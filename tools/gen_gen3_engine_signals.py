@@ -163,11 +163,27 @@ _nature["source"] = "include/constants/pokemon.h#L5"
 _nature["inventory"] = (
     "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before "
     "CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. "
-    "Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, valid record checksum, "
+    "Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, decoded valid species/flags "
+    "and non-Bad-Egg/non-egg record; RR checksum is explicitly unused, never require checksum_ok=true/zero. "
     "unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. "
     "Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; "
     "drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; "
     "do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.")
+for _kind, _symbol, _contract in (
+    ("borrowed_party_begin", "RR School rental team builder",
+     "RR School map5,2 NPC1(6,2) script09051ABF, builder callnative09051B87/09051BF2 ->09079300. "
+     "Capture builder ENTRY before six CreateMon calls overwrite gPlayerParty, including ViewYourTeam "
+     "before battle_begin. Preserve validated own raw records/keys/count and reset epoch, force borrowed "
+     "state until matching restore; no gameplay event/capture/faint from the borrowed records. "
+     "Nested/replayed begin must not replace the original own-party baseline."),
+    ("borrowed_party_end", "LoadPlayerParty restored-party completion",
+     "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and "
+     "six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed "
+     "epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. "
+     "Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school "
+     "postbattle restore caller UNRESOLVED. Borrowed own-party writes remain held until verified restore.")):
+    CANDIDATES.append(candidate(_kind, _symbol, "src/pokemon.c", _contract,
+                                reason="RR-only school borrow lifecycle; not applicable to vanilla pack"))
 
 
 
@@ -822,6 +838,32 @@ RR_CONTRACTS = {
 
 def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
     kind = c["kind"]
+    if kind in ("borrowed_party_begin", "borrowed_party_end"):
+        from tools.research.rr_special_lifecycle import census
+        try:
+            facts = census(rom)["borrowed_party"]
+            body = facts["bodies"]["builder" if kind == "borrowed_party_begin" else "restore"]
+            flat = body["address"] - ROM_BASE
+            code_size = 100 if kind == "borrowed_party_begin" else 64
+            data = rom[flat:flat + code_size]
+            capture = 0 if kind == "borrowed_party_begin" else 0x32
+            site = make_site(rom, flat, data, capture_offset=capture,
+                             symbol=c["symbol"], point=["R15", "CPSR"])
+            site.update(source="rr_school_script_binary",
+                        capture_contract=c["inventory"],
+                        context={"rom_offset": flat, "expected_hex": body["expected_hex"]},
+                        function={"address": body["address"], "size": code_size,
+                                  "capture_offset": capture, "anchor_offset": 0,
+                                  "symbol": c["symbol"], "size_evidence": "reviewed ROM code/return boundary"},
+                        caller={"map": [5, 2], "npc_local_id": 1, "script": 0x09051ABF},
+                        pair_contract={"begin": "borrowed_party_begin", "end": "borrowed_party_end",
+                                       "party_base": facts["party_base"], "stride": 100,
+                                       "baseline": "own raw records/keys/count before builder",
+                                       "restore": "active epoch only; exact own keys/count match",
+                                       "reset": "clear unmatched borrow on reset"})
+            return {"status": "PINNED", "site": site, "matches": [flat]}
+        except ValueError as exc:
+            return {"status": "UNVERIFIED", "reason": str(exc)}
     if kind in ("poison_faint", "poison_hp_before"):
         try:
             detour = decode_thumb_detour(rom, 0x080A0618)
@@ -1122,7 +1164,9 @@ def document(inventory: dict) -> str:
               "- pytest tests/unit/test_gen3_engine_sites.py -q checks every emitted pin, exclusion, "
               "wrong ROM, ambiguous/odd matches and the retained RR-tail trap.",
               "", "## NOT VERIFIED", "",
-              "RR borrowed_party remains UNVERIFIED. Nature Changer paired PID sites are SOURCE pinned "
+              "The legacy generic borrowed_party candidate remains UNVERIFIED; RR School borrowed_party_begin/end "
+              "are SOURCE pinned with exact builder/restore bodies and an active-borrow restore contract. "
+              "School postbattle restore caller attribution remains UNRESOLVED. Nature Changer paired PID sites are SOURCE pinned "
               "by the exact NPC script and unique ROM body, not PHYSICAL qualified. Poison's replacement is disabled; "
               "its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. "
               "Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need "

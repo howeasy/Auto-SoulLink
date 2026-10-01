@@ -214,6 +214,7 @@ function Client.new(p)
     local rival_authority = nil
     local nature_preimage = nil
     local nature_completed = nil
+    local borrowed_party = nil
     local sig_src = nil          -- the signal source drv.start armed; its health gates the authority
     local st = {
         known = {},        -- already acquired non-egg keys (party + boxes)
@@ -418,6 +419,29 @@ function Client.new(p)
     -- ends, then the checkpoint queue lands them.
     local function update_frozen(party)
         local was = st.frozen
+        if borrowed_party then
+            local authority = borrowed_party
+            local restored = authority.ended and not authority.invalid and not in_battle()
+                and #party == authority.count
+            if restored then
+                local seen = {}
+                for _, mon in ipairs(party) do
+                    local k = key(mon)
+                    if not authority.keys[k] or seen[k] or mon.has_species ~= 1
+                       or mon.is_bad_egg ~= 0 or mon.checksum_ok == false then restored = false; break end
+                    seen[k] = true
+                end
+            end
+            if restored then borrowed_party = nil
+            else
+                st.frozen = true
+                if authority.ended and not authority.reported then
+                    log("borrowed party restore held: own keys/count or field state not proved")
+                    authority.reported = true
+                end
+                return
+            end
+        end
         local base = st.battle and st.battle.base_keys
         if base and next(base) and #party > 0 then
             local overlap = false
@@ -689,7 +713,7 @@ function Client.new(p)
             if f.trade then settle_trade(party) end
             if nature_completed then settle_nature(party) end
         end
-        if f.whiteout then
+        if f.whiteout and not st.frozen then
             send("whiteout", {})
             hud.show("WHITED OUT", 255, 60, 60, 300)
         end
@@ -1068,6 +1092,7 @@ function Client.new(p)
     -- (docs/protocol.md §6.2 item 6)
     function drv.checkpoint_ok()
         if recovery_hidden() then return false, "trade recovery withholds party" end
+        if st.frozen then return false, "borrowed party withholds writes" end
         if st.trade_apply then return false, "PC trade in flight" end
         return overworld_ok()
     end
@@ -1081,6 +1106,7 @@ function Client.new(p)
         st.release_snapshot = nil
         nature_preimage = nil
         nature_completed = nil
+        borrowed_party = nil
         st.eggs = {}
         trade_reset_epoch = trade_reset_epoch + 1
         -- Pre-CONTINUE validation can see OT=0 after a real cleared boot interval.
@@ -1341,9 +1367,36 @@ function Client.new(p)
                or after.pid == before.pid or after.species ~= before.species then return end
             sig.nature_before, sig.nature_after, sig.nature_epoch = before, after, trade_reset_epoch
         end
+        local function borrowed_begin(sig)
+            if borrowed_party then return end -- a nested begin never replaces the own-party base
+            local party = party_read()
+            local keys, valid = {}, party and #party >= 1 and #party <= 6
+            if valid then
+                for _, mon in ipairs(party) do
+                    local k = key(mon)
+                    if not k or keys[k] or mon.has_species ~= 1 or mon.is_bad_egg ~= 0
+                       or mon.checksum_ok == false then valid = false; break end
+                    keys[k] = true
+                end
+            end
+            borrowed_party = {keys=keys, count=party and #party or 0,
+                              epoch=trade_reset_epoch, invalid=not valid}
+            st.frozen = true -- before queued command handling or signal drain
+            if not valid then log("borrowed party begin held: own-party preimage unavailable") end
+        end
+        local function borrowed_end(sig)
+            if borrowed_party and borrowed_party.epoch == trade_reset_epoch then
+                borrowed_party.ended = true
+            end
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
-                                 whiteout = close_authority, trade_begin = capture_trade_before,
+                                 whiteout = function(sig)
+                                     close_authority(sig)
+                                     sig.borrowed_party = borrowed_party ~= nil
+                                 end,
+                                 borrowed_party_begin = borrowed_begin, borrowed_party_end = borrowed_end,
+                                 trade_begin = capture_trade_before,
                                  pc_release_begin = release_begin, pc_release = release_done,
                                  hatch = capture_hatch,
                                  nature_change_begin = nature_begin, nature_change = nature_done})
@@ -1370,7 +1423,7 @@ function Client.new(p)
         elseif k == "battle_end" then f.battle_end = true
         elseif k == "faint" then f.faint = true
         elseif k == "poison_faint" then f.faint = true          -- OPEN kind (FR only), not PHYSICAL
-        elseif k == "whiteout" then f.whiteout = true          -- a flag: one whiteout per settle
+        elseif k == "whiteout" and not sig.borrowed_party then f.whiteout = true
         elseif k == "capture_wild" then
             f.acquire, f.caught = true, true
             if st.battle then st.battle.caught = true end
@@ -1390,7 +1443,19 @@ function Client.new(p)
             st.trade = sig.trade_reset_epoch == trade_reset_epoch and sig.trade_before or nil
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
         elseif k == "nature_change" and sig.nature_before and sig.nature_epoch == trade_reset_epoch then
-            nature_completed = {before=sig.nature_before, after=sig.nature_after, epoch=trade_reset_epoch}
+            local pending = nature_completed
+            if pending then
+                if (pending.epoch == trade_reset_epoch and pending.after.key == sig.nature_before.key
+                    and pending.after.ptr == sig.nature_before.ptr
+                    and pending.after.slot == sig.nature_before.slot
+                    and pending.after.ot == sig.nature_before.ot) then
+                    nature_completed = {before=pending.before, after=sig.nature_after, epoch=trade_reset_epoch}
+                else
+                    nature_completed = nil  -- a different record cannot inherit the first old key
+                end
+            else
+                nature_completed = {before=sig.nature_before, after=sig.nature_after, epoch=trade_reset_epoch}
+            end
             f.nature = true
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3

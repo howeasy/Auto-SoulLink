@@ -344,6 +344,58 @@ def test_a_borrowed_party_freezes_the_diff_and_the_tick_party():
     assert "party" in w.events("tick")[-1]
 
 
+def test_rr_prebattle_party_loan_holds_own_commands_and_borrowed_whiteout_until_restore():
+    w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
+    w.fire("borrowed_party_begin")
+    w.set_party([mon_record(C, 0x9999, species=7, hp=0)])
+    w.fire("faint")
+    w.fire("whiteout")
+    w.command(cmd="force_faint", key=KB)
+    w.step()
+    assert w.client.driver.tick_fields()["party_hidden"] is True
+    assert not any(w.events(event) for event in ("capture", "faint", "whiteout", "party_to_box", "box_to_party"))
+    assert w.writes == []
+    w.enter_battle([FOE])
+    w.step()
+    w.set_party(party(A, B))
+    w.fire("borrowed_party_end")
+    w.step()  # the restored record may precede battle_end; still withheld
+    assert w.client.driver.tick_fields()["party_hidden"] is True and w.writes == []
+    w.leave_battle()
+    w.step(3)
+    assert w.client.driver.tick_fields()["party_hidden"] is not True
+    assert w.party_hp(1) == 0  # the old-key command lands once on the own record
+
+
+def test_rr_borrow_cancel_before_battle_and_nested_begin_keep_own_preimage():
+    w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
+    w.fire("borrowed_party_end")  # an end without a begin has no authority
+    w.fire("borrowed_party_begin")
+    w.set_party([mon_record(C, 0x9999, species=7)])
+    w.fire("borrowed_party_begin")  # must not replace A/B with the loaner as its own base
+    w.step()
+    assert w.client.driver.tick_fields()["party_hidden"] is True
+    w.set_party(party(A, B))
+    w.fire("borrowed_party_end")
+    w.step()
+    assert w.client.driver.tick_fields()["party_hidden"] is not True
+    assert not w.events("whiteout") and w.writes == []
+
+
+def test_rr_borrow_restore_mismatch_stays_hidden_until_reset():
+    w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
+    w.fire("borrowed_party_begin")
+    w.set_party([mon_record(C, 0x9999, species=7)])
+    w.fire("borrowed_party_end")
+    w.set_party([mon_record(A, OT), mon_record(C, OT)])
+    w.step(2)
+    assert w.client.driver.tick_fields()["party_hidden"] is True
+    assert any("borrowed party restore held" in line for line in w.logs)
+    w.client.driver.on_reset()
+    w.set_party(party(A, B))
+    assert w.client.driver.tick_fields()["party_hidden"] is not True
+
+
 def test_open_kind_trade_done_reports_a_key_change_with_the_npc_trade_reason():
     w = live(pids=(A, B))
     w.fire("trade_begin")
@@ -388,6 +440,30 @@ def test_rr_nature_change_waits_for_visible_journal_before_alias():
     w.step(3)
     assert [(e["old_key"], e["new_key"], e["reason"]) for e in w.events("key_change")] == [
         (KB, key_of(C, OT), "nature_change")]
+
+
+def test_rr_two_hidden_nature_changes_keep_original_server_key():
+    from tests.unit.gen3_trade_journal_model import JournalModel
+
+    model = JournalModel()
+    w = World("gen3_rr", "radical_red", "companion", journal=model)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    journal = model.journal
+    original_hidden = journal.hidden
+    held = {"yes": True}
+    journal.hidden = lambda self: held["yes"] or original_hidden(self)
+    w.regs["R4"] = w.party_base() + 100
+    for new_pid in (C, C + 1):
+        w.fire("nature_change_begin")
+        w.set_party([mon_record(A, OT), mon_record(new_pid, OT, species=5)])
+        w.fire("nature_change")
+        w.step()
+    assert w.events("key_change") == []
+    held["yes"] = False
+    w.step(3)
+    assert [(e["old_key"], e["new_key"], e["reason"]) for e in w.events("key_change")] == [
+        (KB, key_of(C + 1, OT), "nature_change")]
 
 
 @pytest.mark.parametrize("slot", range(6))

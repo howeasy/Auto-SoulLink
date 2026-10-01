@@ -58,7 +58,14 @@ def test_pinned_sites_match_admitted_rom(name):
         assert site == resolved[kind]["site"]
         assert site["address"] % 2 == site["capture_offset"] % 2 == 0
         data = bytes.fromhex(site["expected_hex"])
-        assert len(data) == 206 if kind in ("nature_change_begin", "nature_change") else 8 <= len(data) <= 16
+        if kind in ("nature_change_begin", "nature_change"):
+            assert len(data) == 206
+        elif kind == "borrowed_party_begin":
+            assert len(data) == 100
+        elif kind == "borrowed_party_end":
+            assert len(data) == 64
+        else:
+            assert 8 <= len(data) <= 16
         assert rom[site["rom_offset"]:site["rom_offset"] + len(data)] == data
         assert site["address"] == 0x08000000 + site["rom_offset"]
     assert "UNVERIFIED" not in json.dumps(document)
@@ -122,6 +129,24 @@ def test_rr_nature_wrong_identity_and_modified_store_are_refused(roms):
         result = gen.resolve(c, "rr", bytes(altered))
         assert result["status"] == "UNVERIFIED" and "site" not in result
         assert "identity" in result["reason"]
+
+
+@pytest.mark.parametrize("name", ["rr", "rr_companion"])
+def test_rr_borrow_hooks_bind_builder_entry_and_completed_restore(roms, name):
+    if name not in roms: pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    for kind, address, capture in (("borrowed_party_begin", 0x09079300, 0),
+                                   ("borrowed_party_end", 0x0804C230, 0x32)):
+        candidate = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(candidate, name, roms[name])
+        assert result["status"] == "PINNED"
+        site = result["site"]
+        assert (site["address"], site["capture_offset"]) == (address, capture)
+        assert site["point"] == ["R15", "CPSR"]
+        assert "active epoch" in site["pair_contract"]["restore"]
+        assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [address-0x08000000]
+    for vanilla in ("fr", "lg"):
+        if vanilla in roms:
+            assert gen.resolve(candidate, vanilla, roms[vanilla])["status"] == "UNVERIFIED"
 
 
 def test_duplicate_local_symbol_name_is_not_guessed():
@@ -218,7 +243,7 @@ def test_rr_faint_and_capture_wild_repinned_off_the_replaced_opcode_table(name):
 def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
     document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
     row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
-    assert len(row["sites"]) == 22  # existing twenty plus the paired Nature Changer captures
+    assert len(row["sites"]) == 24  # existing twenty plus nature and borrowed pairs
     assert row["sites"]["hatch"]["address"] + row["sites"]["hatch"]["capture_offset"] == 0x08046E0A
     # compare EFFECTIVE hook addresses (address + capture_offset): the dead vanilla captures were
     # 0x080213C8 (tryfaintmon) and 0x0802D824 + 4 = 0x0802D828 (givecaughtmon) -- Codex cx-92870c43
