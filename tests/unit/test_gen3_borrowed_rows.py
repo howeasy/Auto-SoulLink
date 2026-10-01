@@ -206,3 +206,25 @@ def test_actual_menu_cancel_block_quits_main_menu_instead_of_reentering_loan():
         end}
     '''+source[start:end]+'''\nreturn state''')
     assert state=='field'
+
+def test_actual_picker_waits_for_fade_before_native_selection_input():
+    """The chooser task exists during fade, but native code ignores its A input."""
+    from lupa import LuaRuntime
+    source=(ROOT/'lua/tests/duo/scenario_gen3_borrowed.lua').read_text()
+    start=source.index('    local function picker()')
+    end=source.index('    local function party_writes(',start)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    got=lua.execute('''
+        local fade,popup=true,false
+        local ctx={party_menu_up=function() return true end,
+            task_live=function(name) return name=='Task_HandleChooseMonInput' end,
+            G={pred_ok=function(_,name) assert(name=='palette_fade_active');return not fade end},cp={}}
+    '''+source[start:end]+'''
+        local premature=picker()
+        local polls=0
+        repeat polls=polls+1;if polls==3 then fade=false end until picker() or polls==10
+        -- Native Task_HandleChooseMonInput ignores A while gPaletteFade.active.
+        if not fade then popup=true end
+        return premature,polls,popup
+    ''')
+    assert got==(False,3,True)

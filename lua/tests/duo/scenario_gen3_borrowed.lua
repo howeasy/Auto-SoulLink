@@ -23,7 +23,8 @@ return function(ctx)
     end
     local function hex(s) return (s:gsub(".",function(c) return string.format("%02X",c:byte()) end)) end
     local function cursor() return ctx.peek("gPartyMenu",1,9) end
-    local function picker() return ctx.party_menu_up() and ctx.task_live("Task_HandleChooseMonInput") end
+    local function picker() return ctx.party_menu_up() and ctx.task_live("Task_HandleChooseMonInput")
+        and ctx.G.pred_ok(ctx.cp,"palette_fade_active") end
     local function party_writes(start)
         local n=0;local base=assert(ctx.party_base())
         for i=start+1,#ctx.write_lines() do
@@ -124,17 +125,25 @@ return function(ctx)
         -- Primary party_menu.c CursorCB_Enter: selected order stores slot+1;
         -- the third entry moves to SLOT_CONFIRM=PARTY_SIZE (6), then A closes.
         for slot=0,2 do
+            if not ctx.wait_until(picker,30,"fade-ready loan chooser") then return false,"loan chooser not ready" end
             for _=1,12 do
                 if cursor()==slot then break end
                 local at=cursor();ctx.G.tap(at==0 and "Right" or (at<slot and "Down" or "Up"),3,20)
             end
             if cursor()~=slot then return false,"loan selection cursor stalled" end
+            if not ctx.wait_until(picker,30,"fade-ready before loan A") then return false,"loan chooser faded before A" end
+            ctx.jlog("BORROW_PARTY_INPUT",{slot=slot,cursor=cursor(),frame=ctx.emulator.framecount(),
+                palette=ctx.peek("gPaletteFade",1,7),palette_ready=ctx.G.pred_ok(ctx.cp,"palette_fade_active")})
             ctx.G.tap("A",3,20)
-            if not ctx.wait_until(function() return ctx.task_live("Task_HandleSelectionMenuInput") end,10,"ENTER popup") then return false,"ENTER popup absent" end
+            if not ctx.wait_until(function() return ctx.task_live("Task_HandleSelectionMenuInput")
+                and ctx.G.pred_ok(ctx.cp,"palette_fade_active") end,10,"ENTER popup") then return false,"ENTER popup absent" end
             ctx.G.tap("A",3,20)
             if not ctx.wait_until(function() return u8(facts.selected_order_address+slot)==slot+1 end,10,"selected loan") then return false,"native selected order absent" end
         end
         if cursor()~=facts.confirm_slot then return false,"native confirm cursor absent" end
+        if not ctx.wait_until(picker,30,"fade-ready loan confirmation") then return false,"loan confirmation not ready" end
+        ctx.jlog("BORROW_PARTY_INPUT",{slot=facts.confirm_slot,cursor=cursor(),frame=ctx.emulator.framecount(),
+            palette=ctx.peek("gPaletteFade",1,7),palette_ready=ctx.G.pred_ok(ctx.cp,"palette_fade_active")})
         ctx.G.tap("A",3,20)
         if not ctx.mash_until(ctx.in_battle,180,"A") then return false,"ordinary School battle absent" end
         for _=1,200 do
