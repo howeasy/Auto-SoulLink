@@ -13,9 +13,9 @@ from tools import gen4_routes as gr
 ROM, PRET, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_PRET, gr.DEFAULT_SAVE
 
 
-def _world(rows, soft=(), blocked=(), water=frozenset()):
+def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None):
     """One 32x32 land cell from ascii rows: '#' collision, '.' floor, 'g' encounter grass,
-    '~' surf water; header id 7 (named "TST")."""
+    '~' surfable water; header id 7 (named "TST")."""
     words = [0x8006] * 1024
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
@@ -30,6 +30,8 @@ def _world(rows, soft=(), blocked=(), water=frozenset()):
         set(soft),
         water or frozenset({0x15}),
         {7: "TST"},
+        frozenset(warps),
+        dict(scripts or {}),
     )
 
 
@@ -82,15 +84,15 @@ def test_coord_event_is_crossed_only_when_unavoidable():
         "#..............#",
         "################",
     ]
-    w = _world(rows, soft={(3, 1), (4, 1)})
+    w = _world(rows, soft={(3, 1), (4, 1)}, scripts={(3, 1): ("T20_002",), (4, 1): ("T20_002",)})
     r = gr.plan_route(w, _start(1, 1))
     _check_never_blocked(w, r)
-    assert r["soft_event_tiles"] == []  # the long way round beats a coord-event crossing
+    assert r["soft_events"] == []  # the long way round beats a coord-event crossing
     assert gr.replay(w, r)[-1] == (7, 1)
-    # when the only way is through the event it is taken and reported
-    w2 = _world(["########", "#..gg###", "########"], soft={(2, 1)})
+    # when the only way is through the event it is taken, and the scriptIds travel with the route
+    w2 = _world(["########", "#..gg###", "########"], soft={(2, 1)}, scripts={(2, 1): ("R29_001",)})
     r2 = gr.plan_route(w2, _start(1, 1))
-    assert r2["soft_event_tiles"] == [[2, 1]]
+    assert r2["soft_events"] == [{"x": 2, "y": 1, "scriptIds": ["R29_001"]}]
 
 
 def test_wrong_map_id_is_refused():
@@ -129,6 +131,50 @@ def test_edge_split_is_a_segment_end():
     assert tiles[-1] == (3, 1)
 
 
+def test_surfable_water_is_blocked_not_priced():
+    # behaviour 0x15 is surfable water: the game gates it behind Surf
+    # (Field_PlayerCanSurfOnTile, asm/overlay_01_021F1AFC.s:763-780; the blocked predicate
+    # sub_02060E54, asm/unk_0205FD20.s:2155-2181), so a water tile is impassable on foot.
+    # Pricing it instead would plan a swim the walker cannot make.
+    w = _world(["##########", "#........#", "#~~~~~~~~#", "#...gg...#", "##########"])
+    assert w.is_water(4, 2) and not w.walkable(4, 2)
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_route(w, _start(1, 1))
+    assert e.value.reason == "no_grass_reachable"
+    # and a route that does exist never reports a water tile
+    ok = _world(["#########", "#.......#", "#..~~~..#", "#...gg..#", "#########"])
+    r = gr.plan_route(ok, _start(1, 1))
+    assert r["water_tiles"] == [] and gr.replay(ok, r)[-1] == (4, 3)
+
+
+def test_grass_crossed_on_the_approach_is_reported():
+    # a lone grass tile on the way to the pace pair is legal, and a wild encounter can fire
+    # there, so the route has to name those tiles (the Lua polls the battle chain for them)
+    w = _world(["##########", "#.g..gg..#", "##########"])
+    r = gr.plan_route(w, _start(1, 1))
+    assert r["approach_grass"] == [[2, 1]]
+    assert r["grass"]["tile"]["x"] == 5  # the first grass with a horizontal partner
+    # a start that is already on the goal grass has no approach to report
+    assert gr.plan_route(w, _start(6, 1))["approach_grass"] == []
+
+
+def test_the_start_tile_exemption_does_not_mutate_the_world():
+    w = _world(ROWS, blocked={(1, 1)})
+    before = set(w.blocked)
+    r = gr.plan_route(w, _start(1, 1))
+    assert w.blocked == before and (1, 1) in w.blocked  # the world's events are untouched
+    _check_never_blocked(w, r)
+    assert gr.replay(w, r)[-1] == (12, 5)
+
+
+def test_an_exhausted_search_budget_is_its_own_refusal():
+    w = _world(ROWS)
+    with pytest.raises(gr.RouteError) as e:
+        gr._search(w, (1, 1), lambda t: False, limit=5)
+    assert e.value.reason == "search_budget"
+    assert gr.plan_route(w, _start(1, 1))["tiles"] > 0  # the default budget is not the limit
+
+
 def test_terrain_layout_guard_refuses_a_misaligned_member():
     body = struct.pack("<4I", 0x800, 0x10, 0x20, 0x30) + struct.pack("<HH", 0x1234, 0)
     good = body + bytes(0x800 + 0x10 + 0x20 + 0x30)
@@ -146,9 +192,18 @@ def test_terrain_layout_guard_refuses_a_misaligned_member():
 
 
 def test_parse_result_takes_the_last_result_line():
-    log = "[f1] x\n[f9] RESULT RESYNC map=60 x=1 y=2 dir=1 state=C:/a.State\n[f10] RESULT BATTLE species=16"
-    assert gr.parse_result(log)["status"] == "BATTLE"
+    log = (
+        "[f1] x\n[f9] RESULT RESYNC map=60 x=1 y=2 dir=1 state=C:/a.State\n"
+        "[f10] RESULT BATTLE phase=pace species=PIDGEY(16) level=2 map=33 x=665 y=404"
+    )
+    r = gr.parse_result(log)
+    assert r["status"] == "BATTLE"
+    assert "phase=pace" in r["detail"] and "species=PIDGEY(16)" in r["detail"]
     assert gr.parse_result("nothing")["status"] == "NO_RESULT"
+    # an encounter on the approach is still a battle, not a resync
+    assert gr.parse_result("[f1] RESULT BATTLE phase=approach species=PIDGEY(16)")["status"] == (
+        "BATTLE"
+    )
 
 
 def test_save_position_absent_is_a_named_skip(tmp_path):
@@ -186,6 +241,19 @@ def test_real_route_is_walkable_ends_in_route29_grass_and_matches_the_door_check
     for s in r["steps"]:
         assert world.map_at(s["to"]["x"], s["to"]["y"]) == s["to"]["map"]
     json.dumps(r)  # JSON-clean
+
+
+def test_real_every_warp_tile_decodes_to_a_door(real):
+    world, _ = real
+    decoded = [(x, y, world.attr(x, y)) for x, y in world.warps if world.attr(x, y) is not None]
+    bad = [(x, y, a & 0xFF) for x, y, a in decoded if (a & 0xFF) not in gr.DOOR_BAND]
+    # The door band is the proof for the land-data layout: a warp tile is a door by
+    # construction, so 0x14 + the u16 at +0x12, the row-major order and the matrix index are
+    # all pinned at once here. A fixed 0x14 puts only 162 of the 313 warp entries (the used
+    # banks list a few tiles twice) in the band; at 0x14+extra it is every one but one.
+    assert len(decoded) >= 307, f"only {len(decoded)} distinct warp tiles in the used banks"
+    assert len(decoded) - len(bad) >= 306, f"{len(decoded) - len(bad)}/{len(decoded)} are doors"
+    assert [b for _, _, b in bad] == [62], f"the door-band outlier changed: {bad}"
 
 
 def test_real_wrong_map_id_refused(real):

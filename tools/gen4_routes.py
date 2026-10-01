@@ -5,22 +5,40 @@ encounter grass tile, derived ONLY from ROM / pret data (no screenshots).
     python tools/gen4_routes.py plan --save S.SaveRAM --rom HG.nds --pret <pokeheartgold> [--out route.json]
 
 Sources (pokeheartgold @ad7a3afa; ROM files read through ndspy):
-  * Save position: general block + 0x1234 = array 5 (SAVE_LOCAL_FIELD_DATA, offset taken from
-    SaveData.arrayHeaders on a live dump), first member `currentPosition` = Location
-    {mapId, warpId, x, y, direction} (include/field_types_def.h, src/save_local_field_data.c).
+  * Save position: general block + 0x1234 = array 5 (SAVE_LOCAL_FIELD_DATA,
+    include/constants/save_arrays.h:13), whose first member is `currentPosition` = Location
+    {mapId, warpId, x, y, direction} (include/field_types_def.h:10-16, Location is 5 x int;
+    src/save_local_field_data.c:13-27, the next four members are four more Locations). The
+    general block starts at the bank base (server/adapters/gen4_codec.py:417-420 rejects any
+    other start), and the block's own 5-Location layout is what pins 0x1234: real-map Locations
+    sit at +0x00 and +0x50 only.
   * Map matrix: NARC a/0/4/1 (NARC_fielddata_mapmatrix_map_matrix = 41), member 0 = "EVERYWHERE",
     the single Johto overworld matrix; layout per src/map_matrix.c `MapMatrix_MapMatrixData_Load`:
     u8 width,height,hasHeaders,hasAltitudes,nameLen,name[],u16 headers[w*h],(u8 alt[w*h]),u16 landIds[w*h].
+    Cell index is row-major j*width+i (src/terrain_attributes.c:36-41).
     Location x/y are GLOBAL tile coordinates: cell = (x//32, y//32), tile = (x%32, y%32).
   * Terrain attributes: NARC a/0/6/5 (NARC_fielddata_landdata_land_data = 65), member landId,
-    32x32 u16 at +0x14 + extraSize, where extraSize is the u16 at +0x12 (src/terrain_attributes.{h,c} reads at a fixed 0x14, which is only right for members with no extra table; New Bark's member 0 has 0x58 extra bytes, found by the file length = 0x14+extra+sum(4 sizes) identity). Row-major
-    [z*32+x]. Low byte = tile behaviour; bit 15 = collision (consistent over every cell used here:
-    tree/building/sign borders carry 0x8000, paths 0x0400, grass 0x0002).
-  * Encounter grass: MetatileBehavior_IsEncounterGrass == behaviour 2 (src/metatile_behavior.c);
-    surfable water = `_020FCA74[b] & 1` (same file): crossable only at a cost; see water_tiles.
-  * Events (global coordinates; warps, coord/bg triggers, NPC tiles+wander ranges are all treated
-    as blocked so the walk never fires a script/warp): files/fielddata/eventdata/zone_event/<bank>_*.json,
-    bank per header from src/data/map_headers.h `.eventsBank = NARC_zone_event_<bank>_..._bin`.
+    32x32 u16 at +0x14 + extraSize, where extraSize is the u16 at +0x12 (a table of 8-byte
+    records between the header and the terrain). MOST members carry a non-zero extra (New Bark's
+    land 0 = 0x58, 4 = 0x40, 5 = 0x10, 7-16 = 0x8..0x88, ...), so the fixed 0x14 of
+    include/terrain_attributes.h:8 / src/terrain_attributes.c:53 is WRONG for them -- that
+    constant only holds for extra == 0 members. Proof, not inference: a warp tile is a door by
+    construction, and 312 of the 313 warp tiles in the used banks decode to the door band
+    0x68..0x6F at 0x14+extra (162/313 at a fixed 0x14). The member-length identity checked in
+    _terrain does NOT discriminate the two layouts -- both satisfy it. Row-major [z*32+x].
+    Low byte = tile behaviour (asm/unk_02054648.s:441-446); bit 15 = collision
+    (asm/unk_02054648.s:386-395).
+  * Encounter grass: MetatileBehavior_IsEncounterGrass == behaviour 2 (src/metatile_behavior.c:11-13,
+    TILE_BEHAVIOR_2 == 2). Surfable water = `_020FCA74[b] & 1` (src/metatile_behavior.c:80-82) is
+    Surf-GATED, not walkable: Field_PlayerCanSurfOnTile (asm/overlay_01_021F1AFC.s:763-780) and the
+    game's blocked predicate sub_02060E54 (asm/unk_0205FD20.s:2155-2181) both refuse it on foot, so
+    walkable() blocks it rather than pricing it.
+  * Events (global coordinates): files/fielddata/eventdata/zone_event/<bank>_*.json, bank per header
+    from src/data/map_headers.h `.eventsBank = NARC_zone_event_<bank>_..._bin`. Warps, bg events and
+    NPC tiles+wander ranges are hard-blocked so the walk never fires a script or a warp; coord-event
+    triggers are crossable at SOFT_COST and the crossed scriptIds are recorded in the route, since
+    a coord event fires on its own var/val (include/map_events_internal.h:40-48) which the planner
+    does not evaluate -- the walker clears a self-clearing one with A and resyncs otherwise.
   * Wild table (informational): files/fielddata/encountdata/gs_enc_data.json, entry "map" = header
     short name (include/constants/maps.h comment, e.g. MAP_ROUTE_29 -> R29).
 
@@ -38,8 +56,9 @@ import struct
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import NamedTuple
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
@@ -61,14 +80,14 @@ DEFAULT_ROM = Path("E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds")
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")
 DEFAULT_PRET = Path("E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold")
 
-LOCAL_FIELD_OFF = 0x1234  # general-block offset of save array 5 (live SaveData.arrayHeaders)
+LOCAL_FIELD_OFF = 0x1234  # general-block offset of save array 5 (see the module docstring)
 MATRIX_NARC, LAND_NARC = "a/0/4/1", "a/0/6/5"
 TERRAIN_OFF, CELL = 0x14, 32
+DOOR_BAND = range(0x68, 0x70)  # TILE_BEHAVIOR_104..111: what a warp tile must decode to
 VOID_LAND = 0xFFFF
 GRASS = 2
 COLLISION = 0x8000
 DIRS = {"Up": (0, -1), "Down": (0, 1), "Left": (-1, 0), "Right": (1, 0)}
-FACING = {0: "Up", 1: "Down", 2: "Left", 3: "Right"}  # Location.direction (HGSS)
 
 
 class RouteError(ValueError):
@@ -91,8 +110,11 @@ class World:
     blocked: set[tuple[int, int]] = field(default_factory=set)  # warps, bg events, NPC boxes
     soft: set[tuple[int, int]] = field(default_factory=set)  # coord-event triggers: crossable
     # (state-dependent), at a cost
-    water: frozenset[int] = frozenset()  # behaviours that are surfable water
+    water: frozenset[int] = frozenset()  # surfable-water behaviours: Surf-gated, never walkable
     names: dict[int, str] = field(default_factory=dict)  # header id -> short name (R29)
+    warps: frozenset[tuple[int, int]] = frozenset()  # warp tiles: the door-band oracle
+    coord_scripts: dict[tuple[int, int], tuple[str, ...]] = field(default_factory=dict)
+    # coord-event tile -> the scriptIds that can fire there
 
     def attr(self, x: int, y: int) -> int | None:
         if x < 0 or y < 0:
@@ -112,8 +134,20 @@ class World:
         return self.headers[cy * self.width + cx]
 
     def walkable(self, x: int, y: int) -> bool:
+        """On-foot passable: no collision bit, not an event tile, and NOT surfable water.
+
+        Water is a hard block, not a cost: Field_PlayerCanSurfOnTile
+        (asm/overlay_01_021F1AFC.s:763-780) and the game's blocked predicate sub_02060E54
+        (asm/unk_0205FD20.s:2155-2181) both gate it behind Surf, and 32,961 of the used land
+        tiles are surfable water on collision-clear tiles, so pricing it would plan unwalkable
+        rivers. A Surf route needs an explicit opt-in here, not a cheaper number."""
         a = self.attr(x, y)
-        return a is not None and not a & COLLISION and (x, y) not in self.blocked
+        return (
+            a is not None
+            and not a & COLLISION
+            and (a & 0xFF) not in self.water
+            and (x, y) not in self.blocked
+        )
 
     def is_water(self, x: int, y: int) -> bool:
         a = self.attr(x, y)
@@ -174,36 +208,55 @@ def _water_behaviours(pret: Path) -> frozenset[int]:
     )
 
 
-def _event_tiles(pret: Path, banks: dict[int, int], headers: set[int]):
-    """(hard, soft): hard = warps, bg events, NPCs with their wander box; soft = coord-event
-    triggers (a script fires only while its var matches the save, so the planner may cross one at
-    a cost and the walker handles the interruption)."""
+class Events(NamedTuple):
+    """Event tiles of the whole overworld, in global coordinates."""
+
+    hard: set[tuple[int, int]]  # warps, bg events, NPC tiles + wander boxes
+    soft: set[tuple[int, int]]  # coord-event triggers: crossable, but state-dependent
+    warps: frozenset[tuple[int, int]]  # warp tiles alone: every one must decode to a door
+    coord_scripts: dict[tuple[int, int], tuple[int, ...]]  # coord tile -> its scriptIds
+
+
+def _event_tiles(pret: Path, banks: dict[int, int], headers: set[int]) -> Events:
+    """Event tiles. Hard = warps, bg events, NPCs with their wander box. Soft = coord-event
+    triggers: a coord event fires on its own var/val, which the planner does not evaluate, so it
+    may cross one at a cost -- the walker clears a self-clearing script with A and resyncs, and
+    the crossed scriptIds travel in the route so a stuck leg names the culprit."""
     edir = _need(pret / "files/fielddata/eventdata/zone_event", "zone_event json dir")
     out: set[tuple[int, int]] = set()
+    warps: set[tuple[int, int]] = set()
     soft: set[tuple[int, int]] = set()
+    scripts: dict[tuple[int, int], set[str]] = {}
     for bank in sorted({banks[h] for h in headers if h in banks}):
         for f in edir.glob(f"{bank:03d}_*.json"):
             d = json.loads(f.read_text(encoding="utf-8"))
             for w in d.get("warps", []):
                 out.add((w["x"], w["z"]))
+                warps.add((w["x"], w["z"]))
             for b in d.get("bgs", []):
                 out.add((b["x"], b["z"]))
             for c in d.get("coords", []):
-                soft.update((c["x"] + i, c["z"] + j) for i in range(c["w"]) for j in range(c["h"]))
+                for i in range(c["w"]):
+                    for j in range(c["h"]):
+                        t = (c["x"] + i, c["z"] + j)
+                        soft.add(t)
+                        scripts.setdefault(t, set()).add(c["scriptId"])
             for o in d.get("objects", []):
                 xr, yr = o.get("xRange", 0), o.get("yRange", 0)
                 out.update(
                     (o["x"] + i, o["z"] + j) for i in range(-xr, xr + 1) for j in range(-yr, yr + 1)
                 )
-    return out, soft - out
+    soft -= out
+    return Events(out, soft, frozenset(warps), {t: tuple(sorted(v)) for t, v in scripts.items()})
 
 
 def _terrain(f: bytes, lid: int) -> tuple[int, ...]:
     """32x32 terrain words of one land-data member. Header: u32 terrainSize(0x800), objectSize,
     modelSize, bdhcSize, then u32 {u16 0x1234, u16 extraSize}; `extraSize` bytes (a table of
-    8-byte records, present in New Bark's land 0 only so far) precede the terrain, so
-    terrain = 0x14 + extraSize. The member length must equal the sum of all parts (verified
-    for every member used: fail loudly rather than mis-index)."""
+    8-byte records) sit between the header and the terrain, so terrain = 0x14 + extraSize. Most
+    members carry a non-zero extra, and the decomp's fixed 0x14 (include/terrain_attributes.h:8)
+    is only right for the rest -- see the module docstring for the door-band proof. The length
+    identity below is a sanity check, not the proof: both layouts satisfy it."""
     sizes = struct.unpack_from("<4I", f, 0)
     magic, extra = struct.unpack_from("<HH", f, 0x10)
     if magic != 0x1234 or sizes[0] != 0x800 or TERRAIN_OFF + extra + sum(sizes) != len(f):
@@ -235,17 +288,25 @@ def load_world(rom_path=DEFAULT_ROM, pret=DEFAULT_PRET) -> World:
     terrain = {lid: _terrain(bytes(land.files[lid]), lid) for lid in used}
     banks = _parse_header_banks(pret)
     present = {hd for hd, lid in zip(headers, lands, strict=True) if lid != VOID_LAND}
-    hard, soft = _event_tiles(pret, banks, present)
+    ev = _event_tiles(pret, banks, present)
     return World(
-        w, h, headers, lands, terrain, hard, soft, _water_behaviours(pret), _parse_short_names(pret)
+        w,
+        h,
+        headers,
+        lands,
+        terrain,
+        ev.hard,
+        ev.soft,
+        _water_behaviours(pret),
+        _parse_short_names(pret),
+        ev.warps,
+        ev.coord_scripts,
     )
 
 
 # --- planning --------------------------------------------------------------------------------
-SOFT_COST = 60
-WATER_COST = (
-    40  # surfable-water behaviour: pret cannot say whether it is walkable (see docs), so costly
-)
+SOFT_COST = 60  # extra step cost on a coord-event tile (crossable, but it may fire a script)
+SEARCH_LIMIT = 600_000  # settled nodes; over it is a named refusal, not "no grass"
 
 
 def _search(world: World, start: tuple[int, int], goal_ok, limit: int = 600_000):
@@ -264,16 +325,13 @@ def _search(world: World, start: tuple[int, int], goal_ok, limit: int = 600_000)
                 cur = prev[cur]
             return path[::-1]
         if len(best) > limit:
-            break
+            raise RouteError(
+                "search_budget", f"{len(best)} nodes settled (limit {limit}); raise the limit"
+            )
         for dx, dy in DIRS.values():
             nxt = (cur[0] + dx, cur[1] + dy)
             if world.walkable(*nxt):
-                c = (
-                    cost
-                    + 1
-                    + (SOFT_COST if nxt in world.soft else 0)
-                    + (WATER_COST if world.is_water(*nxt) else 0)
-                )
+                c = cost + 1 + (SOFT_COST if nxt in world.soft else 0)
                 if c < best.get(nxt, 1 << 60):
                     best[nxt] = c
                     prev[nxt] = cur
@@ -304,17 +362,18 @@ def plan_route(world: World, start: dict, wild_lookup=None) -> dict:
         )
     if world.attr(sx, sy) is None:
         raise RouteError("start_off_map", f"({sx},{sy}) has no land data")
-    # the start tile itself is exempt from the event-blocked rule (the player stands on it)
-    world.blocked.discard((sx, sy))
+    # the start tile is exempt from the event block (the player is standing on it), and the
+    # exemption is per call: `world` is copied, never mutated, so a reused World keeps its events
+    w = replace(world, blocked=world.blocked - {(sx, sy)})
     path = _search(
-        world, (sx, sy), lambda t: world.is_grass(*t) and _pace_pair(world, t) is not None
+        w, (sx, sy), lambda t: w.is_grass(*t) and _pace_pair(w, t) is not None, SEARCH_LIMIT
     )
     if not path:
         raise RouteError(
             "no_grass_reachable", f"no walkable path from ({sx},{sy}) to encounter grass"
         )
-    first_grass = next(i for i, t in enumerate(path) if world.is_grass(*t))
-    pace_b = _pace_pair(world, path[-1])
+    first_grass = next(i for i, t in enumerate(path) if w.is_grass(*t))
+    pace_b = _pace_pair(w, path[-1])
     # run-length segments, split so the grass edge (last non-grass tile) is a segment end
     steps, edge_idx = [], None
     for i in range(1, len(path)):
@@ -346,7 +405,16 @@ def plan_route(world: World, start: dict, wild_lookup=None) -> dict:
             },
         },
         "tiles": len(path) - 1,
-        "soft_event_tiles": [list(t) for t in path if t in world.soft],
+        # every grass tile the walk steps on before the pace tile: a wild encounter can fire on
+        # any of them, so the harness polls the battle chain for a task there
+        "approach_grass": [list(t) for t in path[:-1] if w.is_grass(*t)],
+        "soft_events": [
+            {"x": t[0], "y": t[1], "scriptIds": list(world.coord_scripts.get(t, ()))}
+            for t in path
+            if t in world.soft
+        ],
+        # invariant: water is blocked, so this must stay empty -- a non-empty list means
+        # walkable() regressed to pricing water
         "water_tiles": [list(t) for t in path if world.is_water(*t)],
         "map_name": world.names.get(mid),
     }
@@ -398,7 +466,6 @@ def replay(world: World, route: dict) -> list[tuple[int, int]]:
 # --- live run (one EmuHawk per leg, own lane, bounded) ----------------------------------------
 EMUHAWK = Path("E:/Howard/Bizhawk/EmuHawk.exe")
 LUA = REPO / "lua" / "tests" / "gen4_route_play.lua"
-SPECIES_IDS = {"SPECIES_PIDGEY": 16, "SPECIES_RATTATA": 19, "SPECIES_SENTRET": 161}
 
 
 def parse_result(log: str) -> dict:
@@ -459,13 +526,18 @@ def run_lane(
             env["G4_PACE_MAX"] = str(pace_max)
         cmd = [str(EMUHAWK), f"--config={ld / 'bizhawk.ini'}", f"--lua={LUA}", str(rom_staged)]
         t0 = time.time()
-        proc = subprocess.Popen(cmd, cwd=str(ld), env=env)
+        try:
+            proc = subprocess.Popen(cmd, cwd=str(ld), env=env)
+        except FileNotFoundError as exc:  # a named skip, like every other absent input
+            raise RomAbsent(f"emulator absent: {cmd[0]}") from exc
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             pass
         finally:
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+            # a clean exit has already reaped it; do not taskkill a pid we no longer own
+            if proc.poll() is None:
+                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
             kill_our_emuhawk(ld)
         result = parse_result(log.read_text(encoding="utf-8") if log.exists() else "")
         result.update(leg=leg, wall=round(time.time() - t0, 1), route=route, log=str(log))

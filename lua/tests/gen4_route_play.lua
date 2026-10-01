@@ -23,10 +23,16 @@ local function flush()
 end
 local shot -- defined below; a FAIL leaves a screenshot of the runtime state
 local function finish(status, ...)
+  joypad.set({}) -- never leave a button held in the result state or in a savestate
   if status == "FAIL" and shot then shot("fail") end
   say("RESULT", status, ...)
   flush()
-  pcall(function() client.exit() end)
+  local ok, err = pcall(function() client.exit() end)
+  if not ok then
+    say("client.exit failed:", tostring(err))
+    flush()
+    pcall(function() os.exit(0) end) -- best effort: the spin below is the last resort
+  end
   while true do emu.frameadvance() end -- never return into the caller after exit
 end
 local function r32(a) return memory.read_u32_le(a, BUS) end
@@ -79,12 +85,23 @@ shot = function(name)
   pcall(function() client.screenshot(LANE .. "/" .. TAG .. "_" .. name .. ".png") end)
 end
 local function save_state(name)
+  joypad.set({}) -- release first: a held button would keep being held inside the state
   local p = LANE .. "/" .. TAG .. "_" .. name .. ".State"
   local ok, e = pcall(function() savestate.save(p) end)
   say("savestate", name, ok and "ok" or ("ERR " .. tostring(e)), p)
   return p
 end
 local function pos_s(l) return l and string.format("m%d (%d,%d) d%d", l.map, l.x, l.y, l.dir) or "nil" end
+-- the coord events the route crossed, for naming a stuck leg (gen4_routes.py records them)
+local function near_soft_events(x, y, r)
+  local out = {}
+  for _, e in ipairs(route.soft_events or {}) do
+    if math.abs(e.x - x) <= r and math.abs(e.y - y) <= r then
+      out[#out + 1] = string.format("(%d,%d)=%s", e.x, e.y, table.concat(e.scriptIds or {}, "/"))
+    end
+  end
+  return table.concat(out, " ")
+end
 
 -- ----- boot: A/Start only -----------------------------------------------------------------
 local function boot_to_overworld(maxf)
@@ -126,7 +143,9 @@ for _ = 1, 30 do emu.frameadvance() end
 
 -- ----- interruption (a script/cutscene on a coord event): advance with A until idle ----------
 local function interrupted(where)
-  say("INTERRUPT field task running at", where, "pos", pos_s(loc()), "taskman", hex(taskman() or 0))
+  local li = loc()
+  say("INTERRUPT field task running at", where, "pos", pos_s(li), "taskman", hex(taskman() or 0),
+    "crossed coord events near here:", li and near_soft_events(li.x, li.y, 2) or "")
   local quiet = 0
   for f = 1, 6000 do
     if idle_now() then quiet = quiet + 1 else quiet = 0 end
@@ -165,7 +184,7 @@ local function wait_stable(n)
 end
 
 -- hold `dir` until the location reads (tx,ty); returns frames used or nil+reason
-local function step(dir, tx, ty, tmap)
+local function step(dir, tx, ty)
   local before = loc()
   local t0, busy = emu.framecount(), 0
   for _ = 1, STEP_TIMEOUT do
@@ -191,6 +210,36 @@ local function step(dir, tx, ty, tmap)
   return nil, "timeout", before
 end
 
+-- a wild encounter arrives as a field task too: wait for the battle chain, never call it a script
+local TASK_POLL = 900
+local SETTLE_FRAMES = tonumber(os.getenv("G4_SETTLE") or "") or 900
+local SPECIES = {[16] = "PIDGEY", [19] = "RATTATA", [161] = "SENTRET"}
+local function species_name(id) return SPECIES[id] or ("#" .. tostring(id)) end
+local function poll_battle(frames)
+  for _ = 1, frames do
+    local b = battle()
+    if b then return b end
+    emu.frameadvance()
+  end
+  return nil
+end
+-- savestate + log + RESULT for a wild battle, whichever phase entered it
+local function report_battle(b, phase, extra)
+  local lb = loc()
+  say("BATTLE chain (" .. phase .. ") at frame", emu.framecount(), extra)
+  say("chain", describe(b))
+  say("player pos at battle", pos_s(lb))
+  save_state("battle_start"); shot("battle_start")
+  -- let the intro text / send-out settle (heuristic fixed wait; the screenshot confirms the menu)
+  for _ = 1, SETTLE_FRAMES do emu.frameadvance() end
+  local b2 = battle()
+  say("settled after", SETTLE_FRAMES, "frames; chain", b2 and describe(b2) or "GONE")
+  save_state("battle_settled"); shot("battle_settled")
+  finish("BATTLE", string.format("phase=%s species=%s(%d) level=%d map=%d x=%d y=%d %s",
+    phase, species_name(b.species), b.species, b.level,
+    lb and lb.map or -1, lb and lb.x or -1, lb and lb.y or -1, extra))
+end
+
 local total, edge_done = 0, false
 local steps = route.steps
 local edge_after = route.grass_edge_after_step
@@ -200,9 +249,15 @@ for i = 1, #steps do
   local d = DELTA[s.dir]
   for k = 1, s.n do
     local tx, ty = cur.x + d[1], cur.y + d[2]
-    local fr, why, before = step(s.dir, tx, ty, s.to.map)
+    local fr, why, before = step(s.dir, tx, ty)
     if not fr then
-      if why == "task" then interrupted(string.format("seg%d step%d toward (%d,%d)", i, k, tx, ty)) end
+      if why == "task" then
+        -- the approach can cross grass (route.approach_grass): a field task here may be an
+        -- encounter, so poll the battle chain before treating it as a script
+        local bb = poll_battle(TASK_POLL)
+        if bb then report_battle(bb, "approach", string.format("approachTiles=%d", total)) end
+        interrupted(string.format("seg%d step%d toward (%d,%d)", i, k, tx, ty))
+      end
       finish("FAIL", "diverged", string.format("seg%d step%d dir=%s wanted (%d,%d) m%s; at %s; was %s",
         i, k, s.dir, tx, ty, tostring(s.to.map), pos_s(loc()), pos_s(before)))
     end
@@ -238,6 +293,11 @@ local sum = 0
 for _, v in ipairs(steptimes) do sum = sum + v end
 say(string.format("route walked: %d tiles, avg %.1f frames/tile, frames since overworld %d", total,
   #steptimes > 0 and sum / #steptimes or 0, emu.framecount() - f0))
+if #(route.approach_grass or {}) > 0 then
+  local ag = {}
+  for _, t in ipairs(route.approach_grass) do ag[#ag + 1] = t[1] .. "," .. t[2] end
+  say("approach crossed grass at", table.concat(ag, " "), "-- an encounter there ends this leg as BATTLE")
+end
 
 -- ----- pace in the grass until a wild battle ------------------------------------------------
 local pace = route.grass.pace
@@ -266,12 +326,10 @@ while n < pace_max and not found do
     local tm = taskman()
     if tm and tm ~= 0 then
       -- an encounter transition is a field task: wait for the battle chain, not a script
-      for _ = 1, 900 do
-        found = battle()
-        if found then break end
-        emu.frameadvance()
+      found = poll_battle(TASK_POLL)
+      if not found then
+        finish("FAIL", "task_without_battle", pos_s(loc()), "taskman", hex(taskman() or 0))
       end
-      if not found then finish("FAIL", "task_without_battle", pos_s(loc()), "taskman", hex(taskman() or 0)) end
       break
     end
     joypad.set({[dir] = true})
@@ -285,18 +343,4 @@ end
 if not found then
   finish("FAIL", "no_encounter", string.format("%d pace steps, frames %d", n, emu.framecount() - grass_f0))
 end
-local b = found
-local lb = loc()
-local grass_frames = emu.framecount() - grass_f0
-say("BATTLE chain at frame", emu.framecount(), "pace steps", n, "frames in grass", grass_frames)
-say("chain", describe(b))
-say("player pos at battle", pos_s(lb))
-save_state("battle_start"); shot("battle_start")
--- let the intro text / send-out settle (heuristic fixed wait; the screenshot confirms the menu)
-local settle = tonumber(os.getenv("G4_SETTLE") or "") or 900
-for _ = 1, settle do emu.frameadvance() end
-local b2 = battle()
-say("settled after", settle, "frames; chain", b2 and describe(b2) or "GONE")
-save_state("battle_settled"); shot("battle_settled")
-finish("BATTLE", string.format("species=%d level=%d map=%d x=%d y=%d paceSteps=%d framesInGrass=%d",
-  b.species, b.level, lb and lb.map or -1, lb and lb.x or -1, lb and lb.y or -1, n, grass_frames))
+report_battle(found, "pace", string.format("paceSteps=%d framesInGrass=%d", n, emu.framecount() - grass_f0))

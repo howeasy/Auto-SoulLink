@@ -493,6 +493,85 @@ Everything Gen 2 does not test traces back to that one fact.
 Every gate skips — never hangs — when EmuHawk, a cartridge dump (gitignored) or a fixture is
 missing.
 
+## Gen 4 battle-entry route (HGSS) — planner plus one scripted walk
+
+`tools/gen4_routes.py` plans a walk from the player's saved position to the nearest
+encounter-grass tile that has a horizontal grass partner, and `lua/tests/gen4_route_play.lua`
+drives that route in BizHawk with **normal button input only** — A, Start and the D-pad. It
+writes no game memory: the only side effects are `joypad.set`, `savestate.save`/`load`,
+`client.screenshot`, `client.exit` and its own log file.
+
+### Fixtures
+
+| Input | Default | Notes |
+|---|---|---|
+| ROM | `E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds` | US 1.0; the NARC layout is read from the cartridge, not assumed |
+| Save | `E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM` | a real battery save outside the player's house in New Bark Town; staged (never written in place) |
+| pret | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` | supplies the event/terrain behaviour sources and the Johto encounter table |
+| Emulator | `E:/Howard/Bizhawk/EmuHawk.exe` | absent is a named **SKIP** (exit 2), not a FAIL |
+
+### Plan only (no emulator)
+
+```bash
+python tools/gen4_routes.py plan --out route.json
+```
+
+Prints the route as JSON and exits 0, or `FAIL: <reason>` (exit 1) / `SKIP: <input absent>`
+(exit 2). The planner reads the position from the save at `general + 0x1234`
+(`SAVE_LOCAL_FIELD_DATA.currentPosition`), the Johto cell map from NARC `a/0/4/1`, the tile
+attributes from `a/0/6/5` at `0x14 + the u16 at +0x12`, and the event tiles from
+`files/fielddata/eventdata/zone_event/<bank>_*.json`.
+
+### Plan and drive it (one EmuHawk per leg, own lane)
+
+```bash
+python tools/gen4_routes.py run                    # lane C:/slink/g4/route by default
+python tools/gen4_routes.py run --lane route2 --timeout 900 --pace-max 4000
+```
+
+Leg 1 boots the staged save; a coord-event cutscene is cleared with A, savestated, and reported
+as `RESULT RESYNC map=… x=… y=… dir=… state=…`, after which the next leg re-plans from that
+position and resumes from the state (at most 4 legs). Every leg writes
+`<lane>/<tag>_leg<N>.json`, `<tag>_leg<N>.log` and savestates/screenshot PNGs.
+
+### PASS criterion
+
+`run` exits 0 only when the last leg's last log line is `RESULT BATTLE`, i.e.:
+
+* the walk reached the pace tile and never crossed a warp, a bg event, an NPC box or surfable
+  water (each is refused by the planner, not stepped on),
+* the chain `fs -> +0 -> +4` (overlay id 12) `-> +0x1C -> +0x30` resolves to a battle context with
+  a non-zero enemy species (`docs/gen4/research/battle_pointer.md`),
+* the log names the species and the phase: `RESULT BATTLE phase=pace species=PIDGEY(16) level=2 …`,
+  or `phase=approach` when the encounter fired on the way to the grass instead of while pacing,
+* `<tag>_battle_settled.png` shows the FIGHT menu.
+
+Anything else is exit 1 with `RESULT FAIL <why>` in the log, plus a `fail.png`.
+
+### Known heuristics
+
+* **The post-battle settle is a fixed 900 frames** (`G4_SETTLE` overrides it), not a state
+  predicate. The screenshot is what confirms the menu actually came up; a longer intro
+  (a trainer, a multi-Pokémon send-out) would need the override raised.
+* Surfable water is treated as impassable on foot, so a route that genuinely needs Surf is
+  refused rather than planned. There is no Surf support yet.
+* The boot loop presses A/Start while no FieldSystem exists, so the run assumes the save is
+  mid-game; the run config pins `InitialTime 2010-01-01T12:00:00` for determinism.
+* The planner does not evaluate a coord event's `var`/`val`, so a crossed event is recorded in
+  `route.soft_events` with its scriptIds and the harness names the nearby ones when a leg
+  resyncs. A script that does not clear with A ends the run after 4 legs.
+
+### Headless
+
+```bash
+python -m pytest tests/unit/test_gen4_routes.py -v     # 18 tests, no emulator
+```
+
+The three real-data cases skip by name when the ROM/pret/save is absent and fail when an input
+is present but wrong. `test_real_every_warp_tile_decodes_to_a_door` is the load-bearing one: a
+warp tile is a door by construction, so it pins the land-data offset, the row-major order and
+the matrix index in a single assertion.
+
 ---
 
 ## The Gen 1 release gate — a skip is a failure
