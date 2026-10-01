@@ -1,269 +1,223 @@
 #!/usr/bin/env python3
-"""
-gen_gen4_encounters.py — Generate HGSS + Platinum wild encounter tables.
+"""gen_gen4_encounters.py -- HGSS wild encounter tables, per version, from pinned pret/pokeheartgold.
 
-Outputs:
-  data/games/gen4_hgsspt/encounters_hgss.json
-  data/games/gen4_hgsspt/encounters_pt.json
+Writes data/games/gen4_hgss/encounters.json.
 
-Schema per file:
-  {
-    "<area_id>": {
-      "Grass":        [{"name": "Pidgey", "species_id": 16, "rate": 30,
-                        "min_level": 2, "max_level": 4}, ...],
-      "Day":          [...],
-      "Night":        [...],
-      "Surfing":      [...],
-      "Old Rod":      [...],
-      "Good Rod":     [...],
-      "Super Rod":    [...],
-      "Rock Smash":   [...],
-      "Headbutt":     [...],
-      "Honey Tree":   [...],
-    },
-    ...
-  }
+Sources (pokeheartgold @ the pinned commit; see data/gen4_sources.lock.json):
+  files/fielddata/encountdata/gs_enc_data.json  142 encounter banks. HG/SS differences are nested
+                                                {"HEARTGOLD":..,"SOULSILVER":..} under land levels, per-time-of-day
+                                                species, surf/fishing/rock-smash slots, swarms and radio species
+                                                (53 of 142 banks differ). Every bank is emitted once per version.
+  include/encounter_tables_narc.h               ENCDATA_<token> -> array index (the bank id the map header names)
+  files/arc/headbutt.json                       headbutt tables, one per map id; species {"gold","silver"} split
+  files/arc/safari_enc.json                     Safari encounters per Safari AREA (no HG/SS split exists)
+  include/constants/species.h, msg_0237.gmm     species id and name
+  src/data/map_headers.h (via gen_gen4_area_map) which map ids point at which bank
 
-Source: pret/pokeheartgold data/encounters/*.s + pret/pokeplatinum
-data/encounters/*.s. The tool parses those when --pret-* paths are supplied;
-otherwise writes the curated seed data inlined below (covers ~20 common
-starter / early-game encounter zones).
+Slot percentages are not data: they are hard-coded in src/field/encounter_check.c
+(EncounterSlot_WildMonSlotRoll_*), cited in `slot_rates`. Safari rolls LCRandom() % 10 (uniform).
+Pal Park (files/arc/ppark.json) is deliberately not emitted: it only accepts migrated mons.
 
 Usage:
-  python tools/gen_gen4_encounters.py --pret-hgss /path/to/pokeheartgold
-  python tools/gen_gen4_encounters.py --pret-pt   /path/to/pokeplatinum
-  python tools/gen_gen4_encounters.py  # writes seed-only
-
-The adapter falls back to None for any area_id not in the JSON, so a sparse
-table is safe — overlays just omit the encounter panel for unmapped areas.
+  python tools/gen_gen4_encounters.py [--pret PATH] [--check]
+Exit: 0 ok, 1 drift / wrong pret commit, 2 pret clone absent.
 """
 
-import argparse
+from __future__ import annotations
+
 import json
+import re
 import sys
 from pathlib import Path
 
-# ── Curated seed data (HGSS, key Johto early routes) ──────────────────────────
-# Rates from Bulbapedia HGSS encounter tables. Levels per location.
-HGSS_SEED: dict[str, dict[str, list[dict]]] = {
-    "route_29": {
-        "Day": [
-            {"name": "Pidgey",     "species_id": 16,  "rate": 40, "min_level": 2, "max_level": 4},
-            {"name": "Sentret",    "species_id": 161, "rate": 30, "min_level": 2, "max_level": 4},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 10, "min_level": 3, "max_level": 3},
-            {"name": "Rattata",    "species_id": 19,  "rate": 20, "min_level": 2, "max_level": 4},
-        ],
-        "Night": [
-            {"name": "Hoothoot",   "species_id": 163, "rate": 40, "min_level": 2, "max_level": 4},
-            {"name": "Rattata",    "species_id": 19,  "rate": 30, "min_level": 2, "max_level": 4},
-            {"name": "Sentret",    "species_id": 161, "rate": 30, "min_level": 2, "max_level": 4},
-        ],
-    },
-    "route_30": {
-        "Day": [
-            {"name": "Pidgey",     "species_id": 16,  "rate": 20, "min_level": 3, "max_level": 5},
-            {"name": "Caterpie",   "species_id": 10,  "rate": 20, "min_level": 3, "max_level": 4},
-            {"name": "Weedle",     "species_id": 13,  "rate": 20, "min_level": 3, "max_level": 4},
-            {"name": "Ledyba",     "species_id": 165, "rate": 20, "min_level": 4, "max_level": 5},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 20, "min_level": 4, "max_level": 5},
-        ],
-        "Night": [
-            {"name": "Hoothoot",   "species_id": 163, "rate": 40, "min_level": 3, "max_level": 5},
-            {"name": "Spinarak",   "species_id": 167, "rate": 20, "min_level": 4, "max_level": 5},
-            {"name": "Caterpie",   "species_id": 10,  "rate": 10, "min_level": 3, "max_level": 4},
-            {"name": "Weedle",     "species_id": 13,  "rate": 10, "min_level": 3, "max_level": 4},
-            {"name": "Poliwag",    "species_id": 60,  "rate": 20, "min_level": 4, "max_level": 5},
-        ],
-    },
-    "route_31": {
-        "Day": [
-            {"name": "Bellsprout", "species_id": 69,  "rate": 30, "min_level": 4, "max_level": 6},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 30, "min_level": 3, "max_level": 4},
-            {"name": "Pidgey",     "species_id": 16,  "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Caterpie",   "species_id": 10,  "rate": 10, "min_level": 4, "max_level": 4},
-            {"name": "Weedle",     "species_id": 13,  "rate": 10, "min_level": 4, "max_level": 4},
-        ],
-        "Night": [
-            {"name": "Bellsprout", "species_id": 69,  "rate": 30, "min_level": 4, "max_level": 6},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 30, "min_level": 3, "max_level": 6},
-            {"name": "Poliwag",    "species_id": 60,  "rate": 20, "min_level": 5, "max_level": 5},
-            {"name": "Zubat",      "species_id": 41,  "rate": 20, "min_level": 4, "max_level": 5},
-        ],
-    },
-    "route_32": {
-        "Day": [
-            {"name": "Bellsprout", "species_id": 69,  "rate": 30, "min_level": 6, "max_level": 9},
-            {"name": "Hoppip",     "species_id": 187, "rate": 30, "min_level": 6, "max_level": 7},
-            {"name": "Rattata",    "species_id": 19,  "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Mareep",     "species_id": 179, "rate": 10, "min_level": 4, "max_level": 5},
-            {"name": "Wooper",     "species_id": 194, "rate": 10, "min_level": 6, "max_level": 6},
-        ],
-        "Night": [
-            {"name": "Ekans",      "species_id": 23,  "rate": 30, "min_level": 6, "max_level": 9},
-            {"name": "Rattata",    "species_id": 19,  "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Zubat",      "species_id": 41,  "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Wooper",     "species_id": 194, "rate": 30, "min_level": 6, "max_level": 8},
-        ],
-    },
-    "route_33": {
-        "Day": [
-            {"name": "Spearow",    "species_id": 21,  "rate": 30, "min_level": 5, "max_level": 7},
-            {"name": "Rattata",    "species_id": 19,  "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Geodude",    "species_id": 74,  "rate": 30, "min_level": 4, "max_level": 8},
-            {"name": "Ekans",      "species_id": 23,  "rate": 20, "min_level": 6, "max_level": 7},
-        ],
-    },
-    "route_34": {
-        "Day": [
-            {"name": "Rattata",    "species_id": 19,  "rate": 30, "min_level": 6, "max_level": 12},
-            {"name": "Pidgey",     "species_id": 16,  "rate": 30, "min_level": 7, "max_level": 13},
-            {"name": "Drowzee",    "species_id": 96,  "rate": 30, "min_level": 8, "max_level": 13},
-            {"name": "Abra",       "species_id": 63,  "rate": 10, "min_level": 8, "max_level": 12},
-        ],
-    },
-    "violet_city": {
-        "Surfing": [
-            {"name": "Magikarp",   "species_id": 129, "rate": 90, "min_level": 10, "max_level": 25},
-            {"name": "Poliwag",    "species_id": 60,  "rate": 10, "min_level": 15, "max_level": 25},
-        ],
-    },
-    "sprout_tower": {
-        "Day": [
-            {"name": "Rattata",    "species_id": 19,  "rate": 90, "min_level": 3, "max_level": 6},
-            {"name": "Gastly",     "species_id": 92,  "rate": 10, "min_level": 5, "max_level": 6},
-        ],
-        "Night": [
-            {"name": "Rattata",    "species_id": 19,  "rate": 80, "min_level": 3, "max_level": 6},
-            {"name": "Gastly",     "species_id": 92,  "rate": 20, "min_level": 5, "max_level": 6},
-        ],
-    },
-    "union_cave": {
-        "Day": [
-            {"name": "Zubat",      "species_id": 41,  "rate": 30, "min_level": 6, "max_level": 8},
-            {"name": "Geodude",    "species_id": 74,  "rate": 30, "min_level": 4, "max_level": 8},
-            {"name": "Rattata",    "species_id": 19,  "rate": 30, "min_level": 5, "max_level": 7},
-            {"name": "Onix",       "species_id": 95,  "rate": 10, "min_level": 7, "max_level": 7},
-        ],
-    },
-    "ilex_forest": {
-        "Day": [
-            {"name": "Caterpie",   "species_id": 10,  "rate": 30, "min_level": 5, "max_level": 7},
-            {"name": "Metapod",    "species_id": 11,  "rate": 20, "min_level": 6, "max_level": 7},
-            {"name": "Weedle",     "species_id": 13,  "rate": 10, "min_level": 5, "max_level": 7},
-            {"name": "Kakuna",     "species_id": 14,  "rate": 10, "min_level": 6, "max_level": 7},
-            {"name": "Pidgey",     "species_id": 16,  "rate": 20, "min_level": 5, "max_level": 7},
-            {"name": "Paras",      "species_id": 46,  "rate": 10, "min_level": 6, "max_level": 7},
-        ],
-        "Night": [
-            {"name": "Caterpie",   "species_id": 10,  "rate": 20, "min_level": 5, "max_level": 7},
-            {"name": "Weedle",     "species_id": 13,  "rate": 20, "min_level": 5, "max_level": 7},
-            {"name": "Oddish",     "species_id": 43,  "rate": 30, "min_level": 5, "max_level": 7},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 20, "min_level": 5, "max_level": 7},
-            {"name": "Venonat",    "species_id": 48,  "rate": 10, "min_level": 6, "max_level": 7},
-        ],
-    },
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gen_gen4_area_map as base  # noqa: E402
+
+VERSIONS = {"heartgold": "HEARTGOLD", "soulsilver": "SOULSILVER"}
+HEADBUTT_VER = {"heartgold": "gold", "soulsilver": "silver"}
+TIMES = ("morn", "day", "nite")
+SLOT_RATES = {
+    "_source": "src/field/encounter_check.c EncounterSlot_WildMonSlotRoll_Land/Surfing/Fishing/RockSmash/Headbutt (LCRandRange(100)); safari: LCRandom() % NUM_ENCOUNTERS_SAFARI",
+    "land": [20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1],
+    "surf": [60, 30, 5, 4, 1],
+    "fishing": [40, 30, 15, 10, 5],
+    "rock_smash": [80, 20],
+    "headbutt": [50, 15, 15, 10, 5, 5],
+    "safari": [10] * 10,
 }
-
-# ── Pt seed (key Sinnoh early-game routes) ────────────────────────────────────
-PT_SEED: dict[str, dict[str, list[dict]]] = {
-    "route_201": {
-        "Day": [
-            {"name": "Bidoof",     "species_id": 399, "rate": 50, "min_level": 2, "max_level": 4},
-            {"name": "Starly",     "species_id": 396, "rate": 50, "min_level": 2, "max_level": 4},
-        ],
-        "Night": [
-            {"name": "Bidoof",     "species_id": 399, "rate": 50, "min_level": 2, "max_level": 4},
-            {"name": "Kricketot",  "species_id": 401, "rate": 50, "min_level": 2, "max_level": 4},
-        ],
-    },
-    "route_202": {
-        "Day": [
-            {"name": "Starly",     "species_id": 396, "rate": 50, "min_level": 3, "max_level": 5},
-            {"name": "Bidoof",     "species_id": 399, "rate": 30, "min_level": 3, "max_level": 5},
-            {"name": "Shinx",      "species_id": 403, "rate": 20, "min_level": 4, "max_level": 5},
-        ],
-    },
-    "route_203": {
-        "Day": [
-            {"name": "Starly",     "species_id": 396, "rate": 35, "min_level": 4, "max_level": 6},
-            {"name": "Bidoof",     "species_id": 399, "rate": 25, "min_level": 4, "max_level": 6},
-            {"name": "Shinx",      "species_id": 403, "rate": 20, "min_level": 5, "max_level": 6},
-            {"name": "Abra",       "species_id": 63,  "rate": 10, "min_level": 4, "max_level": 5},
-            {"name": "Zubat",      "species_id": 41,  "rate": 10, "min_level": 5, "max_level": 6},
-        ],
-    },
-    "route_204": {
-        "Day": [
-            {"name": "Starly",     "species_id": 396, "rate": 40, "min_level": 4, "max_level": 6},
-            {"name": "Bidoof",     "species_id": 399, "rate": 20, "min_level": 4, "max_level": 6},
-            {"name": "Wurmple",    "species_id": 265, "rate": 15, "min_level": 5, "max_level": 6},
-            {"name": "Silcoon",    "species_id": 266, "rate": 5,  "min_level": 6, "max_level": 6},
-            {"name": "Cascoon",    "species_id": 268, "rate": 5,  "min_level": 6, "max_level": 6},
-            {"name": "Shinx",      "species_id": 403, "rate": 15, "min_level": 5, "max_level": 6},
-        ],
-    },
-    "oreburgh_mine": {
-        "Day": [
-            {"name": "Zubat",      "species_id": 41,  "rate": 50, "min_level": 5, "max_level": 8},
-            {"name": "Geodude",    "species_id": 74,  "rate": 50, "min_level": 5, "max_level": 8},
-        ],
-    },
-    "eterna_forest": {
-        "Day": [
-            {"name": "Wurmple",    "species_id": 265, "rate": 30, "min_level": 6, "max_level": 8},
-            {"name": "Silcoon",    "species_id": 266, "rate": 5,  "min_level": 8, "max_level": 8},
-            {"name": "Cascoon",    "species_id": 268, "rate": 5,  "min_level": 8, "max_level": 8},
-            {"name": "Hoothoot",   "species_id": 163, "rate": 20, "min_level": 6, "max_level": 9},
-            {"name": "Budew",      "species_id": 406, "rate": 10, "min_level": 7, "max_level": 9},
-            {"name": "Buneary",    "species_id": 427, "rate": 15, "min_level": 6, "max_level": 8},
-            {"name": "Bidoof",     "species_id": 399, "rate": 15, "min_level": 6, "max_level": 9},
-        ],
-    },
-}
+INPUTS = [
+    "files/fielddata/encountdata/gs_enc_data.json",
+    "include/encounter_tables_narc.h",
+    "files/arc/headbutt.json",
+    "files/arc/safari_enc.json",
+    "include/constants/species.h",
+    "files/msgdata/msg/msg_0237.gmm",
+    "include/constants/maps.h",
+    "src/data/map_headers.h",
+]
 
 
-def parse_pret_encounters(pret_path: Path, game: str) -> dict | None:
-    """Parse pret encounter data files. Returns the encounter dict, or None on miss."""
-    enc_dir = pret_path / "data" / "encounters"
-    if not enc_dir.exists():
-        # Try alternate location (pokeplatinum stores under res/)
-        enc_dir = pret_path / "res" / "field" / "encounters"
-        if not enc_dir.exists():
-            return None
-    # pret stores encounter data per-map as .s or .json files. Full parsing is
-    # non-trivial — defer to a separate implementation pass when pret is local.
-    # For now, just confirm the directory exists and log file count.
-    files = list(enc_dir.glob("*"))
-    print(f"  Found {len(files)} encounter files in {enc_dir} (pret parser TBD)")
-    return None
+def split(obj, ver: str):
+    """Collapse a {"HEARTGOLD":..,"SOULSILVER":..} node to this version's value; pass anything else through."""
+    if isinstance(obj, dict) and set(obj) == {"HEARTGOLD", "SOULSILVER"}:
+        return obj[ver]
+    return obj
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pret-hgss", help="Path to cloned pret/pokeheartgold")
-    ap.add_argument("--pret-pt",   help="Path to cloned pret/pokeplatinum")
-    args = ap.parse_args()
+def has_split(obj) -> bool:
+    if isinstance(obj, dict):
+        if set(obj) == {"HEARTGOLD", "SOULSILVER"}:
+            return True
+        return any(has_split(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(has_split(v) for v in obj)
+    return False
 
-    repo_root = Path(__file__).resolve().parent.parent
-    out_dir = repo_root / "data" / "games" / "gen4_hgsspt"
-    out_dir.mkdir(parents=True, exist_ok=True)
 
-    for game, seed, pret_arg, fname in [
-        ("HGSS",     HGSS_SEED, args.pret_hgss, "encounters_hgss.json"),
-        ("Platinum", PT_SEED,   args.pret_pt,   "encounters_pt.json"),
-    ]:
-        data = None
-        if pret_arg:
-            print(f"Parsing {game} encounters from {pret_arg}...")
-            data = parse_pret_encounters(Path(pret_arg), game.lower())
-        if data is None:
-            print(f"Writing {game} seed ({len(seed)} areas)")
-            data = seed
-        out_path = out_dir / fname
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        print(f"  Wrote {out_path}")
+class Species:
+    def __init__(self, clone: Path):
+        self.ids = base.defines(clone, "include/constants/species.h", "SPECIES_")
+        names = base.gmm(clone, 237)
+        self.names = {sid: base.titled(names[sid]) for sid in names}
+
+    def ref(self, const: str) -> dict:
+        sid = self.ids[const]  # KeyError = unknown constant = fail closed
+        return {"species_id": sid, "name": "" if sid == 0 else self.names[sid]}
+
+
+def slot(sp: Species, const: str, lo: int, hi: int, rate: int) -> dict:
+    """One encounter slot; its list position is the game slot index."""
+    return {**sp.ref(const), "rate": rate, "min_level": lo, "max_level": hi}
+
+
+def bank_for(sp: Species, enc: dict, ver: str) -> dict:
+    out: dict = {
+        "rates": {
+            "land": enc["land"]["rate"],
+            "surf": enc["surf"]["rate"],
+            "rock_smash": enc["rock_smash"]["rate"],
+            "old_rod": enc["fishing"]["old_rod"]["rate"],
+            "good_rod": enc["fishing"]["good_rod"]["rate"],
+            "super_rod": enc["fishing"]["super_rod"]["rate"],
+        }
+    }
+    land = enc["land"]["mons"]
+    if land:
+        assert len(land) == 12, "land slot count drifted"
+        out["land"] = {
+            t: [
+                slot(sp, split(m["species"][t], ver), (lv := split(m["level"], ver)), lv, SLOT_RATES["land"][i])
+                for i, m in enumerate(land)
+            ]
+            for t in TIMES
+        }
+
+    def methods(key: str, mons: list, rates: list[int]):
+        if not mons:
+            return
+        assert len(mons) == len(rates), f"{key} slot count drifted"
+        out[key] = [
+            slot(sp, split(m["species"], ver), split(m["level"]["min"], ver), split(m["level"]["max"], ver), rates[i])
+            for i, m in enumerate(mons)
+        ]
+
+    methods("surf", enc["surf"]["mons"], SLOT_RATES["surf"])
+    methods("rock_smash", enc["rock_smash"]["mons"], SLOT_RATES["rock_smash"])
+    for rod in ("old_rod", "good_rod", "super_rod"):
+        methods(rod, enc["fishing"][rod]["mons"], SLOT_RATES["fishing"])
+    radio = {k: [sp.ref(split(m, ver))["species_id"] for m in enc[k]] for k in ("hoenn", "sinnoh")}
+    if any(radio.values()):
+        out["radio"] = {k: [sp.ref(split(m, ver)) for m in enc[k]] for k in ("hoenn", "sinnoh")}
+    swarm = {}
+    for key, name in (("landSwarm", "land"), ("surfSwarm", "surf"), ("fishSwarm", "fish"), ("nightFish", "night_fish")):
+        if key in enc:
+            swarm[name] = sp.ref(split(enc[key], ver))
+    if swarm:
+        out["swarm"] = swarm
+    return out
+
+
+def headbutt_for(sp: Species, tables: list[dict], maps: base.Maps, ver: str) -> dict:
+    gs = HEADBUTT_VER[ver]
+
+    def mons(rows):
+        return [
+            {**sp.ref(m["species"][gs] if isinstance(m["species"], dict) else m["species"]), "rate": SLOT_RATES["headbutt"][i], "min_level": m["minLevel"], "max_level": m["maxLevel"]}
+            for i, m in enumerate(rows)
+        ]
+
+    out = {}
+    for mid, t in enumerate(tables):
+        assert maps.rows[mid]["token"] == t["Map"], f"headbutt table {mid} is {t['Map']}, map header says {maps.rows[mid]['token']}"
+        if not t["Trees"] and not t["SecretTrees"]:
+            continue
+        out[str(mid)] = {"token": t["Map"], "trees": len(t["Trees"]), "secret_trees": len(t["SecretTrees"]), "common": mons(t["CommonMons"]), "rare": mons(t["RareMons"]), "secret": mons(t["SecretMons"])}
+    return out
+
+
+def safari_for(sp: Species, areas: list[dict]) -> dict:
+    def refs(rows):
+        return [{**sp.ref(m["species"]), "level": m["level"]} for m in rows]
+
+    out = {}
+    for a in areas:
+        entry = {}
+        for method in ("land", "surf", "oldrod", "goodrod", "superrod"):
+            d = a[method]
+            entry[method] = {
+                "slots": {t: refs(d["mons"][t]) for t in TIMES},
+                "bonus": [
+                    {"conditions": b["conditions"], **{t: {**sp.ref(b[t]["species"]), "level": b[t]["level"]} for t in TIMES}}
+                    for b in d["bonus_mons"]
+                ],
+            }
+        out[a["area"].removeprefix("SAFARI_ZONE_AREA_").lower()] = {"const": a["area"], **entry}
+    return out
+
+
+def build(clone: Path) -> dict[str, str]:
+    maps = base.Maps(clone)
+    sp = Species(clone)
+    enc = json.loads(base.read(clone, "files/fielddata/encountdata/gs_enc_data.json"))["encounters"]
+    assert len(enc) == 142, f"gs_enc_data.json has {len(enc)} banks, pinned source has 142"
+    index = {int(n): tok for tok, n in re.findall(r"#define ENCDATA_(\w+)\s+ENCDATA\(_(\d+)\)", base.read(clone, "include/encounter_tables_narc.h"))}
+    users: dict[str, list[int]] = {}
+    for mid, row in maps.rows.items():
+        if row["enc_bank"]:
+            users.setdefault(row["enc_bank"], []).append(mid)
+    area_of = base.build_model(clone)["map_area"]
+
+    banks = {}
+    for i, e in enumerate(enc):
+        token = index[i]
+        banks[token] = {"index": i, "json_map": e["map"], "maps": users.get(token, []), "areas": sorted({area_of[m] for m in users.get(token, []) if area_of[m]}), "version_split": has_split(e)}
+    unused = [t for t, b in banks.items() if not b["maps"]]
+
+    doc = {
+        "_note": "GENERATED by tools/gen_gen4_encounters.py from pinned pret/pokeheartgold -- do not edit. banks: ENCDATA token -> index/maps/areas (version independent); versions.<title>.banks: the per-version tables; slots keep game slot order with the percentage in `rate`.",
+        "_schema": "gen4-hgss-encounters-v1",
+        "source": base.provenance(clone, "tools/gen_gen4_encounters.py", INPUTS),
+        "slot_rates": SLOT_RATES,
+        "banks": banks,
+        "banks_without_map": unused,
+        "bank_count": len(banks),
+        "split_bank_count": sum(b["version_split"] for b in banks.values()),
+        "excluded": {"pal_park": "files/arc/ppark.json: migrated mons only, out of scope"},
+        "safari": {"version_split": False, "areas": safari_for(sp, json.loads(base.read(clone, "files/arc/safari_enc.json"))["encounters"])},
+        "versions": {},
+    }
+    headbutt = json.loads(base.read(clone, "files/arc/headbutt.json"))["tables"]
+    assert len(headbutt) == 540, "headbutt table count drifted"
+    for title, ver in VERSIONS.items():
+        doc["versions"][title] = {
+            "banks": {index[i]: bank_for(sp, e, ver) for i, e in enumerate(enc)},
+            "headbutt": headbutt_for(sp, headbutt, maps, title),
+        }
+    return {"encounters.json": base.dumps(doc, 6)}
+
+
+def main() -> int:
+    return base.cli(build, __doc__.splitlines()[0])
 
 
 if __name__ == "__main__":
