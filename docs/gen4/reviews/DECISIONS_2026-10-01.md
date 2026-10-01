@@ -71,3 +71,15 @@ Owner, replying to the paced HG floor (receipt `heartgold-8355974c3c30`), "Thats
   - p99 is no more than 1.0 ms above the same session's bare floor.
   - No interval exceeds 2 native periods (33.43 ms), i.e. no visible dropped frame.
 - **Recording:** each receipt records the five `PACE_1X` values and the floor it was compared against.
+
+## Owner ruling: row o may use the SYNTH second party member (2026-10-01)
+
+**Question asked:** may row o use a save with a cloned second Pokémon, to prove the replacement-prompt path? **Owner:** "Yes, clone allowed (Recommended)".
+
+- **What it amends:** the earlier scope line that kept row o natural-only, for this purpose only.
+  - The `gen4_synth_save.py party2` clone (a disclosed SYNTH setup with a sidecar hash) may supply the 2nd party member.
+  - The battle, the linked-faint write, the replacement prompt, the send-out and the save copy-back all stay native.
+- **Scenarios:**
+  - 2+ mon replacement is the primary production path.
+  - The one-mon whiteout stays as a second scenario.
+- **Why:** the OMP adversarial review cx-fd56a73d graded "row o proven only on a one-mon whiteout" as a BLOCKER. With 2+ mons the write takes the D540 replacement branch, which is the path players actually hit.
