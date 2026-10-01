@@ -41,12 +41,13 @@ M.OBS = {
 }
 M.SCENARIOS = {
   seam_turnend = {kind = "primary", seam = "turnend", apply = {battle = true, party = true}},
-  seam_ufce_bit = {kind = "exploratory", seam = "ufce", apply = {battle = true, party = true}, faint_bit = true},
+  seam_ufce_bit = {kind = "primary", seam = "ufce", apply = {battle = true, party = true}, faint_bit = true},
   poll_fightmenu = {kind = "exploratory", seam = "poll", apply = {battle = true, party = true}},
   battle_only = {kind = "control", seam = "turnend", apply = {battle = true}},
   party_only = {kind = "control", seam = "turnend", apply = {party = true}},
 }
 local BOTH = {battle = true, party = true}
+M.EFFECT_WINDOW = 900 -- frames after the write within which the game result byte must appear
 
 local function u32(v) return v & 0xFFFFFFFF end
 local function s32(v) v = u32(v); if v >= 0x80000000 then return v - 0x100000000 end return v end
@@ -290,7 +291,9 @@ function M.judge(scn, o)
   local w = o.write
   if not w then return "OPEN", "no write performed: " .. tostring(o.no_write_reason) end
   local heal = o.heal and o.heal[1]
-  local ended = o.effect and o.effect.outcome_frame ~= nil
+  -- the game result must FOLLOW the write closely: a later natural faint (live run 163725, party_only) is not evidence
+  local lat = o.latency and o.latency.write_to_effect
+  local ended = o.effect and o.effect.outcome_frame ~= nil and lat ~= nil and lat <= M.EFFECT_WINDOW
   local copyback_zero = heal ~= nil and heal.saved_hp_at_entry == 0
   if scn.kind == "control" then
     if w.verify.ok then return "FAIL", "single-copy write passed the full readback (control cannot go red)" end
@@ -441,7 +444,7 @@ local function run()
     observer(M.OBS.blackout, blackout_hits)
 
     -- per-frame poll: change log + the observables the effect judge needs
-    local first_out, outv
+    local first_out, outv, script_frame, bit_set_seen, bit_clear_frame
     local function sample()
       local fr = emu.framecount()
       local ch = M.chain(mem)
@@ -457,6 +460,11 @@ local function run()
         if cmd == L.CMD_TURN_END or cmd == L.CMD_UFCE then seen12[fr] = true end
         if cmd ~= L.CMD_SELECT then left5 = true end
         if write_frame and out_b ~= 0 and not first_out then first_out, outv = fr, out_b end
+        if write_frame and cmd == 22 and not script_frame then script_frame = fr end -- RUN_SCRIPT after the write
+        local fb = (mem.r32(ch.ctx + L.ctx_status) >> L.FAINT_SHIFT) & 1
+        if write_frame and scn.faint_bit then
+          if fb == 1 then bit_set_seen = true elseif bit_set_seen and not bit_clear_frame then bit_clear_frame = fr end
+        end
         key = cmd .. "," .. out_b .. "," .. bhp .. "," .. php .. "," .. sel
         if key ~= last_key and #obs.trace < 120 then
           obs.trace[#obs.trace + 1] = {f = fr, cmd = cmd, out = out_b, bhp = bhp, php = php, sel = sel}
@@ -490,6 +498,8 @@ local function run()
       shot("poll_idle")
     end
     -- normal inputs: FIGHT, (Right for the 2nd move = a non-damaging turn), confirm
+    -- live finding (run 163238): the FIRST A only wakes the button cursor; the second opens FIGHT
+    if cfg.wake ~= false then tap("A", 3, 40) end
     tap("A", 3, 50); shot("moves")
     if cfg.move_right ~= false then tap("Right", 3, 20) end
     tap("A", 3, 30)
@@ -500,20 +510,26 @@ local function run()
     while armed and not S.done and waited < budget do
       step(44); tap("A", 2, 0); waited = waited + 46
       local ch = M.chain(mem)
-      if left5 and ch and mem.r32(ch.ctx + L.ctx_cmd) == L.CMD_SELECT then
+      if left5 and ch and not S.done and mem.r32(ch.ctx + L.ctx_cmd) == L.CMD_SELECT then
         obs.no_write_reason = "turn ended at the next selection screen without a seam hit"
         break
       end
       if not ch and had_chain then obs.no_write_reason = obs.no_write_reason or "battle ended before a seam hit"; break end
     end
+    if armed and not S.done and not obs.no_write_reason then obs.no_write_reason = "budget exhausted without a seam hit" end
     if not write_frame and #S.refusals > 0 then
       obs.no_write_reason = tostring(obs.no_write_reason) .. "; last refusal: " .. tostring(S.refusals[#S.refusals].reason)
     end
+    local nshots, last_shot = 0, 0
     if write_frame then shot("after_write") end
     -- after the write: advance text and observe until the field is idle again
     local quiet, spent = 0, 0
+    if scn.kind == "control" then budget = 1500 end -- controls only need the window after the write
     while spent < budget and (write_frame or not armed) do
       step(40); spent = spent + 40
+      if write_frame and nshots < 14 and emu.framecount() - last_shot >= 70 then
+        nshots = nshots + 1; last_shot = emu.framecount(); shot("w" .. (emu.framecount() - write_frame))
+      end
       -- advance text only while something is running: an idle A would talk to the nurse (a second HealParty)
       if not field_idle() then tap("A", 2, 0); spent = spent + 2 end
       if chain_gone_frame and field_idle() then quiet = quiet + 42 else quiet = 0 end
@@ -530,7 +546,8 @@ local function run()
       lat.write_to_effect = first_out and (first_out - write_frame) or nil
     end
     obs.latency = lat
-    obs.effect = {outcome_frame = first_out, outcome_value = outv, chain_gone_frame = chain_gone_frame}
+    obs.effect = {outcome_frame = first_out, outcome_value = outv, chain_gone_frame = chain_gone_frame,
+                  script_after_write_frame = script_frame, faint_bit_consumed_frame = bit_clear_frame}
     obs.heal = heal_hits
     obs.blackout = blackout_hits
     obs.seam.hits, obs.seam.wrong_image, obs.seam.stale, obs.seam.bad_state = S.hits, S.wrong_image, S.stale, S.bad_state

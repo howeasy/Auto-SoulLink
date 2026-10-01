@@ -38,7 +38,7 @@ RECEIPT_RE = re.compile(r"^PROBE o (PASS|FAIL|OPEN) (\{.*\})$")
 INITIAL_TIME = "2010-01-01T12:00:00"
 # name -> kind; must equal the Lua table (test_scenario_table_matches_lua)
 SCENARIOS = {"seam_turnend": "primary", "battle_only": "control", "party_only": "control",
-             "seam_ufce_bit": "exploratory", "poll_fightmenu": "exploratory"}
+             "seam_ufce_bit": "primary", "poll_fightmenu": "exploratory"}
 FAULTS = {"identity": "wrong_pid_accepted", "verify_party": "battle_only_not_detected",
           "verify_high": "two_byte_stale_high_not_detected", "locked": "locked_accepted",
           "slot": "wrong_slot_accepted"}
@@ -314,7 +314,7 @@ def test_live_row_o_scenario(title, scenario):
     if status == "OPEN":
         pytest.skip(f"OPEN {scenario}: {payload.get('reason')} ({out})")
     if kind == "primary":  # the only receipt row_o() will accept as the physical row
-        shutil.copyfile(out, LANE_ROOT / f"row_o_{title}.txt")
+        shutil.copyfile(out, LANE_ROOT / f"row_o_{title}_{scenario}.txt")
 
 
 @pytest.mark.live

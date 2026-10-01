@@ -275,7 +275,7 @@ def test_two_byte_write_leaves_stale_high_half_that_readback_catches(api):
 
 def obs(**kw):
     base = {"controls_ok": True, "write": {"verify": {"ok": True, "reasons": {}}},
-            "effect": {"outcome_frame": 900, "outcome_value": 2},
+            "effect": {"outcome_frame": 900, "outcome_value": 2}, "latency": {"write_to_effect": 1},
             "heal": {1: {"frame": 1200, "saved_hp_at_entry": 0}}, "post_heal_saved_hp": 20, "saved_max_hp": 20}
     base.update(kw)
     return base
@@ -298,12 +298,14 @@ def test_judge_primary_requires_both_copies_independent_oracle_and_red_controls(
     assert judge(api, "seam_turnend", write=None)[0] == "OPEN"
     assert judge(api, "seam_turnend", write={"verify": {"ok": False, "reasons": {1: "party_hp_nonzero"}}})[0] == "FAIL"
     assert judge(api, "seam_turnend", effect={})[0] == "OPEN"
+    # a result that only appears long after the write is not the write's effect
+    assert judge(api, "seam_turnend", latency={"write_to_effect": 4361})[0] == "OPEN"
     assert judge(api, "seam_turnend", effect={"outcome_frame": 900, "outcome_value": 1})[0] == "FAIL"
     assert judge(api, "seam_turnend", heal={})[0] == "OPEN"
     # the zero must have reached the SAVE party before the heal: a lost copy-back goes red
     assert judge(api, "seam_turnend", heal={1: {"frame": 1, "saved_hp_at_entry": 20}})[0] == "FAIL"
     assert judge(api, "seam_turnend", post_heal_saved_hp=None)[0] == "OPEN"
-    assert judge(api, "seam_ufce_bit")[0] == "OPEN"  # exploratory: never a gate
+    assert judge(api, "poll_fightmenu")[0] == "OPEN"  # exploratory: never a gate
 
 
 def test_judge_control_scenarios_pass_only_when_the_oracle_goes_red(api):
@@ -315,6 +317,7 @@ def test_judge_control_scenarios_pass_only_when_the_oracle_goes_red(api):
     assert judge(api, "battle_only", **blind)[0] == "FAIL"
     # readback red but the game oracle still fully zero: the oracle is blind, the control must fail
     assert judge(api, "battle_only", write={"verify": {"ok": False, "reasons": {}}})[0] == "FAIL"
+    assert judge(api, "party_only", write={"verify": {"ok": False, "reasons": {}}}, latency={"write_to_effect": 4361})[0] == "PASS"
     assert judge(api, "battle_only", write={"verify": {"ok": False, "reasons": {}}}, heal={})[0] == "PASS"
 
 
@@ -496,10 +499,11 @@ def test_smoke_single_copy_controls_pass_only_because_the_oracle_goes_red(tmp_pa
 
 
 def test_smoke_exploratory_scenarios_are_never_a_gate(tmp_path, monkeypatch):
-    for scenario in ("poll_fightmenu", "seam_ufce_bit"):
-        status, payload, _ = run_probe(tmp_path, monkeypatch, scenario)
-        assert status == "OPEN" and "exploratory" in payload["reason"], (scenario, payload["reason"])
-        assert payload["observation"]["write"]["verify"]["ok"] is True
+    status, payload, _ = run_probe(tmp_path, monkeypatch, "poll_fightmenu")
+    assert status == "OPEN" and "exploratory" in payload["reason"], payload["reason"]
+    assert payload["observation"]["write"]["verify"]["ok"] is True
+    status, payload, _ = run_probe(tmp_path, monkeypatch, "seam_ufce_bit")  # promoted to primary
+    assert status == "PASS" and payload["observation"]["write"]["where"].endswith("UpdateFieldConditionExtra")
 
 
 def test_smoke_disabled_check_turns_the_whole_run_red_before_any_write(tmp_path, monkeypatch):

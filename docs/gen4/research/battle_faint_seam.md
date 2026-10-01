@@ -275,3 +275,35 @@ python -m pytest tests/unit/test_gen4_battle_faint_model.py -q              # cr
 Byte comparison used for §5: ov12 of the HG ROM vs the hge build at `0x0224A958`, `0x0224A70C`, `0x0224D540`,
 `0x0224D7EC`, `0x0224DC74`, `0x0224DD18`, `0x02238358`, `0x02250C40`, and the table at `0x0226CA90` (via ndspy
 `loadArm9Overlays()[12]`). `BattleContext_Main` differs (trampoline) and `0x0224A112` differs by one byte.
+
+## 9. Live result, HG (card C1-8B, 2026-10-01; PHYSICAL, singles wild Pidgey L2, one-mon party)
+
+Receipts: `C:/slink/g4/faint/heartgold_<scenario>_<hhmmss>/receipt.txt` (final runs 163846 `seam_turnend`, 164008
+`seam_ufce_bit`, 163929 `battle_only`, 163948 `party_only`); primary receipts copied to
+`C:/slink/g4/faint/row_o_heartgold_<scenario>.txt`.
+
+| Scenario | Status | Write cmd / frame latency | Game result byte `bs+0x2420` | Save-array HP at `HealParty` entry / after |
+|---|---|---|---|---|
+| `seam_turnend` (S1, HP only) | PASS | cmd 12; write -> result 1 frame | 2 (LOSE) | 0 / 20 |
+| `seam_ufce_bit` (S2 + FAINTED bit) | PASS | cmd 11; write -> result 157 frames | 2 (LOSE) | 0 / 20 |
+| `battle_only` (control) | PASS (red as required) | no result in 1500 frames | none | no heal |
+| `party_only` (control) | PASS (red as required) | no result in 1500 frames | none | no heal |
+
+- **Which seam gives the normal faint:** only **S2 with the FAINTED bit**. `TryFaintMon` consumed the bit at the next
+  dispatch (command 22 one frame after the write): the player sprite slid out, the HP bar was removed, the faint
+  message printed, then the loss message. S1 (HP only) skips all of that: the sprite and the stale `17/20` HP bar stay,
+  and the game goes straight to "is out of usable Pokemon!". Screenshots: `seam_ufce_bit_w73/w157/w241.png` vs
+  `seam_turnend_w71/w155.png`. Both seams reach the loss, and the zero reaches the save party before the heal; the native
+  heal then restores it (`HealParty` hit 2 = the nurse).
+- **Single-copy writes:** battle-only leaves the game on the party-switch screen ("already in battle") with the mon
+  still alive in the party copy; readback names `party_hp_nonzero`. Party-only is undone: the game's next
+  battle-to-party copy restored the HP and the battle played on (the later natural LOSE is outside the 900-frame
+  effect window, so the control correctly stays red).
+- **Poll coverage:** in both primary runs command 11 was never seen at a frame boundary (trace jumps 10 -> 12 in
+  `seam_turnend`); the hooks fired. `hits_without_poll_sight` is 0 because it counts only command 11/12 sightings
+  within +-1 frame of a hit; command 12 was seen at +-1 there.
+- **Source fixes during the live run:** (1) the first A only wakes the D-pad cursor, so FIGHT needs a second A; (2) the
+  effect must follow the write within 900 frames, because a later natural faint had satisfied the control oracle;
+  (3) dense post-write screenshots; (4) `seam_ufce_bit` promoted to primary (owner ruling).
+- **Still OPEN:** replacement prompt (2+ mon party), doubles/TAG/multi, NPC follower, trainer battles, Future Sight /
+  Perish / switch / run as live paths, the `poll_fightmenu` exploratory scenario (not run), hge.
