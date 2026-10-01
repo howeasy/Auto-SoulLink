@@ -277,3 +277,41 @@ def test_actual_picker_accepts_bound_rr_direct_handler_after_first_selection_onl
         return original,after_selection,unrelated
     ''')
     assert result==(True,True,False)
+
+@pytest.mark.parametrize('available',[2,3])
+def test_actual_native_selection_uses_available_party_and_start_confirmation(available):
+    from lupa import LuaRuntime
+    source=(ROOT/'lua/tests/duo/scenario_gen3_borrowed.lua').read_text()
+    start=source.index('        -- Primary party_menu')
+    end=source.index('        if not ctx.mash_until(ctx.in_battle',start)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().AVAILABLE=available
+    result=lua.execute('''
+        local at,state,entered,confirmed,starts=0,'choose',0,false,0
+        local order={0,0,0};local facts={selected_order_address=100,confirm_slot=6,party_selection_max=3}
+        local cursor=function() return at end
+        local picker=function() return state=='choose' end
+        local u8=function(address) return order[address-99] end
+        local selection_trace=function() end
+        local ctx={cp={},wait_until=function(p) return p() end,
+            jlog=function() end,peek=function() return 0 end,emulator={framecount=function() return 1 end}}
+        ctx.party=function() local p={};for i=1,AVAILABLE do p[i]={slot=i-1,key='loan'..i} end;return p end
+        ctx.task_live=function(name) return state=='popup' and name=='Task_HandleSelectionMenuInput' end
+        ctx.G={idle=function() end,pred_ok=function() return true end,shot=function() end,
+            tap=function(button)
+                if button=='Right' or button=='Down' then at=math.min(at+1,AVAILABLE-1)
+                elseif button=='Up' then at=math.max(0,at-1)
+                elseif button=='Start' then starts=starts+1;at=6
+                elseif button=='A' and at==6 then confirmed=true
+                elseif button=='A' and state=='choose' then state='popup'
+                elseif button=='A' and state=='popup' then
+                    entered=entered+1;order[at+1]=at+1;state='choose';if entered==3 then at=6 end
+                else error('invalid native selection input') end
+            end}
+        local function run()
+    '''+source[start:end]+'''
+            return confirmed,entered,starts
+        end
+        return run()
+    ''')
+    assert result==(True,available,1 if available==2 else 0)

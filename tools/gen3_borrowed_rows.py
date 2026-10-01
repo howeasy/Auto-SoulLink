@@ -59,6 +59,13 @@ def own_facts(run):
     if rom[0x11FB28:0x11FB30].hex()!="0049084731620b09":
         raise RuntimeError("RR party chooser trampoline/target changed")
     party_choose_task=int.from_bytes(rom[0x11FB2C:0x11FB30],"little") & ~1
+    if (rom[0x1275F8:0x127600].hex()!="00480047d94c0b09"
+            or rom[0x10B4D34:0x10B4D38].hex()!="ff20f0e7"
+            or rom[0x10B6278:0x10B6292].hex()!="0b4b1b681b7adb07f0d50520094b00f00dfb094b00f00afbe8e7"):
+        raise RuntimeError("RR native selection validator/Start-confirm binding changed")
+    from tools.gen3_gift_egg_rows import saved_gift_flag
+    if saved_gift_flag(run._gen3_fixture_bytes("a"),"radical_red",{"flag":0x930,"flag_mask":1}):
+        raise RuntimeError("RR native selection flag0930 route differs")
     if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
     # Exact native option1 branch and callnative builder; no injected party.
     if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"
@@ -71,7 +78,7 @@ def own_facts(run):
                 menu_option={"menu":0,"battle":3,"opponent":1}[case],
                 begin_kind="borrowed_party_opponent_begin" if case=="opponent" else "borrowed_party_begin",
                 selected_order_address=0x0203C750,confirm_slot=6,party_cancel_task=party_cancel_task,
-                party_choose_task=party_choose_task,borrow=facts["borrowed_party"])
+                party_choose_task=party_choose_task,party_selection_max=3,borrow=facts["borrowed_party"])
 
 
 def orchestrate(run):

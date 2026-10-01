@@ -34,6 +34,20 @@ return function(ctx)
         end
         return n
     end
+    local function selection_trace(stage,slot)
+        local party=ctx.party()
+        local members,order={},{}
+        for _,mon in ipairs(party or {}) do
+            members[#members+1]={slot=mon.slot,key=mon.key,hp=mon.hp,species=mon.species}
+        end
+        -- Observe the same three order cells already used by this pending carrier;
+        -- this is diagnostic evidence, not a claim that RR requires three selections.
+        for i=0,2 do order[#order+1]=u8(facts.selected_order_address+i) end
+        ctx.jlog("BORROW_SELECTION_STATE",{stage=stage,target_slot=slot,cursor=cursor(),
+            frame=ctx.emulator.framecount(),active_party_count=party and #party or nil,
+            party_readable=party~=nil,party=members,selected_order=order,
+            picker=picker(),palette=ctx.peek("gPaletteFade",1,7)})
+    end
     local signals,drain=ctx.session.signals,ctx.session.signals.drain
     signals.drain=function(self)
         local out=drain(self)
@@ -124,14 +138,25 @@ return function(ctx)
         ctx.frames(60);ctx.G.tap("A",3,20)
     else
         -- Primary party_menu.c CursorCB_Enter: selected order stores slot+1;
-        -- the third entry moves to SLOT_CONFIRM=PARTY_SIZE (6), then A closes.
-        for slot=0,2 do
+        -- RR Flag0930-clear native validator accepts a nonempty selection; max is3.
+        -- Select only present UI records, then let native Start/CONFIRM validate it.
+        local available=ctx.party()
+        if not available or #available<1 or #available>6 then return false,"loan UI party unreadable" end
+        local selection_count=math.min(#available,facts.party_selection_max)
+        ctx.jlog("BORROW_SELECTION_COUNT",{available=#available,selected=selection_count})
+        for index=1,selection_count do
+            local slot=available[index].slot
+            selection_trace("selection_begin",slot)
             if not ctx.wait_until(picker,30,"fade-ready loan chooser") then return false,"loan chooser not ready" end
             for _=1,12 do
                 if cursor()==slot then break end
                 local at=cursor();ctx.G.tap(at==0 and "Right" or (at<slot and "Down" or "Up"),3,20)
             end
-            if cursor()~=slot then return false,"loan selection cursor stalled" end
+            if cursor()~=slot then
+                selection_trace("cursor_stalled",slot)
+                ctx.G.shot("borrow_selection_cursor")
+                return false,"loan selection cursor stalled"
+            end
             if not ctx.wait_until(picker,30,"fade-ready before loan A") then return false,"loan chooser faded before A" end
             ctx.G.idle(1) -- release mash_until's last A override; guarantee a new native input edge
             ctx.jlog("BORROW_PARTY_INPUT",{slot=slot,cursor=cursor(),frame=ctx.emulator.framecount(),
@@ -143,7 +168,15 @@ return function(ctx)
             end
             ctx.G.idle(1)
             ctx.G.tap("A",3,20)
-            if not ctx.wait_until(function() return u8(facts.selected_order_address+slot)==slot+1 end,10,"selected loan") then return false,"native selected order absent" end
+            if not ctx.wait_until(function() return u8(facts.selected_order_address+index-1)==slot+1 end,10,"selected loan") then
+                selection_trace("order_missing",slot);return false,"native selected order absent"
+            end
+            selection_trace("after_enter",slot)
+        end
+        if cursor()~=facts.confirm_slot then
+            if not ctx.wait_until(picker,30,"loan chooser before Start") then return false,"loan chooser absent before Start" end
+            ctx.G.idle(1);ctx.G.tap("Start",3,20)
+            selection_trace("native_start_confirm",facts.confirm_slot)
         end
         if cursor()~=facts.confirm_slot then return false,"native confirm cursor absent" end
         if not ctx.wait_until(picker,30,"fade-ready loan confirmation") then return false,"loan confirmation not ready" end
