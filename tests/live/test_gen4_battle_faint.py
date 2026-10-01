@@ -34,7 +34,7 @@ HGE_STATE = Path("C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State")
 HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")
 # the route log of each state must name the settled FIGHT-menu battle (title -> (RESULT regex, settled regex))
 STATE_LOGS = {
-    "heartgold": (r"RESULT BATTLE species=16 level=2\b", r"settled after \d+ frames; chain .* hp=13/13 player=155"),
+    "heartgold": (r"RESULT BATTLE .*species=(?:16|PIDGEY\(16\)) level=2\b", r"settled after \d+ frames; chain .* hp=13/13 player=155"),
     "heartgold_hge": (r"RESULT BATTLE .*species=PIDGEY\(16\) level=3\b",
                       r"settled after \d+ frames; chain .* enemy=16 L3 hp=16/16 player=155"),
 }
