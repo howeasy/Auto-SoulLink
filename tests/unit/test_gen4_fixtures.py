@@ -24,6 +24,8 @@ def _base():
         "PathEntries": {"Paths": [
             {"Type": "Save RAM", "Path": "./SaveRAM", "System": "NDS"},
             {"Type": "Save RAM", "Path": "./SaveRAM", "System": "GBA"},
+            {"Type": "Savestates", "Path": "./State", "System": "NDS"},
+            {"Type": "Screenshots", "Path": "./Screenshots", "System": "NDS"},
         ]},
         "CoreSyncSettings": {g4.NDS_CORE: {
             "EnableJIT": True, "UseRealTime": True, "InitialTime": "2010-01-01T00:00:00",
@@ -48,6 +50,14 @@ def test_config_missing_nds_saveram_entry_raises(tmp_path):
     assert not (tmp_path / "run.ini").exists()
 
 
+def test_config_missing_savestates_entry_raises(tmp_path):
+    base = _base()
+    base["PathEntries"]["Paths"] = [e for e in base["PathEntries"]["Paths"]
+                                    if e["Type"] != "Savestates"]
+    with pytest.raises(g4.FixtureError, match="Savestates"):
+        _cfg(tmp_path, base)
+
+
 def test_config_missing_sync_settings_raises(tmp_path):
     base = _base()
     del base["CoreSyncSettings"][g4.NDS_CORE]
@@ -62,9 +72,12 @@ def test_config_pins_written_json(tmp_path):
     assert sync["EnableJIT"] is False and sync["UseRealTime"] is False
     assert sync["InitialTime"] == "2010-06-01T12:00:00"
     assert sync["SkipFirmware"] is True and sync["UseRealBIOS"] is False
-    nds, gba = cfg["PathEntries"]["Paths"]
+    nds, gba, state, shots = cfg["PathEntries"]["Paths"]
     assert nds["Path"] == (tmp_path / "SaveRAM").as_posix()
     assert gba["Path"] == "./SaveRAM"  # only NDS is redirected
+    # the shared ./NDS/State holds the owner's QuickSave slots: never write there
+    assert state["Path"] == (tmp_path / "State").as_posix()
+    assert shots["Path"] == (tmp_path / "Screenshots").as_posix()
     assert cfg["Rewind"]["Enabled"] is False
     assert cfg["SoundEnabled"] is False and cfg["SoundVolume"] == 0
     assert (tmp_path / "SaveRAM").is_dir()
@@ -210,6 +223,13 @@ def test_duo_identical_trainer_refused_distinct_accepted(tmp_path):
         assert x["tid"] == 5
     with pytest.raises(g4.RomAbsent, match="nope.sav"):
         g4.check_duo_inputs(a, tmp_path / "nope.sav")
+    # same OT name, different bytes after the 0xFFFF terminator: still one trainer
+    n1 = bytes.fromhex("4100" * 3 + "ffff" + "11" * 8)
+    n2 = bytes.fromhex("4100" * 3 + "ffff" + "22" * 8)
+    t1 = _save(tmp_path / "t1.sav", None, _footer_block(count=1, name=n1, tid=5, sid=6))
+    t2 = _save(tmp_path / "t2.sav", None, _footer_block(count=1, name=n2, tid=5, sid=6))
+    with pytest.raises(g4.FixtureError, match="one trainer"):
+        g4.check_duo_inputs(t1, t2)
 
 
 def test_identity_on_real_hg_save():

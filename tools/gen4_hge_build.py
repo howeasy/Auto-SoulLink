@@ -54,7 +54,7 @@ def _hashes(path: Path) -> dict:
 
 
 def _git(fork: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(fork), *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["git", "--no-optional-locks", "-C", str(fork), *args], capture_output=True, text=True, check=True).stdout
 
 
 def plan_lines(fork: Path, out: Path) -> list[str]:

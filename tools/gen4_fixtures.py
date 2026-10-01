@@ -130,6 +130,16 @@ def write_nds_run_config(base_config, out_path, *, initial_time: str, lane_saver
                            f"in this BizHawk so the settings exist")
     for e in entries:
         e["Path"] = saveram_dir
+    # states/screenshots too: the shared ./NDS/State holds the owner's own QuickSave slots
+    lane = Path(saveram_dir).parent
+    for kind, sub_dir in (("Savestates", "State"), ("Screenshots", "Screenshots")):
+        hits = [e for e in cfg["PathEntries"]["Paths"]
+                if e.get("Type") == kind and e.get("System") == "NDS"]
+        if not hits:
+            raise FixtureError(f"no NDS {kind!r} entry in PathEntries.Paths of the base config; "
+                               f"refusing to share the developer's {kind} dir")
+        for e in hits:
+            e["Path"] = (lane / sub_dir).as_posix()
     sync.update(EnableJIT=False, UseRealTime=False, InitialTime=initial_time)
     disable_rewind(cfg)
     for key in ("SoundEnabled", "SoundEnabledNormal", "SoundEnabledRWFF"):
@@ -209,7 +219,12 @@ def hgss_identity(data: bytes) -> dict:
             count, block = c, b
     p = 0x64
     (id32,) = struct.unpack_from("<I", block, p + 0x10)
-    return {"name_raw": block[p:p + 16].hex(), "tid": id32 & 0xFFFF, "sid": id32 >> 16,
+    name = block[p:p + 16]
+    for i in range(0, 16, 2):  # stop at the 0xFFFF terminator: buffer tails are not identity
+        if name[i:i + 2] == b"\xff\xff":
+            name = name[:i]
+            break
+    return {"name_raw": name.hex(), "tid": id32 & 0xFFFF, "sid": id32 >> 16,
             "count": count}
 
 
@@ -253,16 +268,20 @@ def _emuhawk_processes() -> list[dict]:
 
 
 def kill_our_emuhawk(lane_dir_: Path | str) -> None:
-    """Best-effort kill of this lane's EmuHawk PIDs only; waits (bounded) for them to exit."""
+    """Kill this lane's EmuHawk PIDs only; waits (bounded) for them to exit. Raises
+    FixtureError when a PID survives or the process list cannot be read: an orphan could
+    still hold the lane's SaveRAM."""
     try:
         for pid in our_emuhawk_pids(_emuhawk_processes(), lane_dir_):
             subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
         for _ in range(20):
-            if not our_emuhawk_pids(_emuhawk_processes(), lane_dir_):
+            left = our_emuhawk_pids(_emuhawk_processes(), lane_dir_)
+            if not left:
                 return
             time.sleep(0.5)
-    except Exception:
-        pass
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise FixtureError(f"could not confirm lane EmuHawk exit: {exc}") from exc
+    raise FixtureError(f"lane EmuHawk PIDs survived taskkill: {left}")
 
 
 # --- CLI -------------------------------------------------------------------------------------
