@@ -463,3 +463,60 @@ def test_actual_party_pick_refuses_while_a_borrower_picker_predicate_is_false():
     assert pick(0,1,"grid",None,2)[0] is True
     ok,why,taps,pressed,cursor=pick(0,1,"grid","never",2)
     assert not ok and pressed=="" and "never took input" in why,(why,pressed)
+
+
+def pp_model(case,mutate):
+    """Actual fixture records with the saved party's slot-1 PP replaced by `mutate`."""
+    from copy import deepcopy
+    r=runner(case);texts=receipts(r)
+    a,b=deepcopy(r._gen3_fixture_saved("a")),r._gen3_fixture_saved("b")
+    a[0][1]["pp"]=mutate(a[0][1])
+    r._gen3_saved=lambda pid:a if pid=="a" else b
+    return r,texts
+
+def rom_empty_pp(r):
+    """RR's own move table PP byte for move 0 (BATTLE_MOVES_ADDR+4) with the PP-Up bonus."""
+    return h.gen3_limits("radical_red",(ROOT / r._gen3_rom("a")).read_bytes())["max_pp"]
+
+def healed(mon,max_pp,offset=0):
+    return [max_pp(0,mon["pp_bonuses"],i)+offset if m==0 else pp
+            for i,(m,pp) in enumerate(zip(mon["moves"],mon["pp"]))]
+
+def test_actual_battle_accepts_the_native_heal_of_the_targets_empty_moves():
+    """RR's battle heal refills every move slot from its own move table, so the target's
+    UNUSED slots carry the ROM's move-0 PP instead of 0 -- with no harness write."""
+    r=runner("battle");max_pp=rom_empty_pp(r)
+    mon=r._gen3_fixture_saved("a")[0][1]
+    assert any(m==0 for m in mon["moves"]),mon["moves"]
+    r,texts=pp_model("battle",lambda m:healed(m,max_pp))
+    d.saved_oracle(r,texts)
+
+def test_occupied_move_pp_change_stays_refused_in_battle():
+    r,texts=pp_model("battle",lambda mon:[pp+1 if i==next(j for j,m in enumerate(mon["moves"]) if m) else pp
+                                         for i,pp in enumerate(mon["pp"])])
+    with pytest.raises(RuntimeError,match="record1"):d.saved_oracle(r,texts)
+
+def test_wrong_empty_move_pp_value_stays_refused_in_battle():
+    r=runner("battle");max_pp=rom_empty_pp(r)
+    r,texts=pp_model("battle",lambda m:healed(m,max_pp,1))
+    with pytest.raises(RuntimeError,match="empty move"):d.saved_oracle(r,texts)
+
+def test_menu_row_keeps_empty_move_pp_strict():
+    from copy import deepcopy
+    r,texts=held_model("menu");max_pp=rom_empty_pp(r)
+    mon=r._gen3_fixture_saved("a")[0][1]
+    assert any(m==0 for m in mon["moves"]),mon["moves"]
+    a=deepcopy(r._gen3_fixture_saved("a"));a[0][1]["pp"]=healed(mon,max_pp);a[0][1]["hp"]=0
+    r._gen3_saved=lambda pid:a if pid=="a" else r._gen3_fixture_saved("b")
+    with pytest.raises(RuntimeError,match="record1"):d.saved_oracle(r,texts)
+
+
+@pytest.mark.parametrize("field,value",[("contest",[1,2,3,4,5,6]),("unknown",1),("ribbons",0x80000000)])
+def test_battle_changes_the_record_diff_skips_are_still_refused(field,value):
+    """gen3_record_diff skips RR's lossy contest/unknown and masks the ribbon bit, so the
+    battle row's strict equality has to catch those itself."""
+    from copy import deepcopy
+    r=runner("battle");texts=receipts(r)
+    a=deepcopy(r._gen3_fixture_saved("a"));a[0][1][field]=value
+    r._gen3_saved=lambda pid:a if pid=="a" else r._gen3_fixture_saved("b")
+    with pytest.raises(RuntimeError,match="beyond the native empty-move heal"):d.saved_oracle(r,texts)

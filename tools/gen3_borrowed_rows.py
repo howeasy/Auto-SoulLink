@@ -120,9 +120,27 @@ def saved_oracle(run,results):
     party,boxes=run._gen3_saved("a")
     if len(party)!=len(before) or boxes!=run._gen3_fixture_saved("a")[1]:
         raise RuntimeError("borrow changed own membership or boxes")
+    # RR's native battle heal refills every move slot from its own move table, so an EMPTY
+    # slot carries the ROM's move-0 PP (BATTLE_MOVES_ADDR+4) with its PP-Up bonus instead of
+    # 0. Only that, only after a battle, and only at the ROM's value is read back as the
+    # baseline; an occupied slot or any other value stays a refusal.
+    limits=h.gen3_limits("radical_red",(ROOT / run._gen3_rom("a")).read_bytes()) if mode=="battle" else {}
+    if mode=="battle" and not limits.get("max_pp"):raise RuntimeError("borrow battle needs the RR move table")
     for i,(old,new) in enumerate(zip(before,party)):
-        mutable={"hp"} if mode!="battle" and i==1 else set()
-        changed=h.gen3_record_diff(old,new,rr=True,mutable=mutable)
+        if mode=="battle":
+            new=dict(new);new["pp"]=list(new["pp"])
+            for slot,(move,pp) in enumerate(zip(new["moves"],new["pp"])):
+                if move or pp==old["pp"][slot]:continue
+                healed=limits["max_pp"](0,new["pp_bonuses"],slot)
+                if pp!=healed:
+                    raise RuntimeError(f"borrow record{i} empty move{slot} PP {old['pp'][slot]}->{pp}, not the ROM's {healed}")
+                new["pp"][slot]=old["pp"][slot]
+            # gen3_record_diff skips RR's lossy contest/unknown fields and masks the ribbon
+            # bit, so the battle row still compares the NORMALIZED record to the baseline
+            # exactly; only the empty-move PP allowance above may differ.
+            if new!=old:raise RuntimeError(f"borrow changed own record{i} beyond the native empty-move heal")
+            continue
+        changed=h.gen3_record_diff(old,new,rr=True,mutable={"hp"} if i==1 else set())
         if changed:raise RuntimeError(f"borrow changed own record{i}: {changed}")
     if mode!="battle":
         if party[1]["hp"]!=0 or held.get("frames",0)<120 or held.get("party_write_count")!=0 or held.get("hidden_ticks",0)<1:
@@ -134,7 +152,6 @@ def saved_oracle(run,results):
             if window[0]<=frame<=window[1]:raise RuntimeError("logged client write touched loan during held window")
         if run._links_json():raise RuntimeError("menu command control must not create a link")
     else:
-        if party!=before:raise RuntimeError("native borrowed fight changed own party")
         links=run._links_json()
         if len(links)!=1 or links[0].get("status")!="alive" or any(
                 (links[0].get(pid) or {}).get("key")!=run._link_keys[pid] for pid in ("a","b")):
