@@ -45,6 +45,10 @@ def own_facts(run):
         raise RuntimeError("school ordinary menu labels changed")
     if rom[0x1051BA0:0x1051BAE].hex()!="5c0907000000725111098a561109":
         raise RuntimeError("school trainerbattle9 command changed")
+    if (rom[0x1051B45:0x1051B4A].hex()!="6f00002200"
+            or rom[0x1051B76:0x1051B7B].hex()!="052f1c0509"
+            or rom[0x1051C3A:0x1051C48].hex()!="210d8000000601fc1a0509252800"):
+        raise RuntimeError("School B/quit-YES/native restore branch changed")
     if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
     # Exact native option1 branch and callnative builder; no injected party.
     if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"

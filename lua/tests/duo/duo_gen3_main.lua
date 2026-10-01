@@ -340,7 +340,7 @@ local function move_power(move)
 end
 
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
-local seen_tx, seen_rx, tx, rx = {}, {}, {}, {}
+local seen_tx, seen_rx, tx, rx, latest_tick = {}, {}, {}, {}, nil
 local witness_saves, wrong_save_hud = 0, false
 --- The receipt lines one save's witness produces, IN EMISSION ORDER: the DUMP first, then (RR)
 --- the EXT copy bound to the same ordinal -- tools/e2e_duo.py _gen3_final_ext requires the final
@@ -471,7 +471,9 @@ C.send = function(line)
     local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
     if native_candidate and ok and type(msg)=="table" then native_candidate.tx(msg) end
     seen_tx[name] = (seen_tx[name] or 0) + 1
-    if name ~= "tick" then
+    if name == "tick" then
+        latest_tick = msg -- bounded latest actual packet; ticks remain absent from verbose history
+    else
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
         tx[#tx + 1] = { event = name, key = key, msg = ok and msg or nil }
         log(fmt("TX %s %s %s", name, key, name == "hello" and line:sub(1, 200) or line))
@@ -729,6 +731,7 @@ function ctx.balls()
     return b and b.ball_count or -1
 end
 function ctx.sent(event, key)
+    if event == "tick" and key == nil then return seen_tx.tick or 0 end
     local n = 0
     for _, e in ipairs(tx) do if e.event == event and (key == nil or e.key == key) then n = n + 1 end end
     return n
@@ -740,6 +743,7 @@ function ctx.received(cmd, key)
 end
 --- The last event of this name the client sent, decoded (nil if none).
 function ctx.last_sent(event)
+    if event == "tick" then return latest_tick end
     for i = #tx, 1, -1 do if tx[i].event == event then return tx[i].msg end end
 end
 --- pred() each frame, pressing `button` on a 16-frame cadence while it is false.

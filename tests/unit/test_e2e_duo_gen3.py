@@ -21,6 +21,48 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 
 
+def test_actual_tick_collector_keeps_latest_packet_and_count_without_verbose_history():
+    """Replay retained f1da wire tick through the actual collector and ctx accessors."""
+    from lupa import LuaRuntime
+    source=(REPO/'lua/tests/duo/duo_gen3_main.lua').read_text()
+    declaration=next(line for line in source.splitlines() if line.startswith('local seen_tx,'))
+    collector=source[source.index('local C = require("connector")'):source.index('-- ── the production client:')]
+    sent=source[source.index('function ctx.sent('):source.index('function ctx.received(')]
+    last=source[source.index('function ctx.last_sent('):source.index('--- pred() each frame, pressing')]
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().ROOT=REPO.as_posix()
+    harness=lua.execute('''
+        local JSON=dofile(ROOT..'/lua/json_codec.lua')
+        local ctx,logs,forwarded={},{},{}
+        local native_candidate=nil
+        local fmt=string.format
+        local function log(s) logs[#logs+1]=s end
+        package.preload.connector=function() return {send=function(line)
+            forwarded[#forwarded+1]=line;return 77 end} end
+    '''+declaration+'\n'+collector+'\n'+sent+'\n'+last+'''
+        return {send=C.send,sent=ctx.sent,last=ctx.last_sent,
+                retained=function() return #tx end,logs=function() return #logs end,
+                wire=function(i) return forwarded[i] end}
+    ''')
+    packet=dict(area_id='route_1',badges=0,ball_count=9,enemy_party=[],event='tick',
+                has_pokeballs=True,in_battle=False,is_doubles=False,is_trainer_battle=False,
+                loc_name='route1',party_hidden=True,player='a',seq=19,trainer_name='B')
+    line=json.dumps(packet)
+    assert harness.send(line)==77 and harness.wire(1)==line
+    assert harness.sent('tick',None)==1
+    assert harness.last('tick')['party_hidden'] is True
+    for _ in range(200): harness.send(line)
+    assert harness.sent('tick',None)==201
+    packet['party_hidden']=False
+    harness.send(json.dumps(packet))
+    assert harness.last('tick')['party_hidden'] is False
+    assert harness.retained()==0 and harness.logs()==0
+    ordinary=json.dumps(dict(event='faint',key='K'))
+    assert harness.send(ordinary)==77
+    assert harness.sent('faint','K')==1 and harness.last('faint')['key']=='K'
+    assert harness.retained()==1 and harness.logs()==1
+
+
 @pytest.mark.parametrize("fault", ["none", "escape_error", "walk_error"])
 def test_release_transit_escapes_before_complete_pc_sequence(fault):
     """Actual release scenario and shared route policy: transit must preserve the reserve."""

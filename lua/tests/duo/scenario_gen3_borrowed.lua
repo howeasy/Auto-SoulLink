@@ -107,6 +107,14 @@ return function(ctx)
                                start_frame=ready_frame,end_frame=ctx.emulator.framecount()})
         if not ctx.wait_go("RESTORE") then return false,"restore permission absent" end
         ctx.G.tap("B",3,20)
+        -- F5's B returns to School's main menu, not the field. Quit that
+        -- menu with B, then confirm YES to restore and end the conversation.
+        if not ctx.wait_until(function() return ctx.task_live("Task_MultichoiceMenu_HandleInput") end,
+                              120,"School main menu after picker cancel") then return false,"School main menu absent after cancel" end
+        ctx.frames(60);ctx.G.tap("B",3,20)
+        if not ctx.wait_until(function() return ctx.task_live("Task_YesNoMenu_HandleInput") end,
+                              120,"School quit confirmation") then return false,"School quit confirmation absent" end
+        ctx.frames(60);ctx.G.tap("A",3,20)
     else
         -- Primary party_menu.c CursorCB_Enter: selected order stores slot+1;
         -- the third entry moves to SLOT_CONFIRM=PARTY_SIZE (6), then A closes.

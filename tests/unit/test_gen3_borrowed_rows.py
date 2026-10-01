@@ -180,3 +180,26 @@ def test_restore_prefix_never_supplies_missing_or_wrong_borrow_proof(fault):
         texts['a']=texts['a'].replace('BORROW_BATTLE ',
             'BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_opponent_begin'})+'\nBORROW_BATTLE ',1)
     with pytest.raises(RuntimeError,match='begin/end'):d.saved_oracle(r,texts)
+
+def test_actual_menu_cancel_block_quits_main_menu_instead_of_reentering_loan():
+    from lupa import LuaRuntime
+    source=(ROOT/'lua/tests/duo/scenario_gen3_borrowed.lua').read_text()
+    start=source.index('        if not ctx.wait_go("RESTORE")')
+    end=source.index('    else\n        -- Primary party_menu',start)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    state=lua.execute('''
+        local state='picker'
+        ctx={wait_go=function() return true end,frames=function() end}
+        ctx.task_live=function(name)
+            return (state=='main' and name=='Task_MultichoiceMenu_HandleInput')
+                or (state=='quit' and name=='Task_YesNoMenu_HandleInput')
+        end
+        ctx.wait_until=function(pred) assert(pred(),'wrong task transition');return true end
+        ctx.G={tap=function(button)
+            if state=='picker' and button=='B' then state='main'
+            elseif state=='main' and button=='B' then state='quit'
+            elseif state=='quit' and button=='A' then state='field'
+            else error('reentered loan or wrong native input: '..state..'/'..button) end
+        end}
+    '''+source[start:end]+'''\nreturn state''')
+    assert state=='field'
