@@ -548,5 +548,7 @@ def parse_save(image: bytes, profile: Profile | str) -> Gen4Save:
     if other in why and why[other] != "absent":
         fb = f"bank{other}: {why[other]}"
     g, p = banks[pick][0], banks[pick][1]
+    # general/pc are the whole chunks INCLUDING their footer (as laid out in RAM); a writer must
+    # CRC only [start, start + size - footer_size) -- see tools/gen4_synth_save.py
     return Gen4Save(profile, pick, usable[pick], image[g.start : g.start + g.size],
                     image[p.start : p.start + p.size], blocks, fb)
