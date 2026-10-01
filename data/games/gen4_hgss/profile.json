@@ -2,6 +2,7 @@
   "comparison": {
     "address_differs": 1253,
     "common_names": 36771,
+    "differing_name_image_pairs": 1255,
     "differing_names_by_image": {
       "arm9": 19,
       "ov110": 1,
@@ -9,6 +10,10 @@
       "ov60": 99,
       "ov74": 375
     },
+    "differing_names_in_several_images": [
+      "sCameraParam",
+      "sGraphicsBanks"
+    ],
     "differing_objects": [
       "intro_movie.o",
       "intro_movie_scene_1.o",
@@ -83,25 +88,185 @@
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
+    "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
+    "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in differing_names_in_several_images (file-local statics defined in two images)",
     "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
-    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone. Byte source: HG/SS 'arm9' bytes are ndspy's DECOMPRESSED loadArm9().sections[0] (ARM9 static image, RAM base 0x02000000); hge 'arm9' bytes are the RAW uncompressed rom.arm9 (hge stores it uncompressed; the raw file is padded to 0x2477C8, so `collides_with` of an hge site can list arm9 where the arm9 bytes are zero padding); 'ov<N>' bytes are the decompressed overlay N from the ROM overlay table",
     "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 (struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a cross-check, the runtime reads the array header)",
     "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
     "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
     "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe compares an independent always-on observer of the same address with the registry events), predicate {symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
     "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
-    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
+    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
+    "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
   "titles": {
     "heartgold": {
       "admission": "G0_IDENTITY_ONLY",
+      "collision_pairs": [
+        {
+          "address": 35543296,
+          "address_hex": "0x021e5900",
+          "evidence": "FILE: both symbols from the xMAP (heartgoldus.xMAP:53320 and :135351; soulsilverus.xMAP has the same lines), bytes read from each declared image; the two first words differ",
+          "exclusive": "ov1 and ov60 are main-overlay images loaded to the same RAM base (FILE: overlays[1].ram == overlays[60].ram): at most one is resident, the other's bytes are not at this address",
+          "name": "field_vblank_vs_title_init",
+          "open": [],
+          "resident_when": {
+            "field_vblank_ov1": {
+              "evidence": [
+                "src/field_system.c:93",
+                "src/field_system.c:188",
+                "xMAP SDK_OVERLAY_field_ID = 0x1 (heartgoldus.xMAP:53316)"
+              ],
+              "overlay_id": 1,
+              "when": "from the field overlay load (FieldSystem_LoadFieldOverlayInternal) through every launched app, battle included, until the field overlay is unloaded when the field app exits"
+            },
+            "title_init_ov60": {
+              "evidence": [
+                "src/main.c:77",
+                "src/field_system.c:81-85",
+                "xMAP SDK_OVERLAY_intro_title_ID = 0x3C (heartgoldus.xMAP:135346)"
+              ],
+              "overlay_id": 60,
+              "when": "only while the intro_title main overlay runs: after a soft reset / power-on (NitroMain registers the intro movie, whose app goes on to the title screen) and after the field app exits (Field_AppExit); never during the field or a battle"
+            }
+          },
+          "sites": {
+            "field_vblank_ov1": {
+              "address": 35543296,
+              "address_hex": "0x021e5900",
+              "collides_with": [
+                "ov0",
+                "ov11",
+                "ov14",
+                "ov18",
+                "ov36",
+                "ov37",
+                "ov50",
+                "ov53",
+                "ov54",
+                "ov55",
+                "ov60",
+                "ov61",
+                "ov62",
+                "ov64",
+                "ov66",
+                "ov67",
+                "ov68",
+                "ov69",
+                "ov73",
+                "ov76",
+                "ov77",
+                "ov78",
+                "ov85",
+                "ov86",
+                "ov87",
+                "ov94",
+                "ov95",
+                "ov96",
+                "ov99",
+                "ov100",
+                "ov104",
+                "ov105",
+                "ov106",
+                "ov107",
+                "ov108",
+                "ov109",
+                "ov110",
+                "ov111",
+                "ov112",
+                "ov113",
+                "ov121",
+                "ov122"
+              ],
+              "extent": 16,
+              "fire_hex": "1c04b510",
+              "image": "ov1",
+              "mode": "thumb",
+              "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+              "overlay_id": 1,
+              "phase": "probe",
+              "register_hex": "10b5041ca06839f6d5fa3af687fe25f6",
+              "role": "ov1 (field overlay): the field's per-frame VBlank callback",
+              "section": ".text",
+              "symbol": "FieldMap_VBlankCallback",
+              "symbol_size": 34
+            },
+            "title_init_ov60": {
+              "address": 35543296,
+              "address_hex": "0x021e5900",
+              "collides_with": [
+                "ov0",
+                "ov1",
+                "ov11",
+                "ov14",
+                "ov18",
+                "ov36",
+                "ov37",
+                "ov50",
+                "ov53",
+                "ov54",
+                "ov55",
+                "ov61",
+                "ov62",
+                "ov64",
+                "ov66",
+                "ov67",
+                "ov68",
+                "ov69",
+                "ov73",
+                "ov76",
+                "ov77",
+                "ov78",
+                "ov85",
+                "ov86",
+                "ov87",
+                "ov94",
+                "ov95",
+                "ov96",
+                "ov99",
+                "ov100",
+                "ov104",
+                "ov105",
+                "ov106",
+                "ov107",
+                "ov108",
+                "ov109",
+                "ov110",
+                "ov111",
+                "ov112",
+                "ov113",
+                "ov121",
+                "ov122"
+              ],
+              "extent": 16,
+              "fire_hex": "492cb510",
+              "image": "ov60",
+              "mode": "thumb",
+              "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+              "overlay_id": 60,
+              "phase": "probe",
+              "register_hex": "10b52c49041c00202af674f929490120",
+              "role": "ov60 (intro_title overlay): title-screen init",
+              "section": ".text",
+              "symbol": "TitleScreen_Init",
+              "symbol_size": 200
+            }
+          },
+          "wrong_owner_capture": "registering title_init_ov60 while the field runs (or field_vblank_ov1 at the title) fires at the same CPU address with the OTHER image's word: fire_hex differs, so a capture that checks residency and fire_hex rejects it"
+        }
+      ],
       "open": {
         "array_footer": "SaveArrayFooter (per-array, include/save.h:28-34) location is not pinned; the chunk footer is the signature",
         "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
+        "collision_pairs": "the shared-address pair is FILE/SOURCE; the PHYSICAL wrong-owner capture is observed by the C1-1 probe row b",
         "phase_first_event_coverage": "PHYSICAL first/last-event coverage per phase belongs to C1-1/C1-8",
+        "route_legs": "recipes are SOURCE/FILE only (no PHYSICAL run): button timing, the battle cycle and the save sequence are executed by the C1-1 probe; per-leg `open` / `note` carry the caveats (X opens the menu, SAVE cell assumes the fully unlocked menu and a cursor on cell 0, move-learn/evolution prompts, soft-reset NULL-base `until`)",
+        "route_legs.battle_menu_ready": "no RAM predicate for 'the main/fight command menu is up' is pinned (BattleSystem.battleInput and BattleInput.curMenuId offsets are unresolved): battle legs verify only their end condition",
         "slot_spec_runtime_values": "slot offset/size values are read at runtime from saveSlotSpecs; measured HG FILE: general 0xF628, pc @0xF700 size 0x12310",
         "soulsilver_save_offsets": "no owner SS save (D4): party_off / trainer FILE evidence is HeartGold only"
       },
@@ -761,6 +926,13 @@
           "size": 19712
         }
       },
+      "persistence_route": [
+        "open_start_menu",
+        "start_menu_cursor_to_save",
+        "start_menu_select_save",
+        "save_confirm_until_saved",
+        "close_start_menu"
+      ],
       "phase_cases": [
         {
           "caller_matrix": {
@@ -1074,8 +1246,8 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
-            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
+            "fight_until_enemy_faints": "recipe_source (titles.<t>.route_legs): FIGHT, first move, A-mash through the text until the wild mon faints; not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
           },
           "site_rationale": {
@@ -1344,9 +1516,9 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
-            "run_from_wild": "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)"
+            "run_from_wild": "recipe_source (titles.<t>.route_legs): FIGHT menu -> RUN, A-mash, retry on a failed escape; not yet executed"
           },
           "site_rationale": {
             "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
@@ -1654,8 +1826,8 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
-            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
+            "fight_until_enemy_faints": "recipe_source (titles.<t>.route_legs): FIGHT, first move, A-mash through the text until the wild mon faints; not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
           },
           "site_rationale": {
@@ -1932,7 +2104,7 @@
           "route_status": {
             "boot_continue_to_overworld": "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
-            "soft_reset_in_fight_menu": "NEW button script: hold Start+Select+L+R in the FIGHT menu (pokeheartgold@ad7a3afa src/main.c:101-104)"
+            "soft_reset_in_fight_menu": "recipe_source (titles.<t>.route_legs): hold Start+Select+L+R (pokeheartgold@ad7a3afa src/main.c:101-104); not yet executed"
           },
           "site_rationale": {
             "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
@@ -2457,11 +2629,11 @@
         ],
         "probe_field_evidence": {
           "field_app": {
-            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)",
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (set by FieldSystem_LoadFieldOverlayInternal), :115-117 (sub_0203DF7C = unk0->unk0 != NULL)",
             "class": "SOURCE"
           },
           "launched_app": {
-            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)",
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:81 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:123-125 (sub_0203DFA4 = unk0->unk4 != NULL), :127-133 (LaunchApplication)",
             "class": "SOURCE"
           },
           "live": {
@@ -2598,6 +2770,564 @@
         "header_code": "IPKE",
         "md5": "258cea3a62ac0d6eb04b5a0fd764d788",
         "sha1": "4fcded0e2713dc03929845de631d0932ea2b5a37"
+      },
+      "route": [
+        "gen4_routes:battle_settled",
+        "fight_until_enemy_faints",
+        "exit_battle_to_overworld",
+        "open_start_menu",
+        "close_start_menu"
+      ],
+      "route_legs": {
+        "boot_continue_to_overworld": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "EXISTS as the boot loop in lua/tests/probe_gen4_hooks.lua (A/Start cadence until the compound idle_field predicate: taskman == 0, live != 0, no launched app); no single RAM predicate expresses it",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "close_start_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 600,
+          "note": "B (or X) closes the menu when no touch input is pending (start_menu.c:574-577); the leading wait lets the save panel finish returning; until = FieldSystem.taskman == 0",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/start_menu.c:562-587",
+            "src/start_menu.c:1124-1131"
+          ],
+          "starts_from": "start menu open (after a save the panel returns to the menu: Task_StartMenu_HandleInput)",
+          "steps": [
+            {
+              "hold_frames": 0,
+              "press": [],
+              "then_wait_frames": 90
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "B"
+              ],
+              "then_wait_frames": 40
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 16,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "exit_battle_to_overworld": {
+          "evidence": "SOURCE",
+          "max_frames": 3000,
+          "note": "A-mash dismisses text; until = FieldSystem.taskman == 0 (the encounter task, which holds the field while the battle app runs, has ended). OPEN: A answers Yes on a move-learn / evolution prompt, so the fixture mon must not have a full moveset or an evolution due",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/encounter.c:61-70",
+            "src/field_system.c:210"
+          ],
+          "starts_from": "enemy fainted (or escaped); battle text / exp / level-up boxes pending",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 16,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "fight_until_enemy_faints": {
+          "evidence": "SOURCE",
+          "max_frames": 3000,
+          "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/battle/battle_input.c:1656-1710",
+            "src/battle/battle_input.c:3676-3702",
+            "src/battle/battle_input.c:3704-3776",
+            "src/battle/battle_input.c:3836-3891",
+            "src/battle/battle_input.c:4233-4325",
+            "src/battle/battle_input.c:1253",
+            "src/battle/battle_input.c:281-284",
+            "src/battle/battle_input.c:414-418",
+            "src/encounter.c:61-70"
+          ],
+          "starts_from": "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 20
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 45
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 60
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [
+              0,
+              4,
+              28,
+              48
+            ],
+            "offset": 11852,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "gen4_pc:reach_pc_terminal": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "gen4_routes:battle_settled": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "EXISTS as tools/gen4_routes.py + lua/tests/gen4_route_play.lua (CONTINUE, planned walk with per-tile RAM checks, wild encounter, settle on the main menu; C1-9 receipt route_leg2_battle_settled): a verified walk, not a fixed button recipe",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "open_start_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 300,
+          "note": "X opens the HGSS menu (FieldInput_Update tests newKeys & 0x400, FieldInput_Process then calls StartMenu_Init); Start does nothing in the default button mode. OPEN: the owner save's Options.buttonMode is not decoded (BUTTONMODE_STARTEQUALSX would also accept Start); until = a field task exists (StartMenu_Init creates one)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/field_system.c:210",
+            "asm/overlay_01_021E6880.s:212-246",
+            "asm/overlay_01_021E6880.s:641",
+            "src/start_menu.c:214-232",
+            "src/system.c:331-341"
+          ],
+          "starts_from": "overworld idle (FieldSystem.taskman == 0, no launched app)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 30
+            }
+          ],
+          "until": {
+            "deref": [],
+            "nonzero": true,
+            "offset": 16,
+            "symbol": "sFieldSysPtr"
+          }
+        },
+        "pc_deposit_first_party_mon": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_exit_app": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_open_storage": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_withdraw_box_mon": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "run_from_wild": {
+          "evidence": "SOURCE",
+          "max_frames": 2400,
+          "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; a failed escape returns to the menu with the cursor on RUN and the cycle retries; until = the launched-app OverlayManager is gone (sFieldSysPtr->unk0->unk4 == 0)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/battle/battle_input.c:1656-1710",
+            "src/battle/battle_input.c:3676-3702",
+            "src/battle/battle_input.c:3704-3776",
+            "src/battle/battle_input.c:3836-3891",
+            "src/battle/battle_input.c:4233-4325",
+            "src/battle/battle_input.c:1253",
+            "src/battle/battle_input.c:281-284",
+            "src/battle/battle_input.c:414-418"
+          ],
+          "starts_from": "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 20
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Right"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 40
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [
+              0
+            ],
+            "offset": 4,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "save_confirm_until_saved": {
+          "evidence": "SOURCE",
+          "max_frames": 2400,
+          "note": "the Yes/No prompt starts on Yes with keys (inTouchMode FALSE) so A confirms; a second prompt (state 7, overwrite) appears when a save file exists and the repeated A answers Yes again; A is ignored in every other state. until = state CLOSE (15), which lasts 30+ frames (TouchSaveApp_CloseApp) so `until` must be evaluated every frame. It is also reached by the NOT_MY_SAVE / SAVE_FAILED paths: row i's Save_WriteManFinish hit count is the success evidence",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/yes_no_prompt.c:75-95",
+            "src/yes_no_prompt.c:144-175",
+            "src/touch_save_app.c:363-399",
+            "src/touch_save_app.c:401-420",
+            "src/touch_save_app.c:488-494",
+            "src/touch_save_app.c:28-46"
+          ],
+          "starts_from": "save Yes/No prompt up (touch save app state 4)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 22
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 15
+          }
+        },
+        "soft_reset_in_fight_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 900,
+          "note": "until reads sFieldSysPtr itself, which the start-up .bss clear zeroes: a NULL base must count as satisfying `zero` (the probe's active() returns false on a NULL link, so this one leg needs that exception). OPEN: the chord test is inline in NitroMain, whose bytes differ between HG, SS and hge, so it is read from the HG source only (DoSoftReset is byte-identical)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/main.c:101-104",
+            "src/main.c:205-214"
+          ],
+          "starts_from": "battle main command menu (any state: NitroMain tests heldKeysRaw every main-loop frame unless softResetDisabled)",
+          "steps": [
+            {
+              "hold_frames": 10,
+              "press": [
+                "Start",
+                "Select",
+                "L",
+                "R"
+              ],
+              "then_wait_frames": 600
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 0,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "start_menu_cursor_to_save": {
+          "evidence": "FILE",
+          "max_frames": 120,
+          "note": "path = BFS over the ROM neighbour table; until = panel cursor cell (panel data +0x14) == SAVE's cell, read through fs+0xD8 -> data -> +4 panel SysTask -> data. OPEN: (1) the cursor starts on the last used item (fs+0x90, start_menu.c:458-463), its writer is asm-only, so a non-zero start misses the cell and the leg times out instead of pressing A; (2) a menu without Pokedex/Pokemon/Bag/Pokegear uses another layout row (ui_geometry.start_menu.layout_rows) and that cell is not SAVE: the fixture must be the fully unlocked menu",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "asm/overlay_27.s:6073-6101",
+            "asm/overlay_27.s:2441-2470",
+            "asm/overlay_27.s:2530-2610",
+            "asm/overlay_27.s:4248-4276",
+            "asm/overlay_27.s:6038-6045",
+            "asm/overlay_27.s:7-60",
+            "asm/overlay_01_021F6830.s:730-739"
+          ],
+          "starts_from": "start menu open, cursor on cell 0 (Pokedex), fully unlocked menu",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "Down"
+              ],
+              "then_wait_frames": 10
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 10
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 20,
+            "symbol": "sFieldSysPtr",
+            "value": 5
+          }
+        },
+        "start_menu_select_save": {
+          "evidence": "SOURCE",
+          "max_frames": 900,
+          "note": "A runs StartMenu_HandleKeyInput -> Task_StartMenu_HandleSelection_Save -> panel-driver mode 1 (touch save app, ov30); until = TouchSaveAppData.state == HANDLE_SAVE_CONFIRMATION (4: the Yes/No prompt is up)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/start_menu.c:589-609",
+            "src/start_menu.c:1124-1131",
+            "asm/overlay_01_021F6830.s:362-380",
+            "asm/overlay_01_021F6830.s:248-345",
+            "asm/overlay_01_021F6830.s:730-739",
+            "src/touch_save_app.c:170-216",
+            "src/touch_save_app.c:28-46",
+            "src/touch_save_app.c:49-70"
+          ],
+          "starts_from": "start menu open, cursor on SAVE",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 22
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 4
+          }
+        }
       },
       "sites": {
         "battle_controller_try_faint": {
@@ -3507,14 +4237,689 @@
           "section": ".text",
           "size": 652
         }
+      },
+      "ui_geometry": {
+        "battle_fight_cursor": {
+          "address": 36102680,
+          "cells": [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              4
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:414-418",
+          "image": "ov12",
+          "names": {
+            "0": "CANCEL",
+            "1": "MOVE_1",
+            "2": "MOVE_2",
+            "3": "MOVE_3",
+            "4": "MOVE_4"
+          },
+          "symbol": "sCursorArrayFightMenu"
+        },
+        "battle_main_cursor": {
+          "address": 36102688,
+          "cells": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              3,
+              2
+            ]
+          ],
+          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:281-284 (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)",
+          "image": "ov12",
+          "names": {
+            "0": "FIGHT",
+            "1": "BAG",
+            "2": "POKEMON",
+            "3": "RUN"
+          },
+          "symbol": "sCursorArrayMainMenu"
+        },
+        "battle_paths": {
+          "evidence": "re-derived by the generator on the ROM tables with the source cursor logic from every start cell (main_menu_step / _check_key mirror src/battle/battle_input.c:3704-3776, src/battle/battle_input.c:4233-4325); the cursor start cell is not assumed",
+          "fight_to_MOVE_1": [
+            "Up",
+            "Up",
+            "Left"
+          ],
+          "to_FIGHT": [
+            "Left",
+            "Left",
+            "Up"
+          ],
+          "to_RUN": [
+            "Left",
+            "Left",
+            "Right"
+          ]
+        },
+        "code_identity": {
+          "compared_with": "soulsilver",
+          "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the compared ROM, so the pokeheartgold source read applies byte-for-byte",
+          "symbols": {
+            "BattleCursor_CheckKeyInput": {
+              "address": 36087532,
+              "image": "ov12",
+              "sha1": "e55c25b110324a38f7f5232a4925a2c0684d2b46",
+              "size": 504
+            },
+            "BattleInput_CheckCursorInput": {
+              "address": 36084260,
+              "image": "ov12",
+              "sha1": "aacc38c5dc94deb1e58683301442ff780b330b6d",
+              "size": 120
+            },
+            "BattleInput_CheckTouch": {
+              "address": 36072312,
+              "image": "ov12",
+              "sha1": "007fcb05545fa7e6471d5859c15c472dcf20d973",
+              "size": 236
+            },
+            "BattleInput_CursorMove_FightMenu": {
+              "address": 36085204,
+              "image": "ov12",
+              "sha1": "dfcede5b9eea72db0a35d4bd165da8482b401d14",
+              "size": 384
+            },
+            "BattleInput_CursorMove_MainMenu": {
+              "address": 36084380,
+              "image": "ov12",
+              "sha1": "1d80703088ea37e4da9656119a96afe5a9653390",
+              "size": 480
+            },
+            "BattleInput_CursorSave_MainMenu": {
+              "address": 36084860,
+              "image": "ov12",
+              "sha1": "d5eb48573cf11669500fd6fb837ddb338afc35a6",
+              "size": 96
+            },
+            "DoSoftReset": {
+              "address": 33558436,
+              "image": "arm9",
+              "sha1": "47dff46a494735c426aa0c08bdb90969510c27c6",
+              "size": 52
+            },
+            "FieldInput_Update": {
+              "address": 35547432,
+              "image": "ov1",
+              "sha1": "a117abe05752fbc73c5a2524fd004010fd12a32f",
+              "size": 460
+            },
+            "StartMenu_BuildActionLists": {
+              "address": 33800736,
+              "image": "arm9",
+              "sha1": "1b39f0b128c81ce56449582719b039076aad202c",
+              "size": 364
+            },
+            "StartMenu_HandleKeyInput": {
+              "address": 33801480,
+              "image": "arm9",
+              "sha1": "dada8190985abf44ee78d11c93cfe6dcfb6e5967",
+              "size": 156
+            },
+            "Task_StartMenu": {
+              "address": 33799920,
+              "image": "arm9",
+              "sha1": "649cea642d15107a24228eead79d1b1535b067e3",
+              "size": 602
+            },
+            "Task_StartMenu_HandleInput": {
+              "address": 33801340,
+              "image": "arm9",
+              "sha1": "2421812592a79e697fa9afffc8509055c75cdea9",
+              "size": 140
+            },
+            "TouchSaveApp_HandleOverwriteConfirmation": {
+              "address": 36035136,
+              "image": "ov30",
+              "sha1": "6d7fbe0455656e5d08bad521131707abcf02a3e0",
+              "size": 86
+            },
+            "TouchSaveApp_HandleSaveConfirmation": {
+              "address": 36034948,
+              "image": "ov30",
+              "sha1": "6ec178f421e58ad282026a377c9f5446ea7252c5",
+              "size": 104
+            },
+            "YesNoPrompt_HandleButtonInput": {
+              "address": 33646596,
+              "image": "arm9",
+              "sha1": "b30bd9da1f1b2732f3986f6cd7e289be977d3f65",
+              "size": 128
+            },
+            "YesNoPrompt_HandleInput_Internal": {
+              "address": 33646724,
+              "image": "arm9",
+              "sha1": "76194577fcf836354d1de70e24e6a3d3523d54c8",
+              "size": 112
+            },
+            "ov01_021F68DC": {
+              "address": 35612892,
+              "image": "ov1",
+              "sha1": "75dbfa88d2ff6e6be98b5fb67fa5cc3c4563ae2d",
+              "size": 48
+            },
+            "ov01_021F69C0": {
+              "address": 35613120,
+              "image": "ov1",
+              "sha1": "b0e8c9ea0440c33b0c51a73e6898667c517f2364",
+              "size": 220
+            },
+            "ov01_021F6A9C": {
+              "address": 35613340,
+              "image": "ov1",
+              "sha1": "e8c2354db3e2af06d050e5fa2bea6eebdf88acb2",
+              "size": 32
+            },
+            "ov01_021F6B00": {
+              "address": 35613440,
+              "image": "ov1",
+              "sha1": "41aa146dd7691bb5f21115bb9d58fe997b08d6db",
+              "size": 16
+            },
+            "ov01_021F6B10": {
+              "address": 35613456,
+              "image": "ov1",
+              "sha1": "9db634e4750eace8af2dd5f4cafb689a76d74e99",
+              "size": 16
+            },
+            "ov27_0225B360": {
+              "address": 36025184,
+              "image": "ov27",
+              "sha1": "8303245079b17d757cab491675a60bccebfc244b",
+              "size": 56
+            },
+            "ov27_0225B404": {
+              "address": 36025348,
+              "image": "ov27",
+              "sha1": "96fe466fc3ba181ab8d713c7b18c5674b9dab5cf",
+              "size": 168
+            },
+            "ov27_0225C170": {
+              "address": 36028784,
+              "image": "ov27",
+              "sha1": "9250574e887411861b55fa53e98c93ec2c701dc2",
+              "size": 60
+            },
+            "ov30_0225D520": {
+              "address": 36033824,
+              "image": "ov30",
+              "sha1": "b54c69b8d35c23d412057d890dc39a0cfb5403e1",
+              "size": 300
+            },
+            "ov30_0225D700": {
+              "address": 36034304,
+              "image": "ov30",
+              "sha1": "8f2498ae41f4a7d9fa2d020acb67b30e25bbf90a",
+              "size": 132
+            },
+            "sCursorArrayFightMenu": {
+              "address": 36102680,
+              "image": "ov12",
+              "sha1": "1a3a790a951c777c7d09aa2ef32bb0e4370f5a54",
+              "size": 6
+            },
+            "sCursorArrayMainMenu": {
+              "address": 36102688,
+              "image": "ov12",
+              "sha1": "b0e5d91b028992ebc03e1e8284d6b668f2bd1ee0",
+              "size": 6
+            }
+          }
+        },
+        "start_menu": {
+          "action_of_cell": "display index = rank of the cell among enabled cells (asm/overlay_27.s:4248-4276); fs+0xD3 = that index; A selects selectionToAction[index] (src/start_menu.c:589-609, src/start_menu.c:481-521)",
+          "cursor_to_save": {
+            "evidence": "BFS over neighbour_table with every cell enabled; no word reaches SAVE from all start cells, so the leg's `until` verifies the landing cell",
+            "from_cell": 0,
+            "full_menu_only": true,
+            "path": [
+              "Down",
+              "Left"
+            ],
+            "to_cell": 5
+          },
+          "icon_order": [
+            "POKEDEX",
+            "POKEMON",
+            "BAG",
+            "POKEGEAR",
+            "TRAINER_CARD",
+            "SAVE",
+            "OPTIONS"
+          ],
+          "layout_rows": {
+            "address": 36032456,
+            "address_hex": "0x0225cfc8",
+            "cells_per_variant": 8,
+            "evidence": "FILE: ROM bytes (asm/overlay_27.s:6038-6045); row 0 is the full menu: cell c shows icon c",
+            "image": "ov27",
+            "none": 13,
+            "rows": [
+              [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                13
+              ],
+              [
+                7,
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                8
+              ],
+              [
+                7,
+                0,
+                1,
+                3,
+                4,
+                6,
+                10,
+                13
+              ],
+              [
+                7,
+                0,
+                1,
+                3,
+                4,
+                6,
+                9,
+                13
+              ],
+              [
+                11,
+                0,
+                1,
+                2,
+                12,
+                4,
+                6,
+                13
+              ],
+              [
+                1,
+                2,
+                4,
+                6,
+                13,
+                13,
+                13,
+                13
+              ],
+              [
+                1,
+                4,
+                6,
+                13,
+                13,
+                13,
+                13,
+                13
+              ]
+            ],
+            "variants": 7
+          },
+          "neighbour_table": {
+            "address": 36032692,
+            "address_hex": "0x0225d0b4",
+            "candidates": 3,
+            "cells": 7,
+            "dir_order": [
+              "Up",
+              "Down",
+              "Left",
+              "Right"
+            ],
+            "evidence": "FILE: ROM bytes at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
+            "groups": 4,
+            "image": "ov27",
+            "rows": [
+              [
+                [
+                  3,
+                  2,
+                  1
+                ],
+                [
+                  1,
+                  2,
+                  3
+                ],
+                [
+                  4,
+                  0,
+                  0
+                ],
+                [
+                  4,
+                  0,
+                  0
+                ]
+              ],
+              [
+                [
+                  0,
+                  3,
+                  2
+                ],
+                [
+                  2,
+                  3,
+                  0
+                ],
+                [
+                  5,
+                  1,
+                  0
+                ],
+                [
+                  5,
+                  1,
+                  0
+                ]
+              ],
+              [
+                [
+                  1,
+                  0,
+                  3
+                ],
+                [
+                  3,
+                  0,
+                  1
+                ],
+                [
+                  6,
+                  2,
+                  0
+                ],
+                [
+                  6,
+                  2,
+                  0
+                ]
+              ],
+              [
+                [
+                  2,
+                  1,
+                  0
+                ],
+                [
+                  0,
+                  1,
+                  2
+                ],
+                [
+                  6,
+                  3,
+                  0
+                ],
+                [
+                  6,
+                  3,
+                  0
+                ]
+              ],
+              [
+                [
+                  6,
+                  5,
+                  4
+                ],
+                [
+                  5,
+                  6,
+                  4
+                ],
+                [
+                  0,
+                  4,
+                  0
+                ],
+                [
+                  0,
+                  4,
+                  0
+                ]
+              ],
+              [
+                [
+                  4,
+                  6,
+                  5
+                ],
+                [
+                  6,
+                  4,
+                  5
+                ],
+                [
+                  1,
+                  5,
+                  0
+                ],
+                [
+                  1,
+                  5,
+                  0
+                ]
+              ],
+              [
+                [
+                  5,
+                  4,
+                  6
+                ],
+                [
+                  4,
+                  5,
+                  6
+                ],
+                [
+                  2,
+                  6,
+                  0
+                ],
+                [
+                  2,
+                  6,
+                  0
+                ]
+              ]
+            ]
+          }
+        }
       }
     },
     "soulsilver": {
       "admission": "G0_IDENTITY_ONLY",
+      "collision_pairs": [
+        {
+          "address": 35543296,
+          "address_hex": "0x021e5900",
+          "evidence": "FILE: both symbols from the xMAP (heartgoldus.xMAP:53320 and :135351; soulsilverus.xMAP has the same lines), bytes read from each declared image; the two first words differ",
+          "exclusive": "ov1 and ov60 are main-overlay images loaded to the same RAM base (FILE: overlays[1].ram == overlays[60].ram): at most one is resident, the other's bytes are not at this address",
+          "name": "field_vblank_vs_title_init",
+          "open": [],
+          "resident_when": {
+            "field_vblank_ov1": {
+              "evidence": [
+                "src/field_system.c:93",
+                "src/field_system.c:188",
+                "xMAP SDK_OVERLAY_field_ID = 0x1 (heartgoldus.xMAP:53316)"
+              ],
+              "overlay_id": 1,
+              "when": "from the field overlay load (FieldSystem_LoadFieldOverlayInternal) through every launched app, battle included, until the field overlay is unloaded when the field app exits"
+            },
+            "title_init_ov60": {
+              "evidence": [
+                "src/main.c:77",
+                "src/field_system.c:81-85",
+                "xMAP SDK_OVERLAY_intro_title_ID = 0x3C (heartgoldus.xMAP:135346)"
+              ],
+              "overlay_id": 60,
+              "when": "only while the intro_title main overlay runs: after a soft reset / power-on (NitroMain registers the intro movie, whose app goes on to the title screen) and after the field app exits (Field_AppExit); never during the field or a battle"
+            }
+          },
+          "sites": {
+            "field_vblank_ov1": {
+              "address": 35543296,
+              "address_hex": "0x021e5900",
+              "collides_with": [
+                "ov0",
+                "ov11",
+                "ov14",
+                "ov18",
+                "ov36",
+                "ov37",
+                "ov50",
+                "ov53",
+                "ov54",
+                "ov55",
+                "ov60",
+                "ov61",
+                "ov62",
+                "ov64",
+                "ov66",
+                "ov67",
+                "ov68",
+                "ov69",
+                "ov73",
+                "ov76",
+                "ov77",
+                "ov78",
+                "ov85",
+                "ov86",
+                "ov87",
+                "ov94",
+                "ov95",
+                "ov96",
+                "ov99",
+                "ov100",
+                "ov104",
+                "ov105",
+                "ov106",
+                "ov107",
+                "ov108",
+                "ov109",
+                "ov110",
+                "ov111",
+                "ov112",
+                "ov113",
+                "ov121",
+                "ov122"
+              ],
+              "extent": 16,
+              "fire_hex": "1c04b510",
+              "image": "ov1",
+              "mode": "thumb",
+              "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+              "overlay_id": 1,
+              "phase": "probe",
+              "register_hex": "10b5041ca06839f6d5fa3af687fe25f6",
+              "role": "ov1 (field overlay): the field's per-frame VBlank callback",
+              "section": ".text",
+              "symbol": "FieldMap_VBlankCallback",
+              "symbol_size": 34
+            },
+            "title_init_ov60": {
+              "address": 35543296,
+              "address_hex": "0x021e5900",
+              "collides_with": [
+                "ov0",
+                "ov1",
+                "ov11",
+                "ov14",
+                "ov18",
+                "ov36",
+                "ov37",
+                "ov50",
+                "ov53",
+                "ov54",
+                "ov55",
+                "ov61",
+                "ov62",
+                "ov64",
+                "ov66",
+                "ov67",
+                "ov68",
+                "ov69",
+                "ov73",
+                "ov76",
+                "ov77",
+                "ov78",
+                "ov85",
+                "ov86",
+                "ov87",
+                "ov94",
+                "ov95",
+                "ov96",
+                "ov99",
+                "ov100",
+                "ov104",
+                "ov105",
+                "ov106",
+                "ov107",
+                "ov108",
+                "ov109",
+                "ov110",
+                "ov111",
+                "ov112",
+                "ov113",
+                "ov121",
+                "ov122"
+              ],
+              "extent": 16,
+              "fire_hex": "492cb510",
+              "image": "ov60",
+              "mode": "thumb",
+              "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+              "overlay_id": 60,
+              "phase": "probe",
+              "register_hex": "10b52c49041c00202af674f929490120",
+              "role": "ov60 (intro_title overlay): title-screen init",
+              "section": ".text",
+              "symbol": "TitleScreen_Init",
+              "symbol_size": 200
+            }
+          },
+          "wrong_owner_capture": "registering title_init_ov60 while the field runs (or field_vblank_ov1 at the title) fires at the same CPU address with the OTHER image's word: fire_hex differs, so a capture that checks residency and fire_hex rejects it"
+        }
+      ],
       "open": {
         "array_footer": "SaveArrayFooter (per-array, include/save.h:28-34) location is not pinned; the chunk footer is the signature",
         "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
+        "collision_pairs": "the shared-address pair is FILE/SOURCE; the PHYSICAL wrong-owner capture is observed by the C1-1 probe row b",
         "phase_first_event_coverage": "PHYSICAL first/last-event coverage per phase belongs to C1-1/C1-8",
+        "route_legs": "recipes are SOURCE/FILE only (no PHYSICAL run): button timing, the battle cycle and the save sequence are executed by the C1-1 probe; per-leg `open` / `note` carry the caveats (X opens the menu, SAVE cell assumes the fully unlocked menu and a cursor on cell 0, move-learn/evolution prompts, soft-reset NULL-base `until`)",
+        "route_legs.battle_menu_ready": "no RAM predicate for 'the main/fight command menu is up' is pinned (BattleSystem.battleInput and BattleInput.curMenuId offsets are unresolved): battle legs verify only their end condition",
         "slot_spec_runtime_values": "slot offset/size values are read at runtime from saveSlotSpecs; measured HG FILE: general 0xF628, pc @0xF700 size 0x12310",
         "soulsilver_save_offsets": "no owner SS save (D4): party_off / trainer FILE evidence is HeartGold only"
       },
@@ -4174,6 +5579,13 @@
           "size": 19712
         }
       },
+      "persistence_route": [
+        "open_start_menu",
+        "start_menu_cursor_to_save",
+        "start_menu_select_save",
+        "save_confirm_until_saved",
+        "close_start_menu"
+      ],
       "phase_cases": [
         {
           "caller_matrix": {
@@ -4487,8 +5899,8 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
-            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
+            "fight_until_enemy_faints": "recipe_source (titles.<t>.route_legs): FIGHT, first move, A-mash through the text until the wild mon faints; not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
           },
           "site_rationale": {
@@ -4757,9 +6169,9 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
-            "run_from_wild": "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)"
+            "run_from_wild": "recipe_source (titles.<t>.route_legs): FIGHT menu -> RUN, A-mash, retry on a failed escape; not yet executed"
           },
           "site_rationale": {
             "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
@@ -5067,8 +6479,8 @@
             "exit_battle_to_overworld"
           ],
           "route_status": {
-            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
-            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "exit_battle_to_overworld": "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
+            "fight_until_enemy_faints": "recipe_source (titles.<t>.route_legs): FIGHT, first move, A-mash through the text until the wild mon faints; not yet executed",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
           },
           "site_rationale": {
@@ -5345,7 +6757,7 @@
           "route_status": {
             "boot_continue_to_overworld": "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
             "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
-            "soft_reset_in_fight_menu": "NEW button script: hold Start+Select+L+R in the FIGHT menu (pokeheartgold@ad7a3afa src/main.c:101-104)"
+            "soft_reset_in_fight_menu": "recipe_source (titles.<t>.route_legs): hold Start+Select+L+R (pokeheartgold@ad7a3afa src/main.c:101-104); not yet executed"
           },
           "site_rationale": {
             "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
@@ -5870,11 +7282,11 @@
         ],
         "probe_field_evidence": {
           "field_app": {
-            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)",
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (set by FieldSystem_LoadFieldOverlayInternal), :115-117 (sub_0203DF7C = unk0->unk0 != NULL)",
             "class": "SOURCE"
           },
           "launched_app": {
-            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)",
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:81 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:123-125 (sub_0203DFA4 = unk0->unk4 != NULL), :127-133 (LaunchApplication)",
             "class": "SOURCE"
           },
           "live": {
@@ -6011,6 +7423,564 @@
         "header_code": "IPGE",
         "md5": "8a6c8888bed9e1dce952f840351b73f2",
         "sha1": "f8dc38ea20c17541a43b58c5e6d18c1732c7e582"
+      },
+      "route": [
+        "gen4_routes:battle_settled",
+        "fight_until_enemy_faints",
+        "exit_battle_to_overworld",
+        "open_start_menu",
+        "close_start_menu"
+      ],
+      "route_legs": {
+        "boot_continue_to_overworld": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "EXISTS as the boot loop in lua/tests/probe_gen4_hooks.lua (A/Start cadence until the compound idle_field predicate: taskman == 0, live != 0, no launched app); no single RAM predicate expresses it",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "close_start_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 600,
+          "note": "B (or X) closes the menu when no touch input is pending (start_menu.c:574-577); the leading wait lets the save panel finish returning; until = FieldSystem.taskman == 0",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/start_menu.c:562-587",
+            "src/start_menu.c:1124-1131"
+          ],
+          "starts_from": "start menu open (after a save the panel returns to the menu: Task_StartMenu_HandleInput)",
+          "steps": [
+            {
+              "hold_frames": 0,
+              "press": [],
+              "then_wait_frames": 90
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "B"
+              ],
+              "then_wait_frames": 40
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 16,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "exit_battle_to_overworld": {
+          "evidence": "SOURCE",
+          "max_frames": 3000,
+          "note": "A-mash dismisses text; until = FieldSystem.taskman == 0 (the encounter task, which holds the field while the battle app runs, has ended). OPEN: A answers Yes on a move-learn / evolution prompt, so the fixture mon must not have a full moveset or an evolution due",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/encounter.c:61-70",
+            "src/field_system.c:210"
+          ],
+          "starts_from": "enemy fainted (or escaped); battle text / exp / level-up boxes pending",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 16,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "fight_until_enemy_faints": {
+          "evidence": "SOURCE",
+          "max_frames": 3000,
+          "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/battle/battle_input.c:1656-1710",
+            "src/battle/battle_input.c:3676-3702",
+            "src/battle/battle_input.c:3704-3776",
+            "src/battle/battle_input.c:3836-3891",
+            "src/battle/battle_input.c:4233-4325",
+            "src/battle/battle_input.c:1253",
+            "src/battle/battle_input.c:281-284",
+            "src/battle/battle_input.c:414-418",
+            "src/encounter.c:61-70"
+          ],
+          "starts_from": "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 20
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 45
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Up"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 60
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [
+              0,
+              4,
+              28,
+              48
+            ],
+            "offset": 11852,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "gen4_pc:reach_pc_terminal": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "gen4_routes:battle_settled": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "EXISTS as tools/gen4_routes.py + lua/tests/gen4_route_play.lua (CONTINUE, planned walk with per-tile RAM checks, wild encounter, settle on the main menu; C1-9 receipt route_leg2_battle_settled): a verified walk, not a fixed button recipe",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "open_start_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 300,
+          "note": "X opens the HGSS menu (FieldInput_Update tests newKeys & 0x400, FieldInput_Process then calls StartMenu_Init); Start does nothing in the default button mode. OPEN: the owner save's Options.buttonMode is not decoded (BUTTONMODE_STARTEQUALSX would also accept Start); until = a field task exists (StartMenu_Init creates one)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/field_system.c:210",
+            "asm/overlay_01_021E6880.s:212-246",
+            "asm/overlay_01_021E6880.s:641",
+            "src/start_menu.c:214-232",
+            "src/system.c:331-341"
+          ],
+          "starts_from": "overworld idle (FieldSystem.taskman == 0, no launched app)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 30
+            }
+          ],
+          "until": {
+            "deref": [],
+            "nonzero": true,
+            "offset": 16,
+            "symbol": "sFieldSysPtr"
+          }
+        },
+        "pc_deposit_first_party_mon": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_exit_app": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_open_storage": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "pc_withdraw_box_mon": {
+          "evidence": "OPEN",
+          "max_frames": null,
+          "note": null,
+          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "route_status": "open",
+          "source": [],
+          "starts_from": null,
+          "steps": [],
+          "until": null
+        },
+        "run_from_wild": {
+          "evidence": "SOURCE",
+          "max_frames": 2400,
+          "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; a failed escape returns to the menu with the cursor on RUN and the cycle retries; until = the launched-app OverlayManager is gone (sFieldSysPtr->unk0->unk4 == 0)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/battle/battle_input.c:1656-1710",
+            "src/battle/battle_input.c:3676-3702",
+            "src/battle/battle_input.c:3704-3776",
+            "src/battle/battle_input.c:3836-3891",
+            "src/battle/battle_input.c:4233-4325",
+            "src/battle/battle_input.c:1253",
+            "src/battle/battle_input.c:281-284",
+            "src/battle/battle_input.c:414-418"
+          ],
+          "starts_from": "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "X"
+              ],
+              "then_wait_frames": 20
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Right"
+              ],
+              "then_wait_frames": 6
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 40
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 18
+            }
+          ],
+          "until": {
+            "deref": [
+              0
+            ],
+            "offset": 4,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "save_confirm_until_saved": {
+          "evidence": "SOURCE",
+          "max_frames": 2400,
+          "note": "the Yes/No prompt starts on Yes with keys (inTouchMode FALSE) so A confirms; a second prompt (state 7, overwrite) appears when a save file exists and the repeated A answers Yes again; A is ignored in every other state. until = state CLOSE (15), which lasts 30+ frames (TouchSaveApp_CloseApp) so `until` must be evaluated every frame. It is also reached by the NOT_MY_SAVE / SAVE_FAILED paths: row i's Save_WriteManFinish hit count is the success evidence",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/yes_no_prompt.c:75-95",
+            "src/yes_no_prompt.c:144-175",
+            "src/touch_save_app.c:363-399",
+            "src/touch_save_app.c:401-420",
+            "src/touch_save_app.c:488-494",
+            "src/touch_save_app.c:28-46"
+          ],
+          "starts_from": "save Yes/No prompt up (touch save app state 4)",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 22
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 15
+          }
+        },
+        "soft_reset_in_fight_menu": {
+          "evidence": "SOURCE",
+          "max_frames": 900,
+          "note": "until reads sFieldSysPtr itself, which the start-up .bss clear zeroes: a NULL base must count as satisfying `zero` (the probe's active() returns false on a NULL link, so this one leg needs that exception). OPEN: the chord test is inline in NitroMain, whose bytes differ between HG, SS and hge, so it is read from the HG source only (DoSoftReset is byte-identical)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/main.c:101-104",
+            "src/main.c:205-214"
+          ],
+          "starts_from": "battle main command menu (any state: NitroMain tests heldKeysRaw every main-loop frame unless softResetDisabled)",
+          "steps": [
+            {
+              "hold_frames": 10,
+              "press": [
+                "Start",
+                "Select",
+                "L",
+                "R"
+              ],
+              "then_wait_frames": 600
+            }
+          ],
+          "until": {
+            "deref": [],
+            "offset": 0,
+            "symbol": "sFieldSysPtr",
+            "zero": true
+          }
+        },
+        "start_menu_cursor_to_save": {
+          "evidence": "FILE",
+          "max_frames": 120,
+          "note": "path = BFS over the ROM neighbour table; until = panel cursor cell (panel data +0x14) == SAVE's cell, read through fs+0xD8 -> data -> +4 panel SysTask -> data. OPEN: (1) the cursor starts on the last used item (fs+0x90, start_menu.c:458-463), its writer is asm-only, so a non-zero start misses the cell and the leg times out instead of pressing A; (2) a menu without Pokedex/Pokemon/Bag/Pokegear uses another layout row (ui_geometry.start_menu.layout_rows) and that cell is not SAVE: the fixture must be the fully unlocked menu",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "asm/overlay_27.s:6073-6101",
+            "asm/overlay_27.s:2441-2470",
+            "asm/overlay_27.s:2530-2610",
+            "asm/overlay_27.s:4248-4276",
+            "asm/overlay_27.s:6038-6045",
+            "asm/overlay_27.s:7-60",
+            "asm/overlay_01_021F6830.s:730-739"
+          ],
+          "starts_from": "start menu open, cursor on cell 0 (Pokedex), fully unlocked menu",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "Down"
+              ],
+              "then_wait_frames": 10
+            },
+            {
+              "hold_frames": 2,
+              "press": [
+                "Left"
+              ],
+              "then_wait_frames": 10
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 20,
+            "symbol": "sFieldSysPtr",
+            "value": 5
+          }
+        },
+        "start_menu_select_save": {
+          "evidence": "SOURCE",
+          "max_frames": 900,
+          "note": "A runs StartMenu_HandleKeyInput -> Task_StartMenu_HandleSelection_Save -> panel-driver mode 1 (touch save app, ov30); until = TouchSaveAppData.state == HANDLE_SAVE_CONFIRMATION (4: the Yes/No prompt is up)",
+          "open": null,
+          "route_status": "recipe_source",
+          "source": [
+            "src/start_menu.c:589-609",
+            "src/start_menu.c:1124-1131",
+            "asm/overlay_01_021F6830.s:362-380",
+            "asm/overlay_01_021F6830.s:248-345",
+            "asm/overlay_01_021F6830.s:730-739",
+            "src/touch_save_app.c:170-216",
+            "src/touch_save_app.c:28-46",
+            "src/touch_save_app.c:49-70"
+          ],
+          "starts_from": "start menu open, cursor on SAVE",
+          "steps": [
+            {
+              "hold_frames": 2,
+              "press": [
+                "A"
+              ],
+              "then_wait_frames": 22
+            }
+          ],
+          "until": {
+            "deref": [
+              216,
+              16,
+              4,
+              16
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 4
+          }
+        }
       },
       "sites": {
         "battle_controller_try_faint": {
@@ -6919,6 +8889,525 @@
           "object": "unk_020755E8.o",
           "section": ".text",
           "size": 652
+        }
+      },
+      "ui_geometry": {
+        "battle_fight_cursor": {
+          "address": 36102680,
+          "cells": [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              4
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:414-418",
+          "image": "ov12",
+          "names": {
+            "0": "CANCEL",
+            "1": "MOVE_1",
+            "2": "MOVE_2",
+            "3": "MOVE_3",
+            "4": "MOVE_4"
+          },
+          "symbol": "sCursorArrayFightMenu"
+        },
+        "battle_main_cursor": {
+          "address": 36102688,
+          "cells": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              3,
+              2
+            ]
+          ],
+          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:281-284 (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)",
+          "image": "ov12",
+          "names": {
+            "0": "FIGHT",
+            "1": "BAG",
+            "2": "POKEMON",
+            "3": "RUN"
+          },
+          "symbol": "sCursorArrayMainMenu"
+        },
+        "battle_paths": {
+          "evidence": "re-derived by the generator on the ROM tables with the source cursor logic from every start cell (main_menu_step / _check_key mirror src/battle/battle_input.c:3704-3776, src/battle/battle_input.c:4233-4325); the cursor start cell is not assumed",
+          "fight_to_MOVE_1": [
+            "Up",
+            "Up",
+            "Left"
+          ],
+          "to_FIGHT": [
+            "Left",
+            "Left",
+            "Up"
+          ],
+          "to_RUN": [
+            "Left",
+            "Left",
+            "Right"
+          ]
+        },
+        "code_identity": {
+          "compared_with": "heartgold",
+          "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the compared ROM, so the pokeheartgold source read applies byte-for-byte",
+          "symbols": {
+            "BattleCursor_CheckKeyInput": {
+              "address": 36087532,
+              "image": "ov12",
+              "sha1": "e55c25b110324a38f7f5232a4925a2c0684d2b46",
+              "size": 504
+            },
+            "BattleInput_CheckCursorInput": {
+              "address": 36084260,
+              "image": "ov12",
+              "sha1": "aacc38c5dc94deb1e58683301442ff780b330b6d",
+              "size": 120
+            },
+            "BattleInput_CheckTouch": {
+              "address": 36072312,
+              "image": "ov12",
+              "sha1": "007fcb05545fa7e6471d5859c15c472dcf20d973",
+              "size": 236
+            },
+            "BattleInput_CursorMove_FightMenu": {
+              "address": 36085204,
+              "image": "ov12",
+              "sha1": "dfcede5b9eea72db0a35d4bd165da8482b401d14",
+              "size": 384
+            },
+            "BattleInput_CursorMove_MainMenu": {
+              "address": 36084380,
+              "image": "ov12",
+              "sha1": "1d80703088ea37e4da9656119a96afe5a9653390",
+              "size": 480
+            },
+            "BattleInput_CursorSave_MainMenu": {
+              "address": 36084860,
+              "image": "ov12",
+              "sha1": "d5eb48573cf11669500fd6fb837ddb338afc35a6",
+              "size": 96
+            },
+            "DoSoftReset": {
+              "address": 33558436,
+              "image": "arm9",
+              "sha1": "47dff46a494735c426aa0c08bdb90969510c27c6",
+              "size": 52
+            },
+            "FieldInput_Update": {
+              "address": 35547432,
+              "image": "ov1",
+              "sha1": "a117abe05752fbc73c5a2524fd004010fd12a32f",
+              "size": 460
+            },
+            "StartMenu_BuildActionLists": {
+              "address": 33800736,
+              "image": "arm9",
+              "sha1": "1b39f0b128c81ce56449582719b039076aad202c",
+              "size": 364
+            },
+            "StartMenu_HandleKeyInput": {
+              "address": 33801480,
+              "image": "arm9",
+              "sha1": "dada8190985abf44ee78d11c93cfe6dcfb6e5967",
+              "size": 156
+            },
+            "Task_StartMenu": {
+              "address": 33799920,
+              "image": "arm9",
+              "sha1": "649cea642d15107a24228eead79d1b1535b067e3",
+              "size": 602
+            },
+            "Task_StartMenu_HandleInput": {
+              "address": 33801340,
+              "image": "arm9",
+              "sha1": "2421812592a79e697fa9afffc8509055c75cdea9",
+              "size": 140
+            },
+            "TouchSaveApp_HandleOverwriteConfirmation": {
+              "address": 36035136,
+              "image": "ov30",
+              "sha1": "6d7fbe0455656e5d08bad521131707abcf02a3e0",
+              "size": 86
+            },
+            "TouchSaveApp_HandleSaveConfirmation": {
+              "address": 36034948,
+              "image": "ov30",
+              "sha1": "6ec178f421e58ad282026a377c9f5446ea7252c5",
+              "size": 104
+            },
+            "YesNoPrompt_HandleButtonInput": {
+              "address": 33646596,
+              "image": "arm9",
+              "sha1": "b30bd9da1f1b2732f3986f6cd7e289be977d3f65",
+              "size": 128
+            },
+            "YesNoPrompt_HandleInput_Internal": {
+              "address": 33646724,
+              "image": "arm9",
+              "sha1": "76194577fcf836354d1de70e24e6a3d3523d54c8",
+              "size": 112
+            },
+            "ov01_021F68DC": {
+              "address": 35612892,
+              "image": "ov1",
+              "sha1": "75dbfa88d2ff6e6be98b5fb67fa5cc3c4563ae2d",
+              "size": 48
+            },
+            "ov01_021F69C0": {
+              "address": 35613120,
+              "image": "ov1",
+              "sha1": "b0e8c9ea0440c33b0c51a73e6898667c517f2364",
+              "size": 220
+            },
+            "ov01_021F6A9C": {
+              "address": 35613340,
+              "image": "ov1",
+              "sha1": "e8c2354db3e2af06d050e5fa2bea6eebdf88acb2",
+              "size": 32
+            },
+            "ov01_021F6B00": {
+              "address": 35613440,
+              "image": "ov1",
+              "sha1": "41aa146dd7691bb5f21115bb9d58fe997b08d6db",
+              "size": 16
+            },
+            "ov01_021F6B10": {
+              "address": 35613456,
+              "image": "ov1",
+              "sha1": "9db634e4750eace8af2dd5f4cafb689a76d74e99",
+              "size": 16
+            },
+            "ov27_0225B360": {
+              "address": 36025184,
+              "image": "ov27",
+              "sha1": "8303245079b17d757cab491675a60bccebfc244b",
+              "size": 56
+            },
+            "ov27_0225B404": {
+              "address": 36025348,
+              "image": "ov27",
+              "sha1": "96fe466fc3ba181ab8d713c7b18c5674b9dab5cf",
+              "size": 168
+            },
+            "ov27_0225C170": {
+              "address": 36028784,
+              "image": "ov27",
+              "sha1": "9250574e887411861b55fa53e98c93ec2c701dc2",
+              "size": 60
+            },
+            "ov30_0225D520": {
+              "address": 36033824,
+              "image": "ov30",
+              "sha1": "b54c69b8d35c23d412057d890dc39a0cfb5403e1",
+              "size": 300
+            },
+            "ov30_0225D700": {
+              "address": 36034304,
+              "image": "ov30",
+              "sha1": "8f2498ae41f4a7d9fa2d020acb67b30e25bbf90a",
+              "size": 132
+            },
+            "sCursorArrayFightMenu": {
+              "address": 36102680,
+              "image": "ov12",
+              "sha1": "1a3a790a951c777c7d09aa2ef32bb0e4370f5a54",
+              "size": 6
+            },
+            "sCursorArrayMainMenu": {
+              "address": 36102688,
+              "image": "ov12",
+              "sha1": "b0e5d91b028992ebc03e1e8284d6b668f2bd1ee0",
+              "size": 6
+            }
+          }
+        },
+        "start_menu": {
+          "action_of_cell": "display index = rank of the cell among enabled cells (asm/overlay_27.s:4248-4276); fs+0xD3 = that index; A selects selectionToAction[index] (src/start_menu.c:589-609, src/start_menu.c:481-521)",
+          "cursor_to_save": {
+            "evidence": "BFS over neighbour_table with every cell enabled; no word reaches SAVE from all start cells, so the leg's `until` verifies the landing cell",
+            "from_cell": 0,
+            "full_menu_only": true,
+            "path": [
+              "Down",
+              "Left"
+            ],
+            "to_cell": 5
+          },
+          "icon_order": [
+            "POKEDEX",
+            "POKEMON",
+            "BAG",
+            "POKEGEAR",
+            "TRAINER_CARD",
+            "SAVE",
+            "OPTIONS"
+          ],
+          "layout_rows": {
+            "address": 36032456,
+            "address_hex": "0x0225cfc8",
+            "cells_per_variant": 8,
+            "evidence": "FILE: ROM bytes (asm/overlay_27.s:6038-6045); row 0 is the full menu: cell c shows icon c",
+            "image": "ov27",
+            "none": 13,
+            "rows": [
+              [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                13
+              ],
+              [
+                7,
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                8
+              ],
+              [
+                7,
+                0,
+                1,
+                3,
+                4,
+                6,
+                10,
+                13
+              ],
+              [
+                7,
+                0,
+                1,
+                3,
+                4,
+                6,
+                9,
+                13
+              ],
+              [
+                11,
+                0,
+                1,
+                2,
+                12,
+                4,
+                6,
+                13
+              ],
+              [
+                1,
+                2,
+                4,
+                6,
+                13,
+                13,
+                13,
+                13
+              ],
+              [
+                1,
+                4,
+                6,
+                13,
+                13,
+                13,
+                13,
+                13
+              ]
+            ],
+            "variants": 7
+          },
+          "neighbour_table": {
+            "address": 36032692,
+            "address_hex": "0x0225d0b4",
+            "candidates": 3,
+            "cells": 7,
+            "dir_order": [
+              "Up",
+              "Down",
+              "Left",
+              "Right"
+            ],
+            "evidence": "FILE: ROM bytes at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
+            "groups": 4,
+            "image": "ov27",
+            "rows": [
+              [
+                [
+                  3,
+                  2,
+                  1
+                ],
+                [
+                  1,
+                  2,
+                  3
+                ],
+                [
+                  4,
+                  0,
+                  0
+                ],
+                [
+                  4,
+                  0,
+                  0
+                ]
+              ],
+              [
+                [
+                  0,
+                  3,
+                  2
+                ],
+                [
+                  2,
+                  3,
+                  0
+                ],
+                [
+                  5,
+                  1,
+                  0
+                ],
+                [
+                  5,
+                  1,
+                  0
+                ]
+              ],
+              [
+                [
+                  1,
+                  0,
+                  3
+                ],
+                [
+                  3,
+                  0,
+                  1
+                ],
+                [
+                  6,
+                  2,
+                  0
+                ],
+                [
+                  6,
+                  2,
+                  0
+                ]
+              ],
+              [
+                [
+                  2,
+                  1,
+                  0
+                ],
+                [
+                  0,
+                  1,
+                  2
+                ],
+                [
+                  6,
+                  3,
+                  0
+                ],
+                [
+                  6,
+                  3,
+                  0
+                ]
+              ],
+              [
+                [
+                  6,
+                  5,
+                  4
+                ],
+                [
+                  5,
+                  6,
+                  4
+                ],
+                [
+                  0,
+                  4,
+                  0
+                ],
+                [
+                  0,
+                  4,
+                  0
+                ]
+              ],
+              [
+                [
+                  4,
+                  6,
+                  5
+                ],
+                [
+                  6,
+                  4,
+                  5
+                ],
+                [
+                  1,
+                  5,
+                  0
+                ],
+                [
+                  1,
+                  5,
+                  0
+                ]
+              ],
+              [
+                [
+                  5,
+                  4,
+                  6
+                ],
+                [
+                  4,
+                  5,
+                  6
+                ],
+                [
+                  2,
+                  6,
+                  0
+                ],
+                [
+                  2,
+                  6,
+                  0
+                ]
+              ]
+            ]
+          }
         }
       }
     }

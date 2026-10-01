@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import struct
 from pathlib import Path
@@ -274,9 +275,11 @@ def test_present_but_wrong_rom_fails(tmp_path):
     inputs = g.Inputs({"heartgold": path})
     assert g.verify_rom(inputs, _lock_for(data), "heartgold")["header_code"] == "IPKE"
     path.write_bytes(data[:30] + b"Z" + data[31:])  # one byte flipped
+    os.utime(path, ns=(0, path.stat().st_mtime_ns + 1_000_000))  # the digest cache is keyed by (mtime, size): a same-tick rewrite would hit it
     with pytest.raises(g.Fail, match="sha1 mismatch"):
         g.verify_rom(inputs, _lock_for(data), "heartgold")
     path.write_bytes(data)
+    os.utime(path, ns=(0, path.stat().st_mtime_ns + 2_000_000))
     with pytest.raises(g.Fail, match="header"):
         g.verify_rom(inputs, _lock_for(data, header="IPGE"), "heartgold")
 
@@ -548,3 +551,225 @@ def test_every_unexercised_caller_must_be_listed_once_with_a_reason():
     t = _title()
     t["phase_cases"][0]["caller_matrix"]["sites"].pop()
     _red(t, "caller_matrix.sites")
+
+
+# ---- card C1-2c: button-recipe route legs, UI geometry, shared-address collision pairs ------------
+ALL_TITLES = [(mode, name) for mode in ("hgss", "hge") for name in _pack(mode)["titles"]]
+
+
+def _tt(mode: str, name: str) -> dict:
+    return copy.deepcopy(_pack(mode)["titles"][name])
+
+
+def _red_legs(title: dict, needle: str) -> None:
+    errs = g.validate_route_legs(title)
+    assert any(needle in e for e in errs), errs
+
+
+@pytest.mark.parametrize("mode,name", ALL_TITLES)
+def test_committed_route_legs_validate_and_cover_every_named_leg(mode, name):
+    t = _tt(mode, name)
+    assert g.validate_route_legs(t) == [] and g.validate_collision_pairs(t) == []
+    legs = t["route_legs"]
+    for case in [*t["phase_cases"], *t["phase_cases_blocked"]]:
+        assert set(case["route"]) <= set(legs), case["name"]
+    assert set(t["route"]) | set(t["persistence_route"]) <= set(legs)
+    recipes = {n for n, leg in legs.items() if leg["route_status"] == "recipe_source"}
+    assert {"fight_until_enemy_faints", "run_from_wild", "exit_battle_to_overworld", "soft_reset_in_fight_menu", "open_start_menu",
+            "start_menu_cursor_to_save", "start_menu_select_save", "save_confirm_until_saved", "close_start_menu"} == recipes
+    assert all(legs[n]["steps"] == [] and legs[n]["until"] is None and legs[n]["open"] for n in set(legs) - recipes)
+    assert all(legs[n]["evidence"] in ("SOURCE", "FILE") for n in recipes)
+    buttons = {b for n in recipes for st in legs[n]["steps"] for b in st["press"]}
+    assert buttons <= set(g.NDS_BUTTONS) and {"A", "X", "Start", "Select", "L", "R", "Up", "Down", "Left"} <= buttons
+
+
+def test_hg_ss_hge_route_legs_and_collision_pairs_agree():
+    hg, ss = _tt("hgss", "heartgold"), _tt("hgss", "soulsilver")
+    for key in ("route_legs", "route", "persistence_route", "collision_pairs"):
+        assert hg[key] == ss[key], key
+    # the UI code is byte-identical across the two ROMs; only the compared-with label differs
+    assert {n: r["sha1"] for n, r in hg["ui_geometry"]["code_identity"]["symbols"].items()} == \
+        {n: r["sha1"] for n, r in ss["ui_geometry"]["code_identity"]["symbols"].items()}
+    hge = _tt("hge", "heartgold_hge")
+    for n, leg in hg["route_legs"].items():  # same recipes; only the hge note on the faint leg differs
+        assert {k: v for k, v in hge["route_legs"][n].items() if k != "note"} == {k: v for k, v in leg.items() if k != "note"}, n
+    assert hge["ui_geometry"]["code_identity"]["symbols"] == hg["ui_geometry"]["code_identity"]["symbols"]
+
+
+def test_unknown_predicate_symbol_in_a_recipe_goes_red():
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["run_from_wild"]["until"]["symbol"] = "sNotInTheXmap"
+    _red_legs(t, "until.symbol")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["run_from_wild"]["until"].update(nonzero=True)  # value|nonzero|zero must be exactly one
+    _red_legs(t, "exactly one of value")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["run_from_wild"]["until"] = None
+    _red_legs(t, "until must be a predicate object")
+
+
+@pytest.mark.parametrize("bad", [None, 0, -5, g.ROUTE_MAX_FRAMES + 1, True, "600"])
+def test_recipe_without_a_bounded_max_frames_goes_red(bad):
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["fight_until_enemy_faints"]["max_frames"] = bad
+    _red_legs(t, "max_frames must be a bounded integer")
+    t = _tt("hgss", "heartgold")
+    del t["route_legs"]["fight_until_enemy_faints"]["max_frames"]
+    _red_legs(t, "max_frames must be a bounded integer")
+
+
+def test_a_cycle_longer_than_max_frames_and_bad_steps_go_red():
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["fight_until_enemy_faints"]["max_frames"] = 10
+    _red_legs(t, "exceeds max_frames")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["open_start_menu"]["steps"][0]["press"] = ["Z"]  # not a BizHawk NDS joypad name
+    _red_legs(t, "BizHawk NDS buttons")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["open_start_menu"]["steps"][0]["hold_frames"] = 0  # a press must be held at least one frame
+    _red_legs(t, "hold_frames >= 1")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["open_start_menu"]["steps"] = []
+    _red_legs(t, "needs steps")
+
+
+def test_every_route_and_phase_case_leg_must_exist_in_route_legs():
+    t = _tt("hgss", "heartgold")
+    t["phase_cases"][0]["route"].append("teleport")
+    _red_legs(t, "leg 'teleport' is not in route_legs")
+    t = _tt("hgss", "heartgold")
+    del t["route_legs"]["fight_until_enemy_faints"]  # still named by route and by phase_cases[].route
+    errs = g.validate_route_legs(t)
+    assert any("route:" in e for e in errs) and any("phase_case:battle.route" in e for e in errs), errs
+    t = _tt("hgss", "heartgold")
+    t["persistence_route"] = []
+    _red_legs(t, "persistence_route")
+    t = _tt("hgss", "heartgold")
+    t["route_legs"]["gen4_routes:battle_settled"]["steps"] = [{"press": ["A"], "hold_frames": 1, "then_wait_frames": 1}]
+    _red_legs(t, "an open leg keeps steps []")
+
+
+def test_battle_dpad_recipes_follow_the_rom_tables_from_every_cursor_cell():
+    ui = _tt("hgss", "heartgold")["ui_geometry"]
+    main = ui["battle_main_cursor"]["cells"]
+    assert main == g.EXPECT_MAIN_CURSOR and ui["battle_fight_cursor"]["cells"] == g.EXPECT_FIGHT_CURSOR
+    step = lambda x, y, k: g.main_menu_step(main, x, y, k)  # noqa: E731
+    starts = [(x, y) for y in range(2) for x in range(3)]
+    assert {g._run(step, c, ui["battle_paths"]["to_FIGHT"]) for c in starts} == {(0, 0)}
+    assert {main[y][x] for x, y in (g._run(step, c, ui["battle_paths"]["to_RUN"]) for c in starts)} == {3}
+    # the quirks the recipes route around: Up on RUN does nothing; Left on FIGHT jumps to BAG (bottom-left)
+    assert g.main_menu_step(main, 1, 1, "Up") == (1, 1) and g.main_menu_step(main, 0, 0, "Left") == (0, 1)
+    fight = ui["battle_fight_cursor"]["cells"]
+    fstep = lambda x, y, k: g._check_key(x, y, 2, 3, fight, k)  # noqa: E731
+    assert {g._run(fstep, (x, y), ui["battle_paths"]["fight_to_MOVE_1"]) for y in range(3) for x in range(2)} == {(0, 0)}
+
+
+def test_start_menu_save_path_is_the_bfs_over_the_rom_neighbour_table():
+    sm = _tt("hgss", "heartgold")["ui_geometry"]["start_menu"]
+    nav = sm["neighbour_table"]["rows"]
+    assert len(nav) == 7 and all(len(row) == 4 and all(len(c) == 3 for c in row) for row in nav)
+    assert sm["layout_rows"]["rows"][0] == g.FULL_MENU_VARIANT and sm["icon_order"][5] == "SAVE"
+    assert sm["cursor_to_save"] == {**sm["cursor_to_save"], "from_cell": 0, "to_cell": 5, "path": ["Down", "Left"]}
+    assert g.start_menu_path(nav, 0, 5) == ["Down", "Left"] and g.start_menu_path(nav, 5, 5) == []
+    # no single word reaches SAVE from every start cell, which is why the leg verifies the landing cell
+    assert g.start_menu_path(nav, 3, 5) == ["Left", "Up"] != g.start_menu_path(nav, 0, 5)
+    leg = _tt("hgss", "heartgold")["route_legs"]["start_menu_cursor_to_save"]
+    assert [st["press"] for st in leg["steps"]] == [[d] for d in sm["cursor_to_save"]["path"]]
+    assert leg["until"]["value"] == 5 and leg["until"]["offset"] == g.PANEL_CURSOR_OFF
+    assert g.start_menu_path([[[0, 0, 0]] * 4] * 7, 0, 5) is None  # a table without a route is None, not a guess
+
+
+def test_save_and_battle_predicates_use_the_pack_probe_field_offsets():
+    t = _tt("hgss", "heartgold")
+    pf, legs = t["profile"]["probe_field"], t["route_legs"]
+    chain = [pf["save_driver"], pf["save_driver_data_off"], 4, pf["save_driver_data_off"]]
+    assert legs["start_menu_select_save"]["until"] == {"symbol": "sFieldSysPtr", "deref": chain, "offset": 0x0C, "value": 4}
+    assert legs["save_confirm_until_saved"]["until"]["value"] == 15 and legs["save_confirm_until_saved"]["until"]["deref"] == chain
+    assert legs["open_start_menu"]["until"] == {"symbol": "sFieldSysPtr", "deref": [], "offset": pf["task"], "nonzero": True}
+    assert legs["exit_battle_to_overworld"]["until"]["zero"] is True and legs["run_from_wild"]["until"]["deref"] == [pf["sub"]]
+    b = t["profile"]["battle"]
+    assert legs["fight_until_enemy_faints"]["until"] == {
+        "symbol": "sFieldSysPtr", "deref": [pf["sub"], pf["launched_app"], 0x1C, b["ctx_off"]],
+        "offset": b["mons_off"] + b["mon_size"] + b["hp_off"], "zero": True}
+    reset = legs["soft_reset_in_fight_menu"]
+    assert reset["steps"][0]["press"] == ["Start", "Select", "L", "R"] and "NULL base" in reset["note"]
+
+
+def test_collision_pair_shares_one_address_in_two_images_with_different_words():
+    for mode, name in ALL_TITLES:
+        t = _tt(mode, name)
+        (pair,) = t["collision_pairs"]
+        a, b = pair["sites"].values()
+        assert a["address"] == b["address"] == pair["address"] == 0x021E5900
+        assert {a["image"], b["image"]} == {"ov1", "ov60"} and a["fire_hex"] != b["fire_hex"]
+        assert {a["symbol"], b["symbol"]} == {"FieldMap_VBlankCallback", "TitleScreen_Init"}
+        assert t["overlays"]["1"]["ram"] == t["overlays"]["60"]["ram"] == pair["address"]
+        assert g.validate_collision_pairs(t) == []
+    hge = _tt("hge", "heartgold_hge")["collision_pairs"][0]
+    assert "all zero padding" in hge["hge_note"] and hge["open"] == []
+
+
+def test_collision_sites_in_the_same_image_or_at_different_addresses_go_red():
+    t = _tt("hgss", "heartgold")
+    sites = t["collision_pairs"][0]["sites"]
+    sites["title_init_ov60"]["image"] = sites["field_vblank_ov1"]["image"]  # same owning image: not a collision
+    assert any("different images" in e for e in g.validate_collision_pairs(t))
+    t = _tt("hgss", "heartgold")
+    t["collision_pairs"][0]["sites"]["title_init_ov60"]["address"] += 2
+    assert any("share one address" in e for e in g.validate_collision_pairs(t))
+    t = _tt("hgss", "heartgold")
+    sites = t["collision_pairs"][0]["sites"]
+    sites["title_init_ov60"]["fire_hex"] = sites["field_vblank_ov1"]["fire_hex"]
+    assert any("first words must differ" in e for e in g.validate_collision_pairs(t))
+    t = _tt("hgss", "heartgold")
+    del t["collision_pairs"][0]["resident_when"]["title_init_ov60"]
+    assert any("resident_when" in e for e in g.validate_collision_pairs(t))
+    t = _tt("hgss", "heartgold")
+    t["collision_pairs"] = []
+    assert g.validate_collision_pairs(t) == ["collision_pairs missing or empty"]
+
+
+def test_collision_sites_match_the_real_images():
+    inputs = _need("heartgold", "soulsilver", "heartgold_hge")
+    for mode, name, key, raw in (("hgss", "heartgold", "heartgold", False), ("hgss", "soulsilver", "soulsilver", False),
+                                 ("hge", "heartgold_hge", "heartgold_hge", True)):
+        images = g.load_images(inputs.paths[key], raw_arm9=raw)
+        assert g.validate_sites(_tt(mode, name)["collision_pairs"][0]["sites"], images, name) == []
+
+
+def test_the_synthetic_world_rejects_a_same_image_pair(monkeypatch):
+    xm = g.XMap(XMAP)
+    monkeypatch.setattr(g, "COLLISION_SPECS", [{"name": "synthetic", "sites": [("a", "Faint", "x"), ("b", "Faint", "x")]}])
+    with pytest.raises(g.Fail, match="one address in two images"):
+        g.collision_pairs(xm, _images(), "hgss")
+
+
+def test_comparison_name_and_image_attribution_counts_reconcile():
+    c = _pack("hgss")["comparison"]
+    several = c["differing_names_in_several_images"]
+    assert sum(c["differing_names_by_image"].values()) == c["differing_name_image_pairs"]
+    assert c["differing_name_image_pairs"] == c["address_differs"] + len(several)  # each such name sits in exactly two images
+    assert several == sorted(several) and c["address_differs"] > len(several)
+    other = g.XMap(XMAP.replace("02000100 00000010 .text   FuncThumb", "02000104 00000010 .text   FuncThumb"))
+    d = g.compare_title_maps(g.XMap(XMAP), other)
+    assert d["address_differs"] == 1 == d["differing_name_image_pairs"] and d["differing_names_by_image"] == {"arm9": 1}
+
+
+def test_probe_field_citations_point_at_the_lines_the_coordinator_checked():
+    ev = _pack("hgss")["titles"]["heartgold"]["profile"]["probe_field_evidence"]
+    assert "include/field_system.h:81 (FieldSystemUnkSub0.unk4" in ev["launched_app"]["cite"]
+    assert "include/field_system.h:80 (FieldSystemUnkSub0.unk0" in ev["field_app"]["cite"]
+    assert ":115-117 (sub_0203DF7C" in ev["field_app"]["cite"] and "97 (non-NULL for the whole field session" not in ev["field_app"]["cite"]
+
+
+def test_source_citations_are_re_read_from_the_pinned_clone():
+    clone = g.gen4_pins.default_locations().sources["pokeheartgold_citation"]
+    if not (clone / "src" / "start_menu.c").is_file():
+        pytest.skip(f"absent input pokeheartgold clone: {clone}")
+    assert len(g.CITE_NEEDLES) > 40
+    for path, line, needle in g.CITE_NEEDLES:
+        text = (clone / path).read_text(encoding="utf-8", errors="replace").splitlines()
+        assert line <= len(text) and needle in text[line - 1], f"{path}:{line} does not contain {needle!r}: {text[line - 1]!r}"
+    # control: the pre-fix line (field_system.h:80 for unk4) does not carry unk4
+    header = (clone / "include/field_system.h").read_text(encoding="utf-8").splitlines()
+    assert "unk4" not in header[79] and "unk4" in header[80]

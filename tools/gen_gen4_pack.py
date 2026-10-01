@@ -575,12 +575,16 @@ def compare_title_maps(hg: XMap, ss: XMap) -> dict:
     in_ss = {(s.name, s.address, s.image, s.obj) for v in ss.syms.values() for s in v}
     odd = (in_hg ^ in_ss) & entries
     by_image: dict[str, int] = {}
+    several: list[str] = []  # a name defined in two images (file-local statics) is attributed to each image it differs in
     for n in diff:
-        for image in sorted({img for _, img in a[n]} | {img for _, img in b[n]}):
+        images = sorted({img for _, img in a[n]} | {img for _, img in b[n]})
+        several += [n] if len(images) > 1 else []
+        for image in images:
             by_image[image] = by_image.get(image, 0) + 1
     return {"hg_symbols": len(a), "ss_symbols": len(b), "common_names": len(common),
             "only_in_hg": len(set(a) - set(b)), "only_in_ss": len(set(b) - set(a)),
             "address_differs": len(diff), "differing_names_by_image": dict(sorted(by_image.items())),
+            "differing_names_in_several_images": several, "differing_name_image_pairs": sum(by_image.values()),
             "differing_objects": sorted({e[3].strip() for e in odd})}
 
 
@@ -712,10 +716,10 @@ PROBE_FIELD = {
     "task": (0x10, "SOURCE", f"{_FS}:117 (taskman); src/task.c:70-72 (FieldSystem_TaskIsRunning = taskman != NULL)"),
     "live": (0x6C, "ASM", f"{_FS}:137 (unk6C, BOOL); asm/overlay_01_021E5900.s:292 (str r0,[r4,#0x6c] = TRUE, read at :356); "
                           "src/field_system.c:95,199-201"),
-    "launched_app": (0x04, "SOURCE", f"{_FS}:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); "
-                                     "src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)"),
-    "field_app": (0x00, "SOURCE", f"{_FS}:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); "
-                                  "src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)"),
+    "launched_app": (0x04, "SOURCE", f"{_FS}:81 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); "
+                                     "src/field_system.c:123-125 (sub_0203DFA4 = unk0->unk4 != NULL), :127-133 (LaunchApplication)"),
+    "field_app": (0x00, "SOURCE", f"{_FS}:80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); "
+                                  "src/field_system.c:97 (set by FieldSystem_LoadFieldOverlayInternal), :115-117 (sub_0203DF7C = unk0->unk0 != NULL)"),
     "paused": (0x08, "SOURCE", f"{_FS}:82 (FieldSystemUnkSub0.isPaused, BOOL, sub-relative); src/field_system.c:96,145,199-201,284-289"),
     "save_driver": (0xD8, "ASM", f"{_FS}:168 (unk_D8 = SysTask*; struct order and the 0xE4 followMon comment corroborate); "
                                  f"{_ASM_SAVE}:91 (add r4,#0xd8; str r0,[r4] after ov01_021F68DC creates the task)"),
@@ -806,6 +810,18 @@ def hgss_open() -> dict:
         "slot_spec_runtime_values": "slot offset/size values are read at runtime from saveSlotSpecs; measured HG FILE: general 0xF628, pc @0xF700 size 0x12310",
         "phase_first_event_coverage": "PHYSICAL first/last-event coverage per phase belongs to C1-1/C1-8",
         "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
+        **route_open(),
+    }
+
+
+def route_open() -> dict:
+    return {
+        "route_legs": "recipes are SOURCE/FILE only (no PHYSICAL run): button timing, the battle cycle and the save sequence are executed by "
+                      "the C1-1 probe; per-leg `open` / `note` carry the caveats (X opens the menu, SAVE cell assumes the fully unlocked "
+                      "menu and a cursor on cell 0, move-learn/evolution prompts, soft-reset NULL-base `until`)",
+        "route_legs.battle_menu_ready": "no RAM predicate for 'the main/fight command menu is up' is pinned (BattleSystem.battleInput and "
+                                        "BattleInput.curMenuId offsets are unresolved): battle legs verify only their end condition",
+        "collision_pairs": "the shared-address pair is FILE/SOURCE; the PHYSICAL wrong-owner capture is observed by the C1-1 probe row b",
     }
 
 
@@ -916,10 +932,10 @@ _PC_BLOCK = ("BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_259
 ROUTE_LEGS = {
     BS: "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild "
         "encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
-    FIGHT: "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
-    RUN: "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)",
-    EXIT_LEG: "NEW button script: A/B until the probe's idle_field overworld check holds again",
-    RESET_LEG: f"NEW button script: hold Start+Select+L+R in the FIGHT menu ({_P} src/main.c:101-104)",
+    FIGHT: "recipe_source (titles.<t>.route_legs): FIGHT, first move, A-mash through the text until the wild mon faints; not yet executed",
+    RUN: "recipe_source (titles.<t>.route_legs): FIGHT menu -> RUN, A-mash, retry on a failed escape; not yet executed",
+    EXIT_LEG: "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
+    RESET_LEG: f"recipe_source (titles.<t>.route_legs): hold Start+Select+L+R ({_P} src/main.c:101-104); not yet executed",
     BOOT: "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
     **dict.fromkeys(PC_LEGS, _PC_BLOCK),
 }
@@ -1202,13 +1218,482 @@ def validate_phase_cases(title: dict) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------
+# Button-recipe route legs, the ROM-read UI geometry they derive from, and shared-address collision pairs (card C1-2c)
+# --------------------------------------------------------------------------------------------
+# A recipe is declarative: the probe presses `press` for `hold_frames`, waits `then_wait_frames`, runs the steps in order and
+# repeats the cycle while `until` (the probe's phase-predicate shape) is false, for at most `max_frames`. Menu geometry is read
+# from the ROM tables and the pret source, never from screenshots; every claim is SOURCE (pret@ad7a3afa), FILE (ROM bytes) or OPEN.
+NDS_BUTTONS = ("A", "B", "X", "Y", "Start", "Select", "Up", "Down", "Left", "Right", "L", "R")  # BizHawk NDS joypad names
+ROUTE_MAX_FRAMES = 12000  # lua/tests/probe_gen4_hooks.lua play_route bound
+DIRS = ("Up", "Down", "Left", "Right")  # ov27_0225B404 direction order = neighbour-table group order
+CITE_NEEDLES: list[tuple[str, int, str]] = []  # (path in pokeheartgold@ad7a3afa, first line, text that line must contain)
+
+
+def _c(path: str, spec: str, needle: str) -> str:
+    """A source reference 'path:lines' (relative to pokeheartgold@ad7a3afa) whose first line a test re-reads from the clone."""
+    CITE_NEEDLES.append((path, int(spec.split("-")[0]), needle))
+    return f"{path}:{spec}"
+
+
+_BI = "src/battle/battle_input.c"
+S_BI_MAIN_TBL = _c(_BI, "281-284", "sCursorArrayMainMenu")
+S_BI_FIGHT_TBL = _c(_BI, "414-418", "sCursorArrayFightMenu")
+S_BI_TOUCH = _c(_BI, "1656-1710", "BattleInput_CheckTouch")
+S_BI_KEYCARRY = _c(_BI, "1253", "keyPressed = *a4")
+S_BI_CURSOR = _c(_BI, "3676-3702", "BattleInput_CheckCursorInput")
+S_BI_MAIN = _c(_BI, "3704-3776", "BattleInput_CursorMove_MainMenu")
+S_BI_FIGHT = _c(_BI, "3836-3891", "BattleInput_CursorMove_FightMenu")
+S_BI_KEY = _c(_BI, "4233-4325", "BattleCursor_CheckKeyInput")
+S_MAIN_RESET = _c("src/main.c", "101-104", "heldKeysRaw")
+S_DO_RESET = _c("src/main.c", "205-214", "DoSoftReset")
+S_BTN_MODE = _c("src/system.c", "331-341", "ApplyButtonModeToInput")
+S_FIELD_INPUT = _c("src/field_system.c", "210", "FieldInput_Update(&fieldInput")
+S_X_OPENS = _c("asm/overlay_01_021E6880.s", "212-246", "_021E69F8")
+S_OPEN_CALL = _c("asm/overlay_01_021E6880.s", "641", "StartMenu_Init")
+S_SM_INIT = _c("src/start_menu.c", "214-232", "void StartMenu_Init")
+S_SM_LISTS = _c("src/start_menu.c", "481-521", "StartMenu_BuildActionLists")
+S_SM_CURSOR = _c("src/start_menu.c", "453-470", "Task_StartMenu_DrawCursor")
+S_SM_INPUT = _c("src/start_menu.c", "562-587", "Task_StartMenu_HandleInput")
+S_SM_KEY = _c("src/start_menu.c", "589-609", "StartMenu_HandleKeyInput")
+S_SM_SAVE = _c("src/start_menu.c", "1124-1131", "Task_StartMenu_HandleSelection_Save")
+S_PANEL_TABLE = _c("asm/overlay_01_021F6830.s", "730-739", "ov01_02206C60")
+S_PANEL_CREATE = _c("asm/overlay_01_021F6830.s", "123-146", "ov01_021F68DC")
+S_PANEL_SM = _c("asm/overlay_01_021F6830.s", "248-345", "ov01_021F69C0")
+S_PANEL_REQ = _c("asm/overlay_01_021F6830.s", "362-380", "ov01_021F6A9C")
+S_PANEL0_INIT = _c("asm/overlay_27.s", "7-60", "ov27_02259F80")
+S_NAV_FN = _c("asm/overlay_27.s", "2441-2470", "ov27_0225B360")
+S_NAV_KEYS = _c("asm/overlay_27.s", "2530-2610", "ov27_0225B404")
+S_NAV_CELL = _c("asm/overlay_27.s", "4248-4276", "ov27_0225C170")
+S_NAV_TBL = _c("asm/overlay_27.s", "6073-6101", "ov27_0225D0B4")
+S_NAV_LAYOUT = _c("asm/overlay_27.s", "6038-6045", "ov27_0225CFC8")
+S_TS_ENUM = _c("src/touch_save_app.c", "28-46", "enum TouchSaveApp_State")
+S_TS_STRUCT = _c("src/touch_save_app.c", "49-70", "typedef struct TouchSaveAppData")
+S_TS_INIT = _c("src/touch_save_app.c", "170-216", "ov30_0225D520")
+S_TS_SAVE_CONF = _c("src/touch_save_app.c", "363-399", "TouchSaveApp_HandleSaveConfirmation")
+S_TS_OVER_CONF = _c("src/touch_save_app.c", "401-420", "TouchSaveApp_HandleOverwriteConfirmation")
+S_TS_CLOSE = _c("src/touch_save_app.c", "488-494", "TouchSaveApp_CloseApp")
+S_YN_INIT = _c("src/yes_no_prompt.c", "75-95", "YesNoPrompt_InitFromTemplate_Internal")
+S_YN_KEYS = _c("src/yes_no_prompt.c", "144-175", "YesNoPrompt_HandleButtonInput")
+S_ENC_START = _c("src/encounter.c", "61-70", "Task_StartBattle")
+S_FIELD_LOAD = _c("src/field_system.c", "93", "HandleLoadOverlay(FS_OVERLAY_ID(field)")
+S_FIELD_UNLOAD = _c("src/field_system.c", "188", "UnloadOverlayByID(FS_OVERLAY_ID(field))")
+S_TITLE_REG = _c("src/field_system.c", "81-85", "Field_AppExit")
+S_BOOT_REG = _c("src/main.c", "77", "FS_OVERLAY_ID(intro_title)")
+# structural offsets the predicates rely on (each re-read from the clone by the cite test)
+S_OVLMGR = _c("include/overlay_manager.h", "20-28", "struct OverlayManager")
+S_TASK_STRUCT = _c("include/task.h", "19-28", "struct TaskManager")
+S_SM_STRUCT = _c("include/start_menu.h", "43-49", "StartMenuTaskData")
+S_SYSTASK = _c("include/sys_task.h", "10-18", "struct SysTask")
+S_PROBE_FIELD = [_c("include/field_system.h", "80", "unk0"), _c("include/field_system.h", "81", "unk4"),
+                 _c("include/field_system.h", "82", "isPaused"), _c("include/field_system.h", "113", "unk0"),
+                 _c("include/field_system.h", "116", "saveData"), _c("include/field_system.h", "117", "taskman"),
+                 _c("include/field_system.h", "137", "unk6C"), _c("include/field_system.h", "168", "unk_D8"),
+                 _c("src/field_system.c", "97", "OverlayManager_New"), _c("src/field_system.c", "115", "sub_0203DF7C"),
+                 _c("src/field_system.c", "123", "sub_0203DFA4"), _c("src/field_system.c", "127", "FieldSystem_LaunchApplication")]
+
+# BATTLE_BASE (asm-literal derived, battle_pointer.md): enemy battler 1 in singles, hp s32 at mons_off + 1*mon_size + hp_off
+ENEMY_HP_OFF = BATTLE_BASE["mons_off"] + BATTLE_BASE["mon_size"] + BATTLE_BASE["hp_off"]
+OVLMGR_DATA_OFF = 0x1C  # S_OVLMGR: template 0x10, exec_state, proc_state, args 0x18, data 0x1C
+PANEL_TASK_OFF = 4  # panel-driver data +4 = the active panel's SysTask* (S_PANEL_CREATE / S_PANEL_REQ)
+PANEL_CURSOR_OFF = 0x14  # S_NAV_KEYS: ldr r0,[r5,#0x14] = cursor cell; S_PANEL0_INIT: str r5,[r4,#0x10] = FieldSystem*
+TS_STATE_OFF = 0x0C  # S_TS_STRUCT: unk0 0, bgConfig 4, task 8, state 0xC
+TS_PROMPT, TS_CLOSE = 4, 15  # TouchSaveApp_State HANDLE_SAVE_CONFIRMATION / CLOSE (S_TS_ENUM)
+
+EXPECT_MAIN_CURSOR = [[0, 0, 0], [1, 3, 2]]  # CURSOR_INPUT_FIGHT=0, BAG=1, POKEMON=2, RUN=3 (include/constants/battle_menu.h:116-121)
+EXPECT_FIGHT_CURSOR = [[1, 2], [3, 4], [0, 0]]  # MOVE_1..MOVE_4 = 1..4, FIGHT_CANCEL = 0 (:127-132)
+MAIN_NAMES = {0: "FIGHT", 1: "BAG", 2: "POKEMON", 3: "RUN"}
+START_NAV = {"image": "ov27", "address": 0x0225D0B4, "cells": 7, "groups": 4, "candidates": 3}
+START_LAYOUT = {"image": "ov27", "address": 0x0225CFC8, "variants": 7, "cells_per_variant": 8}
+FULL_MENU_VARIANT = [0, 1, 2, 3, 4, 5, 6, 0x0D]  # layout row 0: every icon present; 0x0D = no icon
+START_ICONS = ("POKEDEX", "POKEMON", "BAG", "POKEGEAR", "TRAINER_CARD", "SAVE", "OPTIONS")  # include/start_menu.h:11-18 order
+UI_CODE = ("BattleInput_CheckTouch", "BattleInput_CheckCursorInput", "BattleInput_CursorMove_MainMenu",
+           "BattleInput_CursorSave_MainMenu", "BattleInput_CursorMove_FightMenu", "BattleCursor_CheckKeyInput",
+           "sCursorArrayMainMenu", "sCursorArrayFightMenu", "FieldInput_Update", "Task_StartMenu", "Task_StartMenu_HandleInput",
+           "StartMenu_HandleKeyInput", "StartMenu_BuildActionLists", "ov27_0225B404", "ov27_0225B360", "ov27_0225C170",
+           "ov01_021F68DC", "ov01_021F69C0", "ov01_021F6A9C", "ov01_021F6B00", "ov01_021F6B10", "ov30_0225D520", "ov30_0225D700",
+           "TouchSaveApp_HandleSaveConfirmation", "TouchSaveApp_HandleOverwriteConfirmation", "YesNoPrompt_HandleButtonInput",
+           "YesNoPrompt_HandleInput_Internal", "DoSoftReset")  # NitroMain (the reset-chord test) differs between HG, SS and hge: not listed
+
+
+def _check_key(x: int, y: int, xmax: int, ymax: int, grid: list[list[int]], key: str) -> tuple[int, int]:
+    """BattleCursor_CheckKeyInput (S_BI_KEY) with the table as moveData: clamp, and stay if the new cell holds the same input."""
+    nx, ny = x, y
+    if key == "Up":
+        ny = max(ny - 1, 0)
+    elif key == "Down":
+        ny = min(ny + 1, ymax - 1)
+    elif key == "Left":
+        nx = max(nx - 1, 0)
+    elif key == "Right":
+        nx = min(nx + 1, xmax - 1)
+    return (x, y) if grid[ny][nx] == grid[y][x] else (nx, ny)
+
+
+def main_menu_step(main: list[list[int]], x: int, y: int, key: str) -> tuple[int, int]:
+    """BattleInput_CursorMove_MainMenu (S_BI_MAIN): Up from RUN is a no-op branch; Left/Right on FIGHT jump to the bottom corners."""
+    cur = main[y][x]
+    if cur == 3 and key == "Up":
+        return x, y
+    nx, ny = _check_key(x, y, 3, 2, main, key)
+    if (nx, ny) == (x, y) and cur == 0 and key in ("Left", "Right"):
+        return (0, 1) if key == "Left" else (2, 1)
+    return nx, ny
+
+
+def _run(step, start: tuple[int, int], keys: list[str]) -> tuple[int, int]:
+    pos = start
+    for key in keys:
+        pos = step(*pos, key)
+    return pos
+
+
+def start_menu_path(nav: list[list[list[int]]], src: int, dst: int) -> list[str] | None:
+    """Shortest D-pad path between start-menu cells for a full menu (every cell enabled: the first neighbour candidate wins)."""
+    seen, queue = {src: []}, [src]
+    for cell in queue:
+        if cell == dst:
+            return seen[cell]
+        for d, name in enumerate(DIRS):
+            nxt = nav[cell][d][0]
+            if nxt not in seen:
+                seen[nxt] = seen[cell] + [name]
+                queue.append(nxt)
+    return None
+
+
+def ui_geometry(xm: XMap, images: Images, other: Images, other_label: str) -> dict:
+    """FILE: the cursor tables and the start-menu neighbour/layout tables, with the byte identity of the UI code vs another ROM."""
+    main_sym, fight_sym = xm.lookup("sCursorArrayMainMenu"), xm.lookup("sCursorArrayFightMenu")
+    main_raw, fight_raw = images.read(main_sym.image, main_sym.address, 6), images.read(fight_sym.image, fight_sym.address, 6)
+    main = [list(main_raw[0:3]), list(main_raw[3:6])]
+    fight = [list(fight_raw[0:2]), list(fight_raw[2:4]), list(fight_raw[4:6])]
+    if main != EXPECT_MAIN_CURSOR or fight != EXPECT_FIGHT_CURSOR:
+        raise Fail(f"battle cursor tables differ from the source ({main}, {fight})")
+    # the recipes' D-pad sequences, re-derived on the ROM tables with the source's cursor logic from every start cell
+    at = _run
+    mstep = lambda x, y, k: main_menu_step(main, x, y, k)  # noqa: E731
+    fstep = lambda x, y, k: _check_key(x, y, 2, 3, fight, k)  # noqa: E731
+    mains = [(x, y) for y in range(2) for x in range(3)]
+    if any(at(mstep, c, ["Left", "Left", "Up"]) != (0, 0) for c in mains):
+        raise Fail("[Left, Left, Up] does not reach FIGHT from every main-menu cell")
+    if any(main[y][x] != 3 for x, y in (at(mstep, c, ["Left", "Left", "Right"]) for c in mains)):
+        raise Fail("[Left, Left, Right] does not reach RUN from every main-menu cell")
+    if any(at(fstep, (x, y), ["Up", "Up", "Left"]) != (0, 0) for y in range(3) for x in range(2)):
+        raise Fail("[Up, Up, Left] does not reach MOVE_1 from every fight-menu cell")
+    n = START_NAV
+    nav_raw = images.read(n["image"], n["address"], n["cells"] * n["groups"] * n["candidates"])
+    nav = [[list(nav_raw[(c * 4 + d) * 3:(c * 4 + d) * 3 + 3]) for d in range(4)] for c in range(n["cells"])]
+    lay = START_LAYOUT
+    lay_raw = images.read(lay["image"], lay["address"], lay["variants"] * lay["cells_per_variant"])
+    layout = [list(lay_raw[v * 8:v * 8 + 8]) for v in range(lay["variants"])]
+    if layout[0] != FULL_MENU_VARIANT:
+        raise Fail(f"start-menu layout variant 0 {layout[0]} is not the full menu")
+    save_cell = FULL_MENU_VARIANT.index(START_ICONS.index("SAVE"))
+    path = start_menu_path(nav, 0, save_cell)
+    if path is None:
+        raise Fail("the SAVE cell is unreachable in the start-menu neighbour table")
+    identity = {}
+    for name in UI_CODE:
+        s = xm.lookup(name)
+        a, b = images.read(s.image, s.address, s.size), other.read(s.image, s.address, s.size)
+        if a != b:
+            raise Fail(f"UI code {name} differs from {other_label}")
+        identity[name] = {"image": s.image, "address": s.address, "size": s.size, "sha1": hashlib.sha1(a).hexdigest()}
+    return {
+        "battle_main_cursor": {"symbol": "sCursorArrayMainMenu", "image": main_sym.image, "address": main_sym.address, "cells": main,
+                               "names": MAIN_NAMES, "evidence": f"FILE: ROM bytes; SOURCE {S_BI_MAIN_TBL} (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)"},
+        "battle_fight_cursor": {"symbol": "sCursorArrayFightMenu", "image": fight_sym.image, "address": fight_sym.address, "cells": fight,
+                                "names": {0: "CANCEL", 1: "MOVE_1", 2: "MOVE_2", 3: "MOVE_3", 4: "MOVE_4"},
+                                "evidence": f"FILE: ROM bytes; SOURCE {S_BI_FIGHT_TBL}"},
+        "battle_paths": {"to_FIGHT": ["Left", "Left", "Up"], "to_RUN": ["Left", "Left", "Right"], "fight_to_MOVE_1": ["Up", "Up", "Left"],
+                         "evidence": "re-derived by the generator on the ROM tables with the source cursor logic from every start cell "
+                                     f"(main_menu_step / _check_key mirror {S_BI_MAIN}, {S_BI_KEY}); the cursor start cell is not assumed"},
+        "start_menu": {
+            "neighbour_table": {**n, "dir_order": list(DIRS), "rows": nav, "address_hex": f"{n['address']:#010x}",
+                                "evidence": f"FILE: ROM bytes at the pret asm label ({S_NAV_TBL}); lookup {S_NAV_FN}: for the pressed direction the first "
+                                            "candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 "
+                                            f"({S_NAV_KEYS}, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)"},
+            "layout_rows": {**lay, "rows": layout, "address_hex": f"{lay['address']:#010x}", "none": 0x0D,
+                            "evidence": f"FILE: ROM bytes ({S_NAV_LAYOUT}); row 0 is the full menu: cell c shows icon c"},
+            "icon_order": list(START_ICONS),
+            "action_of_cell": f"display index = rank of the cell among enabled cells ({S_NAV_CELL}); fs+0xD3 = that index; A selects "
+                              f"selectionToAction[index] ({S_SM_KEY}, {S_SM_LISTS})",
+            "cursor_to_save": {"from_cell": 0, "to_cell": save_cell, "path": path, "full_menu_only": True,
+                               "evidence": "BFS over neighbour_table with every cell enabled; no word reaches SAVE from all start cells, so "
+                                           "the leg's `until` verifies the landing cell"},
+        },
+        "code_identity": {"compared_with": other_label, "symbols": identity,
+                          "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the "
+                                      "compared ROM, so the pokeheartgold source read applies byte-for-byte"},
+    }
+
+
+def _step(press: list[str], hold: int, wait: int) -> dict:
+    return {"press": press, "hold_frames": hold, "then_wait_frames": wait}
+
+
+def _pred(deref: list[int], offset: int, **cond) -> dict:
+    return {"symbol": "sFieldSysPtr", "deref": deref, "offset": offset, **cond}
+
+
+def _leg(steps, until, max_frames, evidence, source, starts_from, note=None):
+    return {"steps": steps, "until": until, "max_frames": max_frames, "route_status": "recipe_source", "evidence": evidence,
+            "source": source, "open": None, "starts_from": starts_from, "note": note}
+
+
+def _open_leg(reason: str) -> dict:
+    return {"steps": [], "until": None, "max_frames": None, "route_status": "open", "evidence": "OPEN", "source": [], "open": reason,
+            "starts_from": None, "note": None}
+
+
+def build_route_legs(ui: dict, build: str) -> dict:
+    """titles.<t>.{route_legs, route, persistence_route}: every leg a phase case / row i / row m names, with a recipe or an OPEN reason."""
+    sub, launched, taskman = PROBE_FIELD["sub"][0], PROBE_FIELD["launched_app"][0], PROBE_FIELD["task"][0]
+    data_off = PROBE_FIELD_EXTRA["save_driver_data_off"][0]
+    save_app = [PROBE_FIELD["save_driver"][0], data_off, PANEL_TASK_OFF, data_off]  # fs -> panel driver -> active panel's SysTask data
+    task_nonzero, task_zero = _pred([], taskman, nonzero=True), _pred([], taskman, zero=True)
+    app_gone = _pred([sub], launched, zero=True)
+    enemy_hp_zero = _pred([sub, launched, OVLMGR_DATA_OFF, BATTLE_BASE["ctx_off"]], ENEMY_HP_OFF, zero=True)
+    sm = ui["start_menu"]["cursor_to_save"]
+    battle_src = [S_BI_TOUCH, S_BI_CURSOR, S_BI_MAIN, S_BI_FIGHT, S_BI_KEY, S_BI_KEYCARRY, S_BI_MAIN_TBL, S_BI_FIGHT_TBL]
+    paths = ui["battle_paths"]
+    wake = _step(["X"], 2, 20)  # X is in BattleInput_CheckCursorInput's wake set and ignored by BattleCursor_CheckKeyInput
+    mash = [_step(["A"], 2, 18) for _ in range(5)]
+    battle_note = ("D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the "
+                   "cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven "
+                   "selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset "
+                   "is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell")
+    legs = {
+        "fight_until_enemy_faints": _leg(
+            [wake, *[_step([k], 2, 6) for k in paths["to_FIGHT"]], _step(["A"], 2, 45),
+             *[_step([k], 2, 6) for k in paths["fight_to_MOVE_1"]], _step(["A"], 2, 60), *mash, _step(["A"], 2, 18)],
+            enemy_hp_zero, 3000, "SOURCE", [*battle_src, S_ENC_START],
+            "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+            battle_note + "; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, "
+            "asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)"),
+        "run_from_wild": _leg(
+            [wake, *[_step([k], 2, 6) for k in paths["to_RUN"]], _step(["A"], 2, 40), *mash],
+            app_gone, 2400, "SOURCE", battle_src, "wild battle settled on the main command menu (gen4_routes:battle_settled)",
+            battle_note + "; a failed escape returns to the menu with the cursor on RUN and the cycle retries; until = the launched-app "
+            "OverlayManager is gone (sFieldSysPtr->unk0->unk4 == 0)"),
+        "exit_battle_to_overworld": _leg(
+            [_step(["A"], 2, 18)], task_zero, 3000, "SOURCE", [S_ENC_START, S_FIELD_INPUT],
+            "enemy fainted (or escaped); battle text / exp / level-up boxes pending",
+            "A-mash dismisses text; until = FieldSystem.taskman == 0 (the encounter task, which holds the field while the battle app "
+            "runs, has ended). OPEN: A answers Yes on a move-learn / evolution prompt, so the fixture mon must not have a full moveset "
+            "or an evolution due"),
+        "soft_reset_in_fight_menu": _leg(
+            [_step(["Start", "Select", "L", "R"], 10, 600)], _pred([], 0, zero=True), 900, "SOURCE", [S_MAIN_RESET, S_DO_RESET],
+            "battle main command menu (any state: NitroMain tests heldKeysRaw every main-loop frame unless softResetDisabled)",
+            "until reads sFieldSysPtr itself, which the start-up .bss clear zeroes: a NULL base must count as satisfying `zero` (the "
+            "probe's active() returns false on a NULL link, so this one leg needs that exception). OPEN: the chord test is inline in "
+            "NitroMain, whose bytes differ between HG, SS and hge, so it is read from the HG source only (DoSoftReset is byte-identical)"),
+        "open_start_menu": _leg(
+            [_step(["X"], 2, 30)], task_nonzero, 300, "SOURCE", [S_FIELD_INPUT, S_X_OPENS, S_OPEN_CALL, S_SM_INIT, S_BTN_MODE],
+            "overworld idle (FieldSystem.taskman == 0, no launched app)",
+            "X opens the HGSS menu (FieldInput_Update tests newKeys & 0x400, FieldInput_Process then calls StartMenu_Init); Start does "
+            "nothing in the default button mode. OPEN: the owner save's Options.buttonMode is not decoded (BUTTONMODE_STARTEQUALSX "
+            "would also accept Start); until = a field task exists (StartMenu_Init creates one)"),
+        "start_menu_cursor_to_save": _leg(
+            [_step([k], 2, 10) for k in sm["path"]], _pred(save_app, PANEL_CURSOR_OFF, value=sm["to_cell"]), 120, "FILE",
+            [S_NAV_TBL, S_NAV_FN, S_NAV_KEYS, S_NAV_CELL, S_NAV_LAYOUT, S_PANEL0_INIT, S_PANEL_TABLE],
+            f"start menu open, cursor on cell {sm['from_cell']} (Pokedex), fully unlocked menu",
+            "path = BFS over the ROM neighbour table; until = panel cursor cell (panel data +0x14) == SAVE's cell, read through "
+            "fs+0xD8 -> data -> +4 panel SysTask -> data. OPEN: (1) the cursor starts on the last used item (fs+0x90, start_menu.c:458-463), "
+            "its writer is asm-only, so a non-zero start misses the cell and the leg times out instead of pressing A; (2) a menu without "
+            "Pokedex/Pokemon/Bag/Pokegear uses another layout row (ui_geometry.start_menu.layout_rows) and that cell is not SAVE: the "
+            "fixture must be the fully unlocked menu"),
+        "start_menu_select_save": _leg(
+            [_step(["A"], 2, 22)], _pred(save_app, TS_STATE_OFF, value=TS_PROMPT), 900, "SOURCE",
+            [S_SM_KEY, S_SM_SAVE, S_PANEL_REQ, S_PANEL_SM, S_PANEL_TABLE, S_TS_INIT, S_TS_ENUM, S_TS_STRUCT],
+            "start menu open, cursor on SAVE",
+            "A runs StartMenu_HandleKeyInput -> Task_StartMenu_HandleSelection_Save -> panel-driver mode 1 (touch save app, ov30); until = "
+            "TouchSaveAppData.state == HANDLE_SAVE_CONFIRMATION (4: the Yes/No prompt is up)"),
+        "save_confirm_until_saved": _leg(
+            [_step(["A"], 2, 22)], _pred(save_app, TS_STATE_OFF, value=TS_CLOSE), 2400, "SOURCE",
+            [S_YN_INIT, S_YN_KEYS, S_TS_SAVE_CONF, S_TS_OVER_CONF, S_TS_CLOSE, S_TS_ENUM],
+            "save Yes/No prompt up (touch save app state 4)",
+            "the Yes/No prompt starts on Yes with keys (inTouchMode FALSE) so A confirms; a second prompt (state 7, overwrite) appears "
+            "when a save file exists and the repeated A answers Yes again; A is ignored in every other state. until = state CLOSE (15), "
+            "which lasts 30+ frames (TouchSaveApp_CloseApp) so `until` must be evaluated every frame. It is also reached by the "
+            "NOT_MY_SAVE / SAVE_FAILED paths: row i's Save_WriteManFinish hit count is the success evidence"),
+        "close_start_menu": _leg(
+            [_step([], 0, 90), _step(["B"], 2, 40)], task_zero, 600, "SOURCE", [S_SM_INPUT, S_SM_SAVE],
+            "start menu open (after a save the panel returns to the menu: Task_StartMenu_HandleInput)",
+            "B (or X) closes the menu when no touch input is pending (start_menu.c:574-577); the leading wait lets the save panel finish "
+            "returning; until = FieldSystem.taskman == 0"),
+        "gen4_routes:battle_settled": _open_leg(
+            "EXISTS as tools/gen4_routes.py + lua/tests/gen4_route_play.lua (CONTINUE, planned walk with per-tile RAM checks, wild "
+            "encounter, settle on the main menu; C1-9 receipt route_leg2_battle_settled): a verified walk, not a fixed button recipe"),
+        "boot_continue_to_overworld": _open_leg(
+            "EXISTS as the boot loop in lua/tests/probe_gen4_hooks.lua (A/Start cadence until the compound idle_field predicate: taskman "
+            "== 0, live != 0, no launched app); no single RAM predicate expresses it"),
+        **dict.fromkeys(PC_LEGS, _open_leg(_PC_BLOCK)),
+    }
+    if build == "hge":
+        legs["fight_until_enemy_faints"]["note"] += ("; hge: the chain assumes hge's ServerInit leaves bs->ctx at +0x30 "
+                                                      "(research R9), a PHYSICAL cell")
+    return {
+        "route_legs": legs,
+        "route": ["gen4_routes:battle_settled", "fight_until_enemy_faints", "exit_battle_to_overworld", "open_start_menu", "close_start_menu"],
+        "persistence_route": ["open_start_menu", "start_menu_cursor_to_save", "start_menu_select_save", "save_confirm_until_saved",
+                              "close_start_menu"],
+    }
+
+
+def _predicate_errors(where: str, pred: object, known: set[str]) -> list[str]:
+    if not isinstance(pred, dict):
+        return [f"{where}: until must be a predicate object"]
+    errs = []
+    if pred.get("symbol") not in known:
+        errs.append(f"{where}: until.symbol {pred.get('symbol')!r} is not a symbol of this title's xMAP")
+    if not isinstance(pred.get("deref"), list) or not all(isinstance(o, int) and not isinstance(o, bool) for o in pred["deref"]):
+        errs.append(f"{where}: until.deref must be a list of integer offsets")
+    if not isinstance(pred.get("offset"), int) or isinstance(pred.get("offset"), bool):
+        errs.append(f"{where}: until.offset must be an integer")
+    conds = [k for k in ("value", "nonzero", "zero") if k in pred]
+    if len(conds) != 1 or (conds[0] != "value" and pred[conds[0]] is not True):
+        errs.append(f"{where}: until needs exactly one of value / nonzero:true / zero:true")
+    return errs
+
+
+def validate_route_legs(title: dict) -> list[str]:
+    """Pure check of titles.<t>.route_legs / route / persistence_route against the title's own symbols and phase cases."""
+    errs, legs, known = [], title.get("route_legs") or {}, set(title["symbols"])
+    if not legs:
+        return ["route_legs missing or empty"]
+    for name, leg in legs.items():
+        where = f"route_legs.{name}"
+        status = leg.get("route_status")
+        if status not in ("recipe_source", "open") or leg.get("evidence") not in ("SOURCE", "FILE", "OPEN"):
+            errs.append(f"{where}: route_status must be recipe_source|open and evidence SOURCE|FILE|OPEN")
+        if status == "open":
+            if leg.get("steps") != [] or leg.get("until") is not None or not leg.get("open") or leg.get("evidence") != "OPEN":
+                errs.append(f"{where}: an open leg keeps steps [], until null, evidence OPEN and a reason")
+            continue
+        steps = leg.get("steps")
+        if not isinstance(steps, list) or not steps:
+            errs.append(f"{where}: a recipe needs steps")
+            steps = []
+        cycle = 0
+        for i, st in enumerate(steps):
+            press = st.get("press")
+            if not isinstance(press, list) or any(b not in NDS_BUTTONS for b in press) or len(set(press)) != len(press):
+                errs.append(f"{where}.steps[{i}]: press must be distinct BizHawk NDS buttons {NDS_BUTTONS}")
+            hold, wait = st.get("hold_frames"), st.get("then_wait_frames")
+            if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (hold, wait)) or not (hold or wait):
+                errs.append(f"{where}.steps[{i}]: hold_frames / then_wait_frames must be non-negative integers, not both 0")
+                continue
+            if press and not hold:
+                errs.append(f"{where}.steps[{i}]: a press needs hold_frames >= 1")
+            cycle += hold + wait
+        errs += _predicate_errors(where, leg.get("until"), known)
+        mf = leg.get("max_frames")
+        if not isinstance(mf, int) or isinstance(mf, bool) or not (0 < mf <= ROUTE_MAX_FRAMES):
+            errs.append(f"{where}: max_frames must be a bounded integer in 1..{ROUTE_MAX_FRAMES}")
+        elif cycle > mf:
+            errs.append(f"{where}: one cycle ({cycle} frames) exceeds max_frames {mf}")
+        if not leg.get("source") or leg.get("open") is not None:
+            errs.append(f"{where}: a recipe carries source citations and open null")
+    named = {"route": title.get("route"), "persistence_route": title.get("persistence_route")}
+    for case in [*title.get("phase_cases", []), *title.get("phase_cases_blocked", [])]:
+        named[f"phase_case:{case['name']}.route"] = case.get("route")
+    for where, route in named.items():
+        if not route or not isinstance(route, list):
+            errs.append(f"{where}: must be a non-empty list of leg names")
+            continue
+        errs += [f"{where}: leg {leg!r} is not in route_legs" for leg in route if leg not in legs]
+    return errs
+
+
+# Symbols from different images at ONE cpu address: a capture must be attributed to the image that is resident at that moment
+COLLISION_SPECS = [{
+    "name": "field_vblank_vs_title_init",
+    "sites": [("field_vblank_ov1", "FieldMap_VBlankCallback", "ov1 (field overlay): the field's per-frame VBlank callback"),
+              ("title_init_ov60", "TitleScreen_Init", "ov60 (intro_title overlay): title-screen init")],
+}]
+
+
+def collision_pairs(xm: XMap, images: Images, build: str, vanilla: Images | None = None) -> list[dict]:
+    out = []
+    for spec in COLLISION_SPECS:
+        rows = vanilla_sites(xm, images, [(sid, sym, "probe", role, "ANY") for sid, sym, role in spec["sites"]])
+        first, second = (rows[sid] for sid, _, _ in spec["sites"])
+        if first["address"] != second["address"] or first["image"] == second["image"] or first["fire_hex"] == second["fire_hex"]:
+            raise Fail(f"{spec['name']}: expected one address in two images with different first words")
+        errs = validate_sites(rows, images, spec["name"])
+        if errs:
+            raise Fail("; ".join(errs))
+        if vanilla is not None:  # hge: the shared-address claim is only inherited if the bytes really equal vanilla
+            base = vanilla_sites(xm, vanilla, [(sid, sym, "probe", role, "ANY") for sid, sym, role in spec["sites"]])
+            if any(base[sid]["register_hex"] != rows[sid]["register_hex"] for sid in rows):
+                raise Fail(f"{spec['name']}: hge bytes differ from vanilla at the shared address")
+        pair = {
+            "name": spec["name"], "address": first["address"], "address_hex": first["address_hex"], "sites": rows,
+            "resident_when": {
+                spec["sites"][0][0]: {"overlay_id": first["overlay_id"], "when": (
+                    "from the field overlay load (FieldSystem_LoadFieldOverlayInternal) through every launched app, battle included, "
+                    "until the field overlay is unloaded when the field app exits"),
+                    "evidence": [S_FIELD_LOAD, S_FIELD_UNLOAD, "xMAP SDK_OVERLAY_field_ID = 0x1 (heartgoldus.xMAP:53316)"]},
+                spec["sites"][1][0]: {"overlay_id": second["overlay_id"], "when": (
+                    "only while the intro_title main overlay runs: after a soft reset / power-on (NitroMain registers the intro movie, "
+                    "whose app goes on to the title screen) and after the field app exits (Field_AppExit); never during the field or a battle"),
+                    "evidence": [S_BOOT_REG, S_TITLE_REG, "xMAP SDK_OVERLAY_intro_title_ID = 0x3C (heartgoldus.xMAP:135346)"]},
+            },
+            "exclusive": "ov1 and ov60 are main-overlay images loaded to the same RAM base (FILE: overlays[1].ram == overlays[60].ram): at "
+                         "most one is resident, the other's bytes are not at this address",
+            "wrong_owner_capture": f"registering {spec['sites'][1][0]} while the field runs (or {spec['sites'][0][0]} at the title) fires at "
+                                   "the same CPU address with the OTHER image's word: fire_hex differs, so a capture that checks residency "
+                                   "and fire_hex rejects it",
+            "evidence": "FILE: both symbols from the xMAP (heartgoldus.xMAP:53320 and :135351; soulsilverus.xMAP has the same lines), "
+                        "bytes read from each declared image; the two first words differ",
+            "open": [],
+        }
+        if build == "hge":
+            pad = images.read("arm9", first["address"], first["extent"])
+            pair["hge_note"] = ("FILE: ov1 and ov60 hold the same bytes as vanilla at the shared address; `collides_with` also lists arm9 "
+                                "because the hge raw ARM9 file is padded to 0x2477C8 (hge writes its overlay-2 hooks into base/arm9.bin, "
+                                "docs/gen4/research/hg_engine.md:149); the arm9 bytes at the shared address are " +
+                                ("all zero padding, not a third owner" if not any(pad) else "NOT zero: a third owner"))
+            if any(pad):
+                pair["open"].append("hge raw ARM9 holds non-zero bytes at the shared address: the residency of a third image is unresolved")
+        out.append(pair)
+    return out
+
+
+def validate_collision_pairs(title: dict) -> list[str]:
+    errs, pairs = [], title.get("collision_pairs") or []
+    if not pairs:
+        return ["collision_pairs missing or empty"]
+    for pair in pairs:
+        where = f"collision_pair:{pair.get('name')}"
+        sites = list((pair.get("sites") or {}).values())
+        if len(sites) < 2:
+            errs.append(f"{where}: needs at least two sites")
+            continue
+        if len({s["address"] for s in sites}) != 1 or any(s["address"] != pair.get("address") for s in sites):
+            errs.append(f"{where}: sites must share one address (the pair's address)")
+        if len({s["image"] for s in sites}) != len(sites):
+            errs.append(f"{where}: sites must live in different images")
+        if len({s["fire_hex"] for s in sites}) != len(sites):
+            errs.append(f"{where}: first words must differ, or a wrong-owner capture is indistinguishable")
+        if set(pair.get("resident_when") or {}) != set(pair["sites"]):
+            errs.append(f"{where}: resident_when must name every site")
+        for sid, s in pair["sites"].items():
+            ov = title["overlays"].get(str(s.get("overlay_id")))
+            if ov is None or not (ov["ram"] <= s["address"] and s["address"] + s["extent"] <= ov["ram"] + ov["size"]):
+                errs.append(f"{where}: site {sid} is not inside overlay {s.get('overlay_id')}'s RAM span")
+    return errs
+
+
+# --------------------------------------------------------------------------------------------
 # Pack builders
 # --------------------------------------------------------------------------------------------
 def lock_provenance(inputs: Inputs) -> dict:
     return {"path": "data/gen4_sources.lock.json", "sha256": hashlib.sha256(inputs.lock.read_bytes()).hexdigest()}
 
 
-def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str) -> dict:
+def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str, other: Images, other_label: str) -> dict:
     check_xmap_vs_rom(xm, images, label)
     symbols = {}
     for name in SYMBOL_NAMES:
@@ -1218,6 +1703,7 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str)
     if ovr.size != 3 * 8 * 8:
         raise Fail(f"{label}: sOverlayRegions size {ovr.size:#x} != 3 regions x 8 x 8 bytes")
     sites = vanilla_sites(xm, images)
+    ui = ui_geometry(xm, images, other, other_label)
     return {
         "rom": {k: rom[k] for k in ("sha1", "md5", "header_code")},
         "admission": admission,
@@ -1228,13 +1714,19 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str)
         "profile": hgss_profile(xm),
         "phases": phase_table(sites, "hgss"),
         **build_phase_cases(xm, images),
+        "ui_geometry": ui,
+        **build_route_legs(ui, "hgss"),
+        "collision_pairs": collision_pairs(xm, images, "hgss"),
         "open": hgss_open(),
     }
 
 
 SCHEMA_NOTES = {
     "address": "integers; address_hex is the same value for humans",
-    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone. Byte source: HG/SS "
+             "'arm9' bytes are ndspy's DECOMPRESSED loadArm9().sections[0] (ARM9 static image, RAM base 0x02000000); hge 'arm9' bytes are "
+             "the RAW uncompressed rom.arm9 (hge stores it uncompressed; the raw file is padded to 0x2477C8, so `collides_with` of an hge "
+             "site can list arm9 where the arm9 bytes are zero padding); 'ov<N>' bytes are the decompressed overlay N from the ROM overlay table",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') — the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); "
@@ -1254,6 +1746,22 @@ SCHEMA_NOTES = {
                    "{symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and "
                    "caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). "
                    "phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
+    "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: "
+                  "declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats "
+                  "while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the "
+                  "phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source "
+                  "(derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; "
+                  "source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` "
+                  "are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R "
+                  "(the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and "
+                  "persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; "
+                   "code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)",
+    "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, "
+                       "register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
+    "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name "
+                  "to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in "
+                  "differing_names_in_several_images (file-local statics defined in two images)",
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that "
                           "tests == true stays off until it implements the located bit",
 }
@@ -1268,10 +1776,13 @@ def build_hgss(inputs: Inputs) -> dict:
     for title in titles_order():
         xms[title] = load_xmap(inputs.paths[title + "_xmap"])
         imgs[title] = load_images(inputs.paths[title])
-        titles[title] = title_block(xms[title], imgs[title], roms[title], lock["artifacts"][title]["admission"], title)
+        other = "soulsilver" if title == "heartgold" else "heartgold"
+        titles[title] = title_block(xms[title], imgs[title], roms[title], lock["artifacts"][title]["admission"], title,
+                                    load_images(inputs.paths[other]), other)
     errs = validate_hg_ss(titles["heartgold"], titles["soulsilver"])
     for t in titles_order():
-        errs += validate_sites(titles[t]["sites"], imgs[t], t) + validate_phase_cases(titles[t])
+        errs += (validate_sites(titles[t]["sites"], imgs[t], t) + validate_phase_cases(titles[t]) + validate_route_legs(titles[t])
+                 + validate_collision_pairs(titles[t]))
     if errs:
         raise Fail("; ".join(errs))
     return {
@@ -1539,6 +2050,7 @@ def build_hge(inputs: Inputs) -> dict:
         "pc_swap_redirect": "see sites.pc_swap_by_index_pair.replaces.redirect_evidence",
         "hge_save_geometry_live": "SaveData geometry is source-derived; live read is G2",
         **{k: v for k, v in hgss_open().items() if k in ("phase_first_event_coverage", "battle_offsets_live_read")},
+        **route_open(),
         "battle_hge_effects": "hge faint is replaced in ov130; offsets are shared with vanilla but the active-faint mechanism "
                               "and copy-back are C1-8 cells (battle_pointer.md Open)",
     }
@@ -1552,12 +2064,14 @@ def build_hge(inputs: Inputs) -> dict:
                           "evidence": "never patched by hge (rom.ld:552 / platform.md); per_region = MAX_ACTIVE_OVERLAYS 8"},
         "profile": profile, "phases": phase_table(sites, "hge"), **build_phase_cases(xm, hge_img), "open": open_,
     }
+    ui = ui_geometry(xm, hge_img, hg_img, "heartgold (vanilla)")
+    title.update({"ui_geometry": ui, **build_route_legs(ui, "hge"), "collision_pairs": collision_pairs(xm, hge_img, "hge", hg_img)})
     title["phase_cases_hge_note"] = (
         "same predicate and site ids as HG: Battle_LaunchApp/Battle_Run/PCBox_LaunchApp and the OverlayManager code are byte-identical "
         "in the hge image (profile.probe_field_hge_checks) and the templates carry the same ovy_id; battle_faint_cmd and the pc_* "
         "sites are the hge REPLACEMENT addresses (ov130 / ov129). Whether hge keeps the vanilla battle scripts and the PC UI callers "
         "is a G1 PHYSICAL cell")
-    errs = validate_phase_cases(title)
+    errs = validate_phase_cases(title) + validate_route_legs(title) + validate_collision_pairs(title)
     if errs:
         raise Fail("; ".join(errs))
     return {
@@ -1654,6 +2168,8 @@ def pt_open() -> dict:
                                "page-table check for Platinum until it consumes save.footer / save.block_info",
         "trainer.badges": "TrainerInfo has one badgeMask byte (8 Sinnoh badges): trainer.badge_mask_off, no johto/kanto pair",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
+        "route_legs": "bind-only: no Platinum probe route, button recipe or UI geometry was derived (pokeplatinum menus differ; D3)",
+        "collision_pairs": "bind-only: no Platinum shared-address pair was derived (FieldMap_VBlankCallback is not in the Platinum xMAP)",
     }
 
 

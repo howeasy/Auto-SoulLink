@@ -37,17 +37,21 @@
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
+    "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
+    "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in differing_names_in_several_images (file-local statics defined in two images)",
     "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
-    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone. Byte source: HG/SS 'arm9' bytes are ndspy's DECOMPRESSED loadArm9().sections[0] (ARM9 static image, RAM base 0x02000000); hge 'arm9' bytes are the RAW uncompressed rom.arm9 (hge stores it uncompressed; the raw file is padded to 0x2477C8, so `collides_with` of an hge site can list arm9 where the arm9 bytes are zero padding); 'ov<N>' bytes are the decompressed overlay N from the ROM overlay table",
     "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 (struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a cross-check, the runtime reads the array header)",
     "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
     "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
     "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe compares an independent always-on observer of the same address with the registry events), predicate {symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
     "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
-    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
+    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
+    "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
   "titles": {
     "platinum": {
@@ -55,12 +59,14 @@
       "open": {
         "battle": "Platinum battle context offsets are not established; do not derive from HGSS",
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
+        "collision_pairs": "bind-only: no Platinum shared-address pair was derived (FieldMap_VBlankCallback is not in the Platinum xMAP)",
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
         "probe_field": "bind-only: Platinum FieldSystem probe offsets (processManager parent/child, save driver) are not established",
         "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
+        "route_legs": "bind-only: no Platinum probe route, button recipe or UI geometry was derived (pokeplatinum menus differ; D3)",
         "save.footer.runtime": "RAM footer address (block_info + footer.addr) is SOURCE only; lua/gen4/reads.lua still uses a structural page-table check for Platinum until it consumes save.footer / save.block_info",
         "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
         "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)",
