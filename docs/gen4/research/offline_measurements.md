@@ -73,7 +73,7 @@ The profile was found by charmap search after verifying the known party header f
 | money +0x14 | 3000 |
 | gender +0x18 | 1 |
 | language +0x19 | 2 (English) |
-| Johto badges +0x1A / Kanto badges +0x1E | 0 / 0 |
+| Johto badges +0x1A / Kanto badges **+0x1F** (corrected 2026-10-01: a `dummy` byte at +0x1E precedes it, `include/player_data.h:12-25`; caught by C1-2) | 0 / 0 |
 | version +0x1C | **7 = VERSION_HEARTGOLD** |
 
 Consistency check: 0x60 + sizeof(PLAYERDATA) 0x2C + 4 (chunk CRC) = 0x90, which is exactly the party chunk start. The derived profile offsets hold. IGT, bag and local field data were not pinned.

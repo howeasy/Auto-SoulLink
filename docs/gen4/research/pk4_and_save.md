@@ -41,7 +41,7 @@ The coordinator re-verified this card against a real battery save, marked FILE.
   | `unlockedWallpapers` | +0x122EA |
 
   Total size 0x122FC, block 0x12310.
-- Player profile: save array 1. Field order (verified) is `Options`, `PlayerProfile{name u16[8], id u32, money u32, gender, language, johtoBadges, avatar, version, flags, kantoBadges}`, `coins`, `IGT` (`include/player_data.h:12-32`). The offsets are *derived* (id +0x14, money +0x18, johto +0x1E, kanto +0x22) and must be confirmed on a save.
+- Player profile: save array 1. Field order (verified) is `Options`, `PlayerProfile{name u16[8], id u32, money u32, gender, language, johtoBadges, avatar, version, flags, dummy, kantoBadges}`, `coins`, `IGT` (`include/player_data.h:12-32`). The offsets are *derived* (id +0x14, money +0x18, johto +0x1E, kanto +0x23; i.e. profile-relative kanto +0x1F after the `dummy` byte, corrected 2026-10-01) and must be confirmed on a save.
 - Badges: 0-7 are Johto bits, 8-15 are Kanto bits (`src/player_data.c:115-142`).
 - Location: `SAVE_LOCAL_FIELD_DATA` (5), with `currentPosition` first: `Location {mapId, warpId, x, y, direction}` = 0x14 (`include/field_types_def.h:10-16`).
 - At runtime, `FieldSystem+0x0C` = `SaveData*` and `FieldSystem+0x20` = `Location*` (the same memory) (`include/field_system.h:112-125`).
