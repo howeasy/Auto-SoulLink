@@ -7,7 +7,7 @@
 > - Rev 4 folds in the second adversarial review (OMP G4-REV2 `cx-03ea7236`: 21 accepted, 1 partly refuted) and decisions D12-D15.
 > - Rev 5 incorporates the [full adversarial review](reviews/ADVERSARIAL_REVIEW_2026-09-29.md) at `7da76fbf`, three Sol passes and three reconciled live OMP passes. The owner's amendment request authorizes these documentation corrections, not gate signatures or production implementation.
 > - Research record: [research/README.md](research/README.md)
-> - Ledger: [`../gen4_requirements.md`](../gen4_requirements.md), rev-5 skeleton; all unrun gate cells remain OPEN
+> - Ledger: [`../gen4_requirements.md`](../gen4_requirements.md), C0 binding inventory; all unrun gate cells remain OPEN
 > - Coordinator: Claude (Opus 5.5), worktree `.claude/worktrees/gen4-support-framework-dfd5e2`, branch `claude/gen4-support-framework-dfd5e2`
 
 ## 1. Context
@@ -303,12 +303,12 @@ It carries Gen 3's constructs:
 
 ## 7. Cards
 
-Up to 3 subagents run at once, model explicit, plus headless OMP for checks. Exclusive files never overlap. The coordinator alone runs emulator lanes, one at a time, own PIDs only, on short non-Drive paths.
+Current owner limit (2026-09-30): up to **2 Sol or Luna subagents** at a time, plus bounded/verifiable OMP work. Exclusive files never overlap. The coordinator alone runs emulator lanes, one at a time, own PIDs only, on short non-Drive paths. C0 holds no emulator lane.
 
 | Card | Model | Exclusive files | First falsifier | Exit |
 |---|---|---|---|---|
-| C0-1 ledger | Sonnet | `docs/gen4_requirements.md` | A required artifact/row has no independent oracle or an OPEN cell is treated as PASS | Skeleton created by the owner's rev-5 amendment request; expand exact requirements/manifest mappings under a renewed lease before G0. No gate signature implied. |
-| C0-2 pins | Haiku | `tools/gen4_pins.py`, `data/gen4_sources.lock.json`, `tests/unit/test_gen4_pins.py` | A 1-byte-flipped ROM copy → FAIL; an absent ROM → named skip | `--json` pin table (ROMs pin both MD5 and SHA1) |
+| C0-1 bindings | Sol | `tools/gen4_requirements.py`, `tests/gen4_requirements.json`, `tests/unit/test_gen4_requirements.py`; coordinator owns `docs/gen4_requirements.md` | Remove a required row/direction/physical target or forge CLOSED evidence: refusal required | Exact planned check/control/oracle/receipt and per-layer target inventory; shared coverage validator; mapping complete, behavioral closure OPEN |
+| C0-2 pins | Sol | `tools/gen4_pins.py`, `data/gen4_sources.lock.json`, `tests/unit/test_gen4_pins.py` | One-byte ROM mutation FAIL; absent required G0 input OPEN/nonzero; wrong present map/source/core cannot pass | Read-only exact G0 inventory check; candidate generation explicit, later fixtures/packs/config qualification pending; hashes are identity evidence only |
 | C0-3 hge build | Sonnet | `tools/gen4_hge_build.py`, `tests/unit/test_gen4_hge_build.py` | A build whose `test.nds` hash ≠ the recorded pin → FAIL; `hgbox` unreachable → named skip | Runs the fork's `build-remote.sh` via the `hgbox` alias; pulls `offsets.ini`, `build/rom_gen.ld` and `nm` of `build/*linked.o` into `.cache/gen4/hge/`; records commit + hashes. Reproducibility is unproven (unpinned devkitARM/armips), so the pin is the output hash. |
 | C1-1 platform/phase probes | Opus | `lua/tests/probe_gen4_hooks.lua`, `tests/live/test_gen4_probe_gates.py` | Each negative control can go red, including last-event close and failed cleanup | Rows a–n receipts; C1-8 exclusively supplies row o, consumed as a required input by this gate wrapper |
 | C1-2 pack generator (G1 profiles) | Sonnet | `tools/gen_gen4_pack.py`, `data/games/gen4_hgss/profile.json`, `data/games/gen4_hge/profile.json`, `data/games/gen4_pt/profile.json`, `tests/unit/test_gen4_pack.py` | HG/SS symbol mismatch, wrong declared image, bad full pin or fire width goes red | Probe profiles/provenance for each declared artifact, plus exact activation/producer/site counts (§4.2); Pt remains bind-only |
@@ -332,6 +332,7 @@ Up to 3 subagents run at once, model explicit, plus headless OMP for checks. Exc
 - Resume note: `docs/gen4/RESUME.md`.
 - No push, master merge or tag without owner authority. G-gates are recorded as signed only on an explicit owner yes.
 - Owner instruction 2026-09-29: Claude is editing the sole guide; this amendment session leaves guide/register writes paused. Amendment receipts identify exact docs/data changes and independent review for the coordinator's reconciliation; they do not create a second work ledger.
+- Owner clarification 2026-09-30: this Codex owns **C0**. Its exact pins/bindings/docs claims are recorded in the sole guide; scoped C0 updates preserve all other coordinators and live lanes. Stop at the independently reviewed C0 prerequisite package, before G0 signature or C1 dispatch.
 
 ## 9. Verification
 

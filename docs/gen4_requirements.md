@@ -1,8 +1,8 @@
-# Gen 4 requirements — rev5 skeleton
+# Gen 4 requirements — C0 binding inventory
 
 Created by the owner's 2026-09-29 amendment request. Design: [Gen4 PLAN rev5](gen4/PLAN.md). Review cut: `7da76fbf`; review receipt: [adversarial review](gen4/reviews/ADVERSARIAL_REVIEW_2026-09-29.md). This is the requirement/evidence specification, not a worker ledger. The sole current grants/checkpoint remain in the coordinator's RC guide.
 
-**All gate signatures are OPEN.** The amendment adds specifications and corrects research data; it does not execute production, MODEL, PHYSICAL or release gates. C0-1 still needs exact runner/test bindings and prerequisite pins before full G0 approval.
+**All gate signatures and behavioral evidence remain OPEN.** C0 now supplies a candidate pin lock and exact planned check/control/oracle/receipt bindings. A mapping PASS is only inventory/schema completeness; it is not an executed game gate, independent codec pass or G0 signature.
 
 ## Evidence and verdict rules
 
@@ -14,7 +14,9 @@ Created by the owner's 2026-09-29 amendment request. Design: [Gen4 PLAN rev5](ge
 
 ## Pins required before G0
 
-The canonical implementation artifact is `data/gen4_sources.lock.json` (C0-2, not yet created). It must contain HG/SS/Pt SHA1+MD5/header, hge source/build SHA1+MD5 and exported-symbol hashes, xMAP commits/file SHA256/source correspondence, EmuHawk/melonDS/core file SHA256, exact battery/fixture/config hashes and generated-pack hashes. Source citation checkouts are explicitly separate from the newer xMAP origin. A one-byte ROM flip, changed config/build or missing input must invalidate the dependent verdict.
+The candidate artifact is [`data/gen4_sources.lock.json`](../data/gen4_sources.lock.json). G0 identity inputs are the four ROM SHA1/MD5/SHA256/header/size records, exact xMAP hashes/provenance, citation-source commits/clean state, emulator/core files, observed host config, current hge export files and the pin tool. The newer xMAP origin and older citation checkout remain separate. Hge exports are file identities only: fresh build/export association is a C0-3/G1 prerequisite, not established by hashing cached files. The observed host config is not a qualified RTC/JIT lane config.
+
+Qualified played saves, generated packs and per-run configs are later-gate outputs/inputs, explicitly PLANNED or OPEN in the lock. Their future hashes must be recorded by the producing card; requiring them before G0 would create a circular dependency. Missing a **required G0** input yields OPEN/nonzero; present-but-wrong yields FAIL. Later-gate pending entries never satisfy that later gate. A byte flip, changed source/tool/config or missing required input invalidates the corresponding check; no automatic repinning occurs during normal checks.
 
 The bounded research pins are indexed in [research/README](gen4/research/README.md). They are input leads, not a substitute for the generated lock or a gate signature.
 
@@ -80,7 +82,18 @@ Rows tagged HG/SS/hge apply independently to each artifact; scenario directions 
 | D-10 | doubles/TAG/multi ownership | OPEN | OPEN | OPEN | Both local battlers/wrong-owner controls and required doubles active-faint scenario |
 | D-11 | NPC exchange/loan classification | OPEN | OPEN | OPEN | Actual replacement, same-species alias and loan/no-exchange negative controls |
 
-The implementation manifest must bind these family rows to exact executable check/scenario IDs without silently collapsing missing variants. Each scenario needs a SOURCE/MODEL oracle specification and an actual PHYSICAL receipt per required artifact/direction; the three initial OPEN cells do not imply a model check exists yet.
+## Executable C0 binding check
+
+[`tests/gen4_requirements.json`](../tests/gen4_requirements.json) expands the 44 family rows, G1 a–o and required duo directions into exact planned obligations. [`tools/gen4_requirements.py`](../tools/gen4_requirements.py) injects independent applicability/layer policy into the existing shared `coverage_map` validator; no second coverage engine or implicit identifier waiver is introduced.
+
+Each obligation has stable check/control/oracle/receipt IDs, exact artifact hashes and separate SOURCE, MODEL and applicable PHYSICAL planned targets. Physical targets are live/e2e targets, not fake-RAM unit targets. Hge↔hge retains distinct A/B fixture slots even though both sides use one ROM digest. D3 binds Pt only without physical scope; D14 retains required SOURCE+MODEL. Hge's separate poison-policy obligation is not exempted by the vanilla floor-one fact.
+
+- `python tools/gen4_pins.py --json`: recheck exact G0 file/source identities against the candidate lock (PASS0, FAIL1, OPEN2); read-only by default.
+- `python -m tools.gen4_requirements --mode mapping`: validate exact inventory, input hashes, artifact/direction/layer policy and planned targets. Mapping may pass while every behavioral layer is OPEN.
+- `python -m tools.gen4_requirements --mode closure`: must fail while check targets are PLANNED or required evidence is OPEN. No lower-level exit0 can award a signature.
+- `python -m pytest -q -p no:randomly tests/unit/test_gen4_pins.py tests/unit/test_gen4_requirements.py`: focused C0 falsifiers, not game qualification.
+
+The checked-in manifest is pinned to the full bytes of this ledger, PLAN and the lock. A deliberate specification change requires explicit regeneration/review (`--seed` emits initial OPEN bindings); normal checking never silently rewrites it. Missing/duplicate rows, unknown or lowered checks, changed hashes, wrong side fixtures and forged CLOSED evidence must be refused. Planned target names are a contract for later cards; their existence/execution must be established by those cards before any behavioral closure.
 
 ## Release completeness and signed limits
 
