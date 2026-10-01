@@ -49,6 +49,11 @@ def own_facts(run):
             or rom[0x1051B76:0x1051B7B].hex()!="052f1c0509"
             or rom[0x1051C3A:0x1051C48].hex()!="210d8000000601fc1a0509252800"):
         raise RuntimeError("School B/quit-YES/native restore branch changed")
+    # Actual party-menu cancel confirmation installs its input task from this pool.
+    if (rom[0x11FE90:0x11FE94].hex()!="03480860"
+            or rom[0x11FEA0:0x11FEA4].hex()!="a5fe1108"):
+        raise RuntimeError("native party cancellation YES/NO task binding changed")
+    party_cancel_task=int.from_bytes(rom[0x11FEA0:0x11FEA4],"little") & ~1
     if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
     # Exact native option1 branch and callnative builder; no injected party.
     if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"
@@ -60,7 +65,7 @@ def own_facts(run):
                 rom_sha1=facts["rom_sha1"],arrival=arrival,approach=approach,paths=paths,school_flags=flags,
                 menu_option={"menu":0,"battle":3,"opponent":1}[case],
                 begin_kind="borrowed_party_opponent_begin" if case=="opponent" else "borrowed_party_begin",
-                selected_order_address=0x0203C750,confirm_slot=6,borrow=facts["borrowed_party"])
+                selected_order_address=0x0203C750,confirm_slot=6,party_cancel_task=party_cancel_task,borrow=facts["borrowed_party"])
 
 
 def orchestrate(run):

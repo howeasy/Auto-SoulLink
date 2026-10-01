@@ -107,7 +107,12 @@ return function(ctx)
                                start_frame=ready_frame,end_frame=ctx.emulator.framecount()})
         if not ctx.wait_go("RESTORE") then return false,"restore permission absent" end
         ctx.G.tap("B",3,20)
-        -- F5's B returns to School's main menu, not the field. Quit that
+        -- CHOOSE_MULTIPLE_MONS asks its own cancel confirmation before returning
+        -- to the script. Native input defaults to YES (cursor0); confirm without writes.
+        if not ctx.wait_until(function() return ctx.task_address_live(facts.party_cancel_task) end,
+                              120,"party cancel confirmation") then return false,"party cancel confirmation absent" end
+        ctx.frames(60);ctx.G.tap("A",3,20)
+        -- F5's confirmed cancellation returns to School's main menu, not the field. Quit that
         -- menu with B, then confirm YES to restore and end the conversation.
         if not ctx.wait_until(function() return ctx.task_live("Task_MultichoiceMenu_HandleInput") end,
                               120,"School main menu after picker cancel") then return false,"School main menu absent after cancel" end

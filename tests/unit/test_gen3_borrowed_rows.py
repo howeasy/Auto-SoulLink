@@ -189,14 +189,17 @@ def test_actual_menu_cancel_block_quits_main_menu_instead_of_reentering_loan():
     lua=LuaRuntime(unpack_returned_tuples=True)
     state=lua.execute('''
         local state='picker'
+        facts={party_cancel_task=0x0811FEA4}
         ctx={wait_go=function() return true end,frames=function() end}
         ctx.task_live=function(name)
             return (state=='main' and name=='Task_MultichoiceMenu_HandleInput')
                 or (state=='quit' and name=='Task_YesNoMenu_HandleInput')
         end
+        ctx.task_address_live=function(address) return state=='party_cancel' and address==facts.party_cancel_task end
         ctx.wait_until=function(pred) assert(pred(),'wrong task transition');return true end
         ctx.G={tap=function(button)
-            if state=='picker' and button=='B' then state='main'
+            if state=='picker' and button=='B' then state='party_cancel'
+            elseif state=='party_cancel' and button=='A' then state='main'
             elseif state=='main' and button=='B' then state='quit'
             elseif state=='quit' and button=='A' then state='field'
             else error('reentered loan or wrong native input: '..state..'/'..button) end
