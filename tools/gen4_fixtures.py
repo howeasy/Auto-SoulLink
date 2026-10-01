@@ -97,12 +97,18 @@ def check_saveram_path(saveram_dir: Path | str, name: str) -> None:
                            f"near MAX_PATH 260")
 
 
+PACE_1X = {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0,
+            "AutoMinimizeSkipping": False}
+
+
 def write_nds_run_config(base_config, out_path, *, initial_time: str, lane_saveram_dir,
-                         saveram_name_hint: str | None = None) -> dict:
+                         saveram_name_hint: str | None = None, pace_1x: bool = False) -> dict:
     """Write a per-run BizHawk config (JSON) and return it. `base_config` is a path or a dict
     and is never mutated; the NDS Save RAM entry and the melonDS sync settings must already
     exist there (BizHawk's schema changed otherwise): silently not redirecting would let a
-    run overwrite the developer's own batteries."""
+    run overwrite the developer's own batteries. `pace_1x` pins real-time pacing for performance
+    receipts: the owner's base config inherits Unthrottled=true and FrameSkip=4, which turn a
+    frameadvance loop into an unpaced capacity run."""
     try:
         datetime.datetime.strptime(initial_time, "%Y-%m-%dT%H:%M:%S")
     except ValueError as exc:
@@ -145,6 +151,11 @@ def write_nds_run_config(base_config, out_path, *, initial_time: str, lane_saver
     for key in ("SoundEnabled", "SoundEnabledNormal", "SoundEnabledRWFF"):
         cfg[key] = False
     cfg["SoundVolume"] = 0
+    if pace_1x:
+        missing = [k for k in PACE_1X if k not in cfg]
+        if missing:  # a renamed key would silently leave the run unpaced
+            raise FixtureError(f"base config lacks pacing keys {missing}: cannot pin 1x")
+        cfg.update(PACE_1X)
     Path(saveram_dir).mkdir(parents=True, exist_ok=True)
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:

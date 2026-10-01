@@ -267,3 +267,16 @@ def test_cli_exit_codes(tmp_path, capsys):
     assert (tmp_path / "root" / "t" / "bizhawk.ini").is_file()
     assert g4.main(["config", "--lane", "bad lane", "--initial-time", "2010-01-01T12:00:00",
                     "--base", str(base), "--lane-root", root]) == 1
+
+
+def test_pace_1x_pins_real_time_pacing_and_refuses_missing_keys(tmp_path):
+    base = _base()
+    base.update(Unthrottled=True, ClockThrottle=False, SpeedPercent=300, FrameSkip=4, AutoMinimizeSkipping=True)
+    unpaced, _ = _cfg(tmp_path, base)
+    assert unpaced["Unthrottled"] is True and unpaced["FrameSkip"] == 4  # default leaves pacing alone
+    paced, out = _cfg(tmp_path, base, pace_1x=True)
+    on_disk = json.loads(out.read_text(encoding="utf-8"))
+    for cfg in (paced, on_disk):
+        assert {k: cfg[k] for k in g4.PACE_1X} == g4.PACE_1X
+    with pytest.raises(g4.FixtureError, match="pacing keys"):
+        _cfg(tmp_path, _base(), pace_1x=True)
