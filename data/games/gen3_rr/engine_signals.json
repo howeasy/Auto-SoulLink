@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "601dd2eab2b1e36ea1a554b8fcdd2618ff4a0841bbf0f7ec8d9fcc5d657c2374",
+  "sha256": "76129bc90929a01923258e2075c7886508cfb211474746b940c2ef0e0f5eb559",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -153,6 +153,49 @@
               "rom_offset": 311856,
               "source": "rr_school_script_binary",
               "symbol": "LoadPlayerParty restored-party completion"
+            },
+            "borrowed_party_opponent_begin": {
+              "address": 151490760,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
+                "rom_offset": 17273032
+              },
+              "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046",
+              "function": {
+                "address": 151490760,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 52,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "RR School opponent team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "baseline": "own raw records/keys/count before builder",
+                "begin": "borrowed_party_opponent_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273032,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School opponent team builder"
             },
             "capture_wild": {
               "address": 151510400,
@@ -938,6 +981,49 @@
               "rom_offset": 311856,
               "source": "rr_school_script_binary",
               "symbol": "LoadPlayerParty restored-party completion"
+            },
+            "borrowed_party_opponent_begin": {
+              "address": 151490760,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
+                "rom_offset": 17273032
+              },
+              "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046",
+              "function": {
+                "address": 151490760,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 52,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "RR School opponent team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "baseline": "own raw records/keys/count before builder",
+                "begin": "borrowed_party_opponent_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273032,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School opponent team builder"
             },
             "capture_wild": {
               "address": 151510400,

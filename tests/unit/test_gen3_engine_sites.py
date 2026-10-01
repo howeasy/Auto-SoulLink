@@ -62,6 +62,8 @@ def test_pinned_sites_match_admitted_rom(name):
             assert len(data) == 206
         elif kind == "borrowed_party_begin":
             assert len(data) == 100
+        elif kind == "borrowed_party_opponent_begin":
+            assert len(data) == 52
         elif kind == "borrowed_party_end":
             assert len(data) == 64
         else:
@@ -243,7 +245,7 @@ def test_rr_faint_and_capture_wild_repinned_off_the_replaced_opcode_table(name):
 def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
     document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
     row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
-    assert len(row["sites"]) == 24  # existing twenty plus nature and borrowed pairs
+    assert len(row["sites"]) == 25  # existing twenty plus nature and borrowed pairs
     assert row["sites"]["hatch"]["address"] + row["sites"]["hatch"]["capture_offset"] == 0x08046E0A
     # compare EFFECTIVE hook addresses (address + capture_offset): the dead vanilla captures were
     # 0x080213C8 (tryfaintmon) and 0x0802D824 + 4 = 0x0802D828 (givecaughtmon) -- Codex cx-92870c43
@@ -315,3 +317,20 @@ def test_disabled_rr_poison_is_not_a_fabricated_hp_site(name):
         assert result["status"] == "UNVERIFIED"
         assert "NO HP mutation" in result["reason"]
         assert result["detour"]["target"] == 0x090B20D4
+
+
+@pytest.mark.parametrize("name", ["rr", "rr_companion"])
+def test_opponent_begin_is_separate_from_own_team_builder(roms, name):
+    if name not in roms: pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    candidate = next(c for c in gen.CANDIDATES if c["kind"] == "borrowed_party_opponent_begin")
+    result = gen.resolve(candidate, name, roms[name])
+    assert result["status"] == "PINNED"
+    site = result["site"]
+    assert site["address"] == 0x090790C8 and site["capture_offset"] == 0
+    assert site["address"] != 0x09079300 and len(bytes.fromhex(site["expected_hex"])) == 52
+    assert site["pair_contract"]["end"] == "borrowed_party_end"
+    assert site["point"] == ["R15", "CPSR"]
+    assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [0x010790C8]
+    for vanilla in ("fr", "lg"):
+        if vanilla in roms:
+            assert gen.resolve(candidate, vanilla, roms[vanilla])["status"] == "UNVERIFIED"

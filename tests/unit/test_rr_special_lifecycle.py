@@ -75,3 +75,21 @@ def test_existing_battle_fixture_school_progress_flags_are_clear():
     assert result["sha256"] == "4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac"
     assert result["flags"] == {"1047": 0, "1096": 0}
     assert "unauthenticated" in result["storage"]
+
+
+def test_opponent_script_target_and_actual_party_callee_are_bound():
+    for name in ("rr", "rr_companion"):
+        path = ROM_SPECS[name][3]
+        if not path.is_file(): pytest.skip(f"absent pinned ROM: {path}")
+        rom = path.read_bytes()
+        facts = rr.census(rom)["borrowed_party"]
+        assert facts["opponent_begin"] == 0x090790C8
+        assert facts["opponent_script_call"] == 0x09051C11
+        assert facts["opponent_var"] == 0x512B and facts["opponent_branch_values"] == [6, 7]
+        assert facts["bodies"]["opponent_builder"]["size"] == 72
+        assert facts["bodies"]["opponent_callee"]["size"] == 300
+        assert facts["opponent_party_pointer_literal"] == 0x09079108
+        altered = bytearray(rom)
+        altered[0x01051C12] ^= 2
+        with pytest.raises(ValueError, match="script binding changed"):
+            rr.borrowed_contract(bytes(altered))

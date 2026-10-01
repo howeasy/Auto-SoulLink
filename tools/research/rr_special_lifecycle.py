@@ -49,7 +49,8 @@ def borrowed_contract(rom: bytes) -> dict:
         raise ValueError("borrowed school NPC binding changed")
     bindings = {0x09051AC1: "2b47100601251c05092b96100601b91b0509",
                 0x09051B01: "252700252800", 0x09051B87: "2301930709",
-                0x09051BF2: "2301930709", 0x09051C45: "252800"}
+                0x09051BF2: "2301930709", 0x09051C45: "252800", 0x09051C06: "162b510700",
+                0x09051C11: "23c9900709"}
     for address, expected in bindings.items():
         if take(rom, address, len(expected)//2).hex() != expected:
             raise ValueError(f"borrowed school script binding changed: {address:#x}")
@@ -59,6 +60,8 @@ def borrowed_contract(rom: bytes) -> dict:
     reviewed = {
         "builder": (0x09079300, 120, "5656bcf55dbba578bae20780b9ab33faa07dc871d2d4cd28159bb57f3f9f73f2"),
         "backup": (0x0804C1F0, 64, "3137ada334afde84cbc5a809b487a5bdd2336d4c4445287cb2ce736979c043ca"),
+        "opponent_builder": (0x090790C8, 72, "89aadff89ea8ab617983d5167d51f0c22b4dde8e8b15d26f6812dfa85a6c0372"),
+        "opponent_callee": (0x09078F9C, 300, "a3438895a06ff18ec3829ce3d7aac109d1edae3743827a017075061213d2f1aa"),
         "restore": (0x0804C230, 64, "f58f43e511818d73bd3337e2db971358f22685cc17bfcaf2a5debadff55b3e1e")}
     bodies = {}
     for name, (address, size, sha256) in reviewed.items():
@@ -72,7 +75,10 @@ def borrowed_contract(rom: bytes) -> dict:
         bodies[name] = {"address": address, "size": size, "sha256": sha256,
                         "anchor_occurrences": 1, "expected_hex": body.hex().upper()}
     return {"status": "SOURCE_PIN", "npc": npc, "map": [5, 2], "bodies": bodies,
-            "begin": 0x09079300, "end": 0x0804C262,
+            "begin": 0x09079300, "opponent_begin": 0x090790C8, "end": 0x0804C262,
+            "opponent_script_call": 0x09051C11, "opponent_var": 0x512B,
+            "opponent_branch_values": [6, 7], "opponent_callee": 0x09078F9C,
+            "opponent_party_pointer_literal": 0x09079108,
             "script_flags_checked": [0x1047, 0x1096],
             "builder_script_calls": [0x09051B87, 0x09051BF2],
             "cancel_restore_script": 0x09051C45,

@@ -176,6 +176,14 @@ for _kind, _symbol, _contract in (
      "before battle_begin. Preserve validated own raw records/keys/count and reset epoch, force borrowed "
      "state until matching restore; no gameplay event/capture/faint from the borrowed records. "
      "Nested/replayed begin must not replace the original own-party baseline."),
+    ("borrowed_party_opponent_begin", "RR School opponent team builder",
+     "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. "
+     "Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count "
+     "and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. "
+     "Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that "
+     "callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. "
+     "Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on "
+     "borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM."),
     ("borrowed_party_end", "LoadPlayerParty restored-party completion",
      "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and "
      "six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed "
@@ -838,15 +846,16 @@ RR_CONTRACTS = {
 
 def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
     kind = c["kind"]
-    if kind in ("borrowed_party_begin", "borrowed_party_end"):
+    if kind in ("borrowed_party_begin", "borrowed_party_opponent_begin", "borrowed_party_end"):
         from tools.research.rr_special_lifecycle import census
         try:
             facts = census(rom)["borrowed_party"]
-            body = facts["bodies"]["builder" if kind == "borrowed_party_begin" else "restore"]
+            body = facts["bodies"]["builder" if kind == "borrowed_party_begin" else
+                                    "opponent_builder" if kind == "borrowed_party_opponent_begin" else "restore"]
             flat = body["address"] - ROM_BASE
-            code_size = 100 if kind == "borrowed_party_begin" else 64
+            code_size = 100 if kind == "borrowed_party_begin" else 52 if kind == "borrowed_party_opponent_begin" else 64
             data = rom[flat:flat + code_size]
-            capture = 0 if kind == "borrowed_party_begin" else 0x32
+            capture = 0x32 if kind == "borrowed_party_end" else 0
             site = make_site(rom, flat, data, capture_offset=capture,
                              symbol=c["symbol"], point=["R15", "CPSR"])
             site.update(source="rr_school_script_binary",
@@ -856,7 +865,7 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
                                   "capture_offset": capture, "anchor_offset": 0,
                                   "symbol": c["symbol"], "size_evidence": "reviewed ROM code/return boundary"},
                         caller={"map": [5, 2], "npc_local_id": 1, "script": 0x09051ABF},
-                        pair_contract={"begin": "borrowed_party_begin", "end": "borrowed_party_end",
+                        pair_contract={"begin": kind if kind != "borrowed_party_end" else "borrowed_party_begin", "end": "borrowed_party_end",
                                        "party_base": facts["party_base"], "stride": 100,
                                        "baseline": "own raw records/keys/count before builder",
                                        "restore": "active epoch only; exact own keys/count match",
