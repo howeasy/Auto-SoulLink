@@ -1,5 +1,8 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
+**RR evidence refresh (2026-09-30):** [The delivered closeout](RR_COMPLETION_2026-09-30.md) records standard **28/28** and explicit recovery **3/3** passes at `e1e2adbd`, including native trade and both info-panel scenarios. This is current technical evidence under the existing signed scope; it does not replace the owner's signature or expand qualification to excluded feature rows. The earlier request text and receipts below are retained as history.
+
+
 > **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
 
 **Status: G5 is ready for the owner's signature.** RR is live on the new client, and the frozen-cut

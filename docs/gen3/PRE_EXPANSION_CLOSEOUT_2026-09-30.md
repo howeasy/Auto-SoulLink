@@ -1,8 +1,10 @@
 # Pre-expansion closeout — 2026-09-30
 
-The owner requested wrap-up. Reviewed source changes are ready for local main integration; expansion implementation stays paused and production expansion admission remains refused. This is a bounded completion record, not a release declaration.
+The earlier core wrap-up and the RR continuation are delivered in local main. [RR closeout](RR_COMPLETION_2026-09-30.md) records the exact-source 28/28 standard and 3/3 recovery passes, source/model checks, preservation and cleanup limits. Expansion implementation stays paused and production expansion admission remains refused. This is a bounded completion record, not a release declaration.
 
 ## Completed evidence
+
+- **RR final cut: PASS 28/28 and explicit recovery: PASS 3/3** at `e1e2adbd`; [current evidence and scope](RR_COMPLETION_2026-09-30.md). The older title/global figures below keep their original cut identities.
 
 - **FRLG final cut: PASS 43/43** at `067768b920d1e797e6f8fc39d2bd6a872126ee23`: eight dependency/input-key cached build/tutorial rows and 35 newly run rows; no carried rows. See [summary](probes/fc_SUMMARY_067768b9.txt).
 - **Emerald final cut: PASS 24/24**, all newly run, at the same cut. See [summary](probes/fc_SUMMARY_067768b9_emerald.txt).
@@ -15,8 +17,6 @@ Source changes reuse the existing hunter, duo transport, classifier and clause o
 
 ## Still pending
 
-- RR's complete 28-row final cut on the corrected candidate.
-- Explicit RR `trade_lock_probe_gen3`, `trade_reset_success_gen3` and `trade_reset_commit_gen3` controls outside that cut.
 - A full Gen3 release-gate invocation.
 - A complete all-green Gen1 release invocation after the corrections. The earlier full run remains a retained FAIL; subsequent corrected quick gate and targeted physical replay do not rewrite it.
 - Expansion physical qualification, including pending observer/register-liveness and battle work. Source/build evidence does not authorize production routing.

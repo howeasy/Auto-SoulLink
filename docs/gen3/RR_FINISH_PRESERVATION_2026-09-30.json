@@ -1,0 +1,55 @@
+{
+  "recorded_at_utc": "2026-10-01T02:34:29.924272+00:00",
+  "qualified_source": "e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd",
+  "source_integrated_into": "master",
+  "evidence_commit": "b90e0846bfbb7d741c5a21a69db81b479aeedac6",
+  "archive": "C:\\slink-cache\\gen3-inputs\\rr-finish-2026-09-30\\ignored-evidence.zip",
+  "archive_bytes": 1689474342,
+  "archive_sha256": "763657159e74b6669e1738be08f628b3a445418a96f030e2345385cd34e4109d",
+  "archive_members": 4223,
+  "verification": "All member SHA256 values and ZIP CRC verified before retirement; manifests append distinct prefixes without replacing prior evidence.",
+  "manifests": [
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-finish-2026-09-30\\manifest.json",
+      "sha256": "3482a974a74762ef413e03d3fe486ebffa2ee557b5a3c75cce2ded89f0d3132f",
+      "files": 1059
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-finish-2026-09-30\\manifest-current43.json",
+      "sha256": "a98525d359a88e2f81c4c62eb08053b8a42a810eae7589b8302840f5f3e3b6da",
+      "files": 728
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-finish-2026-09-30\\manifest-interrupted-e632.json",
+      "sha256": "4573990719da25204687fcf0d381f9cdb149a5536d43032763554670acb3a09e",
+      "files": 865
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-finish-2026-09-30\\manifest-final-e1e2adbd.json",
+      "sha256": "bb4dbf27f141b673503a1efdfa4e9c14f732defbd0b839e78ddff938a8921f7d",
+      "files": 1571
+    }
+  ],
+  "player_bundle": {
+    "path": "E:\\Google Drive\\SLink\\dist\\SLink-player-g4-e1e2adbd.zip",
+    "sha256": "b33c54d756705b2615df9627d49e3c5651dca68d21ba9b936ba0310e0b7eb2f8",
+    "qualified_revision": "e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd"
+  },
+  "cleanup": {
+    "worktree": "C:/slink-wt/rr-finish",
+    "branch": "codex/gen3-rr-finish",
+    "git_registration_removed": true,
+    "branch_removed": true,
+    "external_junctions_unlinked_targets_preserved": true,
+    "filesystem_remnants": [
+      "C:/slink-wt/rr-finish",
+      "E:/Google Drive/SLink/.git/worktrees/rr-finish"
+    ],
+    "blocker": "Git removal returned Permission denied. Automatic approval review rejected the follow-up recursive Remove-Item command with only blocked by policy. No ACL or trust changes attempted.",
+    "earlier_residue": "Previously recorded g3-core/g3-rr-finish and other old metadata residue remains outside this retirement; see WORKTREE_REGISTER.md."
+  },
+  "foreign_untracked_preserved": {
+    "lua/memory_gba.lua": "8518b82cf0fd10141c8029d05781e2394e7d5dfe42a27883ccf8e6b7ebe85b55",
+    "server/adapters/gen2_crystal.py": "0590a8b52e2e5e0938ca2d7e0206bace50b7ae826de0995eba2933a27ac65d06"
+  }
+}

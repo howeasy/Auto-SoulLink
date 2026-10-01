@@ -1,5 +1,12 @@
 # Gen 3 release requirements
 
+## RR evidence refresh — 2026-09-30
+
+The current RR closeout passed **28/28 standard rows plus 3/3 explicit recovery controls** at `e1e2adbd`, with 5,021 source/model tests passing without skips or failures. See [the exact receipts, changes and remaining scope](gen3/RR_COMPLETION_2026-09-30.md). The reviewed source and evidence are integrated into local main.
+
+This supersedes the historical N-3/N-4 and RR artifact-cell statements below that native trade and info-panel scenarios were unbuilt: both now have current physical receipts. It does not close the separately recorded RR S-8/S-9/S-11/S-12 limitations or qualify the six explicit feature scenarios outside the 28+3 run. The dated 2026-09-26 cells below remain historical where superseded here. The existing G5 owner signature is preserved, and no new coverage waiver or full release verdict is asserted.
+
+
 This is the release contract for Pokémon FireRed/LeafGreen (US 1.0) and Radical Red 4.1. Emerald
 (pack `gen3_emerald`) has its own contract at `docs/gen3_emerald/REQUIREMENTS.md`; it is not
 covered by this file. A row
