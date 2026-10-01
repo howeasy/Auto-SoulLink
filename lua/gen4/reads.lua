@@ -12,7 +12,8 @@
 --
 -- Reason tokens: "pack_gap:<field>" (the pack does not carry what this read needs), "out_of_ram",
 -- "unmapped", "null_ptr", "signature", "bad_array_id", "bad_array", "party_count",
--- "party_mon<N>:<pk4 reason>", "no_pk4".
+-- "party_mon<N>:<pk4 reason>", "no_pk4"; battle(): "no_app", "not_battle", "null_ptr:<hop>", "bad_ptr:<hop>",
+-- "bad_battler<b>:<field>", "bad_selected" (see R.battle).
 --
 -- Pointer chain (HGSS/hge; the Platinum table-of-offsets differs only in the profile's numbers):
 --   [sSaveDataPtr] -> SaveData; array(id) = SaveData + dynamic_region_off + u32[header(id).offset]
@@ -321,8 +322,110 @@ function R.decode_name(u16s, charmap)
     return table.concat(out)
 end
 
--- TODO(C1-8 / battle card): the battle chain (BattleSystem pointer -> battlers/party, validated
--- against local party ownership and PID:OTID) is NOT part of this card.
-function R.battle() return nil, "todo:battle_chain" end
+-- The zero-hook battle chain (docs/gen4/research/battle_pointer.md), re-acquired from the static
+-- sFieldSysPtr on EVERY call; nothing is cached across calls, so a recycled heap block can never
+-- be mistaken for the last battle (the caller compares `fingerprint` instead):
+--   fs = [sFieldSysPtr]; sub = [fs + probe_field.sub]; man = [sub + probe_field.launched_app]
+--   man + template_off == template_id   (the launched app is the battle overlay's OverlayManager;
+--                                        the bag/party/summary apps share the same slot)
+--   bs = [man + battle.man_data_off]; ctx = [bs + battle.ctx_off]
+-- Every offset is the pack's. PACK GAPS (the pack carries none of these today; the test supplies
+-- them as a labelled MODEL entry, tests/unit/test_gen4_reads_lua.py): battle.man_data_off,
+-- battle.max_battlers, battle.type_off, battle.outcome_off, battle.outcome_mask, battle.species_off,
+-- battle.level_off, battle.max_hp_off, battle.personality_off, battle.otid_off. The template check
+-- comes from battle.template_off + battle.template_id, or from the title's battle phase_case
+-- predicate (deref {sub, launched_app}, offset, value) when a title object is passed.
+-- Returns nil + reason when no battle chain is up: "no_app" (nothing launched: the normal
+-- overworld), "not_battle" (another launched app), "null_ptr:<hop>", "bad_ptr:<hop>" (not word
+-- aligned), "out_of_ram" / "unmapped", "bad_battler<b>:<field>", "bad_selected", "pack_gap:<field>".
+-- On success:
+--   { fingerprint = "fs.sub.man.bs.ctx" hex, btype = u32, outcome = raw & mask, outcome_raw,
+--     mons = { {b (0-based battler), species, level, hp (s32), max_hp, pid, otid, key,
+--               slot (selectedMonIndex, nil when 6 = no mon on field)} ... present battlers only } }
+R.SPECIES_SANITY, R.EMPTY_SLOT = 0x7FF, 6   -- sanity bound (hge tops out at 1475) / sentinel (battle_command.c:1417)
+
+local function battle_template(profile, p, b)
+    if b.template_off ~= nil and b.template_id ~= nil then return b.template_off, b.template_id end
+    local pf = p.probe_field
+    for _, c in ipairs(type(profile) == "table" and type(profile.phase_cases) == "table" and profile.phase_cases or {}) do
+        local pr = c.phase == "battle" and c.predicate
+        if pr and type(pr.deref) == "table" and pr.deref[1] == pf.sub and pr.deref[2] == pf.launched_app
+           and pr.offset ~= nil and pr.value ~= nil then
+            return pr.offset, pr.value
+        end
+    end
+    return nil, "pack_gap:battle.template_id|phase_cases.battle.predicate"
+end
+
+function R.battle(mem, profile)
+    local p = prof(profile)
+    local fsp, pf, b, why = nil, nil, nil, nil
+    fsp, why = need(p, "fieldsys_ptr", "address")
+    if not fsp then return nil, why end
+    pf, why = need(p, "probe_field")
+    if not pf then return nil, why end
+    if pf.sub == nil or pf.launched_app == nil then return nil, "pack_gap:probe_field.sub|launched_app" end
+    b, why = need(p, "battle")
+    if not b then return nil, why end
+    for _, k in ipairs({ "man_data_off", "ctx_off", "max_battlers", "type_off", "outcome_off", "outcome_mask",
+                         "mons_off", "mon_size", "selected_off", "hp_off", "hp_width", "species_off", "level_off",
+                         "max_hp_off", "personality_off", "otid_off" }) do
+        if b[k] == nil then return nil, "pack_gap:battle." .. k end
+    end
+    if b.hp_width ~= 4 or b.hp_signed ~= true then return nil, "pack_gap:battle.hp_width" end
+    local t_off, t_id = battle_template(profile, p, b)
+    if not t_off then return nil, t_id end
+
+    local function hop(addr, name)
+        local v, e = read(mem, addr, 4)
+        if not v then return nil, e end
+        if v == 0 then return nil, "null_ptr:" .. name end
+        if v & 3 ~= 0 then return nil, "bad_ptr:" .. name end
+        return v
+    end
+    local fs, sub, man, bs, ctx
+    fs, why = hop(fsp, "fs");                            if not fs then return nil, why end
+    sub, why = hop(fs + pf.sub, "sub");                  if not sub then return nil, why end
+    man, why = read(mem, sub + pf.launched_app, 4);      if not man then return nil, why end
+    if man == 0 then return nil, "no_app" end
+    if man & 3 ~= 0 then return nil, "bad_ptr:man" end
+    local tid
+    tid, why = read(mem, man + t_off, 4);                if not tid then return nil, why end
+    if tid ~= t_id then return nil, "not_battle" end
+    bs, why = hop(man + b.man_data_off, "bs");           if not bs then return nil, why end
+    ctx, why = hop(bs + b.ctx_off, "ctx");               if not ctx then return nil, why end
+
+    local btype, raw
+    btype, why = read(mem, bs + b.type_off, 4);          if not btype then return nil, why end
+    raw, why = read(mem, bs + b.outcome_off, 1);         if not raw then return nil, why end
+    local out = { fingerprint = string.format("%08X.%08X.%08X.%08X.%08X", fs, sub, man, bs, ctx),
+                  btype = btype, outcome_raw = raw, outcome = raw & b.outcome_mask, mons = {} }
+    for bt = 0, b.max_battlers - 1 do
+        local sel
+        sel, why = read(mem, ctx + b.selected_off + bt, 1)
+        if not sel then return nil, why end
+        if sel > R.EMPTY_SLOT then return nil, "bad_selected" end
+        local base = ctx + b.mons_off + bt * b.mon_size
+        local species
+        species, why = read(mem, base + b.species_off, 2)
+        if not species then return nil, why end
+        if species ~= 0 then
+            local lvl, hp, mhp, pid, otid
+            lvl, why = read(mem, base + b.level_off, 1);        if not lvl then return nil, why end
+            hp, why = read(mem, base + b.hp_off, 4);            if not hp then return nil, why end
+            mhp, why = read(mem, base + b.max_hp_off, 2);       if not mhp then return nil, why end
+            pid, why = read(mem, base + b.personality_off, 4);  if not pid then return nil, why end
+            otid, why = read(mem, base + b.otid_off, 4);        if not otid then return nil, why end
+            hp = s32(hp)
+            local bad = (species > R.SPECIES_SANITY and "species") or ((lvl < 1 or lvl > 100) and "level")
+                or (mhp < 1 and "max_hp") or ((hp < 0 or hp > mhp) and "hp")
+            if bad then return nil, "bad_battler" .. bt .. ":" .. bad end
+            out.mons[#out.mons + 1] = { b = bt, species = species, level = lvl, hp = hp, max_hp = mhp, pid = pid,
+                otid = otid, key = string.format("%08X:%08X", pid, otid),   -- == Pk4.mon_key
+                slot = sel ~= R.EMPTY_SLOT and sel or nil }
+        end
+    end
+    return out
+end
 
 return R

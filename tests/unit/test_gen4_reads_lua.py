@@ -411,7 +411,7 @@ def test_pack_gaps_are_named_not_hard_coded(lua_reads):
     lua2, no_pk4 = make_lua()
     no_pk4.pk4 = None
     refused(no_pk4.party(ram.adapter(lua2), to_lua(lua2, prof)), "no_pk4")
-    refused(reads.battle(), "todo:battle_chain")
+    refused(reads.battle(mem, to_lua(lua, prof)), "pack_gap:battle.man_data_off")  # the pack carries no BattleSystem offsets yet
     refused(reads.save_data(mem, lua.table_from({})), "pack_gap:save_ptr")
 
 
@@ -463,3 +463,183 @@ def test_probe_dump_confirms_the_embedded_array_table_and_codec_layout():
     diff = [i for i, (a, b) in enumerate(zip(live, save.general, strict=True)) if a != b]
     assert diff and all(i < 0x90 for i in diff) and len(diff) <= 8, f"unexpected live/file differences {diff}"
     assert d[0x10 + PC_OFF : 0x10 + PC_OFF + len(save.pc)] == save.pc
+
+
+# -- reads.battle: the zero-hook chain (C1-9 live values) -------------------------------------
+# PACK GAP, supplied here as a labelled MODEL entry (never in reads.lua): the pack's `battle` block carries
+# ctx_off/mons_off/mon_size/selected_off/hp_off but not the OverlayManager.data offset, the battler count, the
+# battle-type / outcome offsets or the BattleMon field offsets. SOURCE for each:
+# docs/gen4/research/battle_pointer.md (man+0x1C, bs+0x2C, species/level/hp/maxHp) and checkpoint.md section 2
+# (outcome byte bs+0x2420, `& 0x3F`), battle_faint_seam.md section 6 (personality +0x68, OTID +0x74).
+BATTLE_MODEL = {"man_data_off": 0x1C, "max_battlers": 4, "type_off": 0x2C, "outcome_off": 0x2420,
+                "outcome_mask": 0x3F, "species_off": 0x00, "level_off": 0x34, "max_hp_off": 0x50,
+                "personality_off": 0x68, "otid_off": 0x74}
+# the addresses the C1-9 route report observed live (HG, wild Pidgey L2, Cyndaquil battler 0)
+FS, SUB, MAN, BS, CTX = 0x022A01EC, 0x022A0334, 0x022A6B04, 0x022C020C, 0x022C32D8
+OWN_PID, FOE_PID, PLAYER_OTID = 0x11111111, 0x1A2B3C4D, 0x0BB83039
+
+
+def battle_title(model: bool = True) -> dict:
+    doc = json.loads((ROOT / "data/games/gen4_hgss/profile.json").read_text(encoding="utf-8"))
+    title = copy.deepcopy(doc["titles"]["heartgold"])
+    if model:
+        title["profile"]["battle"].update(BATTLE_MODEL)
+    return title
+
+
+FS_CELL = battle_title()["profile"]["fieldsys_ptr"]["address"]
+
+
+def put_mon(ram, b, species, level, hp, max_hp, pid, otid):
+    base = CTX + 0x2D40 + 0xC0 * b
+    ram.put(base, struct.pack("<H", species))
+    ram.put(base + 0x34, bytes([level]))
+    ram.put(base + 0x4C, struct.pack("<iH", hp, max_hp))
+    ram.put(base + 0x68, struct.pack("<I", pid))
+    ram.put(base + 0x74, struct.pack("<I", otid))
+
+
+def battle_ram() -> Ram:
+    ram = Ram()
+    ram.u32_cell(FS_CELL, FS)
+    ram.u32_cell(FS + 0, SUB)
+    ram.u32_cell(SUB + 4, MAN)
+    ram.u32_cell(MAN + 0x0C, 12)
+    ram.u32_cell(MAN + 0x1C, BS)
+    ram.u32_cell(BS + 0x30, CTX)
+    ram.u32_cell(BS + 0x2C, 0)
+    ram.put(BS + 0x2420, bytes([0x40 | 4]))                    # raw byte: a flag above the mask + MON_CAUGHT
+    ram.put(CTX + 0x219C, bytes([0, 0, 6, 6]))
+    put_mon(ram, 0, 155, 5, 20, 20, OWN_PID, PLAYER_OTID)
+    put_mon(ram, 1, 16, 2, 13, 13, FOE_PID, 0)
+    return ram
+
+
+def is_ok(res):
+    return not isinstance(res, tuple)            # a refusal comes back as (nil, reason)
+
+
+def read_battle(lua, reads, ram, title=None, boom=False):
+    return reads.battle(ram.adapter(lua, boom=boom), to_lua(lua, title if title is not None else battle_title()))
+
+
+def test_battle_chain_reads_the_c1_9_live_values(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    out = py(read_battle(lua, reads, ram))
+    assert out["fingerprint"] == "022A01EC.022A0334.022A6B04.022C020C.022C32D8"
+    assert (out["btype"], out["outcome_raw"], out["outcome"]) == (0, 0x44, 4)       # the mask drops the flag bit
+    own, foe = out["mons"]
+    assert (own["b"], own["species"], own["level"], own["hp"], own["max_hp"], own["slot"]) == (0, 155, 5, 20, 20, 0)
+    assert own["key"] == f"{OWN_PID:08X}:{PLAYER_OTID:08X}"
+    assert (foe["b"], foe["species"], foe["level"], foe["hp"], foe["max_hp"]) == (1, 16, 2, 13, 13)
+    assert foe["pid"] == FOE_PID and foe["otid"] == 0 and len(out["mons"]) == 2      # battlers 2/3 are empty
+    assert ram.oob_calls == 0
+
+
+def test_battle_chain_template_comes_from_the_pack_phase_case_or_the_battle_block(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    title = battle_title()
+    assert read_battle(lua, reads, ram, title["profile"])[1] == "pack_gap:battle.template_id|phase_cases.battle.predicate"
+    assert is_ok(read_battle(lua, reads, ram, title))            # the title object's battle predicate
+    sect = copy.deepcopy(title["profile"])
+    sect["battle"].update({"template_off": 0x0C, "template_id": 12})     # or stated in the battle block
+    assert is_ok(read_battle(lua, reads, ram, sect))
+
+
+def test_battle_pack_gaps_are_named_never_guessed(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    refused(read_battle(lua, reads, ram, battle_title(model=False)), "pack_gap:battle.man_data_off")
+    for k in BATTLE_MODEL:
+        t = battle_title()
+        del t["profile"]["battle"][k]
+        refused(read_battle(lua, reads, ram, t), "pack_gap:battle." + k)
+    t = battle_title()
+    t["profile"]["battle"]["hp_width"] = 2                                 # the full-width s32 read is mandatory
+    refused(read_battle(lua, reads, ram, t), "pack_gap:battle.hp_width")
+    t = battle_title()
+    del t["profile"]["fieldsys_ptr"]
+    refused(read_battle(lua, reads, ram, t), "pack_gap:fieldsys_ptr")
+    pt = to_lua(lua, pack_profile("pt"))                                   # Platinum carries no battle block at all
+    assert not is_ok(reads.battle(ram.adapter(lua), pt))
+
+
+@pytest.mark.parametrize("name, edit, reason", [
+    ("wrong template id (another launched app)", lambda r: r.u32_cell(MAN + 0x0C, 7), "not_battle"),
+    ("nothing launched", lambda r: r.u32_cell(SUB + 4, 0), "no_app"),
+    ("null FieldSystem", lambda r: r.u32_cell(FS_CELL, 0), "null_ptr:fs"),
+    ("null sub-struct", lambda r: r.u32_cell(FS, 0), "null_ptr:sub"),
+    ("null BattleSystem", lambda r: r.u32_cell(MAN + 0x1C, 0), "null_ptr:bs"),
+    ("null context", lambda r: r.u32_cell(BS + 0x30, 0), "null_ptr:ctx"),
+    ("FieldSystem out of RAM", lambda r: r.u32_cell(FS_CELL, 0x03000000), "out_of_ram"),
+    ("sub-struct out of RAM", lambda r: r.u32_cell(FS, 0x00100000), "out_of_ram"),
+    ("manager out of RAM", lambda r: r.u32_cell(SUB + 4, 0x03000010), "out_of_ram"),
+    ("BattleSystem out of RAM", lambda r: r.u32_cell(MAN + 0x1C, 0x04000000), "out_of_ram"),
+    ("context so near the end its battlers run past RAM", lambda r: r.u32_cell(BS + 0x30, RAM_HI - 0xFFF),
+     "out_of_ram"),
+    ("BattleSystem not word aligned", lambda r: r.u32_cell(MAN + 0x1C, BS + 2), "bad_ptr:bs"),
+    ("manager not word aligned", lambda r: r.u32_cell(SUB + 4, MAN + 1), "bad_ptr:man"),
+    ("selectedMonIndex above the sentinel", lambda r: r.put(CTX + 0x219C, bytes([0, 7, 6, 6])), "bad_selected"),
+    ("level 0", lambda r: put_mon(r, 0, 155, 0, 20, 20, OWN_PID, PLAYER_OTID), "bad_battler0:level"),
+    ("level 101", lambda r: put_mon(r, 1, 16, 101, 13, 13, FOE_PID, 0), "bad_battler1:level"),
+    ("hp above maxHp", lambda r: put_mon(r, 1, 16, 2, 14, 13, FOE_PID, 0), "bad_battler1:hp"),
+    ("negative hp (stale high half)", lambda r: put_mon(r, 0, 155, 5, -1, 20, OWN_PID, PLAYER_OTID), "bad_battler0:hp"),
+    ("maxHp 0", lambda r: put_mon(r, 0, 155, 5, 0, 0, OWN_PID, PLAYER_OTID), "bad_battler0:max_hp"),
+    ("species beyond any real id", lambda r: put_mon(r, 1, 0x7FFF, 2, 13, 13, FOE_PID, 0), "bad_battler1:species"),
+])
+def test_battle_chain_refusals(lua_reads, name, edit, reason):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    edit(ram)
+    refused(read_battle(lua, reads, ram), reason)
+    assert ram.oob_calls == 0, "a bad pointer reached the bus"
+
+
+def test_battle_chain_unmapped_bus_and_hole(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    refused(read_battle(lua, reads, ram, boom=True), "unmapped")
+    ram.holes.append((CTX + 0x2D40 + 0xC0, CTX + 0x2D40 + 0xC0 + 0xBF))   # battler 1's block unreadable
+    refused(read_battle(lua, reads, ram), "unmapped")
+
+
+def test_battle_slot_sentinel_6_is_no_mon_on_the_field(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    ram.put(CTX + 0x219C, bytes([0, 6, 6, 6]))
+    own, foe = py(read_battle(lua, reads, ram))["mons"]
+    assert own["slot"] == 0 and foe.get("slot") is None
+
+
+def test_battle_chain_is_reacquired_every_call_and_the_fingerprint_follows_the_heap(lua_reads):
+    lua, reads = lua_reads
+    ram = battle_ram()
+    first = py(read_battle(lua, reads, ram))["fingerprint"]
+    assert py(read_battle(lua, reads, ram))["fingerprint"] == first
+    ram.u32_cell(MAN + 0x1C, BS + 0x4000)                    # the next battle's block landed elsewhere
+    ram.u32_cell(BS + 0x4000 + 0x30, CTX)
+    assert py(read_battle(lua, reads, ram))["fingerprint"] != first
+    ram.u32_cell(SUB + 4, 0)                                  # the application ended: no stale chain survives
+    refused(read_battle(lua, reads, ram), "no_app")
+
+
+def test_control_without_the_template_check_another_launched_app_is_read_as_a_battle(lua_reads):
+    src = READS.read_text(encoding="utf-8")
+    needle = 'if tid ~= t_id then return nil, "not_battle" end'
+    assert needle in src
+    lua, reads = make_lua(src.replace(needle, ""))
+    ram = battle_ram()
+    ram.u32_cell(MAN + 0x0C, 7)
+    assert is_ok(read_battle(lua, reads, ram))        # reverted module accepts the bag/party app: bug caught
+
+
+def test_control_without_the_alignment_guard_a_misaligned_pointer_is_followed(lua_reads):
+    src = READS.read_text(encoding="utf-8")
+    needle = 'if v & 3 ~= 0 then return nil, "bad_ptr:" .. name end'
+    assert needle in src
+    lua, reads = make_lua(src.replace(needle, ""))
+    ram = battle_ram()
+    ram.u32_cell(MAN + 0x1C, BS + 2)
+    assert not (isinstance(r := read_battle(lua, reads, ram), tuple) and r[1] == "bad_ptr:bs")     # reverted module dereferences the garbage pointer
