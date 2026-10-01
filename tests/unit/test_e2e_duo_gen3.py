@@ -19,6 +19,66 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("fault", ["none", "escape_error", "walk_error"])
+def test_release_transit_escapes_before_complete_pc_sequence(fault):
+    """Actual release scenario and shared route policy: transit must preserve the reserve."""
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().ROOT = REPO.as_posix()
+    lua.globals().FAULT = fault
+    result = lua.execute(r'''
+        local Routes = dofile(ROOT .. '/lua/tests/gen3_routes.lua')
+        local hp, escaped, ops = 22, 0, {}
+        local c = {player='a', session={signals={drain=function()
+            return {{kind='pc_release', release_key='K1', release_source={where='box'}}}
+        end}}}
+        c.wait_go=function() return true end
+        c.linked=function() return 'K1' end
+        c.find=function() return {slot=1} end
+        c.log=function() end; c.jlog=function() end
+        c.play={fight_through=function() hp=0; return true end}
+        local original=c.play.fight_through
+        c.run_away=function()
+            escaped=escaped+1
+            return FAULT~='escape_error', 'retained flee refusal'
+        end
+        c.flee_incidentals=function(label,fn)
+            return Routes.with_incidental_escape(c,label,fn)
+        end
+        c.walk_to_pc=function()
+            c.play.fight_through()
+            if FAULT=='walk_error' then error('retained walk failure') end
+        end
+        c.pc_deposit=function()
+            assert(hp>0, 'retained leadKO before first deposit')
+            ops[#ops+1]='deposit'; return 'K1'
+        end
+        c.pc_withdraw=function() ops[#ops+1]='withdraw'; return 'K1' end
+        c.pc_release=function()
+            ops[#ops+1]='release'; c.session.signals:drain(); return true
+        end
+        c.observe_boxed=function() return true end
+        c.observe_returned=function() return true end
+        c.wait_sent=function() return true end
+        c.wait_until=function(fn) return fn() end
+        c.sent=function() return 2 end
+        c.G={tap=function() end}
+        c.save=function() ops[#ops+1]='save'; return true end
+        local scenario=dofile(ROOT .. '/lua/tests/duo/scenario_gen3_release.lua')
+        local ok,pass,why=pcall(scenario,c)
+        return ok,pass,tostring(why),hp,escaped,table.concat(ops,','),
+               c.play.fight_through==original
+    ''')
+    ok, passed, why, hp, escaped, operations, restored = result
+    assert ok, (passed, why)
+    assert restored and hp == 22 and escaped == 1
+    if fault == "none":
+        assert passed is True and operations == "deposit,withdraw,deposit,release,save"
+    else:
+        assert passed is False and operations == "" and "release transit:" in why
 sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "tests" / "unit"))
 
