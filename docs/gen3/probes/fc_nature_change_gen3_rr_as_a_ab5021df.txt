@@ -1,0 +1,48 @@
+# gen3_final_cut row=nature_change_gen3_rr_as_a item=§14_P5_RR_duo cut=ab5021dfb8c4ab271c2302beebbb31675d7731ea
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario nature_change_gen3 --keep-data --wire-log --lane rr-nature-ab5021df   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-nature-ab5021df
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T08:28:20 cpu=49% emuhawk=0 python=5
+start_utc=2026-10-01T12:28:18Z tracked_clean_before=True
+
+========== scenario: nature_change_gen3 ==========
+[duo] nature_change_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=ab5021dfb8c4ab271c2302beebbb31675d7731ea
+[duo] server up: tcp=64437 http=64438 data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for nature_change_gen3: e2e_nature_change_gen3_a_attempt1_result.txt, e2e_nature_change_gen3_a_result.txt, e2e_nature_change_gen3_b_attempt1_result.txt, e2e_nature_change_gen3_b_result.txt, e2e_nature_change_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8 path=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8 path=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=route_1 encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 31.2s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=5e1d3b341e33837792be63e944e091af3f403371f7488f50b5b216a23785545a file=5e1d3b341e33837792be63e944e091af3f403371f7488f50b5b216a23785545a match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=d51053f5b8fd180618891ed67c8f1fb9e633b559060c59f119aa25e0c1fd60f1 file=d51053f5b8fd180618891ed67c8f1fb9e633b559060c59f119aa25e0c1fd60f1 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] nature: native points, ACK, alive migrated link and independent saved PID F56D8C1D:2BDDC8BF->1DE0B239:2BDDC8BF
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] nature_change_gen3: a=PASS b=PASS
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\nature_change_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\nature_change_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3__c5bl2y8
+
+========== summary ==========
+  nature_change_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-01T12:29:00Z tracked_clean_after=True classification=pass

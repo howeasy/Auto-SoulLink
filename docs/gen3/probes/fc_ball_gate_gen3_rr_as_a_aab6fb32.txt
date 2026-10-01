@@ -1,0 +1,47 @@
+# gen3_final_cut row=ball_gate_gen3_rr_as_a item=§14_P5_RR_duo cut=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario ball_gate_gen3 --keep-data --lane rr-full-ball_gate_gen3_rr_as_a-aab6fb32   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-ball_gate_gen3_rr_as_a-aab6fb32
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T11:54:59 cpu=8% emuhawk=0 python=7
+start_utc=2026-10-01T15:54:58Z tracked_clean_before=True
+
+========== scenario: ball_gate_gen3 ==========
+[duo] ball_gate_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=c14eb7f55f5e4cc16cae88d4a53f1f6851321cae86b8ef93eaf0e479bbb0f52f b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=327197e1b9fe9deb377da7eb49139f63034df144ce40d4a0d4884d2b853f8a81 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=55969 http=55970 data=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp path=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp path=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=F4A05114:2BDDC8BF b=73DC4B7D:D4223740
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): F4A05114:2BDDC8BF <-> 73DC4B7D:D4223740 on route_1, alive
+[duo] timing orchestrate 50.8s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS (caught F4A05114:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (caught 73DC4B7D:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=a0c0eaa925086286ca783901190eaf580c3a9af209b52adeaa2b5d749ae01c1e file=a0c0eaa925086286ca783901190eaf580c3a9af209b52adeaa2b5d749ae01c1e match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=0f9f83ec2e150081dc4cf3dcd57a66bb6fe1f3bc4e5e39195f887adf523ab00d file=0f9f83ec2e150081dc4cf3dcd57a66bb6fe1f3bc4e5e39195f887adf523ab00d match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] BAG_BALLS baseline=10 final=9 throws=1 inst=a native_grant=10
+[duo] BAG_BALLS baseline=10 final=9 throws=1 inst=b native_grant=10
+[duo] link: F4A05114:2BDDC8BF <-> 73DC4B7D:D4223740 alive on route_1 and saved once in each party
+[duo] ball gate: pre-ball native faint suppressed; native reward activates; post-ball real catch/link saved
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] ball_gate_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_o7wvxsfp
+
+========== summary ==========
+  ball_gate_gen3: PASS (attempt 1 of 8)
+exit=0 end_utc=2026-10-01T15:55:56Z tracked_clean_after=True classification=pass

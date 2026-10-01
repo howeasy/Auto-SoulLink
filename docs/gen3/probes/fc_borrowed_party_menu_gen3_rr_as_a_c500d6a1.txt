@@ -1,0 +1,94 @@
+# gen3_final_cut row=borrowed_party_menu_gen3_rr_as_a item=§14_P5_RR_duo cut=c500d6a162216fe499951fe3a3e6584d66e981fe
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario borrowed_party_menu_gen3 --keep-data --wire-log --lane rr-full-borrowed_party_menu_gen3_rr_as_a-c500d6a1   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-borrowed_party_menu_gen3_rr_as_a-c500d6a1
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T09:08:00 cpu=6% emuhawk=0 python=5
+start_utc=2026-10-01T13:07:59Z tracked_clean_before=True
+
+========== scenario: borrowed_party_menu_gen3 ==========
+[duo] borrowed_party_menu_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=c500d6a162216fe499951fe3a3e6584d66e981fe
+[duo] server up: tcp=56106 http=56107 data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for borrowed_party_menu_gen3: e2e_borrowed_party_menu_gen3_a_1_witness.bin, e2e_borrowed_party_menu_gen3_a_1_witness_ext.bin, e2e_borrowed_party_menu_gen3_a_attempt1_result.txt, e2e_borrowed_party_menu_gen3_a_result.txt, e2e_borrowed_party_menu_gen3_b_attempt1_result.txt, e2e_borrowed_party_menu_gen3_b_result.txt, e2e_borrowed_party_menu_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_ path=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_ path=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=route_1 encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] timing orchestrate 161.2s
+[duo] RESULT_LINE a: RESULT: FAIL (School main menu absent after cancel)
+[duo] RESULT_LINE b: RESULT: FAIL (idle peer; no save)
+[duo] PYDEC: FAIL client RESULT before a: own-party registered restore
+[duo] borrowed_party_menu_gen3: a client finished before 'a: own-party registered restore' (a: RESULT: FAIL (School main menu absent after cancel); b: RESULT: FAIL (idle peer; no save))
+--- borrowed_party_menu_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+BORROW_ROUTE_STAGE {"callback2":134571445,"controls":true,"field":true,"map":[3,1],"pos":[25,19],"script":true,"stage":"school_door_warp","tasks":[134716941,134670353,134670397]}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_school","player":"a","seq":168}
+BORROW_ROUTE_STAGE {"callback2":134571445,"controls":false,"field":true,"map":[5,2],"pos":[4,7],"script":true,"stage":"school_counter_path","tasks":[134716941,134670353,134670397,134734541]}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+BORROW_BASELINE {"key":"F56D8C1D:2BDDC8BF","raw_party_hex":["DA11EFEBBFC8DD2BCEE6D9D9D7DFE3FF6D000202BCFFFFFFFFFFFF000000000015018B00E4000000003A030001002B0047000000231E1923000000000000000000000000009D0502FFFFFF3F000000000000000006FF160016000C000C000F000E000B00","1D8C6DF5BFC8DD2BBBD5D5D5D5D5D5D5D5D50202BCFFFFFFFFFFFF00000000002C05000060000000003403002100E600000000002314000000000000000000000000000000650402FFFFFF3F000000000000000004FF1200120009000900080009000A00"],"rom_sha1":"da579690db7d6933a0952a1f490312842793f71a"}
+SAVE_WITNESS_DUMP path=patch/build/e2e_borrowed_party_menu_gen3_a_1_witness.bin bytes=131072 saves=1 frame=6430 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_borrowed_party_menu_gen3_a_1_witness_ext.bin bytes=8160 saves=1
+BORROW_SIGNAL {"frame":6480,"kind":"borrowed_party_end","point":{"CPSR":536870975,"R15":134529636}}
+BORROW_SIGNAL {"frame":6550,"kind":"borrowed_party_begin","point":{"CPSR":63,"R15":151491330}}
+BORROW_MENU_READY {"frame":6589,"key":"F56D8C1D:2BDDC8BF"}
+RX force_faint key=F56D8C1D:2BDDC8BF
+BORROW_HELD {"end_frame":6722,"frames":120,"hidden_ticks":4,"key":"F56D8C1D:2BDDC8BF","party_write_count":0,"start_frame":6589}
+[client] [SLink-gen3] held: force_faint x1 (borrowed party withholds writes)
+[client] [SLink-gen3] held: force_faint x1 (trade recovery withholds party)
+[client] [SLink-gen3] held: force_faint x1 (borrowed party withholds writes)
+[client] [SLink-gen3] held: force_faint x1 (trade recovery withholds party)
+[client] [SLink-gen3] held: force_faint x1 (borrowed party withholds writes)
+[client] [SLink-gen3] held: force_faint x1 (trade recovery withholds party)
+[client] [SLink-gen3] held: force_faint x1 (borrowed party withholds writes)
+TIMEOUT waiting for School main menu after picker cancel [tasks=[0811FEA5] storage_state=-1 script_status=1 result=0 menu_cursor=0]
+WRITES 16
+RESULT: FAIL (School main menu absent after cancel)
+--- borrowed_party_menu_gen3 b result (last 25 lines) ---
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 620
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 620
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+WRITES 16
+RESULT: FAIL (idle peer; no save)
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\borrowed_party_menu_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\borrowed_party_menu_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_9v44_aw_
+
+========== summary ==========
+  borrowed_party_menu_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-10-01T13:10:43Z tracked_clean_after=True classification=real

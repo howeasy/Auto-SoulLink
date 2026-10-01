@@ -1,0 +1,93 @@
+# gen3_final_cut row=borrowed_party_menu_gen3_rr_as_a item=§14_P5_RR_duo cut=cd888b59936bb723a477432ade58df8e837ad29a
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario borrowed_party_menu_gen3 --keep-data --wire-log --lane rr-borrowed_party_menu_gen3_rr_as_a-cd888b59   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-borrowed_party_menu_gen3_rr_as_a-cd888b59
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T08:38:21 cpu=2% emuhawk=0 python=5
+start_utc=2026-10-01T12:38:20Z tracked_clean_before=True
+
+========== scenario: borrowed_party_menu_gen3 ==========
+[duo] borrowed_party_menu_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=cd888b59936bb723a477432ade58df8e837ad29a
+[duo] server up: tcp=52492 http=52493 data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for borrowed_party_menu_gen3: e2e_borrowed_party_menu_gen3_a_attempt1_result.txt, e2e_borrowed_party_menu_gen3_a_result.txt, e2e_borrowed_party_menu_gen3_b_attempt1_result.txt, e2e_borrowed_party_menu_gen3_b_result.txt, e2e_borrowed_party_menu_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis path=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis path=C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=route_1 encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 33.7s
+[duo] RESULT_LINE a: RESULT: FAIL (helper: School door: destination_mismatch: expected 5.2 (4,8), got 5.2 (4,7))
+[duo] RESULT_LINE b: RESULT: FAIL (idle peer; no save)
+[duo] PYDEC: FAIL client RESULT before a: native borrowed ViewYourTeam
+[duo] borrowed_party_menu_gen3: a client finished before 'a: native borrowed ViewYourTeam' (a: RESULT: FAIL (helper: School door: destination_mismatch: expected 5.2 (4,8), got 5.2 (4,7)); b: RESULT: FAIL (idle peer; no save))
+--- borrowed_party_menu_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+BORROW_ROUTE_STAGE {"callback2":134571445,"controls":true,"field":true,"map":[5,4],"pos":[7,8],"script":true,"stage":"center_exit_warp","tasks":[134716941,134670353,134670397,135371261,135236405,135372085]}
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":129}
+BORROW_ROUTE_STAGE {"callback2":134571445,"controls":false,"field":true,"map":[3,1],"pos":[26,27],"script":true,"stage":"city_path","tasks":[134716941,134670353,134670397,134840749,134733757]}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+BORROW_ROUTE_STAGE {"callback2":134571445,"controls":true,"field":true,"map":[3,1],"pos":[25,19],"script":true,"stage":"school_door_warp","tasks":[134716941,134670353,134670397]}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_school","player":"a","seq":167}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [gen3] RESULT: FAIL School door: destination_mismatch: expected 5.2 (4,8), got 5.2 (4,7)
+RESULT: FAIL (helper: School door: destination_mismatch: expected 5.2 (4,8), got 5.2 (4,7))
+--- borrowed_party_menu_gen3 b result (last 25 lines) ---
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 620
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 620
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+WRITES 16
+RESULT: FAIL (idle peer; no save)
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\borrowed_party_menu_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\borrowed_party_menu_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_borrowed_party_menu_gen3_mk3xajis
+
+========== summary ==========
+  borrowed_party_menu_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-10-01T12:38:56Z tracked_clean_after=True classification=real

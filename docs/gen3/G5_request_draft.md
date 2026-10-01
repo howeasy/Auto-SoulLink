@@ -1,24 +1,10 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
-**RR evidence refresh (2026-09-30):** [The delivered closeout](RR_COMPLETION_2026-09-30.md) records standard **28/28** and explicit recovery **3/3** passes at `e1e2adbd`, including native trade and both info-panel scenarios. This is current technical evidence under the existing signed scope; it does not replace the owner's signature or expand qualification to excluded feature rows. The earlier request text and receipts below are retained as history.
-
+**RR completion (2026-10-01):** [The completion record](RR_COMPLETION_2026-09-30.md) records **41/41 PASS** at `aab6fb32`, including the six formerly omitted explicit feature rows, Nature, three School borrowed controls, native trade/recovery/panels and final ZIP boot. The source/model quick gate passed **5,180 tests with zero skips/failures**, all five lanes. The exact-cut source is integrated into local main. The existing owner signature and signed deferred scope are preserved; no new waiver or publication authority is inferred. Earlier dated request sections below are history.
 
 > **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
 
-**Status: G5 is ready for the owner's signature.** RR is live on the new client, and the frozen-cut
-RR final pass has now run: `tools/gen3_final_cut.py --title rr` PASSed **19/19 rows** at cut
-`a2985d5a` (`docs/gen3/probes/fc_SUMMARY_a2985d5a_rr.txt`, committed `622aa7f5`; §1a) — the 15 RR
-duo rows (§2, including the two ruling-25 additions, `rival_swap_real_gen3` and
-`faint_cmd_clean_gen3`, and excluding the signed-limit mega row), `rr_opcode_gates`, and the RR
-release zip build/check/boot (`rr_zip_build`, `rr_zip_check`, `zip_boot_radicalred`).
-`whiteout_gen3` (row 6) PASSes at `fca70bb2` and again at the frozen cut. **Owner ruling 25**
-(2026-09-25, `docs/gen3/G4_request_draft.md` §6 item 25) resolves every item §11 used to carry as
-an open decision — clean RR coverage, the qualifying rival-swap row, the opcode-gate count, and
-the per-item receipts PLAN.md doesn't name explicitly (§11, "Resolved by ruling 25"). The RR
-opcode gate port is **26/26 PASS** live (12 further cases deferred by design, §3). The rebuilt
-companion is pinned (§8). Nothing here authorizes a release: ruling 22 (§9) holds G5 back until G4
-is also signed; G4 is itself now ready for signature at the same frozen cut
-(`docs/gen3/G4_request_draft.md`).
+**Status: G5 retains the owner signature of 2026-09-27.** Current RR technical qualification is [41/41 PASS at aab6fb32](probes/fc_SUMMARY_aab6fb32_rr.txt). The opcode row retains its 12 established deferred cases. This refresh does not assert a full Gen1/Gen3 release-gate invocation or refreshed FRLG/Emerald cuts.
 
 This draft follows the shape of `docs/gen3/G3_request_draft.md` and
 `docs/gen3/G4_request_draft.md`. Every claim is tagged **S** (source: a file/commit in this
@@ -36,14 +22,7 @@ P5 row: G5 is the gate at which the **owner plays RR themselves** — the SOULLI
 trade NPC, the ghost walk, Explode, rival swap — and signs the companion build md5
 (`docs/gen3/PLAN.md:207`). **S**
 
-> **Read before playing (updated 2026-09-26): RR trade and the SOULLINK panel now have automated duos, but trade is not yet at the Gen 1/2 durability bar.**
-> - The new duos found three companion bugs, fixed in `03b19b71` and `2c553181`: the trade-scene EWRAM overrun from an unterminated nickname, the initiator's stuck script context, and the missing START row once the player has the Pokédex. The companion is rebuilt (md5 `c372c428…`).
-> - On it, these pass twice each: `trade_gen3` and `trade_decline_gen3` (`docs/gen3/probes/rr_trade{,_decline}_gen3_gen3_rr_as_a_5418c725{,_r2}.txt`), and `infopanel_gen3` and `infopanel_dex_gen3` (`..._539e0aea{,_r2}.txt`).
-> - **Still open:**
->   - The RR trade reports DONE on returning to the field, with no native save before DONE and no trade evolution. The duo saves through the harness afterwards.
->   - Owner ruling 27's shared patched-trade work (Emerald worktree, T2–T5) brings RR to the Gen 1/2 bar: save-before-DONE, evolve on receipt, reset/uncertain semantics.
->   - The RR frozen cut re-runs once after that lands, on its companion. The a2985d5a 19/19 predates both companion rebuilds.
-> - Overworld Presence is now forced off (570eb621), so the Pokémon Center trade NPC is always the entry point.
+> **Current native trade status (2026-10-01):** Native trade, decline, OS-lock recovery, commit interruption and native-success cold reload all PASS at `aab6fb32`. The admitted service uses native scene/evolution, successful native save before DONE, and reset/uncertain reconciliation. Both native info-panel scenarios also PASS. The 2026-09-26 scene-without-save blockers are superseded; their original text remains in Git history at `e3549be4`. Native linked trade and NPC exchange keep distinct stimuli and oracles. Overworld Presence remains off; the Center trade NPC remains the entry point.
 
 The gate-check cell for P5 (`docs/gen3/PLAN.md:306`) lists: nine RR receipts, **RR clean coverage
 rows**, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and the **extracted-zip

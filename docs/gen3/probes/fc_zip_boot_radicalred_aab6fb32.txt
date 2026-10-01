@@ -1,0 +1,39 @@
+# gen3_final_cut row=zip_boot_radicalred item=§9_item5_RR cut=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+# lane=C:\slink-wt\rr-complete
+# command: python tools/gen3_final_cut.py zip-boot --zip 'C:\slink-wt\rr-complete/dist/SLink-player-g4-aab6fb32.zip' --lane 'C:\slink-wt\rr-complete' --title radical_red   (cwd=C:\slink-wt\rr-complete)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T11:58:57 cpu=11% emuhawk=0 python=7
+start_utc=2026-10-01T15:58:56Z tracked_clean_before=True
+zip=C:\slink-wt\rr-complete/dist/SLink-player-g4-aab6fb32.zip
+extract=C:\Users\howar\AppData\Local\Temp\slink_zipboot_wahc5hd0\extract entry=C:\Users\howar\AppData\Local\Temp\slink_zipboot_wahc5hd0\extract\SLink-player-g4-aab6fb32\lua\slink.lua
+fixture=C:\slink-wt\rr-complete\tests\fixtures\gen3\rr_town.sav
+server: python -m server.server --port 56127 --http-port 56128 (cwd=C:\slink-wt\rr-complete)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua slink_RR.gba  (cwd=C:\Users\howar\AppData\Local\Temp\slink_zipboot_wahc5hd0)
+--- C:\Users\howar\AppData\Local\Temp\slink_zipboot_wahc5hd0\extract\SLink-player-g4-aab6fb32\slink_lua.log ---
+=== SLink Lua boot Thu Oct  1 11:59:28 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/slink_zipboot_wahc5hd0/extract/SLink-player-g4-aab6fb32/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:56127 (non-blocking)…
+[SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:56127 (rom da579690)
+[SLink] TCP connected to 127.0.0.1:56127
+[SLink-gen3] trade journal binding refused: server run identity or trainer unavailable
+[SLink-gen3] unhandled command dead_keys
+
+--- server log ---
+2026-10-01 11:58:58,528 [INFO] Logging to C:\Users\howar\AppData\Local\Temp\slink_zipboot_wahc5hd0\data\slink.log
+2026-10-01 11:58:58,528 [INFO] SLink TCP server listening on ('127.0.0.1', 56127)
+2026-10-01 11:58:58,533 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-10-01 11:58:58,533 [INFO] SLink status page at http://127.0.0.1:56128/
+2026-10-01 11:59:28,530 [INFO] Client connected: ('127.0.0.1', 56136)
+2026-10-01 11:59:28,620 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-10-01 11:59:28,621 [INFO] [a] hello rom=firered_rr area='route_1' party=1
+2026-10-01 11:59:28,621 [INFO] [a] Identity locked: B (OT 73595513)
+2026-10-01 11:59:28,623 [INFO] Adapter switched to gen3_frlge (rom_type=firered_rr)
+2026-10-01 11:59:28,623 [INFO] Committed ROM type 'firered_rr' for this run
+2026-10-01 11:59:28,623 [INFO] Committed trainer name 'B' for player a
+2026-10-01 11:59:29,188 [INFO] Client disconnected: ('127.0.0.1', 56136)
+
+RESULT: PASS the extracted zip booted radical_red on the new client
+exit=0 end_utc=2026-10-01T15:59:29Z tracked_clean_after=True classification=pass

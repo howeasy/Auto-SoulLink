@@ -1,35 +1,39 @@
-# Radical Red closeout — 2026-09-30
+# Radical Red completion — 2026-10-01
 
-The reviewed RR changes are integrated into local `master`. Qualified source: `e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd`; the 165 retained evidence files were committed at `b90e0846`. No push or release publication was performed.
+RR passed the complete **41/41-row plan** at `aab6fb325780e8a4a94b1b33d0f04c74749a51d5`. The qualified source is integrated into local `master`; this delivery adds documentation and retained evidence only. No push or release publication was performed.
 
 ## Qualification
 
 | Evidence | Result | Receipt |
 |---|---|---|
-| PHYSICAL standard RR cut | **28/28 PASS** | [Exact-cut summary](probes/fc_SUMMARY_e1e2adbd_rr.txt) |
-| PHYSICAL explicit recovery controls | **3/3 PASS**: OS journal lock, native-success cold reload, commit-window interruption | [Recovery summary](probes/fc_SUMMARY_e1e2adbd_rr_recovery.txt) |
-| SOURCE/MODEL quick gate | **5,021 passed, zero skips/failures**, plus Lua, pins, profile generation and shadow negatives | [Gate output](probes/rr_source_gates_e1e2adbd.txt) |
+| Complete frozen RR plan | **41/41 PASS**, no carried or cached rows | [Exact-cut summary](probes/fc_SUMMARY_aab6fb32_rr.txt) |
+| SOURCE/MODEL quick gate | **5,180 passed, zero skips/failures**, all five lanes | [Gate output](probes/source_quick_aab6fb32.txt) |
+| Player ZIP build/check/boot | PASS; 182 verified members; extracted ZIP booted RR on the new client | [ZIP check](probes/fc_rr_zip_check_aab6fb32.txt), [boot](probes/fc_zip_boot_radicalred_aab6fb32.txt) |
 
-All 31 physical receipts passed `gen3_final_cut.fc_check` against the exact source and their exit/cleanliness records. Trade and release ran first and were resumed within the same cut; no result was carried from another source cut. The opcode suite reports 27 passed tests and 12 existing deferred/empty-parameter skips under its established policy. The tested player ZIP contains 182 verified members and passed its RR boot check.
+The quick gate executes SOURCE/MODEL checks only; emulator qualification comes from the separate 41-row cut.
 
-Additional model checks: 613 release/route/harness tests; 224 focused trade tests; 16 new picker cases independently reproduced by a fresh nonauthor; 79 protocol/conformance checks, including 9 citation checks independently repeated by the coordinator. Both captured trade wire transcripts passed their conformance checks (2 tests). These counts overlap and are not added together.
+All 41 receipts passed `gen3_final_cut.fc_check` with the exact full source SHA, successful final exit and clean tracked tree. The plan includes all applicable explicit feature/recovery scenarios, Nature Changer and the three School borrowed-party controls. The opcode row reports 27 passed and 12 skipped under its existing deferred-case policy; 41/41 does not claim those cases executed. The owner-signed Mega, ghost and native-text scope is unchanged. Expansion remains paused and production admission refused. FRLG/Emerald historical cuts and a full Gen1/Gen3 release-gate invocation are not re-qualified by this RR run.
 
-## Changes
+## Completed changes and bounded evidence
 
-- Shared server lifecycle retains a native Trade action, selected pair or accepted offer while party visibility is withheld. It releases commands only after a fresh visible census passes the existing identity, slot, eligibility and capability checks. Duplicate choices cannot renew the watchdog; cancellation, withdrawal and expiry remain bounded. These pre-application waits are memory-only.
-- The trade carrier records a bound raw 100-byte donor preimage before selection/confirmation. Strict invariant comparison, including moves, uses that record rather than the starting fixture. This accepts natural growth before a trade without masking transfer corruption; missing, wrong, late or malformed evidence fails.
-- Release transit reuses the existing ordinary-input incidental-escape policy so the walk does not fight away the other usable party member. PC checks, game facts and runtime guards remain unchanged. The corrected physical row records escape, deposit, withdrawal, second deposit, release, partner memorial and matching independent save witnesses.
+- RR plan selection now includes the previously omitted gift, hatch, evolution, NPC-trade, species-family and shiny-bonus rows, plus all three explicit trade recovery controls. All ran at this cut.
+- Nature Changer has ROM-bound paired PID capture points and a native-input carrier. [Its receipt](probes/fc_nature_change_gen3_rr_as_a_aab6fb32.txt) proves one engine identity mutation, visible census generation 4→5, same-pair retry, migration ACK, alive link and independent saved PID. Shared core/server correction `1c15e3d9` retains retry credit while hidden/disconnected and returns keyed retryable hidden-party rejections without identity mutation. Hidden-window withholding is proved by cross-wire MODEL tests, not by this particular physical run.
+- School own-team preview, opponent-team preview and full battle have source-bound prewrite begin and completed-restore points. [Own preview](probes/fc_borrowed_party_menu_gen3_rr_as_a_aab6fb32.txt) and [opponent preview](probes/fc_borrowed_party_opponent_gen3_rr_as_a_aab6fb32.txt) prove zero loan-party client writes during the held window, then native restoration and saved own HP0 from a queued server command. These are command/persistence controls, not natural faint qualification. [Battle](probes/fc_borrowed_party_battle_gen3_rr_as_a_aab6fb32.txt) proves native play, restored own records and one alive link. B is idle/no-save in these three rows; its unchanged saved records are baseline comparison, not a fresh save witness.
+- The borrowed battle oracle accepts only the ROM-derived native-heal PP value for empty move slots. Occupied PP and every other saved field remain strict. The new behavior shares the existing lifecycle, transport, state and write gates; RR modules supply ROM facts.
+- RR field poison is N/A on the admitted `MOVS r0,#0; BX lr` no-mutation path. This source fact does not waive FR/LG poison coverage. Nature/School companion receipts do not claim other borrowed routes or clean-ROM physical execution.
 
-The native-wait, preimage and release changes received independent OMP reviews (cx-7fe86ed3, cx-7e0a4d71, cx-d21d063d, cx-b5d7ed2b). The final selection correction received a fresh Sol review with no actionable findings. Shared behavior stays in shared modules; no new title-specific facts or admission exceptions were introduced.
+The bounded implementation cuts received nonauthor Sol and OMP reviews. All three live OMP peers contributed final evidence, archive and cleanup checks. Archive review `cx-b044f897` was reconciled; per-side witness validation was independently checked by the coordinator with an isolated missing-B negative. Final receipt reconciliation is recorded in the orchestration ledger.
 
-## Scope and retained failures
+## Retained attempts
 
-The historical `617c7360` standard pass lacked a passing lock probe. `43e9b99e` had standard 27/28 and recovery 3/3. At `e632e14e`, release passed but a later selection was rejected and canceled; its explicitly incomplete 14/28 summary retains 13 PASS and 1 FAIL. The old trace lacks wire visibility facts: a real-server replay proved the hidden-selection gap separately, so that causal attribution for the old live failure remains an inference. None of these results was rewritten or combined to manufacture a current pass.
+The summary's attempt column counts final-cut process attempts; nested duo RNG attempts are retained inside each row receipt. Gift and hatch each used the runner's one allowed contention retry. Species preflight and gender-clause unobserved attempts remained within their existing bounded policies; no threshold or guard was relaxed.
 
-FRLG 43/43 and Emerald 24/24 at `067768b9` remain historical exact-cut evidence. Their cut plans contain no native trade scenario. This closeout does not assert refreshed FRLG/Emerald cuts or a full Gen1/Gen3 release-gate invocation. The separately registered gift, hatch, evolve, NPC-trade, species-family and shiny-bonus scenarios were not executed by this 28+3 run; no new qualification is claimed for them. Existing RR S-8/S-9/S-11/S-12 and Mega limits remain recorded. The G5 owner signature of 2026-09-27 is preserved; no new waiver is invented. Expansion remains paused and production admission refused.
+The first `aab6fb32` faint-command run passed gameplay but failed the tracked-clean gate because optional `--wire-log` rewrote two committed goldens. Its [rejected receipt](probes/rejected_wire_output_faint_cmd_gen3_rr_as_a_aab6fb32.txt) is retained verbatim. Its 32-member evidence archive has SHA-256 `b383d5d2aefcaf2aec350a90ccc617ef178a3af5b9d6963508d3362a1c818d9d`. After archiving, exactly those two generated files were restored. Optional wire logging was omitted uniformly for row7 onward; reset rows retain their private wire automatically. The clean-tree gate was unchanged, and the corrected-argv faint-command run passed. Historical goldens are not claimed as traffic from no-wire rows.
 
-## Delivery and cleanup
+Earlier Nature, menu and battle failures are retained alongside the separate 8fa699a9 six-feature, ab5021df Nature, 3008cd9b preview and 3ff4932d borrowed passes. These historical cuts do not fill any current row. The earlier e1e2adbd 28+3 delivery and its 4,223-member archive remain recorded in [the prior preservation record](RR_FINISH_PRESERVATION_2026-09-30.json).
 
-The qualified ZIP is in main at `dist/SLink-player-g4-e1e2adbd.zip`. [Preservation record](RR_FINISH_PRESERVATION_2026-09-30.json) names the archive, four manifests, hashes and all 4,223 preserved members, including failed runs, final outputs and private recovery data.
+## Local delivery and preservation
 
-The task's Git worktree registration and `codex/gen3-rr-finish` branch were removed after integration; external cache junctions were unlinked without touching their targets. Windows denied deletion of directory remnants under `C:/slink-wt/rr-finish` and its Git metadata directory. Automatic approval review also blocked the follow-up recursive cleanup command, reporting only “blocked by policy.” This is filesystem residue, not an unmerged branch or registered worktree. No ACL/trust bypass was attempted. Main's two foreign untracked files retain their original hashes.
+The tested package is `dist/SLink-player-g4-aab6fb32.zip` in main. [The preservation record](RR_COMPLETE_PRESERVATION_2026-10-01.json) lists hashes for the qualified archive, prior failure/pass archives, 82 retained receipt files, control scripts/logs and the package. The qualified archive contains 1,364 payload members plus its manifest, passed CRC verification, and has SHA-256 `1b8b4e4fabc5ba13f8f1578a2a19aa8aff3ac6c821f22074016277b46b0dd978`. Supplemental build outputs are explicitly contextual; current qualification comes from receipt-bound artifacts.
+
+Task worktree/branch cleanup: PENDING after the evidence commit. The original planning worktree, other lanes, shared cache targets and main's two foreign untracked files are preserved. Prior Windows-blocked rr-finish residue remains documented in the earlier preservation record; no ACL or policy bypass is authorized.

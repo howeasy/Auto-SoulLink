@@ -1,0 +1,14 @@
+# Scope: six previously omitted RR feature rows; completed 6 of6. FullRR plan has37 rows and is separate.
+# G4 final cut 8fa699a957aff76dd2a403465cad3c14c01ba893 -- tools/gen3_final_cut.py summary (written 2026-10-01T11:00:30Z)
+# RUN 6 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | gift_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_gift_gen3_rr_as_a_8fa699a9.txt |
+| 2 | egg_hatch_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_egg_hatch_gen3_rr_as_a_8fa699a9.txt |
+| 3 | evolve_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_evolve_gen3_rr_as_a_8fa699a9.txt |
+| 4 | npc_trade_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_npc_trade_gen3_rr_as_a_8fa699a9.txt |
+| 5 | species_family_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_species_family_gen3_rr_as_a_8fa699a9.txt |
+| 6 | shiny_bonus_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_shiny_bonus_gen3_rr_as_a_8fa699a9.txt |
+
+OVERALL: PASS (6/6 rows)

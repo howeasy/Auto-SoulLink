@@ -1,0 +1,77 @@
+# gen3_final_cut row=gift_gen3_rr_as_a item=§14_P5_RR_duo cut=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario gift_gen3 --keep-data --wire-log --lane rr-full-gift_gen3_rr_as_a-aab6fb32   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-gift_gen3_rr_as_a-aab6fb32
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 2 ---
+LOAD 2026-10-01T11:22:48 cpu=4% emuhawk=0 python=7
+start_utc=2026-10-01T15:22:47Z tracked_clean_before=True
+
+========== scenario: gift_gen3 ==========
+[duo] gift_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=81fe99b43d7599a2580dac8e551a7174a6d0adec544a09daa495782dc73c5f72 b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=8afd340e852490f9f048f01c604defa1c3d420296c225fcf2ea3cd1dd2a174cb write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=55517 http=55518 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for gift_gen3: e2e_gift_gen3_a_1_witness.bin, e2e_gift_gen3_a_1_witness_ext.bin, e2e_gift_gen3_a_attempt1_result.txt, e2e_gift_gen3_a_result.txt, e2e_gift_gen3_b_1_witness.bin, e2e_gift_gen3_b_1_witness_ext.bin, e2e_gift_gen3_b_attempt1_result.txt, e2e_gift_gen3_b_result.txt, e2e_gift_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 127.2s
+[duo] PYDEC: FAIL timed out after 120s waiting for one native gift link
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\gift_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\gift_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_omnpyfee
+[duo] gift_gen3: attempt 1 aborted — TimeoutError: timed out after 120s waiting for one native gift link
+
+========== summary ==========
+  gift_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 120s waiting for one native gift link
+exit=1 end_utc=2026-10-01T15:24:57Z tracked_clean_after=True classification=contention
+--- attempt 2 of 2 ---
+LOAD 2026-10-01T11:24:58 cpu=12% emuhawk=0 python=7
+start_utc=2026-10-01T15:24:57Z tracked_clean_before=True
+
+========== scenario: gift_gen3 ==========
+[duo] gift_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=81fe99b43d7599a2580dac8e551a7174a6d0adec544a09daa495782dc73c5f72 b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=8afd340e852490f9f048f01c604defa1c3d420296c225fcf2ea3cd1dd2a174cb write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=53529 http=53530 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for gift_gen3: e2e_gift_gen3_a_attempt1_result.txt, e2e_gift_gen3_a_result.txt, e2e_gift_gen3_b_attempt1_result.txt, e2e_gift_gen3_b_result.txt, e2e_gift_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 7.0s
+[duo] timing results 6.8s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=d551293f4f519b26d74f6fda4048247762866ad463f069c7dacf2a3239fc8ca3 file=d551293f4f519b26d74f6fda4048247762866ad463f069c7dacf2a3239fc8ca3 match=true saves=1 counter=2->3 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=69cfe759945fe8f18076fca4667157955dabca84127c62666ba9853f33b8caa7 file=69cfe759945fe8f18076fca4667157955dabca84127c62666ba9853f33b8caa7 match=true saves=1 counter=2->3 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] gift: native signal, one gift capture per side, one alive link, independent saved records and controls
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] gift_gen3: a=PASS b=PASS
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\gift_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\gift_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_74auf35j
+
+========== summary ==========
+  gift_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-01T15:25:14Z tracked_clean_after=True classification=pass
