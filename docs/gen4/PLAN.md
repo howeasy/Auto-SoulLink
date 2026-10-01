@@ -1,6 +1,6 @@
 # Gen 4 plan: HeartGold / SoulSilver + hg-engine on the shared framework
 
-> **Status:** DRAFT rev 5 (2026-09-29); G0 remains unsigned.
+> **Status:** rev 5 (2026-09-29). **G0 SIGNED**, owner 2026-10-01: "Consider all work signd" (recorded in [reviews/G0_SIGNATURE_2026-10-01.md](reviews/G0_SIGNATURE_2026-10-01.md)). Later gates remain unsigned.
 > - Owner decisions D1-D15 were taken in the planning session.
 > - Rev 2 folded in the first adversarial review (OMP G4-REV1 `cx-b646f457`).
 > - Rev 3 folded in the research wave (live melonDS probe, offline measurements, R7-R9, wire contract).
