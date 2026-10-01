@@ -31,7 +31,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from boot_splash import DEFAULT_VERSION, TILES_OFFSET, splash_spans  # noqa: E402
+from boot_splash import DEFAULT_VERSION, FREE_FROM, splash_spans  # noqa: E402
 from manifest import (  # noqa: E402
     BANK_SIZE,
     HOOK_BANK,
@@ -126,8 +126,8 @@ def inject(rom: bytes, payload: bytes | None = None, version: str = DEFAULT_VERS
 
     if not state["size_ok"]:
         raise InjectError(f"expected a {ROM_SIZE}-byte Game Boy ROM, got {len(rom)} bytes")
-    if len(payload) > TILES_OFFSET - INJECT_OFFSET:
-        raise InjectError("the payload runs into the splash tiles at the end of bank $3F")
+    if len(payload) > FREE_FROM - INJECT_OFFSET:
+        raise InjectError("the payload runs into the splash at the end of bank $3F")
 
     # ── Already patched? Say which, and refuse the ones we cannot safely redo. ─────────
     # The reapply matrix, stated rather than discovered at runtime: an exact match is a
@@ -157,7 +157,7 @@ def inject(rom: bytes, payload: bytes | None = None, version: str = DEFAULT_VERS
             f"{HOOK_ORIGINAL.hex()}")
     lo, hi = PROTECTED_RANGE
     try:
-        spans = MENU_PATCHES + splash_spans(rom, version)
+        spans = MENU_PATCHES + splash_spans(version)
     except ValueError as exc:
         raise InjectError(f"refusing to patch; nothing was written: {exc}") from None
     for off, original, new, why in spans:

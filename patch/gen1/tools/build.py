@@ -38,7 +38,7 @@ BUILD = os.path.join(REPO, "patch", "gen1", "build")
 DIST = os.path.join(REPO, "patch", "gen1", "dist")
 PAYLOAD_FILE = os.path.join(DIST, "slink_bank3f.bin")
 
-from boot_splash import DEFAULT_VERSION, TILES_OFFSET, splash_spans  # noqa: E402
+from boot_splash import DEFAULT_VERSION, FREE_FROM, splash_spans  # noqa: E402
 from manifest import (  # noqa: E402
     BANK_SIZE,
     HOOK_BANK,
@@ -127,7 +127,7 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False, version: str
     #    the protected header. Checked for ALL spans before ANY is written, so a manifest
     #    that is half-applicable leaves the ROM untouched rather than half-patched.
     lo, hi = PROTECTED_RANGE
-    spans = MENU_PATCHES + splash_spans(bytes(data), version)
+    spans = MENU_PATCHES + splash_spans(version)
     for off, original, new, why in spans:
         if not (off + len(new) <= lo or off > hi):
             raise SystemExit(
@@ -184,8 +184,8 @@ def main():
 
     bank = assemble()
     n = code_length(bank)
-    if n > TILES_OFFSET - INJECT_OFFSET:
-        raise SystemExit(f"payload is {n} bytes; it would run into the splash tiles at {TILES_OFFSET:#x}")
+    if n > FREE_FROM - INJECT_OFFSET:
+        raise SystemExit(f"payload is {n} bytes; it would run into the splash at {FREE_FROM:#x}")
     print(f"[gen1-patch] assembled {n} bytes of code into bank {HOOK_BANK:#x}", file=sys.stderr)
 
     # Publish the payload so the structural injector can run WITHOUT a toolchain.

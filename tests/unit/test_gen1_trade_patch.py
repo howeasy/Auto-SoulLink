@@ -217,7 +217,7 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
     assert patched[0x0100:0x0150] == pristine[0x0100:0x0150]
     permitted = set(range(manifest.INJECT_OFFSET, manifest.INJECT_OFFSET + manifest.BANK_SIZE))
     permitted.update(range(manifest.HOOK_SITE, manifest.HOOK_SITE + len(manifest.HOOK_ORIGINAL)))
-    for offset, before, after, _why in manifest.MENU_PATCHES + boot_splash.splash_spans(pristine):
+    for offset, before, after, _why in manifest.MENU_PATCHES + boot_splash.splash_spans():
         assert len(before) == len(after)
         assert pristine[offset:offset + len(before)] == before
         assert patched[offset:offset + len(after)] == after
