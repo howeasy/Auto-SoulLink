@@ -51,3 +51,23 @@ Owner, 2026-10-01: "We need at least 1x full speed FPS constantly. 58 isnt going
 - **D11 npc_trade:** the reducer only notes a `slot_replace`. The client card wires `identity:begin_alias` plus `pending.msg`, `box_generation()` and `rescan_boxes()` (MERGE_DRIFT item 2).
 - **Before G2 sign-off, the owner needs to see** ruling 35: the server force-faints a traded-in mon that breaks an enabled clause.
 - **Capture identity:** the wild mon's OTID at capture needs a PHYSICAL receipt (PID match plus OTID equal to the foe's or the player's).
+
+## Owner ruling: what counts as 1x (2026-10-01)
+
+Owner, replying to the paced HG floor (receipt `heartgold-8355974c3c30`), "Thats fine was regarding the framerate". The owner accepts the native NDS cadence and its host jitter as 1x.
+
+- **Reference:** the native NDS refresh, 33,513,982 Hz / (6 × 355 × 263) = 59.8261 fps, which is a 16.7151 ms period. The earlier wording, no interval longer than 1/60 s, fails by construction and is withdrawn.
+- **Measured floor on HG, paced** (`pace_1x`, frameadvance, Stopwatch, 3000 frames):
+
+  | Run | Mean fps | p99 | Max |
+  |---|---|---|---|
+  | Overworld, no load | 59.826 | 18.11 ms | 20.46 ms |
+  | Overworld + full client load | 59.824 | 18.20 ms | 22.21 ms |
+
+  The jitter is host/throttle noise, and it is present without the client.
+- **Row f passes (coordinator operationalization of the ruling) when every production row meets all three conditions:**
+  - The rows are 0 hooks + load in the overworld and in battle, and 1 on-demand hook + load in battle.
+  - The mean fps is within 0.1% of 59.8261 over at least 3000 paced frames.
+  - p99 is no more than 1.0 ms above the same session's bare floor.
+  - No interval exceeds 2 native periods (33.43 ms), i.e. no visible dropped frame.
+- **Recording:** each receipt records the five `PACE_1X` values and the floor it was compared against.
