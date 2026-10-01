@@ -228,3 +228,29 @@ def test_actual_picker_waits_for_fade_before_native_selection_input():
         return premature,polls,popup
     ''')
     assert got==(False,3,True)
+
+def test_actual_first_loan_press_releases_mash_override_for_new_a_edge():
+    from lupa import LuaRuntime
+    source=(ROOT/'lua/tests/duo/scenario_gen3_borrowed.lua').read_text()
+    start=source.index('            if not ctx.wait_until(picker,30,"fade-ready before loan A")')
+    end=source.index('            if not ctx.wait_until(function() return ctx.task_live',start)
+    boot=(ROOT/'lua/tests/gen3_boot_check.lua').read_text()
+    idle=boot[boot.index('function M.idle(n)'):boot.index('--- Mash A (and Start every 4th beat)')]
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    presses=lua.execute('''
+        local held,last,accepted=true,true,0
+        joypad={set=function(keys) held=keys.A==true end}
+        local M={advance=function()
+            if held and not last then accepted=accepted+1 end
+            last=held
+        end}
+    '''+idle+'''
+        local slot=0
+        local cursor=function() return slot end
+        local picker=function() return true end
+        local ctx={G=M,cp={},wait_until=function(p) return p() end,
+            jlog=function() end,peek=function() return 0 end,
+            emulator={framecount=function() return 1 end}}
+        M.pred_ok=function() return true end
+    '''+source[start:end]+'''\nreturn accepted''')
+    assert presses==1

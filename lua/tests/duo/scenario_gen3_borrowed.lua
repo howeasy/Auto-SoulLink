@@ -132,16 +132,21 @@ return function(ctx)
             end
             if cursor()~=slot then return false,"loan selection cursor stalled" end
             if not ctx.wait_until(picker,30,"fade-ready before loan A") then return false,"loan chooser faded before A" end
+            ctx.G.idle(1) -- release mash_until's last A override; guarantee a new native input edge
             ctx.jlog("BORROW_PARTY_INPUT",{slot=slot,cursor=cursor(),frame=ctx.emulator.framecount(),
                 palette=ctx.peek("gPaletteFade",1,7),palette_ready=ctx.G.pred_ok(ctx.cp,"palette_fade_active")})
             ctx.G.tap("A",3,20)
             if not ctx.wait_until(function() return ctx.task_live("Task_HandleSelectionMenuInput")
-                and ctx.G.pred_ok(ctx.cp,"palette_fade_active") end,10,"ENTER popup") then return false,"ENTER popup absent" end
+                and ctx.G.pred_ok(ctx.cp,"palette_fade_active") end,10,"ENTER popup") then
+                ctx.G.shot("borrow_enter_popup");return false,"ENTER popup absent"
+            end
+            ctx.G.idle(1)
             ctx.G.tap("A",3,20)
             if not ctx.wait_until(function() return u8(facts.selected_order_address+slot)==slot+1 end,10,"selected loan") then return false,"native selected order absent" end
         end
         if cursor()~=facts.confirm_slot then return false,"native confirm cursor absent" end
         if not ctx.wait_until(picker,30,"fade-ready loan confirmation") then return false,"loan confirmation not ready" end
+        ctx.G.idle(1)
         ctx.jlog("BORROW_PARTY_INPUT",{slot=facts.confirm_slot,cursor=cursor(),frame=ctx.emulator.framecount(),
             palette=ctx.peek("gPaletteFade",1,7),palette_ready=ctx.G.pred_ok(ctx.cp,"palette_fade_active")})
         ctx.G.tap("A",3,20)
