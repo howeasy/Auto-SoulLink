@@ -38,6 +38,7 @@ BUILD = os.path.join(REPO, "patch", "gen1", "build")
 DIST = os.path.join(REPO, "patch", "gen1", "dist")
 PAYLOAD_FILE = os.path.join(DIST, "slink_bank3f.bin")
 
+from boot_splash import DEFAULT_VERSION, TILES_OFFSET, splash_spans  # noqa: E402
 from manifest import (  # noqa: E402
     BANK_SIZE,
     HOOK_BANK,
@@ -99,7 +100,7 @@ def code_length(bank: bytes) -> int:
     return end
 
 
-def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
+def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False, version: str = DEFAULT_VERSION) -> str:
     name, sha1 = ROMS[rom_key]
     src = os.path.join(REPO, name)
     if not os.path.exists(src):
@@ -126,7 +127,8 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     #    the protected header. Checked for ALL spans before ANY is written, so a manifest
     #    that is half-applicable leaves the ROM untouched rather than half-patched.
     lo, hi = PROTECTED_RANGE
-    for off, original, new, why in MENU_PATCHES:
+    spans = MENU_PATCHES + splash_spans(bytes(data), version)
+    for off, original, new, why in spans:
         if not (off + len(new) <= lo or off > hi):
             raise SystemExit(
                 f"{rom_key}: patch at {off:#06x} ({why}) overlaps the protected cartridge "
@@ -139,10 +141,10 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
 
     if verify_only:
         return (f"{rom_key}: clean ROM, hook site, target bank and "
-                f"{len(MENU_PATCHES)} menu spans all as expected")
+                f"{len(spans)} menu and splash spans all as expected")
 
     data[INJECT_OFFSET:INJECT_OFFSET + BANK_SIZE] = bank
-    for off, _original, new, _why in MENU_PATCHES:
+    for off, _original, new, _why in spans:
         data[off:off + len(new)] = new
     # Rewrite only the two immediates: `ld b, $3F` and `ld hl, $4000`. The
     # `call Bankswitch` after them is untouched, so control still flows the same way.
@@ -161,7 +163,7 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     assert check[HOOK_SITE + 1] == HOOK_BANK
     assert check[HOOK_SITE + 3] | (check[HOOK_SITE + 4] << 8) == HOOK_TARGET
     assert check[INJECT_OFFSET:INJECT_OFFSET + 8] == bank[:8]
-    for off, _original, new, why in MENU_PATCHES:
+    for off, _original, new, why in spans:
         assert bytes(check[off:off + len(new)]) == new, f"{why} did not land at {off:#06x}"
     with open(src, "rb") as f:
         pristine = f.read()[lo:hi + 1]
@@ -176,10 +178,14 @@ def main():
     ap.add_argument("--rom", choices=sorted(ROMS), help="only this ROM (default: both)")
     ap.add_argument("--verify-only", action="store_true",
                     help="check the base ROMs and hook site, build nothing")
+    ap.add_argument("--version", default=DEFAULT_VERSION,
+                    help="shown on the boot splash: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
 
     bank = assemble()
     n = code_length(bank)
+    if n > TILES_OFFSET - INJECT_OFFSET:
+        raise SystemExit(f"payload is {n} bytes; it would run into the splash tiles at {TILES_OFFSET:#x}")
     print(f"[gen1-patch] assembled {n} bytes of code into bank {HOOK_BANK:#x}", file=sys.stderr)
 
     # Publish the payload so the structural injector can run WITHOUT a toolchain.
@@ -193,7 +199,7 @@ def main():
           file=sys.stderr)
 
     for rom_key in ([args.rom] if args.rom else sorted(ROMS)):
-        print("[gen1-patch] " + patch_rom(rom_key, bank, args.verify_only), file=sys.stderr)
+        print("[gen1-patch] " + patch_rom(rom_key, bank, args.verify_only, args.version), file=sys.stderr)
     return 0
 
 
