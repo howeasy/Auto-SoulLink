@@ -43,15 +43,40 @@ return function(ctx)
         return out
     end
     local Routes=dofile(ctx.D.wt.."/lua/tests/gen3_routes.lua")
+    local function route_trace(stage)
+        local group,num=ctx.G.map(ctx.cp);local x,y=ctx.G.pos(ctx.cp);local tasks={}
+        if ctx.sym and ctx.sym.gTasks then
+            for i=0,15 do
+                local at=ctx.sym.gTasks+i*40 -- same Task layout as duo main's task reader
+                if u8(at+4)~=0 then tasks[#tasks+1]=memory.read_u32_le(at,"System Bus") end
+            end
+        end
+        ctx.jlog("BORROW_ROUTE_STAGE",{stage=stage,map={group,num},pos={x,y},tasks=tasks,
+            callback2=ctx.sym and ctx.sym.gMain and memory.read_u32_le(ctx.sym.gMain+4,"System Bus"),
+            field=ctx.play.on_field(ctx.cp),controls=ctx.G.pred_ok(ctx.cp,"field_controls_locked"),
+            script=ctx.G.pred_ok(ctx.cp,"script_context_status")})
+    end
+    route_trace("grass_to_pc")
     local ok,why=Routes.with_incidental_escape(ctx,"borrowed school",function()
         ctx.walk_to_pc("borrowed school")
+    end)
+    if not ok then route_trace("grass_to_pc_failed");return false,"borrow transit: "..tostring(why) end
+    -- RR's Center exit can start a message scene. Restore the ordinary step first:
+    -- Routes.wait_walk's idle gate would raise before traced_follow can press A.
+    ok,why=pcall(function()
+        route_trace("pc_to_center_exit")
         ctx.play.follow(ctx.cp,"pc_to_pokecenter_entrance","borrowed school")
+        route_trace("center_exit_warp")
         ctx.SP.warp_to(ctx.cp,"Down",30,ctx.SP.DEST.center_exit,"borrowed Center exit")
-        ctx.follow_path("borrow_city",facts.paths.city,{26,27},{25,19},"borrowed school door")
+        route_trace("city_path")
+        ctx.SP.PATHS.borrow_city={from={26,27},to={25,19},dirs=facts.paths.city,battles=false}
+        ctx.SP.traced_follow(ctx.cp,"borrow_city","borrowed school door")
+        route_trace("school_door_warp")
         ctx.SP.warp_to(ctx.cp,"Up",30,{group=5,num=2,x=facts.arrival[1],y=facts.arrival[2]},"School door")
+        route_trace("school_counter_path")
         ctx.follow_path("borrow_school",facts.paths.school,facts.arrival,{6,4},"School counter")
     end)
-    if not ok then return false,"borrow transit: "..tostring(why) end
+    if not ok then route_trace("route_failed");return false,"borrow transit: "..tostring(why) end
     local own=ctx.party() or {};local pre={}
     if #own<2 or own[2].key~=key or own[2].hp<=0 then return false,"own healthy targetslot1 absent" end
     for _,m in ipairs(own) do pre[#pre+1]=hex(raw(m.slot)) end

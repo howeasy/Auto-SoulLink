@@ -68,3 +68,61 @@ def test_menu_oracle_cannot_accept_saved_healthy_target_as_command_success():
     r=runner("menu");texts=receipts(r);r._links_json=lambda:[]
     texts["a"]=texts["a"].replace("SAVE_WITNESS ","BORROW_HELD "+json.dumps(dict(frames=120,party_write_count=0,hidden_ticks=4,start_frame=100,end_frame=220))+"\nSAVE_WITNESS ")
     with pytest.raises(RuntimeError,match="ownHP0"):d.saved_oracle(r,texts)
+
+
+def test_actual_route_composes_rr_dialogue_recovery_outside_incidental_wrapper():
+    """Run actual carrier, Routes wrapper and traced_follow with a locked post-door scene."""
+    from lupa import LuaRuntime
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    source=(ROOT / "lua/tests/gen3_scripted_play.lua").read_text()
+    start=source.index("local function traced_follow(cp, path_name, label)")
+    end=source.index("--- Route either admitted respawn interior",start)
+    facts=d.own_facts(runner("menu"))
+    lua.globals().ROOT=ROOT.as_posix();lua.globals().FACTS=lua.table_from(facts,recursive=True)
+    lua.execute(r'''
+        F={locked=false,group=3,num=19,x=12,y=37,clears=0,frames=0}
+        local delta={Left={-1,0},Right={1,0},Up={0,-1},Down={0,1}}
+        PATHS={};TITLE='radical_red';RR_TRACE=false
+        G={shot=function() end,finish=function(ok,msg) if not ok then error(msg) end end}
+        H={pos=function() return F.x,F.y end,scene_quiet=function() return not F.locked end}
+        play={}
+        play.map=function() return F.group*256+F.num end
+        play.on_field=function() return not F.locked end
+        play.in_battle=function() return false end
+        play.wait_at=function(_,x,y) return F.x==x and F.y==y end
+        play.at=function() return tostring(F.x)..','..tostring(F.y) end
+        play.clear_dialogue=function() F.clears=F.clears+1;F.locked=false end
+        play.step=function(_,dir)
+            if F.locked then return false,'locked' end
+            local d=delta[dir];F.x=F.x+d[1];F.y=F.y+d[2];return true
+        end
+        original_step=play.step
+        play.follow=function(cp,name)
+            if name=='pc_to_pokecenter_entrance' then F.x,F.y=7,8;return end
+            for _,dir in ipairs(PATHS[name].dirs) do assert(play.step(cp,dir,play.map()),'plain step locked') end
+        end
+        SP={PATHS=PATHS,DEST={center_exit={group=3,num=1,x=26,y=27}}}
+        SP.warp_to=function(_,dir,_,dest)
+            F.group,F.num,F.x,F.y=dest.group,dest.num,dest.x,dest.y
+            F.locked=dir=='Down' -- retained post-Center scene, requires ordinary A
+        end
+        c={player='a',D={wt=ROOT},SP=SP,play=play,cp={},session={signals={drain=function() return {} end}}}
+        c.wait_go=function() return true end
+        c.go_value=function(name) return name=='BORROW' and FACTS or 'K1' end
+        c.in_battle=play.in_battle;c.on_field=play.on_field
+        c.log=function() end;c.jlog=function() end
+        c.frames=function(n) F.frames=F.frames+n end
+        c.G={pred_ok=function() return not F.locked end,map=function() return F.group,F.num end,
+             pos=function() return F.x,F.y end}
+        c.walk_to_pc=function() F.group,F.num,F.x,F.y=5,4,11,2 end
+        c.follow_path=function(name,path,from,to,label)
+            PATHS[name]={from=from,to=to,dirs=path,battles=false};play.follow(c.cp,name,label)
+        end
+        c.party=function() error('MODEL_REACHED_SCHOOL') end
+    ''')
+    lua.execute(source[start:end]+"\nSP.traced_follow=traced_follow")
+    result=lua.execute("local fn=dofile(ROOT..'/lua/tests/duo/scenario_gen3_borrowed.lua'); return pcall(fn,c)")
+    ok,msg=result[:2]
+    assert not ok and "MODEL_REACHED_SCHOOL" in str(msg), result
+    assert lua.globals().F.clears>0 and lua.globals().F.x==6 and lua.globals().F.y==4
+    assert lua.execute("return play.step==original_step") is True

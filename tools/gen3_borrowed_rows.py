@@ -27,6 +27,12 @@ def own_facts(run):
     arrival=[dest.x,dest.y+1] # same door step/arrival semantics as verified Center door
     paths=dict(city=city.bfs((26,27),(door.x,door.y+1)),school=school.bfs(tuple(arrival),(6,4)))
     if any(p is None or len(p)>=100 for p in paths.values()):raise RuntimeError("school BFS route absent")
+    x,y=26,27
+    for direction in paths["city"]:
+        dx,dy={"Left":(-1,0),"Right":(1,0),"Up":(0,-1),"Down":(0,1)}[direction]
+        x,y=x+dx,y+dy
+        if city.behaviour[y][x]!=0 or any((event.x,event.y)==(x,y) for event in city.coords):
+            raise RuntimeError("school city path no longer has plain tiles without coordinate scripts")
     labels=[(0x091153D2,"View Your Team"),(0x091153F0,"Start Battle")]
     from tools.rr_ingame_trades import decode_text
     if any(decode_text(rom[a-0x08000000:a-0x08000000+50])!=text for a,text in labels):
