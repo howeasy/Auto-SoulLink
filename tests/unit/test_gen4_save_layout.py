@@ -279,6 +279,17 @@ def test_real_platinum_save_decode():
     assert len(save.boxes()) == 18
 
 
+def test_real_populated_hge_save_decode():
+    # owner-made hge save 2026-10-01 on the pinned build cb2dc435 (save sha1 13d56589...)
+    img = real_save("SLINK_GEN4_HGE_POP_SAVE", "hg-engine.SaveRAM", "populated hg-engine battery save")
+    save = codec.parse_save(img, "hge")
+    me = save.player()
+    assert (me["name"], me["tid"], me["sid"]) == ("OOO", 630, 62679)
+    (mon,) = save.party()  # party_off 0x90 FILE-confirmed here
+    assert (mon["species"], mon["level"], mon["ability"], mon["otid"]) == (155, 5, 66, me["id"])
+    assert mon["tail_plausible"] and len(save.boxes()) == 30
+
+
 def test_real_soulsilver_save_decode():
     # owner-made SS starter save 2026-10-01 (sha1 a554fbcc...); distinct trainer from the HG save
     img = real_save("SLINK_GEN4_SS_SAVE", "Pokemon - SoulSilver Version (USA).SaveRAM",

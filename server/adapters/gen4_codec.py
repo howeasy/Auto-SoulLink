@@ -179,7 +179,7 @@ PROFILES: dict[str, Profile] = {
     ),
     "hge": Profile(
         "hge", 21, True, *_HGSS_FOOTER, slot_field="slot",
-        party_off=0x90, party_off_verified=False,   # source projection; empty save cannot confirm
+        party_off=0x90, party_off_verified=True,    # FILE: owner hge save 13d56589 (Cyndaquil)
         box_count=30, boxes_off=0x0, box_stride=0x1000,
         cur_box_off=0x1E000, modified_off=0x1E004,  # modified_off: C-struct calculation only
         names_off=0x1E008, names_stride=0x28,       # names: FILE ("Box 1".."Box 30")
