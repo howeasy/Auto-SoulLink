@@ -1,0 +1,67 @@
+# gen3_final_cut row=trade_gen3_rr_as_a item=RR_changed_selection_qualification cut=e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd
+# lane=C:\slink-wt\rr-finish
+# command: python tools/e2e_duo.py --game gen3_rr --scenario trade_gen3 --keep-data --wire-log --lane rr-trade-e1e2adbd   (cwd=C:\slink-wt\rr-finish)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-finish\patch\build\rr-state-trade-e1e2adbd
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T22:03:04 cpu=6% emuhawk=0 python=3
+start_utc=2026-10-01T02:03:03Z tracked_clean_before=True
+
+========== scenario: trade_gen3 ==========
+[duo] trade_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd
+[duo] server up: tcp=58782 http=58783 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5
+[duo] timing server 0.6s
+[duo] cleared 4 stale artifact(s) for trade_gen3: duo_go_trade_gen3_a.txt, duo_go_trade_gen3_b.txt, e2e_trade_gen3_a_result.txt, e2e_trade_gen3_b_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5 path=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5 path=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 78.8s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS (traded F56D8C1D:2BDDC8BF for F56D8C1D:D4223740)
+[duo] RESULT_LINE b: RESULT: PASS (traded F56D8C1D:D4223740 for F56D8C1D:2BDDC8BF)
+[duo] SAVE_WITNESS_SHA256 inst=a site=557e2e8fb4813ce8ac3b478c93411bec8385afb1ad2a75598ad8a6047eeceb43 file=557e2e8fb4813ce8ac3b478c93411bec8385afb1ad2a75598ad8a6047eeceb43 match=true saves=3 counter=4->7 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=f815d2654aea90c239d368fefe591d31f21f634b6221bfbbe80a03f6b407f031 file=f815d2654aea90c239d368fefe591d31f21f634b6221bfbbe80a03f6b407f031 match=true saves=3 counter=4->7 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> durable native pre-save/scene/post-save both sides; saved a holds F56D8C1D:D4223740, b holds F56D8C1D:2BDDC8BF (partner records intact), links.json re-keyed, each key once
+[duo] MARKER a: TALKED npc=(3,3) player=(3,4) facing=Up pi_count=0->1
+[duo] MARKER a: TX trade_request - {"event":"trade_request","player":"a","seq":300}
+[duo] MARKER a: RX show_choices text=OAK: Took you long enough.
+[duo] MARKER a: TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":303,"token":"t1"}
+[duo] MARKER a: RX choose_mon
+[duo] MARKER a: TX mon_chosen - {"event":"mon_chosen","player":"a","seq":308,"slot":1,"token":"t1"}
+[duo] MARKER a: RX apply_prepare
+[duo] MARKER a: TX apply_ready - {"event":"apply_ready","ok":true,"player":"a","seq":348,"token":"t1"}
+[duo] MARKER a: RX apply_trade
+[duo] MARKER a: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:D4223740","new_species":1324,"player":"a","seq":445,"slot":1,"token":"t1"}
+[duo] MARKER a: TRADED gave=F56D8C1D:2BDDC8BF got=F56D8C1D:D4223740 slot=1 species=1324 level=4
+[duo] MARKER a: RX msgbox text=Traded Aaaaaaaaaa for Aaaaaaaaaa!
+[duo] MARKER b: RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+[duo] MARKER b: TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":302,"token":"t1"}
+[duo] MARKER b: RX apply_prepare
+[duo] MARKER b: TX apply_ready - {"event":"apply_ready","ok":true,"player":"b","seq":337,"token":"t1"}
+[duo] MARKER b: RX apply_trade
+[duo] MARKER b: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:2BDDC8BF","new_species":1324,"player":"b","seq":438,"slot":1,"token":"t1"}
+[duo] MARKER b: TRADED gave=F56D8C1D:D4223740 got=F56D8C1D:2BDDC8BF slot=1 species=1324 level=4
+[duo] MARKER b: RX msgbox text=Traded Aaaaaaaaaa for Aaaaaaaaaa!
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] trade_gen3: a=PASS b=PASS
+[duo] wire log: C:\slink-wt\rr-finish\tests\fixtures\gen3\wire\trade_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-finish\tests\fixtures\gen3\wire\trade_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_gycecwo5
+
+========== summary ==========
+  trade_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-01T02:04:32Z tracked_clean_after=True classification=pass

@@ -1,0 +1,151 @@
+duo instance a scenario=trade_lock_probe_gen3 phase=initial title=radical_red attempt=1
+speedmode requested=300 call=ok
+[client] [SLink] TCP connecting to 127.0.0.1:58008 (non-blocking)…
+DUO_JOURNAL scope=install-root-probe path=production-default guard=unchanged
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:58008 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:58008
+[client] [SLink] TCP connected to 127.0.0.1:58008
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=546 map=(3,19)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=546 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 619
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 619
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 620
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 621
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 621
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 623
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 623
+RX link_panel
+JITTER requested=0 applied=0 attempt=1
+JOURNAL_PROBE_ARMED player=a frame=632
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JOURNAL_PROBE_HIDDEN player=a frame=720
+JOURNAL_PROBE_RECOVERED player=a frame=750 party=2
+[client] [gen3] phase encounter frame=1163 #1 during step Up at (12,27)
+ENGINE_FAINT_SITE frame=2382 active=1 battler0_slot=0 battle_hp=18 party_hp=18 counter=0
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":74,"species_id":452}
+TX safe - {"event":"safe","player":"a","seq":75}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2729
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 2729
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 2729
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2729
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2729
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2729
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 2729
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2729
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2729
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2729
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2729
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [gen3] phase encounter-done frame=2825 #1 resolved at (12,27)
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":103}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":117}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+AT_NPC npc_oe=7
+TX trade_request - {"event":"trade_request","player":"a","seq":136}
+RX show_choices text=OAK: Took you long enough.
+BB is waiting. Make it quick.
+[client] [SLink-gen3] write native 0x0203FC90 +15 frame 4449
+[client] [SLink-gen3] write native 0x0203F900 +57 frame 4449
+[client] [SLink-gen3] write native 0x0203F810 +1 frame 4449
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 4449
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 4449
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 4449
+TALKED npc=(3,3) player=(3,4) facing=Up pi_count=0->1
+TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":139,"token":"t1"}
+CHOSE_TRADE
+RX msgbox text=Trade paused - party withheld.
+Wait for a fresh snapshot.
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TIMEOUT waiting for RX choose_mon nil [tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 34
+RESULT: FAIL (no choose_mon)

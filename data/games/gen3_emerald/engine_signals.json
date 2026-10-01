@@ -1,0 +1,1280 @@
+{
+  "evidence": "SOURCE_BYTE_PIN",
+  "live_verified": false,
+  "pack": "gen3_emerald",
+  "schema": "gen3-engine-signals-v1",
+  "sha256": "7a5e252ef149c295095e86241fc94884ecaf43980c68376e758ad444dd71ffde",
+  "titles": {
+    "emerald": {
+      "artifacts": {
+        "clean": {
+          "rom_md5": "605b89b67018abcea91e693a4dd25be3",
+          "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+          "sites": {
+            "battle_begin": {
+              "address": 134440800,
+              "capture_contract": "Entry, before MoveSaveBlocks_ResetHeap relocates the save blocks (first BL, 08076C2C). Emerald splits multi/recorded setup into CB2_InitBattleInternal and CB2_HandleStartMultiPartnerBattle, all reached from this one callback invocation; battle-type qualification and dedupe stay the consumer's duty.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B540F063FA20F0DFFB26F0D5FC28F0",
+                "rom_offset": 223072
+              },
+              "expected_hex": "00B540F063FA20F0DFFB26F0D5FC",
+              "function": {
+                "address": 134440800,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 116,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_InitBattle",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:2914",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 223072,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_main.c#L588-L617",
+              "symbol": "CB2_InitBattle"
+            },
+            "battle_end": {
+              "address": 134471652,
+              "capture_contract": "+0x78 is BL SetMainCallback2(gMain.savedCallback) on the completion branch, after inBattle is cleared (+0x44) and callback1 restored; the link-wait early return (+0x2C) bypasses it. R0 = the saved callback. Not an exp/evolution-settled checkpoint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B5204E306802252840002806D11E4C",
+                "rom_offset": 253808
+              },
+              "expected_hex": "08488068C2F7AAFA70BC01BC",
+              "function": {
+                "address": 134471536,
+                "anchor_offset": 116,
+                "capture_offset": 120,
+                "size": 168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReturnFromBattleToOverworld",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3017",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 253924,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_main.c#L5217-L5249",
+              "symbol": "ReturnFromBattleToOverworld"
+            },
+            "capture_wild": {
+              "address": 134571726,
+              "capture_contract": "Battle opcode 0xF0; +0x2A is immediately AFTER BL GiveMonToPlayer (+0x26; FR +0x24/+0x28, the Emerald prologue also saves R10). R0 = party/PC/failure result before the shift; R5 = &gBattlerAttacker, R8 = gEnemyParty, R9 = gBattlerPartyIndexes. Do not count failure as acquisition or emit twice with mon_given.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B557464E464546E0B419488146194D",
+                "rom_offset": 353960
+              },
+              "expected_hex": "14F0A1FE000600285CD0E4F0A0FD0006",
+              "function": {
+                "address": 134571688,
+                "anchor_offset": 38,
+                "capture_offset": 42,
+                "size": 424,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_givecaughtmon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3346",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R8",
+                "R9"
+              ],
+              "rom_offset": 353998,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_script_commands.c#L10055-L10083",
+              "symbol": "Cmd_givecaughtmon"
+            },
+            "evolve_species_store": {
+              "address": 135522762,
+              "capture_contract": "EVOSTATE_SET_MON_EVOLVED: +0x462 immediately after SetMonData(mon, MON_DATA_SPECIES) whose BL is +0x45E (evolution_scene.c:764). R9 = mon, R4 = task. Stats/re-nickname/dex follow; cancellation bypasses this state.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B54F464646C0B486B00006070E184A",
+                "rom_offset": 1303920
+              },
+              "expected_hex": "48460B212CF76DF948462AF79AF96189",
+              "function": {
+                "address": 135521648,
+                "anchor_offset": 1114,
+                "capture_offset": 1122,
+                "size": 3144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_EvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:11884",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 1305034,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/evolution_scene.c#L757-L771",
+              "symbol": "Task_EvolutionScene"
+            },
+            "faint": {
+              "address": 134519924,
+              "capture_contract": "Battle opcode 0x19. +0x11C follows the PLAYER faint-counter increment/store (+0x118..+0x11A, battle_script_commands.c:3010-3011); a saturated counter skips the store but reaches the same point. R7/R8 point at gActiveBattler (02024064). Snapshot battler/party identity now; consumer dedupes; not every entry is a faint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B0184802689178",
+                "rom_offset": 301916
+              },
+              "expected_hex": "0130087038780DF03BFA26E064400202",
+              "function": {
+                "address": 134519644,
+                "anchor_offset": 280,
+                "capture_offset": 284,
+                "size": 740,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_tryfaintmon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3111",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R8",
+                "R13"
+              ],
+              "rom_offset": 302196,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_script_commands.c#L2965-L3050",
+              "symbol": "Cmd_tryfaintmon"
+            },
+            "frame_control": {
+              "address": 134219036,
+              "capture_contract": "Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); it only runs gMain.callback1 then callback2. Capture the ENTRY: once per main-loop frame, before either callback. Frame control, not a game event. E2 CLIENT PRECONDITION: pret src/main.c#L171-L174 (UpdateLinkAndCallCallbacks) calls CallCallbacks only when !HandleLinkConnection(); during an active link exchange this site does not fire every frame. A client must not assume FR's help/save-failed gate, and must not assume this capture has FR's fixed one-hit-per-frame cadence.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "10B5074C2068002801D0E6F2D3FD6068",
+                "rom_offset": 1308
+              },
+              "expected_hex": "10B5074C2068002801D0E6F2D3FD6068",
+              "function": {
+                "address": 134219036,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 36,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CallCallbacks",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:1100",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1308,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/main.c#L188-L195",
+              "symbol": "CallCallbacks"
+            },
+            "hatch": {
+              "address": 134681942,
+              "capture_contract": "AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 464056
+              },
+              "expected_hex": "281CFDF7E4F9281CF7F7D5FB05B030BC",
+              "function": {
+                "address": 134681784,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3987",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 464214,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/egg_hatch.c#L358-L397",
+              "symbol": "AddHatchedMonToParty"
+            },
+            "map_load": {
+              "address": 134766596,
+              "capture_contract": "+0x14 is BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop (+0x04) finished the load. Emerald has no Quest Log branch, so this is the only path through CB2_LoadMap2 (FR +0x2C on its normal branch). CB2_LoadMap only schedules; other loaders stay uncovered.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B5064800F0D6FB00F0BCF90448FFF7",
+                "rom_offset": 548860
+              },
+              "expected_hex": "00F0BCF90448FFF73DFF04487AF796FA",
+              "function": {
+                "address": 134766588,
+                "anchor_offset": 8,
+                "capture_offset": 20,
+                "size": 40,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_LoadMap2",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4478",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 548868,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/overworld.c#L1582-L1588",
+              "symbol": "CB2_LoadMap2"
+            },
+            "mon_given": {
+              "address": 134657152,
+              "capture_contract": "Common POP at +0x76, after the party copy (R0=MON_GIVEN_TO_PARTY 0) or the CopyMonToPC return (R0=1 PC / 2 can't give). R6 = source mon. Callers: Cmd_givecaughtmon and ScriptGiveMon; caller context is required before classifying gift versus catch.",
+              "capture_offset": 10,
+              "context": {
+                "expected_hex": "70B5061C094C22680721FFF745FC2268",
+                "rom_offset": 439316
+              },
+              "expected_hex": "301C00F005F80006000E70BC02BC0847",
+              "function": {
+                "address": 134657044,
+                "anchor_offset": 108,
+                "capture_offset": 118,
+                "size": 124,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "GiveMonToPlayer",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3792",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13"
+              ],
+              "rom_offset": 439424,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon.c#L4425-L4445",
+              "symbol": "GiveMonToPlayer"
+            },
+            "pc_box_place": {
+              "address": 135061712,
+              "capture_contract": "Common epilogue +0x4C after the SetBoxMonAt call on the box path. The party path joins here too: REQUIRE R6<14 and R7<30. Do not duplicate pc_deposit.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 843916
+              },
+              "expected_hex": "301C391C03F020FFF0BC01BC0047",
+              "function": {
+                "address": 135061644,
+                "anchor_offset": 68,
+                "capture_offset": 76,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8024",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 843984,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6365-L6376",
+              "symbol": "SetPlacedMonData"
+            },
+            "pc_deposit": {
+              "address": 135062034,
+              "capture_contract": "Called by the deposit menu (pokemon_storage_system.c:2872). +0x7E is the common POP (FR +0x80: the Emerald sStorage load is one instruction shorter) with R0 bool, R6 box and R4 slot<<24 on success. Requires R0==1.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B50006060E301CF8F716FF0004040C",
+                "rom_offset": 844188
+              },
+              "expected_hex": "012139F7C8FF012070BC02BC0847",
+              "function": {
+                "address": 135061916,
+                "anchor_offset": 118,
+                "capture_offset": 126,
+                "size": 144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TryStorePartyMonInBox",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8027",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R6"
+              ],
+              "rom_offset": 844306,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6400-L6424",
+              "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 134657324,
+              "capture_contract": "CopyMonToPC (the FR SendMonToPC, renamed and static) called by GiveMonToPlayer; +0xA0 is the common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only on success; R8 source mon. Acquisition-to-storage, not every PC menu operation.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5474680B480461A4832F0FBF80006",
+                "rom_offset": 439440
+              },
+              "expected_hex": "BFD1022008BC9846F0BC02BC0847",
+              "function": {
+                "address": 134657168,
+                "anchor_offset": 156,
+                "capture_offset": 160,
+                "size": 170,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CopyMonToPC",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3793",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R6",
+                "R8"
+              ],
+              "rom_offset": 439596,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon.c#L4447-L4479",
+              "symbol": "CopyMonToPC"
+            },
+            "pc_release": {
+              "address": 135062288,
+              "capture_contract": "+0x3E after PurgeMonOrBoxMon (BL +0x3A), before the display refresh. One confirmed release; resolve the key from the pc_release_begin snapshot.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+                "rom_offset": 844504
+              },
+              "expected_hex": "101CFFF7E9FE00F013FC01BC0047",
+              "function": {
+                "address": 135062232,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8031",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13"
+              ],
+              "rom_offset": 844560,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6460-L6479",
+              "symbol": "ReleaseMon"
+            },
+            "pc_release_begin": {
+              "address": 135062232,
+              "capture_contract": "ReleaseMon entry, called after confirmation (pokemon_storage_system.c:2958). Capture the pre-removal identity before the purge; pairs with pc_release.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+                "rom_offset": 844504
+              },
+              "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+              "function": {
+                "address": 135062232,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8031",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13",
+                "R14"
+              ],
+              "rom_offset": 844504,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6460-L6479",
+              "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 135061674,
+              "capture_contract": "Party branch: +0x24 after memcpy(gPlayerParty[position], movingMon, 100), before the branch to the epilogue. R6=14, R7=party destination. Correlate moving-mon origin before emitting box_to_party.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 843916
+              },
+              "expected_hex": "64221BF292F912E0",
+              "function": {
+                "address": 135061644,
+                "anchor_offset": 30,
+                "capture_offset": 36,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8024",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 843946,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6365-L6376",
+              "symbol": "SetPlacedMonData"
+            },
+            "poison_faint": {
+              "address": 135239562,
+              "capture_contract": "+0x4E immediately after SetMonData(MON_DATA_HP) (field_poison.c:137). R4 = mon, [R13] = new HP. REQUIRE new HP==0 AND paired old HP>0; one edge per newly fainted mon.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 1021764
+              },
+              "expected_hex": "39216A4671F78DFA01376434013D002D",
+              "function": {
+                "address": 135239492,
+                "anchor_offset": 70,
+                "capture_offset": 78,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:9398",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R13",
+                "R5"
+              ],
+              "rom_offset": 1021834,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/field_poison.c#L120-L154",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "poison_hp_before": {
+              "address": 135239540,
+              "capture_contract": "+0x34 after GetMonData(MON_DATA_HP) (field_poison.c:133), before the stack store/decrement. R0 = old HP, R4 = mon. Pair with poison_faint by pointer and iteration.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 1021764
+              },
+              "expected_hex": "70F7D0FE0090002803D00138",
+              "function": {
+                "address": 135239492,
+                "anchor_offset": 48,
+                "capture_offset": 52,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:9398",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "rom_offset": 1021812,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/field_poison.c#L120-L154",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "save": {
+              "address": 135607152,
+              "capture_contract": "Common POP at +0x3E before R5 is restored: require R0==1 (SAVE_STATUS_OK) AND R5==SAVE_NORMAL(0). One observation per invocation; not every call is a full save.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "30B50006050E09480468012C09D1281C",
+                "rom_offset": 1389368
+              },
+              "expected_hex": "02480480012030BC02BC084794620003",
+              "function": {
+                "address": 135607096,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 72,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TrySavingData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:12429",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R13"
+              ],
+              "rom_offset": 1389424,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/save.c#L765-L785",
+              "symbol": "TrySavingData"
+            },
+            "trade_begin": {
+              "address": 134722768,
+              "capture_contract": "TradeMons entry: R0 player slot, R1 partner slot, pre-swap identities. Callers: the in-game cable/wireless animations (trade.c:3874, :4371) and the link path (:4633).",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B00C1C0006000E",
+                "rom_offset": 505040
+              },
+              "expected_hex": "F0B54F464646C0B481B00C1C0006000E",
+              "function": {
+                "address": 134722768,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4230",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R1",
+                "R14"
+              ],
+              "rom_offset": 505040,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/trade.c#L3102-L3130",
+              "symbol": "TradeMons"
+            },
+            "trade_done": {
+              "address": 134722954,
+              "capture_contract": "TradeMons +0xBE before stack restoration: both party/enemy copies and mail/dex updates are done. RECORD-SWAP completion, NOT scene/evolution completion; use trade_begin for the old key.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B00C1C0006000E",
+                "rom_offset": 505040
+              },
+              "expected_hex": "FFF79BFF01B018BC9846A146F0BC01BC",
+              "function": {
+                "address": 134722768,
+                "anchor_offset": 186,
+                "capture_offset": 190,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4230",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R9",
+                "R5"
+              ],
+              "rom_offset": 505226,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/trade.c#L3102-L3130",
+              "symbol": "TradeMons"
+            },
+            "trade_evolve_species_store": {
+              "address": 135525664,
+              "capture_contract": "T_EVOSTATE_SET_MON_EVOLVED: +0x370 after the SetMonData species BL at +0x36C (evolution_scene.c:1183). R9 = mon (FR used R8), R4 = task. Correlate the trade lease to suppress an ordinary key_change during SLink apply.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B54F464646C0B486B00006070E0C4B",
+                "rom_offset": 1307064
+              },
+              "expected_hex": "48460B212BF7C2FB484629F7EFFB6189",
+              "function": {
+                "address": 135524792,
+                "anchor_offset": 872,
+                "capture_offset": 880,
+                "size": 2848,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_TradeEvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:11885",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 1307936,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/evolution_scene.c#L1176-L1190",
+              "symbol": "Task_TradeEvolutionScene"
+            },
+            "whiteout": {
+              "address": 134766496,
+              "capture_contract": "+0x54 is BL SetMainCallback2(CB2_Overworld) on the ++gMain.state >= 120 completion branch (FR +0x5A). The party is already healed by DoWhiteOut (+0x26); a completion marker, not an HP-at-faint witness.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B581B016498720C000091808780130",
+                "rom_offset": 548696
+              },
+              "expected_hex": "00F0EEF90748FFF76FFF07487AF7C8FA",
+              "function": {
+                "address": 134766424,
+                "anchor_offset": 72,
+                "capture_offset": 84,
+                "size": 116,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_WhiteOut",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4476",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 548768,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/overworld.c#L1550-L1570",
+              "symbol": "CB2_WhiteOut"
+            }
+          }
+        },
+        "companion": {
+          "production": true,
+          "rom_md5": "bca9de3751315fb126cf348a74cfae88",
+          "rom_sha1": "2eef703ca448df5d782d16490cf2608803a7ef13",
+          "sites": {
+            "battle_begin": {
+              "address": 134440800,
+              "capture_contract": "Entry, before MoveSaveBlocks_ResetHeap relocates the save blocks (first BL, 08076C2C). Emerald splits multi/recorded setup into CB2_InitBattleInternal and CB2_HandleStartMultiPartnerBattle, all reached from this one callback invocation; battle-type qualification and dedupe stay the consumer's duty.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B540F063FA20F0DFFB26F0D5FC28F0",
+                "rom_offset": 223072
+              },
+              "expected_hex": "00B540F063FA20F0DFFB26F0D5FC",
+              "function": {
+                "address": 134440800,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 116,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_InitBattle",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:2914",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 223072,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_main.c#L588-L617",
+              "symbol": "CB2_InitBattle"
+            },
+            "battle_end": {
+              "address": 134471652,
+              "capture_contract": "+0x78 is BL SetMainCallback2(gMain.savedCallback) on the completion branch, after inBattle is cleared (+0x44) and callback1 restored; the link-wait early return (+0x2C) bypasses it. R0 = the saved callback. Not an exp/evolution-settled checkpoint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B5204E306802252840002806D11E4C",
+                "rom_offset": 253808
+              },
+              "expected_hex": "08488068C2F7AAFA70BC01BC",
+              "function": {
+                "address": 134471536,
+                "anchor_offset": 116,
+                "capture_offset": 120,
+                "size": 168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReturnFromBattleToOverworld",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3017",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 253924,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_main.c#L5217-L5249",
+              "symbol": "ReturnFromBattleToOverworld"
+            },
+            "capture_wild": {
+              "address": 134571726,
+              "capture_contract": "Battle opcode 0xF0; +0x2A is immediately AFTER BL GiveMonToPlayer (+0x26; FR +0x24/+0x28, the Emerald prologue also saves R10). R0 = party/PC/failure result before the shift; R5 = &gBattlerAttacker, R8 = gEnemyParty, R9 = gBattlerPartyIndexes. Do not count failure as acquisition or emit twice with mon_given.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B557464E464546E0B419488146194D",
+                "rom_offset": 353960
+              },
+              "expected_hex": "14F0A1FE000600285CD0E4F0A0FD0006",
+              "function": {
+                "address": 134571688,
+                "anchor_offset": 38,
+                "capture_offset": 42,
+                "size": 424,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_givecaughtmon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3346",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R8",
+                "R9"
+              ],
+              "rom_offset": 353998,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_script_commands.c#L10055-L10083",
+              "symbol": "Cmd_givecaughtmon"
+            },
+            "evolve_species_store": {
+              "address": 135522762,
+              "capture_contract": "EVOSTATE_SET_MON_EVOLVED: +0x462 immediately after SetMonData(mon, MON_DATA_SPECIES) whose BL is +0x45E (evolution_scene.c:764). R9 = mon, R4 = task. Stats/re-nickname/dex follow; cancellation bypasses this state.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B54F464646C0B486B00006070E184A",
+                "rom_offset": 1303920
+              },
+              "expected_hex": "48460B212CF76DF948462AF79AF96189",
+              "function": {
+                "address": 135521648,
+                "anchor_offset": 1114,
+                "capture_offset": 1122,
+                "size": 3144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_EvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:11884",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 1305034,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/evolution_scene.c#L757-L771",
+              "symbol": "Task_EvolutionScene"
+            },
+            "faint": {
+              "address": 134519924,
+              "capture_contract": "Battle opcode 0x19. +0x11C follows the PLAYER faint-counter increment/store (+0x118..+0x11A, battle_script_commands.c:3010-3011); a saturated counter skips the store but reaches the same point. R7/R8 point at gActiveBattler (02024064). Snapshot battler/party identity now; consumer dedupes; not every entry is a faint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B0184802689178",
+                "rom_offset": 301916
+              },
+              "expected_hex": "0130087038780DF03BFA26E064400202",
+              "function": {
+                "address": 134519644,
+                "anchor_offset": 280,
+                "capture_offset": 284,
+                "size": 740,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_tryfaintmon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3111",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R8",
+                "R13"
+              ],
+              "rom_offset": 302196,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/battle_script_commands.c#L2965-L3050",
+              "symbol": "Cmd_tryfaintmon"
+            },
+            "frame_control": {
+              "address": 134219036,
+              "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B184755F6E30801D0E6F2D3FD6068",
+                "rom_offset": 1308
+              },
+              "expected_hex": "004B184755F6E30801D0E6F2D3FD6068",
+              "function": {
+                "address": 134219036,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 36,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CallCallbacks",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:1100",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1308,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/main.c#L188-L195",
+              "symbol": "CallCallbacks"
+            },
+            "hatch": {
+              "address": 134681942,
+              "capture_contract": "AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 464056
+              },
+              "expected_hex": "281CFDF7E4F9281CF7F7D5FB05B030BC",
+              "function": {
+                "address": 134681784,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3987",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 464214,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/egg_hatch.c#L358-L397",
+              "symbol": "AddHatchedMonToParty"
+            },
+            "map_load": {
+              "address": 134766596,
+              "capture_contract": "+0x14 is BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop (+0x04) finished the load. Emerald has no Quest Log branch, so this is the only path through CB2_LoadMap2 (FR +0x2C on its normal branch). CB2_LoadMap only schedules; other loaders stay uncovered.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B5064800F0D6FB00F0BCF90448FFF7",
+                "rom_offset": 548860
+              },
+              "expected_hex": "00F0BCF90448FFF73DFF04487AF796FA",
+              "function": {
+                "address": 134766588,
+                "anchor_offset": 8,
+                "capture_offset": 20,
+                "size": 40,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_LoadMap2",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4478",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 548868,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/overworld.c#L1582-L1588",
+              "symbol": "CB2_LoadMap2"
+            },
+            "mon_given": {
+              "address": 134657152,
+              "capture_contract": "Common POP at +0x76, after the party copy (R0=MON_GIVEN_TO_PARTY 0) or the CopyMonToPC return (R0=1 PC / 2 can't give). R6 = source mon. Callers: Cmd_givecaughtmon and ScriptGiveMon; caller context is required before classifying gift versus catch.",
+              "capture_offset": 10,
+              "context": {
+                "expected_hex": "70B5061C094C22680721FFF745FC2268",
+                "rom_offset": 439316
+              },
+              "expected_hex": "301C00F005F80006000E70BC02BC0847",
+              "function": {
+                "address": 134657044,
+                "anchor_offset": 108,
+                "capture_offset": 118,
+                "size": 124,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "GiveMonToPlayer",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3792",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13"
+              ],
+              "rom_offset": 439424,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon.c#L4425-L4445",
+              "symbol": "GiveMonToPlayer"
+            },
+            "pc_box_place": {
+              "address": 135061712,
+              "capture_contract": "Common epilogue +0x4C after the SetBoxMonAt call on the box path. The party path joins here too: REQUIRE R6<14 and R7<30. Do not duplicate pc_deposit.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 843916
+              },
+              "expected_hex": "301C391C03F020FFF0BC01BC0047",
+              "function": {
+                "address": 135061644,
+                "anchor_offset": 68,
+                "capture_offset": 76,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8024",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 843984,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6365-L6376",
+              "symbol": "SetPlacedMonData"
+            },
+            "pc_deposit": {
+              "address": 135062034,
+              "capture_contract": "Called by the deposit menu (pokemon_storage_system.c:2872). +0x7E is the common POP (FR +0x80: the Emerald sStorage load is one instruction shorter) with R0 bool, R6 box and R4 slot<<24 on success. Requires R0==1.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B50006060E301CF8F716FF0004040C",
+                "rom_offset": 844188
+              },
+              "expected_hex": "012139F7C8FF012070BC02BC0847",
+              "function": {
+                "address": 135061916,
+                "anchor_offset": 118,
+                "capture_offset": 126,
+                "size": 144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TryStorePartyMonInBox",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8027",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R6"
+              ],
+              "rom_offset": 844306,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6400-L6424",
+              "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 134657324,
+              "capture_contract": "CopyMonToPC (the FR SendMonToPC, renamed and static) called by GiveMonToPlayer; +0xA0 is the common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only on success; R8 source mon. Acquisition-to-storage, not every PC menu operation.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5474680B480461A4832F0FBF80006",
+                "rom_offset": 439440
+              },
+              "expected_hex": "BFD1022008BC9846F0BC02BC0847",
+              "function": {
+                "address": 134657168,
+                "anchor_offset": 156,
+                "capture_offset": 160,
+                "size": 170,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CopyMonToPC",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3793",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R6",
+                "R8"
+              ],
+              "rom_offset": 439596,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon.c#L4447-L4479",
+              "symbol": "CopyMonToPC"
+            },
+            "pc_release": {
+              "address": 135062288,
+              "capture_contract": "+0x3E after PurgeMonOrBoxMon (BL +0x3A), before the display refresh. One confirmed release; resolve the key from the pc_release_begin snapshot.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+                "rom_offset": 844504
+              },
+              "expected_hex": "101CFFF7E9FE00F013FC01BC0047",
+              "function": {
+                "address": 135062232,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8031",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13"
+              ],
+              "rom_offset": 844560,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6460-L6479",
+              "symbol": "ReleaseMon"
+            },
+            "pc_release_begin": {
+              "address": 135062232,
+              "capture_contract": "ReleaseMon entry, called after confirmation (pokemon_storage_system.c:2958). Capture the pre-removal identity before the purge; pairs with pc_release.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+                "rom_offset": 844504
+              },
+              "expected_hex": "00B5FDF7A1FE03490878002804D00020",
+              "function": {
+                "address": 135062232,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8031",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13",
+                "R14"
+              ],
+              "rom_offset": 844504,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6460-L6479",
+              "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 135061674,
+              "capture_contract": "Party branch: +0x24 after memcpy(gPlayerParty[position], movingMon, 100), before the branch to the epilogue. R6=14, R7=party destination. Correlate moving-mon origin before emitting box_to_party.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 843916
+              },
+              "expected_hex": "64221BF292F912E0",
+              "function": {
+                "address": 135061644,
+                "anchor_offset": 30,
+                "capture_offset": 36,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:8024",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 843946,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/pokemon_storage_system.c#L6365-L6376",
+              "symbol": "SetPlacedMonData"
+            },
+            "poison_faint": {
+              "address": 135239562,
+              "capture_contract": "+0x4E immediately after SetMonData(MON_DATA_HP) (field_poison.c:137). R4 = mon, [R13] = new HP. REQUIRE new HP==0 AND paired old HP>0; one edge per newly fainted mon.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 1021764
+              },
+              "expected_hex": "39216A4671F78DFA01376434013D002D",
+              "function": {
+                "address": 135239492,
+                "anchor_offset": 70,
+                "capture_offset": 78,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:9398",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R13",
+                "R5"
+              ],
+              "rom_offset": 1021834,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/field_poison.c#L120-L154",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "poison_hp_before": {
+              "address": 135239540,
+              "capture_contract": "+0x34 after GetMonData(MON_DATA_HP) (field_poison.c:133), before the stack store/decrement. R0 = old HP, R4 = mon. Pair with poison_faint by pointer and iteration.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 1021764
+              },
+              "expected_hex": "70F7D0FE0090002803D00138",
+              "function": {
+                "address": 135239492,
+                "anchor_offset": 48,
+                "capture_offset": 52,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:9398",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "rom_offset": 1021812,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/field_poison.c#L120-L154",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "save": {
+              "address": 135607152,
+              "capture_contract": "Common POP at +0x3E before R5 is restored: require R0==1 (SAVE_STATUS_OK) AND R5==SAVE_NORMAL(0). One observation per invocation; not every call is a full save.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "30B50006050E09480468012C09D1281C",
+                "rom_offset": 1389368
+              },
+              "expected_hex": "02480480012030BC02BC084794620003",
+              "function": {
+                "address": 135607096,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 72,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TrySavingData",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:12429",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R13"
+              ],
+              "rom_offset": 1389424,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/save.c#L765-L785",
+              "symbol": "TrySavingData"
+            },
+            "trade_begin": {
+              "address": 134722768,
+              "capture_contract": "TradeMons entry: R0 player slot, R1 partner slot, pre-swap identities. Callers: the in-game cable/wireless animations (trade.c:3874, :4371) and the link path (:4633).",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B1847E1D4E30881B00C1C0006000E",
+                "rom_offset": 505040
+              },
+              "expected_hex": "004B1847E1D4E30881B00C1C0006000E",
+              "function": {
+                "address": 134722768,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4230",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R1",
+                "R14"
+              ],
+              "rom_offset": 505040,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/trade.c#L3102-L3130",
+              "symbol": "TradeMons"
+            },
+            "trade_done": {
+              "address": 134722954,
+              "capture_contract": "TradeMons +0xBE before stack restoration: both party/enemy copies and mail/dex updates are done. RECORD-SWAP completion, NOT scene/evolution completion; use trade_begin for the old key.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "004B1847E1D4E30881B00C1C0006000E",
+                "rom_offset": 505040
+              },
+              "expected_hex": "FFF79BFF01B018BC9846A146F0BC01BC",
+              "function": {
+                "address": 134722768,
+                "anchor_offset": 186,
+                "capture_offset": 190,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4230",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R9",
+                "R5"
+              ],
+              "rom_offset": 505226,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/trade.c#L3102-L3130",
+              "symbol": "TradeMons"
+            },
+            "trade_evolve_species_store": {
+              "address": 135525664,
+              "capture_contract": "T_EVOSTATE_SET_MON_EVOLVED: +0x370 after the SetMonData species BL at +0x36C (evolution_scene.c:1183). R9 = mon (FR used R8), R4 = task. Correlate the trade lease to suppress an ordinary key_change during SLink apply.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B54F464646C0B486B00006070E0C4B",
+                "rom_offset": 1307064
+              },
+              "expected_hex": "48460B212BF7C2FB484629F7EFFB6189",
+              "function": {
+                "address": 135524792,
+                "anchor_offset": 872,
+                "capture_offset": 880,
+                "size": 2848,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_TradeEvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:11885",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 1307936,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/evolution_scene.c#L1176-L1190",
+              "symbol": "Task_TradeEvolutionScene"
+            },
+            "whiteout": {
+              "address": 134766496,
+              "capture_contract": "+0x54 is BL SetMainCallback2(CB2_Overworld) on the ++gMain.state >= 120 completion branch (FR +0x5A). The party is already healed by DoWhiteOut (+0x26); a completion marker, not an HP-at-faint witness.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B581B016498720C000091808780130",
+                "rom_offset": 548696
+              },
+              "expected_hex": "00F0EEF90748FFF76FFF07487AF7C8FA",
+              "function": {
+                "address": 134766424,
+                "anchor_offset": 72,
+                "capture_offset": 84,
+                "size": 116,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_WhiteOut",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:4476",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 548768,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/overworld.c#L1550-L1570",
+              "symbol": "CB2_WhiteOut"
+            }
+          }
+        }
+      }
+    }
+  }
+}

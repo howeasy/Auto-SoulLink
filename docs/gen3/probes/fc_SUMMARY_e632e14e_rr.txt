@@ -1,0 +1,22 @@
+# INCOMPLETE frozen RR run: 14/28 rows completed. Trade selection canceled; coordinator terminated owned process after retaining exact failure. Remaining rows UNRUN.
+# G4 final cut e632e14efc24f29164004956313ddb54bcecc4e2 -- tools/gen3_final_cut.py summary (written 2026-10-01T01:49:48Z)
+# RUN 13 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_gen3_rr_as_a_e632e14e.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_e632e14e.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_e632e14e.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_e632e14e.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_e632e14e.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_link_gen3_rr_as_a_e632e14e.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_deadzone_gen3_rr_as_a_e632e14e.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_reconnect_gen3_rr_as_a_e632e14e.txt |
+| 9 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_e632e14e.txt |
+| 10 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_gen3_rr_as_a_e632e14e.txt |
+| 11 | rival_swap_real_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_real_gen3_rr_as_a_e632e14e.txt |
+| 12 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_native_absent_gen3_rr_as_a_e632e14e.txt |
+| 13 | trade_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_trade_gen3_rr_as_a_e632e14e.txt |
+| 14 | release_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_release_gen3_rr_as_a_e632e14e.txt |
+
+COMPLETED SUBSET: FAIL (13/14 rows)

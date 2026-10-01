@@ -1,0 +1,74 @@
+{
+  "artifacts": {
+    "a_result.txt": {
+      "bytes": 11558,
+      "sha256": "af2a0aea6cb8ec695e22edb043a83066be396b836e9e19929fdae9e558d30074",
+      "source": "C:\\slink-wt\\journal-probe-lane\\patch\\build\\e2e_trade_lock_probe_gen3_a_result.txt"
+    },
+    "b_result.txt": {
+      "bytes": 9696,
+      "sha256": "206799da3f4c88fd98b9e07bfae76e61a9db9a460481397418c8c90c9678176b",
+      "source": "C:\\slink-wt\\journal-probe-lane\\patch\\build\\e2e_trade_lock_probe_gen3_b_result.txt"
+    },
+    "events.json": {
+      "bytes": 1980,
+      "sha256": "88690b802df041b58e39d71d709622613386effb0f994bd72d54c04662149b61",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\events.json"
+    },
+    "guard_held.txt": {
+      "bytes": 122,
+      "sha256": "2ca5609661dfb2a5bc91cf1d88caa7046dbf7ac0350ee4cd9fef32b066150143",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\journal_guard_held.txt"
+    },
+    "guard_release.txt": {
+      "bytes": 9,
+      "sha256": "4e849abdc801751949bcd426f3a46ebe35fce480733d743d97b57118b044195d",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\journal_guard_release.txt"
+    },
+    "journal.guard": {
+      "bytes": 36,
+      "sha256": "599b7f318f76c9e399578355cee943d81e485c3dc26860df1d6d11eedc5759b6",
+      "source": "C:\\slink-wt\\journal-probe-lane\\slink_gen3_trade.guard"
+    },
+    "journal.log": {
+      "bytes": 1191,
+      "sha256": "7c3141909732187d11ef77650a8e384e7339d5f7ba336ebbddd757859c857b52",
+      "source": "C:\\slink-wt\\journal-probe-lane\\slink_gen3_trade.log"
+    },
+    "links.json": {
+      "bytes": 2695,
+      "sha256": "0ee10657ec5a85164da6266d5be0ef8950ad7dca7b2c7947d2f00cb5e123bbfd",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\links.json"
+    },
+    "pydec_result.txt": {
+      "bytes": 3675,
+      "sha256": "2118b10aacc7fca9dd75ff5344827a44f41cb480df24b58bb9687c8f581f40dc",
+      "source": "C:\\slink-wt\\journal-probe-lane\\patch\\build\\e2e_trade_lock_probe_gen3_pydec_result.txt"
+    },
+    "runner.log": {
+      "bytes": 4879,
+      "sha256": "78e15ce6aa9231fd7c914c19cda6abcbbe04e8994150da43a856970d8d4c31f7",
+      "source": "C:\\slink-wt\\journal-probe-first.log"
+    },
+    "server.log": {
+      "bytes": 3946,
+      "sha256": "78e8b7cb5538ae6798dd36d57f97f6b77acf1868aa7c55359e0be06a6baaaef4",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\server.log"
+    },
+    "slink.log": {
+      "bytes": 4450,
+      "sha256": "dd36bd5e2610a8b18eb62695dd8881b8c21b5c2439b8704267c44c1b02ea2f2c",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd\\slink.log"
+    }
+  },
+  "command": "python tools/e2e_duo.py --game gen3_rr --scenario trade_lock_probe_gen3 --lane journal-probe --keep-data",
+  "guard_path": "C:\\slink-wt\\journal-probe-lane\\slink_gen3_trade.guard",
+  "kind": "DEVELOPMENT_PHYSICAL_PROBE_NOT_FINAL_CUT",
+  "result": "EXIT=0; a=PASS; b=PASS; PYDEC=PASS",
+  "rom_sha1": "da579690db7d6933a0952a1f490312842793f71a",
+  "root": "C:\\slink-wt\\journal-probe-lane",
+  "scope": "Physical OS guard read contention, hidden and recovered party ticks in the same client sessions, ordinary RR native trade and terminal retirement. Forced busy terminal/save-proof callers have MODEL and installed CLR primitive evidence only.",
+  "server_data_dir": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_lock_probe_gen3_j5qsoxcd",
+  "source_commit": "ec6d1325fb4d20456768e06e069e2d1f0c7e3c45",
+  "state_dir": "C:/slink-wt/journal-probe-state"
+}

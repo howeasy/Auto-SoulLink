@@ -1,0 +1,31 @@
+# gen3_final_cut row=unit_emerald item=§13.1_source cut=c04420a95ea4f535d6bc1fe5bccadea7ce981645
+# lane=C:/slink-wt/g3-lane2
+# command: python -m pytest tests/unit/test_gen3_codec_emerald.py tests/unit/test_gen3_emerald_areas.py tests/unit/test_gen3_emerald_badges.py tests/unit/test_gen3_emerald_checkpoint.py tests/unit/test_gen3_emerald_client.py tests/unit/test_gen3_emerald_entry.py tests/unit/test_gen3_emerald_fixture_qualify.py tests/unit/test_gen3_emerald_moves_items.py tests/unit/test_gen3_emerald_pack.py tests/unit/test_gen3_emerald_play_legs.py tests/unit/test_gen3_emerald_server.py tests/unit/test_gen3_fixture_qualify_emerald.py tests/unit/test_gen3_title_syms.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane2)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T18:53:21 cpu=69% emuhawk=1 python=9
+start_utc=2026-09-27T22:53:19Z tracked_clean_before=True
+........................................................................ [ 21%]
+........................................................................ [ 42%]
+...F.................................................................... [ 63%]
+........................................................................ [ 84%]
+....................................................                     [100%]
+================================== FAILURES ===================================
+___________________ test_profile_regenerates_byte_identical ___________________
+
+    def test_profile_regenerates_byte_identical():
+        from tools import gen_gen3_profile as gen
+    
+>       assert gen.render(gen.build_emerald()) == (PACK / "profile.json").read_text(encoding="utf-8")
+E       assert '{\n  "genera...  }\n  }\n}\n' == '{\n  "genera...  }\n  }\n}\n'
+E         
+E         Skipping 21826 identical leading characters in diff, use -v to show
+E         Skipping 29949 identical trailing characters in diff, use -v to show
+E         - sha256": "db628e307a1309c056a1c2a184f2f1f11c263bf9ad53dd140ac170475306bf42",
+E         + sha256": "47d6ead69d37cb6c816ddb406bb73f05a2392508a3197affd837aa9c0efa7339",
+
+tests\unit\test_gen3_emerald_pack.py:69: AssertionError
+1 failed, 339 passed in 20.41s
+exit=1 end_utc=2026-09-27T22:53:43Z tracked_clean_after=True classification=real

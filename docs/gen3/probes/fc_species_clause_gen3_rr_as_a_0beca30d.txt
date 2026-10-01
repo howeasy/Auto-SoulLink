@@ -1,0 +1,149 @@
+# gen3_final_cut row=species_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+# lane=C:/slink-wt/g3-core
+# command: python tools/e2e_duo.py --game gen3_rr --scenario species_clause_gen3   (cwd=C:/slink-wt/g3-core)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-29T22:09:47 cpu=9% emuhawk=0 python=4
+start_utc=2026-09-30T02:09:45Z tracked_clean_before=True
+
+========== scenario: species_clause_gen3 ==========
+[duo] species_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58170 http=58171 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 13.7s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_xn_5o3_z
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58193 http=58194 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc
+[duo] timing server 0.5s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=2 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=2 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 14.5s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_dagyk0mc
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 3 of 8
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58205 http=58206 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp
+[duo] timing server 0.5s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=3 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=3 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 12.3s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_jxdrm5bp
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 4 of 8
+[duo] JITTER requested=111 attempt=4
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58215 http=58216 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t
+[duo] timing server 0.5s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=4 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=4 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 12.9s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_t5wks51t
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 5 of 8
+[duo] JITTER requested=148 attempt=5
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58226 http=58227 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12
+[duo] timing server 0.5s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=5 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12 path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=5 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12 path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 13.7s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_owlj5o12
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 6 of 8
+[duo] JITTER requested=185 attempt=6
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=0beca30d5ccbc0807ae9e06f55adbc3324446cd3
+[duo] server up: tcp=58238 http=58239 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_p_w9hyes
+[duo] timing server 0.5s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=6 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_p_w9hyes path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_p_w9hyes\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=6 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_p_w9hyes path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_p_w9hyes\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 34.4s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=f93780aa9195646d7f19182514f5a544dc4a7db603f9a4a3be4cdf36483a6f0e file=f93780aa9195646d7f19182514f5a544dc4a7db603f9a4a3be4cdf36483a6f0e match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=a79a878cc598bae2b61b2f4cf862f75def206a82b95d77ec3acb6ef7b453340f file=a79a878cc598bae2b61b2f4cf862f75def206a82b95d77ec3acb6ef7b453340f match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=b native_grant=0
+[duo] link: 272AACD9:2BDDC8BF <-> 661F23F4:D4223740 alive on route_1 and saved once in each party
+[duo] species: alive pair after 1 native rerolls
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] species_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  species_clause_gen3: PASS (attempt 6 of 8)
+exit=0 end_utc=2026-09-30T02:11:42Z tracked_clean_after=True classification=pass

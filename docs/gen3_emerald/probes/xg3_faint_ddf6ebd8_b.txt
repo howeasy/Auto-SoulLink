@@ -1,0 +1,73 @@
+duo instance b scenario=linked_faint_active_gen3 phase=initial title=emerald_expansion_28877d73 attempt=1
+SYMS_ABSENT emerald_expansion_28877d73 Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder,gActiveBattler,gStatuses3
+TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)
+[client] [SLink] TCP connecting to 127.0.0.1:60822 (non-blocking)…
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+[client] [SLink-gen3] pack has no valid gift_areas.ids: every area treated as a gift area (no banner, no no_catch)
+[client] [SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player b -> 127.0.0.1:60822 (rom 28877d73)
+client built by lua/gen3/run.lua: title=emerald_expansion_28877d73 player=b -> 127.0.0.1:60822
+[client] [SLink] TCP connected to 127.0.0.1:60822
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_id":3
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+booted frame=610 map=map=10 at=(6,17) balls=5
+JITTER requested=37 applied=37 attempt=1
+TX area_enter - {"area_id":"route_103","event":"area_enter","loc_name":"route103","player":"b","seq":18}
+READY_ACTIVE 4D55444B:DFDAF6DA case=wild
+RX force_faint key=4D55444B:DFDAF6DA
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 23852
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 23852
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 23852
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 23852
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 23852
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 23852
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 23852
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 23852
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 23852
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 23852
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 23852
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 23852
+RX memorialize key=4D55444B:DFDAF6DA
+RX game_over
+[client] [SLink-gen3] write battle_commit 0x0200054E +1 frame 23852
+[client] [SLink-gen3] write battle_commit 0x02000562 +1 frame 23852
+[client] [SLink-gen3] write battle_commit 0x0200029C +1 frame 23852
+[client] [SLink-gen3] write battle_commit 0x02000134 +1 frame 23852
+[client] [SLink-gen3] write battle_commit 0x030023EC +4 frame 23852
+[client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 4D55444B:DFDAF6DA
+ACTIVE_COMMIT 4D55444B:DFDAF6DA frame=23852 writes=5 attempted=38 handoff=1 status3=0x80 ctrl=0x0805A209 counter=0 last_move=0 pp=35/40/0/0 why="active faint committed" case=wild
+HANDOFF 4D55444B:DFDAF6DA from=0x0805A209 to=0x08059DB1 frames=1 exec_bit0=0
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/xg3-ddf6-verify/lua/gen3/safety.lua:105: forbidden state: callback1); force_faint (C:/slink-wt/xg3-ddf6-verify/lua/gen3/safety.lua:213: forbidden state: battle_main_func)
+ACTIVE_KO 4D55444B:DFDAF6DA frame=24622 in_battle=1 battle_hp=0 status3=0x0 pp=35/40/0/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=38 case=wild
+FORCED_HP0 4D55444B:DFDAF6DA frame=24622 in_battle=1 battler=1
+XG3_FAINT_HOOK frame=24622 r4=0 counter=1 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=24622 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+ACTIVE_FAINT_SITE 4D55444B:DFDAF6DA frame=24622 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/xg3-ddf6-verify/lua/gen3/safety.lua:105: forbidden state: callback1)
+SENT_OUT slot=1 battler_slot=1
+TX safe - {"event":"safe","player":"b","seq":834}
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/xg3-ddf6-verify/lua/gen3/safety.lua:105: forbidden state: callback2)
+[client] [SLink-gen3] write overworld 0x0200F328 +80 frame 25523
+[client] [SLink-gen3] write overworld 0x02031B64 +100 frame 25523
+[client] [SLink-gen3] write overworld 0x02031BC8 +100 frame 25523
+[client] [SLink-gen3] write overworld 0x02031B54 +1 frame 25523
+XG3_MEMORIAL_SOURCE 4D55444B:DFDAF6DA frame=25523 slot=0 hp=0 max_hp=20 attempted=281
+TX memorialize_done 4D55444B:DFDAF6DA {"box":13,"event":"memorialize_done","key":"4D55444B:DFDAF6DA","player":"b","seq":836}
+ACTIVE_OUTCOME 4D55444B:DFDAF6DA outcome=4 sent_out=1 whiteout_tx=0
+[client] [gen3] phase save-menu frame=25644 counter=3
+[client] [gen3] phase save-dialog frame=25704 row=3/6
+[client] [gen3] phase saved frame=26104 counter=3->4
+SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=26305 counter=4
+SAVE_WITNESS linked_faint_active counter=3->4
+WRITES 21
+RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))

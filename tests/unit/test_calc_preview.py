@@ -115,3 +115,98 @@ async def test_calc_attribute_round_trips_quotes(tmp_path):
 
     P().feed(body)
     assert found and all(f == tricky for f in found)
+
+
+_PREVIEW_HARNESS = r"""
+const src = require('fs').readFileSync(process.argv[1], 'utf8');
+const c = JSON.parse(process.argv[2]);
+const log = { order: [], dex: [], defender: null };
+const div = { style: {}, innerHTML: '',
+  getAttribute: k => ({ 'data-in-battle': '1', 'data-calc': JSON.stringify(c) })[k] || null };
+let installed = false;
+global.document = {
+  querySelector: () => div,
+  getElementById: id => (id === 'calc-preview-a' ? div : null),
+  createElement: () => ({}),
+  head: { appendChild(s) { if (!installed) { installed = true; install(); } setImmediate(() => s.onload()); } },
+};
+global.window = global;
+function install() {  // a recording stand-in for the compiled engine
+  const e = window.calc;
+  e.useDex = d => { log.order.push('useDex'); log.dex.push(d); };
+  e.Generations = { get: n => { log.order.push('gen'); return { num: n }; } };
+  e.Pokemon = function (gen, name, opts) {
+    if (!log.defender) log.defender = { name, item: opts.item, ability: opts.ability, nature: opts.nature };
+    Object.assign(this, { name, species: { baseStats: {} }, rawStats: { hp: 100 },
+      maxHP: () => 100, curHP: () => 100 });
+  };
+  e.Move = function () {}; e.Field = function () {};
+  e.calculate = () => ({ damage: [10, 20] });
+  window.SETDEX_SV = { Onix: { 'Leader Brock': { level: 12, item: 'Set Item', ability: 'Sturdy' } } };
+}
+eval(src);
+setTimeout(() => console.log(JSON.stringify(log)), 200);
+"""
+
+
+def _run_preview(calc: dict) -> dict:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    res = subprocess.run([node, "-e", _PREVIEW_HARNESS,
+                          os.path.join(_REPO, "server", "static", "calc-preview.js"), json.dumps(calc)],
+                         capture_output=True, text=True, timeout=30)
+    assert res.returncode == 0, res.stderr
+    return json.loads(res.stdout)
+
+
+_BASE = {"player_species": "Pikachu", "player_level": 12, "player_moves": ["Thunder"],
+         "enemy_species": "Onix", "enemy_level": 12}
+
+
+def test_preview_runs_purergb_on_its_own_dex_and_vanilla_gen1_on_vanilla():
+    """Review cx-66e7600f F1, behaviourally: the dex is picked before any Gen 1 data is read."""
+    log = _run_preview({**_BASE, "gen": 1, "dex": "purergb"})
+    assert log["dex"] == ["purergb"] and log["order"][:2] == ["useDex", "gen"]
+    assert _run_preview({**_BASE, "gen": 1, "dex": "vanilla"})["dex"] == ["vanilla"]
+    assert _run_preview({**_BASE, "gen": 3, "dex": "vanilla"})["dex"] == []
+
+
+def test_preview_defender_uses_the_live_foe_and_an_rr_set_still_wins():
+    """Review cx-66e7600f F2: outside a matched RR set the defender carries the live item and
+    ability; a matched RR trainer set keeps precedence."""
+    live = {"enemy_item": "Leftovers", "enemy_ability": "Rock Head", "enemy_nature": None}
+    d = _run_preview({**_BASE, **live, "gen": 3, "dex": "vanilla"})["defender"]
+    assert (d["item"], d["ability"]) == ("Leftovers", "Rock Head")
+    rr = {**_BASE, **live, "gen": 9, "dex": "rr", "is_trainer": True, "trainer_key": "Leader Brock"}
+    d = _run_preview(rr)["defender"]
+    assert (d["item"], d["ability"]) == ("Set Item", "Sturdy")
+
+
+def test_a_repeat_render_neither_hides_nor_rewrites_the_box():
+    """The battle flash: every 2 s poll re-rendered the preview by hiding it and rebuilding its
+    HTML. An unchanged matchup must leave the box visible and its DOM untouched."""
+    harness = _PREVIEW_HARNESS.replace(
+        "setTimeout(() => console.log(JSON.stringify(log)), 200);",
+        """setTimeout(() => {
+  const writes = { display: [], html: 0 };
+  let d = div.style.display, h = div.innerHTML;
+  Object.defineProperty(div.style, 'display', { get: () => d, set: v => { writes.display.push(v); d = v; } });
+  Object.defineProperty(div, 'innerHTML', { get: () => h, set: v => { writes.html++; h = v; } });
+  window._slinkCalcRender(); window._slinkCalcRender();
+  console.log(JSON.stringify(writes));
+}, 200);""")
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    res = subprocess.run([node, "-e", harness, os.path.join(_REPO, "server", "static", "calc-preview.js"),
+                          json.dumps({**_BASE, "gen": 3, "dex": "vanilla"})],
+                         capture_output=True, text=True, timeout=30)
+    assert res.returncode == 0, res.stderr
+    writes = json.loads(res.stdout)
+    assert "none" not in writes["display"], writes
+    assert writes["html"] == 0, writes

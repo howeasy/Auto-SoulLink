@@ -1,4 +1,4 @@
-// calc-preview.js — the in-battle damage preview for Radical Red runs.
+// calc-preview.js — the in-battle damage preview on the board (every game with a calc_profile).
 // Reads #calc-preview-{pid}[data-in-battle] (its data-calc JSON is _calc_preview in server.py)
 // and lazy-loads the damage engine exactly as the full calc page does: the same CommonJS shim
 // and the same compiled files in the same order (calc/src/normal.template.html). Those files
@@ -105,6 +105,10 @@ window.SLinkCalc = (function () {
   function _calcMove(gen, atk, def, moveName, field) {
     try {
       var move = new window.calc.Move(gen, moveName, { ability: atk.ability, item: atk.item, species: atk.name });
+      // Unknown names can construct a Move with no type instead of throwing. Never
+      // present that failed lookup as an immunity or silently lose an occupied slot.
+      if (!move.type) return { label: 'Unavailable' };
+      if (move.category === 'Status') return { label: 'Status' };
       var dmg = window.calc.calculate(gen, atk, def, move, field).damage;
       var lo, hi;
       if (typeof dmg === 'number') { lo = hi = dmg; }
@@ -112,7 +116,7 @@ window.SLinkCalc = (function () {
         lo = _sum(dmg.map(function (h) { return h[0]; }));
         hi = _sum(dmg.map(function (h) { return h[h.length - 1]; }));
       } else { lo = dmg[0]; hi = dmg[dmg.length - 1]; }
-      if (!hi) return null;  // status moves and immunities
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { label: 'Unavailable' };
       var max = def.maxHP() || 1, cur = def.curHP() || max;
       return {
         lo: Math.round(lo / max * 1000) / 10,
@@ -120,18 +124,31 @@ window.SLinkCalc = (function () {
         ohko: lo >= cur,
         twoHko: lo * 2 >= cur && lo < cur,
       };
-    } catch (e) { return null; }
+    } catch (e) { return { label: 'Unavailable' }; }
   }
 
+  // Update in place: hiding first and rebuilding every poll made the box flash on each HP
+  // tick. The DOM is only rewritten when the rendered numbers actually change.
   function _renderPreview(pid) {
     var div = document.getElementById('calc-preview-' + pid);
     if (!div) return;
-    div.style.display = 'none';
-    if (!div.getAttribute('data-in-battle') || _state !== 'ready') return;
+    var html = (div.getAttribute('data-in-battle') && _state === 'ready') ? _previewHtml(div) : '';
+    if (!html) { div.style.display = 'none'; return; }
+    if (div._calcHtml !== html) { div.innerHTML = html; div._calcHtml = html; }
+    div.style.display = '';
+  }
+
+  function _previewHtml(div) {
     try {
       var c = JSON.parse(div.getAttribute('data-calc') || '{}');
       var moves = (c.player_moves || []).filter(Boolean);
       if (!c.player_species || !c.enemy_species || !moves.length) return;
+      // Gen 1 has two dexes; pick this run's before reading any Gen 1 data, as the full
+      // page's bridge does (calc/src/js/slink_bridge.js _applyCalcGen).
+      if (typeof window.calc.useDex === 'function') {
+        if (c.dex === 'purergb') window.calc.useDex('purergb');
+        else if (c.gen === 1) window.calc.useDex('vanilla');
+      }
       var gen = window.calc.Generations.get(c.gen || 9);
 
       // Trainer battles: pick the difficulty whose set matches the active enemy's level.
@@ -152,7 +169,11 @@ window.SLinkCalc = (function () {
       // enemy_hp_pct is null when the client hasn't decoded a max HP yet; _buildPokemon
       // already treats a non-0-100 value as "full HP" (its default), so null needs no guard.
       var defender = _buildPokemon(gen, c.enemy_species, {
-        level: c.enemy_level, nature: set.nature, ability: set.ability, item: set.item,
+        // A matched RR trainer set wins; otherwise what the client read off the live foe.
+        level: c.enemy_level,
+        nature: set.nature || c.enemy_nature || undefined,
+        ability: set.ability || c.enemy_ability || undefined,
+        item: set.item || c.enemy_item || undefined,
         ivs: enemyStats.ivs, evs: enemyStats.evs,
         status: c.enemy_status || '', boosts: c.enemy_boosts || {},
       }, c.enemy_hp_pct);
@@ -169,21 +190,19 @@ window.SLinkCalc = (function () {
       var rows = '';
       moves.forEach(function (m) {
         var r = _calcMove(gen, attacker, defender, m, field);
-        if (!r) return;
         var cls = r.ohko ? 'ohko' : (r.twoHko ? 'twohko' : '');
         rows += '<tr><td>' + _esc(m) + '</td>'
-          + '<td class="' + cls + '">' + r.lo + '–' + r.hi + '%</td>'
+          + '<td class="' + cls + '">' + (r.label || r.lo + '–' + r.hi + '%') + '</td>'
           + '<td class="' + cls + '">' + (r.ohko ? 'OHKO' : (r.twoHko ? '2HKO' : '')) + '</td></tr>';
       });
       if (!rows) return;
       var badge = difficulty === 'hardcore' ? ' <span style="color:#f80;font-size:0.78em">HC</span>' : '';
-      div.innerHTML = '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
+      return '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
         + '<table class="calc-preview-table"><thead><tr><th>Move</th><th>Dmg %</th><th></th></tr></thead>'
         + '<tbody>' + rows + '</tbody></table>'
         + '<a class="calc-open-btn" href="/calc/' + difficulty + '.html" target="_blank">'
-        + '⚔️ Open in RR Calc</a>';
-      div.style.display = '';
-    } catch (e) { /* a matchup the engine cannot model stays hidden */ }
+        + '⚔️ Open in Calc</a>';
+    } catch (e) { return ''; /* a matchup the engine cannot model stays hidden */ }
   }
 
   function _renderAll() { _renderPreview('a'); _renderPreview('b'); }

@@ -1,0 +1,173 @@
+{
+  "evidence": "SYNTH_SETUP_ONLY",
+  "fixtures": [
+    {
+      "file": "firered_party_gift_synth.sav",
+      "sha256": "c31322b604313c5b3abefac43327da428b0b9f90e863f601d159e47ae3a17aa4",
+      "seed": "firered_party_town.sav",
+      "seed_sha256": "db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213",
+      "title": "firered",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH flag 0x249=0",
+        "SYNTH money=1000 (native price=500)",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (1,4); native gift pending"
+      ]
+    },
+    {
+      "file": "firered_party_hatch_synth.sav",
+      "sha256": "000122f78b1eafc6baa9b2ea382517d5e686fccbce0884f3c6573cf75820dd90",
+      "seed": "firered_party_town.sav",
+      "seed_sha256": "db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213",
+      "title": "firered",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH party[1]=SYNTH own species 7 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (3,6); native hatch pending"
+      ]
+    },
+    {
+      "file": "leafgreen_party_gift_synth.sav",
+      "sha256": "8814964c5e816035778a86e3c573435c81f06580641c76392c9385947f0a7eb0",
+      "seed": "leafgreen_party_town.sav",
+      "seed_sha256": "b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2",
+      "title": "leafgreen",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH flag 0x249=0",
+        "SYNTH money=1000 (native price=500)",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (1,4); native gift pending"
+      ]
+    },
+    {
+      "file": "leafgreen_party_hatch_synth.sav",
+      "sha256": "bde1d4548b7f52a54bc8e5d14adb17d7deeaa61283c2ba15fbb6d6a1d51602ed",
+      "seed": "leafgreen_party_town.sav",
+      "seed_sha256": "b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2",
+      "title": "leafgreen",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH party[1]=SYNTH own species 7 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (3,6); native hatch pending"
+      ]
+    },
+    {
+      "file": "rr_gift_synth.sav",
+      "sha256": "81fe99b43d7599a2580dac8e551a7174a6d0adec544a09daa495782dc73c5f72",
+      "seed": "rr_town.sav",
+      "seed_sha256": "b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3",
+      "title": "radical_red",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH extended flag 0x98e=0 at parasite RAM 0x0203b185; section0+0xF35",
+        "SYNTH money=1000 (native price=500)",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (1,4); native gift pending",
+        "SYNTH sector[2] id=0 chunk checksum recomputed",
+        "SYNTH sector[3] id=1 chunk checksum recomputed"
+      ]
+    },
+    {
+      "file": "rr_hatch_synth.sav",
+      "sha256": "207c177bfe1ab5dbf3c1a16c4ee32ad9c359699e21c5106947270a1c37642e7e",
+      "seed": "rr_town.sav",
+      "seed_sha256": "b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3",
+      "title": "radical_red",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH party[1]=SYNTH own species 277 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (3,6); native hatch pending",
+        "SYNTH sector[2] id=0 chunk checksum recomputed",
+        "SYNTH sector[3] id=1 chunk checksum recomputed"
+      ]
+    },
+    {
+      "file": "rr_gift_synth_b.sav",
+      "sha256": "8afd340e852490f9f048f01c604defa1c3d420296c225fcf2ea3cd1dd2a174cb",
+      "seed": "rr_town_b.sav",
+      "seed_sha256": "13da0f15400894b78077a236514a54c01e4085d53a02821f411e428c9f51f1d3",
+      "title": "radical_red",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH extended flag 0x98e=0 at parasite RAM 0x0203b185; section0+0xF35",
+        "SYNTH money=1000 (native price=500)",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (1,4); native gift pending",
+        "SYNTH sector[2] id=0 chunk checksum recomputed",
+        "SYNTH sector[3] id=1 chunk checksum recomputed"
+      ]
+    },
+    {
+      "file": "rr_hatch_synth_b.sav",
+      "sha256": "e403c21f137d3b8cd39b3e51d208499d7fe598d5460e5e54f605e336e5e67d21",
+      "seed": "rr_town_b.sav",
+      "seed_sha256": "13da0f15400894b78077a236514a54c01e4085d53a02821f411e428c9f51f1d3",
+      "title": "radical_red",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH party[1]=SYNTH own species 277 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 16.0 (3,6); native hatch pending",
+        "SYNTH sector[2] id=0 chunk checksum recomputed",
+        "SYNTH sector[3] id=1 chunk checksum recomputed"
+      ]
+    },
+    {
+      "file": "emerald_gift_synth.sav",
+      "sha256": "e2ed54f21c0cc7748cd7e3c78d495df5d38fc8ab4f86941599acf840add0b63d",
+      "seed": "emerald_town.sav",
+      "seed_sha256": "f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a",
+      "title": "emerald",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH VAR_STEVENS_HOUSE_STATE=0 (Dive scene disabled)",
+        "SYNTH flag 0x12a=0",
+        "SYNTH CONTINUE_GAME_WARP 14.7 (3,3); native gift pending"
+      ]
+    },
+    {
+      "file": "emerald_hatch_synth.sav",
+      "sha256": "465594f2ceb8862aca3d94eef2df802bbfab66edf93dfa4594db36bc53ef815b",
+      "seed": "emerald_town.sav",
+      "seed_sha256": "f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a",
+      "title": "emerald",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH VAR_STEVENS_HOUSE_STATE=0 (Dive scene disabled)",
+        "SYNTH party[1]=SYNTH own species 283 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 14.7 (3,5); native hatch pending"
+      ]
+    },
+    {
+      "file": "emerald_gift_synth_b.sav",
+      "sha256": "a45e2e899db12bb9cd1875f9f994cd9cd794523338694ba77eb6deb49e5a04cc",
+      "seed": "emerald_town_b.sav",
+      "seed_sha256": "17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec",
+      "title": "emerald",
+      "kind": "gift",
+      "manifest": [
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH VAR_STEVENS_HOUSE_STATE=0 (Dive scene disabled)",
+        "SYNTH flag 0x12a=0",
+        "SYNTH CONTINUE_GAME_WARP 14.7 (3,3); native gift pending"
+      ]
+    },
+    {
+      "file": "emerald_hatch_synth_b.sav",
+      "sha256": "07fbe50ea78303b51b683d1ed1ec45ec1c9b6370d2bb29473ec1600a42779500",
+      "seed": "emerald_town_b.sav",
+      "seed_sha256": "17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec",
+      "title": "emerald",
+      "kind": "hatch",
+      "manifest": [
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH VAR_STEVENS_HOUSE_STATE=0 (Dive scene disabled)",
+        "SYNTH party[1]=SYNTH own species 283 egg cycles0; count2; remaining slots cleared",
+        "SYNTH CONTINUE_GAME_WARP 14.7 (3,5); native hatch pending"
+      ]
+    }
+  ]
+}

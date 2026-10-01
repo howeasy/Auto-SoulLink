@@ -144,6 +144,7 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         # runtime, because Entry.admit/admission_table reads every pack's sites to admit any
         # cartridge (entry.lua Entry.PACK_FILES names both packs literally).
         "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua",
+        "lua/gen3/trade_journal.lua",
         "lua/core/session.lua", "lua/core/identity.lua", "lua/core/deferred.lua",
         "data/games/gen3_frlg/profile.json", "data/games/gen3_rr/engine_signals.json",
         # The Gen 2 (Crystal) production graph, cut over at U5.
@@ -197,6 +198,12 @@ def test_the_shipped_socket_dll_is_packaged(archive):
     )
 
 
+def test_the_licence_and_notices_ship_with_the_code(archive):
+    """Review cx-66e7600f F3: MIT (ours, Alpine's, LuaSocket's for the DLL above) requires the
+    copyright and permission notice to travel with the copies."""
+    assert {"LICENSE", "NOTICE.md"} <= archive
+
+
 def test_the_old_gen1_client_is_not_shipped(archive):
     """The old client's files are out of the manifest (tooling half of the cutover); the files
     themselves stay on disk until their unit consumers are migrated."""
@@ -227,6 +234,52 @@ def test_gb_companion_bundle_names_every_pure_overlay_ups():
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
 
 
+def _entry_pack_files() -> dict[str, dict[str, str]]:
+    """`Entry.PACK_FILES` from the real `lua/gen3/entry.lua`, via lupa -- every pack it names is
+    opened unconditionally by `Entry.admission_table` (entry.lua:121-140), routed or not, so a
+    release zip missing one of these paths refuses EVERY GBA cartridge (F1, cx-7b74a808)."""
+    import lupa
+
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry_path = os.path.join(_REPO, "lua", "gen3", "entry.lua").replace(os.sep, "/")
+    entry = lua.eval(f'dofile("{entry_path}")')
+    out: dict[str, dict[str, str]] = {}
+    for pack, files in entry.PACK_FILES.items():
+        out[str(pack)] = {str(k): str(v) for k, v in files.items()}
+    return out
+
+
+def test_every_entry_pack_file_is_in_the_release_manifest():
+    """F3: the falsifier for F1 -- a future pack registered in `Entry.PACK_FILES` but left out
+    of `make_release._DATA_GAME_LUA` repeats the gen3_emerald bug (a release zip that refuses
+    every GBA cartridge, not just the unshipped pack's own). MUTATION-CHECK: comment out the
+    "gen3_emerald" row in tools/make_release.py's `_DATA_GAME_LUA` and this test goes red."""
+    manifest_paths = {
+        f"data/games/{gen}/{f}"
+        for gen, files in make_release._DATA_GAME_LUA.items() for f in files
+    }
+    for pack, files in _entry_pack_files().items():
+        for key, rel in files.items():
+            assert rel in manifest_paths, (
+                f"Entry.PACK_FILES.{pack}.{key} = {rel!r} is not in make_release's "
+                "_DATA_GAME_LUA manifest -- a release zip would ship without it"
+            )
+
+
+def test_every_emerald_adapter_data_file_is_in_the_release_manifest():
+    """OMP cx-9f0eacae F1: server/adapters/gen3_frlge.py `_emerald_json` returns {} for a missing
+    file, so an unshipped Emerald table fails OPEN (the fixed-gift clause bypasses silently vanish)
+    instead of refusing. Every file `_load_emerald()` opens must ship. MUTATION-CHECK: drop
+    "statics.json" from the gen3_emerald row of `_DATA_GAME_LUA` and this goes red."""
+    import inspect
+    import re
+    from server.adapters import gen3_frlge
+    opened = set(re.findall(r'_emerald_json\("([^"]+)"\)', inspect.getsource(gen3_frlge._load_emerald)))
+    assert opened >= {"area_map.json", "statics.json", "write_checkpoint.json"}, opened
+    missing = opened - set(make_release._DATA_GAME_LUA["gen3_emerald"])
+    assert not missing, f"gen3_emerald adapter tables not shipped in the release zip: {sorted(missing)}"
+
+
 def test_the_retired_gen3_modules_are_not_shipped(archive):
     """C5-6 (owner ruling 24): the old Gen 3 client is deleted and lua/games/gen3_frlge.lua stays
     only as cited source material; neither may ship in the player ZIP."""
@@ -237,7 +290,7 @@ def test_the_retired_gen3_modules_are_not_shipped(archive):
 
 def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):
     """RELEASE-EVIDENCE-TOOLING: each UPS named by data/gen2/overlay_provenance.json lands under
-    companion/ with its published bytes; the Gen 1 / pureRGB / RR companion set is unchanged."""
+    companion/ with its published bytes, alongside the published vanilla Gen 3 companions."""
     import hashlib
     import json
     from pathlib import Path
@@ -252,4 +305,8 @@ def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_chan
     assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()} == {
         "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
         "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
-        "companion/SLink-PureGreen.ups"}
+        "companion/SLink-PureGreen.ups", "companion/SLink-FireRed.ups", "companion/SLink-LeafGreen.ups",
+        "companion/SLink-Emerald.ups", "companion/gen3_companions.json"}
+    native=json.loads(companion["companion/gen3_companions.json"])
+    for row in native["titles"].values():
+        assert hashlib.sha256(companion["companion/"+row["patch"]]).hexdigest()==row["ups_sha256"]

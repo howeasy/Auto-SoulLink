@@ -36,7 +36,20 @@ TITLE_PROFILES = {
     "firered": (_REPO / "data/games/gen3_frlg/profile.json", False),
     "leafgreen": (_REPO / "data/games/gen3_frlg/profile.json", False),
     "radical_red": (_REPO / "data/games/gen3_rr/profile.json", True),
+    # X2: the expansion reference build -- vanilla crypto/order, masked record lanes (its profile's
+    # derived layout keys, the same block lua/gen3/reads.lua decodes with)
+    "emerald_expansion_28877d73": (_REPO / "data/games/gen3_exp/28877d73/profile.json", False),
 }
+# The profile.derived keys that make a record layout (gen3_codec.validate_expansion_layout).
+LAYOUT_KEYS = ("MON_SPECIES_MASK", "MON_ITEM_MASK", "MON_MOVE_MASK", "EXPERIENCE_MASK",
+               "NICKNAME_EXTRA", "POKEBALL_FIELD", "ABILITY_NUM_FIELD", "PP_MASK",
+               "MARKINGS_MASK", "SHINY_MODIFIER_FIELD")
+
+
+def profile_layout(profile: dict) -> dict | None:
+    """The title's masked-record layout, or None for a vanilla profile (no layout keys)."""
+    layout = {k: profile["derived"][k] for k in LAYOUT_KEYS if k in profile.get("derived", {})}
+    return layout or None
 
 DUMP_RE = re.compile(
     r"^DUMP name=(?P<name>\S+) addr=0x(?P<addr>[0-9A-Fa-f]+) len=(?P<len>\d+) "
@@ -100,10 +113,10 @@ def _mon_to_fields(mon: dict) -> dict:
     }
 
 
-def decode_records(name: str, raw: bytes, rr: bool) -> list[dict]:
+def decode_records(name: str, raw: bytes, rr: bool, layout: dict | None = None) -> list[dict]:
     if name == "party":
         stride = PARTY_MON_SIZE
-        decode = lambda rec: codec.decode_party_mon(rec, rr=rr)  # noqa: E731
+        decode = lambda rec: codec.decode_party_mon_masked(rec, rr=rr, layout=layout)  # noqa: E731
     elif name == "box0":
         stride = COMPRESSED_MON_SIZE if rr else BOX_MON_SIZE
         if rr:
@@ -111,7 +124,7 @@ def decode_records(name: str, raw: bytes, rr: bool) -> list[dict]:
             decode = lambda rec: codec.decode_box_mon(  # noqa: E731
                 codec.expand_compressed_box_mon(rec), rr=True)
         else:
-            decode = lambda rec: codec.decode_box_mon(rec, rr=False)  # noqa: E731
+            decode = lambda rec: codec.decode_box_mon_masked(rec, rr=False, layout=layout)  # noqa: E731
     else:
         return []
     if stride == 0 or len(raw) % stride != 0:
@@ -119,13 +132,13 @@ def decode_records(name: str, raw: bytes, rr: bool) -> list[dict]:
     return [decode(raw[i:i + stride]) for i in range(0, len(raw), stride)]
 
 
-def diff_dump(dumps: dict, lua_lines: dict, rr: bool) -> list[tuple]:
+def diff_dump(dumps: dict, lua_lines: dict, rr: bool, layout: dict | None = None) -> list[tuple]:
     """-> list of (name, slot, field, lua_value, py_value) mismatches."""
     diffs = []
     for name, raw in dumps.items():
         if name not in ("party", "box0"):
             continue
-        records = decode_records(name, raw, rr)
+        records = decode_records(name, raw, rr, layout)
         seen_slots = {slot for (n, slot) in lua_lines if n == name}
         for slot in range(max(len(records), (max(seen_slots) + 1) if seen_slots else 0)):
             lua_row = lua_lines.get((name, slot))
@@ -187,6 +200,39 @@ def decode_badges(flags_byte: int) -> int:
     return flags_byte & 0xFF
 
 
+def decode_badges_straddle(flags: bytes, first_flag: int) -> int:
+    """Emerald's badges (FLAG_BADGE01_GET = SYSTEM_FLAGS+7 = 0x867, pret
+    include/constants/flags.h:1359) straddle a byte instead of sharing one: badge i (0-based)
+    is bit ((first_flag+i) & 7) of `flags[(first_flag+i) >> 3]`. `flags` is
+    SaveBlock1.flags[] (or a slice covering both straddled bytes), `first_flag` is
+    profile.derived.BADGE_FIRST_FLAG. Independent of lua/gen3/reads.lua's read_badges on
+    purpose (PLAN §5.7); the two must agree bit for bit."""
+    out = 0
+    for i in range(8):
+        bit_index = first_flag + i
+        byte = flags[bit_index >> 3]
+        if (byte >> (bit_index & 7)) & 1:
+            out |= 1 << i
+    return out
+
+
+def decode_badges_for_profile(flags: bytes, derived: dict) -> tuple[int | None, str | None]:
+    """Profile-driven dispatch mirroring lua/gen3/reads.lua's read_badges (F10): picks
+    decode_badges_straddle vs decode_badges by which derived field the profile carries, and
+    refuses -- (None, reason), the Python shape of Lua's `return nil, why` -- when a profile is
+    self-contradictory (both BADGE_FIRST_FLAG and a non-null SB1_BADGE_BYTE_OFFSET). `flags` is
+    SaveBlock1.flags[] (or a slice covering whichever bytes the chosen path reads)."""
+    first_flag = derived.get("BADGE_FIRST_FLAG")
+    byte_off = derived.get("SB1_BADGE_BYTE_OFFSET")
+    if first_flag is not None:
+        if byte_off is not None:
+            return None, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
+        return decode_badges_straddle(flags, first_flag), None
+    if byte_off is None:
+        return None, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
+    return decode_badges(flags[byte_off]), None
+
+
 def decode_ball_pocket(raw: bytes, count: int, key: int | None = None) -> dict:
     """ItemSlot{u16 itemId, u16 quantity} (pret include/global.h:400-404), `count` slots back
     to back. `key` is SaveBlock2.encryptionKey (src/item.c GetBagItemQuantity XORs the low 16
@@ -216,7 +262,7 @@ def main(argv=None) -> int:
                              "(planted-offender control: must produce a diff)")
     args = parser.parse_args(argv)
 
-    _profile, rr = resolve_title(args.title)
+    profile, rr = resolve_title(args.title)
     if not args.dump.exists():
         raise SystemExit2(f"dump not found: {args.dump}")
     dumps, lua_lines = parse_dump(args.dump)
@@ -227,7 +273,7 @@ def main(argv=None) -> int:
     if args.mutate and mutated_name is None:
         raise SystemExit2("--mutate requested but the dump has no party or box0 record to mutate")
 
-    diffs = diff_dump(dumps, lua_lines, rr)
+    diffs = diff_dump(dumps, lua_lines, rr, profile_layout(profile))
 
     if args.mutate:
         print(f"mutated: flipped byte 0 of the first {mutated_name} record")

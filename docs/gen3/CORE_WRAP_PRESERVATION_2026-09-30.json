@@ -1,0 +1,53 @@
+{
+  "created_at_utc": "2026-09-30T06:50:55.550830+00:00",
+  "source_head": "067768b920d1e797e6f8fc39d2bd6a872126ee23",
+  "archive": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\core-ignored-evidence.zip",
+  "archive_sha256": "5cda63e1eec94a7923367c2a63a1664140b4a095512a3025e80f4e296653331b",
+  "archive_crc_and_member_sha256_verified": true,
+  "external_links_not_followed": {
+    ".cache/expansion-src": "C:\\slink-cache\\expansion\\e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+    ".cache/purergb": "E:\\Google Drive\\SLink\\.cache\\purergb",
+    ".cache/purergb-overlay": "E:\\Google Drive\\SLink\\.cache\\purergb-overlay",
+    ".cache/slink-upr": "E:\\Google Drive\\SLink\\.cache\\slink-upr",
+    ".cache/pret/pokeyellow": "E:\\Google Drive\\SLink\\.cache\\pret\\pokeyellow"
+  },
+  "environment": {
+    "path": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\qualification-env.ps1",
+    "sha256": "0d77b0210c021f4efd2465b21cf7de9cfb60cb67b9f3da1fe8e42e6ba912479e"
+  },
+  "source_inputs": "Existing stable/main inputs retained; external link targets remain untouched.",
+  "file_count": 1765,
+  "member_bytes": 721922127,
+  "full_manifest": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\core-ignored-manifest.json",
+  "full_manifest_sha256": "87158b9846fb7b99472e3e10dd7638dda61d15dabf096b37a0364c5ea9362a5b",
+  "cleanup_status": "Git checkout registration and merged branch removed. Ordinary filesystem cleanup completed except Windows access-denied remnants. No ACL changes or bypass.",
+  "cleanup_completed_at_utc": "2026-09-30T06:54:59.835069+00:00",
+  "main_integration_commit": "01e2978c873f2e431fb70f9970087b1d7527abd7",
+  "git_worktree_registration_removed": true,
+  "merged_branch_removed": true,
+  "external_cache_links_removed": true,
+  "temporary_environment_removed": true,
+  "remaining_directory": "C:\\slink-wt\\g3-core",
+  "cleanup_error_count": 4026,
+  "cleanup_operations": {
+    "rmdir": 3994,
+    "unlink": 32
+  },
+  "cleanup_error_examples": [
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\remotes\\origin",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\remotes\\\\origin'"
+    },
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\heads",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\heads'"
+    },
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\remotes",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\remotes'"
+    }
+  ]
+}

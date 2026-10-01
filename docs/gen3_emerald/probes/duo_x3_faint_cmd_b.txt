@@ -1,0 +1,53 @@
+duo instance b scenario=faint_cmd_gen3 phase=initial title=emerald_expansion_28877d73 attempt=1
+SYMS_ABSENT emerald_expansion_28877d73 Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder,gActiveBattler,gStatuses3
+TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)
+[client] [SLink] TCP connecting to 127.0.0.1:61128 (non-blocking)…
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+[client] [SLink-gen3] pack has no valid gift_areas.ids: every area treated as a gift area (no banner, no no_catch)
+[client] [SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player b -> 127.0.0.1:61128 (rom 28877d73)
+client built by lua/gen3/run.lua: title=emerald_expansion_28877d73 player=b -> 127.0.0.1:61128
+[client] [SLink] TCP connected to 127.0.0.1:61128
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_id":3
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+booted frame=610 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+READY 504F4F4D:DFDAF6DA
+RX force_faint key=504F4F4D:DFDAF6DA
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 962
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 962
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 962
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 962
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 962
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 962
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 962
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 962
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 962
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 962
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 962
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 962
+RX memorialize key=504F4F4D:DFDAF6DA
+RX game_over
+[client] [SLink-gen3] write overworld 0x02031C1E +2 frame 962
+FORCED_HP0 504F4F4D:DFDAF6DA frame=962 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x0200F2F4 +80 frame 963
+[client] [SLink-gen3] write overworld 0x02031BC8 +100 frame 963
+[client] [SLink-gen3] write overworld 0x02031B54 +1 frame 963
+TX memorialize_done 504F4F4D:DFDAF6DA {"box":13,"event":"memorialize_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":16}
+[client] [gen3] phase save-menu frame=1023 counter=3
+[client] [gen3] phase save-dialog frame=1083 row=3/6
+[client] [gen3] phase saved frame=1483 counter=3->4
+SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_b_1_witness.bin bytes=131072 saves=1 frame=1697 counter=4
+SAVE_WITNESS faint_cmd counter=3->4
+WRITES 16
+RESULT: PASS (memorialized 504F4F4D:DFDAF6DA)

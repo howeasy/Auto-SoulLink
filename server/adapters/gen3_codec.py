@@ -1,9 +1,11 @@
-"""Independent Gen 3 (FR/LG) record and flash-save oracle, derived from pret.
+"""Independent Gen 3 (FR/LG, Emerald) record and flash-save oracle, derived from pret.
 
 Hand-derived from pret/pokefirered at commit
 ``c75f352304d529f6ba92d4f74b9cf8b5c3810788`` (every citation below is a
-``file#Lstart-Lend`` range at that immutable commit) and, for the CFRU/RR
-divergence, from the SOURCE note ``docs/gen3/research/flash_save.md``.
+``file#Lstart-Lend`` range at that immutable commit unless it names another), for
+the Emerald save layout from pret/pokeemerald at ``c65e93f20a5275ab03b07d6f6411096a82a60ffd``
+(the TITLE_EMERALD block below), and, for the CFRU/RR divergence, from the SOURCE
+note ``docs/gen3/research/flash_save.md``.
 
 This module is deliberately independent of ``archive/gen3-old-client:lua/memory_gba.lua``: it is the
 Python side of the ``reads == PYDEC`` differential (PLAN §5.7), so it must
@@ -13,7 +15,13 @@ them.  It reads no JSON profile and touches no emulator.
 Decoding preserves raw record values; it does not certify a legal Pokemon.
 Names are English FR font tokens; unknown glyph bytes use reversible
 ``<$XX>`` tokens, and the raw name bytes are returned alongside the decoded
-string so that ``encode(decode(x)) == x`` byte-for-byte on real records.
+string so that ``encode(decode(x)) == x`` byte-for-byte on real vanilla/RR
+records. The pokeemerald-expansion masked path (``decode_party_mon_masked`` /
+``decode_box_mon_masked`` with a ``NICKNAME_EXTRA`` layout) is DECODE-ONLY: a
+12-character expansion nickname does not round-trip through
+``encode_party_mon``/``encode_box_mon``, which refuse a >10-byte
+``nickname_raw`` by name rather than silently corrupting the record (XR-2,
+review cx-fcdc11c5 F1).
 
 Base URL for every citation:
 https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/
@@ -171,21 +179,139 @@ def _substruct_positions(personality: int, rr: bool) -> tuple[int, ...]:
     return _FIXED_ORDER if rr else SUBSTRUCT_ORDER[personality % 24]
 
 
-def _decode_secure(plain_by_type: list[bytes]) -> dict:
+def _bitfield(blob: bytes, field: dict) -> int:
+    """Read a validated ``{word_off, word_size, shift, width}`` bitfield out of
+    a 12-byte substruct (or any blob ``field`` was validated against)."""
+    word = _u(blob, field["word_off"], field["word_size"])
+    return (word >> field["shift"]) & ((1 << field["width"]) - 1)
+
+
+def _validate_bitfield(label: str, field: object, container_size: int) -> None:
+    if not isinstance(field, dict):
+        raise ValueError(f"{label}: must be an object")
+    for key in ("word_off", "word_size", "shift", "width"):
+        if not isinstance(field.get(key), int):
+            raise ValueError(f"{label}: missing or non-integer {key!r}")
+    word_off, word_size = field["word_off"], field["word_size"]
+    shift, width = field["shift"], field["width"]
+    if word_size not in (1, 2, 4):
+        raise ValueError(f"{label}: word_size must be 1, 2 or 4 (got {word_size})")
+    if word_off < 0 or word_off + word_size > container_size:
+        raise ValueError(
+            f"{label}: word_off {word_off} + word_size {word_size} exceeds the "
+            f"{container_size}-byte container")
+    if width < 1 or shift < 0 or shift + width > word_size * 8:
+        raise ValueError(
+            f"{label}: shift {shift} + width {width} exceeds the {word_size * 8}-bit word")
+
+
+def _validate_fixed_bitfield(label: str, field: object, total_bits: int) -> None:
+    """Like :func:`_validate_bitfield`, for a field with a fixed, implicit
+    container (no ``word_off``/``word_size`` of its own)."""
+    if not isinstance(field, dict):
+        raise ValueError(f"{label}: must be an object")
+    for key in ("shift", "width"):
+        if not isinstance(field.get(key), int):
+            raise ValueError(f"{label}: missing or non-integer {key!r}")
+    shift, width = field["shift"], field["width"]
+    if width < 1 or shift < 0 or shift + width > total_bits:
+        raise ValueError(
+            f"{label}: shift {shift} + width {width} exceeds the {total_bits}-bit field")
+
+
+def _validate_mask(label: str, value: object) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{label}: mask must be a positive integer (got {value!r})")
+
+
+_MASK_KEYS = ("MON_SPECIES_MASK", "MON_ITEM_MASK", "MON_MOVE_MASK",
+              "EXPERIENCE_MASK", "PP_MASK", "MARKINGS_MASK")
+
+
+def validate_expansion_layout(layout: dict | None) -> dict:
+    """Validate an optional expansion layout block ONCE, at the codec entry
+    point (review cx-fcdc11c5 F7/F9): a malformed layout (bad word_off/
+    word_size/shift/width, a zero mask, a NICKNAME_EXTRA without a ``chars``
+    list, ...) is refused by name here, before any bit is read, rather than
+    crashing mid-decode or silently reading nonsense. ``None``/``{}`` is the
+    vanilla no-op layout and always valid."""
+    if layout is None:
+        return {}
+    if not isinstance(layout, dict):
+        raise ValueError("expansion layout must be an object")
+    for key in _MASK_KEYS:
+        if key in layout:
+            _validate_mask(key, layout[key])
+    if "NICKNAME_EXTRA" in layout:
+        extra = layout["NICKNAME_EXTRA"]
+        if not isinstance(extra, dict) or not isinstance(extra.get("chars"), list):
+            raise ValueError("NICKNAME_EXTRA: must be an object with a 'chars' list")
+        for i, char in enumerate(extra["chars"]):
+            _validate_bitfield(f"NICKNAME_EXTRA.chars[{i}]", char, SUBSTRUCT_SIZE)
+    if "POKEBALL_FIELD" in layout:
+        _validate_bitfield("POKEBALL_FIELD", layout["POKEBALL_FIELD"], SUBSTRUCT_SIZE)
+    if "ABILITY_NUM_FIELD" in layout:
+        _validate_bitfield("ABILITY_NUM_FIELD", layout["ABILITY_NUM_FIELD"], SUBSTRUCT_SIZE)
+    if "SHINY_MODIFIER_FIELD" in layout:
+        _validate_fixed_bitfield("SHINY_MODIFIER_FIELD", layout["SHINY_MODIFIER_FIELD"], 16)
+    return layout
+
+
+def _decode_secure(plain_by_type: list[bytes], layout: dict | None = None) -> dict:
     """Decode the four substructs, already put back in Growth/Attacks/EVs/Misc
-    order.  Field maps: include/pokemon.h#L8-L85."""
+    order.  Field maps: include/pokemon.h#L8-L85.
+
+    ``layout`` is XR-1/XR-2's optional expansion mask block (additive; ``None``
+    or ``{}`` reproduces this function's pre-XR-1 output byte for byte;
+    :func:`validate_expansion_layout` must already have accepted it).  Keys,
+    verified against rh-hideout/pokeemerald-expansion at tag ``expansion/1.17.0``
+    (commit ``e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7``), ``include/pokemon.h``:
+
+    - ``MON_SPECIES_MASK`` (default 0xFFFF): species is an 11-bit field sharing
+      its u16 lane with a new 5-bit ``teraType`` (species:11, teraType:5, #L134).
+    - ``MON_ITEM_MASK`` (default 0xFFFF): heldItem is a 10-bit field (heldItem:10,
+      6 unused bits, #L136-137) in the next u16 lane.
+    - ``MON_MOVE_MASK`` (default 0xFFFF): move1..4 are each an 11-bit field
+      sharing their u16 lane with an evolution-tracker/hyper-trained bit
+      (#L150-159).
+    - ``EXPERIENCE_MASK`` (default 0xFFFFFFFF; 0x1FFFFF for the expansion):
+      experience is a 21-bit field sharing its u32 lane with the new
+      ``nickname11:8`` (#L138-140).  First-class key (XR-2 F2) -- no longer
+      inferred from ``NICKNAME_EXTRA``.
+    - ``POKEBALL_FIELD`` ``{word_off, word_size, shift, width}`` (absent =
+      vanilla): pokeball moved from the Misc substruct into the Growth
+      substruct's last u16 lane (pokeball:6, #L143); the vanilla Misc slot
+      (bits 11-14 of the met u16) is now ``dynamaxLevel`` (#L192), not decoded
+      here (XR-2 F5, residual -- see docs/gen3_emerald/research/expansion_record_layout.md).
+    - ``ABILITY_NUM_FIELD`` ``{word_off, word_size, shift, width}`` (absent =
+      vanilla): abilityNum moved from bit31 of the IVs u32 into the Misc
+      substruct's ribbons u32 (abilityNum:2 at bits 29-30, #L221); the vanilla
+      bit31-of-IVs slot is now ``gigantamaxFactor`` (#L201), not decoded here.
+    - ``PP_MASK`` (default 0xFF): each PP byte's top bit is a hyperTrained*
+      flag (pp1..4:7 + hyperTrained*:1, #L160-167).
+    """
     g, a, e, m = plain_by_type
+    layout = layout or {}
+    species_mask = layout.get("MON_SPECIES_MASK", 0xFFFF)
+    item_mask = layout.get("MON_ITEM_MASK", 0xFFFF)
+    move_mask = layout.get("MON_MOVE_MASK", 0xFFFF)
+    experience_mask = layout.get("EXPERIENCE_MASK", 0xFFFFFFFF)
+    pp_mask = layout.get("PP_MASK", 0xFF)
     ivs = _u(m, 4, 4)
     met = _u(m, 2, 2)
+    pokeball_field = layout.get("POKEBALL_FIELD")
+    pokeball = _bitfield(g, pokeball_field) if pokeball_field else (met >> 11) & 0x0F
+    ability_field = layout.get("ABILITY_NUM_FIELD")
+    ability_num = _bitfield(m, ability_field) if ability_field else (ivs >> 31) & 1
     return {
-        "species": _u(g, 0, 2),
-        "held_item": _u(g, 2, 2),
-        "experience": _u(g, 4, 4),
+        "species": _u(g, 0, 2) & species_mask,
+        "held_item": _u(g, 2, 2) & item_mask,
+        "experience": _u(g, 4, 4) & experience_mask,
         "pp_bonuses": g[8],
         "friendship": g[9],
         "growth_filler": _u(g, 10, 2),
-        "moves": [_u(a, i * 2, 2) for i in range(4)],
-        "pp": list(a[8:12]),
+        "moves": [_u(a, i * 2, 2) & move_mask for i in range(4)],
+        "pp": [byte & pp_mask for byte in a[8:12]],
         "evs": {
             "hp": e[0], "attack": e[1], "defense": e[2],
             "speed": e[3], "sp_attack": e[4], "sp_defense": e[5],
@@ -195,7 +321,7 @@ def _decode_secure(plain_by_type: list[bytes]) -> dict:
         "met_location": m[1],
         "met_level": met & 0x7F,
         "met_game": (met >> 7) & 0x0F,
-        "pokeball": (met >> 11) & 0x0F,
+        "pokeball": pokeball,
         "ot_gender": (met >> 15) & 1,
         "ivs": {
             "hp": ivs & 0x1F, "attack": (ivs >> 5) & 0x1F,
@@ -203,7 +329,7 @@ def _decode_secure(plain_by_type: list[bytes]) -> dict:
             "sp_attack": (ivs >> 20) & 0x1F, "sp_defense": (ivs >> 25) & 0x1F,
         },
         "is_egg": (ivs >> 30) & 1,
-        "ability_num": (ivs >> 31) & 1,
+        "ability_num": ability_num,
         "ribbons": _u(m, 8, 4),
     }
 
@@ -234,7 +360,7 @@ def _encode_secure(d: dict) -> list[bytes]:
     return [growth, attacks, evs, misc]
 
 
-def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
+def _decode_mon(raw: bytes, rr: bool, party: bool, layout: dict | None = None) -> dict:
     want = PARTY_MON_SIZE if party else BOX_MON_SIZE
     if len(raw) != want:
         raise ValueError(f"expected {want} bytes, got {len(raw)}")
@@ -246,8 +372,25 @@ def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
 
     flags = raw[_OFF_FLAGS]
     stored_checksum = _u(raw, _OFF_CHECKSUM, 2)
-    nick = raw[_OFF_NICKNAME:_OFF_NICKNAME + NICKNAME_LEN]
+    nick = bytearray(raw[_OFF_NICKNAME:_OFF_NICKNAME + NICKNAME_LEN])
+    # XR-1: the expansion's 11th/12th nickname characters are bitfields inside
+    # the Growth substruct (PokemonSubstruct0.nickname11/nickname12), not part
+    # of the raw 10-byte array above.  pret's GetBoxMonData3 (src/pokemon.c)
+    # treats "both zero" as a vanilla (10-char) record and omits them.
+    # (layout, including NICKNAME_EXTRA, is already validate_expansion_layout()-
+    # checked by the masked entry points, so a malformed layout has already
+    # been refused by name -- XR-2 F6/F7 -- rather than KeyError-ing here.)
+    layout = layout or {}
+    nickname_extra = layout.get("NICKNAME_EXTRA")
+    if nickname_extra:
+        growth = ordered[0]
+        chars = [_bitfield(growth, c) for c in nickname_extra["chars"]]
+        if any(chars):
+            nick.extend(chars)
+    nick = bytes(nick)
     ot = raw[_OFF_OT_NAME:_OFF_OT_NAME + OT_NAME_LEN]
+    markings_mask = layout.get("MARKINGS_MASK", 0xFF)
+    unknown = _u(raw, _OFF_UNKNOWN, 2)
     mon = {
         "personality": personality,
         "ot_id": ot_id,
@@ -261,11 +404,14 @@ def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
         "flags_unused": (flags >> 4) & 0x0F,
         "ot_name": decode_name(ot),
         "ot_name_raw": bytes(ot),
-        "markings": raw[_OFF_MARKINGS],
+        "markings": raw[_OFF_MARKINGS] & markings_mask,
         "checksum": stored_checksum,
-        "unknown": _u(raw, _OFF_UNKNOWN, 2),
+        "unknown": unknown,
     }
-    mon.update(_decode_secure(ordered))
+    shiny_field = layout.get("SHINY_MODIFIER_FIELD")
+    if shiny_field:
+        mon["shiny_modifier"] = (unknown >> shiny_field["shift"]) & ((1 << shiny_field["width"]) - 1)
+    mon.update(_decode_secure(ordered, layout))
     # CFRU never validates the BoxPokemon checksum, and its reconstruction
     # leaves the field zero (flash_save.md §3; archive/gen3-old-client:lua/memory_gba.lua:1075-1083),
     # so there is nothing to check in rr mode.
@@ -282,6 +428,12 @@ def _encode_mon(d: dict, rr: bool, party: bool) -> bytes:
     raw[_OFF_PERSONALITY:_OFF_PERSONALITY + 4] = personality.to_bytes(4, "little")
     raw[_OFF_OTID:_OFF_OTID + 4] = ot_id.to_bytes(4, "little")
     nick = d.get("nickname_raw") or encode_name(d["nickname"], NICKNAME_LEN)
+    if len(nick) != NICKNAME_LEN:
+        raise ValueError(
+            f"expansion nickname: encoder not layout-aware (nickname_raw is "
+            f"{len(nick)} bytes, expected {NICKNAME_LEN}); encode_party_mon/"
+            f"encode_box_mon do not support pokeemerald-expansion 12-character "
+            f"nicknames (XR-2 F1)")
     ot = d.get("ot_name_raw") or encode_name(d["ot_name"], OT_NAME_LEN)
     raw[_OFF_NICKNAME:_OFF_NICKNAME + NICKNAME_LEN] = nick
     raw[_OFF_LANGUAGE] = d["language"]
@@ -323,6 +475,23 @@ def encode_party_mon(mon: dict, rr: bool = False) -> bytes:
 
 def decode_box_mon(raw: bytes, rr: bool = False) -> dict:
     return _decode_mon(raw, rr, party=False)
+
+
+def decode_party_mon_masked(raw: bytes, rr: bool = False, layout: dict | None = None) -> dict:
+    """XR-1: same as :func:`decode_party_mon`, plus an optional expansion mask
+    block (see :func:`_decode_secure`/:func:`_decode_mon`).  A NEW function,
+    not a change to the frozen ``decode_party_mon(raw, rr=False)`` contract
+    (test_gen3_codec_emerald.py::test_decode_party_mon_signature_and_frozen_keys
+    pins that signature literally).  ``layout=None`` reproduces
+    ``decode_party_mon`` byte-for-byte.  The layout is validated once here
+    (:func:`validate_expansion_layout`, XR-2 F7) -- a malformed layout is
+    refused by name before any record byte is read."""
+    return _decode_mon(raw, rr, party=True, layout=validate_expansion_layout(layout))
+
+
+def decode_box_mon_masked(raw: bytes, rr: bool = False, layout: dict | None = None) -> dict:
+    """XR-1 twin of :func:`decode_party_mon_masked` for box records."""
+    return _decode_mon(raw, rr, party=False, layout=validate_expansion_layout(layout))
 
 
 def encode_box_mon(mon: dict, rr: bool = False) -> bytes:
@@ -395,20 +564,76 @@ CHUNK_SIZE_VANILLA = SECTOR_DATA_SIZE   # 0xF80, src/save.c#L43-L48
 # physical sectors 30/31; neither is modelled here.
 CHUNK_SIZE_CFRU = 0x0FF0
 
-_OBJECTS = (
-    ("sb2", SAVEBLOCK2_SIZE, 0, 0),
-    ("sb1", SAVEBLOCK1_SIZE, 1, 4),
-    ("storage", STORAGE_SIZE, 5, 13),
-)
+# ---------------------------------------------------------------------------
+# Emerald flash layout -- pokeemerald@c65e93f2, same skeleton as FR/LG (32 x
+# 0x1000 sectors, 14 sections/slot, signature 0x08012025, sectors 30/31
+# Trainer Hill / Recorded Battle: include/save.h), but SaveBlock1/2 are
+# bigger and the party moved.  Values are the GF ROM header fields read
+# straight from the pinned ROM at file offset 0x100 (struct GFRomHeader,
+# src/rom_header_gf.c#L18-L90); test_gen3_codec_emerald.py re-derives the
+# struct's byte offsets independently and reads the same ROM as a control.
+#   saveBlock2Size = sizeof(struct SaveBlock2)                 -- ROM +0x88
+#   saveBlock1Size = sizeof(struct SaveBlock1)                 -- ROM +0x8C
+#   partyCountOffset = offsetof(SaveBlock1, playerPartyCount)  -- ROM +0x90
+#   partyOffset = offsetof(SaveBlock1, playerParty)            -- ROM +0x94
+# (all relative to the header base 0x08000100).  include/global.h#L999-L1001
+# independently confirms the same two SaveBlock1 offsets.
+# ---------------------------------------------------------------------------
+TITLE_FRLG = "frlg"
+TITLE_EMERALD = "emerald"
+# pokeemerald-expansion reference build (expansion/1.17.0 e8bd1cd7, ROM 28877d73): the
+# same 14-section skeleton, but its own sizes -- data/games/gen3_exp/28877d73/facts.json
+# (the build's offsetof probe): SaveBlock2 3884, SaveBlock1 15568, PokemonStorage 34144
+# (vanilla + fusions[4]); party at SaveBlock1 +0x234/+0x238 as in Emerald. Records are
+# masked bitfields, so party/box decodes need the build's layout (profile.derived).
+# test_gen3_codec_expansion.py binds every number here to facts.json.
+TITLE_EXPANSION = "emerald_expansion_28877d73"
+
+SAVEBLOCK2_SIZE_EMERALD = 0x0F2C
+SAVEBLOCK1_SIZE_EMERALD = 0x3D88
+SB1_PARTY_COUNT_OFFSET_EMERALD = 0x234
+SB1_PARTY_OFFSET_EMERALD = 0x238
+
+_TITLE_SAVE_SIZES = {
+    TITLE_FRLG: (SAVEBLOCK2_SIZE, SAVEBLOCK1_SIZE),
+    TITLE_EMERALD: (SAVEBLOCK2_SIZE_EMERALD, SAVEBLOCK1_SIZE_EMERALD),
+    TITLE_EXPANSION: (3884, 15568),
+}
+_TITLE_STORAGE_SIZES = {TITLE_EXPANSION: 34144}   # every other title: STORAGE_SIZE
+# A codec title or a client rom_type (server/adapters/__init__.py) names the layout.
+_TITLE_ALIASES = {"frlg": TITLE_FRLG, "firered": TITLE_FRLG, "leafgreen": TITLE_FRLG,
+                  "emerald": TITLE_EMERALD, TITLE_EXPANSION: TITLE_EXPANSION}
 
 
-def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA) -> list[dict]:
+def _title(title: str, *, cfru: bool = False) -> str:
+    """The codec title for ``title``, refused by name when unknown or combined with the
+    CFRU/RR layout, which exists only on FR-based builds (review cx-73b96095 M5-M7): a
+    ValueError, so :func:`qualify_flash` reports it as ``(False, msg)``."""
+    canonical = _TITLE_ALIASES.get(title)
+    if canonical is None:
+        raise ValueError(f"unknown Gen 3 title {title!r}; expected one of {sorted(_TITLE_ALIASES)}")
+    if cfru and canonical != TITLE_FRLG:
+        raise ValueError(f"the CFRU/RR save layout is FR-based; title {title!r} cannot use it")
+    return canonical
+
+
+def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA,
+                title: str = TITLE_FRLG) -> list[dict]:
     """The 14 logical sections, via the SAVEBLOCK_CHUNK macro
     (src/save.c#L43-L72): offset = chunkNum * chunk_size, size =
     min(sizeof(object) - offset, chunk_size).  The same macro with
-    chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3)."""
+    chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3).
+    ``title`` only changes the SaveBlock1/2 object sizes -- Storage is
+    identical across vanilla titles (pokemon_storage_system.h); expansion's is bigger."""
+    title = _title(title)
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
+    objects = (
+        ("sb2", sb2_size, 0, 0),
+        ("sb1", sb1_size, 1, 4),
+        ("storage", _TITLE_STORAGE_SIZES.get(title, STORAGE_SIZE), 5, 13),
+    )
     layout = []
-    for name, total, first_id, last_id in _OBJECTS:
+    for name, total, first_id, last_id in objects:
         for chunk in range(last_id - first_id + 1):
             offset = chunk * chunk_size
             size = min(total - offset, chunk_size) if total >= offset else 0
@@ -518,13 +743,15 @@ def _select_slot(s1: int, c1: int, s2: int, c2: int) -> tuple[int, int]:
     return _STATUS_INVALID, 0
 
 
-def parse_flash(image: bytes, cfru: bool = False) -> dict:
+def parse_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> dict:
     """Loader-style recovery: mirrors GetSaveValidStatus + CopySaveSlotData.
 
     Like the game, this accepts a partially valid image and copies whatever
     sections check out.  Use :func:`qualify_flash` for the strict witness
-    test."""
-    layout = slot_layout(CHUNK_SIZE_CFRU if cfru else CHUNK_SIZE_VANILLA)
+    test.  ``title`` selects the SaveBlock1/2 sizes (default: FR/LG/RR)."""
+    title = _title(title, cfru=cfru)
+    layout = slot_layout(CHUNK_SIZE_CFRU if cfru else CHUNK_SIZE_VANILLA, title=title)
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
     body, rtc = split_rtc(image)
     sectors = [read_sector(body, i, layout) for i in range(SECTORS_COUNT)]
     s1, c1 = _scan_slot(sectors[:NUM_SECTORS_PER_SLOT])
@@ -533,9 +760,9 @@ def parse_flash(image: bytes, cfru: bool = False) -> dict:
 
     slot = counter % NUM_SAVE_SLOTS
     base = NUM_SECTORS_PER_SLOT * slot
-    blocks = {"sb2": bytearray(SAVEBLOCK2_SIZE),
-              "sb1": bytearray(SAVEBLOCK1_SIZE),
-              "storage": bytearray(STORAGE_SIZE)}
+    blocks = {"sb2": bytearray(sb2_size),
+              "sb1": bytearray(sb1_size),
+              "storage": bytearray(_TITLE_STORAGE_SIZES.get(title, STORAGE_SIZE))}
     rotation = None
     for i in range(NUM_SECTORS_PER_SLOT):   # src/save.c#L440-L464
         sector = sectors[base + i]
@@ -562,14 +789,14 @@ def parse_flash(image: bytes, cfru: bool = False) -> dict:
     }
 
 
-def qualify_flash(image: bytes, cfru: bool = False) -> tuple[bool, str]:
+def qualify_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> tuple[bool, str]:
     """STRICT qualification, deliberately stronger than the game's loader
     (flash_save.md §1 [RECOMMENDATION]): the selected slot must carry exactly
     one copy of each of the 14 ids, with valid signature and checksum, all at
     the SAME counter.  A recovered older slot is playable but is not a witness
     that the intended save completed."""
     try:
-        parsed = parse_flash(image, cfru=cfru)
+        parsed = parse_flash(image, cfru=cfru, title=title)
     except ValueError as exc:
         return False, str(exc)
     base = NUM_SECTORS_PER_SLOT * parsed["slot"]
@@ -607,30 +834,54 @@ SB1_PARTY_COUNT_OFFSET = 0x34
 SB1_PARTY_OFFSET = 0x38
 PARTY_CAPACITY = 6
 
-def party_from_save(image: bytes, rr: bool = False) -> list[dict]:
-    """Decode party using the title's disk layout; qualify_flash is a separate gate."""
+_TITLE_PARTY_OFFSETS = {
+    TITLE_FRLG: (SB1_PARTY_COUNT_OFFSET, SB1_PARTY_OFFSET),
+    TITLE_EMERALD: (SB1_PARTY_COUNT_OFFSET_EMERALD, SB1_PARTY_OFFSET_EMERALD),
+    TITLE_EXPANSION: (SB1_PARTY_COUNT_OFFSET_EMERALD, SB1_PARTY_OFFSET_EMERALD),
+}
+
+
+def _record_layout(title: str, layout: dict | None) -> dict:
+    """The masked-record layout a title's party/box decode needs: none for vanilla, and
+    for expansion the build's own (a vanilla decode of an expansion record reads the new
+    bit lanes as species/moves/experience, so it is refused rather than guessed)."""
+    if title == TITLE_EXPANSION and not layout:
+        raise ValueError("expansion records need the build's layout (profile.derived)")
+    return validate_expansion_layout(layout)
+
+
+def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG,
+                    layout: dict | None = None) -> list[dict]:
+    """Decode party using the title's disk layout; qualify_flash is a separate gate.
+    ``layout`` is an expansion build's masked-record layout (required for that title)."""
+    title = _title(title, cfru=rr)
+    layout = _record_layout(title, layout)
     if rr:
         return rr_party_from_save(image)
-    sb1 = parse_flash(image)["sb1"]
-    count = min(sb1[SB1_PARTY_COUNT_OFFSET], PARTY_CAPACITY)
+    sb1 = parse_flash(image, title=title)["sb1"]
+    count_off, party_off = _TITLE_PARTY_OFFSETS[title]
+    count = min(sb1[count_off], PARTY_CAPACITY)
     out = []
     for slot in range(count):
-        start = SB1_PARTY_OFFSET + slot * PARTY_MON_SIZE
-        out.append(decode_party_mon(sb1[start:start + PARTY_MON_SIZE]))
+        start = party_off + slot * PARTY_MON_SIZE
+        out.append(decode_party_mon_masked(sb1[start:start + PARTY_MON_SIZE], layout=layout))
     return out
 
 
-def boxes_from_save(image: bytes, rr: bool = False) -> list[list[dict]]:
+def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG,
+                    layout: dict | None = None) -> list[list[dict]]:
     """Decode vanilla's 14 boxes or RR's 25 scattered compressed boxes."""
+    title = _title(title, cfru=rr)
+    layout = _record_layout(title, layout)
     if rr:
         return rr_boxes_from_save(image)
-    storage = parse_flash(image)["storage"]
+    storage = parse_flash(image, title=title)["storage"]
     boxes = []
     for box in range(BOXES_PER_STORE):
         slots = []
         for slot in range(MONS_PER_BOX):
             start = BOX_DATA_OFFSET + (box * MONS_PER_BOX + slot) * BOX_MON_SIZE
-            slots.append(decode_box_mon(storage[start:start + BOX_MON_SIZE]))
+            slots.append(decode_box_mon_masked(storage[start:start + BOX_MON_SIZE], layout=layout))
         boxes.append(slots)
     return boxes
 

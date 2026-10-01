@@ -18,6 +18,12 @@ and allocation prerequisites. The current ruling is recorded in
 Resolved means the scope decision is settled. Mailbox allocation and P4 sound/context
 qualification remain dependencies; no PHYSICAL pass, live feasibility or gate signature is implied.
 
+2026-09-26 update: those dependencies have since closed -- panel (ticket 26), native sound
+(ticket 27) and native trade (ticket 28) are all built with PHYSICAL PASS receipts
+(`tools/verify_gen2_release.py --lane live-gates` / `--lane live-trade-gates`). The remaining
+gap before the first RC is the owner's G4 signature promoting the overlay artifacts to
+ADMITTED (`docs/gen2/issues/29-p4-overlay-evidence.md`); no gate signature is implied here.
+
 ## Comments
 
 2026-09-21 history: round 2 Q9 said peer ghost "if possible, implement". O-13 superseded

@@ -1,5 +1,11 @@
 # P4.5 plan: Soul Link phone calls (Gen 2 easter egg), 2026-09-23
 
+> **Historical planning record — shipped.** Cards P4.5a-d landed (`lua/gen2/phone.lua`,
+> `patch/gen2/src/phone.asm`, `SLINK_CAP_PHONE` in `patch/gb/slink_abi.inc`, the three
+> `server/state.py` tags, `tests/unit/test_gen2_phone.py` / `test_state_phone_tags.py`). The
+> §4 "Deferred (optional, O-29)" partner-mon-name feature was later delivered as a follow-on,
+> "named phone calls" (PHONE-NAMES, commit `e6d7761d`) — do not read §4's deferral as still open.
+
 Planning worker P4.5a → coordinator. Docs only: nothing under `patch/**`, `lua/**` or `server/**`
 was edited. Scope: owner ruling **O-29** (2026-09-23). On SLink-patched Gen 2 ROMs the Pokégear
 rings with 2-3 fixed-text Soul Link calls, carried by the native special-call mechanism.

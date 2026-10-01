@@ -4,7 +4,8 @@
       "cb1_overworld": {
         "address": 134571316,
         "expected_hex": {
-          "clean": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+          "clean": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047",
+          "companion": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
         },
         "length": 66,
         "rom_offset": 353588,
@@ -13,7 +14,8 @@
       "cb2_overworld": {
         "address": 134571444,
         "expected_hex": {
-          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302",
+          "companion": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
         },
         "length": 44,
         "rom_offset": 353716,
@@ -22,7 +24,8 @@
       "frame_control": {
         "address": 134219024,
         "expected_hex": {
-          "clean": "3BF1A9F900060028"
+          "clean": "3BF1A9F900060028",
+          "companion": "3BF1A9F900060028"
         },
         "length": 8,
         "rom_offset": 1306,
@@ -31,7 +34,8 @@
       "run_tasks": {
         "address": 134706552,
         "expected_hex": {
-          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003"
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003",
+          "companion": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003"
         },
         "length": 48,
         "rom_offset": 488824,
@@ -40,7 +44,8 @@
       "try_saving_data": {
         "address": 135111524,
         "expected_hex": {
-          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003",
+          "companion": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
         },
         "length": 72,
         "rom_offset": 893796,
@@ -134,6 +139,93 @@
       },
       "handoff": {
         "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "pret pokefirered c75f3523: include/battle.h BattleStruct.moveTarget/chosenMovePositions; src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1"
+        },
         "head": [
           {
             "address": 33701372,
@@ -171,6 +263,32 @@
       "pc_min": 134219920,
       "symbol": "WaitForVBlank",
       "thumb": 1
+    },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
+    "native": {
+      "abi": 2,
+      "abi_off": 4,
+      "base": 33665024,
+      "busy": 1,
+      "info": 33666784,
+      "info_state_off": 14,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "patch/src/trade_targets/abi.h; native heap reservation",
+      "status_off": 10,
+      "version": "gen3-native-v2"
     },
     "pointers": {
       "gPokemonStoragePtr": {
@@ -357,6 +475,14 @@
         "source": "sym",
         "symbol": "gMPlayInfo_SE1"
       },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "95": 95
+      },
       "sound_info": {
         "address": 50356048,
         "source": "sym",
@@ -408,7 +534,8 @@
       "cb1_overworld": {
         "address": 134571316,
         "expected_hex": {
-          "clean": "10B5094C61680948814217D1BCF0A0FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+          "clean": "10B5094C61680948814217D1BCF0A0FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047",
+          "companion": "10B5094C61680948814217D1BCF0A0FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
         },
         "length": 66,
         "rom_offset": 353588,
@@ -417,7 +544,8 @@
       "cb2_overworld": {
         "address": 134571444,
         "expected_hex": {
-          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302",
+          "companion": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
         },
         "length": 44,
         "rom_offset": 353716,
@@ -426,7 +554,8 @@
       "frame_control": {
         "address": 134219024,
         "expected_hex": {
-          "clean": "3BF195F900060028"
+          "clean": "3BF195F900060028",
+          "companion": "3BF195F900060028"
         },
         "length": 8,
         "rom_offset": 1306,
@@ -435,7 +564,8 @@
       "run_tasks": {
         "address": 134706552,
         "expected_hex": {
-          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF1F9FAA079FF28F5D130BC01BC0047000090500003"
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF1F9FAA079FF28F5D130BC01BC0047000090500003",
+          "companion": "30B500F015F80006000E10280AD0074D84002418E400641921686CF1F9FAA079FF28F5D130BC01BC0047000090500003"
         },
         "length": 48,
         "rom_offset": 488824,
@@ -444,7 +574,8 @@
       "try_saving_data": {
         "address": 135111480,
         "expected_hex": {
-          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BFFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BFFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003",
+          "companion": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BFFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
         },
         "length": 72,
         "rom_offset": 893752,
@@ -538,6 +669,93 @@
       },
       "handoff": {
         "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "pret pokefirered c75f3523: include/battle.h BattleStruct.moveTarget/chosenMovePositions; src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1"
+        },
         "head": [
           {
             "address": 33701372,
@@ -575,6 +793,32 @@
       "pc_min": 134219920,
       "symbol": "WaitForVBlank",
       "thumb": 1
+    },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
+    "native": {
+      "abi": 2,
+      "abi_off": 4,
+      "base": 33665024,
+      "busy": 1,
+      "info": 33666784,
+      "info_state_off": 14,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "patch/src/trade_targets/abi.h; native heap reservation",
+      "status_off": 10,
+      "version": "gen3-native-v2"
     },
     "pointers": {
       "gPokemonStoragePtr": {
@@ -760,6 +1004,14 @@
         "address": 50361152,
         "source": "sym",
         "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "95": 95
       },
       "sound_info": {
         "address": 50356048,

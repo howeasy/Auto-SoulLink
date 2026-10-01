@@ -1,0 +1,2 @@
+attempt 1 of 3
+PYDEC: FAIL timed out after 180s waiting for the SERVER to pair the two real captures

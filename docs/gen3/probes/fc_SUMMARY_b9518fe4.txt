@@ -1,0 +1,21 @@
+# G4 final cut b9518fe437909097f07ad7fea05ddaf597125e40 -- tools/gen3_final_cut.py summary (written 2026-09-30T05:21:50Z)
+# RUN 8 / CARRIED 0 / CACHED 0 / FAIL 6
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | PASS | 1 | fc_states_firered_town_b9518fe4.txt |
+| 2 | states_firered_battle | §1.1 build | PASS | 1 | fc_states_firered_battle_b9518fe4.txt |
+| 3 | states_firered_trainer | §1.1 build | PASS | 1 | fc_states_firered_trainer_b9518fe4.txt |
+| 4 | states_leafgreen_town | §1.1 build | PASS | 1 | fc_states_leafgreen_town_b9518fe4.txt |
+| 5 | states_leafgreen_battle | §1.1 build | PASS | 1 | fc_states_leafgreen_battle_b9518fe4.txt |
+| 6 | states_leafgreen_trainer | §1.1 build | PASS | 1 | fc_states_leafgreen_trainer_b9518fe4.txt |
+| 7 | tutorials_firered | §1.2 build | PASS | 1 | fc_tutorials_firered_b9518fe4.txt |
+| 8 | tutorials_leafgreen | §1.2 build | PASS | 1 | fc_tutorials_leafgreen_b9518fe4.txt |
+| 9 | faint_cmd_gen3_fr_as_a | §2-3 item1-2 | FAIL exit=1 | 1 | fc_faint_cmd_gen3_fr_as_a_b9518fe4.txt |
+| 10 | link_gen3_fr_as_a | §2-3 item1-2 | FAIL exit=1 | 1 | fc_link_gen3_fr_as_a_b9518fe4.txt |
+| 11 | boxsync_gen3_fr_as_a | §2-3 item1-2 | FAIL exit=1 | 1 | fc_boxsync_gen3_fr_as_a_b9518fe4.txt |
+| 12 | reconnect_gen3_fr_as_a | §2-3 item1-2 | FAIL exit=1 | 1 | fc_reconnect_gen3_fr_as_a_b9518fe4.txt |
+| 13 | deadzone_gen3_fr_as_a | §2-3 item1-2 | FAIL exit=1 | 1 | fc_deadzone_gen3_fr_as_a_b9518fe4.txt |
+| 14 | whiteout_gen3_fr_as_a | §4 item2a | FAIL exit=1 | 1 | fc_whiteout_gen3_fr_as_a_b9518fe4.txt |
+
+OVERALL: FAIL (8/14 rows)

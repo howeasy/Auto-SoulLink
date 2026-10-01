@@ -1,0 +1,45 @@
+# gen3_final_cut row=whiteout_gen3_fr_as_a item=§4_item2a cut=b9518fe437909097f07ad7fea05ddaf597125e40
+# lane=C:/slink-wt/g3-core
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario whiteout_gen3   (cwd=C:/slink-wt/g3-core)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T01:19:51 cpu=18% emuhawk=0 python=3
+start_utc=2026-09-30T05:19:50Z tracked_clean_before=True
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b9518fe437909097f07ad7fea05ddaf597125e40+dirty dirty=[docs/gen3/probes/fc_SUMMARY_b9518fe4.txt,docs/gen3/probes/fc_boxsync_gen3_fr_as_a_b9518fe4.txt,docs/gen3/probes/fc_deadzone_gen3_fr_as_a_b9518fe4.txt,docs/gen3/probes/fc_faint_cmd_gen3_fr_as_a_b9518fe4.txt,docs/gen3/probes/fc_link_gen3_fr_as_a_b9518fe4.txt,docs/gen3/probes/fc_reconnect_gen3_fr_as_a_b9518fe4.txt,docs/gen3/probes/fc_states_firered_battle_b9518fe4.txt,docs/gen3/probes/fc_states_firered_town_b9518fe4.txt,docs/gen3/probes/fc_states_firered_trainer_b9518fe4.txt,docs/gen3/probes/fc_states_leafgreen_battle_b9518fe4.txt,docs/gen3/probes/fc_states_leafgreen_town_b9518fe4.txt,docs/gen3/probes/fc_states_leafgreen_trainer_b9518fe4.txt,docs/gen3/probes/fc_tutorials_firered_b9518fe4.txt,docs/gen3/probes/fc_tutorials_leafgreen_b9518fe4.txt]
+[duo] server up: tcp=56207 http=56208 data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped 263620B6:99DE0D8A and F6B6A64D:1C600D89
+[duo] queued for a: {'cmd': 'box_mon', 'key': '263620B6:99DE0D8A'}
+[duo] timing orchestrate 113.8s
+[duo] timing results 3.6s
+[duo] RESULT_LINE a: RESULT: PASS (pair 263620B6:99DE0D8A rebuilt after the whiteout; the write landed in the Center)
+[duo] RESULT_LINE b: RESULT: PASS (pair F6B6A64D:1C600D89 rebuilt after the whiteout)
+[duo] timing oracle 0.0s
+[duo] PYDEC: FAIL the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_b9518fe4.txt, docs/gen3/probes/fc_boxsync_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_deadzone_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_faint_cmd_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_link_gen3_fr_as_a_b9518fe4.txt, ...): a G4 receipt must come from a clean cut
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_4nw15vtq
+[duo] whiteout_gen3: attempt 1 aborted — RuntimeError: the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_b9518fe4.txt, docs/gen3/probes/fc_boxsync_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_deadzone_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_faint_cmd_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_link_gen3_fr_as_a_b9518fe4.txt, ...): a G4 receipt must come from a clean cut
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1) — RuntimeError: the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_b9518fe4.txt, docs/gen3/probes/fc_boxsync_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_deadzone_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_faint_cmd_gen3_fr_as_a_b9518fe4.txt, docs/gen3/probes/fc_link_gen3_fr_as_a_b9518fe4.txt, ...): a G4 receipt must come from a clean cut
+exit=1 end_utc=2026-09-30T05:21:50Z tracked_clean_after=True classification=real

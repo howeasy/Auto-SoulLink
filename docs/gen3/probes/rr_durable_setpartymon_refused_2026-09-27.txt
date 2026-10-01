@@ -1,0 +1,10 @@
+native arm possible at frame 388
+  [ok] native:transfer(party) queued the op
+  [ok] op posted to the mailbox (dispatch receipt)
+  [ok] opcode acked  — why=native refused result=0 reason=nil
+  [ok] ack is ST_FAIL (raw record replacement refused)  — why=native refused result=0 reason=nil
+  [ok] reason is REASON_DURABLE_ONLY (9)  — reason=9
+  [ok] gPlayerParty[1] untouched  — 
+  [ok] party count untouched  — count 1 -> 1
+  [ok] beacon still present (no corruption)
+RESULT: PASS setpartymon (0 checks failed)

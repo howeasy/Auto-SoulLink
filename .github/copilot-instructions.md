@@ -29,16 +29,16 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required
-# (~1450 and growing — the hand-maintained per-file sum that used to live here drifted
-#  constantly; run the suite for the real number)
+# (14215 collected as of this writing and growing — the hand-maintained per-file sum that
+#  used to live here drifted constantly; run the suite for the real number)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
-pytest tests/unit/test_gen1_adapter.py -v
+pytest tests/unit/test_gen1_adapter_contract.py -v
 pytest tests/unit/test_gen2_adapter.py -v
 pytest tests/unit/test_gen5_adapter.py -v
 pytest tests/unit/test_stat_stages.py -v
-pytest tests/unit/test_phase1_comms.py -v
+pytest tests/integration/test_phase1_comms.py -v
 pytest tests/unit/test_obs_priority.py -v
 pytest tests/unit/test_manager_launcher.py -v
 # 0.2.6 — Rival Team Swap / Explode Mode / Upcoming Key Trainers:
@@ -46,10 +46,10 @@ pytest tests/unit/test_trainer_panel.py -v
 pytest tests/unit/test_state_rival_battle_start.py -v
 pytest tests/unit/test_state_party_blob_cache.py -v
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v
-pytest tests/unit/test_cli_rival_team_swap.py -v
+pytest tests/integration/test_cli_rival_team_swap.py -v
 # Companion patch + per-run toggles:
-pytest tests/unit/test_cli_native_toggles.py -v
-pytest tests/unit/test_cli_overworld_presence.py -v
+pytest tests/integration/test_cli_native_toggles.py -v
+pytest tests/integration/test_cli_overworld_presence.py -v
 pytest tests/unit/test_patcher_routes.py -v
 
 # Single test
@@ -58,7 +58,10 @@ pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
 # Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (184 entries)
 python tools/gen_area_map.py
 
-# Regenerate data/games/gen2_<title>/area_map.json (124 entries) per title
+# Regenerate data/games/gen3_emerald/{area_map.json,gen3_emerald_areas.lua,gen3_emerald_locations.lua}
+python tools/gen_area_map.py --game emerald
+
+# Regenerate data/games/gen2_<title>/area_map.json per title (388 Crystal, 368 Gold, 368 Silver)
 python tools/gen_gen2_area_map.py
 
 # Regenerate Gen 5 BW area maps and location tables
@@ -66,6 +69,15 @@ python tools/gen_gen5_area_map.py    # Gen 5 BW
 
 # Regenerate the RR priority/key-trainer roster (Upcoming Key Trainers panel + calc setdex)
 python tools/gen_rr_priority_trainers.py
+
+# Regenerate lua/tests/gen3_title_syms_exp_28877d73.lua (pokeemerald-expansion harness addresses)
+python tools/gen_gen3_title_syms_exp.py --symbols <build>/pokeemerald.sym --map <build>/pokeemerald.map
+
+# Regenerate the pinned pokeemerald-expansion battle-mechanics config VALUES
+# (data/games/gen3_exp/28877d73/config.json; resolves B_*/P_*/I_*/GEN_* macros via
+# the pinned build's own arm-none-eabi-cpp on the hgbox VM -- see tools/build_expansion.py
+# and tools/gen_expansion_facts.py for the sibling ROM-build/compiler-fact generators)
+python tools/extract_expansion_config.py --host hgbox
 
 # Lint (dev only: pip install -r requirements-dev.txt; config ruff.toml)
 ruff check .
@@ -77,11 +89,11 @@ python tools/lua_syntax_check.py
 
 ## Project Overview
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Radical Red), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a generation-specific Lua client (`lua/gen1/client.lua`, `lua/gen2/client.lua`, `lua/gen3/entry.lua` + `lua/gen3/run.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game state through its generation's read layer and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Radical Red, Emerald — Emerald pairs only with itself), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a generation-specific Lua client (`lua/gen1/client.lua`, `lua/gen2/client.lua`, `lua/gen3/entry.lua` + `lua/gen3/run.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game state through its generation's read layer and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
 ### Game Maturity
 
-**Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus nine two-instance Soul Link scenarios across two cartridge pairings, Red/Blue and Yellow/Red (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+**Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs the original headless gates (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`, 11 cases) plus the rewritten client's own gates (`tests/live/test_gen1_new_gates.py`, 29 cases) and two-instance Soul Link scenarios on the Red/Blue pairing (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py`, 20 cases; `ROMS = ("red", "blue")` -- there is no Yellow duo pairing) — and, for the second Gen 1 foundation, `tests/e2e/test_duo_gen1_pure.py` (37 cases: PureRed↔PureBlue, PureRed↔PureGreen, and the companion-overlay pairing). The pre-rewrite `tests/e2e/test_duo_gen1.py` no longer exists. Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
 
 **Gen 2 is partially verified — mechanisms proven, no playthrough.** Inspect, frame-alignment and write-window gates run against real Crystal/Gold cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py`), and two-instance link scenarios run against a real server (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py`) across the Crystal, Gold and Silver pairings. What has *never* happened on Gen 2 is unscripted play: no wild encounter, no area change, no ball thrown, so encounter linking, the dead zone and the species clause have no live Gen 2 evidence. Those three rules are enforced server-side and are generation-independent, and Gen 1's `playthrough` / `deadzone` / `dupes` scenarios cover them. Gen 2's blocker is the fixture: New Bark Town's west exit is script-locked until Elm hands over a starter, so the qualified fixtures can only park indoors and there is no grass fixture to walk.
 
@@ -159,7 +171,7 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 [BizHawk Instance A (Gen 3 GBA)]     [BizHawk Instance B (Gen 3 GBA)]
   lua/gen3/entry.lua + run.lua         lua/gen3/entry.lua + run.lua
   lua/gen3/{reads,signals,writes,safety,client,boxes,native}.lua
-  data/games/{gen3_frlg,gen3_rr}/ + data/games/gen3_frlge/area_map.json
+  data/games/{gen3_frlg,gen3_rr,gen3_emerald}/ + data/games/gen3_frlge/area_map.json
 
 [BizHawk Instance A (Gen 4 NDS)]     [BizHawk Instance B (Gen 4 NDS)]
   lua/clients/gen4_hgsspt_client.lua   lua/clients/gen4_hgsspt_client.lua
@@ -238,12 +250,13 @@ SLink-RR/
 │   ├── state.py                 # SoulLinkState FSM (game-agnostic)
 │   ├── obs_controller.py        # OBS WebSocket controller (simpleobsws, per-player queues)
 │   ├── pokemon_data.py          # Species names, evo families, types, abilities
-│   ├── move_data.py             # Move names and properties (Gen 3 RR + vanilla)
+│   ├── data/moves/             # Move names and properties (gen3_rr.py, gen3_vanilla.py)
 │   ├── manager.py               # Run Manager (multi-run orchestration)
 │   └── adapters/                # Per-game server adapters
 │       ├── base.py              # Abstract base adapter
-│       ├── gen1_rby.py          # Gen 1 adapter
-│       ├── gen2_gsc.py          # Gen 2 adapter
+│       ├── gen1_rby.py          # Gen 1 adapter (Red/Blue/Yellow + Archipelago)
+│       ├── gen1_purergb.py      # Gen 1 pureRGB adapter (PureRed/PureBlue/PureGreen)
+│       ├── gen2_gsc.py          # Gen 2 adapter (Crystal/Gold/Silver)
 │       ├── gen3_frlge.py        # Gen 3 adapter
 │       ├── gen4_hgsspt.py       # Gen 4 adapter
 │       └── gen5_bw.py           # Gen 5 adapter
@@ -252,13 +265,16 @@ SLink-RR/
 │   ├── memorial.json            # Death log (auto-generated)
 │   ├── runs/                    # Run Manager named runs (each has own links.json)
 │   └── games/                   # Per-game static data
-│       ├── gen3_frlge/          # Shared Gen 3 area map/locations and server-side inputs
+│       ├── gen3_frlge/          # Shared Gen 3 (FRLG/RR) area map/locations and server-side inputs
 │       ├── gen3_frlg/           # FireRed/LeafGreen profile, sites and checkpoint
 │       ├── gen3_rr/             # Radical Red profile, sites and checkpoint
+│       ├── gen3_emerald/        # Emerald profile, sites, checkpoint and own area map (E<->E only)
 │       ├── gen4_hgsspt/         # HGSS/Pt area maps + gen4_hgsspt_areas.lua
 │       ├── gen2_crystal/        # Crystal species, types, items, area maps
-│       ├── gen1_rby/            # Placeholder
-│       ├── gen2_gsc/            # Placeholder
+│       ├── gen2_gold/, gen2_silver/  # Same shape as gen2_crystal/, per title
+│       ├── gen1_rby/            # Profile, area map, engine signals, trainers, species/moves/evolutions (pret-derived)
+│       ├── gen1_purergb/        # pureRGB's own species/types/area map + trade-overlay variants (pinned build v2.7.6)
+│       ├── gen2_gsc/            # calc_names.json only — per-title Gen 2 data still lives in gen2_crystal/gold/silver
 │       └── gen5_bw/             # Gen 5 area maps and location data
 ├── tools/                       # Code generation scripts (run manually)
 │   ├── gen_pokemon_data.py      # Generates pokemon_data.py tables
@@ -289,10 +305,10 @@ SLink-RR/
 - **Shared Lua modules** → `lua/` root (e.g., `hud.lua`, `connector.lua`)
 - **Never** place game-specific files in the root or in another game's directory
 
-*Gen 3 Lua (GBA — FireRed / LeafGreen / Radical Red):*
-- **`lua/slink.lua`** — Routes an admitted GBA cartridge through `Entry.admit` before the legacy game detector; FireRed, LeafGreen, and Radical Red are admitted, while Emerald, Archipelago-FRLG, and unknown/header-only GBA builds are refused by name.
+*Gen 3 Lua (GBA — FireRed / LeafGreen / Radical Red / Emerald):*
+- **`lua/slink.lua`** — Routes an admitted GBA cartridge through `Entry.admit` before the legacy game detector; FireRed, LeafGreen, Radical Red, and Emerald are admitted, while Archipelago-FRLG and unknown/header-only GBA builds are refused by name.
 - **`lua/slink_gen3.lua`** — Thin launcher wrapper that configures `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER`, then loads `slink.lua`; the admission and build graph stay in `lua/gen3/`.
-- **`lua/gen3/entry.lua`** — Composition root. It defines the `gen3_frlg` and `gen3_rr` packs, literal pack-file paths, hash/anchor/header admission, and `Entry.build(deps)`; injected `io`/`ev` tables keep the production graph independent of BizHawk globals.
+- **`lua/gen3/entry.lua`** — Composition root. It defines the `gen3_frlg`, `gen3_rr`, and `gen3_emerald` packs, literal pack-file paths, hash/anchor/header admission, and `Entry.build(deps)`; injected `io`/`ev` tables keep the production graph independent of BizHawk globals.
 - **`lua/gen3/run.lua`** — BizHawk bootstrap. It supplies GBA memory/event adapters, the connector and HUD, calls `Entry.admit`, builds the production session, and drives guarded frame/exit callbacks.
 - **`lua/gen3/reads.lua`** — Profile-driven record decoder for party, boxes, trainer, bag, map, and battle state. It dereferences the live SaveBlock pointers and uses injected read-only I/O; FRLG and Radical Red differ by pack data and record rules, not a title branch.
 - **`lua/gen3/signals.lua`** — Converts pack `engine_signals.json` sites into `on_bus_exec` hooks, checks expected ROM bytes at load and fire, verifies callback identity, and bounds the signal queue.
@@ -300,7 +316,7 @@ SLink-RR/
 - **`lua/gen3/boxes.lua`** — Profile-aware party/PC/memorial moves, including FRLG's relocated storage and Radical Red's compressed-box format, with optional native executor seams.
 - **`lua/gen3/client.lua`** — Pack-neutral state machine over `lua/core`: hello gating, signal-to-event reduction, keyed/deferred commands, PC sync, battle writes, and HUD prompts. It receives `native` only for an admitted Radical Red companion artifact.
 - **`lua/gen3/native.lua`** — Optional single-owner Radical Red companion mailbox part. It owns staging, publishes opcodes through the armed write sink, polls acknowledgements, and reads back native results; its addresses and opcodes come from `profile.native`.
-- **`data/games/gen3_frlg/`, `data/games/gen3_rr/`, and `data/games/gen3_frlge/`** — Per-pack profiles, engine signals, checkpoints, and the shared FRLG/RR area map and locations.
+- **`data/games/gen3_frlg/`, `data/games/gen3_rr/`, `data/games/gen3_emerald/`, and `data/games/gen3_frlge/`** — Per-pack profiles, engine signals, and checkpoints; `gen3_frlge/` holds the shared FRLG/RR area map and locations, while `gen3_emerald/` carries its own (Emerald pairs only with itself).
 
 *Gen 2 Lua (GBC — Crystal):*
 - **`lua/gen2/entry.lua`** — Gen 2 composition root (Crystal/Gold/Silver): builds the candidate and
@@ -333,19 +349,19 @@ SLink-RR/
 - **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter + GamePresentationAdapter. All game-specific server logic flows through adapter interfaces. 0.2.6 added `gift_link_area`, `rival_trainer_ids` (rules) and `trainers_for_area` / `trainer_party` / `trainer_brief` (presentation) as inert-default stubs.
-- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Legacy Emerald gift-area entries remain server-side compatibility data, but the current launcher admits only FireRed, LeafGreen, and Radical Red. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Emerald gift/fixed-gift areas are loaded from data/games/gen3_emerald/ (area_map, statics, write_checkpoint); the launcher admits FireRed, LeafGreen, Radical Red, and Emerald. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
 - **`server/adapters/gen2_gsc.py`** — `Gen2GSCAdapter`, Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), per-title item names, PokeAPI sprites. Data from `data/games/gen2_<title>/` (Crystal, Gold, Silver).
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
 - **`server/adapters/__init__.py`** — Adapter registry: get_adapter(game_id) with backward-compat aliases.
-- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses. Verbose Logging checkbox in New Run form; `--verbose` forwarded to spawned subprocess; badge shown on run card. Per-run augmentations (`--explode-mode`, `--rival-team-swap`) persisted in the run registry and forwarded on launch. The Manager is the UI: `/runs/{id}` shows a run's board (live, or persisted once stopped) on the Manager's own origin; `/new` is the run creator (game family first, options greyed with reasons from `OPTION_SUPPORT`); `/broadcast`, `/tools`, `/runs/{id}/randomizer`. Run options live in one table, `RUN_FLAGS`. The randomizer's cartridges come from `GET /api/roms` (`ROM_DIRS`: the repo, `roms/`, `patch/build/`, `.cache/purergb*`; each described by `upr_pipeline.describe_rom` with its family) or `POST /api/roms` (the browser's file dialog, streamed into `roms/`); `GAME_FAMILY` maps a Gen 1 game key to its randomizer family and `handle_randomize` refuses a pair from the other family. Randomizer presets are named specs in `data/runs/presets.json` (`/api/presets`); the settings interchange file is UPR's `.rnqs` (`/api/randomizer/settings/{export,import}`, admitted by `upr_pipeline.admit_settings` — the same gates `prepare_pair` uses). A Gen 1 run's cartridges are made by `server/cartridges.py::provision` (`POST /api/runs/{id}/cartridges`; the older `/randomize` implies randomizing): vanilla randomize→structural inject, pureRGB overlay→randomize, contract with the final sha1, no contract when not randomized; the run records `cartridges` (and `randomizer`), downloads read `cartridges.players[p].output`. Area ids nothing names fall back to `adapters.base.humanize_area_id` ("route8" → "Route 8"). See `docs/ui_migration_plan.md`.
+- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses. Verbose Logging checkbox in New Run form; `--verbose` forwarded to spawned subprocess; badge shown on run card. Per-run augmentations (`--explode-mode`, `--rival-team-swap`) persisted in the run registry and forwarded on launch. The Manager is the UI: `/runs/{id}` shows a run's board (live, or persisted once stopped) on the Manager's own origin; `/new` is the run creator (game family first, options greyed with reasons from `OPTION_SUPPORT`); `/broadcast`, `/tools`, `/runs/{id}/randomizer`. Run options live in one table, `RUN_FLAGS`. The randomizer's cartridges come from `GET /api/roms` (`ROM_DIRS`: the repo, `roms/`, `patch/build/`, `.cache/purergb*`; each described by `upr_pipeline.describe_rom` with its family) or `POST /api/roms` (the browser's file dialog, streamed into `roms/`); `GAME_FAMILY` maps a Gen 1 game key to its randomizer family and `handle_randomize` refuses a pair from the other family. Randomizer presets are named specs in `data/runs/presets.json` (`/api/presets`); the settings interchange file is UPR's `.rnqs` (`/api/randomizer/settings/{export,import}`, admitted by `upr_pipeline.admit_settings` — the same gates `prepare_pair` uses). A Gen 1 run's cartridges are made by `server/cartridges.py::provision` (`POST /api/runs/{id}/cartridges`; the older `/randomize` implies randomizing): vanilla randomize→structural inject, pureRGB overlay→randomize, contract with the final sha1, no contract when not randomized; the run records `cartridges` (and `randomizer`), downloads read `cartridges.players[p].output`. Area ids nothing names fall back to `adapters.base.humanize_area_id` ("route8" → "Route 8"). See `docs/historical/ui_migration_plan.md`.
 
 *Data:*
 - **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules (species/gender/type + `explode_mode`), written on every state change. (`rival_team_swap` is supplied per-launch from the Manager run registry, not persisted here.)
 - **`data/obs_config.json`** — OBS WebSocket config (host, port, password per player, enabled flag, trigger rules list). Written by `OBSController.save_config()`. Not per-run — shared across all server instances. Passwords stored in plaintext locally; never returned in HTTP responses.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
-- **`tools/gen_gen2_area_map.py`** — Generates each title's `data/games/gen2_<title>/area_map.json` (124 entries).
+- **`tools/gen_gen2_area_map.py`** — Generates each title's `data/games/gen2_<title>/area_map.json` (388 Crystal, 368 Gold, 368 Silver). It writes the JSON pack only; there is no generated `*_areas.lua` for Gen 2.
 - **`tools/gen_gen5_area_map.py`** — Generates `data/games/gen5_bw/gen5_bw_areas.lua` and `data/games/gen5_bw/gen5_bw_locations.lua` from the Gen 5 BW/BW2 area maps.
 
 *Tests:*
@@ -355,21 +371,21 @@ SLink-RR/
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
 - **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
-- **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (18 cases: 4 gate scripts × red/blue/yellow, plus the companion-patch and Archipelago gates) and `tests/e2e/test_duo_gen1.py` (18 cases: 9 scenarios × the Red/Blue and Yellow/Red pairings).
-- **`tests/unit/test_gen2_adapter.py`** — tests for `Gen2GSCAdapter`. Live coverage lives in `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py` (inspect, frame-align, write windows; Crystal + Gold, Silver shares Gold's receipt) and `tests/e2e/test_duo_gen2_new.py` (two-instance link scenarios, one real server).
-- **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
-- **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
+- **`tests/unit/test_gen1_adapter_contract.py`** — 10 tests checking the Gen 1 adapter against pret source directly, independently of the shipped JSON data (supersedes the old `test_gen1_adapter.py`, which no longer exists). Live coverage lives in `tests/live/test_gen1_gates.py` (11 cases, the original gates) and `tests/live/test_gen1_new_gates.py` (29 cases, the rewritten client), plus `tests/e2e/test_duo_gen1_new.py` (20 cases, the Red/Blue pairing only) and `tests/e2e/test_duo_gen1_pure.py` (37 cases, the pureRGB pairings). The pre-rewrite `tests/e2e/test_duo_gen1.py` no longer exists.
+- **`tests/unit/test_gen2_adapter.py`** — 59 tests for `Gen2GSCAdapter`. Live coverage lives in `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py` (inspect, frame-align, write windows; Crystal + Gold, Silver shares Gold's receipt) and `tests/e2e/test_duo_gen2_new.py` (two-instance link scenarios, one real server).
+- **`tests/unit/test_gen3_adapter.py`** — 218 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen4_adapter.py`** — 101 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
-- **`tests/unit/test_stat_stages.py`** — 46 tests for stat stage calculations.
+- **`tests/unit/test_stat_stages.py`** — 48 tests for stat stage calculations.
 - **`tests/unit/test_obs_priority.py`** — 7 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, exact area + area-group filters).
-- **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
+- **`tests/integration/test_phase1_comms.py`** — 6 TCP integration tests.
 - **`tests/unit/test_trainer_panel.py`** — 14 tests for the Upcoming Key Trainers panel (`trainers_for_area` / `trainer_party` / `trainer_brief`, base no-op defaults).
-- **`tests/unit/test_state_rival_battle_start.py`** — 15 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
+- **`tests/unit/test_state_rival_battle_start.py`** — 34 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
 - **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
 - **`tests/unit/test_gen3_adapter_rival_ids.py`** — 8 tests for `rival_trainer_ids()` (set size 27, known-ID anchors, vanilla empty, mutation safety).
-- **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
-- **`tests/integration/test_cli_native_toggles.py`** — tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
-- **`tests/unit/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
+- **`tests/integration/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
+- **`tests/integration/test_cli_native_toggles.py`** — 9 tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
+- **`tests/integration/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
 - **`tests/unit/test_patcher_routes.py`** — the `/patcher` page + a `/companion/{name}` route per target. `server/patcher.py` holds a TARGETS registry (Radical Red, Pokemon Red, Pokemon Blue), because a UPS embeds the CRC32 of the exact dump it was diffed against and one shared file would refuse every user but one. Includes a real apply path: each shipped patch reproduces its recorded md5, the result carries the `SLNK` beacon, and applying Red's patch to a Blue dump raises. Asserts NO Yellow artifact is shipped — Yellow has no free WRAM for the mailbox, so no build exists.
 
 ---
@@ -382,9 +398,10 @@ The server uses a pluggable adapter pattern for game-specific behavior. All game
 - **`GamePresentationAdapter`** — sprite HTML generation, species/ability/item/move/area names, trainer info, type names, and the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief`).
 
 Each game family has its own adapter module:
-- **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow)
+- **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow, + Archipelago Red/Blue)
+- **`server/adapters/gen1_purergb.py`** — Gen 1 pureRGB (PureRed, PureBlue, PureGreen — a second Gen 1 foundation, not a vanilla variant)
 - **`server/adapters/gen2_gsc.py`** — Gen 2 (Crystal, Gold, Silver)
-- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, and Radical Red only; Emerald and Archipelago-FRLG are refused before the adapter is used.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, Radical Red, and Emerald; Archipelago-FRLG is refused before the adapter is used.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
 - **`server/adapters/gen5_bw.py`** — Gen 5 (Black, White, Black 2, White 2)
 
@@ -432,7 +449,7 @@ The Gen 4 adapter is the **cleanest implementation** — use it as the template 
 
 ### Known Technical Debt (DO NOT Extend)
 
-**server.py is now fully game-agnostic.** All game-specific data and logic routes through the adapter pattern. The only `pokemon_data` import remaining is `GENDER_SYMBOL` (a universal `{0: "♂", 1: "♀", 2: "—"}` mapping).
+**server.py is now fully game-agnostic.** All game-specific data and logic routes through the adapter pattern — `server.py` imports nothing from `pokemon_data` at all. `GENDER_SYMBOL` still lives there (`server/pokemon_data.py:353`), keyed by name rather than index — `{"male": "♂", "female": "♀", "genderless": ""}` — and is imported by the Gen 3/4/5 adapters, not by the server.
 
 Remaining back-compat shims (leave them, don't extend them): the `"frlg"` rom_type alias in `adapters/__init__.py`, the accepted-but-ignored `is_rr` parameter on three `pokemon_data.py` functions, and the legacy theme-name aliases in `templating.py`.
 
@@ -473,7 +490,7 @@ Remaining back-compat shims (leave them, don't extend them): the `"frlg"` rom_ty
 
 **No CLI flags required.** Load the appropriate launcher script in each BizHawk Lua Console:
 - **Universal:** Load `lua/slink.lua` — auto-detects the ROM and loads the correct client. Uses default connection settings.
-- **Gen 3 (GBA):** Load `lua/slink_gen3.lua` (or `lua/slink.lua`); the launcher admits FireRed, LeafGreen, or Radical Red and then loads `lua/gen3/run.lua`. Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
+- **Gen 3 (GBA):** Load `lua/slink_gen3.lua` (or `lua/slink.lua`); the launcher admits FireRed, LeafGreen, Radical Red, or Emerald and then loads `lua/gen3/run.lua`. Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Gen 4 (NDS):** Load `lua/slink_gen4.lua` (or `lua/clients/gen4_hgsspt_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Gen 5 (NDS):** Load `lua/slink_gen5.lua` (or `lua/clients/gen5_bw_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Downloaded launcher:** Launcher files from the status page/manager prompt for the project root folder, cache it in `slink_path.cfg`, and auto-detect the game.
@@ -821,7 +838,7 @@ All multi-byte values are little-endian. FRLG record geometry is verified agains
 
 ### Admission and ROM identification
 
-`lua/gen3/entry.lua` is hash-first: `gameinfo.getromhash()` is matched against the packs' admission data, then the engine-site anchors, then a header-named fallback. The launcher accepts only `gen3_frlg` (FireRed/LeafGreen) and `gen3_rr` (Radical Red). Emerald, Archipelago-FRLG, unknown hacks, and a header-only BPRE/BPGE match are refused by name. There is no pure-Lua ROM rehash; the anchor pass is the byte-level proof. Missing or mismatched pack data fails before hooks or writes are armed.
+`lua/gen3/entry.lua` is hash-first: `gameinfo.getromhash()` is matched against the packs' admission data, then the engine-site anchors, then a header-named fallback. The launcher accepts `gen3_frlg` (FireRed/LeafGreen), `gen3_rr` (Radical Red), and `gen3_emerald` (Emerald). Archipelago-FRLG, unknown hacks, and a header-only BPRE/BPGE/BPEE match are refused by name. There is no pure-Lua ROM rehash; the anchor pass is the byte-level proof. Missing or mismatched pack data fails before hooks or writes are armed.
 
 ### Stable EWRAM globals (FireRed US 1.0)
 
@@ -834,7 +851,7 @@ All multi-byte values are little-endian. FRLG record geometry is verified agains
 | `gEnemyPartyCount`  | `0x0202402A` | u8            | Wild/trainer enemy |
 | `gEnemyParty`       | `0x0202402C` | Pokemon[6]    | Immediately follows gEnemyPartyCount |
 
-The FRLG addresses above are data in `data/games/gen3_frlg/profile.json`; `reads.lua` receives them through the injected I/O and never hardcodes them. Radical Red uses its own pack fields. Archipelago FRLG is unadmitted, so its former address shifts are not active client profiles.
+The FRLG addresses above are data in `data/games/gen3_frlg/profile.json`; `reads.lua` receives them through the injected I/O and never hardcodes them. Radical Red and Emerald each use their own pack fields (`data/games/gen3_rr/profile.json`, `data/games/gen3_emerald/profile.json`). Archipelago FRLG is unadmitted, so its former address shifts are not active client profiles.
 
 ### SaveBlock ASLR — map, PC storage, and bag pockets
 
@@ -933,7 +950,7 @@ The `patch/` directory holds a UPS companion for Radical Red. The current Gen 3 
 
 ### Area Normalization
 
-Raw `mapGroup:mapNum` maps to a canonical `area_id` through `data/games/gen3_frlge/area_map.json`, which both admitted Gen 3 packs load; `gen3_frlge_locations.lua` supplies display names. The generated `gen3_frlge_areas.lua` remains a server-side compatibility table, not a dependency of the rewritten client. The 184-entry map is generated from `area_map.json` by `python tools/gen_area_map.py`. Key decisions:
+Raw `mapGroup:mapNum` maps to a canonical `area_id` through `data/games/gen3_frlge/area_map.json`, which the admitted `gen3_frlg` and `gen3_rr` packs load; `gen3_frlge_locations.lua` supplies display names. Emerald has its own `data/games/gen3_emerald/area_map.json` and `gen3_emerald_locations.lua` (E<->E pairing only; it does not share the FRLG/RR map). The generated `gen3_frlge_areas.lua` remains a server-side compatibility table, not a dependency of the rewritten client. The 184-entry map is generated from `area_map.json` by `python tools/gen_area_map.py`. Key decisions:
 
 - Multi-floor dungeons share one area_id (e.g., all Mt. Moon floors → `"mt_moon"`)
 - Building interiors with wild encounters (Safari Zone areas) each get their own area_id
@@ -1046,7 +1063,7 @@ Gen 3 does not use a single `not in_battle` test for writes. `lua/gen3/safety.lu
 - **`native`**: companion signature/ABI and mailbox-idle checks; clean FRLG/RR artifacts have no native block and cannot arm native writes.
 - **`sound`** (when enabled): the pack's sound block and initialized m4a state.
 
-An unknown reason, missing anchor, failed predicate, or unreadable input returns a refusal. The client holds the deferred command; it never falls back to a direct RAM poke. Archipelago FRLG and Emerald are refused during admission, so their former AP/CFRU-specific battle branches are not part of the active client.
+An unknown reason, missing anchor, failed predicate, or unreadable input returns a refusal. The client holds the deferred command; it never falls back to a direct RAM poke. Archipelago FRLG is refused during admission, so its former AP-specific battle branches are not part of the active client. Emerald is admitted and reads its title facts from the `gen3_emerald` pack, not FR literals.
 
 ---
 
@@ -1125,23 +1142,23 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # ~1450 tests
-pytest tests/unit/test_state.py -v          # 318 tests (incl. tick reconciliation + Explode Mode)
-pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
-pytest tests/unit/test_gen2_adapter.py -v   # 50 tests (Gen2GSCAdapter)
-pytest tests/unit/test_gen3_adapter.py -v   # 216 tests
-pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
+pytest tests/unit/ -v   # 14215 tests collected
+pytest tests/unit/test_state.py -v          # 319 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/test_gen1_adapter_contract.py -v  # 10 tests (checked against pret source, not shipped JSON)
+pytest tests/unit/test_gen2_adapter.py -v   # 59 tests (Gen2GSCAdapter)
+pytest tests/unit/test_gen3_adapter.py -v   # 218 tests
+pytest tests/unit/test_gen4_adapter.py -v   # 101 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
-pytest tests/unit/test_stat_stages.py -v    # 46 tests
-pytest tests/unit/test_phase1_comms.py -v   # 6 tests
+pytest tests/unit/test_stat_stages.py -v    # 48 tests
+pytest tests/integration/test_phase1_comms.py -v   # 6 tests
 pytest tests/unit/test_obs_priority.py -v   # 7 tests (priority + area-group filters)
 pytest tests/unit/test_manager_launcher.py -v   # 4 tests (BizHawk launcher Lua syntax)
 # 0.2.6 — Rival Team Swap / Upcoming Key Trainers:
 pytest tests/unit/test_trainer_panel.py -v             # 14 tests (Upcoming Key Trainers panel)
-pytest tests/unit/test_state_rival_battle_start.py -v  # 15 tests (rival-swap auto-trigger)
+pytest tests/unit/test_state_rival_battle_start.py -v  # 34 tests (rival-swap auto-trigger)
 pytest tests/unit/test_state_party_blob_cache.py -v    # 10 tests (blob_hex cache)
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 tests (rival trainer IDs)
-pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 tests (--rival-team-swap CLI)
+pytest tests/integration/test_cli_rival_team_swap.py -v       # 4 tests (--rival-team-swap CLI)
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.
@@ -1161,7 +1178,7 @@ Test coverage includes: faint propagation, encounter linking, dead zones, whiteo
 
 ### Lua tests (manual, in BizHawk)
 
-Run `lua/tests/test_1_memory.lua` through `lua/tests/test_5_soullink.lua` in order. See `tests/TESTING.md` for pass criteria and controls (F1–F7 keys) for each test script.
+The numbered `lua/tests/test_1_memory.lua` … `test_5_soullink.lua` scripts are gone — they belonged to the removed Gen 3 client, and `tests/TESTING.md` records Tests 1–3 as removed for that reason. See `tests/TESTING.md` for the current walkthrough and its pass criteria; the per-generation gate scripts now live in `lua/tests/` under their own names (`gen1_gate.lua`, `gen2_*`, `gen3_*`).
 
 ---
 
@@ -1175,7 +1192,7 @@ Run `lua/tests/test_1_memory.lua` through `lua/tests/test_5_soullink.lua` in ord
 - **Party compaction**: Deposit/withdraw/memorial plans update the profile-derived party count and records atomically through `boxes.lua`; do not hardcode `0x02024029` in a new client path.
 - **SaveBlock ASLR**: The pointer addresses and relocation bounds come from the active pack/checkpoint. `reads.lua` dereferences them on each call; never cache or hardcode the live target.
 - **Nuzlocke gate is in Lua**: The server trusts that the client will not send `no_catch` before its decoded ball count is positive. The server's own faint-related gate remains `pokeballs_obtained`.
-- **Admission is fail-closed**: `Entry.admit` admits only pinned FireRed, LeafGreen, and Radical Red artifacts; Emerald and Archipelago-FRLG are refused before the client graph is built.
+- **Admission is fail-closed**: `Entry.admit` admits only pinned FireRed, LeafGreen, Radical Red, and Emerald artifacts; Archipelago-FRLG is refused before the client graph is built.
 - **Profile-driven reads**: FRLG and Radical Red share the composition root but differ in pack data and record rules. Do not add a title branch or a client-side address database.
 - **Borrowed-party battles (Radical Red)**: At `battle_begin`, the client snapshots the known party keys. If the live party has no overlap with that baseline, the reducer freezes party learning and omits party data from ticks until the own party returns; queued battle writes remain held.
 - **Persistent run metadata**: `rom_type` and `trainer_names` in `SoulLinkState` are set-once — committed on first hello, never overwritten. Read by `_page_title()`, `_is_rr`, and `trainer_name` dict seeding.

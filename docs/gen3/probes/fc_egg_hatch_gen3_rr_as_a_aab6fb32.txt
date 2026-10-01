@@ -1,0 +1,77 @@
+# gen3_final_cut row=egg_hatch_gen3_rr_as_a item=§14_P5_RR_duo cut=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario egg_hatch_gen3 --keep-data --wire-log --lane rr-full-egg_hatch_gen3_rr_as_a-aab6fb32   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-egg_hatch_gen3_rr_as_a-aab6fb32
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 2 ---
+LOAD 2026-10-01T11:25:16 cpu=17% emuhawk=0 python=7
+start_utc=2026-10-01T15:25:14Z tracked_clean_before=True
+
+========== scenario: egg_hatch_gen3 ==========
+[duo] egg_hatch_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=207c177bfe1ab5dbf3c1a16c4ee32ad9c359699e21c5106947270a1c37642e7e b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=e403c21f137d3b8cd39b3e51d208499d7fe598d5460e5e54f605e336e5e67d21 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=53541 http=53542 data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for egg_hatch_gen3: e2e_egg_hatch_gen3_a_1_witness.bin, e2e_egg_hatch_gen3_a_1_witness_ext.bin, e2e_egg_hatch_gen3_a_attempt1_result.txt, e2e_egg_hatch_gen3_a_result.txt, e2e_egg_hatch_gen3_b_1_witness.bin, e2e_egg_hatch_gen3_b_1_witness_ext.bin, e2e_egg_hatch_gen3_b_attempt1_result.txt, e2e_egg_hatch_gen3_b_result.txt, e2e_egg_hatch_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 181.7s
+[duo] PYDEC: FAIL timed out after 120s waiting for one native gift link
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\egg_hatch_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\egg_hatch_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_oz2_qnlm
+[duo] egg_hatch_gen3: attempt 1 aborted — TimeoutError: timed out after 120s waiting for one native gift link
+
+========== summary ==========
+  egg_hatch_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 120s waiting for one native gift link
+exit=1 end_utc=2026-10-01T15:28:19Z tracked_clean_after=True classification=contention
+--- attempt 2 of 2 ---
+LOAD 2026-10-01T11:28:20 cpu=59% emuhawk=0 python=8
+start_utc=2026-10-01T15:28:19Z tracked_clean_before=True
+
+========== scenario: egg_hatch_gen3 ==========
+[duo] egg_hatch_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=207c177bfe1ab5dbf3c1a16c4ee32ad9c359699e21c5106947270a1c37642e7e b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=e403c21f137d3b8cd39b3e51d208499d7fe598d5460e5e54f605e336e5e67d21 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=65340 http=65341 data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for egg_hatch_gen3: e2e_egg_hatch_gen3_a_attempt1_result.txt, e2e_egg_hatch_gen3_a_result.txt, e2e_egg_hatch_gen3_b_attempt1_result.txt, e2e_egg_hatch_gen3_b_result.txt, e2e_egg_hatch_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 62.2s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=2af42f27a5bcd6ab563e4c488188b24d1b31f0ffab9805c9ff4ed9f7e0427846 file=2af42f27a5bcd6ab563e4c488188b24d1b31f0ffab9805c9ff4ed9f7e0427846 match=true saves=1 counter=2->3 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=7b6e4bf67711a1a884c2d20f02fb2781d7aba2f827008348e60006c678eec74a file=7b6e4bf67711a1a884c2d20f02fb2781d7aba2f827008348e60006c678eec74a match=true saves=1 counter=2->3 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] hatch: native signal, one gift capture per side, one alive link, independent saved records and controls
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] egg_hatch_gen3: a=PASS b=PASS
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\egg_hatch_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\egg_hatch_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_gjxezhuf
+
+========== summary ==========
+  egg_hatch_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-01T15:29:31Z tracked_clean_after=True classification=pass

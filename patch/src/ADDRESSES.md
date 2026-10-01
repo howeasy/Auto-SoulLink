@@ -79,18 +79,24 @@ document alone would have clobbered live state.
 | `0x0203FD08` | *8* | — gap |
 | `0x0203FD10` | 52 | `EvRing` |
 | `0x0203FD44` | 264 | `SlinkInfo` — §6 SOULLINK menu/info (see below) |
-| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** (what `test_live_ewramtail` now watches) |
+| `0x0203FE4C` | *4* | — gap (aligns the durable block) |
+| `0x0203FE50` | 80 | RR-DURABLE shadow `SlinkMailboxV2` (`RT_BASE`): +0x00..0x3F mirror of the v1 header, **+0x40 capabilities, +0x44 session_epoch (Lua), +0x48 producer_phase (native)** |
+| `0x0203FEA0` | 80 | RR-DURABLE `SlinkTradeWitnessV2` (`RT_BASE + SLINK_WITNESS_OFFSET`) |
+| `0x0203FEF0` | 112 | RR-DURABLE `SlinkTradeProducer` (phase, sequences, 100-byte incoming copy) |
+| `0x0203FF60` | 1 | RR-DURABLE `RT_PRESAVE` (our save dialog is running) |
+| `0x0203FF61` | *159* | — **free tail, the last contiguous run to `0x0203FFFF`** |
 
-**436 contiguous bytes remain**, plus 111 across seven interior gaps (largest 68 B). When the tail
+**159 contiguous bytes remain**, plus 115 across eight interior gaps (largest 68 B). When the tail
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
 discovered the expensive way.
 
-**The tail is runtime-proven free, not inferred.** `lua/tests/test_live_ewramtail.lua` paints all
-700 bytes of `0x0203FD44..0x0203FFFF` with a per-address pattern and watches them across seven
-savestates and 5,100 frames of mashed input (overworld, Pokécenter, a door warp, battle, the
-action/move menus), with a detector self-check each scene — it clobbers the mailbox beacon and
-requires the frame hook to restore it, so the watch cannot silently pass while blind. Zero bytes
-changed. This matters because the *static* argument for the region was wrong twice: "above CFRU's
+**The tail was runtime-proven free before allocation, not inferred.** The original
+`lua/tests/test_live_ewramtail.lua` painted all 700 bytes of `0x0203FD44..0x0203FFFF` and
+watched them across seven savestates and 5,100 frames of mashed input. It found zero changes.
+After SlinkInfo and RR-DURABLE claimed their blocks, the gate watches the remaining 159 bytes
+at `0x0203FF61..0x0203FFFF`. Its detector self-check clobbers the mailbox beacon and requires
+the frame hook to restore it, so the watch cannot silently pass while blind. This matters because
+the *static* argument for the region was wrong twice: "above CFRU's
 highest known symbol" is an incomplete list, and a ROM literal-pool scan offered as backup turned
 out to be measuring coincidental word matches inside PCM and graphics data, not literal pools.
 
@@ -114,7 +120,7 @@ with hardcoded offsets — `desc[i] = *(base+8+4i)` (13 entries, ending `0x09148
 over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` appends, and which
 `lua/tests/test_live_startmenu.lua` proves absent from the menu a real player opens.
 
-`build.py` rewrites four words, each verified against its expected current value first:
+`build.py` rewrites five words, each verified against its expected current value first:
 
 | ROM word | was | becomes |
 |---|---|---|
@@ -122,11 +128,17 @@ over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` ap
 | `0x09149030` (`act[8].text`) | `0x0841628E` | `sSoulLinkLabel` |
 | `0x09149034` (`act[8].func`) | `0x0806F56D` | `slink_startmenu_cb\|1` |
 | `0x0806ED58` (`SetUpStartMenu` literal) | `0x090BE179` | `slink_setup_start_menu\|1` |
+| `0x090BDD54` (page-switch rebuild callback) | `0x090BE30D` | `slink_start_menu_redraw\|1` |
 
 Menu globals, both located live: **`sNumStartMenuActions = 0x020370F5`**, **`sStartMenuOrder =
-0x020370F6`**. A normal field menu is exactly `[1 2 3 4 5 6]` with EXIT (id 6) last, so the wrapper
-splices SOULLINK at index 5 and pushes EXIT to 6 — and it splices *only* into that exact shape, so
-the link menu and any future RR revision are left alone rather than guessed at.
+0x020370F6`**. RR's `SetUpStartMenu` (`0x090BE178`) builds the main page as `[(0) (1) (2) (3) (4) 5 EXIT]`
+(POKEDEX appears with FLAG_SYS_POKEDEX_GET, so 6 rows before the Pokedex and 7 after), where EXIT is id 6,
+or id 11 once the DexNav/PC tools page exists (flag 0x91E). The wrapper splices SOULLINK right before
+EXIT on that main page only; link (`[1 2 8 5 6]`), union room, Safari (`[7 ...]`) and the tools page
+(`[.. 12]`) get no row, and at most 8 rows (CFRU sizes the window 2n-1 tiles). RR's L/R page switch
+rebuilds through `0x090BE30C`, a direct `bl` that bypasses the literal above, so its one callback
+literal is repointed to `slink_start_menu_redraw`, which replays its prologue through the wrapper and
+falls into its own tail. `lua/tests/test_live_startmenu_shapes.lua` gates every shape.
 
 ### The info screen (opcode 27)
 
@@ -319,8 +331,12 @@ disabled, `[1 2 3 4 5 8 6]` when enabled, and the callback fires on row 5 **and 
 
   Consumers: EV_PLAYER_FAINT and EV_OUTCOME drive behaviour (faint fast-path, whiteout
   acceleration). EV_PARTY_ADD and EV_EVOLVE are a cross-check that asserts the ring agrees with the
-  Lua diff and counts disagreements — the soak instrument the §3 authority swap is waiting on. See
-  `ev_xcheck` in `lua/clients/gen3_frlge_client.lua`.
+  Lua diff and counts disagreements — the soak instrument the §3 authority swap is waiting on.
+  ⚠ That consumer (`ev_xcheck`) lived in `lua/clients/gen3_frlge_client.lua`, since deleted
+  (addc9225); no `ev_xcheck`/`events_drain`/`EV_PARTY_ADD` consumer exists in the current
+  `lua/gen3/*.lua` client — today the ring is exercised only by `lua/tests/test_live_events.lua`
+  and `test_live_partyevents.lua`, not consumed live. Flagged for the owning lane; not guessed at
+  here.
 
 ## Bundled RR4.1_Custom Battle Calc (in-battle damage calculator)
 
@@ -393,12 +409,15 @@ against `BPRE.ld` and disassembled (capstone):
 | 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (legacy; ghost auto-arms now) |
 | 14 | GHOST_SPAWN | `[0]`=gfxId `[1]`=localId | engine-driven peer ghost: hook spawns+walks it via held movements (GhostState@0x0203F850) |
 | 15 | GHOST_CLEAR | — | hook cleanly removes the ghost (RemoveEventObject) |
-| 16 | SET_ENEMY_PARTY | `[0]`=count; blobs staged in `0x0203FA00` | faithful byte-copy of count×100 party-mon bytes into `gEnemyParty` + set count (rival-team-swap) |
+| 16 | SET_ENEMY_PARTY | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — a raw trade stage is a durable-trade bypass. The rival swap has its own opcode 28 |
 | 17 | SHOW_MENU | text (FR-encoded) in `0x0203F900` → `result[0]`=choice (1=YES 0=NO) | native YES/NO field menu (`yesnobox`); **async** — ack ST_BUSY, `drive_menu` publishes `gSpecialVar_Result`@`0x020370D0` when the script ends. Talk-to-partner menuing foundation. |
-| 18 | SET_PARTY_MON | `[0]`=slot `[1]`=bump; one blob staged in `0x0203FA00` | faithful 100-byte blob copy into `gPlayerParty[slot]` (trade — mirror of SET_ENEMY_PARTY) |
+| 18 | SET_PARTY_MON | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — raw record replacement is never a trade path |
 | 19 | PLAY_SE | `[0..1]`=songId | `PlaySE(songId)` @`0x080722CC` — native sound effect (retires the Lua m4a SE1 RAM-poke) |
-| 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative InitPartyMenu` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
-| 21 | TRADE_SCENE | `[0]`=slot | native in-game trade animation+evolution via `callnative DoInGameTradeScene` @`0x08054440` (RE'd); trades `gPlayerParty[slot]` ↔ `gEnemyParty[0]`; ASYNC |
+| 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative ChoosePartyMonByMenuType` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
+| 21 | TRADE_SCENE | ABI2 trade args (slot, role, old PID/OT, visit, token) + the incoming record in `SLINK_BLOB_BUF` | **RR-DURABLE**: owned by the shared producer (`rr_trade_relay.h`, `trade_targets/trade_producer.h`), only after a READY PREPARE. Stages `gEnemyParty[0]`, runs `callnative DoInGameTradeScene` @`0x08054440`, then the native post-save (`SaveMapView`, `SaveQuestLogData`, `TrySavingData(SAVE_NORMAL)`) before the witnessed DONE. The old raw v1 scene ack is gone |
+| 29 | TRADE_PREPARE | ABI2 trade args | **RR-DURABLE**: native "save the game?" dialog (`callnative Field_AskSaveTheGame` @`0x0806F67C`); READY only after a successful pre-save |
+| 30 | TRADE_WITHDRAW | ABI2 trade args | **RR-DURABLE**: READY → witnessed UNCHANGED; later → `withdraw_too_late` (14) |
+| 31 | TRADE_STATUS | ABI2 trade args | **RR-DURABLE**: identity-bound ACK only |
 | 22 | SHOW_CHOICES | options FR-encoded in `SLINK_MENU_BUF` (`[u8 count][str 0xFF]...`) → `result[0]`=index/0x7F=cancel | native multichoice list (custom labels); replicates `DrawVerticalMultichoiceMenu` in C (`CreateWindowFromRect 0x809D654`, `SetStandardWindowBorderStyle 0x80F7750`, `AddTextPrinterParameterized 0x8002C48`, `CopyWindowToVram 0x8003F20`, `Menu_InitCursor 0x810F7D8`, `CreateTask 0x807741C` → `Task_MultichoiceMenu_HandleInput 0x809CC98`, `GetStringWidth 0x8005ED4`, `ScheduleBgCopyTilemapToVram 0x80F67A4`); FONT_NORMAL=2, gTasks=0x3005090. ASYNC (lockall-bracketed, drive_ui kind 1) |
 | 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
 | 25 | WITHDRAW_MON | `[0]`=boxId `[1]`=boxPos `[2]`=partySlot | PC box→party (CFRU `CompressedMonToMon`; engine recomputes level/stats/PP). LIVE (`test_live_boxsync`) |
@@ -413,6 +432,7 @@ against `BPRE.ld` and disassembled (capstone):
 | 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
 | 2 | `REASON_BAD_ARGS` | out-of-range args |
 | 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
+| 9 | `REASON_DURABLE_ONLY` | **RR-DURABLE** — raw trade opcode 16/18 on the durable build. Durable-trade refusals (identity 12, uncertain 11, withdraw_too_late 14) are the producer's ABI2 words in the SHADOW mailbox and reach Lua through the relay only for opcodes 21/29/30/31; the v1 meanings of 11/12 for the other opcodes are unchanged |
 | 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="window_closed", reason="window_closed"}` (G5-RR-RIVAL review F3; was error="refresh_failed") |
 
 ### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)
@@ -440,8 +460,12 @@ bump the version and ship a range check in `present()`.
 
 **RR `gSpecials` is REORDERED** — the FireRed `special` indices (e.g. ChoosePartyMon 170, DoInGameTradeScene
 265) DO NOT work on RR (live-proven no-ops). The native menus/scene are invoked **by address** via CFRU's
-`callnative` (script-cmd `0x23` + 4-byte fn ptr). `InitPartyMenu = 0x0811EA44`, `Task_HandleChooseMonInput
-= 0x0811FB28`, `CB2_ReturnToField = 0x080567DC` (BPRE.ld). **`DoInGameTradeScene = 0x08054440`** was RE'd
+`callnative` (script-cmd `0x23` + 4-byte fn ptr). The chooser calls RR's `ChoosePartyMonByMenuType =
+0x081283A8` (pret FR byte for byte): it sets `gFieldCallback2 (0x03005024) = CB2_FadeFromPartyMenu
+(0x081283E4)` before `InitPartyMenu(3, 0, 11, 0, 0, Task_HandleChooseMonInput, CB2_ReturnToField)`, and on
+the way back `Task_PartyMenuWaitForFade (0x081283FC)` runs `EnableBothScriptContexts`, so the script's
+`waitstate` resumes and reaches `end` (`sGlobalScriptContextStatus 0x03000EA8` = 2). Calling `InitPartyMenu`
+directly (the old trampoline) left the script waiting forever. **`DoInGameTradeScene = 0x08054440`** was RE'd
 (`patch/tools/find_trade_scene.py`): the tiny fn LockPlayerFieldControls→CreateTask(Task_InGameTrade,10)→
 BeginNormalPaletteFade(-1,0,0,16,0)→HelpSystem_Disable whose task installs CB2 `0x080505CC` (references
 gSelectedTradeMonPositions + Var8005 + gEnemyParty = the in-game NPC trade). `gSpecialVar_0x8004=0x020370C0`,
@@ -451,8 +475,10 @@ gSelectedTradeMonPositions + Var8005 + gEnemyParty = the in-game NPC trade). `gS
 `gSpecialVar_Result = 0x020370D0` (yes/no + multichoice chosen index), `gPlayerPartyCount = 0x02024029`,
 `gEnemyPartyCount = 0x0202402A` (u8 member counts, bumped by SET_PARTY_MON/SET_ENEMY_PARTY). The trade
 scene's "X sent over Y" text is overridden each frame from the staged `gEnemyParty[0]` plaintext
-(NO_ENCRYPT: nickname @+0x08 (11 b), otName @+0x14 (8 b)) into `gStringVar3 = 0x02021D04` (received
-nickname) and `gStringVar1 = 0x02021CD0` (received OT); `gStringVar2`/`gStringVar4 = 0x02021D18`.
+(NO_ENCRYPT: nickname @+0x08, 10 glyphs; otName @+0x14, 7 glyphs) into `gStringVar3 = 0x02021D04` (received
+nickname) and `gStringVar1 = 0x02021CD0` (received OT), always 0xFF-terminated (a full-length name has no
+terminator inside its field; an unterminated `gStringVar3` runs into `gStringVar4 = 0x02021D18`, the
+expansion's own destination, and `StringExpandPlaceholders` then copies forever over EWRAM).
 
 > **Function-pointer convention:** the address tables above list **bare** ROM addresses; `handlers.c`
 > ORs the Thumb bit (`addr | 1`) on every function pointer it calls (e.g. table `0x809D654` →
@@ -517,9 +543,11 @@ currentCoords x@0x10/y@0x12, facing@0x18); `gSprites = 0x0202063C` (stride 0x44;
 
 **Live-validated** (`test_live_spawnnpc.lua`): SPAWN creates an active object-event + allocated
 sprite at the target tile; DESPAWN clears it and frees the sprite. **Per-frame position/facing
-driving stays in Lua** (the existing `peer_ghost.lua` smooth-tracking logic, now driving the
-engine-spawned sprite — no clone, so no callback/palette/VRAM corruption). The NPC is spawned with
-`movementType=NONE` so its engine callback won't fight the Lua-driven position.
+driving stays in Lua** (at the time of writing, the smooth-tracking logic in `lua/peer_ghost_npc.lua`
+drove the engine-spawned sprite — no clone, so no callback/palette/VRAM corruption). That file is
+since deleted (addc9225); peer ghost is deferred post-RC for Gen 3 and `lua/gen3/client.lua`'s
+`ghost_pos` is currently a stub. The NPC-spawn opcode/patch mechanism itself is unaffected. The NPC
+is spawned with `movementType=NONE` so its engine callback won't fight the Lua-driven position.
 
 ## Phase-2 (CREATE_MON) — validated
 `gPlayerParty = 0x02024284` (BPRE.ld ↔ SLink RR profile), MON_SIZE 100; party struct
@@ -663,7 +691,7 @@ prologue (`push {..,lr}`). CFRU uses the "EventObject" naming = pokefirered "Obj
 | `EventObjectClearHeldMovementIfActive` | 0x8063D1C | push {lr} | stop active held movement |
 | `EventObjectClearHeldMovementIfFinished` | 0x8063D7C | push {r4,r5,lr} | poll: 0=finished 16=not-active else=busy; clears if done |
 | `GetFaceDirectionMovementAction` | 0x8063EB8 | push {r4,lr} | dir→FACE action (0x0-0x3, idle facing) |
-| `GetWalkNormalMovementAction` | 0x8063F2C | push {r4,lr} | dir→WALK_NORMAL action (0x10-0x13) |
+| `GetWalkNormalMovementAction` | 0x8063F2C ⚠ | push {r4,lr} | dir→WALK_NORMAL action (0x10-0x13) |
 | `GetWalkFastMovementAction` | 0x8063FB0 | push {r4,lr} | dir→WALK_FAST/run action (0x1D-0x20) |
 | `RemoveEventObject` | 0x805E4B4 | push {lr} | clean remove: destroys sprite + deactivates OE |
 | `MoveEventObjectToMapCoords` | 0x805F724 | push {r4-r7,lr} | hard re-place an OE at map coords (snap) |
@@ -678,15 +706,23 @@ overworld savestate it reads 0 (player IS slot 0), so player_oe() == slot 0 ther
 pass; the fix is reading this slot instead of a hardcoded 0, both in the patch (player_oe()) and Lua
 (MB.player_oe()).
 
+⚠ `GetWalkNormalMovementAction` at `0x8063F2C` does not match `data/gen3/pret/pokefirered.sym`:
+that address is `GetWalkSlowerMovementAction` there (the real `GetWalkNormalMovementAction` is
+`0x08063F84`, i.e. `0x8063F85` Thumb\|1). `patch/src/handlers.c` `#define`s the same `0x8063F2Du`
+value, but nothing in `patch/src` calls it (the `#define` is its only hit), so it has no
+runtime effect today. Correct the value, or delete the define, before anything uses it.
+
 Directions: DIR_SOUTH=1 NORTH=2 WEST=3 EAST=4. Model = CFRU `follow_me.c`: spawn OE with
 MOVEMENT_TYPE_NONE, then each step `EventObjectSetHeldMovement(oe, GetWalk*Action(dir))` and poll
 `EventObjectClearHeldMovementIfFinished`. The engine animates/positions/palettes/collides natively.
 `SpawnSpecialObjectEventParameterized`=0x805E831 and `ScriptContext1_SetupScript`=0x08069AE5 already
 validated above.
 
-## PC storage / box migration reference (forward-looking — for OP_DEPOSIT_MON/WITHDRAW/MEMORIALIZE)
-Groundwork for retiring the Lua `depositPartyMon`/`retrieveBoxMon`/`memorializeMon` RAM-pokes
-(`memory_gba.lua`). **The data layout is already fully mapped by SLink's Lua** (`lua/games/gen3_frlge.lua`):
+## PC storage / box migration reference (for OP_DEPOSIT_MON/WITHDRAW/MEMORIALIZE)
+`handlers.c` already implements the opcodes; `lua/gen3/boxes.lua` (`self:deposit/withdraw/
+memorialize`) calls the native opcode path when available and falls back to its own RAM-poke
+logic otherwise (`memory_gba.lua`, which carried this fallback before, is since deleted,
+addc9225). **The data layout is already fully mapped by SLink's Lua** (`lua/games/gen3_frlge.lua`):
 PC boxes use CFRU's **58-byte (0x3A) `CompressedPokemon`** (NOT the 80-byte BoxPokemon), unencrypted,
 fixed substruct order; `POKEMON_STORAGE_BASE = 0x02029314`, **25 boxes**, and the boxes are
 **non-contiguous in EWRAM** — see `CFRU_BOX_BASES` (the `sPokemonBoxPtrs[]` table; e.g. box0 @
@@ -729,4 +765,6 @@ bytes ARE a BoxPokemon*/, comp)`; then shift-compact the party + decrement count
 save's real lead mon: personality/OT/species preserved, level recomputed, box slot freed, no corruption).
 **Status:** DONE — `exec_box_mon`/`exec_party_mon` run through `MB.deposit_mon`/`MB.withdraw_mon`
 (async + patch-detect + Lua fallback), and `OP_MEMORIALIZE` (26) landed as the follow-up. The Lua
-RAM-poke path is kept deliberately: it is the fallback for unpatched ROMs.
+RAM-poke path is kept deliberately: it is the fallback for unpatched ROMs. (`MB` was `lua/mailbox.lua`,
+since deleted, addc9225; today the same native-then-fallback shape lives in `lua/gen3/boxes.lua`
+`self:deposit`/`self:withdraw`/`self:memorialize`.)

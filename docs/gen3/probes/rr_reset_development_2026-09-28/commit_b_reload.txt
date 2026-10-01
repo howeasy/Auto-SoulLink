@@ -1,0 +1,17 @@
+duo instance b scenario=trade_reset_commit_gen3 phase=rr_reset_reload title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:61922 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:61922 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:61922
+[client] [SLink] TCP connected to 127.0.0.1:61922
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RESET_RELOADED {"counter":6,"key":"F56D8C1D:2BDDC8BF","side":"b"}
+JITTER requested=0 applied=0 attempt=1
+WRITES 0
+RESULT: PASS (cold-reloaded expected native save without runner SAVE)

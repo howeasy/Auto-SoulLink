@@ -16,11 +16,14 @@ Usage: python patch/tools/build.py [--rom <Radical Red.gba>]
 import argparse
 import glob
 import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.dirname(HERE)
@@ -28,6 +31,274 @@ BUILD = os.path.join(PATCH, "build")
 DIST = os.path.join(PATCH, "dist")
 SRC = os.path.join(PATCH, "src")
 EXE = ".exe" if os.name == "nt" else ""
+TARGET_NAMES = ("firered", "leafgreen", "emerald", "radical_red")
+
+
+def target_spec(title):
+    """Read the per-title C header shared with the payload, never another target's facts."""
+    if title not in TARGET_NAMES:
+        raise ValueError(f"unknown companion target: {title}")
+    path = Path(SRC) / "trade_targets" / f"{title}.h"
+    fields = {}
+    for key, value in re.findall(r'^#define SLINK_TARGET_(\w+) (.+)$', path.read_text(), re.M):
+        fields[key] = json.loads(value) if value.startswith('"') else int(value.rstrip("uU"), 0)
+    return fields
+
+
+def validate_detour(data, address, expected):
+    offset = address - 0x08000000
+    if offset < 0 or offset + len(expected) > len(data) or data[offset:offset + len(expected)] != expected:
+        raise ValueError(f"detour bytes mismatch at {address:#010x}")
+
+
+def validate_base(title, data):
+    spec = target_spec(title)
+    if (len(data) != spec["ROM_SIZE"] or hashlib.sha1(data).hexdigest() != spec["ROM_SHA1"]
+            or data[0xAC:0xB0] != spec["HEADER"].encode("ascii") or data[0xBC] != 0):
+        raise ValueError(f"base ROM identity mismatch for {title}")
+    validate_detour(data, spec["DETOUR_CANDIDATE"], bytes.fromhex(spec["DETOUR_BYTES"]))
+    return spec
+
+
+def validate_arena(title, start, size, *, heap_size=None):
+    """Static exclusion, NOT physical qualification. Reservation proofs are separate."""
+    if size <= 0 or start < 0x02000000 or start + size > 0x02040000:
+        raise ValueError("arena outside EWRAM")
+    spec = target_spec(title)
+    # FR/LG's linker emits gHeap with size zero in .sym. The reservation is
+    # nevertheless real: pret include/malloc.h:6 and src/main.c:154. A future
+    # carve-out needs explicit ROM mutation + runtime proof; zero symbol size
+    # cannot silently authorize it.
+    if max(start, spec["HEAP_BASE"]) < min(start + size, spec["HEAP_BASE"] + (spec["HEAP_SIZE"] if heap_size is None else heap_size)):
+        raise ValueError("arena overlap with gHeap reservation (heap clamp not qualified)")
+    if not spec["SYMBOLS"]:
+        raise ValueError("RR has no matching source symbols; its arena needs a binary/physical proof")
+    path = Path(PATCH).parent / "data/gen3/pret" / spec["SYMBOLS"]
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        address, extent = int(fields[0], 16), int(fields[2], 16)
+        if fields[3] == "gHeap" and address == spec["HEAP_BASE"] and heap_size is not None:
+            extent = heap_size  # runtime InitHeap detour reserves the published tail
+        if extent and max(start, address) < min(start + size, address + extent):
+            raise ValueError(f"arena overlap with {fields[3]} [{address:#x}, {address + extent:#x})")
+
+
+def require_ready(title):
+    spec = target_spec(title)
+    if not spec["READY"]:
+        raise ValueError(f"{title} ABI v2 not qualified: arena, detour and payload evidence required")
+    if spec["ARENA_BASE"] != spec["HEAP_BASE"] + spec["HEAP_SIZE"] - spec["ARENA_SIZE"]:
+        raise ValueError("published arena must match the native heap reservation")
+    validate_arena(title, spec["ARENA_BASE"], spec["ARENA_SIZE"],
+                   heap_size=spec["HEAP_SIZE"]-spec["ARENA_SIZE"])
+    return spec
+
+
+def thumb_entry_jump(address, destination):
+    """Aligned eight-byte Thumb-1 entry veneer: ldr r3,[pc]; bx r3; target|1.
+
+    Only valid when replacing the whole callee's behavior, not returning into
+    overwritten PC-relative instructions. Caller LR is preserved.
+    """
+    if address & 3 or destination & 1:
+        raise ValueError("entry/destination must be aligned")
+    return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
+
+
+def validate_frame_replay(spec, facts, clean):
+    tails=[row for row in facts["continuations"] if row.get("symbol")=="CallCallbacks"]
+    if len(tails)!=1:
+        raise ValueError("callback continuation must name CallCallbacks exactly once")
+    tail=tails[0]
+    entry=spec["FRAME_ENTRY"]
+    if (tail["symbol_address"]!=entry or tail["offset"]!=8 or tail["address"]!=entry+8
+            or tail["thumb_address"]!=(tail["address"]|1) or spec["FRAME_RESUME"]!=tail["thumb_address"]):
+        raise ValueError("callback continuation differs from the relocated eight-byte entry")
+    expected=(f"push {{r4,lr}}\n ldr r4,=0x{spec['GMAIN']:08x}\n ldr r0,[r4]\n cmp r0,#0\n"
+              f" ldr r3,=0x{spec['FRAME_RESUME']:08x}\n bx r3\n")
+    if spec["FRAME_REPLAY_ASM"]!=expected:
+        raise ValueError("callback replay assembly disagrees with GMAIN/FRAME_RESUME")
+    instruction=int.from_bytes(clean[entry-ROM_BASE+2:entry-ROM_BASE+4],"little")
+    if instruction&0xff00!=0x4c00 or ((entry+6)&~3)+4*(instruction&255)!=spec["FRAME_GMAIN_LITERAL"]:
+        raise ValueError("callback PC-relative gMain load disagrees with its pinned literal")
+    validate_detour(clean,tail["address"],bytes.fromhex(tail["bytes"]))
+    validate_detour(clean,spec["FRAME_GMAIN_LITERAL"],spec["GMAIN"].to_bytes(4,"little"))
+    return {"address":spec["FRAME_RESUME"],"gmain_literal":spec["FRAME_GMAIN_LITERAL"],
+            "gmain":spec["GMAIN"],"original_tail":tail["bytes"]}
+
+
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False):
+    """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
+    if trade_candidate and mode != "trade":
+        raise ValueError("trade candidate requires trade composition")
+    if title != "firered" and not (title in ("leafgreen", "emerald") and trade_candidate):
+        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen/Emerald")
+    clean = Path(rom_path).read_bytes()
+    spec = validate_base(title, clean)
+    frame_replay=None
+    if spec.get("FRAME_REPLAY_REQUIRED"):
+        facts=json.loads((Path(SRC)/"trade_targets"/f"{title}_lifecycle.json").read_text())
+        frame_replay=validate_frame_replay(spec,facts,clean)
+    if production:
+        if not trade_candidate:
+            raise ValueError("production requires the complete native composition")
+        require_ready(title)
+    carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
+    if trade_candidate:
+        for key in ("CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            carrier_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("SOUND_SE", "SOUND_FANFARE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            sound_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("RIVAL_START", "RIVAL_DUMMY"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            rival_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+    validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
+    if mode in ("census", "trade"):
+        validate_detour(clean, spec["FRAME_ENTRY"], bytes.fromhex(spec["FRAME_BYTES"]))
+    if mode == "trade":
+        for key in ("TRADE_MON", "EVO_GETTER"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+    out = Path(BUILD) / (f"production-{title}" if production else f"candidate-{title}-trade" if trade_candidate else f"arena-{title}-{mode}")
+    out.mkdir(parents=True, exist_ok=True)
+    header = Path(SRC) / "trade_targets" / f"{title}.h"
+    obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
+    flag = "-DSLINK_NATIVE_TRADE_PROBE=1" if mode == "trade" else (
+        f"-DSLINK_ARENA_PROBE={ {'positive':1,'negative':2,'exhaustion':3,'census':4}[mode]}")
+    if trade_candidate:
+        flag = "-DSLINK_NATIVE_COMPANION=1"
+    entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
+    run([GCC, *CFLAGS, flag,
+         "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
+    run([LD, "-T", str(header.with_suffix(".ld")), "-e", entry,
+         "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
+    symbol_text = run([NM, str(elf)])
+    found = [line.split()[0] for line in symbol_text.splitlines()
+             if line.split()[-1:] == [entry]]
+    if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
+        raise ValueError("probe entry is not at the verified payload candidate")
+    run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
+    blob = bytearray(binary.read_bytes())
+    panel_detours, panel_tables = [], {}
+    if trade_candidate:
+        symbols = {line.split()[-1]: int(line.split()[0], 16)
+                   for line in symbol_text.splitlines() if len(line.split()) == 3}
+        tables = [
+            ("actions", spec.get("PANEL_STOCK_ACTIONS", 9)*8, "PANEL_ACTION_TABLE", "slink_panel_actions",
+             (symbols["slink_panel_label"], symbols["slink_panel_menu_callback"] | 1)),
+        ]
+        if "PANEL_DESC_TABLE" in spec:
+            tables.append(("descriptions", 36, "PANEL_DESC_TABLE", "slink_panel_descriptions",
+                           (symbols["slink_panel_description"],)))
+        for key, count, table_key, symbol, additions in tables:
+            offset = symbols[symbol] - spec["CODE_CANDIDATE"]
+            length = count + 4 * len(additions)
+            if offset < 0 or offset + length > len(blob) or any(blob[offset:offset+length]):
+                raise ValueError("panel table placeholder outside payload or not empty")
+            original = spec[table_key] - ROM_BASE
+            blob[offset:offset+count] = clean[original:original+count]
+            for index, word in enumerate(additions):
+                blob[offset+count+4*index:offset+count+4*index+4] = word.to_bytes(4,"little")
+            panel_tables[key] = {"address": symbols[symbol], "original_address": spec[table_key]}
+            refs = spec["PANEL_ACTION_REFS" if key == "actions" else "PANEL_DESC_REFS"]
+            for ref in refs.split(","):
+                address = int(ref, 0)
+                expected = spec[table_key].to_bytes(4,"little")
+                validate_detour(clean,address,expected)
+                panel_detours.append({"address":address,"original":expected.hex(),
+                                      "replacement":symbols[symbol].to_bytes(4,"little").hex()})
+        address = spec["PANEL_NORMAL_MENU"]
+        validate_detour(clean,address,bytes.fromhex(spec["PANEL_NORMAL_BYTES"]))
+        panel_detours.append({"address":address,"original":spec["PANEL_NORMAL_BYTES"],
+                              "replacement":thumb_entry_jump(address,symbols["slink_panel_normal_menu"]).hex()})
+    offset = spec["CODE_CANDIDATE"] - ROM_BASE
+    if not blob or len(blob) > 0x14000 or clean[offset:offset + len(blob)] != b"\xff" * len(blob):
+        raise ValueError("probe payload candidate not free/within linker bound")
+    data = bytearray(clean)
+    data[offset:offset + len(blob)] = blob
+    for detour in panel_detours:
+        start = detour["address"] - ROM_BASE
+        replacement = bytes.fromhex(detour["replacement"])
+        data[start:start+len(replacement)] = replacement
+    hook = spec["HEAP_INIT"] - ROM_BASE
+    data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
+    frame_receipt = None
+    if mode in ("census", "trade"):
+        frame = next(int(line.split()[0], 16) for line in symbol_text.splitlines()
+                     if line.split()[-1:] == ["slink_native_frame" if mode=="trade" else "slink_frame_probe"])
+        offset = spec["FRAME_ENTRY"] - ROM_BASE
+        data[offset:offset+8] = thumb_entry_jump(spec["FRAME_ENTRY"], frame)
+        frame_receipt = {"address": spec["FRAME_ENTRY"], "original": spec["FRAME_BYTES"],
+                         "replacement": data[offset:offset+8].hex()}
+        if spec.get("FRAME_REPLAY_REQUIRED"):
+            frame_receipt["continuation"] = frame_replay
+    trade_detours = []
+    if mode == "trade":
+        for key, symbol in (("TRADE_MON","slink_native_trade_gate"), ("EVO_GETTER","slink_native_evolution_gate")):
+            destination = next(int(line.split()[0],16) for line in symbol_text.splitlines()
+                               if line.split()[-1:] == [symbol])
+            offset = spec[key]-ROM_BASE
+            data[offset:offset+8] = thumb_entry_jump(spec[key],destination)
+            trade_detours.append({"address":spec[key],"original":spec[key+"_BYTES"],
+                                  "replacement":data[offset:offset+8].hex(),"symbol":symbol})
+    rom = out / "probe.gba"
+    rom.write_bytes(data)
+    receipt = {"status": "PRODUCTION_COMPANION" if production else "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
+               "target": title, "mode": mode, "ready": spec["READY"] if production else 0,
+               "production": production,
+               "arena_static_check": "native heap reservation" if production else "skipped: heap clamp unqualified",
+               "capabilities": (87 if spec.get("CALL_FEATURE") else 23) if trade_candidate else 0,
+               "panel_detours": panel_detours, "panel_tables": panel_tables,
+               "carrier_bindings": carrier_bindings,
+               "sound_bindings": sound_bindings,
+               "rival_bindings": rival_bindings,
+               "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
+               "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
+               "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
+               "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
+               "frame_detour": frame_receipt,
+               "trade_detours": trade_detours,
+               "compiler": run([GCC, "--version"])}
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    print(f"{'PRODUCTION' if production else 'DIAGNOSTIC ONLY'}: {rom}")
+    return out, receipt
+
+
+PUBLISHED_TARGETS = {"firered":"FireRed", "leafgreen":"LeafGreen", "emerald":"Emerald"}
+
+
+def publish_native(title, rom_path, *, check=False):
+    """Build, round-trip and pin one vanilla ABI2 UPS; RR keeps its ABI1 pipeline."""
+    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True)
+    clean, patched = Path(rom_path).read_bytes(), (out/"probe.gba").read_bytes()
+    patch = make_ups.ups_create(clean, patched)
+    if make_ups.ups_apply(clean, patch) != patched:
+        raise ValueError("production UPS round-trip differs")
+    name = f"SLink-{PUBLISHED_TARGETS[title]}.ups"
+    row = {"patch":name,"abi":2,"capabilities":receipt["capabilities"],"production":True,
+           "base_sha1":hashlib.sha1(clean).hexdigest(),"base_md5":hashlib.md5(clean).hexdigest(),
+           "rom_sha1":hashlib.sha1(patched).hexdigest(),"rom_md5":hashlib.md5(patched).hexdigest(),
+           "rom_sha256":hashlib.sha256(patched).hexdigest(),"ups_sha256":hashlib.sha256(patch).hexdigest(),
+           "arena_base":require_ready(title)["ARENA_BASE"],"arena_size":0x1000,
+           "payload_sha256":receipt["payload_sha256"],
+           "protected_spans":[{"offset":require_ready(title)["CODE_CANDIDATE"]-ROM_BASE,"size":receipt["payload_bytes"]}]
+               + [{"offset":item.get("address",item.get("detour"))-ROM_BASE,"size":len(bytes.fromhex(item["original"]))}
+                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]}
+    manifest = Path(DIST)/"gen3_companions.json"
+    data = json.loads(manifest.read_text()) if manifest.exists() else {"schema":"slink-gen3-companions-v1","titles":{}}
+    if check:
+        if (Path(DIST)/name).read_bytes() != patch or data["titles"].get(title) != row:
+            raise ValueError(f"{title} published UPS/manifest differs from source")
+        print(f"CHECK OK: {name} and manifest reproduce")
+    else:
+        Path(DIST).mkdir(parents=True,exist_ok=True)
+        (Path(DIST)/name).write_bytes(patch)
+        data["titles"][title]=row
+        manifest.write_text(json.dumps(data,indent=2,sort_keys=True)+"\n")
+        print(f"PUBLISHED {name}: sha1 {row['rom_sha1']}")
 
 
 def _toolchain_dir():
@@ -74,17 +345,19 @@ BATTLE_CALC_TRAMPOLINE = 0x08378CA8
 # literal with hardcoded offsets, and the two ranges abut (desc[13] IS act[0].text), so a 14th
 # action id cannot own a description. We take over id 8 instead — a second PLAYER row only
 # SetUpStartMenu_Link ever appends, proven absent from a real field menu by
-# lua/tests/test_live_startmenu.lua. Four word writes, each verified against its expected current value
+# lua/tests/test_live_startmenu.lua. Five word writes, each verified against its expected current value
 # so a different RR build fails the build instead of producing a subtly wrong ROM.
 STARTMENU_TABLE = 0x09148FB4
 STARTMENU_DESC8 = STARTMENU_TABLE + 8 + 4 * 8       # 0x09148FDC — desc[8]
 STARTMENU_ACT8 = STARTMENU_TABLE + 0x3C + 8 * 8     # 0x09149030 — act[8] = {text, func}
 STARTMENU_SETUP_LIT = 0x0806ED58                    # CFRU's SetUpStartMenu redirect literal
+STARTMENU_REDRAW_LIT = 0x090BDD54                   # the page switch's rebuild callback literal
 STARTMENU_EXPECT = {
     STARTMENU_DESC8: 0x0841A049,       # duplicate of desc[3] (PLAYER)
     STARTMENU_ACT8: 0x0841628E,        # duplicate of act[3].text (PLAYER)
     STARTMENU_ACT8 + 4: 0x0806F56D,    # id 8's own action func (NOT act[3].func)
     STARTMENU_SETUP_LIT: 0x090BE179,   # the original SetUpStartMenu
+    STARTMENU_REDRAW_LIT: 0x090BE30D,  # RR's rebuild (direct `bl SetUpStartMenu`, bypasses the above)
 }
 
 RR_MD5 = "8529f3a45d32bce4da637976fcf269d4"
@@ -131,6 +404,13 @@ def thumb_bl(src, dst):
 def main():
     global BUILD, DIST
     ap = argparse.ArgumentParser()
+    ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
+    ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
+    ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
+    ap.add_argument("--trade-candidate", action="store_true",
+                    help="private FR/LG ABI v2 candidate ROM; READY/UPS publication unchanged")
+    ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
+                    help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
@@ -141,8 +421,52 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.trade_candidate:
+        if args.arena_probe or args.check or args.describe or args.no_verify_md5:
+            ap.error("trade candidate cannot combine with probes/check/describe/verification bypass")
+        try:
+            build_arena_probe(args.target, args.rom, "trade", trade_candidate=True)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
+        return 0
+    if args.describe:
+        print(json.dumps(target_spec(args.target), indent=2))
+        return 0
+    if args.arena_probe:
+        try:
+            build_arena_probe(args.target, args.rom, args.arena_probe)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
+        return 0
+    if args.target in PUBLISHED_TARGETS:
+        if args.no_verify_md5:
+            ap.error("base verification bypass is not supported for pinned companion targets")
+        try:
+            publish_native(args.target,args.rom,check=args.check)
+        except (ValueError,OSError) as error:
+            ap.error(str(error))
+        return 0
+    if args.abi_version == 2:
+        try:
+            require_ready(args.target)
+        except ValueError as error:
+            ap.error(str(error))
+        # This early T2 cut intentionally cannot compile RR addresses into another title.
+        ap.error("ABI v2 target producer not implemented")
+    if args.no_verify_md5:
+        ap.error("base verification bypass is not supported for pinned companion targets")
+    try:
+        validate_base(args.target, Path(args.rom).read_bytes())
+    except (ValueError, OSError) as error:
+        ap.error(str(error))
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
-    tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
+    tmp = None
+    if args.check:
+        parent = Path(PATCH) / "build"
+        if parent.resolve() != Path(PATCH).resolve() / "build":
+            ap.error("redirected build directory refused")
+        parent.mkdir(parents=True, exist_ok=True)
+        tmp = tempfile.mkdtemp(prefix="slink-build-", dir=parent)
     if args.check:
         if not os.path.exists(committed_ups):
             sys.exit(f"--check: no committed patch at {committed_ups}")
@@ -165,7 +489,8 @@ def main():
     # Every symbol the ROM-side rewrites need to point at. Missing one is fatal: it would mean a
     # detour or table word silently keeping its old target.
     WANTED = ("slink_hook", "slink_battletext_hook", "slink_backup_wrap",
-              "slink_startmenu_cb", "slink_setup_start_menu", "sSoulLinkLabel", "sSoulLinkDesc")
+              "slink_startmenu_cb", "slink_setup_start_menu", "slink_start_menu_redraw",
+               "sSoulLinkLabel", "sSoulLinkDesc")
     sym = {}
     for line in run([NM, elf]).splitlines():
         parts = line.split()
@@ -244,6 +569,7 @@ def main():
     w32(STARTMENU_ACT8, sym["sSoulLinkLabel"])
     w32(STARTMENU_ACT8 + 4, sym["slink_startmenu_cb"] | 1)          # Thumb bit
     w32(STARTMENU_SETUP_LIT, sym["slink_setup_start_menu"] | 1)
+    w32(STARTMENU_REDRAW_LIT, sym["slink_start_menu_redraw"] | 1)
     print(f"      start-menu id 8 -> SOULLINK (label {sym['sSoulLinkLabel']:#x}, "
           f"cb {sym['slink_startmenu_cb'] | 1:#x}, setup wrapper "
           f"{sym['slink_setup_start_menu'] | 1:#x})")
@@ -272,7 +598,10 @@ def main():
     if args.check:
         with open(committed_ups, "rb") as f:
             want = f.read()
-        shutil.rmtree(tmp, ignore_errors=True)
+        resolved = Path(tmp).resolve()
+        if resolved.parent != Path(PATCH).resolve() / "build" or not resolved.name.startswith("slink-build-"):
+            sys.exit(f"refusing cleanup outside owned build directory: {resolved}")
+        shutil.rmtree(resolved)
         if ups != want:
             sys.exit(f"CHECK FAIL: rebuilt UPS ({len(ups)} B, md5 "
                      f"{hashlib.md5(ups).hexdigest()}) != committed "

@@ -95,11 +95,20 @@ Gen 1 is its own composition root. See `lua/gen1/entry.lua` (wiring) and
 `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` (the modules it
 composes), and `docs/gen1_gen2_runtime_checks.md` for the live-verification story.
 
+### Gen 2 — `lua/gen2/`
+
+Pokémon Crystal, Gold, and Silver (US) also do not use the `games/` module contract — like
+Gen 1, Gen 2 is its own composition root. See `lua/gen2/entry.lua` (wiring; `Entry.PACKS` /
+`Entry.build`) and `lua/gen2/{client,reads,writes,signals,boxes,rom,panel,phone,trade_overlay,wire}.lua`
+(the modules it composes), and `docs/gen1_gen2_runtime_checks.md` for the live-verification
+story.
+
 ### Gen 3 — `gen3_frlge.lua` (reference only)
 
 The old Gen 3 client's game module (FireRed, LeafGreen, Emerald). Since C5-6 nothing loads it at
-runtime: `lua/slink.lua` admits FireRed/LeafGreen/Radical Red into the rewritten client under
-`lua/gen3/` and refuses every other GBA cartridge (Emerald, Archipelago builds) by name. The file
+runtime: `lua/slink.lua` admits FireRed, LeafGreen, Radical Red and Emerald (pack `gen3_emerald`,
+see `docs/gen3_emerald/`) into the rewritten client under `lua/gen3/`, and refuses every other GBA
+cartridge (Archipelago builds, header-only carts) by name. The file
 stays as the cited source of the profile facts in `data/games/gen3_frlg/profile.json`; the old
 client, its `memory_gba.lua` and the helpers described below are at tag `archive/gen3-old-client`.
 The description below is of that archived client.
@@ -158,6 +167,13 @@ vanilla FRLG (priority 10) since RR is a superset ROM.
 4. **Runtime**: The client script calls module functions for game-specific behavior
 
 ## Adding a New Game
+
+The single-file `games/` module contract above is what Gen 4 and Gen 5 still use. Gen 1, Gen 2
+and Gen 3 have each moved to a composition-root package instead (`lua/gen1/`, `lua/gen2/`,
+`lua/gen3/`, each with its own `entry.lua`) — the shared-framework direction (see CLAUDE.md) is
+to bring new generations onto that pattern, so a genuinely new game is more likely to want a
+`lua/gen<N>/entry.lua` than a `lua/games/<game_id>.lua`. The steps below are still accurate for
+extending the Gen 4/5-style contract:
 
 1. Create `lua/games/<game_id>.lua`
 2. Implement the contract fields above

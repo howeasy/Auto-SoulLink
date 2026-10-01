@@ -23,7 +23,7 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | fr | 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc |
 | lg | 574fa542ffebb14be69902d1d36f1ec0a4afd71e |
 | rr | 964f951a0fdaf209e4ea1344883ef0d557bb3a80 |
-| rr_companion | ea5352f8a3b9073f8ae20870ad12857925d442cd |
+| rr_companion | da579690db7d6933a0952a1f490312842793f71a |
 
 ## PINNED / UNVERIFIED matrix
 
@@ -43,7 +43,12 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | save | PINNED | PINNED | PINNED | PINNED |
 | poison_faint | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 | borrowed_party | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| nature_change | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| nature_change | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| nature_change_begin | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| borrowed_party_begin | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| borrowed_party_opponent_begin | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| borrowed_party_end | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| hatch | PINNED | PINNED | PINNED | PINNED |
 | pc_deposit | PINNED | PINNED | PINNED | PINNED |
 | pc_withdraw | PINNED | PINNED | PINNED | PINNED |
 | pc_box_place | PINNED | PINNED | PINNED | PINNED |
@@ -364,18 +369,92 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | rr | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 1 matches, aligned=none; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379724; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379b7c; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
 
 ### nature_change — RR nature-changer special
 
-[pret src/pokemon.c#L3686-L3706](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3686-L3706). RR-specific PID identity update; existing client.lua:3399-3557 is only a local behavior reference. The linked vanilla source is a contrast, NOT evidence for the special.
+[pret include/constants/pokemon.h#L5](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5). RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, decoded valid species/flags and non-Bad-Egg/non-egg record; RR checksum is explicitly unused, never require checksum_ok=true/zero. unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 906 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 911 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
+| rr | PINNED | 090B17CC / +AC / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090B17CC / +AC / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+
+### nature_change_begin — RR Nature Changer PID preimage
+
+[pret include/constants/pokemon.h#L5](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5). RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only Nature Changer; not applicable to vanilla FR/LG; bytes, if shown, are diagnostic only |
+| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only Nature Changer; not applicable to vanilla FR/LG; bytes, if shown, are diagnostic only |
+| rr | PINNED | 090B17CC / +A8 / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090B17CC / +A8 / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+
+### borrowed_party_begin — RR School rental team builder
+
+[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). RR School map5,2 NPC1(6,2) script09051ABF, builder callnative09051B87/09051BF2 ->09079300. Capture builder ENTRY before six CreateMon calls overwrite gPlayerParty, including ViewYourTeam before battle_begin. Preserve validated own raw records/keys/count and reset epoch, force borrowed state until matching restore; no gameplay event/capture/faint from the borrowed records. Nested/replayed begin must not replace the original own-party baseline.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| rr | PINNED | 09079300 / +0 / 1079300 | F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC046 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 09079300 / +0 / 1079300 | F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC046 | SOURCE only; capture contract above |
+
+### borrowed_party_opponent_begin — RR School opponent team builder
+
+[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| rr | PINNED | 090790C8 / +1C / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090790C8 / +1C / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
+
+### borrowed_party_end — LoadPlayerParty restored-party completion
+
+[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
+| rr | PINNED | 0804C230 / +32 / 4C230 | 30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 0804C230 / +32 / 4C230 | 30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202 | SOURCE only; capture contract above |
+
+### hatch — AddHatchedMonToParty
+
+[pret src/daycare.c#L1639-L1678](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678). AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| lg | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| rr | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| rr_companion | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2583 AddHatchedMonToParty | 08046D60 / C0 | +AA | 30B585B00006000E03AC462121706421 |
+| lg | data/gen3/pret/pokeleafgreen.sym:2583 AddHatchedMonToParty | 08046D60 / C0 | +AA | 30B585B00006000E03AC462121706421 |
+
+Unless an RR-specific binding is described below, RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. JSON reference_size is a vanilla bound, not a proved RR extent. frame_control retains its measured/patched artifact binding.
+
+RR-specific capture contract:
+
+[CFRU source map](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/daycare.c#L1639-L1678). RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.
+Binary body, not upstream C, is authoritative. RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned.
+
+| Artifact | Entry/trampoline | Body entry bytes | Estimated extent | Boundary bytes |
+|---|---|---|---|---|
+| rr | 08046D60 in-place | 30B585B00006000E03AC462121706421 | C0 (estimate) | 00B503480078FFF7 |
+| rr_companion | 08046D60 in-place | 30B585B00006000E03AC462121706421 | C0 (estimate) | 00B503480078FFF7 |
 
 ### pc_deposit — TryStorePartyMonInBox
 
@@ -565,4 +644,4 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 
 ## NOT VERIFIED
 
-RR borrowed_party and nature_change remain UNVERIFIED. Poison's replacement is disabled; its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need separate evidence; the mutation sites here are not a claim of complete gameplay coverage. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.
+The legacy generic borrowed_party candidate remains UNVERIFIED; RR School borrowed_party_begin/end are SOURCE pinned with exact builder/restore bodies and an active-borrow restore contract. School postbattle restore caller attribution remains UNRESOLVED. Nature Changer paired PID sites are SOURCE pinned by the exact NPC script and unique ROM body, not PHYSICAL qualified. Poison's replacement is disabled; its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need separate evidence; the mutation sites here are not a claim of complete gameplay coverage. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.

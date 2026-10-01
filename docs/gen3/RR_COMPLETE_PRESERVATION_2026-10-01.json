@@ -1,0 +1,518 @@
+{
+  "qualified_source": "aab6fb325780e8a4a94b1b33d0f04c74749a51d5",
+  "source_quick": {
+    "passed": 5180,
+    "skipped": 0,
+    "failed": 0,
+    "lanes_passed": 5,
+    "receipt": "probes/source_quick_aab6fb32.txt"
+  },
+  "rr_rows": {
+    "passed": 41,
+    "required": 41,
+    "carried": 0,
+    "summary": "probes/fc_SUMMARY_aab6fb32_rr.txt",
+    "opcode_deferred_cases": 12
+  },
+  "archives": [
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrow-menu-076e-failed.zip",
+      "sha256": "61f6f1c50f53c237edc3cfb5a50b8bfb4c7f889c813417663e99a58342f4b50e",
+      "members_including_manifest": 46,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrow-menu-ab50-failed.zip",
+      "sha256": "96f907ce98d1b41ebef3942ad5eb32e938a9355e662cd36e2bbfde23cfed6550",
+      "members_including_manifest": 26,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrow-menu-cd88-failed.zip",
+      "sha256": "1c0b215dc5eb8ceaea1c84ba3f69d3cbaf5f4336abde4fe748fbdc19e313f642",
+      "members_including_manifest": 36,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrow-menu-f1da-failed.zip",
+      "sha256": "f69b634e83df74fca7dee2dcc7933e71ae36d7c78472e5f2ca1e1eb1ea9bbc66",
+      "members_including_manifest": 58,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed-trio-3ff4-pass.zip",
+      "sha256": "398270270cbd3b35fb0a4229b20a666df12fca3d451b0be00eb1bb0ce4a64a06",
+      "members_including_manifest": 235,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-05bb0344-failed.zip",
+      "sha256": "37db47b71c16f9e25b3f80215a857014655d940755fc324d28e98695bab36f4c",
+      "members_including_manifest": 70,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-3008cd9b-failed.zip",
+      "sha256": "2e71947ee15364f6dcd53ae121f7a446ac41b6da7e37a531d38afaf7aeaf0ea1",
+      "members_including_manifest": 29,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-3bddc632-failed.zip",
+      "sha256": "f03b6e092da4d91c9cc81c0cfc88332fba441bd82d6d2f8121fa3eb79d485376",
+      "members_including_manifest": 39,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-647fb1d0-failed.zip",
+      "sha256": "a399c576cf89f6fba7379c963572b03b76f694da33b9fd163c0dda3de31cb636",
+      "members_including_manifest": 80,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-ac3fc4d7-failed.zip",
+      "sha256": "116d63feb0cee565c9b7d17a65642ac05160d96247ac77519de574390a732be9",
+      "members_including_manifest": 49,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_battle_gen3-f2429d4c-failed.zip",
+      "sha256": "1beb4b78e93d0bb6f935c1d6a1b2c22a639c87f5f4f69da39f14645e00a3a81f",
+      "members_including_manifest": 60,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\borrowed_party_menu_gen3-c500d6a1-failed.zip",
+      "sha256": "d714d7fa090de59bc9b473d12d4c3fe49000a69a08e08022f67b5ede51ce6fec",
+      "members_including_manifest": 69,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\faint_cmd_gen3-aab6fb32-failed.zip",
+      "sha256": "b383d5d2aefcaf2aec350a90ccc617ef178a3af5b9d6963508d3362a1c818d9d",
+      "members_including_manifest": 33,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\final-aab6fb32.zip",
+      "sha256": "1b8b4e4fabc5ba13f8f1578a2a19aa8aff3ac6c821f22074016277b46b0dd978",
+      "members_including_manifest": 1365,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\nature-ec46-failed.zip",
+      "sha256": "0102e408fdbecc838b8baa69bc29183f15a9b43e4362178cf01a2fe0f59042c8",
+      "members_including_manifest": 25,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\nature_change_gen3-3ff4932d-failed.zip",
+      "sha256": "ef67c4aec08946ab7a5f7f22ca314dc565151baa2acee9ac95295bdc74a779e9",
+      "members_including_manifest": 34,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\previews-3008-pass.zip",
+      "sha256": "bbfbe6c62db92f979ead7ac44f824880916707eb9a35abe3484e38eeaf79d284",
+      "members_including_manifest": 109,
+      "crc": "PASS"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\seven-feature-passes-pre-final.zip",
+      "sha256": "bc6f14712199d7d47745d69480297ce720ea881b18b50c7082f06caf7c645d81",
+      "members_including_manifest": 258,
+      "crc": "PASS"
+    }
+  ],
+  "qualified_archive": "final-aab6fb32.zip",
+  "qualified_archive_payload_members": 1364,
+  "supplemental_note": "Build-glob archive members may contain earlier-attempt context; only receipt-bound files qualify current results. Ordinary rows7 onward omitted optional wire-log; reset rows retain private wire.",
+  "player_zip": {
+    "path": "E:\\Google Drive\\SLink\\dist\\SLink-player-g4-aab6fb32.zip",
+    "sha256": "5215331f055f2dfe7ee9cb18d047cb0e58021d9bac2e269da783ced6d9aeaa27",
+    "verified_members": 182
+  },
+  "owned_receipts": [
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_05bb0344_rr_progress.txt",
+      "sha256": "e348af407963449018e91921123ddfd85021f931c3fbdb610858be61e7495a75"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_3008cd9b_rr_progress.txt",
+      "sha256": "0981ed41f7cf49a6afd12447a5fff7ed7ccfc58476aa5e454f777a282cda03dd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_3bddc632_rr_progress.txt",
+      "sha256": "83a79349c1eaefe0bdeac09bebc6932551ecf6ab08f84d0c8f309c455272def1"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_3ff4932d_rr_progress.txt",
+      "sha256": "3dfa1f5c6ee94081f3b18a34626a6ba69d8e52f46009da8c26702109db294ccd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_647fb1d0_rr_progress.txt",
+      "sha256": "4b14693eed75e02d0ed22128a7f7d90a726bc4b9ad3ebe23b53118896236c0fb"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_8fa699a9_rr_features.txt",
+      "sha256": "898883e8b6f5dffef75283c76485e62f43920b6f30a03f4bb5414d4a22504c64"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_aab6fb32_rr.txt",
+      "sha256": "20d2eac4080fe9d4c87aeb82c4e33ea93d56c4413571ae61dc7bba97b25743f7"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_aab6fb32_rr_progress.txt",
+      "sha256": "be4dd1f87f55d1302deb4eccce3a27a9b6d2e8b7fa5b0e474129093928b2ab24"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_ac3fc4d7_rr_progress.txt",
+      "sha256": "71f6bd7c14c796a70099d535c3395b0d8a64e4cb28b6774de28160db7f102619"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_c500d6a1_rr_progress.txt",
+      "sha256": "ef46f82b4e8e494fd5f85448b0d7267e021d7cfddac755bb2712a663129e31b2"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_f1dacc38_rr_progress.txt",
+      "sha256": "77cf648cccebb8cb67b37be6055b961b631538e56aa5a7b86ee3537dba34bf53"
+    },
+    {
+      "path": "docs/gen3/probes/fc_SUMMARY_f2429d4c_rr_progress.txt",
+      "sha256": "33eb340735cb96645c2a668c96c9b78a8f204a7c06e94f07c56ca8914c38a3e1"
+    },
+    {
+      "path": "docs/gen3/probes/fc_ball_gate_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "66605adb27fa30e055ff364e4b2f7a043e89e42aff73403c99303a9d21377718"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_05bb0344.txt",
+      "sha256": "1557264751bbd0e0f720a5529743c03748ae825d4640e1106e5cd82932d68cad"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_3008cd9b.txt",
+      "sha256": "e5f5178135a5935466f8df886df0bac27c61d8163a144fae3bbab36ad25b12be"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_3bddc632.txt",
+      "sha256": "d0d7faa6f4f1125314728ed5a5340d5cbccb835b61c48b1be9fb08200fbac034"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_3ff4932d.txt",
+      "sha256": "60c62beb5153952f97cb07d385cabadc557bc764a493476c5166da306c710a3e"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_647fb1d0.txt",
+      "sha256": "0b0747040b13eb3c7ab3306f1fc081a584cc42b9e1a00a92eeac2aea7dec34c4"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "20f08e2be3907a41e6a5107da2b18fd767c19c0dc445c4ba6252ea38a6b0ba84"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_ac3fc4d7.txt",
+      "sha256": "bd7f74dce537785801cd5072dfd1fa4e67354fa674c8ea73ac1a95ade6b43254"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_battle_gen3_rr_as_a_f2429d4c.txt",
+      "sha256": "393866c82102b3abb4d03027a7471b91afcc6d29890e61ac491d92d3c7c9ffca"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_076efafd.txt",
+      "sha256": "671f9c8c6da2ee8faed1697e604c43b59b056197cbbc079abb594ed9b4513ec3"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_3008cd9b.txt",
+      "sha256": "836da6b52c31519e1edd0b14e231422bedb5e4c27f80eaaa98483074a5f59313"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_3ff4932d.txt",
+      "sha256": "0f0c87b7e38b928a05606d40a2b0cb3d2500666c9606432379294a461b9e8df1"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "86e9157ca4d8c458cd2918e3092512a0ecb8cad03da5b2c0cd32522be345f614"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_ab5021df.txt",
+      "sha256": "2c23bba928c9c1e84c4f4dbbb5aaf86983258689f025247d9049724d4ddc8b2f"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_c500d6a1.txt",
+      "sha256": "6b2df517b7018a0957101c44b1896f6fdff4129f32841de849caf3a3a57c56b3"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_cd888b59.txt",
+      "sha256": "acbe90f8c5cd54e72cc5effe71cb5a495be6b38745abb75d3f87f5b6a3654a49"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_menu_gen3_rr_as_a_f1dacc38.txt",
+      "sha256": "e7ed6bad8e8ff9f7e6eb126859355409529b28ccbaff057ebee41f02a6b6a2c5"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_opponent_gen3_rr_as_a_3008cd9b.txt",
+      "sha256": "d4f58a7e1bc5e00db7e052d6ac27a3f17fa86a60c11cdf9d2ad6bb25770e5e44"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_opponent_gen3_rr_as_a_3ff4932d.txt",
+      "sha256": "cee580a42aa275284662f2553bb9b2c01b9eced97a78a81866952dfdefbf8b8b"
+    },
+    {
+      "path": "docs/gen3/probes/fc_borrowed_party_opponent_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "f55a8eee02a1b0ef76097fa9cff65dac260e8035efc10487143f01abc58966fd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_boxsync_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "2d43d54e7e6f6b5ee575c9547e060d036bdb6eec7502dd67d0a8c5fb780594a9"
+    },
+    {
+      "path": "docs/gen3/probes/fc_deadzone_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "2633e1cf99863bdb6891e8c5d15092788bc814fee72338f53e7600ce529dddd4"
+    },
+    {
+      "path": "docs/gen3/probes/fc_egg_hatch_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "9fd55bccffea619c336365d670126db2052522b6a19473ad09dd71c006e44652"
+    },
+    {
+      "path": "docs/gen3/probes/fc_egg_hatch_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "9b1c72b06b7d9a7b71002de71444da33c7a29f62d99077a43bc56a04df2c57dc"
+    },
+    {
+      "path": "docs/gen3/probes/fc_evolve_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "29775f6fff1b88d382a9d2fd5cdef66f6d68404f64f8585d7ca98173e490c296"
+    },
+    {
+      "path": "docs/gen3/probes/fc_evolve_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "978df8a976d766250867530d381ddfd43ad6abd0b03f862e0b86614a6327518a"
+    },
+    {
+      "path": "docs/gen3/probes/fc_explode_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "eb6a6fe3adc5a60b38cb7d3577b13d0eba63408c03c923415fd03a94f3ca5af0"
+    },
+    {
+      "path": "docs/gen3/probes/fc_faint_cmd_clean_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "18cfb1048ed67932e0df88393c68033735969edd504a6bc6866d71f3bb062757"
+    },
+    {
+      "path": "docs/gen3/probes/fc_faint_cmd_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "42ddb213ad12871a941d0adf4e71b8557cff5a7a53a5d72e96d475b5b035602e"
+    },
+    {
+      "path": "docs/gen3/probes/fc_gender_clause_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "5e5d47bbaae9eadf26c54e33e93df10fae29a44f9175682347a133395f51a808"
+    },
+    {
+      "path": "docs/gen3/probes/fc_gift_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "45b515d95784005c54f7396945e2e2fc6969bda1c0f1742f28800106b17987df"
+    },
+    {
+      "path": "docs/gen3/probes/fc_gift_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "54659838cabb6b8a9bcd31992b87213c430fb4f452249cf8d7bacdb8c86c447e"
+    },
+    {
+      "path": "docs/gen3/probes/fc_infopanel_dex_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "70b8f18ddc42614b079cd833d60e99b8d30e75b0c7a2f095f7ff5ea6718c26ac"
+    },
+    {
+      "path": "docs/gen3/probes/fc_infopanel_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "907117ecbeb325437aac1030fb1126baa17268e9adb556aef404428e672d717f"
+    },
+    {
+      "path": "docs/gen3/probes/fc_link_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "cac091d4fd161c06884b3a969e8f670fde3b6f042bc05505a359f7d2144a3887"
+    },
+    {
+      "path": "docs/gen3/probes/fc_linked_faint_active_clean_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "e6c0c745157ea4b72e0403539ce2d97f61e8e3e41ac011ca929b1608a3010534"
+    },
+    {
+      "path": "docs/gen3/probes/fc_linked_faint_active_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "52cae874841553fb02b1a226e78e62c47b6e50aa6082514079e03090abd473fd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_linked_faint_active_lhammer_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "ae2acfce05907197a758e7a871a7e92812312829eb41c949d286e41b2f3dadfd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_linked_faint_active_whiteout_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "3d48bc02b8f7f08e019170b08f9489aba918113564537c8d6ce236848ce47c91"
+    },
+    {
+      "path": "docs/gen3/probes/fc_native_absent_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "11cf864fd5adbfcaa06efb15429191b6d2f275d071e16b2d29e3e4a5bb9d6e0d"
+    },
+    {
+      "path": "docs/gen3/probes/fc_nature_change_gen3_rr_as_a_3ff4932d.txt",
+      "sha256": "94128c4d1833e01c35fb737a116f12332b18c76ab75d3d54c0f07d86a4aeb483"
+    },
+    {
+      "path": "docs/gen3/probes/fc_nature_change_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "abe7f743dd9e3bff86f09ce6f9168e856aa0925ebad50f97a6adc755264541bd"
+    },
+    {
+      "path": "docs/gen3/probes/fc_nature_change_gen3_rr_as_a_ab5021df.txt",
+      "sha256": "cd74fde4b355cdedff4d9f4b2b66bc8805eb40a2b63335c8d0e6dd19bf16dd1a"
+    },
+    {
+      "path": "docs/gen3/probes/fc_nature_change_gen3_rr_as_a_ec46c8a4.txt",
+      "sha256": "a50757715f71b908799ac39b47786269016870142b08e194cae485d82f94f256"
+    },
+    {
+      "path": "docs/gen3/probes/fc_npc_trade_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "b634a97d3b0b8e607691e6647b0079670060f7cf3f6bb36e64ba50ee9eb48d3c"
+    },
+    {
+      "path": "docs/gen3/probes/fc_npc_trade_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "c1f2f68a50f7158160526edeba801920e8a357856a91bfe40f1322234971a249"
+    },
+    {
+      "path": "docs/gen3/probes/fc_reconnect_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "fc635c1301908efc6dad6b1ea6a43373e783c19b6829996390c5b5e228d3204e"
+    },
+    {
+      "path": "docs/gen3/probes/fc_release_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "e4777bb0fe4867bfcc5206edcb706668e835e5c0c445102d1c743e8075df001c"
+    },
+    {
+      "path": "docs/gen3/probes/fc_rival_swap_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "67beed93ff113f87096bb35bfc80e2729c067f8f8284dea68d9e0bd9c9dabdab"
+    },
+    {
+      "path": "docs/gen3/probes/fc_rival_swap_real_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "3a552e7e8317e2b265a3b032c362d95c439974fa189e631aeaf46811857549f1"
+    },
+    {
+      "path": "docs/gen3/probes/fc_rr_opcode_gates_aab6fb32.txt",
+      "sha256": "2b26ab90c25ea07d6ee4b379c5b1ad3229455b68b7880d4953a59f63aebf5e7d"
+    },
+    {
+      "path": "docs/gen3/probes/fc_rr_zip_build_aab6fb32.txt",
+      "sha256": "f6376555615084a6db73988e3010aea5469ab5b59f9f0eca33d686f9617ee5aa"
+    },
+    {
+      "path": "docs/gen3/probes/fc_rr_zip_check_aab6fb32.txt",
+      "sha256": "c179f5b97008343a11def7e9d70d41cce49b18c54a2b241f3d81ab0b95028537"
+    },
+    {
+      "path": "docs/gen3/probes/fc_shiny_bonus_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "d6b210dc5b8937a81b8995654a4e43476b66d1dcdbcf704072ee74eb330c4ba1"
+    },
+    {
+      "path": "docs/gen3/probes/fc_shiny_bonus_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "26eecfe4da6cb1a76fbf94f7e4693d5bff5c23568555fde2e05baf63244aa963"
+    },
+    {
+      "path": "docs/gen3/probes/fc_species_clause_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "bf321ee6de19df7acc3e99fa099b36b687582d908de0e8e4cf6f9132e7f20618"
+    },
+    {
+      "path": "docs/gen3/probes/fc_species_family_gen3_rr_as_a_8fa699a9.txt",
+      "sha256": "451bc45ee3666a056285d7f436daff89241f54e5c15df91f428395b615217ae9"
+    },
+    {
+      "path": "docs/gen3/probes/fc_species_family_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "653be15c453eb87fd8b663f2bfea6f3c7e785b0edcff4e0492c6967e51621e85"
+    },
+    {
+      "path": "docs/gen3/probes/fc_trade_decline_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "80ae1117db76ced15483f04a1777abc42f321b1759027d0ab8effca6ea1eae3a"
+    },
+    {
+      "path": "docs/gen3/probes/fc_trade_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "1849d9170467ac9c3351d05e4b5c4cbd4298b7b824d3a4c259ab28d5312f154c"
+    },
+    {
+      "path": "docs/gen3/probes/fc_trade_lock_probe_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "b935f60de149063fdda0fbf5dd2ac22646bded66477e0e3d5318db362ce5b997"
+    },
+    {
+      "path": "docs/gen3/probes/fc_trade_reset_commit_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "d3907280888386500f649af6033bfe7ae9a62994a8c133f5d0b45406b8c36f3a"
+    },
+    {
+      "path": "docs/gen3/probes/fc_trade_reset_success_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "30ccda1cc0a48205328707dd3a15017977c2391b2b41f785b005bd5a25b68eac"
+    },
+    {
+      "path": "docs/gen3/probes/fc_type_clause_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "b047cafc62aa463a24844c959c96a2bea0233e572d9e53468d44097d87651942"
+    },
+    {
+      "path": "docs/gen3/probes/fc_whiteout_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "b4484df16e5ec72e9d9d6329e3e4147478d9cbc49e1c9d751c657958c1131ae6"
+    },
+    {
+      "path": "docs/gen3/probes/fc_zip_boot_radicalred_aab6fb32.txt",
+      "sha256": "e32a96c2732e603fdf51d79844d72ef1b565582711f4bca9d79c276a2a840a93"
+    },
+    {
+      "path": "docs/gen3/probes/rejected_wire_output_faint_cmd_gen3_rr_as_a_aab6fb32.txt",
+      "sha256": "d5ff080e455dfb7f7e95072fa394cf4250595d367d39de397da7827f4dc4134a"
+    },
+    {
+      "path": "docs/gen3/probes/source_quick_aab6fb32.txt",
+      "sha256": "86cbe3e6572aa4b19ffdb87087aab875ebb9e954cad76193195e35bf231552d8"
+    },
+    {
+      "path": "docs/gen3/probes/source_quick_ec46c8a4.txt",
+      "sha256": "beabd1dd3db1e8040caaaf9039c6bbe9637c8c7c39ca917deb8ab3ec17e0ecb3"
+    },
+    {
+      "path": "docs/gen3/probes/source_quick_f1dacc38.txt",
+      "sha256": "517cdd8594a7a0b70409b5ea58bcfc35263e8bd9fc09900343fe9cf137852d0a"
+    }
+  ],
+  "control_files": [
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr-complete-full-aab6-resume.log",
+      "sha256": "ca58f1617d5ac2e618a91a2aabdf91d7df751c2e8e1de4395bd1dc778c408ac7"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr-complete-full-aab6.log",
+      "sha256": "c141b576e11650c401e8f6c78d377d453de93cfb9722d9696f25c342974ffc71"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr_complete_full.py",
+      "sha256": "ef8b7609eea05e6cb286f897ee0717a75157ff99ae44ad55f18b15ca59d3b5ea"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr_complete_full_aab6.ps1",
+      "sha256": "27a7c2df2b04fe328d07a1b1d61f3e24c9f5a80e74569bbb002c18dd1533f70c"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr_complete_resume_aab6.ps1",
+      "sha256": "df53dd245d1a57758657f1203d0920d5797c892e5ee4f6aae5b30fe7b3273737"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr_completion_docs_proposal.md",
+      "sha256": "52b0f3c7a8bea92b7e40d574713fc0e651971f66297c9f9d7ddd4a1b36ebe97c"
+    },
+    {
+      "path": "C:\\slink-cache\\gen3-inputs\\rr-complete-2026-10-01\\control\\rr_final_archive_omp.py",
+      "sha256": "675cee79fffd63fd5a01f64f1d51e61570df87c43afa77b72178d539485b2056"
+    }
+  ],
+  "input_backup": "Own .cache/expansion-output linux1/linux2/reference: 15/15 byte-identical copies at E:/Google Drive/SLink/.cache/expansion-output (OMP cx-66061990); five external junction targets preserved.",
+  "cleanup": {
+    "worktree": "C:/slink-wt/rr-complete",
+    "branch": "codex/rr-complete",
+    "git_metadata": "E:/Google Drive/SLink/.git/worktrees/rr-complete",
+    "status": "BLOCKED_BY_AUTOMATIC_APPROVAL_REVIEW",
+    "reason": "blocked by policy",
+    "operation": "Verify exact owned root, unlink five owned cache junction objects, git worktree remove --force, git branch -d after merge reachability check",
+    "execution": "Rejected at CreateProcess before command ran; directory, registration, branch and five junction objects remain. No ACL, trust or alternative deletion bypass attempted.",
+    "verified_at_utc": "2026-10-01T16:08:30.095262+00:00",
+    "source_head": "aab6fb325780e8a4a94b1b33d0f04c74749a51d5",
+    "all_work_integrated": true
+  },
+  "foreign_untracked_preserved": {
+    "lua/memory_gba.lua": "8518b82cf0fd10141c8029d05781e2394e7d5dfe42a27883ccf8e6b7ebe85b55",
+    "server/adapters/gen2_crystal.py": "0590a8b52e2e5e0938ca2d7e0206bace50b7ae826de0995eba2933a27ac65d06"
+  },
+  "delivery_commit": "47f520d8a4feecbf3c39489f4f63cd370c53bb4e",
+  "independent_closing_checks": [
+    "cx-beeb34d1 receipt/headline check",
+    "cx-2eeb55eb current documentation/link/evidence review",
+    "cx-1c0fcf31 executed archive all1364entry hash/CRC check"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "source_cut": "9513bea7",
+  "game": "gen1_pure_green",
+  "scenario": "linked_faint_bench_battle_new",
+  "verdict": "FAIL: first intended catch KO/no_catch -> valid dead zone -> re-hunt capture retired -> pair timeout",
+  "evidence": "PHYSICAL",
+  "files": {
+    "slink.log": {
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_linked_faint_bench_battle_new_9re82z3z\\slink.log",
+      "sha256": "757bde755cd53f58d55d1811a0196b6dd8a09f807ab8a82cdd773a5034721b25",
+      "size": 133882
+    },
+    "server.log": {
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_linked_faint_bench_battle_new_9re82z3z\\server.log",
+      "sha256": "14abbcc5767337e82072381f55c8ddb029d60288258c0bd72d0b6ef160de51e6",
+      "size": 119408
+    },
+    "links.json": {
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_linked_faint_bench_battle_new_9re82z3z\\links.json",
+      "sha256": "8f1ac9e213e877e3a5165308ec1058a09f63883bf3c6885ea05b8cc6e869a386",
+      "size": 2083
+    },
+    "events.json": {
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_linked_faint_bench_battle_new_9re82z3z\\events.json",
+      "sha256": "6910cd70d835e0c22033d5e506e9812261a32174f10afa5363f058880878e528",
+      "size": 959
+    },
+    "a_attempt1_result.txt": {
+      "source": "C:\\slink-wt\\g3-core\\patch\\build\\e2e_linked_faint_bench_battle_new_a_attempt1_result.txt",
+      "sha256": "25302cfaf2c70ca75232a35aae02a28eca3f107d9e71ef2c286659d72d6c23e4",
+      "size": 4076
+    },
+    "b_attempt1_result.txt": {
+      "source": "C:\\slink-wt\\g3-core\\patch\\build\\e2e_linked_faint_bench_battle_new_b_attempt1_result.txt",
+      "sha256": "e41c9751b7f02ee6341be51eeeda28eea1c4db107ee361d2a0859f4318c29b54",
+      "size": 4979
+    },
+    "pydec_attempt1_result.txt": {
+      "source": "C:\\slink-wt\\g3-core\\patch\\build\\e2e_linked_faint_bench_battle_new_pydec_attempt1_result.txt",
+      "sha256": "6eed68218d403cc438179d60261e26eaede24d7d3687bf6b234eabac1decedce",
+      "size": 103
+    }
+  }
+}

@@ -1,6 +1,7 @@
 """Read-only ROM tile verification and injected route/snapshot falsifiers; no emulator."""
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,12 +25,14 @@ def _up(rel):
     return ROOT / rel
 
 
-PRET = _up(".cache/pret/pokefirered")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gen3_pret  # noqa: E402
+
+PRET = gen3_pret.find()
 
 
 def _need_pret():
-    if not PRET.exists():
-        pytest.skip(f"pret pokefirered not cloned ({PRET})")
+    gen3_pret.require(PRET)
 
 
 def _rom(title):

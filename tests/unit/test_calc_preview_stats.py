@@ -65,3 +65,20 @@ def test_calc_preview_enemy_hp_pct_present_when_maxhp_known(tmp_path):
         "dvs": {"atk": 0, "def": 0, "spe": 0, "spc": 0},
         "stat_exp": {"hp": 0, "atk": 0, "def": 0, "spe": 0, "spc": 0},
     }
+
+
+def test_calc_preview_carries_the_live_enemy_item_like_the_full_calc(tmp_path):
+    """Review cx-66e7600f F2: outside RR trainer sets the preview dropped the foe's held
+    item. It now builds the foe through the same _foe_detail /api/calc/mons uses."""
+    from server.adapters.gen3_frlge import Gen3Adapter
+    from server.server import _build_mon_entry, _foe_detail
+
+    srv = _server(tmp_path)
+    adapter = srv._player_adapters["b"] = Gen3Adapter(is_rr=False)
+    foe = {"species_id": 4, "level": 12, "hp": 30, "maxHP": 40, "held_item_id": 13}
+    c = srv._calc_preview("b", [foe])
+
+    full = _build_mon_entry("foe-0", _foe_detail(foe, adapter), adapter)
+    assert c["enemy_item"] and c["enemy_item"] == full["item_name"]
+    assert c["enemy_species"] == full["species_name"]
+    assert c["enemy_nature"] is None  # no client sends an enemy personality

@@ -1,0 +1,42 @@
+# gen3_final_cut row=type_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario type_clause_gen3 --keep-data --lane rr-full-type_clause_gen3_rr_as_a-aab6fb32   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-type_clause_gen3_rr_as_a-aab6fb32
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T11:53:37 cpu=6% emuhawk=0 python=7
+start_utc=2026-10-01T15:53:35Z tracked_clean_before=True
+
+========== scenario: type_clause_gen3 ==========
+[duo] type_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=aab6fb325780e8a4a94b1b33d0f04c74749a51d5
+[duo] server up: tcp=55931 http=55932 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah path=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah path=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 30.0s
+[duo] timing results 6.6s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=d292223ad8d641c047771cc4da66760e1cad4c9273388c2b9e6064e24fa838c3 file=d292223ad8d641c047771cc4da66760e1cad4c9273388c2b9e6064e24fa838c3 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=9280e8b297b821f922cf6fed99a8fea6bc82817c0c9a9cad0073978312bfe4c6 file=9280e8b297b821f922cf6fed99a8fea6bc82817c0c9a9cad0073978312bfe4c6 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] type: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] type_clause_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_7uew_pah
+
+========== summary ==========
+  type_clause_gen3: PASS (attempt 1 of 8)
+exit=0 end_utc=2026-10-01T15:54:16Z tracked_clean_after=True classification=pass

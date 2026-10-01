@@ -12,6 +12,7 @@ base stats.
 """
 
 import math
+import os
 
 from server.adapters import gen1_codec, gen3_codec
 from server.adapters.gen1_rby import Gen1Adapter
@@ -177,6 +178,48 @@ def test_gen3_rr_calc_stats_uses_the_unencrypted_fixed_substruct_order():
     # agree -- otherwise this test would pass even if the adapter ignored the rr flag.
     wrong = VANILLA.calc_stats({"key": "k", "level": level, "blob_hex": blob.hex()})
     assert wrong is None or wrong != cs
+
+
+# ---------------------------------------------------------------------------
+# Gen 3 Emerald -- unlike every other case in this file, party bytes here are NOT
+# hand-built: they're read straight off a real save file (tests/fixtures/gen3/
+# emerald_battle.sav, built by tools/gen3_fixtures.py), the same way the live server
+# gets blob_hex, to prove the adapter's rom_type="emerald" path decodes a real save's
+# SaveBlock1 party slot 0 correctly end to end (not just a synthetic encode/decode
+# round-trip of our own construction).
+# ---------------------------------------------------------------------------
+
+_MUDKIP_BASE = {"hp": 50, "atk": 70, "def": 50, "spa": 50, "spd": 50, "spe": 40}
+# pret pokeemerald c65e93f2, src/data/pokemon/species_info.h:7799-7819 SPECIES_MUDKIP:
+# baseHP 50, baseAttack 70, baseDefense 50, baseSpeed 40, baseSpAttack 50, baseSpDefense 50
+# (tools/gen3_fixtures.py's own MUDKIP comment, ~964-972, glosses this as "50/70/50/40/50/50"
+# in hp/atk/def/spa/spd/spe order, which transposes speed and special attack -- both are 50
+# except speed, so it never showed up there; this test's own formula check catches it).
+_MUDKIP_LEVEL = 5
+_MUDKIP_IV = 15  # tools/gen3_fixtures.py STARTER_IV
+
+
+def test_gen3_emerald_calc_stats_decodes_real_save_party_mon_0():
+    fixture = os.path.join(os.path.dirname(__file__), "..", "fixtures", "gen3", "emerald_battle.sav")
+    with open(fixture, "rb") as fh:
+        image = fh.read()
+
+    sb1 = gen3_codec.parse_flash(image, title=gen3_codec.TITLE_EMERALD)["sb1"]
+    count = sb1[gen3_codec.SB1_PARTY_COUNT_OFFSET_EMERALD]
+    assert count >= 1, "fixture save has no party mon 0 to read"
+    start = gen3_codec.SB1_PARTY_OFFSET_EMERALD
+    blob = sb1[start:start + gen3_codec.PARTY_MON_SIZE]
+
+    EMERALD = Gen3Adapter(rom_type="emerald")
+    cs = EMERALD.calc_stats({"key": "k", "level": _MUDKIP_LEVEL, "blob_hex": blob.hex()})
+    assert cs is not None
+
+    assert cs["ivs"] == dict.fromkeys(_MUDKIP_BASE, _MUDKIP_IV)
+    assert cs["evs"] == dict.fromkeys(_MUDKIP_BASE, 0)  # freshly-received starter, no EVs yet
+
+    for stat, base in _MUDKIP_BASE.items():
+        expected = _g3_stat(base, _MUDKIP_IV, 0, _MUDKIP_LEVEL, is_hp=(stat == "hp"))
+        assert cs["stats"][stat] == expected, stat
 
 
 def test_gen3_calc_stats_none_on_missing_or_bad_blob():

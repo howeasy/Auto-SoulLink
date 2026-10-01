@@ -1,0 +1,50 @@
+# gen3_final_cut row=shiny_bonus_gen3_rr_as_a item=§14_P5_RR_duo cut=8fa699a957aff76dd2a403465cad3c14c01ba893
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario shiny_bonus_gen3 --keep-data --wire-log --lane rr-complete-shiny_bonus_gen3_rr_as_a-8fa699a9   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-shiny_bonus_gen3_rr_as_a-8fa699a9
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T06:59:45 cpu=26% emuhawk=0 python=5
+start_utc=2026-10-01T10:59:43Z tracked_clean_before=True
+
+========== scenario: shiny_bonus_gen3 ==========
+[duo] shiny_bonus_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=8fa699a957aff76dd2a403465cad3c14c01ba893
+[duo] server up: tcp=54088 http=54089 data=C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh path=C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh path=C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=E670DD35:2BDDC8BF b=E670DD35:D4223740
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): E670DD35:2BDDC8BF <-> E670DD35:D4223740 on route_1, alive
+[duo] SYNTH_SHINY_SETUP {"after": "dd00bbe3bfc8dd2bd3e9e2dbe3e3e7ff05000202bcffffffffffff0000000000b7030000080000000032030021000000000000002300000000000000000000000000000000650202ffffff3f000000000000000002ff0e000e0007000600070006000600", "after_key": "E3BB00DD:2BDDC8BF", "after_sha256": "61c7d9cccfe776a552a885dd72a5f020c73372a6f6fd6ab1eb8bcb6c702ecec7", "before": "ddb90351bfc8dd2bd3e9e2dbe3e3e7ff05000202bcffffffffffff0000000000b7030000080000000032030021000000000000002300000000000000000000000000000000650202ffffff3f000000000000000002ff0e000e0007000600070006000600", "before_key": "5103B9DD:2BDDC8BF", "before_sha256": "9d6c6accfececda650b4ddca7a8bd7e50bbf8eab2a8be322a1a92e3d716bcd0d", "label": "SYNTH wild PID before native capture", "level": 2, "rr": true, "species": 951}
+[duo] SHINY_PENDING {"area_states": {"route_1": "linked"}, "bonus_keys": {"a": ["E3BB00DD:2BDDC8BF"], "b": []}, "links": [{"a": {"is_shiny": false, "key": "E670DD35:2BDDC8BF", "level": 2, "nickname": "Bidoof", "species": 452}, "area_id": "route_1", "b": {"is_shiny": false, "key": "E670DD35:D4223740", "level": 2, "nickname": "Bidoof", "species": 452}, "cause": "", "encounter_a": null, "encounter_b": null, "initiating_player": "", "killed_at": null, "killer": null, "status": "alive"}], "pending_bonus": {"a": [], "b": ["E3BB00DD:2BDDC8BF"]}}
+[duo] timing orchestrate 36.2s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=c25f461220346e941e017ade883b4022d32faf589aa58a507e675d7f03ac2ed6 file=c25f461220346e941e017ade883b4022d32faf589aa58a507e675d7f03ac2ed6 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=e622bc4f0a73832077d9e4267fa49389e1479b6e70fe8893fa1c95c72d924f68 file=e622bc4f0a73832077d9e4267fa49389e1479b6e70fe8893fa1c95c72d924f68 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SHINY_BALLS side=a baseline=9 final=7 throws=2
+[duo] SHINY_BALLS side=b baseline=9 final=7 throws=2
+[duo] shiny exception: native catch bypassed linked area; next native partner catch formed and saved the bonus pair
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] shiny_bonus_gen3: a=PASS b=PASS
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\shiny_bonus_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\shiny_bonus_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_shiny_bonus_gen3_ogy6sjmh
+
+========== summary ==========
+  shiny_bonus_gen3: PASS (attempt 1 of 8)
+exit=0 end_utc=2026-10-01T11:00:30Z tracked_clean_after=True classification=pass

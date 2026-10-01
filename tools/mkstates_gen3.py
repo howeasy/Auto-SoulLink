@@ -10,6 +10,12 @@ SLINK_STATE_DIR.
 
     python tools/mkstates_gen3.py --title firered --kind town --out-dir patch/build/gen3_probe_states/firered
     python tools/mkstates_gen3.py --title leafgreen --kind battle --out-dir patch/build/gen3_probe_states/leafgreen
+    python tools/mkstates_gen3.py --title emerald --kind town --out-dir C:/slink-wt/emerald-e2/states
+
+Emerald (card E2-CKPT) boots tests/fixtures/gen3/emerald_<kind>.sav under the Emerald pack: town ->
+slink_overworld/slink_door (Oldale heal tile, one step S of the Center door), slink_pokecenter
+(Center 1F arrival), slink_script (below the nurse); battle -> Route 102 grass; trainer -> the
+Youngster Calvin battle parked at the action menu (slink_pretrainer only).
 """
 import argparse
 import os
@@ -36,9 +42,18 @@ def main() -> int:
     args = ap.parse_args()
 
     rom = fx.resolve_rom(args.title, args.rom)
-    fixture = fx.FIXTURES_DIR / f"{args.title}_party_{FIXTURE_KIND[args.kind]}.sav"
+    meta = fx.PARTY_TITLES[args.title]
+    # E2-CKPT: emerald names its fixtures emerald_<kind>.sav, one per kind (trainer included),
+    # and runs under its own checkpoint pack; FR/LG keep <title>_party_<FIXTURE_KIND>.sav
+    if "fixture" in meta:
+        fixture = fx.FIXTURES_DIR / str(meta["fixture"]).format(kind=args.kind)
+    else:
+        fixture = fx.FIXTURES_DIR / f"{args.title}_party_{FIXTURE_KIND[args.kind]}.sav"
+    extra_env = {"SLINK_STATE_KIND": args.kind}
+    if "checkpoint" in meta:
+        extra_env["SLINK_GEN3_CHECKPOINT"] = str(Path(fx.REPO) / str(meta["checkpoint"]))
     seed = fx.codec.split_rtc(fixture.read_bytes())[0]
-    saveram = args.saveram_name or str(fx.PARTY_TITLES[args.title]["saveram"])
+    saveram = args.saveram_name or str(meta["saveram"])
     rom_rel, run_dir, _ = fx._prepare_run(f"mkstates_{args.title}_{args.kind}", rom,
                                           seed=seed, saveram_name_override=saveram)
     out = Path(args.out_dir).resolve()
@@ -46,8 +61,7 @@ def main() -> int:
     print(f"seeded {run_dir / saveram} from {fixture}; states -> {out}")
     passed, text = fx._launch(LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
                               title=args.title,
-                              extra_env={"SLINK_STATE_KIND": args.kind,
-                                         "SLINK_STATE_DIR": out.as_posix()})
+                              extra_env={**extra_env, "SLINK_STATE_DIR": out.as_posix()})
     print(text.rstrip())
     return 0 if passed else 1
 

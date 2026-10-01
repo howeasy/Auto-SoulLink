@@ -1,0 +1,9 @@
+# INCOMPLETE progress: 1 of 41 required RR rows; not a full-cut verdict.
+# G4 final cut 3bddc6328bc82b998a02349df69c85014944c1fb -- tools/gen3_final_cut.py summary (written 2026-10-01T13:27:03Z)
+# RUN 0 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | borrowed_party_battle_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_borrowed_party_battle_gen3_rr_as_a_3bddc632.txt |
+
+OVERALL: FAIL (0/1 rows)

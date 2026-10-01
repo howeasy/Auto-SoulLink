@@ -598,13 +598,14 @@ def test_overworld_presence_defaults_false():
     assert state.overworld_presence is False
 
 
-def test_overworld_presence_round_trips_through_save_load(tmp_path, monkeypatch):
-    """Setting overworld_presence=True must persist via _save() and be restored by load()."""
+def test_overworld_presence_stays_off_through_save_load(tmp_path, monkeypatch):
+    """Deferred post-RC: overworld_presence=True is ignored at construction and on reload
+    (tests/unit/test_overworld_presence_deferred.py)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(data_dir=str(tmp_path), overworld_presence=True)
     state._save()
     reloaded = SoulLinkState.load(data_dir=str(tmp_path))
-    assert reloaded.overworld_presence is True
+    assert reloaded.overworld_presence is False
 
 
 def test_explode_mode_on_emits_force_explode(tmp_path, monkeypatch):
@@ -3308,6 +3309,45 @@ def test_dupes_clause_concurrent_zero_partner(tmp_path, monkeypatch):
     fired = state.check_dupe_on_encounter("b", "route_1", 16, partner_battle_species=0)
     assert fired is False
     assert "route_1" not in state.dupe_notified_areas["b"]
+
+
+def test_dupes_clause_concurrent_ignored_once_partner_has_pending_here(tmp_path, monkeypatch):
+    """Check 3 is for the case where NEITHER player has captured yet, as its own comment says.
+
+    Live run_20260926_225435, route_2: A captured at 19:17:17, then at 19:17:29 B's Rattata was
+    rerolled as "same family as partner's concurrent battle Rattata". A's route_2 slot was already
+    filled -- a second capture in one area is retired on arrival (see the "second capture in area"
+    guard) -- so whatever A was battling could never link against B's encounter. B lost a legal
+    encounter to a collision that cannot happen.
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # A catches Pidgey (16) on route_2: their slot for this area is now filled.
+    state.handle_event("a", {"event": "capture", "key": "AA:77", "area_id": "route_2",
+                             "level": 3, "species_id": 16})
+    assert state.pending_captures["route_2"]["a"].species == 16
+    # A is now in a wild battle with a Rattata (19) on route_2 that they cannot catch for the area,
+    # and B encounters a Rattata of their own.
+    fired = state.check_dupe_on_encounter("b", "route_2", 19, partner_battle_species=19)
+    assert fired is False
+    assert "route_2" not in state.dupe_notified_areas["b"]
+    # B keeps the "partner caught" hud_show from A's capture; what must NOT appear is a reroll.
+    assert not any(c.get("cmd") == "unresolve_area" for c in state.queued_commands["b"])
+    assert not any("reroll" in str(c.get("text", "")).lower() for c in state.queued_commands["b"])
+
+
+def test_dupes_clause_concurrent_still_fires_when_partner_pending_is_elsewhere(tmp_path, monkeypatch):
+    """The guard above is scoped to THIS area: a pending capture on another route does not
+    license a concurrent-battle collision here."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.handle_event("a", {"event": "capture", "key": "AA:78", "area_id": "route_1",
+                             "level": 3, "species_id": 16})
+    fired = state.check_dupe_on_encounter("b", "route_2", 19, partner_battle_species=19)
+    assert fired is True
+    assert "route_2" in state.dupe_notified_areas["b"]
 
 
 def test_dupes_clause_concurrent_no_catch_suppresses_dead_zone(tmp_path, monkeypatch):

@@ -1,0 +1,5 @@
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+SHADOW t=1 frame=1932 kind=mon_given key= address=134657162 callback_address=134657162 cpsr=1073741887 mode=thumb raw_r15=134657164 sp=50363772 thumb=1

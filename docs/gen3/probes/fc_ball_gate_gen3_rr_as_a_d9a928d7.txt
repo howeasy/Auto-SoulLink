@@ -1,0 +1,87 @@
+# gen3_final_cut row=ball_gate_gen3_rr_as_a item=§14_P5_RR_duo cut=d9a928d79a99aef33ac923cfbf589cda2715762d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario ball_gate_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:53:46 cpu=45% emuhawk=0 python=4
+start_utc=2026-09-27T19:53:44Z tracked_clean_before=True
+
+========== scenario: ball_gate_gen3 ==========
+[duo] ball_gate_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c14eb7f55f5e4cc16cae88d4a53f1f6851321cae86b8ef93eaf0e479bbb0f52f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=327197e1b9fe9deb377da7eb49139f63034df144ce40d4a0d4884d2b853f8a81 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=d9a928d79a99aef33ac923cfbf589cda2715762d
+[duo] server up: tcp=63386 http=63387 data=C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_ao4o7qrd
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 30.9s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (helper: route2 Route1->Pallet: map never changed from 787)
+[duo] PYDEC: FAIL client RESULT before b: native first ball
+[duo] ball_gate_gen3: a client finished before 'b: native first ball' (a: no RESULT; b: RESULT: FAIL (helper: route2 Route1->Pallet: map never changed from 787))
+--- ball_gate_gen3 a result (last 25 lines) ---
+TX safe - {"event":"safe","player":"a","seq":128}
+[client] [gen3] phase fled frame=4293 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=4388 #2 resolved at (16,16)
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":142}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"a","seq":166}
+[client] [gen3] phase mart-entered frame=5421 map=1283 at=(4,7)
+[client] [gen3] phase parcel-received frame=5804 VAR_MART=1
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":194}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"a","seq":218}
+[client] [gen3] phase encounter frame=7339 #1 during step Down at (16,16)
+[client] [gen3] phase flee frame=7662 run attempt 1
+TX safe - {"event":"safe","player":"a","seq":251}
+[client] [gen3] phase fled frame=7845 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=7940 #1 resolved at (16,16)
+[client] [gen3] phase encounter frame=8596 #2 during step Down at (12,35)
+[client] [gen3] phase flee frame=8926 run attempt 1
+TX safe - {"event":"safe","player":"a","seq":294}
+[client] [gen3] phase fled frame=9109 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=9204 #2 resolved at (12,35)
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"a","seq":301}
+TX area_enter - {"area_id":"oaks_lab","event":"area_enter","loc_name":"pallet_town_professor_oaks_lab","player":"a","seq":315}
+[client] [gen3] phase lab-entered frame=9708 map=1027 at=(6,12)
+[client] [gen3] phase parcel-delivered frame=11309 VAR_MART=2 dex=1 balls=10
+BALL_PICKUP {"after":true,"before":false,"flag":2089}
+BALL_FLIP {"active":true,"balls":10}
+--- ball_gate_gen3 b result (last 25 lines) ---
+[client] [gen3] phase seeded frame=2318 counter=3
+[client] [gen3] phase party frame=2318 [1] species=277 level=6 hp=0/22 [2] species=453 level=25 hp=82/82
+[client] [gen3] phase encounter frame=2734 #1 during step Up at (12,25)
+[client] [gen3] phase flee frame=3058 run attempt 1
+TX safe - {"event":"safe","player":"b","seq":92}
+[client] [gen3] phase fled frame=3241 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=3336 #1 resolved at (12,25)
+[client] [gen3] phase encounter frame=3832 #2 during step Up at (16,8)
+[client] [gen3] phase flee frame=4164 run attempt 1
+TX safe - {"event":"safe","player":"b","seq":129}
+[client] [gen3] phase fled frame=4345 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=4440 #2 resolved at (16,8)
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"b","seq":140}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"b","seq":164}
+[client] [gen3] phase mart-entered frame=5346 map=1283 at=(4,7)
+[client] [gen3] phase parcel-received frame=5729 VAR_MART=1
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"b","seq":191}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"b","seq":216}
+[client] [gen3] phase encounter frame=7728 #1 during step Down at (8,33)
+[client] [gen3] phase flee frame=8068 run attempt 1
+TX safe - {"event":"safe","player":"b","seq":264}
+[client] [gen3] phase fled frame=8248 outcome=4 runs=1
+[client] [gen3] phase encounter-done frame=8343 #1 resolved at (8,33)
+[client] [gen3] RESULT: FAIL route2 Route1->Pallet: map never changed from 787
+RESULT: FAIL (helper: route2 Route1->Pallet: map never changed from 787)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_ball_gate_gen3_ao4o7qrd
+
+========== summary ==========
+  ball_gate_gen3: FAIL (attempt 1 of 8)
+exit=1 end_utc=2026-09-27T19:54:19Z tracked_clean_after=True classification=real

@@ -1,0 +1,1085 @@
+{
+  "generator": "tools/gen_gen3_profile.py",
+  "native": {
+    "ABI": 2,
+    "BASE": 33665024,
+    "BLOB_BUF": 33665280,
+    "INFO": 33666784,
+    "MENU_BUF": 33666400,
+    "OP_ARM_PEER_INTERACT": 13,
+    "OP_CHOOSE_PARTY_MON": 20,
+    "OP_CREATE_MON": 4,
+    "OP_DEPOSIT_MON": 24,
+    "OP_DESPAWN_PEER_NPC": 7,
+    "OP_FORCE_FAINT": 2,
+    "OP_FORCE_MOVE": 3,
+    "OP_FORCE_MOVE_SLOT": 5,
+    "OP_GHOST_CLEAR": 15,
+    "OP_GHOST_SPAWN": 14,
+    "OP_MATCH_CALL": 32,
+    "OP_MEMORIALIZE": 26,
+    "OP_PING": 1,
+    "OP_PLAY_FANFARE": 9,
+    "OP_PLAY_SE": 19,
+    "OP_RIVAL_SWAP": 28,
+    "OP_SET_ENEMY_PARTY": 16,
+    "OP_SET_PARTY_MON": 18,
+    "OP_SHOW_BATTLE_MESSAGE": 23,
+    "OP_SHOW_CHOICES": 22,
+    "OP_SHOW_INFO": 27,
+    "OP_SHOW_MENU": 17,
+    "OP_SHOW_MESSAGE": 8,
+    "OP_SPAWN_PEER_NPC": 6,
+    "OP_TRADE_PREPARE": 29,
+    "OP_TRADE_SCENE": 21,
+    "OP_TRADE_STATUS": 31,
+    "OP_TRADE_WITHDRAW": 30,
+    "OP_WITHDRAW_MON": 25,
+    "SIG": 1263422547,
+    "TEXT_BUF": 33665888,
+    "abi_v2": {
+      "_src": {
+        "SLINK_ABI_VERSION": "patch/src/trade_targets/abi.h:18 (SLINK_ABI_VERSION)",
+        "SLINK_ARENA_SIZE": "patch/src/trade_targets/abi.h:19 (SLINK_ARENA_SIZE)",
+        "SLINK_BLOB_OFFSET": "patch/src/trade_targets/abi.h:22 (SLINK_BLOB_OFFSET)",
+        "SLINK_BLOB_SIZE": "patch/src/trade_targets/abi.h:23 (SLINK_BLOB_SIZE)",
+        "SLINK_CALC_OFF_FIELD": "patch/src/trade_targets/abi.h:201 (SLINK_CALC_OFF_FIELD)",
+        "SLINK_CALL_ARMED": "patch/src/trade_targets/abi.h:152 (SLINK_CALL_ARMED)",
+        "SLINK_CALL_COMPLETE": "patch/src/trade_targets/abi.h:153 (SLINK_CALL_COMPLETE)",
+        "SLINK_CALL_COOLDOWN_FRAMES": "patch/src/trade_targets/abi.h:39 (SLINK_CALL_COOLDOWN_FRAMES)",
+        "SLINK_CALL_DELIVERED": "patch/src/trade_targets/abi.h:152 (SLINK_CALL_DELIVERED)",
+        "SLINK_CALL_EMPTY": "patch/src/trade_targets/abi.h:152 (SLINK_CALL_EMPTY)",
+        "SLINK_CALL_RECORD_OFFSET": "patch/src/trade_targets/abi.h:38 (SLINK_CALL_RECORD_OFFSET)",
+        "SLINK_CALL_REFUSED": "patch/src/trade_targets/abi.h:153 (SLINK_CALL_REFUSED)",
+        "SLINK_CALL_WITNESS_OFFSET": "patch/src/trade_targets/abi.h:37 (SLINK_CALL_WITNESS_OFFSET)",
+        "SLINK_CAP_BATTLE_CALC": "patch/src/trade_targets/abi.h:67 (SLINK_CAP_BATTLE_CALC)",
+        "SLINK_CAP_DURABLE_TRADE": "patch/src/trade_targets/abi.h:62 (SLINK_CAP_DURABLE_TRADE)",
+        "SLINK_CAP_EXPLODE": "patch/src/trade_targets/abi.h:65 (SLINK_CAP_EXPLODE)",
+        "SLINK_CAP_INFO_PANEL": "patch/src/trade_targets/abi.h:63 (SLINK_CAP_INFO_PANEL)",
+        "SLINK_CAP_MATCH_CALL": "patch/src/trade_targets/abi.h:68 (SLINK_CAP_MATCH_CALL)",
+        "SLINK_CAP_NATIVE_SOUND": "patch/src/trade_targets/abi.h:64 (SLINK_CAP_NATIVE_SOUND)",
+        "SLINK_CAP_RIVAL_SWAP": "patch/src/trade_targets/abi.h:66 (SLINK_CAP_RIVAL_SWAP)",
+        "SLINK_COMMIT_ENTERED": "patch/src/trade_targets/abi.h:86 (SLINK_COMMIT_ENTERED)",
+        "SLINK_CONTROL_EPOCH_FIELD": "patch/src/trade_targets/abi.h:197 (SLINK_CONTROL_EPOCH_FIELD)",
+        "SLINK_CONTROL_OFFSET": "patch/src/trade_targets/abi.h:35 (SLINK_CONTROL_OFFSET)",
+        "SLINK_CONTROL_SIZE": "patch/src/trade_targets/abi.h:36 (SLINK_CONTROL_SIZE)",
+        "SLINK_FINAL_RESULT": "patch/src/trade_targets/abi.h:88 (SLINK_FINAL_RESULT)",
+        "SLINK_INFO_BAR_WIDTH": "patch/src/trade_targets/abi.h:34 (SLINK_INFO_BAR_WIDTH)",
+        "SLINK_INFO_CLOSED_FIELD": "patch/src/trade_targets/abi.h:185 (SLINK_INFO_CLOSED_FIELD)",
+        "SLINK_INFO_DRAWN_FIELD": "patch/src/trade_targets/abi.h:180 (SLINK_INFO_DRAWN_FIELD)",
+        "SLINK_INFO_ENABLE_FIELD": "patch/src/trade_targets/abi.h:184 (SLINK_INFO_ENABLE_FIELD)",
+        "SLINK_INFO_EPOCH_FIELD": "patch/src/trade_targets/abi.h:178 (SLINK_INFO_EPOCH_FIELD)",
+        "SLINK_INFO_LINES_FIELD": "patch/src/trade_targets/abi.h:181 (SLINK_INFO_LINES_FIELD)",
+        "SLINK_INFO_LINE_WIDTH": "patch/src/trade_targets/abi.h:30 (SLINK_INFO_LINE_WIDTH)",
+        "SLINK_INFO_MAX_LINES": "patch/src/trade_targets/abi.h:32 (SLINK_INFO_MAX_LINES)",
+        "SLINK_INFO_OFFSET": "patch/src/trade_targets/abi.h:28 (SLINK_INFO_OFFSET)",
+        "SLINK_INFO_PAGES_FIELD": "patch/src/trade_targets/abi.h:183 (SLINK_INFO_PAGES_FIELD)",
+        "SLINK_INFO_PAGE_FIELD": "patch/src/trade_targets/abi.h:182 (SLINK_INFO_PAGE_FIELD)",
+        "SLINK_INFO_PAGE_SLOT": "patch/src/trade_targets/abi.h:33 (SLINK_INFO_PAGE_SLOT)",
+        "SLINK_INFO_REQUEST_FIELD": "patch/src/trade_targets/abi.h:179 (SLINK_INFO_REQUEST_FIELD)",
+        "SLINK_INFO_RESULT_FIELD": "patch/src/trade_targets/abi.h:187 (SLINK_INFO_RESULT_FIELD)",
+        "SLINK_INFO_ROW_COUNT": "patch/src/trade_targets/abi.h:31 (SLINK_INFO_ROW_COUNT)",
+        "SLINK_INFO_SIZE": "patch/src/trade_targets/abi.h:29 (SLINK_INFO_SIZE)",
+        "SLINK_INFO_STATE_FIELD": "patch/src/trade_targets/abi.h:186 (SLINK_INFO_STATE_FIELD)",
+        "SLINK_INFO_TEXT_FIELD": "patch/src/trade_targets/abi.h:188 (SLINK_INFO_TEXT_FIELD)",
+        "SLINK_MAILBOX_OFFSET": "patch/src/trade_targets/abi.h:20 (SLINK_MAILBOX_OFFSET)",
+        "SLINK_MENU_OFFSET": "patch/src/trade_targets/abi.h:26 (SLINK_MENU_OFFSET)",
+        "SLINK_MENU_SIZE": "patch/src/trade_targets/abi.h:27 (SLINK_MENU_SIZE)",
+        "SLINK_MILESTONE_COUNT": "patch/src/trade_targets/abi.h:88 (SLINK_MILESTONE_COUNT)",
+        "SLINK_OP_ARM_PEER_INTERACT": "patch/src/trade_targets/abi.h:49 (SLINK_OP_ARM_PEER_INTERACT)",
+        "SLINK_OP_CHOOSE_PARTY_MON": "patch/src/trade_targets/abi.h:52 (SLINK_OP_CHOOSE_PARTY_MON)",
+        "SLINK_OP_CREATE_MON": "patch/src/trade_targets/abi.h:46 (SLINK_OP_CREATE_MON)",
+        "SLINK_OP_DEPOSIT_MON": "patch/src/trade_targets/abi.h:54 (SLINK_OP_DEPOSIT_MON)",
+        "SLINK_OP_DESPAWN_PEER_NPC": "patch/src/trade_targets/abi.h:47 (SLINK_OP_DESPAWN_PEER_NPC)",
+        "SLINK_OP_FORCE_FAINT": "patch/src/trade_targets/abi.h:45 (SLINK_OP_FORCE_FAINT)",
+        "SLINK_OP_FORCE_MOVE": "patch/src/trade_targets/abi.h:45 (SLINK_OP_FORCE_MOVE)",
+        "SLINK_OP_FORCE_MOVE_SLOT": "patch/src/trade_targets/abi.h:46 (SLINK_OP_FORCE_MOVE_SLOT)",
+        "SLINK_OP_GHOST_CLEAR": "patch/src/trade_targets/abi.h:50 (SLINK_OP_GHOST_CLEAR)",
+        "SLINK_OP_GHOST_SPAWN": "patch/src/trade_targets/abi.h:49 (SLINK_OP_GHOST_SPAWN)",
+        "SLINK_OP_MATCH_CALL": "patch/src/trade_targets/abi.h:59 (SLINK_OP_MATCH_CALL)",
+        "SLINK_OP_MEMORIALIZE": "patch/src/trade_targets/abi.h:55 (SLINK_OP_MEMORIALIZE)",
+        "SLINK_OP_PING": "patch/src/trade_targets/abi.h:45 (SLINK_OP_PING)",
+        "SLINK_OP_PLAY_FANFARE": "patch/src/trade_targets/abi.h:48 (SLINK_OP_PLAY_FANFARE)",
+        "SLINK_OP_PLAY_SE": "patch/src/trade_targets/abi.h:52 (SLINK_OP_PLAY_SE)",
+        "SLINK_OP_RIVAL_SWAP": "patch/src/trade_targets/abi.h:56 (SLINK_OP_RIVAL_SWAP)",
+        "SLINK_OP_SET_ENEMY_PARTY": "patch/src/trade_targets/abi.h:50 (SLINK_OP_SET_ENEMY_PARTY)",
+        "SLINK_OP_SET_PARTY_MON": "patch/src/trade_targets/abi.h:51 (SLINK_OP_SET_PARTY_MON)",
+        "SLINK_OP_SHOW_BATTLE_MESSAGE": "patch/src/trade_targets/abi.h:54 (SLINK_OP_SHOW_BATTLE_MESSAGE)",
+        "SLINK_OP_SHOW_CHOICES": "patch/src/trade_targets/abi.h:53 (SLINK_OP_SHOW_CHOICES)",
+        "SLINK_OP_SHOW_INFO": "patch/src/trade_targets/abi.h:56 (SLINK_OP_SHOW_INFO)",
+        "SLINK_OP_SHOW_MENU": "patch/src/trade_targets/abi.h:51 (SLINK_OP_SHOW_MENU)",
+        "SLINK_OP_SHOW_MESSAGE": "patch/src/trade_targets/abi.h:48 (SLINK_OP_SHOW_MESSAGE)",
+        "SLINK_OP_SPAWN_PEER_NPC": "patch/src/trade_targets/abi.h:47 (SLINK_OP_SPAWN_PEER_NPC)",
+        "SLINK_OP_TRADE_PREPARE": "patch/src/trade_targets/abi.h:57 (SLINK_OP_TRADE_PREPARE)",
+        "SLINK_OP_TRADE_SCENE": "patch/src/trade_targets/abi.h:53 (SLINK_OP_TRADE_SCENE)",
+        "SLINK_OP_TRADE_STATUS": "patch/src/trade_targets/abi.h:58 (SLINK_OP_TRADE_STATUS)",
+        "SLINK_OP_TRADE_WITHDRAW": "patch/src/trade_targets/abi.h:57 (SLINK_OP_TRADE_WITHDRAW)",
+        "SLINK_OP_WITHDRAW_MON": "patch/src/trade_targets/abi.h:55 (SLINK_OP_WITHDRAW_MON)",
+        "SLINK_PHASE_DONE": "patch/src/trade_targets/abi.h:83 (SLINK_PHASE_DONE)",
+        "SLINK_PHASE_IDLE": "patch/src/trade_targets/abi.h:82 (SLINK_PHASE_IDLE)",
+        "SLINK_PHASE_PRE_SAVE": "patch/src/trade_targets/abi.h:82 (SLINK_PHASE_PRE_SAVE)",
+        "SLINK_PHASE_READY": "patch/src/trade_targets/abi.h:82 (SLINK_PHASE_READY)",
+        "SLINK_PHASE_SCENE": "patch/src/trade_targets/abi.h:83 (SLINK_PHASE_SCENE)",
+        "SLINK_PHASE_UNCERTAIN": "patch/src/trade_targets/abi.h:83 (SLINK_PHASE_UNCERTAIN)",
+        "SLINK_PI_COUNT_FIELD": "patch/src/trade_targets/abi.h:198 (SLINK_PI_COUNT_FIELD)",
+        "SLINK_PI_COUNT_WIDTH": "patch/src/trade_targets/abi.h:199 (SLINK_PI_COUNT_WIDTH)",
+        "SLINK_POST_SAVE_OK": "patch/src/trade_targets/abi.h:87 (SLINK_POST_SAVE_OK)",
+        "SLINK_PRE_SAVE_CONSENT": "patch/src/trade_targets/abi.h:92 (SLINK_PRE_SAVE_CONSENT)",
+        "SLINK_PRE_SAVE_OK": "patch/src/trade_targets/abi.h:86 (SLINK_PRE_SAVE_OK)",
+        "SLINK_REASON_CLIENT_TOO_OLD": "patch/src/trade_targets/abi.h:78 (SLINK_REASON_CLIENT_TOO_OLD)",
+        "SLINK_REASON_IDENTITY": "patch/src/trade_targets/abi.h:77 (SLINK_REASON_IDENTITY)",
+        "SLINK_REASON_UNCERTAIN": "patch/src/trade_targets/abi.h:76 (SLINK_REASON_UNCERTAIN)",
+        "SLINK_REASON_WITHDRAW_TOO_LATE": "patch/src/trade_targets/abi.h:79 (SLINK_REASON_WITHDRAW_TOO_LATE)",
+        "SLINK_SAVE_FAILED": "patch/src/trade_targets/abi.h:103 (SLINK_SAVE_FAILED)",
+        "SLINK_SAVE_OK": "patch/src/trade_targets/abi.h:102 (SLINK_SAVE_OK)",
+        "SLINK_SCENE_EVOLUTION_DONE": "patch/src/trade_targets/abi.h:87 (SLINK_SCENE_EVOLUTION_DONE)",
+        "SLINK_SIGNATURE": "patch/src/trade_targets/abi.h:17 (SLINK_SIGNATURE)",
+        "SLINK_ST_BUSY": "patch/src/trade_targets/abi.h:70 (SLINK_ST_BUSY)",
+        "SLINK_ST_FAIL": "patch/src/trade_targets/abi.h:70 (SLINK_ST_FAIL)",
+        "SLINK_ST_OK": "patch/src/trade_targets/abi.h:70 (SLINK_ST_OK)",
+        "SLINK_SUCCESS_MILESTONES": "patch/src/trade_targets/abi.h:101 (SLINK_SUCCESS_MILESTONES)",
+        "SLINK_TEXT_OFFSET": "patch/src/trade_targets/abi.h:24 (SLINK_TEXT_OFFSET)",
+        "SLINK_TEXT_SIZE": "patch/src/trade_targets/abi.h:25 (SLINK_TEXT_SIZE)",
+        "SLINK_TN_ENABLE_FIELD": "patch/src/trade_targets/abi.h:200 (SLINK_TN_ENABLE_FIELD)",
+        "SLINK_TRADE_COMMITTED": "patch/src/trade_targets/abi.h:95 (SLINK_TRADE_COMMITTED)",
+        "SLINK_TRADE_PENDING": "patch/src/trade_targets/abi.h:95 (SLINK_TRADE_PENDING)",
+        "SLINK_TRADE_UNCERTAIN": "patch/src/trade_targets/abi.h:96 (SLINK_TRADE_UNCERTAIN)",
+        "SLINK_TRADE_UNCHANGED": "patch/src/trade_targets/abi.h:96 (SLINK_TRADE_UNCHANGED)",
+        "SLINK_VISIT_ACCEPTED": "patch/src/trade_targets/abi.h:91 (SLINK_VISIT_ACCEPTED)",
+        "SLINK_WITNESS_OFFSET": "patch/src/trade_targets/abi.h:21 (SLINK_WITNESS_OFFSET)",
+        "SlinkCallRecordV2": "patch/src/trade_targets/abi.h:146 (SlinkCallRecordV2)",
+        "SlinkCallWitnessV2": "patch/src/trade_targets/abi.h:155 (SlinkCallWitnessV2)",
+        "SlinkControlV2": "patch/src/trade_targets/abi.h:190 (SlinkControlV2)",
+        "SlinkInfoV2": "patch/src/trade_targets/abi.h:167 (SlinkInfoV2)",
+        "SlinkMailboxV2": "patch/src/trade_targets/abi.h:105 (SlinkMailboxV2)",
+        "SlinkTradeWitnessV2": "patch/src/trade_targets/abi.h:125 (SlinkTradeWitnessV2)"
+      },
+      "constants": {
+        "SLINK_ABI_VERSION": 2,
+        "SLINK_ARENA_SIZE": 4096,
+        "SLINK_BLOB_OFFSET": 256,
+        "SLINK_BLOB_SIZE": 600,
+        "SLINK_CALC_OFF_FIELD": 9,
+        "SLINK_CALL_ARMED": 1,
+        "SLINK_CALL_COMPLETE": 4,
+        "SLINK_CALL_COOLDOWN_FRAMES": 10800,
+        "SLINK_CALL_DELIVERED": 2,
+        "SLINK_CALL_EMPTY": 0,
+        "SLINK_CALL_RECORD_OFFSET": 3648,
+        "SLINK_CALL_REFUSED": 3,
+        "SLINK_CALL_WITNESS_OFFSET": 3584,
+        "SLINK_CAP_BATTLE_CALC": 32,
+        "SLINK_CAP_DURABLE_TRADE": 1,
+        "SLINK_CAP_EXPLODE": 8,
+        "SLINK_CAP_INFO_PANEL": 2,
+        "SLINK_CAP_MATCH_CALL": 64,
+        "SLINK_CAP_NATIVE_SOUND": 4,
+        "SLINK_CAP_RIVAL_SWAP": 16,
+        "SLINK_COMMIT_ENTERED": 1,
+        "SLINK_CONTROL_EPOCH_FIELD": 0,
+        "SLINK_CONTROL_OFFSET": 2048,
+        "SLINK_CONTROL_SIZE": 1536,
+        "SLINK_FINAL_RESULT": 4,
+        "SLINK_INFO_BAR_WIDTH": 38,
+        "SLINK_INFO_CLOSED_FIELD": 12,
+        "SLINK_INFO_DRAWN_FIELD": 6,
+        "SLINK_INFO_ENABLE_FIELD": 11,
+        "SLINK_INFO_EPOCH_FIELD": 0,
+        "SLINK_INFO_LINES_FIELD": 8,
+        "SLINK_INFO_LINE_WIDTH": 32,
+        "SLINK_INFO_MAX_LINES": 6,
+        "SLINK_INFO_OFFSET": 1760,
+        "SLINK_INFO_PAGES_FIELD": 10,
+        "SLINK_INFO_PAGE_FIELD": 9,
+        "SLINK_INFO_PAGE_SLOT": 7,
+        "SLINK_INFO_REQUEST_FIELD": 4,
+        "SLINK_INFO_RESULT_FIELD": 15,
+        "SLINK_INFO_ROW_COUNT": 8,
+        "SLINK_INFO_SIZE": 288,
+        "SLINK_INFO_STATE_FIELD": 14,
+        "SLINK_INFO_TEXT_FIELD": 32,
+        "SLINK_MAILBOX_OFFSET": 0,
+        "SLINK_MENU_OFFSET": 1376,
+        "SLINK_MENU_SIZE": 384,
+        "SLINK_MILESTONE_COUNT": 5,
+        "SLINK_OP_ARM_PEER_INTERACT": 13,
+        "SLINK_OP_CHOOSE_PARTY_MON": 20,
+        "SLINK_OP_CREATE_MON": 4,
+        "SLINK_OP_DEPOSIT_MON": 24,
+        "SLINK_OP_DESPAWN_PEER_NPC": 7,
+        "SLINK_OP_FORCE_FAINT": 2,
+        "SLINK_OP_FORCE_MOVE": 3,
+        "SLINK_OP_FORCE_MOVE_SLOT": 5,
+        "SLINK_OP_GHOST_CLEAR": 15,
+        "SLINK_OP_GHOST_SPAWN": 14,
+        "SLINK_OP_MATCH_CALL": 32,
+        "SLINK_OP_MEMORIALIZE": 26,
+        "SLINK_OP_PING": 1,
+        "SLINK_OP_PLAY_FANFARE": 9,
+        "SLINK_OP_PLAY_SE": 19,
+        "SLINK_OP_RIVAL_SWAP": 28,
+        "SLINK_OP_SET_ENEMY_PARTY": 16,
+        "SLINK_OP_SET_PARTY_MON": 18,
+        "SLINK_OP_SHOW_BATTLE_MESSAGE": 23,
+        "SLINK_OP_SHOW_CHOICES": 22,
+        "SLINK_OP_SHOW_INFO": 27,
+        "SLINK_OP_SHOW_MENU": 17,
+        "SLINK_OP_SHOW_MESSAGE": 8,
+        "SLINK_OP_SPAWN_PEER_NPC": 6,
+        "SLINK_OP_TRADE_PREPARE": 29,
+        "SLINK_OP_TRADE_SCENE": 21,
+        "SLINK_OP_TRADE_STATUS": 31,
+        "SLINK_OP_TRADE_WITHDRAW": 30,
+        "SLINK_OP_WITHDRAW_MON": 25,
+        "SLINK_PHASE_DONE": 4,
+        "SLINK_PHASE_IDLE": 0,
+        "SLINK_PHASE_PRE_SAVE": 1,
+        "SLINK_PHASE_READY": 2,
+        "SLINK_PHASE_SCENE": 3,
+        "SLINK_PHASE_UNCERTAIN": 5,
+        "SLINK_PI_COUNT_FIELD": 4,
+        "SLINK_PI_COUNT_WIDTH": 4,
+        "SLINK_POST_SAVE_OK": 3,
+        "SLINK_PRE_SAVE_CONSENT": 2,
+        "SLINK_PRE_SAVE_OK": 0,
+        "SLINK_REASON_CLIENT_TOO_OLD": 13,
+        "SLINK_REASON_IDENTITY": 12,
+        "SLINK_REASON_UNCERTAIN": 11,
+        "SLINK_REASON_WITHDRAW_TOO_LATE": 14,
+        "SLINK_SAVE_FAILED": 255,
+        "SLINK_SAVE_OK": 1,
+        "SLINK_SCENE_EVOLUTION_DONE": 2,
+        "SLINK_SIGNATURE": 1263422547,
+        "SLINK_ST_BUSY": 1,
+        "SLINK_ST_FAIL": 3,
+        "SLINK_ST_OK": 2,
+        "SLINK_SUCCESS_MILESTONES": 31,
+        "SLINK_TEXT_OFFSET": 864,
+        "SLINK_TEXT_SIZE": 512,
+        "SLINK_TN_ENABLE_FIELD": 8,
+        "SLINK_TRADE_COMMITTED": 1,
+        "SLINK_TRADE_PENDING": 0,
+        "SLINK_TRADE_UNCERTAIN": 3,
+        "SLINK_TRADE_UNCHANGED": 2,
+        "SLINK_VISIT_ACCEPTED": 1,
+        "SLINK_WITNESS_OFFSET": 80
+      },
+      "source_sha256": "9160b63ffe550bab124461fe90c31a51cee21f4e6c0f041143aef659c9f47b50",
+      "structs": {
+        "SlinkCallRecordV2": {
+          "fields": {
+            "caller_nick": {
+              "count": 11,
+              "offset": 14,
+              "width": 1
+            },
+            "caller_species": {
+              "count": 1,
+              "offset": 2,
+              "width": 2
+            },
+            "event": {
+              "count": 1,
+              "offset": 0,
+              "width": 1
+            },
+            "has_names": {
+              "count": 1,
+              "offset": 1,
+              "width": 1
+            },
+            "receiver_nick": {
+              "count": 11,
+              "offset": 25,
+              "width": 1
+            },
+            "receiver_species": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "trainer": {
+              "count": 8,
+              "offset": 6,
+              "width": 1
+            }
+          },
+          "size": 36
+        },
+        "SlinkCallWitnessV2": {
+          "fields": {
+            "armed_frame": {
+              "count": 1,
+              "offset": 12,
+              "width": 4
+            },
+            "delivered_frame": {
+              "count": 1,
+              "offset": 16,
+              "width": 4
+            },
+            "event": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "phase": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            },
+            "reason": {
+              "count": 1,
+              "offset": 10,
+              "width": 2
+            },
+            "reserved": {
+              "count": 3,
+              "offset": 20,
+              "width": 4
+            },
+            "revision": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "seq": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            }
+          },
+          "size": 32
+        },
+        "SlinkControlV2": {
+          "fields": {
+            "calc_off": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "pi_count": {
+              "count": 1,
+              "offset": 4,
+              "width": 4
+            },
+            "reserved": {
+              "count": 6,
+              "offset": 10,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "tn_enable": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            }
+          },
+          "size": 16
+        },
+        "SlinkInfoV2": {
+          "fields": {
+            "closed_seq": {
+              "count": 1,
+              "offset": 12,
+              "width": 2
+            },
+            "drawn_seq": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "enable": {
+              "count": 1,
+              "offset": 11,
+              "width": 1
+            },
+            "lines": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            },
+            "page": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "pages": {
+              "count": 1,
+              "offset": 10,
+              "width": 1
+            },
+            "request_seq": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "reserved": {
+              "count": 4,
+              "offset": 16,
+              "width": 4
+            },
+            "result": {
+              "count": 1,
+              "offset": 15,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "state": {
+              "count": 1,
+              "offset": 14,
+              "width": 1
+            },
+            "text": {
+              "count": 256,
+              "offset": 32,
+              "width": 1
+            }
+          },
+          "size": 288
+        },
+        "SlinkMailboxV2": {
+          "fields": {
+            "abi_version": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "ack_seq": {
+              "count": 1,
+              "offset": 12,
+              "width": 2
+            },
+            "args": {
+              "count": 32,
+              "offset": 16,
+              "width": 1
+            },
+            "capabilities": {
+              "count": 1,
+              "offset": 64,
+              "width": 4
+            },
+            "opcode": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "producer_phase": {
+              "count": 1,
+              "offset": 72,
+              "width": 4
+            },
+            "reason": {
+              "count": 1,
+              "offset": 14,
+              "width": 2
+            },
+            "reserved": {
+              "count": 1,
+              "offset": 76,
+              "width": 4
+            },
+            "result": {
+              "count": 16,
+              "offset": 48,
+              "width": 1
+            },
+            "seq": {
+              "count": 1,
+              "offset": 8,
+              "width": 2
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 68,
+              "width": 4
+            },
+            "signature": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "status": {
+              "count": 1,
+              "offset": 10,
+              "width": 2
+            }
+          },
+          "size": 80
+        },
+        "SlinkTradeWitnessV2": {
+          "fields": {
+            "final_result": {
+              "count": 1,
+              "offset": 42,
+              "width": 1
+            },
+            "milestone_frame": {
+              "count": 5,
+              "offset": 44,
+              "width": 4
+            },
+            "milestone_seq": {
+              "count": 5,
+              "offset": 32,
+              "width": 2
+            },
+            "milestones": {
+              "count": 1,
+              "offset": 28,
+              "width": 4
+            },
+            "old_otid": {
+              "count": 1,
+              "offset": 68,
+              "width": 4
+            },
+            "old_pid": {
+              "count": 1,
+              "offset": 64,
+              "width": 4
+            },
+            "received_otid": {
+              "count": 1,
+              "offset": 76,
+              "width": 4
+            },
+            "received_pid": {
+              "count": 1,
+              "offset": 72,
+              "width": 4
+            },
+            "revision": {
+              "count": 1,
+              "offset": 24,
+              "width": 2
+            },
+            "save_status": {
+              "count": 1,
+              "offset": 43,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "token": {
+              "count": 16,
+              "offset": 8,
+              "width": 1
+            },
+            "visit_flags": {
+              "count": 1,
+              "offset": 26,
+              "width": 2
+            },
+            "visit_id": {
+              "count": 1,
+              "offset": 4,
+              "width": 4
+            }
+          },
+          "size": 80
+        }
+      }
+    }
+  },
+  "pack": "gen3_frlg",
+  "schema": "gen3-profile-v1",
+  "source": {
+    "file": "lua/games/gen3_frlge.lua",
+    "git_head": "0866f406889ee12b262704ecf52aecd11dd246fd",
+    "sha256": "f1cdd07ace8cbd8d0de65b49ad38bc455f258906501e028a568bb43c4e9375fd"
+  },
+  "titles": {
+    "firered": {
+      "_src": {
+        "derived.BASESTATS_GROWTH_RATE_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:230 (struct SpeciesInfo.growthRate)",
+        "derived.BATTLE_MON_OT_ID_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:205 (BattlePokemon.otId); CopyPlayerMonData: str r0,[sp,#0x54] @0x08030F16 after GetMonData(MON_DATA_OT_ID)",
+        "derived.BATTLE_MON_PERSONALITY_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:202 (BattlePokemon.personality); data/gen3/pret/pokefirered.sym CopyPlayerMonData 0x08030C04: str r0,[sp,#0x48] @0x08030E70 after GetMonData(MON_DATA_PERSONALITY)",
+        "derived.BATTLE_MON_STAT_STAGES_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:187 (BattlePokemon.statStages at 0x18); include/constants/pokemon.h:166-175 (STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)",
+        "derived.BATTLE_MOVE_ENTRY_SIZE": "data/gen3/pret/pokefirered.sym:26905 gBattleMoves (0x10A4 bytes / 355 moves = 12); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:284",
+        "derived.BATTLE_MOVE_PP_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:238-249 (struct BattleMove.pp)",
+        "derived.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:373-412 (BattleStruct.chosenMovePositions; offsetof verified from prefix)",
+        "derived.BATTLE_STRUCT_MOVE_TARGET_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:373-380 (BattleStruct.moveTarget; u8 prefix + wrappedMove[8])",
+        "derived.BATTLE_TYPE_DOUBLE_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:47 (BATTLE_TYPE_DOUBLE)",
+        "derived.BATTLE_TYPE_LINK_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:48 (BATTLE_TYPE_LINK)",
+        "derived.BATTLE_TYPE_TRAINER_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:50 (BATTLE_TYPE_TRAINER)",
+        "derived.BOXES_PER_STORE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:7 (TOTAL_BOXES_COUNT)",
+        "derived.BOX_DATA_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:44-48; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:105-108 (u32 alignment)",
+        "derived.B_ACTION_NOTHING_FAINTED": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)",
+        "derived.DISABLE_STRUCT_PERISH_TIMER_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:153-154 (perishSongTimer:4 low nibble, perishSongTimerStartValue:4)",
+        "derived.DISABLE_STRUCT_SIZE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:139-172 (sizeof(struct DisableStruct)); data/gen3/pret/pokefirered.sym:126 gDisableStructs 0x70 bytes / 4",
+        "derived.EXPERIENCE_TABLE_ENTRY_COUNT": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:src/data/pokemon/experience_tables.h:18 (gExperienceTables[][MAX_LEVEL + 1])",
+        "derived.GMAIN_INBATTLE_MASK": "data/games/gen3_frlg/write_checkpoint.json: firered.predicates.in_battle",
+        "derived.GMAIN_INBATTLE_OFFSET": "data/games/gen3_frlg/write_checkpoint.json: firered.predicates.in_battle (gMain+0x439; verified live by the cb1_overworld census probe, docs/gen3/probes/census_fr_overworld_2026-09-21.txt)",
+        "derived.MAX_LEVEL": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/pokemon.h:187 (MAX_LEVEL)",
+        "derived.MONS_PER_BOX": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
+        "derived.OUTCOME_CAUGHT": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:82 (B_OUTCOME_CAUGHT)",
+        "derived.OUTCOME_DREW": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:78 (B_OUTCOME_DREW)",
+        "derived.OUTCOME_LOST": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:77 (B_OUTCOME_LOST)",
+        "derived.OUTCOME_RAN": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:79 (B_OUTCOME_RAN)",
+        "derived.OUTCOME_WON": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:76 (B_OUTCOME_WON)",
+        "derived.PARTY_CAPACITY": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/global.h:78 (PARTY_SIZE)",
+        "derived.SB1_BADGE_BYTE_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/flags.h:1324,1364-1371 (SYS_FLAGS=0x800; FLAG_BADGE01_GET..FLAG_BADGE08_GET = SYS_FLAGS+0x20..+0x27; byte = flag_id >> 3, relative to SaveBlock1.flags[])",
+        "derived.SB1_LOCATION_MAP_GROUP_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:759-762 (SaveBlock1.location); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:392-398 (struct WarpData.mapGroup)",
+        "derived.SB1_LOCATION_MAP_NUM_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:759-762 (SaveBlock1.location); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:392-398 (struct WarpData.mapNum)",
+        "derived.SB2_NAME_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:329 (SaveBlock2.playerName)",
+        "derived.SB2_OT_ID_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:332 (SaveBlock2.playerTrainerId); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:src/pokemon.c:1798-1801 (u32 little-endian assembly)",
+        "derived.SHEDINJA_SPECIES_ID": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/species.h:312 (SPECIES_SHEDINJA); used by CalculateMonStats' 1-HP exception, src/pokemon.c:2124-2132",
+        "derived.STATUS3_PERISH_SONG": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:138 (STATUS3_PERISH_SONG)",
+        "ram.BATTLE_COMM_ADDR": "data/gen3/pret/pokefirered.sym:130 (gBattleCommunication; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.BATTLE_STRUCT_PTR_ADDR": "data/gen3/pret/pokefirered.sym:142 (gBattleStruct; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.CHOSEN_ACTION_ADDR": "data/gen3/pret/pokefirered.sym:108 (gChosenActionByBattler; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.CHOSEN_MOVE_ADDR": "data/gen3/pret/pokefirered.sym:117 (gChosenMoveByBattler; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.DISABLE_STRUCTS_ADDR": "data/gen3/pret/pokefirered.sym:126 (gDisableStructs; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokefirered.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.STATUS3_ADDR": "data/gen3/pret/pokefirered.sym:125 (gStatuses3; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.TRAINER_OPPONENT_ADDR": "data/gen3/pret/pokefirered.sym:287 (gTrainerBattleOpponent_A; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "data/gen3/pret/pokefirered.sym:1607 (BattleIntroGetMonsData|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_MOVES_ADDR": "data/gen3/pret/pokefirered.sym:26905 (gBattleMoves; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_ADDR": "data/gen3/pret/pokefirered.sym:1602 (BeginBattleIntro|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "data/gen3/pret/pokefirered.sym:1601 (BeginBattleIntroDummy|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.EXPERIENCE_TABLES_ADDR": "data/gen3/pret/pokefirered.sym:26980 (gExperienceTables; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokefirered.sym:27396 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
+      },
+      "admitted": true,
+      "derived": {
+        "BASESTATS_ADDR_BY_GAME_CODE": {
+          "BPGE": 136660832,
+          "BPRE": 136660868
+        },
+        "BASESTATS_ENTRY_SIZE": 28,
+        "BASESTATS_GROWTH_RATE_OFFSET": 19,
+        "BATTLE_MON_OT_ID_OFF": 84,
+        "BATTLE_MON_PERSONALITY_OFF": 72,
+        "BATTLE_MON_STAT_STAGES_OFF": 25,
+        "BATTLE_MOVE_ENTRY_SIZE": 12,
+        "BATTLE_MOVE_PP_OFFSET": 4,
+        "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
+        "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
+        "BATTLE_STRUCT_MOVE_TARGET_OFF": 12,
+        "BATTLE_TYPE_DOUBLE_MASK": 1,
+        "BATTLE_TYPE_LINK_MASK": 2,
+        "BATTLE_TYPE_TRAINER_MASK": 8,
+        "BOXES_PER_STORE": 14,
+        "BOX_DATA_OFFSET": 4,
+        "B_ACTION_NOTHING_FAINTED": 13,
+        "DISABLE_STRUCT_PERISH_TIMER_OFF": 15,
+        "DISABLE_STRUCT_SIZE": 28,
+        "EXPERIENCE_TABLE_ENTRY_COUNT": 101,
+        "GMAIN_CB2_OFFSET": 4,
+        "GMAIN_INBATTLE_MASK": 2,
+        "GMAIN_INBATTLE_OFFSET": 1081,
+        "MAX_LEVEL": 100,
+        "MONS_PER_BOX": 30,
+        "OUTCOME_CAUGHT": 7,
+        "OUTCOME_DREW": 3,
+        "OUTCOME_LOST": 2,
+        "OUTCOME_RAN": 4,
+        "OUTCOME_WON": 1,
+        "OVERWORLD_MODE": "gmain_flags",
+        "PARTY_CAPACITY": 6,
+        "SB1_BADGE_BYTE_OFFSET": 260,
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1072,
+        "SB1_FLAGS_OFFSET": 3808,
+        "SB1_LOCATION_MAP_GROUP_OFFSET": 4,
+        "SB1_LOCATION_MAP_NUM_OFFSET": 5,
+        "SB1_VARS_OFFSET": 4096,
+        "SB2_ENC_KEY_OFFSET": 3872,
+        "SB2_NAME_OFFSET": 0,
+        "SB2_OT_ID_OFFSET": 10,
+        "SHEDINJA_SPECIES_ID": 303,
+        "STATUS3_PERISH_SONG": 32,
+        "TASK_STRUCT_SIZE": 40
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700812,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700814,
+        "BATTLE_COMM_ADDR": 33701506,
+        "BATTLE_MAIN_FUNC_ADDR": 50352004,
+        "BATTLE_MONS_ADDR": 33700836,
+        "BATTLE_OUTCOME_ADDR": 33701514,
+        "BATTLE_RESULTS_ADDR": 50352016,
+        "BATTLE_STRUCT_PTR_ADDR": 33701864,
+        "BATTLE_TYPE_ADDR": 33696588,
+        "CHOSEN_ACTION_ADDR": 33701244,
+        "CHOSEN_MOVE_ADDR": 33701316,
+        "DISABLE_STRUCTS_ADDR": 33701388,
+        "ENEMY_BASE": 33701932,
+        "ENEMY_COUNT_ADDR": 33701930,
+        "GMAIN_ADDR": 50344176,
+        "LOCKED_MOVES_ADDR": 33701304,
+        "PARTY_BASE": 33702532,
+        "PARTY_COUNT_ADDR": 33701929,
+        "POKEMON_STORAGE_BASE": 33723156,
+        "PSP_PTR_ADDR": 50352144,
+        "SB1_PTR_ADDR": 50352136,
+        "SB2_PTR_ADDR": 50352140,
+        "SPECIAL_VAR_BOX_ID_ADDR": 33779926,
+        "SPECIAL_VAR_BOX_POS_ADDR": 33779928,
+        "STATUS3_ADDR": 33701372,
+        "TASKS_BASE_ADDR": 50352272,
+        "TRAINER_OPPONENT_ADDR": 33785518
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136660868,
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR": 134295469,
+        "BATTLE_MOVES_ADDR": 136645636,
+        "BEGIN_BATTLE_INTRO_ADDR": 134292417,
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
+        "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
+        "CB2_EVOLUTION_LOAD_ADDR": 135061737,
+        "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063341,
+        "EXPERIENCE_TABLES_ADDR": 136657636,
+        "POST_BATTLE_WRITER_TASKS": [
+          134414905
+        ],
+        "PP_UP_GET_MASK_ADDR": 136699553,
+        "RETURN_FROM_BATTLE_ADDR": 134306649,
+        "SE_SONG_HEADERS": {
+          "16": 141252996,
+          "17": 141253076,
+          "22": 141253340,
+          "25": 141253552,
+          "26": 141253600,
+          "95": 141258352
+        }
+      },
+      "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 136681300,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 136660868,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 136570200,
+          "count": 107,
+          "size": 1391,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 136571592,
+          "count": 743,
+          "size": 29720,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 138190008,
+          "count": 133,
+          "size": 2660,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokefirered@c75f3523 gEvolutionTable; data/gen3/pret/pokefirered.sym:27393",
+        "gSpeciesInfo": "pret/pokefirered@c75f3523 gSpeciesInfo; data/gen3/pret/pokefirered.sym:26981",
+        "gTrainerClassNames": "pret/pokefirered@c75f3523 gTrainerClassNames; data/gen3/pret/pokefirered.sym:26688",
+        "gTrainers": "pret/pokefirered@c75f3523 gTrainers; data/gen3/pret/pokefirered.sym:26689",
+        "gWildMonHeaders": "pret/pokefirered@c75f3523 gWildMonHeaders; data/gen3/pret/pokefirered.sym:33296"
+      },
+      "rom_thumb": [
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+        "BEGIN_BATTLE_INTRO_ADDR",
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
+        "CB2_EVOLUTION_BEGIN_ADDR",
+        "CB2_EVOLUTION_LOAD_ADDR",
+        "CB2_EVOLUTION_UPDATE_ADDR",
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+        "POST_BATTLE_WRITER_TASKS",
+        "RETURN_FROM_BATTLE_ADDR"
+      ],
+      "variant": "vanilla"
+    },
+    "firered_ap": {
+      "admitted": false,
+      "derived": {
+        "BASESTATS_ENTRY_SIZE": 28,
+        "OVERWORLD_MODE": "gmain_038",
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1664,
+        "SB1_FLAGS_OFFSET": 4400,
+        "SB1_VARS_OFFSET": 4688,
+        "SB2_ENC_KEY_OFFSET": 3884
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700832,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700834,
+        "BATTLE_MAIN_FUNC_ADDR": 50351828,
+        "BATTLE_MONS_ADDR": 33700856,
+        "BATTLE_OUTCOME_ADDR": 33701534,
+        "BATTLE_TYPE_ADDR": 33696608,
+        "ENEMY_BASE": 33701952,
+        "ENEMY_COUNT_ADDR": 33701950,
+        "GMAIN_ADDR": 50344000,
+        "LOCKED_MOVES_ADDR": 33701324,
+        "PARTY_BASE": 33702552,
+        "PARTY_COUNT_ADDR": 33701949,
+        "PSP_PTR_ADDR": 50351968,
+        "SB1_PTR_ADDR": 50351960,
+        "SB2_PTR_ADDR": 50351964
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136667980,
+        "RETURN_FROM_BATTLE_ADDR": null,
+        "SE_SONG_HEADERS": {
+          "16": 141410128,
+          "17": 141410208,
+          "22": 141410472,
+          "25": 141410684,
+          "26": 141410732,
+          "95": 141415484
+        }
+      },
+      "rom_thumb": [],
+      "variant": "ap"
+    },
+    "leafgreen": {
+      "_src": {
+        "derived.BASESTATS_GROWTH_RATE_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:230 (struct SpeciesInfo.growthRate)",
+        "derived.BATTLE_MON_OT_ID_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:205 (BattlePokemon.otId); CopyPlayerMonData: str r0,[sp,#0x54] @0x08030F16 after GetMonData(MON_DATA_OT_ID)",
+        "derived.BATTLE_MON_PERSONALITY_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:202 (BattlePokemon.personality); data/gen3/pret/pokefirered.sym CopyPlayerMonData 0x08030C04: str r0,[sp,#0x48] @0x08030E70 after GetMonData(MON_DATA_PERSONALITY)",
+        "derived.BATTLE_MON_STAT_STAGES_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:187 (BattlePokemon.statStages at 0x18); include/constants/pokemon.h:166-175 (STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)",
+        "derived.BATTLE_MOVE_ENTRY_SIZE": "data/gen3/pret/pokefirered.sym:26905 gBattleMoves (0x10A4 bytes / 355 moves = 12); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:284",
+        "derived.BATTLE_MOVE_PP_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:238-249 (struct BattleMove.pp)",
+        "derived.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:373-412 (BattleStruct.chosenMovePositions; offsetof verified from prefix)",
+        "derived.BATTLE_STRUCT_MOVE_TARGET_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:373-380 (BattleStruct.moveTarget; u8 prefix + wrappedMove[8])",
+        "derived.BATTLE_TYPE_DOUBLE_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:47 (BATTLE_TYPE_DOUBLE)",
+        "derived.BATTLE_TYPE_LINK_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:48 (BATTLE_TYPE_LINK)",
+        "derived.BATTLE_TYPE_TRAINER_MASK": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:50 (BATTLE_TYPE_TRAINER)",
+        "derived.BOXES_PER_STORE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:7 (TOTAL_BOXES_COUNT)",
+        "derived.BOX_DATA_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:44-48; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:105-108 (u32 alignment)",
+        "derived.B_ACTION_NOTHING_FAINTED": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)",
+        "derived.DISABLE_STRUCT_PERISH_TIMER_OFF": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:153-154 (perishSongTimer:4 low nibble, perishSongTimerStartValue:4)",
+        "derived.DISABLE_STRUCT_SIZE": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/battle.h:139-172 (sizeof(struct DisableStruct)); data/gen3/pret/pokefirered.sym:126 gDisableStructs 0x70 bytes / 4",
+        "derived.EXPERIENCE_TABLE_ENTRY_COUNT": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:src/data/pokemon/experience_tables.h:18 (gExperienceTables[][MAX_LEVEL + 1])",
+        "derived.GMAIN_INBATTLE_MASK": "data/games/gen3_frlg/write_checkpoint.json: firered.predicates.in_battle",
+        "derived.GMAIN_INBATTLE_OFFSET": "data/games/gen3_frlg/write_checkpoint.json: firered.predicates.in_battle (gMain+0x439; verified live by the cb1_overworld census probe, docs/gen3/probes/census_fr_overworld_2026-09-21.txt)",
+        "derived.MAX_LEVEL": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/pokemon.h:187 (MAX_LEVEL)",
+        "derived.MONS_PER_BOX": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon_storage_system.h:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
+        "derived.OUTCOME_CAUGHT": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:82 (B_OUTCOME_CAUGHT)",
+        "derived.OUTCOME_DREW": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:78 (B_OUTCOME_DREW)",
+        "derived.OUTCOME_LOST": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:77 (B_OUTCOME_LOST)",
+        "derived.OUTCOME_RAN": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:79 (B_OUTCOME_RAN)",
+        "derived.OUTCOME_WON": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:76 (B_OUTCOME_WON)",
+        "derived.PARTY_CAPACITY": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/global.h:78 (PARTY_SIZE)",
+        "derived.SB1_BADGE_BYTE_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/flags.h:1324,1364-1371 (SYS_FLAGS=0x800; FLAG_BADGE01_GET..FLAG_BADGE08_GET = SYS_FLAGS+0x20..+0x27; byte = flag_id >> 3, relative to SaveBlock1.flags[])",
+        "derived.SB1_LOCATION_MAP_GROUP_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:759-762 (SaveBlock1.location); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:392-398 (struct WarpData.mapGroup)",
+        "derived.SB1_LOCATION_MAP_NUM_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:759-762 (SaveBlock1.location); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:392-398 (struct WarpData.mapNum)",
+        "derived.SB2_NAME_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:329 (SaveBlock2.playerName)",
+        "derived.SB2_OT_ID_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/global.h:332 (SaveBlock2.playerTrainerId); pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:src/pokemon.c:1798-1801 (u32 little-endian assembly)",
+        "derived.SHEDINJA_SPECIES_ID": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/species.h:312 (SPECIES_SHEDINJA); used by CalculateMonStats' 1-HP exception, src/pokemon.c:2124-2132",
+        "derived.STATUS3_PERISH_SONG": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/battle.h:138 (STATUS3_PERISH_SONG)",
+        "ram.BATTLE_COMM_ADDR": "data/gen3/pret/pokeleafgreen.sym:130 (gBattleCommunication; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.BATTLE_STRUCT_PTR_ADDR": "data/gen3/pret/pokeleafgreen.sym:142 (gBattleStruct; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.CHOSEN_ACTION_ADDR": "data/gen3/pret/pokeleafgreen.sym:108 (gChosenActionByBattler; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.CHOSEN_MOVE_ADDR": "data/gen3/pret/pokeleafgreen.sym:117 (gChosenMoveByBattler; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.DISABLE_STRUCTS_ADDR": "data/gen3/pret/pokeleafgreen.sym:126 (gDisableStructs; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokeleafgreen.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.STATUS3_ADDR": "data/gen3/pret/pokeleafgreen.sym:125 (gStatuses3; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "ram.TRAINER_OPPONENT_ADDR": "data/gen3/pret/pokeleafgreen.sym:287 (gTrainerBattleOpponent_A; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BASESTATS_ADDR": "data/gen3/pret/pokeleafgreen.sym:26983 (gSpeciesInfo; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "data/gen3/pret/pokeleafgreen.sym:1607 (BattleIntroGetMonsData|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_MOVES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26907 (gBattleMoves; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_ADDR": "data/gen3/pret/pokeleafgreen.sym:1602 (BeginBattleIntro|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "data/gen3/pret/pokeleafgreen.sym:1601 (BeginBattleIntroDummy|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_BEGIN_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_BeginEvolutionScene translated by symbol name from pokefirered.sym 0x080CDD19 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_LOAD_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_EvolutionSceneLoadGraphics translated by symbol name from pokefirered.sym 0x080CE0E9 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_UPDATE_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_EvolutionSceneUpdate translated by symbol name from pokefirered.sym 0x080CE711 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_TRADE_EVOLUTION_UPDATE_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_TradeEvolutionSceneUpdate translated by symbol name from pokefirered.sym 0x080CE72D (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.EXPERIENCE_TABLES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26982 (gExperienceTables; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokeleafgreen.sym:27398 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.16": "data/gen3/pret/pokeleafgreen.sym se_faint translated by symbol name from pokefirered.sym 0x086B5984 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.17": "data/gen3/pret/pokeleafgreen.sym se_flee translated by symbol name from pokefirered.sym 0x086B59D4 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.22": "data/gen3/pret/pokeleafgreen.sym se_boo translated by symbol name from pokefirered.sym 0x086B5ADC (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.25": "data/gen3/pret/pokeleafgreen.sym se_success translated by symbol name from pokefirered.sym 0x086B5BB0 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.26": "data/gen3/pret/pokeleafgreen.sym se_failure translated by symbol name from pokefirered.sym 0x086B5BE0 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.95": "data/gen3/pret/pokeleafgreen.sym se_shiny translated by symbol name from pokefirered.sym 0x086B6E70 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
+      },
+      "admitted": true,
+      "derived": {
+        "BASESTATS_ADDR_BY_GAME_CODE": {
+          "BPGE": 136660832,
+          "BPRE": 136660868
+        },
+        "BASESTATS_ENTRY_SIZE": 28,
+        "BASESTATS_GROWTH_RATE_OFFSET": 19,
+        "BATTLE_MON_OT_ID_OFF": 84,
+        "BATTLE_MON_PERSONALITY_OFF": 72,
+        "BATTLE_MON_STAT_STAGES_OFF": 25,
+        "BATTLE_MOVE_ENTRY_SIZE": 12,
+        "BATTLE_MOVE_PP_OFFSET": 4,
+        "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
+        "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
+        "BATTLE_STRUCT_MOVE_TARGET_OFF": 12,
+        "BATTLE_TYPE_DOUBLE_MASK": 1,
+        "BATTLE_TYPE_LINK_MASK": 2,
+        "BATTLE_TYPE_TRAINER_MASK": 8,
+        "BOXES_PER_STORE": 14,
+        "BOX_DATA_OFFSET": 4,
+        "B_ACTION_NOTHING_FAINTED": 13,
+        "DISABLE_STRUCT_PERISH_TIMER_OFF": 15,
+        "DISABLE_STRUCT_SIZE": 28,
+        "EXPERIENCE_TABLE_ENTRY_COUNT": 101,
+        "GMAIN_CB2_OFFSET": 4,
+        "GMAIN_INBATTLE_MASK": 2,
+        "GMAIN_INBATTLE_OFFSET": 1081,
+        "MAX_LEVEL": 100,
+        "MONS_PER_BOX": 30,
+        "OUTCOME_CAUGHT": 7,
+        "OUTCOME_DREW": 3,
+        "OUTCOME_LOST": 2,
+        "OUTCOME_RAN": 4,
+        "OUTCOME_WON": 1,
+        "OVERWORLD_MODE": "gmain_flags",
+        "PARTY_CAPACITY": 6,
+        "SB1_BADGE_BYTE_OFFSET": 260,
+        "SB1_BALL_POCKET_COUNT": 13,
+        "SB1_BALL_POCKET_OFFSET": 1072,
+        "SB1_FLAGS_OFFSET": 3808,
+        "SB1_LOCATION_MAP_GROUP_OFFSET": 4,
+        "SB1_LOCATION_MAP_NUM_OFFSET": 5,
+        "SB1_VARS_OFFSET": 4096,
+        "SB2_ENC_KEY_OFFSET": 3872,
+        "SB2_NAME_OFFSET": 0,
+        "SB2_OT_ID_OFFSET": 10,
+        "SHEDINJA_SPECIES_ID": 303,
+        "STATUS3_PERISH_SONG": 32,
+        "TASK_STRUCT_SIZE": 40
+      },
+      "ram": {
+        "BATTLERS_COUNT_ADDR": 33700812,
+        "BATTLER_PARTY_INDEXES_ADDR": 33700814,
+        "BATTLE_COMM_ADDR": 33701506,
+        "BATTLE_MAIN_FUNC_ADDR": 50352004,
+        "BATTLE_MONS_ADDR": 33700836,
+        "BATTLE_OUTCOME_ADDR": 33701514,
+        "BATTLE_RESULTS_ADDR": 50352016,
+        "BATTLE_STRUCT_PTR_ADDR": 33701864,
+        "BATTLE_TYPE_ADDR": 33696588,
+        "CHOSEN_ACTION_ADDR": 33701244,
+        "CHOSEN_MOVE_ADDR": 33701316,
+        "DISABLE_STRUCTS_ADDR": 33701388,
+        "ENEMY_BASE": 33701932,
+        "ENEMY_COUNT_ADDR": 33701930,
+        "GMAIN_ADDR": 50344176,
+        "LOCKED_MOVES_ADDR": 33701304,
+        "PARTY_BASE": 33702532,
+        "PARTY_COUNT_ADDR": 33701929,
+        "POKEMON_STORAGE_BASE": 33723156,
+        "PSP_PTR_ADDR": 50352144,
+        "SB1_PTR_ADDR": 50352136,
+        "SB2_PTR_ADDR": 50352140,
+        "SPECIAL_VAR_BOX_ID_ADDR": 33779926,
+        "SPECIAL_VAR_BOX_POS_ADDR": 33779928,
+        "STATUS3_ADDR": 33701372,
+        "TASKS_BASE_ADDR": 50352272,
+        "TRAINER_OPPONENT_ADDR": 33785518
+      },
+      "rom": {
+        "BASESTATS_ADDR": 136660832,
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR": 134295469,
+        "BATTLE_MOVES_ADDR": 136645600,
+        "BEGIN_BATTLE_INTRO_ADDR": 134292417,
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
+        "CB2_EVOLUTION_BEGIN_ADDR": 135060717,
+        "CB2_EVOLUTION_LOAD_ADDR": 135061693,
+        "CB2_EVOLUTION_UPDATE_ADDR": 135063269,
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063297,
+        "EXPERIENCE_TABLES_ADDR": 136657600,
+        "POST_BATTLE_WRITER_TASKS": [
+          134414905
+        ],
+        "PP_UP_GET_MASK_ADDR": 136699521,
+        "RETURN_FROM_BATTLE_ADDR": 134306649,
+        "SE_SONG_HEADERS": {
+          "16": 141251168,
+          "17": 141251248,
+          "22": 141251512,
+          "25": 141251724,
+          "26": 141251772,
+          "95": 141256524
+        }
+      },
+      "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 136681268,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 136660832,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 136570164,
+          "count": 107,
+          "size": 1391,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 136571556,
+          "count": 743,
+          "size": 29720,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 138189556,
+          "count": 133,
+          "size": 2660,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokefirered@c75f3523 gEvolutionTable; data/gen3/pret/pokeleafgreen.sym:27395",
+        "gSpeciesInfo": "pret/pokefirered@c75f3523 gSpeciesInfo; data/gen3/pret/pokeleafgreen.sym:26983",
+        "gTrainerClassNames": "pret/pokefirered@c75f3523 gTrainerClassNames; data/gen3/pret/pokeleafgreen.sym:26690",
+        "gTrainers": "pret/pokefirered@c75f3523 gTrainers; data/gen3/pret/pokeleafgreen.sym:26691",
+        "gWildMonHeaders": "pret/pokefirered@c75f3523 gWildMonHeaders; data/gen3/pret/pokeleafgreen.sym:33298"
+      },
+      "rom_thumb": [
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+        "BEGIN_BATTLE_INTRO_ADDR",
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
+        "CB2_EVOLUTION_BEGIN_ADDR",
+        "CB2_EVOLUTION_LOAD_ADDR",
+        "CB2_EVOLUTION_UPDATE_ADDR",
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+        "POST_BATTLE_WRITER_TASKS",
+        "RETURN_FROM_BATTLE_ADDR"
+      ],
+      "variant": "vanilla"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+# gen3_final_cut row=linked_faint_active_lhammer_gen3_rr_as_a item=§14_P5_RR_duo cut=d9a928d79a99aef33ac923cfbf589cda2715762d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario linked_faint_active_lhammer_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:47:20 cpu=48% emuhawk=0 python=4
+start_utc=2026-09-27T19:47:19Z tracked_clean_before=True
+
+========== scenario: linked_faint_active_lhammer_gen3 ==========
+[duo] linked_faint_active_lhammer_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=d9a928d79a99aef33ac923cfbf589cda2715762d
+[duo] server up: tcp=51350 http=51352 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_lhammer_gen3_5ryiujuw
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 6.3s
+[duo] timing results 31.1s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with alternating L input (lhammer))
+[duo] SAVE_WITNESS_SHA256 inst=a site=46dcc87d7aad2d40fdb5758556e5f55337217ec020d4430222ce374807124099 file=46dcc87d7aad2d40fdb5758556e5f55337217ec020d4430222ce374807124099 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=06ba3d0cdb826223a2487dc2a6798e4d5f1805eb3a068b06285e0857aacddb00 file=06ba3d0cdb826223a2487dc2a6798e4d5f1805eb3a068b06285e0857aacddb00 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[lhammer]: engine faint EBEF11DA:2BDDC8BF -> force_faint -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: none)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=7489 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":231}
+[duo] MARKER a: TX memorialize_done EBEF11DA:2BDDC8BF {"box":24,"event":"memorialize_done","key":"EBEF11DA:2BDDC8BF","player":"a","seq":286}
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_lhammer_gen3_a_1_witness.bin bytes=131072 saves=1 frame=10256 counter=5
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=lhammer
+[duo] MARKER b: RX force_faint key=EBEF11DA:D4223740
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 EBEF11DA:D4223740
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=8762 writes=5 attempted=1215 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed" case=lhammer
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=9127 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=181 keys=0x200 hp_writes=0 attempted=1313 case=lhammer
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=10931 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: LHAMMER_BALLS EBEF11DA:D4223740 balls=9 ball_id=0 unchanged
+[duo] MARKER b: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_lhammer_gen3_b_1_witness.bin bytes=131072 saves=1 frame=12735 counter=5
+[duo] MARKER b: FORCED_HP0 EBEF11DA:D4223740 frame=9127 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done EBEF11DA:D4223740 {"box":24,"event":"memorialize_done","key":"EBEF11DA:D4223740","player":"b","seq":368}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_lhammer_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_lhammer_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T19:47:59Z tracked_clean_after=True classification=pass

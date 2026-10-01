@@ -89,9 +89,11 @@
   // Non-RR trainer sets (task 5/8): the vendored, pret-verified setdex named by the
   // payload's calc.sets = {file, var}. One flat setdex (no Normal/Hardcore split like RR).
   var _gameSetdex        = null;  // window[calc.sets.var] once loaded
+  var _prepDeferred      = false; // a Prep request that arrived before this game's sets loaded
   var _gameIndex         = {};    // _buildTrainerIndex(_gameSetdex), for the Prep tab
   var _gameSetsLoadStarted = false;
   var _gameSetsFile      = null;  // the file currently loaded/loading; a dex switch reloads
+  var _gameSetsLoad      = 0;     // bumped per load and per clear: stale callbacks see a newer one
 
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
@@ -149,6 +151,14 @@
     if (modeSel) modeSel.style.display = _isRR() ? '' : 'none';
   }
 
+  function _updateCalcTitle(calcInfo) {
+    var name = calcInfo && (calcInfo.name || (_isRR() ? 'Radical Red' : 'Generation ' + calcInfo.gen));
+    var title = 'Pokémon' + (name ? ' ' + name : '') + ' Damage Calculator';
+    var heading = document.querySelector('.title-text');
+    if (heading) heading.textContent = title;
+    document.title = title;
+  }
+
   // Called at the top of every successful /api/calc/mons fetch, before the
   // species-name normalization / enemy enrichment that depend on the right
   // gen's pokedex being loaded.
@@ -157,10 +167,13 @@
       console.warn('[SLink bridge] Payload has no "calc" info — staying on Gen 9.');
       _dex = null;
       _updateModeToggleVisibility();
+      _updateCalcTitle(null);
       return;
     }
+    var previousDex = _dex;
     _dex = calcInfo.dex || null;
     _updateModeToggleVisibility();
+    _updateCalcTitle(calcInfo);
     // pureRGB's engine export must be selected BEFORE the gen-1 radio switch below loads
     // its pokedex; vanilla gen-1 needs the vanilla export back if a prior payload left
     // 'purergb' selected. Guarded: a no-op until that worker wires calc.useDex onto the
@@ -170,7 +183,9 @@
       else if (calcInfo.gen === 1) calc.useDex('vanilla');
     }
     var wantGen = calcInfo.gen;
-    if (!wantGen || window.gen === wantGen) return;
+    // A same-generation dex change replaces the engine's tables, but the UI caches
+    // pokedex/moves/typeChart in the gen change handler. Re-run it for that change too.
+    if (!wantGen || (window.gen === wantGen && previousDex === _dex)) return;
     var $radio = window.$ && window.$('#gen' + wantGen);
     if (!$radio || !$radio.length) {
       console.warn('[SLink bridge] No #gen' + wantGen + ' radio in this template — staying on gen ' + window.gen + '.');
@@ -195,16 +210,25 @@
     if (_isRR()) return;
     var sets = calcInfo && calcInfo.sets;
     if (!sets || !sets.file || !sets.var) {
-      _setdexReady = true; // nothing to load: Prep tab / enrichment just has no sets
+      // Nothing to load -- and drop any sets an earlier payload loaded: Crystal's trainers
+      // must not linger once a Gold/Silver player makes the shared profile set-less.
+      _gameSetdex = null;
+      _gameIndex = {};
+      _gameSetsLoadStarted = false;
+      _gameSetsFile = null;
+      _gameSetsLoad++;
+      _setdexReady = true;
       return;
     }
     if (_gameSetsLoadStarted && _gameSetsFile === sets.file) return;
     _gameSetsLoadStarted = true;
     _gameSetsFile = sets.file;
+    var load = ++_gameSetsLoad;
 
     var s = document.createElement('script');
     s.src = './js/data/sets/games/' + sets.file;
     s.onload = function () {
+      if (load !== _gameSetsLoad) return; // superseded while loading
       _gameSetdex = window[sets.var] || {};
       // Vendored Gen 1/2 trainer sets carry DVs but no stat exp; trainer mons have none
       // (pret add_mon.asm / move_mon.asm zero it), so say so rather than default to max.
@@ -217,9 +241,11 @@
       _gameIndex  = _buildTrainerIndex(_gameSetdex, true); // skipSplit: vendored keys are per-fight already
       _setdexReady = true;
       _enrichEnemyMons();
+      if (_prepDeferred) { _prepDeferred = false; if (_supportsPrepTab()) _activeTab = 'prep'; }
       refreshPanel();
     };
     s.onerror = function () {
+      if (load !== _gameSetsLoad) return;
       console.warn('[SLink bridge] Failed to load trainer sets file: ' + sets.file);
       _gameSetdex = null;
       _setdexReady = true;
@@ -1422,7 +1448,12 @@
 
     // Prep tab needs a trainer setdex (RR's dual index, or a non-RR game's loaded sets);
     // bounce off it once we know none is available for this game.
-    if (_activeTab === 'prep' && !_supportsPrepTab()) _activeTab = 'a';
+    // A ?prep= link can arrive before a non-RR game's sets file has loaded: remember it, so the
+    // sets onload restores the Prep tab instead of leaving the player on Party for good.
+    if (_activeTab === 'prep' && !_supportsPrepTab()) {
+      if (!_setdexReady) _prepDeferred = true;
+      _activeTab = 'a';
+    }
 
     // Prep tab is available even without SLink data (it only needs the SETDEX)
     if (!_data && _activeTab !== 'prep') {
@@ -1507,7 +1538,7 @@
       }
 
       tab.onclick = (function (s) {
-        return function () { _activeTab = s; refreshPanel(); };
+        return function () { _activeTab = s; _prepDeferred = false; refreshPanel(); };
       })(side);
 
       tabRow.appendChild(tab);

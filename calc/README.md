@@ -1,6 +1,6 @@
 # SLink Damage Calculator
 
-This is a fork of the [RadicalRedShowdown damage calculator](https://github.com/RadicalRedShowdown/damage-calc), embedded in the SLink server and served at `/calc/`. It provides damage calculation for Radical Red / CFRU Pokémon runs with live party integration via the SLink Bridge Panel.
+This is a fork of the [RadicalRedShowdown damage calculator](https://github.com/RadicalRedShowdown/damage-calc), embedded in the SLink server and served at `/calc/`. It started out Radical Red / CFRU-only; it now also calculates for FireRed/LeafGreen, Emerald, Red/Blue/Yellow, pureRGB and Crystal/Gold/Silver runs (see "Generation, Dex & Trainer Sets" below), with live party integration via the SLink Bridge Panel.
 
 ---
 
@@ -14,6 +14,23 @@ Only two pages are built and served:
 | `dist/hardcore.html` | `/calc/hardcore.html` | Hardcore-difficulty trainer sets |
 
 All other upstream pages (`index.html`, `randoms.html`, `honkalculate.html`, `oms.html`) have been removed — they are not reachable from the SLink server and were unused.
+
+`server/calc_files.py` resolves both pages (`calc/src/` wins over `calc/dist/` for any path both have, so `src/` edits go live without a build step). The run server also serves the calc from inside the Manager's own chrome at `/runs/{id}/calc/…` — a bare `/calc/…` request there redirects to that per-run path — so the same `normal.html`/`hardcore.html` entry points can appear either standalone or wrapped in the Manager's page frame.
+
+---
+
+## Generation, Dex & Trainer Sets
+
+One calc build now serves every supported game; which rules, dex and trainer sets it uses for a given run comes entirely from the server, not from a page the user picks:
+
+1. `/api/calc/mons` includes `"calc": adapter.calc_profile()` — a small dict shaped `{"gen": <1-9>, "dex": <str>, "sets": {"file": ..., "var": ...}?}` that each game's adapter builds (e.g. `server/adapters/gen1_purergb.py`'s `calc_profile()` returns `{"gen": 1, "dex": "purergb", "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}`). `dex` is only meaningful for Gen 1, which has more than one dex flavour (`"vanilla"` vs `"purergb"`); other gens just send `gen`.
+2. `src/js/slink_bridge.js`'s `_applyCalcGen()` reads that `calc` field on every payload: it switches the calc's gen radio (`#gen<N>`), and for Gen 1 calls `calc.useDex('purergb')` or `calc.useDex('vanilla')` (exported by `calc/calc/src/data/purergb.ts`) *before* the gen switch loads the pokedex, so the right species/moves/type chart are already live.
+3. A `sets` entry names the trainer-set file to load from `src/js/data/sets/games/` (vendored for Gen 1/2/3, generated for pureRGB — see the "Vendored Trainer Sets" section below) and the global variable it exports.
+4. RR-only bridge features (the Prep tab, the HC/Normal difficulty badge, trainer-set-composition enrichment) key off `dex === 'rr'` rather than sniffing species or gen, and stay RR-only regardless of what else the bridge learns about a run.
+
+The wire shape of one enemy-party entry (`enemy_party`, an element of which the bridge matches against trainer sets) is `docs/protocol.md` §4.3's `FoeEntry` — not restated here.
+
+Per-game status (what's wired, what's verified, what's still open for each game) is tracked in [`docs/calc_multigen/HANDOFF.md`](../docs/calc_multigen/HANDOFF.md), not here; this section only documents the *mechanism*.
 
 ---
 
@@ -46,19 +63,18 @@ Results display the full `"Pokémon (Trainer Set Name)"` string — so searching
 
 ## Result Description
 
-The calc result line (e.g., `"Lvl 50 Charizard Flamethrower vs. Lvl 50 Blastoise: 45-53%"`) does **not** show EV investment numbers. Since all mons in our runs assume maximum EVs, the original `"252 SpA"` / `"0 HP / 0 SpD"` annotations were always `0` and have been removed from `calc/src/desc.ts` to reduce clutter.
+The calc result line (e.g., `"Lvl 50 Charizard Flamethrower vs. Lvl 50 Blastoise: 45-53%"`) does **not** show EV investment numbers. `calc/calc/src/mechanics/*.ts` still populate `RawDesc.attackEVs` / `.defenseEVs` / `.HPEVs` for gens with EVs, but `buildDescription()` in `calc/calc/src/desc.ts` never reads those fields when assembling the line, so the `"252 SpA"` / `"0 HP / 0 SpD"` annotations (always `0` since all mons in our runs assume maximum EVs) never make it into the output.
 
 ---
 
 ## Build
 
 ```bash
-# Install dependencies (run once)
-npm install
+# Install dependencies (run once) -- there is no repo-root package.json, everything lives under calc/
 cd calc && npm install && cd ..
 
 # Full build: TypeScript compile → bundle → copy assets → hash HTML
-node build
+cd calc && node build
 
 # Fast rebuild: only copy assets and rehash HTML (use after editing src/ files, not .ts)
 node build view
@@ -74,26 +90,35 @@ Output goes to `dist/`. Always run `node build` (not `node build view`) after an
 calc/
 ├── calc/                   # @smogon/calc TypeScript package (upstream fork)
 │   └── src/
-│       ├── desc.ts         # Result description builder — EV display suppressed
+│       ├── desc.ts         # Result description builder — never renders EVs (see below)
+│       ├── data/purergb.ts # pureRGB's Gen 1 species/moves/type chart + useDex() swap
 │       └── ...             # Mechanics, data types, formula
 ├── src/                    # UI source files
 │   ├── normal.template.html    # Normal-difficulty page template
 │   ├── hardcore.template.html  # Hardcore-difficulty page template
-│   ├── css/                    # Stylesheets (dark theme, main, type colours)
+│   ├── css/                    # Stylesheets (dark theme, main) — no per-type colouring; type
+│   │                            # selects are plain <option> text for every game, RR included
 │   ├── img/                    # Static images
 │   └── js/
-│       ├── slink_bridge.js         # SLink bridge panel (live party integration)
+│       ├── slink_bridge.js         # SLink bridge panel (live party integration, gen/dex switching)
 │       ├── moveset_import.js       # Showdown paste → calc field populator
 │       ├── shared_controls.js      # Core UI logic, search, trainer set matching
 │       ├── index_randoms_controls.js  # Mode switching (Normal/Hardcore)
 │       ├── data/
 │       │   └── sets/
-│       │       ├── normal.js       # Normal-mode RR trainer sets (SETDEX_SV)
-│       │       └── hardcore.js     # Hardcore-mode RR trainer sets (SETDEX_HC)
+│       │       ├── normal.js / hardcore.js    # RR trainer sets (SETDEX_SV / SETDEX_HC)
+│       │       ├── gen1.js … gen9.js          # Generation move/species/ability/item tables
+│       │       ├── slink_priority.js          # RR priority-set overrides
+│       │       └── games/
+│       │           ├── RedBlue.js / Yellow.js     # Vendored Gen 1 trainer sets
+│       │           ├── Crystal.js                 # Vendored Gen 2 trainer sets
+│       │           ├── FRLG.js / Emerald.js        # Vendored Gen 3 trainer sets
+│       │           └── PureRGB.js                  # Generated (`tools/gen_purergb_setdex.py`)
 │       └── vendor/                 # jQuery, Select2, etc.
 ├── dist/                   # Build output (served by SLink HTTP server)
 │   ├── normal.html
 │   ├── hardcore.html
+│   ├── calc/               # Compiled @smogon/calc (from calc/calc/dist, copied by `node build`)
 │   └── ...
 └── build                   # Build script (Node.js, no extension)
 ```
@@ -123,7 +148,7 @@ The following were present in the upstream fork but have been removed from this 
 
 ## Vendored Trainer Sets
 
-`src/js/data/sets/games/{RedBlue,Yellow,Crystal,FRLG,Emerald}.js` are trainer-set dumps vendored from [KinglerChamp/VanillaNuzlockeCalc](https://github.com/KinglerChamp/VanillaNuzlockeCalc) @ `54ed9713ca0fed4d92fb50ee153e9e9c5f4bb4a8` (MIT licensed). Gold/Silver and Ruby/Sapphire were not carried over since SLink's calc doesn't support those games.
+`src/js/data/sets/games/{RedBlue,Yellow,Crystal,FRLG,Emerald}.js` are trainer-set dumps vendored from [KinglerChamp/VanillaNuzlockeCalc](https://github.com/KinglerChamp/VanillaNuzlockeCalc) @ `54ed9713ca0fed4d92fb50ee153e9e9c5f4bb4a8` (MIT licensed). Ruby/Sapphire were not carried over since SLink's calc doesn't support those games at all (no adapter). Gold/Silver *are* supported (Gen 2 rules run fine for them, `server/adapters/gen2_gsc.py`), but their trainer rosters differ from Crystal's, so they get no `sets` file rather than Crystal's mismatched one — `calc_profile()` omits `sets` entirely for Gold/Silver runs. `games/PureRGB.js` is not vendored at all — it's generated by `tools/gen_purergb_setdex.py` (see "Generation, Dex & Trainer Sets" above).
 
-We don't trust vendored data blindly: `tests/unit/test_calc_trainer_sets.py` parses each file independently and checks species, level, and (where pret encodes them) movesets and trainer-class DVs against the [pret](https://github.com/pret) decompilations (`pokered`, `pokeyellow`, `pokecrystal`, `pokefirered`) in `.cache/pret`. A handful of confirmed vendor mistakes (wrong DVs, wrong levels) were fixed directly in these files — see each file's own header comment for the specifics. Emerald has no local `pokeemerald` checkout to verify against, so it's vendored as-is and unchecked.
+We don't trust vendored data blindly: `tests/unit/test_calc_trainer_sets.py` parses each file independently and checks species, level, and (where pret encodes them) movesets and trainer-class DVs against the [pret](https://github.com/pret) decompilations (`pokered`, `pokeyellow`, `pokecrystal`, `pokefirered`) in `.cache/pret`. A handful of confirmed vendor mistakes (wrong DVs, wrong levels) were fixed directly in these files — see each file's own header comment for the specifics. `Emerald.js` isn't cross-checked by that test (`pokeemerald` isn't one of its four `_PRET` entries, whether or not a local checkout exists), so it's vendored as-is and unchecked — Emerald is correspondingly still gated off in live runs (see HANDOFF.md).
 

@@ -1,0 +1,74 @@
+{
+  "purpose": "Required existing global unit prerequisites; no expansion admission or implementation qualification",
+  "source_cut": "f4538676",
+  "evidence": "SOURCE_BUILD",
+  "outputs": {
+    "linux1": {
+      "stable_path": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\linux1",
+      "remote_working_directory": "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/7f7c4b148ed74f9c8c5d42ec3e80d479",
+      "generated": "2026-09-30T02:17:39.149421+00:00",
+      "files": {
+        "pokeemerald.gba": {
+          "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+          "size": 33554432
+        },
+        "pokeemerald.elf": {
+          "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+          "size": 35972280
+        },
+        "pokeemerald.map": {
+          "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+          "size": 4623407
+        },
+        "pokeemerald.sym": {
+          "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+          "size": 4812449
+        },
+        "receipt.json": {
+          "sha256": "4a3fd815eb198c4e4159a3f77a67011551395a15dbc86cbca9cc18a67ec7ed08",
+          "size": 5479
+        }
+      },
+      "rom": {
+        "sha1": "28877d733492299599f2b8fff50493109d72653c",
+        "md5": "83bde8deeaa27453b12545b9cfffe3a6",
+        "size": 33554432
+      },
+      "compiler_status": "provisional"
+    },
+    "linux2": {
+      "stable_path": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\linux2",
+      "remote_working_directory": "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/b9b085110edb47f588f0a0262bc5c55c",
+      "generated": "2026-09-30T02:22:30.603195+00:00",
+      "files": {
+        "pokeemerald.gba": {
+          "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+          "size": 33554432
+        },
+        "pokeemerald.elf": {
+          "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+          "size": 35972280
+        },
+        "pokeemerald.map": {
+          "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+          "size": 4623407
+        },
+        "pokeemerald.sym": {
+          "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+          "size": 4812449
+        },
+        "receipt.json": {
+          "sha256": "3bd79a627bd616dc3aa06753df2e7ca99c6b3fbe80a4a4046f120b5bf525002f",
+          "size": 5478
+        }
+      },
+      "rom": {
+        "sha1": "28877d733492299599f2b8fff50493109d72653c",
+        "md5": "83bde8deeaa27453b12545b9cfffe3a6",
+        "size": 33554432
+      },
+      "compiler_status": "provisional"
+    }
+  },
+  "result": "PASS: distinct build directories; all four binary/source outputs byte identical; both current receipts validate. Provisional compiler status unchanged."
+}

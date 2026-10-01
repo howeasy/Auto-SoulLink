@@ -20,17 +20,16 @@
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local t = G.open("ewram_tail")
 
--- The FREE tail: what the patch has not claimed. It began at 0x0203FD44 (where EvRing ends) and
--- the first run of this gate proved all 700 bytes of that run untouched across 7 savestates. §6
--- then allocated SlinkInfo at 0x0203FD44..0x0203FE4B out of it, so the watch moves up to what is
--- still unallocated. Painting a region the patch OWNS would be testing the wrong thing — worse, it
--- would switch the SOULLINK feature on with garbage state and the patch would then write there
--- itself, which is exactly how this gate started failing when SlinkInfo landed.
-local TAIL_LO, TAIL_HI = 0x0203FE4C, 0x0203FFFF     -- SlinkInfo ends 0x0203FE4C (exclusive)
-local N = TAIL_HI - TAIL_LO + 1                     -- 436
--- SlinkInfo is 264 bytes (write_checkpoint native.spans INFO): the tail must start where it ends.
-if t.P.INFO + 264 ~= TAIL_LO then
-    t.fail("the watched tail starts where SlinkInfo ends", string.format("INFO+264=0x%08X", t.P.INFO + 264))
+-- The first run proved 0x0203FD44..0x0203FFFF untouched. SlinkInfo later claimed
+-- 0x0203FD44..0x0203FE4B, and RR-DURABLE then claimed 0x0203FE50..0x0203FF60
+-- (shadow mailbox, witness, producer, and pre-save flag; handlers.c RT_*).
+-- Never paint owned state: the producer writes its shadow mailbox every frame.
+local RT_BASE, RT_END = 0x0203FE50, 0x0203FF61 -- RT_END is exclusive
+local TAIL_LO, TAIL_HI = RT_END, 0x0203FFFF
+local N = TAIL_HI - TAIL_LO + 1                     -- 159
+if t.P.INFO + 264 > RT_BASE or RT_BASE + 0x111 ~= TAIL_LO then
+    t.fail("the watched tail starts after RR-DURABLE", string.format(
+        "INFO+264=0x%08X RT_END=0x%08X", t.P.INFO + 264, RT_BASE + 0x111))
 end
 local log = t.log
 local function finish(ok)
@@ -46,7 +45,7 @@ local function paint()
     for a = TAIL_LO, TAIL_HI do memory.write_u8(a, want(a)) end
 end
 
--- Bulk read where the API allows it; 700 per-byte reads every few frames is enough Lua work to
+-- Bulk read where the API allows it; per-byte reads every few frames add avoidable Lua work to
 -- distort the very timing we are trying to observe.
 local bulk = nil
 do
@@ -158,7 +157,7 @@ if nhits > 0 then
                           lo, addrs[j], addrs[j] - lo + 1, h.scene, h.frame, h.got))
         i = j + 1
     end
-    log("the tail is NOT free — do not allocate the §6 page buffer here")
+    log("the remaining tail is NOT free — do not allocate it")
     finish(false); return
 end
 

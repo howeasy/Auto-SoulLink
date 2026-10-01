@@ -306,13 +306,35 @@ def _pure(ops: list[str]) -> list[str]:
 @pytest.mark.parametrize("red,pure,start,end", [
     ("trade_ui.asm", "trade_ui.asm", "SlinkTradeUIMustSave::", "SlinkTradeUINameTable::"),
     ("trade_prompt.asm", "trade_prompt.asm", ".choice", ".unavailable"),
-    ("native_trade.asm", "native_trade.asm", "call PlayDefaultMusic", ".refused"),
     ("trade_service.asm", "trade_service.asm", ".apply", ".publish"),
     ("trade_service.asm", "slink.asm", "ld a, [wWalkCounter]", "jp SlinkTradeService"),
 ])
 def test_purergb_overlay_carries_the_same_save_and_step_hunks(red, pure, start, end):
     mine = _ops(SOURCE / red, start, end)
     assert mine == _pure(_ops(PURE / pure, start, end))
+
+
+def test_purergb_apply_retains_shared_restore_then_full_save_contract():
+    """Graphics restoration uses foundation-native routines, not instruction parity.
+
+    The assembled Pure replay in test_gen1_purergb_trade_restore_feedback covers
+    its font/sprite alias and movement mode. Keep the shared persistence contract
+    here: restore borrowed state, refuse uncertain saves, then save all game data.
+    """
+    restored = ("ldh [hWY], a", "ldh [hTileAnimations], a",
+                "ldh [hAutoBGTransferEnabled], a", "ld [wUpdateSpritesEnabled], a",
+                "ld [wForceEvolution], a", "ld [wFontLoaded], a",
+                "ld [wStatusFlags5], a", "ld [wOptions], a")
+    for src in (SOURCE, PURE):
+        ops = _ops(src / "native_trade.asm", ".restore", ".refused")
+        positions = [ops.index(op) for op in restored]
+        assert positions == sorted(positions)
+        refuse = ops.index("ret nz")
+        save = ops.index("call SaveGameData")
+        assert positions[-1] < refuse < save
+        assert ops.count("call SaveGameData") == 1
+        assert "call SavePartyAndDexData" not in ops
+        assert ops[save + 1:] == ["xor a", "ld d, a", "ret"]
 
 
 def _must_save_lines(path: Path) -> tuple[str, str]:

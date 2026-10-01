@@ -1,0 +1,50 @@
+duo instance a scenario=trade_reset_success_gen3 phase=rr_reset_reload title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:56071 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:56071 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:56071
+[client] [SLink] TCP connected to 127.0.0.1:56071
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 528
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 528
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 529
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 530
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 530
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 532
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 532
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 543
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 543
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 543
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 543
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 543
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 543
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 543
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 543
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 543
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 543
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 543
+[client] [gen3] phase field frame=580 map=(5,4)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=7 hp=17/24
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=580 map=map=1284 at=(3,3) balls=9
+RESET_RELOADED {"counter":6,"key":"F56D8C1D:D4223740","side":"a"}
+JITTER requested=0 applied=0 attempt=1
+WRITES 18
+RESULT: PASS (cold-reloaded expected native save without runner SAVE)

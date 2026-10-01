@@ -1,0 +1,54 @@
+# gen3_final_cut row=active_end_gen3_fr_as_a item=§5_item2b cut=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario active_end_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:07:09 cpu=93% emuhawk=5 python=14
+start_utc=2026-09-28T03:07:07Z tracked_clean_before=True
+
+========== scenario: active_end_gen3 ==========
+[duo] active_end_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+[duo] server up: tcp=62337 http=62338 data=C:\Users\howar\AppData\Local\Temp\slink_duo_active_end_gen3_zkw33hfh
+[duo] timing server 1.2s
+[duo] cleared 6 stale artifact(s) for active_end_gen3: e2e_active_end_gen3_a_1_witness.bin, e2e_active_end_gen3_a_attempt1_result.txt, e2e_active_end_gen3_a_result.txt, e2e_active_end_gen3_b_attempt1_result.txt, e2e_active_end_gen3_b_result.txt, e2e_active_end_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': '2D356A90:99DE0D8A'}
+[duo] timing orchestrate 10.9s
+[duo] timing results 20.0s
+[duo] RESULT_LINE a: RESULT: PASS (P+H: engine Perish KO in battle with no input (command))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); the subject passed)
+[duo] SAVE_WITNESS_SHA256 inst=a site=a1e12e73baca12813915a668f7caf1f15ca5a8ae6ed816f80fc4ab04f9360fe6 file=a1e12e73baca12813915a668f7caf1f15ca5a8ae6ed816f80fc4ab04f9360fe6 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] active_end: force_faint 2D356A90:99DE0D8A -> P+H commit -> hand-off -> Perish KO in battle with no input -> send-out -> RUN; saved HP 0
+[duo] MARKER a: READY_ACTIVE 2D356A90:99DE0D8A case=command
+[duo] MARKER a: RX force_faint key=2D356A90:99DE0D8A
+[duo] MARKER a: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 2D356A90:99DE0D8A
+[duo] MARKER a: ACTIVE_COMMIT 2D356A90:99DE0D8A frame=1562 writes=5 attempted=11 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/30/0 why="active faint committed" case=command
+[duo] MARKER a: HANDOFF 2D356A90:99DE0D8A from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER a: ACTIVE_KO 2D356A90:99DE0D8A frame=2274 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/30/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=11 case=command
+[duo] MARKER a: ACTIVE_FAINT_SITE 2D356A90:99DE0D8A frame=2274 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER a: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER a: ACTIVE_OUTCOME 2D356A90:99DE0D8A outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_active_end_gen3_a_1_witness.bin bytes=131072 saves=1 frame=5627 counter=8
+[duo] MARKER a: FORCED_HP0 2D356A90:99DE0D8A frame=2274 in_battle=1 battler=1
+[duo] MARKER b: WRITES 0
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] active_end_gen3: a=PASS b=PASS
+
+========== summary ==========
+  active_end_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-28T03:07:43Z tracked_clean_after=True classification=pass

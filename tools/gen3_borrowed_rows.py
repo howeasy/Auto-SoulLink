@@ -1,0 +1,206 @@
+"""Ordinary RR school borrowed-party DuoRun rows. SOURCE/MODEL; PHYSICAL unrun."""
+from pathlib import Path
+import hashlib,json,re
+from tools.research.rr_special_lifecycle import census,school_fixture_flags,COMPANION_SHA1
+from tools.gba_map import Rom
+from tools.gen3_clause_rows import one,rows
+from tools.gen3_gift_egg_rows import tx_messages
+
+ROOT = Path(__file__).resolve().parents[1]
+
+ROWS={name:dict(flags=[],timeout=2400,frames=3000000,games=("gen3_rr",),target="battle2",
+               explicit_only=True,scenario_module="borrowed",no_save=("b",),
+               oracle="assert_borrowed_party_gen3_saved")
+      for name in ("borrowed_party_menu_gen3","borrowed_party_battle_gen3","borrowed_party_opponent_gen3")}
+
+
+def own_facts(run):
+    rom=(ROOT / run._gen3_rom("a")).read_bytes()
+    facts=census(rom)
+    if facts["rom_sha1"]!=COMPANION_SHA1:raise RuntimeError("borrow requires actual admitted RR companion")
+    flags=school_fixture_flags(rom,run._gen3_fixture_bytes("a"))
+    if flags["flags"]!={"1047":0,"1096":0}:raise RuntimeError("school fixture progress route differs")
+    maps=Rom(rom,0x083526A8);city=maps.map(3,1);school=maps.map(5,2)
+    doors=[w for w in city.warps if (w.map_group,w.map_num)==(5,2)]
+    if len(doors)!=1 or (doors[0].x,doors[0].y)!=(25,18):raise RuntimeError("school door changed")
+    door=doors[0];dest=school.warps[door.warp_id]
+    # Raw School warp destination, independently witnessed at cd888b59:
+    # expected5.2(4,8) failed against actual5.2(4,7). Center's +1 is not transferable.
+    arrival=[dest.x,dest.y]
+    npc=facts["borrowed_party"]["npc"]
+    approach=[npc["x"],npc["y"]+1]
+    if school.collision[approach[1]][approach[0]]!=0 or school.behaviour[approach[1]][approach[0]]!=0:
+        raise RuntimeError("school adjacent interaction tile changed")
+    paths=dict(city=city.bfs((26,27),(door.x,door.y+1)),school=school.bfs(tuple(arrival),tuple(approach)))
+    if any(p is None or len(p)>=100 for p in paths.values()):raise RuntimeError("school BFS route absent")
+    x,y=26,27
+    for direction in paths["city"]:
+        dx,dy={"Left":(-1,0),"Right":(1,0),"Up":(0,-1),"Down":(0,1)}[direction]
+        x,y=x+dx,y+dy
+        if city.behaviour[y][x]!=0 or any((event.x,event.y)==(x,y) for event in city.coords):
+            raise RuntimeError("school city path no longer has plain tiles without coordinate scripts")
+    labels=[(0x091153D2,"View Your Team"),(0x091153E1,"View Opp[AD] Team"),(0x091153F0,"Start Battle")]
+    from tools.rr_ingame_trades import decode_text
+    if any(decode_text(rom[a-0x08000000:a-0x08000000+50])!=text for a,text in labels):
+        raise RuntimeError("school ordinary menu labels changed")
+    if rom[0x1051BA0:0x1051BAE].hex()!="5c0907000000725111098a561109":
+        raise RuntimeError("school trainerbattle9 command changed")
+    if (rom[0x1051B45:0x1051B4A].hex()!="6f00002200"
+            or rom[0x1051B76:0x1051B7B].hex()!="052f1c0509"
+            or rom[0x1051C3A:0x1051C48].hex()!="210d8000000601fc1a0509252800"):
+        raise RuntimeError("School B/quit-YES/native restore branch changed")
+    # Actual party-menu cancel confirmation installs its input task from this pool.
+    if (rom[0x11FE90:0x11FE94].hex()!="03480860"
+            or rom[0x11FEA0:0x11FEA4].hex()!="a5fe1108"):
+        raise RuntimeError("native party cancellation YES/NO task binding changed")
+    party_cancel_task=int.from_bytes(rom[0x11FEA0:0x11FEA4],"little") & ~1
+    # RR's initial chooser uses the vanilla-address trampoline, but ENTER returns
+    # directly to its exact CFRU handler. Both addresses belong to this one task class.
+    if rom[0x11FB28:0x11FB30].hex()!="0049084731620b09":
+        raise RuntimeError("RR party chooser trampoline/target changed")
+    party_choose_task=int.from_bytes(rom[0x11FB2C:0x11FB30],"little") & ~1
+    if (rom[0x1275F8:0x127600].hex()!="00480047d94c0b09"
+            or rom[0x10B4D34:0x10B4D38].hex()!="ff20f0e7"
+            or rom[0x10B6278:0x10B6292].hex()!="0b4b1b681b7adb07f0d50520094b00f00dfb094b00f00afbe8e7"):
+        raise RuntimeError("RR native selection validator/Start-confirm binding changed")
+    from tools.gen3_gift_egg_rows import saved_gift_flag
+    if saved_gift_flag(run._gen3_fixture_bytes("a"),"radical_red",{"flag":0x930,"flag_mask":1}):
+        raise RuntimeError("RR native selection flag0930 route differs")
+    if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
+    # Exact native option1 branch and callnative builder; no injected party.
+    if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"
+            or rom[0x1051C11:0x1051C16].hex()!="23c9900709"):
+        raise RuntimeError("school ViewOpponent option/caller changed")
+    case={"borrowed_party_menu_gen3":"menu","borrowed_party_battle_gen3":"battle",
+          "borrowed_party_opponent_gen3":"opponent"}[run.scenario]
+    return dict(case=case,
+                rom_sha1=facts["rom_sha1"],arrival=arrival,approach=approach,paths=paths,school_flags=flags,
+                menu_option={"menu":0,"battle":3,"opponent":1}[case],
+                begin_kind="borrowed_party_opponent_begin" if case=="opponent" else "borrowed_party_begin",
+                selected_order_address=0x0203C750,confirm_slot=6,party_cancel_task=party_cancel_task,
+                party_choose_task=party_choose_task,party_selection_max=3,borrow=facts["borrowed_party"])
+
+
+def orchestrate(run):
+    facts=own_facts(run);mode=facts["case"]
+    ka,kb=run._gen3_prelude(link_slot=1 if mode=="battle" else None)
+    if mode!="battle":run._link_keys={"a":ka[1],"b":kb[1]}
+    run._gen3_area_control()
+    lines={inst:["TARGET "+json.dumps(run._link_keys[inst]),"BORROW "+json.dumps(facts)] for inst in ("a","b")}
+    run.go(lines)
+    if mode!="battle":
+        run._gen3_mark("a",r"^BORROW_MENU_READY ","native borrowed ViewYourTeam")
+        run.queue_command("a",{"cmd":"force_faint","key":run._link_keys["a"]})
+        run._gen3_mark("a",r"^BORROW_HELD ","command held 120 frames without loan write")
+        run._append_reconnect_marker("a","RESTORE")
+    run._gen3_mark("a",r"^BORROW_RESTORED ","own-party registered restore")
+    run._append_reconnect_marker("a","SAVE")
+
+
+def saved_oracle(run,results):
+    """DuoRun's witness gate runs first; independently decode its actual flushed batteries."""
+    import e2e_duo as h
+    from server.adapters import gen3_codec as c
+    facts=own_facts(run);mode=facts["case"];text=results["a"]
+    run._gen3_flush_boundary()
+    baseline=one(text,"BORROW_BASELINE");held=one(text,"BORROW_HELD") if mode!="battle" else None
+    restored=one(text,"BORROW_RESTORED")
+    # Party-region client writes the run already logged, in frame order. The queued
+    # force_faint logs its own landing here; this reads it, it does not add one.
+    base=facts["borrow"]["party_base"]
+    party_writes=sorted(((int(a,16),int(n),int(f)) for a,n,f in
+                         re.findall(r"write \S+ 0x([0-9A-Fa-f]+) \+(\d+) frame (\d+)",text)
+                         if int(a,16)<base+600 and int(a,16)+int(n)>base),key=lambda w:w[2])
+    raw=[bytes.fromhex(x) for x in baseline["raw_party_hex"]]
+    if baseline.get("rom_sha1")!=facts["rom_sha1"] or len(raw)<2 or any(len(x)!=100 for x in raw):
+        raise RuntimeError("borrow baseline ROM/party raw invalid")
+    before=[c.decode_party_mon(x,rr=True) for x in raw]
+    target=run._link_keys["a"]
+    if h.gen3_key(before[1])!=target:raise RuntimeError("borrow target differs from actual ownslot1")
+    party,boxes=run._gen3_saved("a")
+    if len(party)!=len(before) or boxes!=run._gen3_fixture_saved("a")[1]:
+        raise RuntimeError("borrow changed own membership or boxes")
+    # RR's native battle heal refills every move slot from its own move table, so an EMPTY
+    # slot carries the ROM's move-0 PP (BATTLE_MOVES_ADDR+4) with its PP-Up bonus instead of
+    # 0. Only that, only after a battle, and only at the ROM's value is read back as the
+    # baseline; an occupied slot or any other value stays a refusal.
+    limits=h.gen3_limits("radical_red",(ROOT / run._gen3_rom("a")).read_bytes()) if mode=="battle" else {}
+    if mode=="battle" and not limits.get("max_pp"):raise RuntimeError("borrow battle needs the RR move table")
+    for i,(old,new) in enumerate(zip(before,party)):
+        if mode=="battle":
+            new=dict(new);new["pp"]=list(new["pp"])
+            for slot,(move,pp) in enumerate(zip(new["moves"],new["pp"])):
+                if move or pp==old["pp"][slot]:continue
+                healed=limits["max_pp"](0,new["pp_bonuses"],slot)
+                if pp!=healed:
+                    raise RuntimeError(f"borrow record{i} empty move{slot} PP {old['pp'][slot]}->{pp}, not the ROM's {healed}")
+                new["pp"][slot]=old["pp"][slot]
+            # gen3_record_diff skips RR's lossy contest/unknown fields and masks the ribbon
+            # bit, so the battle row still compares the NORMALIZED record to the baseline
+            # exactly; only the empty-move PP allowance above may differ.
+            if new!=old:raise RuntimeError(f"borrow changed own record{i} beyond the native empty-move heal")
+            continue
+        changed=h.gen3_record_diff(old,new,rr=True,mutable={"hp"} if i==1 else set())
+        if changed:raise RuntimeError(f"borrow changed own record{i}: {changed}")
+    if mode!="battle":
+        if party[1]["hp"]!=0 or held.get("frames",0)<120 or held.get("party_write_count")!=0 or held.get("hidden_ticks",0)<1:
+            raise RuntimeError("borrow menu lacks held-write/hidden-window/ownHP0 proof")
+        window=(held.get("start_frame"),held.get("end_frame"))
+        if any(type(v) is not int for v in window) or window[1]-window[0]<120:
+            raise RuntimeError("borrow menu lacks actual 120-frame bound")
+        for _,_,frame in party_writes:
+            if window[0]<=frame<=window[1]:raise RuntimeError("logged client write touched loan during held window")
+        if run._links_json():raise RuntimeError("menu command control must not create a link")
+    else:
+        links=run._links_json()
+        if len(links)!=1 or links[0].get("status")!="alive" or any(
+                (links[0].get(pid) or {}).get("key")!=run._link_keys[pid] for pid in ("a","b")):
+            raise RuntimeError("borrowed fight changed the single alive linked pair")
+        if one(text,"BORROW_BATTLE").get("outcome") not in (1,2):raise RuntimeError("no actual win/loss")
+    if run._gen3_saved("b")!=run._gen3_fixture_saved("b"):raise RuntimeError("idle B changed saved party/boxes")
+    operation=text[text.index("BORROW_BASELINE "):]
+    for event in ("capture","no_catch","whiteout","party_to_box","box_to_party","key_change"):
+        if tx_messages(operation,event):raise RuntimeError("borrow emitted "+event)
+    if mode=="battle" and tx_messages(operation,"faint"):raise RuntimeError("borrowed KO emitted own faint")
+    signals=rows(text,"BORROW_SIGNAL")
+    # School's common entry calls LoadPlayerParty before selecting a loan. That
+    # registered end has no active borrow authority; only this leading prefix is ignored.
+    while signals and signals[0].get("kind")=="borrowed_party_end":
+        signals=signals[1:]
+    if (len(signals)<2 or signals[0].get("kind")!=facts["begin_kind"]
+            or any(s.get("kind")!="borrowed_party_end" for s in signals[1:])):
+        raise RuntimeError("registered begin/end borrow evidence missing")
+    # Structure alone cannot order these. The observed run is held end -> registered
+    # loan end(s) -> the queued command's own-party HP0 write -> restore marker; a
+    # restore that precedes the hold it claims to follow is not that run.
+    paired_end,restored_frame=signals[1].get("frame"),restored.get("frame")
+    if type(paired_end) is not int or type(restored_frame) is not int:
+        raise RuntimeError("borrow order: registered end or restore marker carries no frame")
+    if paired_end>restored_frame:
+        raise RuntimeError(f"borrow order: registered loan end {paired_end} follows restore marker {restored_frame}")
+    order=f"loan end {paired_end}"
+    if mode!="battle":
+        if paired_end<=window[1]:
+            raise RuntimeError(f"borrow order: registered loan end {paired_end} did not follow the held window ending {window[1]}")
+        # The queued force_faint lands on this mon's own HP field -- the codec's record
+        # layout over the census party base, not merely some party-region write.
+        hp_off,hp_len=next((off,size) for name,off,size in c._PARTY_TAIL if name=="hp")
+        hp_at=base+1*c.PARTY_MON_SIZE+hp_off
+        spans=[frame for address,length,frame in party_writes if address==hp_at and length==hp_len]
+        if spans and spans[0]<=paired_end:
+            raise RuntimeError(f"borrow order: target HP field was written at {spans[0]}, inside the loan that ends {paired_end}")
+        if not spans or spans[0]>restored_frame:
+            raise RuntimeError(f"borrow order: target HP landing {spans[0] if spans else None} is not between loan end {paired_end} and restore {restored_frame}")
+        if before[1]["hp"]<=0:
+            raise RuntimeError("borrow order: baseline own target was already fainted")
+        if restored.get("hp")!=0:
+            raise RuntimeError(f"borrow order: restore marker logged hp {restored.get('hp')!r}, not the awaited own HP0")
+        order=f"held end {window[1]} < loan end {paired_end} < own HP0 {spans[0]}"
+    order+=f" <= restore {restored_frame}"
+    if restored.get("key")!=target or restored.get("borrowed") is not False:raise RuntimeError("restore names wrong ownparty")
+    problems=h.gen3_receipt_problems("a",text,required=["BORROW_BASELINE ","BORROW_RESTORED ","SAVE_WITNESS "],
+             ordered=[("BORROW_BASELINE ","BORROW_RESTORED "),("BORROW_RESTORED ","SAVE_WITNESS ")])
+    if "SAVE_WITNESS " in results["b"]:problems.append("idle B unexpectedly saved")
+    if problems:raise RuntimeError("; ".join(problems))
+    run._pydec_note("borrowed "+mode+": real registered lifecycle, independent saved own records, idle peer"
+                    "; borrow order "+order)

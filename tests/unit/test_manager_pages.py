@@ -207,7 +207,7 @@ async def test_roms_are_found_in_the_project_folder_with_a_verdict(manager_clien
     monkeypatch.setattr(manager, "ROM_DIRS", (str(tmp_path), str(tmp_path / "roms")))
     j = await (await manager_client.get("/api/roms")).json()
     assert [r["name"] for r in j["roms"]] == ["crystal.gbc"]
-    assert j["roms"][0]["clean"] is False and j["roms"][0]["title"] == "not a Gen 1 cartridge"
+    assert j["roms"][0]["clean"] is False and j["roms"][0]["title"].startswith("not a recognised cartridge")
 
 
 @pytest.mark.asyncio
@@ -300,7 +300,7 @@ async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kep
     assert (await upload("red.gb", b"b" * 16))["path"] == str(tmp_path / "roms" / "red (2).gb"), "never overwrite a different file"
     sneaky = (await upload("../red.gb", b"c" * 16))["path"]
     assert os.path.dirname(sneaky) == str(tmp_path / "roms") and os.sep not in os.path.basename(sneaky), "stays in roms/"
-    assert (await upload("x.exe", b"MZ")) == {"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}
+    assert (await upload("x.exe", b"MZ")) == {"ok": False, "error": "send a .gb, .gbc, .gba or .jar as `file`"}
     assert (await manager_client.post("/api/roms", data=b"file=x")).status == 400, "not multipart"
     assert sorted(os.listdir(tmp_path / "roms")) == sorted(["red (2).gb", "red.gb", os.path.basename(sneaky)]), "no .part left behind"
 

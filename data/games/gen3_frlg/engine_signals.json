@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_frlg",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "56b91e318411ec3b18de7c6e2b30a87d20125f1987c69f066267fe0b298c155e",
+  "sha256": "0b04d64aa4e7af57986c7a2c638f0e95b4a9272097d67e59e3505bba5cdde6e6",
   "titles": {
     "firered": {
       "artifacts": {
@@ -182,6 +182,33 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2583",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 134571884,
@@ -612,6 +639,640 @@
               "symbol": "CB2_WhiteOut completion branch"
             }
           }
+        },
+        "companion": {
+          "production": true,
+          "rom_md5": "f3989b7545a622b808cafedd5a03822c",
+          "rom_sha1": "10109d33a937af6182827a5b0b36abccfaabd1c9",
+          "sites": {
+            "battle_begin": {
+              "address": 134282652,
+              "capture_contract": "Callback selected by battle-start flow; resets/moves save blocks and allocates battle resources, then initializes normal/multi battle; void. Capture ENTRY before relocation, not an initialized party snapshot. One callback invocation; event dedupe/battle-type qualification remains the consumer's duty. Address corroboration: BR docs/rr_reference/GAME_HEAP_RESERVATION.md:48-49; first BL targets 0804C0A4.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "10B53CF081F91EF04BF924F007F825F0",
+                "rom_offset": 64924
+              },
+              "expected_hex": "10B53CF081F91EF04BF924F007F8",
+              "function": {
+                "address": 134282652,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 134,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_InitBattle",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:1551",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 64924,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L612-L646",
+              "symbol": "CB2_InitBattle"
+            },
+            "battle_end": {
+              "address": 134306764,
+              "capture_contract": "Battle main callback: sets result, clears inBattle, restores callback1, handles roamer/Pokerus and installs saved callback2; void. Capture BEFORE final SetMainCallback2 on completion branch, after inBattle clear; link-wait branch bypasses it. This is not an exp/evolution-settled checkpoint. Entry address comes from RETURN_FROM_BATTLE_ADDR.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B5204E306802252840002806D11E4C",
+                "rom_offset": 88920
+              },
+              "expected_hex": "08488068EAF7B8FC70BC01BC",
+              "function": {
+                "address": 134306648,
+                "anchor_offset": 116,
+                "capture_offset": 120,
+                "size": 168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReturnFromBattleToOverworld",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:1641",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 89036,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L3915-L3940",
+              "symbol": "ReturnFromBattleToOverworld"
+            },
+            "capture_wild": {
+              "address": 134404132,
+              "capture_contract": "Battle opcode 0xF0; +0x28 is immediately AFTER BL GiveMonToPlayer (+0x24). R0 holds party/PC/failure result before shift. Destination has been assigned on success; read party/box identity using profile facts. Do not count failure as acquisition or emit twice with mon_given. This is acquired-mon placement, not a ball animation witness.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B419488146194D2878",
+                "rom_offset": 186368
+              },
+              "expected_hex": "13F076F9000600285DD09EF0C1FF0006",
+              "function": {
+                "address": 134404096,
+                "anchor_offset": 36,
+                "capture_offset": 40,
+                "size": 348,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_givecaughtmon",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:1969",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R8",
+                "R9"
+              ],
+              "rom_offset": 186404,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L9617-L9645",
+              "symbol": "Cmd_givecaughtmon"
+            },
+            "evolve_species_store": {
+              "address": 135064934,
+              "capture_contract": "Task_EvolutionScene EVOSTATE_SET_MON_EVOLVED; +0x492 immediately after SetMonData(MON_DATA_SPECIES), whose BL is +0x48E. R9=mon, R4=task. Stats/re-nickname/dex updates FOLLOW, so retain species publication then settle; do not call this final evolution completion. Cancellation bypasses this state.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B557464E464546E0B486B00006070E",
+                "rom_offset": 846044
+              },
+              "expected_hex": "48460B2171F707FB48466FF784FB6189",
+              "function": {
+                "address": 135063772,
+                "anchor_offset": 1162,
+                "capture_offset": 1170,
+                "size": 3168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_EvolutionScene",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:8402",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 847206,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L764-L785",
+              "symbol": "Task_EvolutionScene"
+            },
+            "faint": {
+              "address": 134353860,
+              "capture_contract": "Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store (+0x11A); saturated counter skips the store but reaches this same point. Player-side, present-battler and HP-zero branches precede it. R7/R8 point at gActiveBattler. Snapshot battler/party identity now; consumer dedupes the faint transition; not every entry is a faint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B0184802689178",
+                "rom_offset": 135852
+              },
+              "expected_hex": "0130087038780CF02DFF2DE0C43B0202",
+              "function": {
+                "address": 134353580,
+                "anchor_offset": 280,
+                "capture_offset": 284,
+                "size": 756,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_tryfaintmon",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:1735",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R8",
+                "R13"
+              ],
+              "rom_offset": 136132,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L2831-L2905",
+              "symbol": "Cmd_tryfaintmon"
+            },
+            "frame_control": {
+              "address": 134219024,
+              "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B18479D26EB080FD13BF1A9F90006",
+                "rom_offset": 1296
+              },
+              "expected_hex": "004B18479D26EB080FD13BF1A9F90006",
+              "function": {
+                "address": 134219024,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 52,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CallCallbacks",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:946",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1296,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
+              "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2583",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
+            },
+            "map_load": {
+              "address": 134571884,
+              "capture_contract": "CB2_LoadMap only schedules callbacks; its return is NOT completed load. Normal CB2_LoadMap2 calls DoMapLoadLoop, then restores field callbacks; Quest Log branch does something else. Capture BEFORE final SetMainCallback2 on normal branch. Other map/load/return paths remain uncovered. BPRE.ld:1074 gives dispatcher 0805671C; its savedCallback literal at 08056748 is 0805674D.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B5064800F084FBBCF0F8FF0006000E",
+                "rom_offset": 354124
+              },
+              "expected_hex": "00F04AF90348FFF735FF0348A9F7E4FE",
+              "function": {
+                "address": 134571852,
+                "anchor_offset": 32,
+                "capture_offset": 44,
+                "size": 60,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_LoadMap2",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2977",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 354156,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1568-L1591",
+              "symbol": "CB2_LoadMap2 normal completion branch"
+            },
+            "mon_given": {
+              "address": 134482816,
+              "capture_contract": "Known caller Cmd_givecaughtmon; script gift chain ScrCmd_givemon -> ScriptGiveMon (scrcmd.c:1734-1755), full call census OPEN. Sets OT name/gender/id then copies into party or SendMonToPC. R0 result distinguishes party/PC/failure; common pop at +0x76 from inferred function entry 08040B14. Capture R0/R6 BEFORE pop. Caller context is required before classifying gift versus catch; zero failure is NOT inferred.",
+              "capture_offset": 10,
+              "context": {
+                "expected_hex": "70B5061C094C22680721FFF72DFC2268",
+                "rom_offset": 264980
+              },
+              "expected_hex": "301C00F005F80006000E70BC02BC0847",
+              "function": {
+                "address": 134482708,
+                "anchor_offset": 108,
+                "capture_offset": 118,
+                "size": 124,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "GiveMonToPlayer",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2395",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13"
+              ],
+              "rom_offset": 265088,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3686-L3740",
+              "symbol": "GiveMonToPlayer common return"
+            },
+            "pc_box_place": {
+              "address": 134819864,
+              "capture_contract": "SetPlacedMonData common epilogue +0x4C AFTER SetBoxMonAt call on box path. Party path also joins here; REQUIRE R6<14, valid R7<30. R6/R7 name destination; moving-mon origin identifies deposit versus box rearrange/shift. Do not duplicate pc_deposit.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "301C391CF8F7CAFDF0BC01BC0047",
+              "function": {
+                "address": 134819796,
+                "anchor_offset": 68,
+                "capture_offset": 76,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6321",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 602136,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655",
+              "symbol": "SetPlacedMonData"
+            },
+            "pc_deposit": {
+              "address": 134820188,
+              "capture_contract": "TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), so snapshot the actual transfer and do not assume final party slot numbering yet.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B50006060E301CF9F70CF80004040C",
+                "rom_offset": 602340
+              },
+              "expected_hex": "012175F715F9012070BC02BC08470000",
+              "function": {
+                "address": 134820068,
+                "anchor_offset": 120,
+                "capture_offset": 128,
+                "size": 144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TryStorePartyMonInBox",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6324",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R6"
+              ],
+              "rom_offset": 602460,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L658-L682",
+              "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 134482988,
+              "capture_contract": "SendMonToPC called by GiveMonToPlayer; +0xA0 common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only valid on success; R8 source mon. This is acquisition-to-storage, not every PC menu operation.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5474680B480461A482DF0E5FC0006",
+                "rom_offset": 265104
+              },
+              "expected_hex": "BFD1022008BC9846F0BC02BC0847",
+              "function": {
+                "address": 134482832,
+                "anchor_offset": 156,
+                "capture_offset": 160,
+                "size": 170,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SendMonToPC",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2396",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R6",
+                "R8"
+              ],
+              "rom_offset": 265260,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3708-L3740",
+              "symbol": "SendMonToPC"
+            },
+            "pc_release": {
+              "address": 134820432,
+              "capture_contract": "ReleaseMon +0x3E: after PurgeMonOrBoxMon (or moving flag clear), before display refresh. One confirmed release; resolve key from pc_release_begin snapshot, never from zeroed bytes. This must not be classified as party_to_box; party compaction may follow.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "00B5FDF757FF03490878002804D00020",
+                "rom_offset": 602648
+              },
+              "expected_hex": "101CFFF7EDFE00F0DBFB01BC0047",
+              "function": {
+                "address": 134820376,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6328",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13"
+              ],
+              "rom_offset": 602704,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
+              "symbol": "ReleaseMon"
+            },
+            "pc_release_begin": {
+              "address": 134820376,
+              "capture_contract": "ReleaseMon entry, called after permission/confirmation in Task_ReleaseMon (tasks.c:1302). Capture pre-removal identity and moving/party/box context via profile facts BEFORE purge. Pairs with pc_release; moving-mon release may only clear the carried flag.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B5FDF757FF03490878002804D00020",
+                "rom_offset": 602648
+              },
+              "expected_hex": "00B5FDF757FF03490878002804D00020",
+              "function": {
+                "address": 134820376,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6328",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13",
+                "R14"
+              ],
+              "rom_offset": 602648,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
+              "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 134819826,
+              "capture_contract": "SetPlacedMonData party branch: +0x24 after memcpy(gPlayerParty[position],movingMon,100), BEFORE branch to epilogue. R6=14, R7=party destination. Called by placement/shift paths; origin may be party rather than box. Correlate moving-mon origin/caller before emitting box_to_party. One record placement, not a whole animation or batch completion.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 602068
+              },
+              "expected_hex": "642252F140FF12E0",
+              "function": {
+                "address": 134819796,
+                "anchor_offset": 30,
+                "capture_offset": 36,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6321",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 602098,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655",
+              "symbol": "SetPlacedMonData"
+            },
+            "poison_faint": {
+              "address": 134874718,
+              "capture_contract": "DoPoisonFieldEffect +0x4E immediately after SetMonData(HP) BL +0x4A. R4=current mon, [R13]=new HP. REQUIRE new HP==0 AND paired old HP>0; source also writes zero for already-fainted mons. Capture before later poison task clears status/whiteout heals (field_poison.c:32-81). One edge per actual newly fainted mon.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 656920
+              },
+              "expected_hex": "39216A469FF78BFE01376434013D002D",
+              "function": {
+                "address": 134874648,
+                "anchor_offset": 70,
+                "capture_offset": 78,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6887",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R13",
+                "R5"
+              ],
+              "rom_offset": 656990,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "poison_hp_before": {
+              "address": 134874696,
+              "capture_contract": "DoPoisonFieldEffect +0x34 after GetMonData(HP), before stack store/decrement. R0=old HP, R4=mon pointer. Pair by pointer and ordered invocation/iteration with poison_faint, not merely frame; up to six iterations may occur in one frame.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 656920
+              },
+              "expected_hex": "9FF7CEFA0090002803D00138",
+              "function": {
+                "address": 134874648,
+                "anchor_offset": 48,
+                "capture_offset": 52,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:6887",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "rom_offset": 656968,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "save": {
+              "address": 135111580,
+              "capture_contract": "Save-menu callers supply saveType. Serializes then writes; returns OK=1 or ERROR=255. Capture at common pop BEFORE R5 restored: require R0==1 AND R5==SAVE_NORMAL(0). One observation per invocation, not every call is full save. BPRE.ld:1708 gives entry 080DA364; LG byte search moves it to 080DA338. RR wrapper byte pin does NOT qualify its relocated writer/extension sectors or flash-witness completeness.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "30B50006050E09480468012C09D1281C",
+                "rom_offset": 893796
+              },
+              "expected_hex": "02480480012030BC02BC084720540003",
+              "function": {
+                "address": 135111524,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 72,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TrySavingData",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:8717",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R13"
+              ],
+              "rom_offset": 893852,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/save.c#L650-L720",
+              "symbol": "TrySavingData successful-return preparation"
+            },
+            "trade_begin": {
+              "address": 134547468,
+              "capture_contract": "TradeMons entry captures player slot R0 and partner slot R1 plus pre-swap identities. Same primitive called by NPC cable/wireless animations (:1776,:2276) and link CB2_UpdateLinkTrade (:2533). Preserve caller/trade context; distinguish NPC and SLink.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B1847AD10EB0881B00C1C0006000E",
+                "rom_offset": 329740
+              },
+              "expected_hex": "004B1847AD10EB0881B00C1C0006000E",
+              "function": {
+                "address": 134547468,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2810",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R1",
+                "R14"
+              ],
+              "rom_offset": 329740,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084",
+              "symbol": "TradeMons"
+            },
+            "trade_done": {
+              "address": 134547654,
+              "capture_contract": "TradeMons +0xBE before stack restoration: BOTH party/enemy copies, friendship/mail/dex updates have finished. R7=received player mon, R9=player slot. NPC cable/wireless callers (:1776,:2276) and link caller (:2533) share this primitive, not distinct copies. This is RECORD-SWAP completion, NOT native scene/evolution completion; do not emit wire trade_done until that separate lifecycle is complete. Use trade_begin for old key.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "004B1847AD10EB0881B00C1C0006000E",
+                "rom_offset": 329740
+              },
+              "expected_hex": "FFF79BFF01B018BC9846A146F0BC01BC",
+              "function": {
+                "address": 134547468,
+                "anchor_offset": 186,
+                "capture_offset": 190,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2810",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R9",
+                "R5"
+              ],
+              "rom_offset": 329926,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084",
+              "symbol": "TradeMons"
+            },
+            "trade_evolve_species_store": {
+              "address": 135067860,
+              "capture_contract": "Task_TradeEvolutionScene T_EVOSTATE_SET_MON_EVOLVED; +0x3A0 after SetMonData species BL +0x39C. R8=mon, R4=task. Stats/name/dex follow. Correlate trade lease to suppress ordinary key_change during SLink apply.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B5474680B488B00006060E1C4DB000",
+                "rom_offset": 849212
+              },
+              "expected_hex": "40460B2170F750FD40466EF7CDFD6189",
+              "function": {
+                "address": 135066940,
+                "anchor_offset": 920,
+                "capture_offset": 928,
+                "size": 2832,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_TradeEvolutionScene",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:8403",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R8",
+                "R4"
+              ],
+              "rom_offset": 850132,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L1206-L1219",
+              "symbol": "Task_TradeEvolutionScene"
+            },
+            "whiteout": {
+              "address": 134571762,
+              "capture_contract": "Whiteout callback repeats until ++state >=120; calls DoWhiteOut, reloads map and restores field callbacks; void. Capture BEFORE final SetMainCallback2 exclusively on completion branch (early returns bypass). Party may already be healed; not a faint-time HP witness. BPRE.ld:1073 supplies entry 080566A4.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B581B017498720C000091808780130",
+                "rom_offset": 353956
+              },
+              "expected_hex": "00F087F90748FFF772FF0648A9F721FF",
+              "function": {
+                "address": 134571684,
+                "anchor_offset": 78,
+                "capture_offset": 90,
+                "size": 120,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_WhiteOut",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2975",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 354034,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1545-L1566",
+              "symbol": "CB2_WhiteOut completion branch"
+            }
+          }
         }
       }
     },
@@ -792,6 +1453,33 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2583",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 134571884,
@@ -1142,6 +1830,640 @@
               "capture_offset": 4,
               "context": {
                 "expected_hex": "F0B54F464646C0B481B00C1C0006000E",
+                "rom_offset": 329740
+              },
+              "expected_hex": "FFF79BFF01B018BC9846A146F0BC01BC",
+              "function": {
+                "address": 134547468,
+                "anchor_offset": 186,
+                "capture_offset": 190,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2810",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R9",
+                "R5"
+              ],
+              "rom_offset": 329926,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084",
+              "symbol": "TradeMons"
+            },
+            "trade_evolve_species_store": {
+              "address": 135067816,
+              "capture_contract": "Task_TradeEvolutionScene T_EVOSTATE_SET_MON_EVOLVED; +0x3A0 after SetMonData species BL +0x39C. R8=mon, R4=task. Stats/name/dex follow. Correlate trade lease to suppress ordinary key_change during SLink apply.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B5474680B488B00006060E1C4DB000",
+                "rom_offset": 849168
+              },
+              "expected_hex": "40460B2170F766FD40466EF7E3FD6189",
+              "function": {
+                "address": 135066896,
+                "anchor_offset": 920,
+                "capture_offset": 928,
+                "size": 2832,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_TradeEvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:8405",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R8",
+                "R4"
+              ],
+              "rom_offset": 850088,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L1206-L1219",
+              "symbol": "Task_TradeEvolutionScene"
+            },
+            "whiteout": {
+              "address": 134571762,
+              "capture_contract": "Whiteout callback repeats until ++state >=120; calls DoWhiteOut, reloads map and restores field callbacks; void. Capture BEFORE final SetMainCallback2 exclusively on completion branch (early returns bypass). Party may already be healed; not a faint-time HP witness. BPRE.ld:1073 supplies entry 080566A4.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B581B017498720C000091808780130",
+                "rom_offset": 353956
+              },
+              "expected_hex": "00F087F90748FFF772FF0648A9F721FF",
+              "function": {
+                "address": 134571684,
+                "anchor_offset": 78,
+                "capture_offset": 90,
+                "size": 120,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_WhiteOut",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2975",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 354034,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1545-L1566",
+              "symbol": "CB2_WhiteOut completion branch"
+            }
+          }
+        },
+        "companion": {
+          "production": true,
+          "rom_md5": "212450676d820bc85fbd6274868f5fed",
+          "rom_sha1": "e651983a7e0d3cbd8810c76252755d2f09bd9bf0",
+          "sites": {
+            "battle_begin": {
+              "address": 134282652,
+              "capture_contract": "Callback selected by battle-start flow; resets/moves save blocks and allocates battle resources, then initializes normal/multi battle; void. Capture ENTRY before relocation, not an initialized party snapshot. One callback invocation; event dedupe/battle-type qualification remains the consumer's duty. Address corroboration: BR docs/rr_reference/GAME_HEAP_RESERVATION.md:48-49; first BL targets 0804C0A4.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "10B53CF081F91EF04BF924F007F825F0",
+                "rom_offset": 64924
+              },
+              "expected_hex": "10B53CF081F91EF04BF924F007F8",
+              "function": {
+                "address": 134282652,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 134,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_InitBattle",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:1551",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 64924,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L612-L646",
+              "symbol": "CB2_InitBattle"
+            },
+            "battle_end": {
+              "address": 134306764,
+              "capture_contract": "Battle main callback: sets result, clears inBattle, restores callback1, handles roamer/Pokerus and installs saved callback2; void. Capture BEFORE final SetMainCallback2 on completion branch, after inBattle clear; link-wait branch bypasses it. This is not an exp/evolution-settled checkpoint. Entry address comes from RETURN_FROM_BATTLE_ADDR.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B5204E306802252840002806D11E4C",
+                "rom_offset": 88920
+              },
+              "expected_hex": "08488068EAF7B8FC70BC01BC",
+              "function": {
+                "address": 134306648,
+                "anchor_offset": 116,
+                "capture_offset": 120,
+                "size": 168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReturnFromBattleToOverworld",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:1641",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 89036,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L3915-L3940",
+              "symbol": "ReturnFromBattleToOverworld"
+            },
+            "capture_wild": {
+              "address": 134404132,
+              "capture_contract": "Battle opcode 0xF0; +0x28 is immediately AFTER BL GiveMonToPlayer (+0x24). R0 holds party/PC/failure result before shift. Destination has been assigned on success; read party/box identity using profile facts. Do not count failure as acquisition or emit twice with mon_given. This is acquired-mon placement, not a ball animation witness.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B419488146194D2878",
+                "rom_offset": 186368
+              },
+              "expected_hex": "13F076F9000600285DD09EF0ABFF0006",
+              "function": {
+                "address": 134404096,
+                "anchor_offset": 36,
+                "capture_offset": 40,
+                "size": 348,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_givecaughtmon",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:1969",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R8",
+                "R9"
+              ],
+              "rom_offset": 186404,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L9617-L9645",
+              "symbol": "Cmd_givecaughtmon"
+            },
+            "evolve_species_store": {
+              "address": 135064890,
+              "capture_contract": "Task_EvolutionScene EVOSTATE_SET_MON_EVOLVED; +0x492 immediately after SetMonData(MON_DATA_SPECIES), whose BL is +0x48E. R9=mon, R4=task. Stats/re-nickname/dex updates FOLLOW, so retain species publication then settle; do not call this final evolution completion. Cancellation bypasses this state.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B557464E464546E0B486B00006070E",
+                "rom_offset": 846000
+              },
+              "expected_hex": "48460B2171F71DFB48466FF79AFB6189",
+              "function": {
+                "address": 135063728,
+                "anchor_offset": 1162,
+                "capture_offset": 1170,
+                "size": 3168,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Task_EvolutionScene",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:8404",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R9",
+                "R4"
+              ],
+              "rom_offset": 847162,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/evolution_scene.c#L764-L785",
+              "symbol": "Task_EvolutionScene"
+            },
+            "faint": {
+              "address": 134353860,
+              "capture_contract": "Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store (+0x11A); saturated counter skips the store but reaches this same point. Player-side, present-battler and HP-zero branches precede it. R7/R8 point at gActiveBattler. Snapshot battler/party identity now; consumer dedupes the faint transition; not every entry is a faint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54F464646C0B481B0184802689178",
+                "rom_offset": 135852
+              },
+              "expected_hex": "0130087038780CF02DFF2DE0C43B0202",
+              "function": {
+                "address": 134353580,
+                "anchor_offset": 280,
+                "capture_offset": 284,
+                "size": 756,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "Cmd_tryfaintmon",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:1735",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R8",
+                "R13"
+              ],
+              "rom_offset": 136132,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_script_commands.c#L2831-L2905",
+              "symbol": "Cmd_tryfaintmon"
+            },
+            "frame_control": {
+              "address": 134219024,
+              "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B18479129EB080FD13BF195F90006",
+                "rom_offset": 1296
+              },
+              "expected_hex": "004B18479129EB080FD13BF195F90006",
+              "function": {
+                "address": 134219024,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 52,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CallCallbacks",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:946",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1296,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
+              "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2583",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
+            },
+            "map_load": {
+              "address": 134571884,
+              "capture_contract": "CB2_LoadMap only schedules callbacks; its return is NOT completed load. Normal CB2_LoadMap2 calls DoMapLoadLoop, then restores field callbacks; Quest Log branch does something else. Capture BEFORE final SetMainCallback2 on normal branch. Other map/load/return paths remain uncovered. BPRE.ld:1074 gives dispatcher 0805671C; its savedCallback literal at 08056748 is 0805674D.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "00B5064800F084FBBCF0E4FF0006000E",
+                "rom_offset": 354124
+              },
+              "expected_hex": "00F04AF90348FFF735FF0348A9F7E4FE",
+              "function": {
+                "address": 134571852,
+                "anchor_offset": 32,
+                "capture_offset": 44,
+                "size": 60,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "CB2_LoadMap2",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2977",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15"
+              ],
+              "rom_offset": 354156,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/overworld.c#L1568-L1591",
+              "symbol": "CB2_LoadMap2 normal completion branch"
+            },
+            "mon_given": {
+              "address": 134482816,
+              "capture_contract": "Known caller Cmd_givecaughtmon; script gift chain ScrCmd_givemon -> ScriptGiveMon (scrcmd.c:1734-1755), full call census OPEN. Sets OT name/gender/id then copies into party or SendMonToPC. R0 result distinguishes party/PC/failure; common pop at +0x76 from inferred function entry 08040B14. Capture R0/R6 BEFORE pop. Caller context is required before classifying gift versus catch; zero failure is NOT inferred.",
+              "capture_offset": 10,
+              "context": {
+                "expected_hex": "70B5061C094C22680721FFF72DFC2268",
+                "rom_offset": 264980
+              },
+              "expected_hex": "301C00F005F80006000E70BC02BC0847",
+              "function": {
+                "address": 134482708,
+                "anchor_offset": 108,
+                "capture_offset": 118,
+                "size": 124,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "GiveMonToPlayer",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2395",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13"
+              ],
+              "rom_offset": 265088,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3686-L3740",
+              "symbol": "GiveMonToPlayer common return"
+            },
+            "pc_box_place": {
+              "address": 134819820,
+              "capture_contract": "SetPlacedMonData common epilogue +0x4C AFTER SetBoxMonAt call on box path. Party path also joins here; REQUIRE R6<14, valid R7<30. R6/R7 name destination; moving-mon origin identifies deposit versus box rearrange/shift. Do not duplicate pc_deposit.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 602024
+              },
+              "expected_hex": "301C391CF8F7CAFDF0BC01BC0047",
+              "function": {
+                "address": 134819752,
+                "anchor_offset": 68,
+                "capture_offset": 76,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6323",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 602092,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655",
+              "symbol": "SetPlacedMonData"
+            },
+            "pc_deposit": {
+              "address": 134820144,
+              "capture_contract": "TryStorePartyMonInBox called by Task_DepositMenu (tasks.c:1214); +0x80 common return with R0 bool, R6 box and R4 slot-in-high-byte on success. Requires R0==1. Moving-mon and party-selected branches converge; task compacts later (tasks.c:1232), so snapshot the actual transfer and do not assume final party slot numbering yet.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "70B50006060E301CF9F70CF80004040C",
+                "rom_offset": 602296
+              },
+              "expected_hex": "012175F72BF9012070BC02BC08470000",
+              "function": {
+                "address": 134820024,
+                "anchor_offset": 120,
+                "capture_offset": 128,
+                "size": 144,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TryStorePartyMonInBox",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6326",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R6"
+              ],
+              "rom_offset": 602416,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L658-L682",
+              "symbol": "TryStorePartyMonInBox"
+            },
+            "pc_move": {
+              "address": 134482988,
+              "capture_contract": "SendMonToPC called by GiveMonToPlayer; +0xA0 common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); R5/R6 destination box/slot only valid on success; R8 source mon. This is acquisition-to-storage, not every PC menu operation.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5474680B480461A482DF0E5FC0006",
+                "rom_offset": 265104
+              },
+              "expected_hex": "BFD1022008BC9846F0BC02BC0847",
+              "function": {
+                "address": 134482832,
+                "anchor_offset": 156,
+                "capture_offset": 160,
+                "size": 170,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SendMonToPC",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2396",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R6",
+                "R8"
+              ],
+              "rom_offset": 265260,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3708-L3740",
+              "symbol": "SendMonToPC"
+            },
+            "pc_release": {
+              "address": 134820388,
+              "capture_contract": "ReleaseMon +0x3E: after PurgeMonOrBoxMon (or moving flag clear), before display refresh. One confirmed release; resolve key from pc_release_begin snapshot, never from zeroed bytes. This must not be classified as party_to_box; party compaction may follow.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "00B5FDF757FF03490878002804D00020",
+                "rom_offset": 602604
+              },
+              "expected_hex": "101CFFF7EDFE00F0DBFB01BC0047",
+              "function": {
+                "address": 134820332,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6330",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13"
+              ],
+              "rom_offset": 602660,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
+              "symbol": "ReleaseMon"
+            },
+            "pc_release_begin": {
+              "address": 134820332,
+              "capture_contract": "ReleaseMon entry, called after permission/confirmation in Task_ReleaseMon (tasks.c:1302). Capture pre-removal identity and moving/party/box context via profile facts BEFORE purge. Pairs with pc_release; moving-mon release may only clear the carried flag.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "00B5FDF757FF03490878002804D00020",
+                "rom_offset": 602604
+              },
+              "expected_hex": "00B5FDF757FF03490878002804D00020",
+              "function": {
+                "address": 134820332,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 76,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "ReleaseMon",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6330",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R13",
+                "R14"
+              ],
+              "rom_offset": 602604,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L716-L733",
+              "symbol": "ReleaseMon"
+            },
+            "pc_withdraw": {
+              "address": 134819782,
+              "capture_contract": "SetPlacedMonData party branch: +0x24 after memcpy(gPlayerParty[position],movingMon,100), BEFORE branch to epilogue. R6=14, R7=party destination. Called by placement/shift paths; origin may be party rather than box. Correlate moving-mon origin/caller before emitting box_to_party. One record placement, not a whole animation or batch completion.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "F0B50006060E09060F0E0E2E12D10649",
+                "rom_offset": 602024
+              },
+              "expected_hex": "642252F144FF12E0",
+              "function": {
+                "address": 134819752,
+                "anchor_offset": 30,
+                "capture_offset": 36,
+                "size": 92,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6323",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R6",
+                "R7"
+              ],
+              "rom_offset": 602054,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon_storage_system_data.c#L625-L655",
+              "symbol": "SetPlacedMonData"
+            },
+            "poison_faint": {
+              "address": 134874674,
+              "capture_contract": "DoPoisonFieldEffect +0x4E immediately after SetMonData(HP) BL +0x4A. R4=current mon, [R13]=new HP. REQUIRE new HP==0 AND paired old HP>0; source also writes zero for already-fainted mons. Capture before later poison task clears status/whiteout heals (field_poison.c:32-81). One edge per actual newly fainted mon.",
+              "capture_offset": 8,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 656876
+              },
+              "expected_hex": "39216A469FF7A1FE01376434013D002D",
+              "function": {
+                "address": 134874604,
+                "anchor_offset": 70,
+                "capture_offset": 78,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6889",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R13",
+                "R5"
+              ],
+              "rom_offset": 656946,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "poison_hp_before": {
+              "address": 134874652,
+              "capture_contract": "DoPoisonFieldEffect +0x34 after GetMonData(HP), before stack store/decrement. R0=old HP, R4=mon pointer. Pair by pointer and ordered invocation/iteration with poison_faint, not merely frame; up to six iterations may occur in one frame.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B581B0194C002700260525201C0521",
+                "rom_offset": 656876
+              },
+              "expected_hex": "9FF7E4FA0090002803D00138",
+              "function": {
+                "address": 134874604,
+                "anchor_offset": 48,
+                "capture_offset": 52,
+                "size": 130,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:6889",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R5"
+              ],
+              "rom_offset": 656924,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/field_poison.c#L92-L118",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "save": {
+              "address": 135111536,
+              "capture_contract": "Save-menu callers supply saveType. Serializes then writes; returns OK=1 or ERROR=255. Capture at common pop BEFORE R5 restored: require R0==1 AND R5==SAVE_NORMAL(0). One observation per invocation, not every call is full save. BPRE.ld:1708 gives entry 080DA364; LG byte search moves it to 080DA338. RR wrapper byte pin does NOT qualify its relocated writer/extension sectors or flash-witness completeness.",
+              "capture_offset": 6,
+              "context": {
+                "expected_hex": "30B50006050E09480468012C09D1281C",
+                "rom_offset": 893752
+              },
+              "expected_hex": "02480480012030BC02BC084720540003",
+              "function": {
+                "address": 135111480,
+                "anchor_offset": 56,
+                "capture_offset": 62,
+                "size": 72,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TrySavingData",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:8719",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R13"
+              ],
+              "rom_offset": 893808,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/save.c#L650-L720",
+              "symbol": "TrySavingData successful-return preparation"
+            },
+            "trade_begin": {
+              "address": 134547468,
+              "capture_contract": "TradeMons entry captures player slot R0 and partner slot R1 plus pre-swap identities. Same primitive called by NPC cable/wireless animations (:1776,:2276) and link CB2_UpdateLinkTrade (:2533). Preserve caller/trade context; distinguish NPC and SLink.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "004B1847A113EB0881B00C1C0006000E",
+                "rom_offset": 329740
+              },
+              "expected_hex": "004B1847A113EB0881B00C1C0006000E",
+              "function": {
+                "address": 134547468,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "size": 232,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2810",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R1",
+                "R14"
+              ],
+              "rom_offset": 329740,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/trade_scene.c#L1054-L1084",
+              "symbol": "TradeMons"
+            },
+            "trade_done": {
+              "address": 134547654,
+              "capture_contract": "TradeMons +0xBE before stack restoration: BOTH party/enemy copies, friendship/mail/dex updates have finished. R7=received player mon, R9=player slot. NPC cable/wireless callers (:1776,:2276) and link caller (:2533) share this primitive, not distinct copies. This is RECORD-SWAP completion, NOT native scene/evolution completion; do not emit wire trade_done until that separate lifecycle is complete. Use trade_begin for old key.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "004B1847A113EB0881B00C1C0006000E",
                 "rom_offset": 329740
               },
               "expected_hex": "FFF79BFF01B018BC9846A146F0BC01BC",

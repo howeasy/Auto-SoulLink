@@ -1,0 +1,96 @@
+# gen3_final_cut row=trade_lock_probe_gen3_rr_as_a item=RR_explicit_recovery_qualification cut=617c7360e05788fb46f96ef7b83c2837b47365f9
+# lane=C:\slink-wt\g3-rr-finish
+# command: python tools/e2e_duo.py --game gen3_rr --scenario trade_lock_probe_gen3 --keep-data --lane rr-lock-617c7360   (cwd=C:\slink-wt\g3-rr-finish)
+# env: SLINK_STATE_DIR=C:\slink-wt\g3-rr-finish\patch\build\rr-state-lock-617c7360 SLINK_JOURNAL_PROBE_ROOT=C:\slink-wt\g3-rr-finish
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T09:53:50 cpu=26% emuhawk=0 python=3
+start_utc=2026-09-30T13:53:48Z tracked_clean_before=True
+
+========== scenario: trade_lock_probe_gen3 ==========
+[duo] trade_lock_probe_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=617c7360e05788fb46f96ef7b83c2837b47365f9
+[duo] server up: tcp=58008 http=58009 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_lock_probe_gen3_gg7ruepn
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=install-root-probe install_root=C:\slink-wt\g3-rr-finish
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=install-root-probe install_root=C:\slink-wt\g3-rr-finish
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] JOURNAL_PROBE_ROOT root=C:\slink-wt\g3-rr-finish guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard counter_before=0
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] LOCK_HELD pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard started_utc=2026-09-30T13:53:57.8729395Z
+[duo] JOURNAL_PROBE_SERVER_HIDDEN both=true
+[duo] LOCK_HELD pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard started_utc=2026-09-30T13:53:57.8729395Z LOCK_RELEASED pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard released_utc=2026-09-30T13:53:58.1084511Z
+[duo] JOURNAL_PROBE_SERVER_RECOVERED both=true
+[duo] timing orchestrate 149.1s
+[duo] RESULT_LINE a: RESULT: FAIL (no choose_mon)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before a: A traded
+[duo] trade_lock_probe_gen3: a client finished before 'a: A traded' (a: RESULT: FAIL (no choose_mon); b: no RESULT)
+--- trade_lock_probe_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-rr-finish/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TIMEOUT waiting for RX choose_mon nil [tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 34
+RESULT: FAIL (no choose_mon)
+--- trade_lock_probe_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JOURNAL_PROBE_HIDDEN player=b frame=720
+JOURNAL_PROBE_RECOVERED player=b frame=750 party=2
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2733
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 2733
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 2733
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2733
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2733
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2733
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 2733
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2733
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2733
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2733
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2733
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_lock_probe_gen3_gg7ruepn
+
+========== summary ==========
+  trade_lock_probe_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-09-30T13:56:21Z tracked_clean_after=True classification=real

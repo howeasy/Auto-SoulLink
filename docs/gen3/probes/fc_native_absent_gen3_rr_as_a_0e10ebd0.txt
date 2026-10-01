@@ -1,0 +1,89 @@
+# gen3_final_cut row=native_absent_gen3_rr_as_a item=§14_P5_RR_duo cut=0e10ebd07ef1f3e3bed223066406ab5ac0992727
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario native_absent_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T16:01:41 cpu=79% emuhawk=2 python=6
+start_utc=2026-09-27T20:01:39Z tracked_clean_before=True
+
+========== scenario: native_absent_gen3 ==========
+[duo] native_absent_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=0e10ebd07ef1f3e3bed223066406ab5ac0992727
+[duo] server up: tcp=57316 http=57317 data=C:\Users\howar\AppData\Local\Temp\slink_duo_native_absent_gen3_hadkay5x
+[duo] timing server 0.6s
+[duo] cleared 1 stale artifact(s) for native_absent_gen3: e2e_native_absent_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'apply_trade', 'slot': 1, 'old_key': 'F56D8C1D:2BDDC8BF', 'blob_hex': '1D8C6DF5403722D4BBD5D5D5D5D5D5D5D5D50202BCBCFFFFFFFFFF00000000002C05000060000000003203002100E600000000002314000000000000000000000000000000650402FFFFFF3F000000000000000004FF1200120009000900080009000A00', 'token': 'native_absent_a'}
+[duo] queued for b: {'cmd': 'apply_trade', 'slot': 1, 'old_key': 'F56D8C1D:D4223740', 'blob_hex': '1D8C6DF5BFC8DD2BBBD5D5D5D5D5D5D5D5D50202BCFFFFFFFFFFFF00000000002C05000060000000003203002100E600000000002314000000000000000000000000000000650402FFFFFF3F000000000000000004FF1200120009000900080009000A00', 'token': 'native_absent_b'}
+[duo] timing orchestrate 6.1s
+[duo] timing results 0.2s
+[duo] RESULT_LINE a: RESULT: FAIL (the stage completed without a native write)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] native_absent_gen3: a client finished before 'both RESULT lines' (a: RESULT: FAIL (the stage completed without a native write); b: no RESULT)
+--- native_absent_gen3 a result (last 25 lines) ---
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","par
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+RX apply_trade
+[client] [SLink-gen3] apply_trade refused: durable native trade unavailable
+TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:2BDDC8BF","new_species":0,"player":"a","seq":4,"slot":1,"token":"native_absent_a"}
+TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":5,"token":"native_absent_a","withdraw":true}
+WRITES 11
+RESULT: FAIL (the stage completed without a native write)
+--- native_absent_gen3 b result (last 25 lines) ---
+duo instance b scenario=native_absent_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:57316 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (clean by hash) player b -> 127.0.0.1:57316 (rom 964f951a)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:57316
+[client] [SLink] TCP connected to 127.0.0.1:57316
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"clean","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","party":
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+RX link_panel
+JITTER requested=0 applied=0 attempt=1
+RX apply_trade
+[client] [SLink-gen3] apply_trade refused: durable native trade unavailable
+TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:D4223740","new_species":0,"player":"b","seq":6,"slot":1,"token":"native_absent_b"}
+TX menu_result - {"choice":0,"event":"menu_result","player":"b","seq":7,"token":"native_absent_b","withdraw":true}
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_native_absent_gen3_hadkay5x
+
+========== summary ==========
+  native_absent_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-09-27T20:01:49Z tracked_clean_after=True classification=real

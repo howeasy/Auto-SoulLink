@@ -1,0 +1,67 @@
+# gen3_final_cut row=rr_opcode_gates item=G5-GATES-LIVE cut=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+# lane=C:/slink-wt/g3-lane3
+# command: python -m pytest tests/live/test_lua_gates.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane3)
+# env: SLINK_LIVE=1
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T21:25:26 cpu=17% emuhawk=0 python=4
+start_utc=2026-09-28T01:25:25Z tracked_clean_before=True
+.........F.................ssssssssssss[test_lua_gates] ported gates executed: 27/27
+                                                                         [100%]
+================================== FAILURES ===================================
+_____________________ test_gate[test_live_ewramtail.lua] ______________________
+
+gate = 'test_live_ewramtail.lua'
+
+    @pytest.mark.parametrize("gate", _gates())
+    def test_gate(gate):
+>       _run(gate, strict=True)
+
+tests\live\test_lua_gates.py:196: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+gate = 'test_live_ewramtail.lua', strict = True
+
+    def _run(gate, strict):
+        """Run one gate. strict (a PORTED gate under SLINK_LIVE=1): a missing prerequisite FAILS with its
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        problem = prerequisite_problem(gate)
+        if problem:
+            (pytest.fail if strict else pytest.skip)(f"{gate}: prerequisite missing — {problem}")
+        rom = _clean_rom() if gate in CLEAN_ROM_GATES else ROM_REL
+        if strict:
+            EXECUTED.append(gate)
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+                        f"result: {result_path}\n{text[-2000:]}")
+E       AssertionError: test_live_ewramtail.lua did not report PASS
+E         result: C:\slink-wt\g3-lane3\patch\build\ewram_tail_result.txt
+E         bulk read: read_bytes_as_array
+E         watching EWRAM tail 0x0203FE4C..0x0203FFFF (436 bytes)
+E           overworld     900 frames  new-hits=72
+E           pokecenter    900 frames  new-hits=0
+E           door          600 frames  new-hits=0
+E           battle        900 frames  new-hits=0
+E           actionmenu    600 frames  new-hits=0
+E           movemenu      600 frames  new-hits=0
+E           prebattle     600 frames  new-hits=0
+E         FAIL: 72 of 436 tail bytes were written by something else
+E           0x0203FE50..0x0203FE93 (68 B) first seen in overworld at frame 6, got 0x53
+E         the tail is NOT free — do not allocate the §6 page buffer here
+E           [FAIL] EWRAM tail untouched across every scene
+E         RESULT: FAIL ewram_tail (1 checks failed)
+E         
+E       assert False
+
+tests\live\test_lua_gates.py:174: AssertionError
+=========================== short test summary info ===========================
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_BATTLE_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [6] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE; OP_PLAY_FANFARE rides with it) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_GHOST_SPAWN talk-to-ghost) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_SPAWN/DESPAWN_PEER_NPC, the ghost's engine NPC) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:206: got empty parameter set for (gate)
+1 failed, 26 passed, 12 skipped in 104.17s (0:01:44)
+exit=1 end_utc=2026-09-28T01:27:12Z tracked_clean_after=True classification=real

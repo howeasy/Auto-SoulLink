@@ -1,0 +1,31 @@
+{
+  "source_cut": "e632e14efc24f29164004956313ddb54bcecc4e2",
+  "disposition": "Valid linked slot1 selection received Pick a linked POKeMON and reissued picker, then slot7 canceled. Coordinator terminates owned run after irreversible cancellation rather than wait600/1500game-second timeouts. Not a PASS.",
+  "data_dir": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_12eudx38",
+  "files": [
+    {
+      "path": "a_result.txt",
+      "sha256": "4a59d1bcd808373c5bed107a5db2a5d1d61b1862f76698374d20aa60cf0c8d10"
+    },
+    {
+      "path": "b_result.txt",
+      "sha256": "e9b4b834c7be0ead9869d17cb66b9b17c49c7b0710e8b19939d7bb799268e994"
+    },
+    {
+      "path": "slink.log",
+      "sha256": "906de164ae4fd9be9e525af0b792e029184b2aa8cebc583ad76321c644e4137b"
+    },
+    {
+      "path": "server.log",
+      "sha256": "abffadbd2eae75665dc45895c5ca7c00f20110bbf0c71a9b022377b428aabf87"
+    },
+    {
+      "path": "links.json",
+      "sha256": "c553f9a4b6edbba5c40e6b51a82a7cbffa33565f3332cea4764d62465772f8bb"
+    },
+    {
+      "path": "events.json",
+      "sha256": "63e264a537fded9a6d3166c2f875203878a223a72463f52e16e5e121d4211626"
+    }
+  ]
+}

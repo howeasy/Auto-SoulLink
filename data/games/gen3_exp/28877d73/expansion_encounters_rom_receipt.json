@@ -1,0 +1,32 @@
+{
+  "altering_cave_header_count": 9,
+  "area_projection_sha256": "f18cf515fa2e4b0a4cf8d6d86602d068d4283e1fb2f5e459e61750d3cf1fb130",
+  "build": "28877d73",
+  "decoded_slots_sha256": "eb5edeae38c43233b709ba1b60f6a874df2c6fc783dc35760e4811db43ea1bc9",
+  "evidence": "COMPILED_ROM_SOURCE_READBACK",
+  "habitat_counts": {
+    "fishing_mons": 53,
+    "land_mons": 95,
+    "rock_smash_mons": 6,
+    "water_mons": 55
+  },
+  "header_count": 124,
+  "header_order_sha256": "9cb704488d96e35cda8d9d6c3f04f6c45b3659ee097060562bc7e4fa6b15c754",
+  "header_stride": 84,
+  "hidden_pointer_count": 0,
+  "hidden_pointer_sha256": "882993b55cc0c527f0a6059b69b3faf4ef3ccb9cecd3d8847ca0e49a1444debe",
+  "limits": [
+    "Static compiled ROM/source readback, not live encounter behavior",
+    "Area projection selects first header per map; later Altering Cave sets remain unprojected",
+    "Runtime overrides, scripts, randomized ROMs and time-dependent builds remain outside scope"
+  ],
+  "live_verified": false,
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "schema": "gen3-expansion-wild-rom-readback-v1",
+  "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+  "source_pack_sha256": "b60b4e01bd6d44046add5bd944d7b00f5bc5b4273d33ea7a3c4e815d660454f3",
+  "source_projection_match": true,
+  "source_projection_set": 0,
+  "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+  "terminator_count": 1
+}

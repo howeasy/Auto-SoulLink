@@ -1,0 +1,581 @@
+{
+  "emerald": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134766084,
+        "expected_hex": {
+          "clean": "00B5054A51680548814203D1D08D918DFFF7CAFF01BC0047C02200035D5E0808",
+          "companion": "00B5054A51680548814203D1D08D918DFFF7CAFF01BC0047C02200035D5E0808"
+        },
+        "length": 32,
+        "rom_offset": 548356,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134766172,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D000207AF740FCFFF7D8FF002C01D000F082FA10BC01BC00470000D47F0302",
+          "companion": "10B50948C079C009041C002C02D000207AF740FCFFF7D8FF002C01D000F082FA10BC01BC00470000D47F0302"
+        },
+        "length": 44,
+        "rom_offset": 548444,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219036,
+        "expected_hex": {
+          "clean": "10B5074C2068002801D0E6F2D3FD6068002801D0E6F2CEFD10BC01BC00470000C0220003",
+          "companion": "004B184755F6E30801D0E6F2D3FD6068002801D0E6F2CEFD10BC01BC00470000C0220003"
+        },
+        "length": 36,
+        "rom_offset": 1308,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134910220,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921683DF2D5FFA079FF28F5D130BC01BC00470000005E0003",
+          "companion": "30B500F015F80006000E10280AD0074D84002418E400641921683DF2D5FFA079FF28F5D130BC01BC00470000005E0003"
+        },
+        "length": 48,
+        "rom_offset": 692492,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 135607096,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF75CFF0648006800280DD0281C25F01BFE0449FF200880FF2008E0885D0003FC6100039462000302480480012030BC02BC084794620003",
+          "companion": "30B50006050E09480468012C09D1281CFFF75CFF0648006800280DD0281C25F01BFE0449FF200880FF2008E0885D0003FC6100039462000302480480012030BC02BC084794620003"
+        },
+        "length": 72,
+        "rom_offset": 1389368,
+        "symbol": "TrySavingData"
+      }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50355460,
+          "compare": "eq_symbol",
+          "expect": 134463093,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33702706,
+          "compare": "eq",
+          "expect": 2,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33701992,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50355552,
+          "compare": "eq_symbol",
+          "expect": 134575497,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattlerControllerFuncs",
+          "width": 4
+        },
+        {
+          "address": 33697772,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33702020,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33702714,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33702706,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
+        "symbol": "gBattleCommunication",
+        "value": 4,
+        "width": 1
+      },
+      "handoff": {
+        "address": 50355552,
+        "explode": {
+          "head": [
+            {
+              "address": 33702032,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33702056,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33702034,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33702057,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33702036,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33702058,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33702038,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33702059,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33702428,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33702516,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33703068,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33703068,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "pret pokeemerald c65e93f2: include/battle.h BattleStruct.moveTarget/chosenMovePositions; src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1"
+        },
+        "head": [
+          {
+            "address": 33702572,
+            "name": "perish_status",
+            "set": 32,
+            "width": 4
+          },
+          {
+            "address": 33702603,
+            "keep": 240,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33702428,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "PlayerBufferExecCompleted|1 (.sym; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends); ROM body prefix +0..+0xF == the FR/LG pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret pokeemerald c65e93f2 src/battle_controller_player.c:200-214,216",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134575245,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
+      "version": "gen3-battle-v1"
+    },
+    "cpu": {
+      "census": "docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt",
+      "mode": 31,
+      "observed_pc": 134219976,
+      "pc_max": 134219995,
+      "pc_min": 134219948,
+      "symbol": "WaitForVBlank",
+      "thumb": 1
+    },
+    "gift_areas": {
+      "ids": [
+        "lavaridge_town",
+        "mossdeep_city_stevens_house",
+        "route119_weather_institute_2f",
+        "rustboro_city_devon_corp_2f"
+      ],
+      "source": "gen3_emerald/statics.json gift rows x area_map.json, less the starter's wild route_101"
+    },
+    "native": {
+      "abi": 2,
+      "abi_off": 4,
+      "base": 33665024,
+      "busy": 1,
+      "info": 33666784,
+      "info_state_off": 14,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "patch/src/trade_targets/abi.h; native heap reservation",
+      "status_off": 10,
+      "version": "gen3-native-v2"
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50355604,
+        "source": "pokeemerald.sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50355596,
+        "source": "pokeemerald.sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50355600,
+        "source": "pokeemerald.sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50340544,
+        "expect": 134766085,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50340544,
+        "expect": 134766173,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335532,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50340544,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 33696196,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLinkOpen",
+        "width": 1
+      },
+      "link_players_received": {
+        "address": 50344228,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
+      "link_transferring": {
+        "address": 50340532,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33783764,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "script_context_status": {
+        "address": 50335288,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50341632,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50361840,
+        "source": "sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 31,
+        "26": 32,
+        "95": 102
+      },
+      "sound_info": {
+        "address": 50357120,
+        "source": "sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "pokeemerald.sym; pret pokeemerald c65e93f2 include/gba/m4a_internal.h:185-221 (SoundInfo +0x24 musicPlayerHead), :272-315 (MusicPlayerTrack), :327-350 (MusicPlayerInfo, +0x3C musicPlayerNext): the FR offsets",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
+    "sym": "pokeemerald.sym",
+    "tasks": {
+      "address": 50355712,
+      "allowed_overworld_tasks": {
+        "Task_InitUnionRoom": 134310268,
+        "Task_MapNamePopUpWindow": 135088252,
+        "Task_MuddySlope": 134866488,
+        "Task_RunPerStepCallback": 134862988,
+        "Task_RunTimeBasedEvents": 134863112,
+        "Task_SearchForChildOrParent": 134311072,
+        "Task_UnionRoomListen": 134277956,
+        "Task_WeatherMain": 134918576
+      },
+      "count": 16,
+      "excluded_tasks": {
+        "Task_RunPokemonLeagueLightingEffect": "absent from pret/pokeemerald c65e93f2 (0 in pokeemerald.sym, 0 in src/): the Hoenn league rooms create no lighting task, so there is nothing to admit"
+      },
+      "forbidden_inventory": {
+        "CB2_ContestMain": 135103036,
+        "CB2_FrontierPass": 135025720,
+        "CB2_HandleStartMultiBattle": 134446580,
+        "CB2_HandleStartMultiPartnerBattle": 134444120,
+        "CB2_LoadBerryBlender": 134740680,
+        "CB2_PreInitMultiBattle": 134445788,
+        "CB2_StartBlenderLink": 134742040,
+        "CB2_StartBlenderLocal": 134744276,
+        "CB2_StartContest": 135101220,
+        "CB2_UnionRoomBattle": 134327380,
+        "Task_BattlePyramidChooseMonHeldItems": 136025664,
+        "Task_DoRecordMixing": 135167992,
+        "Task_EnterSecretBase": 135172048,
+        "Task_LinkContest_CalculateRound1Em": 136159500,
+        "Task_LinkContest_CalculateTurnOrderEm": 136159544,
+        "Task_LinkContest_CalculateTurnOrderRS": 135235256,
+        "Task_LinkContest_CommunicateAIMonsEm": 136160392,
+        "Task_LinkContest_CommunicateAppealsState": 135253128,
+        "Task_LinkContest_CommunicateCategoryEm": 136160184,
+        "Task_LinkContest_CommunicateCategoryRS": 135252116,
+        "Task_LinkContest_CommunicateFinalStandings": 135252684,
+        "Task_LinkContest_CommunicateLeaderIdsEm": 136159976,
+        "Task_LinkContest_CommunicateLeaderIdsRS": 135253576,
+        "Task_LinkContest_CommunicateMonIdxs": 135252376,
+        "Task_LinkContest_CommunicateMonsEm": 136159584,
+        "Task_LinkContest_CommunicateMonsRS": 135251644,
+        "Task_LinkContest_CommunicateMoveSelections": 135252472,
+        "Task_LinkContest_CommunicateRngEm": 136159812,
+        "Task_LinkContest_CommunicateRngRS": 135251972,
+        "Task_LinkContest_CommunicateRound1Points": 135253824,
+        "Task_LinkContest_CommunicateTurnOrder": 135253968,
+        "Task_LinkContest_Disconnect": 135235468,
+        "Task_LinkContest_FinalizeConnection": 135235348,
+        "Task_LinkContest_Init": 135251328,
+        "Task_LinkContest_InitFlags": 135251420,
+        "Task_LinkContest_SetUpContestEm": 136159080,
+        "Task_LinkContest_SetUpContestRS": 135235004,
+        "Task_LinkContest_StartCommunicateCategoryEm": 136159052,
+        "Task_LinkContest_StartCommunicateLeaderIdsEm": 136159024,
+        "Task_LinkContest_StartCommunicateRngEm": 136158996,
+        "Task_LinkContest_StartCommunicationEm": 136158692,
+        "Task_LinkContest_StartInitFlags": 135251392,
+        "Task_LinkContest_WaitDisconnect": 135235508,
+        "Task_RecordMixing_Main": 135164252,
+        "Task_StartContest": 135234528,
+        "Task_TrainerHillWaitForPaletteFade": 135513532,
+        "Task_WarpOutOfSecretBase": 135173796
+      },
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "source": "pret pokeemerald c65e93f2: src/field_tasks.c:181-194 (SetUpFieldTasks: Task_RunPerStepCallback :138, Task_MuddySlope :880-957, Task_RunTimeBasedEvents :150-177), src/field_weather.c:154-181,216-227 (StartWeather -> Task_WeatherInit -> Task_WeatherMain); Center 1F Union Room background: data/scripts/cable_club.inc:1226-1228 (CableClub_OnResume), src/union_room.c:3294-3377,3465-3497, src/link_rfu_2.c:510-565,2640-2649; map-name popup (E2-CKPT): src/map_name_popup.c:231-426, src/menu.c:521-540, src/overworld.c:822-824,1698-1702,1946-1947; FR/LG league lighting excluded (absent in Emerald)",
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "title": "emerald",
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 33781276,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCallback",
+        "width": 4
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# gen3_final_cut row=probe_gates_emerald item=§13.5_probe cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python -m pytest tests/live/test_gen3_probe_gates.py -q -p no:randomly -rs -k emerald   (cwd=C:/slink-wt/g3-lane)
+# env: SLINK_LIVE=1
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:09:08 cpu=87% emuhawk=0 python=8
+start_utc=2026-09-27T19:09:06Z tracked_clean_before=True
+..                                                                       [100%]
+2 passed, 2 deselected in 40.59s
+exit=0 end_utc=2026-09-27T19:09:53Z tracked_clean_after=True classification=pass

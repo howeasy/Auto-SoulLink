@@ -52,6 +52,23 @@ def _symbols(path: Path) -> dict[str, tuple[int, int]]:
     return result
 
 
+def _pret_source() -> Path:
+    """The pinned pret/pokered checkout every charmap/text assertion reads.
+
+    It is a gitignored cache, so a worktree that has not cloned its own has an ABSENT
+    input, not a wrong one: skip by name (tests/TESTING.md) rather than raising
+    FileNotFoundError out of the middle of a test. SLINK_PRET_SRC points at an existing
+    clone -- the root checkout's, from a worktree -- the way tools/gen1_foundation.py
+    reads it; nothing walks up to find one implicitly, because a test that reaches
+    outside its own checkout for input passes on another lane's artifacts.
+    """
+    source = Path(os.environ.get("SLINK_PRET_SRC") or ROOT / ".cache/pret/pokered")
+    if not source.is_dir():
+        pytest.skip(f"pret/pokered source absent at {source} "
+                    f"(set SLINK_PRET_SRC, or run python tools/build_pret_syms.py)")
+    return source
+
+
 def _rgbds() -> tuple[Path, str]:
     try:
         directory = Path(ensure_rgbds())
@@ -66,6 +83,9 @@ def _rgbds() -> tuple[Path, str]:
 @pytest.fixture(scope="module")
 def built() -> dict[str, bytes]:
     _rgbds()
+    for key in TARGETS:  # absent input skips (tests/TESTING.md); build.py exits on a missing dump
+        if not (ROOT / manifest.ROMS[key][0]).is_file():
+            pytest.skip(f"clean Gen 1 {key} dump absent: {manifest.ROMS[key][0]}")
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py")],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=False)
@@ -138,7 +158,7 @@ def test_defs_match_committed_red_and_blue_symbols_and_pret_tables():
     assert match and [int(value) for value in match[1].split(",")] == species
     # The name alphabet is selected from pinned pret/constants/charmap.asm,
     # not an ASCII range. Match every one of the 256 gate bits.
-    charmap = (ROOT / ".cache/pret/pokered/constants/charmap.asm").read_text(encoding="utf-8")
+    charmap = (_pret_source() / "constants/charmap.asm").read_text(encoding="utf-8")
     allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 é():;[]'-?!.♂♀×/,¥")
     allowed.update(("<PK>", "<MN>", "<DOT>", "<ED>", "'d", "'l", "'s", "'t", "'v", "'r", "'m"))
     glyphs = {int(value, 16) for glyph, value in re.findall(
@@ -152,9 +172,7 @@ def test_defs_match_committed_red_and_blue_symbols_and_pret_tables():
 
 
 def test_text_include_matches_pret_sources():
-    pret_src = ROOT / ".cache/pret/pokered"
-    if not pret_src.is_dir():
-        pytest.skip(f"{pret_src} not present (set SLINK_PRET_SRC or clone pret/pokered there)")
+    pret_src = _pret_source()
     text = (SOURCE / "pret_text.inc").read_text(encoding="utf-8")
     for relative in ("constants/charmap.asm", "macros/const.asm", "macros/scripts/text.asm"):
         upstream = (pret_src / relative).read_text(encoding="utf-8")

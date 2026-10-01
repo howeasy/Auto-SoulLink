@@ -13,18 +13,20 @@ BizHawk Lua test scripts. Three families:
   and per-instance SaveRAM dirs) and orchestrates via the debug HTTP API. This automates the old "two-instance
   E2E (USER gate)".
 
-  `duo_gen1_main.lua` does **not** use prefix-based scenario lookup: its eighteen
+  `duo_gen1_main.lua` does **not** use prefix-based scenario lookup: its twenty
   `gen1_new` scenarios (`link_new`, `ball_gate_new`, `deadzone_new`, `species_clause_new`,
   `type_clause_new`, `reconnect_new`, `trade_new`, `trade_decline_new`,
-  `linked_faint_bench_new`, `linked_faint_active_new`, `explode_new`, `soft_reset_new`,
-  `pc_ops_new`, `changebox_new`, `whiteout_new`, `poison_new`, `rival_swap_new`,
-  `admit_randomized_new`) are `scenarios.<name>()` functions implemented directly in that
-  file. `duo_gen2_main.lua` resolves a scenario as `scenario_gen2_<name>.lua`:
+  `linked_faint_bench_new`, `linked_faint_active_new`, `linked_faint_bench_battle_new`,
+  `explode_new`, `explode_bench_battle_new`, `soft_reset_new`, `pc_ops_new`, `changebox_new`,
+  `whiteout_new`, `poison_new`, `rival_swap_new`, `admit_randomized_new`) are
+  `scenarios.<name>()` functions implemented directly in that file (`tests/e2e/test_duo_gen1_new.py`'s
+  `SCENARIOS` tuple is the same 20, one pytest case each). `duo_gen2_main.lua` resolves a
+  scenario as `scenario_gen2_<name>.lua`:
 
   | File(s) | Games |
   |---|---|
   | `scenario_gen3_*.lua` | Gen 3 battery rows (`gen3_frlg`, `gen3_lgfr`, `gen3_rr`) |
-  | `scenario_gen2_{link,faint}.lua` | Gen 2 (Crystal/Gold/Silver, same-title and cross-title pairings) |
+  | `scenario_gen2_*.lua` | Gen 2 (Crystal/Gold/Silver, same-title and cross-title pairings; `link`/`faint`/`reconnect`/`soft_reset`/`admit_wrong_rom` plus the clause/trade/poison/pc-ops/whiteout/evolution/gift family — see `tools/e2e_duo.py --game gen2_new --list`) |
 
   The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua`
   prefix files and the `gen1`/`gen1_yellow` duo titles they drove no longer exist — deleted
@@ -36,7 +38,7 @@ BizHawk Lua test scripts. Three families:
   Red as A / Blue as B) or `gen2_new` (Crystal/Gold/Silver pairings).
 
   ```bash
-  SLINK_E2E=1 pytest tests/e2e/test_duo.py -q               # Gen 3
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q          # Gen 3
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py -q      # Gen 1 (rewritten client, 18 scenarios)
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q      # Gen 2
   python tools/e2e_duo.py --game gen2_new --scenario link    # one scenario, directly
@@ -91,10 +93,11 @@ fresh probe per the patterns below if new discovery is needed.
 | `test_live_message.lua`, `test_live_msgboxdismiss.lua` | OP_SHOW_MESSAGE (8) field box + dismissal |
 | `test_live_menu.lua`, `test_live_choices.lua` | OP_SHOW_MENU (17) / OP_SHOW_CHOICES (22) |
 | `test_live_choosepartymon.lua` | OP_CHOOSE_PARTY_MON (20) |
-| `test_live_tradescene.lua` | OP_TRADE_SCENE (21) native trade animation |
-| `test_live_setpartymon.lua` | OP_SET_PARTY_MON (19) silent trade fallback |
+| `test_live_tradescene.lua` | RR-DURABLE: OP_TRADE_PREPARE (29) + OP_TRADE_SCENE (21), native pre-save/scene/post-save, witnessed COMMITTED; bare 21 refused |
+| `test_live_setpartymon.lua` | OP_SET_PARTY_MON (18) refused on the durable build (reason 9) |
 | `test_live_createmon.lua`, `test_live_givemon.lua` | OP_CREATE_MON (4) / OP_GIVE_MON |
-| `test_live_enemyparty.lua`, `test_live_enemyparty_route.lua` | OP_SET_ENEMY_PARTY (16) rival swap |
+| `test_live_enemyparty.lua` | OP_CREATE_MON into the enemy party |
+| `test_live_enemyparty_route.lua` | OP_SET_ENEMY_PARTY (16) refused on the durable build (reason 9) |
 | `test_live_forcemove.lua`, `test_live_explode_route.lua` | OP_FORCE_MOVE_SLOT (5) / explode plumbing (native path currently disabled — ROADMAP §2) |
 | `test_live_playse.lua` | OP_PLAY_SE (native sound) |
 | `test_live_spawnnpc.lua`, `test_live_pcnpc.lua` | OP_SPAWN/DESPAWN_PEER_NPC + the Pokémon-Center trade NPC driver |

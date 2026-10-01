@@ -79,6 +79,10 @@ def _display_case(name: str) -> str:
 class Gen1PureRGBAdapter(Gen1Adapter):
     """One per-player view of a pureRGB cartridge (PureRed/PureBlue/PureGreen)."""
 
+    @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        return isinstance(rom_type, str) and rom_type in _ROM_VARIANT
+
     def __init__(self, **kwargs):
         rom_type = kwargs.get("rom_type") or "PureRed"
         if rom_type not in _ROM_VARIANT:
@@ -264,13 +268,17 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         if not dex:
             return ""
         url = self.sprite_src(species_id)
+        # Gen-I PokeAPI art uses a 56px cell in a 96px canvas with 20px padding.
+        # Shared presentation CSS sizes the cell; these ratios are art facts.
         return (
-            '<span style="display:inline-block;width:40px;height:40px;'
-            'overflow:hidden;vertical-align:middle">'
+            '<span class="mon-sprite-frame">'
             f'<img class="mon-sprite" data-species="{dex}" src="{url}" '
-            'width="52" height="52" loading="lazy" alt="" '
+            'width="96" height="96" loading="lazy" alt="" '
             'onerror="this.style.visibility=&#39;hidden&#39;" '
-            'style="image-rendering:pixelated;margin:-6px"></span>'
+            'style="image-rendering:pixelated;max-width:none;'
+            'width:calc(var(--sprite-cell-size,40px) * 96 / 56);'
+            'height:calc(var(--sprite-cell-size,40px) * 96 / 56);'
+            'margin:calc(var(--sprite-cell-size,40px) * -20 / 56)"></span>'
         )
 
     def _sprite_dex(self, species_id: int) -> int:
@@ -336,7 +344,7 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         # and forms) with its generated trainer sets. Known limits (Defense Curl's
         # super-effective block, the optional type-chart toggles, move side effects) are in
         # docs/calc_multigen/PURERGB_MECHANICS.md.
-        return {"gen": 1, "dex": "purergb",
+        return {"name": "pureRGB", "gen": 1, "dex": "purergb",
                 "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
     def move_data(self, move_id: int) -> dict | None:

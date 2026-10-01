@@ -1,0 +1,14 @@
+Gen 3 release gate ΓÇö 5 lanes
+
+[ .. ] unit
+[PASS] unit               4998 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (250s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+[ .. ] shadow-negatives-emerald
+[PASS] shadow-negatives-emerald exit 0  (0s)
+
+Fast lanes passed. The emulator lanes were NOT run, so this is not a release verdict ΓÇö re-run without --quick.

@@ -37,7 +37,10 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
                  -- (fits inside the proposer's SLINK_TRADE_APPLY_FRAMES = 3600 hold with ~29 s left for the
                  -- YES/NO, patch/gen2/src/trade_service.asm; a waiting cartridge picks up an armed APPLY
                  -- within a frame, so this never gives up before the cartridge does)
-                 TRADE_PICKUP_FRAMES = 1800 }
+                 TRADE_PICKUP_FRAMES = 1800,
+                 -- W-4: a parked replace_rival_team gives up this many frames after trainer_battle_start
+                 -- (Gen 1 RIVAL_INIT_FRAMES; rival_tick logs the measured RIVAL_WINDOW)
+                 RIVAL_FRAMES = 240 }
 
 -- Gen 2: the wild battle types whose failure dead-zones the map are exactly the ones the
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
@@ -211,6 +214,11 @@ function Client.new(p)
     -- function every snapshot entry uses; test_gen2_client pins it to gen2_codec.key.
     local mon_key = wire.mon_key
 
+    -- The Gen 2 trainer id on the wire: class * 256 + instance (wOtherTrainerClass/wOtherTrainerID,
+    -- C ram/wram.asm:2728,2736 / G:2194,2204), the pair ReadTrainerParty indexes by. One int keeps
+    -- the shared trainer_battle_start/replace_rival_team contract; gen2_gsc.py decodes it.
+    local function trainer_id_of(trainer) return trainer.class_raw * 256 + trainer.id_raw end
+
     local function current_party() return reads.read_party() end
 
     -- Gen 2: eggs stay off the wire until they hatch (O-15). Each entry keeps its own
@@ -353,6 +361,7 @@ function Client.new(p)
         if self.signals then self.signals:boundary(kind) end
         self.faint_latches, self.battle, self.pending_rescan = {}, nil, false
         self.key_alias, self.retired_alias = nil, {}
+        self:rival_close("the " .. kind .. " boundary")
         -- O-30: a reset/reload leaves the battle; the owed deaths go to the checkpoint (Gen 1 battle_end)
         for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
         self.pending_battle_writes, self.commanded = {}, {}
@@ -381,6 +390,7 @@ function Client.new(p)
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
         self.pending_battle_writes, self.commanded = {}, {}
+        self:rival_close(why)
         self:trade_forget(why)
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
@@ -503,7 +513,8 @@ function Client.new(p)
         if phone and cmd.phone ~= nil then phone:request(cmd.phone, cmd.phone_data) end -- + PHONE-NAMES
         self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
         if c_ == "force_faint" or c_ == "force_explode" then
-            -- Gen 2: supports_explode_mode() is False; a stray explode is the bench faint.
+            -- W-3: force_explode rides the same queue; only the active battler at the battle hold explodes
+            -- (at_battle_hold), a bench mon or a checkpoint death is the plain faint (Gen 1 parity).
             local slot, mon, party, why = find_party_slot(cmd.key, c_)
             if why then log("[SLink-gen2] " .. c_ .. ": " .. why .. " " .. tostring(cmd.key)) return end
             local entry = { cmd = c_, key = cmd.key, nickname = cmd.nickname, arrival = self.arrivals }
@@ -543,9 +554,7 @@ function Client.new(p)
             return
         end
         if c_ == "replace_rival_team" then
-            -- Gen 2: gen2_gsc.rival_trainer_ids() is empty, so this is never queued; it must
-            -- still be NACKed (protocol §5)
-            send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = arr({}), error = "unsupported" })
+            self:replace_rival_team(cmd)
         elseif c_ == "msgbox" or c_ == "gui_prompt" then
             local r, g, b, f = hud_color(cmd)
             hud.prompt(cmd.text, r, g, b, f)
@@ -1138,8 +1147,8 @@ function Client.new(p)
                 self:request_sfx_local(25)
             end
         elseif k == "trainer_ready" then
-            -- Gen 2: no trainer_battle_start: the (class, id) pair has no agreed single-int
-            -- packing (gen2_gsc.trainer_info) and rival_trainer_ids() is empty
+            -- trainer_battle_start is announced by rival_tick (frame end), not here: the U1 receipts
+            -- never proved this site, so production has no trainer_ready observation
             self.battle = { wild = false }
             self.bench_owed = true -- O-32: as wild_ready
         elseif k == "battle_end" then
@@ -1359,7 +1368,8 @@ function Client.new(p)
         send(event or "tick", {
             party = party, has_pokeballs = self.has_pokeballs, ball_count = ball_count(),
             area_id = area_id, loc_name = loc, in_battle = in_battle,
-            -- Gen 2: no trainer_id (see trainer_ready)
+            -- the packed (class, instance) id, as trainer_battle_start (gen2_gsc.trainer_info decodes it)
+            trainer_id = battle.trainer and trainer_id_of(battle.trainer) or nil,
             is_trainer_battle = battle.mode == c.TRAINER_BATTLE,
             enemy_party = enemy_party(battle),
             badges = badges and badges.johto, kanto_badges = badges and badges.kanto,
@@ -1482,9 +1492,14 @@ function Client.new(p)
                 local species, sub5 = target("wBattleMonSpecies"), target("wPlayerSubStatus5")
                 local transformed = sub5 ~= nil and math.floor(sub5 / 2 ^ transformed_bit) % 2 == 1
                 if species == mon.species_id or transformed then
+                    -- W-3: a committed move becomes EXPLOSION; an item/switch already spent the turn and
+                    -- a landed bench write that got switched in is already dead: both take W-2
+                    snapshot.player_action = target("wBattlePlayerAction")
+                    local explode = w.cmd == "force_explode" and not w.landed and snapshot.player_action == 0
                     local ok, e = pcall(function()
                         writes:arm("battle_hold")
-                        writes:faint_active_battler(slot, snapshot)
+                        if explode then writes:explode_active_battler(slot, snapshot)
+                        else writes:faint_active_battler(slot, snapshot) end
                     end)
                     writes:disarm()
                     landed, err = ok, e
@@ -1571,6 +1586,106 @@ function Client.new(p)
                     end
                 end
             end
+        end
+    end
+
+    -- ── W-4 Rival Team Swap (lua/gen1/client.lua replace_rival_team / rival_window_tick) ──────────
+    -- The window: a trainer battle whose enemy party ReadTrainerParty already loaded and nobody sent
+    -- out yet (wCurOTMon = $FF from InitEnemyTrainer until LoadEnemyMon; lua/gen2/writes.lua header).
+    -- Announced at the first battle frame end that shows it, answered from the partner's party at a
+    -- battle frame end (battle_bench's evaluate_frame: in battle, not linked, WRAMX bank 1; the intro
+    -- slide switches WRAMX away, C engine/battle/sliding_intro.asm:1-13, so those frames retry).
+    -- RIVAL_FRAMES bounds a reply that never finds a writable frame; the RIVAL_WINDOW log line
+    -- measures the real window (frames from the announcement to the send-out) for the live gate.
+    local function rival_reply(cmd, ids, err)
+        send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = ids or arr({}), error = err })
+    end
+    function self:rival_close(why)
+        local r = self.rival
+        self.rival = nil
+        if r and r.pending then
+            log("[SLink-gen2] rival swap closed unanswered: " .. tostring(why))
+            rival_reply(r.pending.cmd, nil, "late_reply")
+        end
+    end
+    local function cur_ot_mon()
+        local pt = writes.sym.wCurOTMon
+        if io.bank_valid(pt[1], pt[2], 1) ~= true then return nil end
+        return io.read_u8(pt[2], "System Bus")
+    end
+
+    function self:replace_rival_team(cmd)
+        local r = self.rival
+        if not p.rival_swap then return rival_reply(cmd, nil, "unsupported") end
+        if not r or r.trainer_id ~= cmd.trainer_id then return rival_reply(cmd, nil, "not_in_battle") end
+        if r.applied then return rival_reply(cmd, nil, "already_applied") end
+        if r.closed then return rival_reply(cmd, nil, "late_reply") end
+        -- decode now so a bad payload is answered at once, not when the window opens
+        local n, rl, ol = type(cmd.blobs_hex) == "table" and #cmd.blobs_hex or 0, c.PARTYMON_STRUCT_LENGTH, c.NAME_LENGTH
+        if n < 1 or n > c.PARTY_LENGTH then return rival_reply(cmd, nil, "bad_blob_count") end
+        local living, fainted = {}, {}
+        for i = 1, n do
+            local hex = cmd.blobs_hex[i]
+            if type(hex) ~= "string" or #hex ~= (rl + ol + c.MON_NAME_LENGTH) * 2 or not hex:match("^%x+$") then
+                return rival_reply(cmd, nil, "bad_blob_length")
+            end
+            local b = hex_bytes(hex)
+            local m = { record = { table.unpack(b, 1, rl) }, ot = { table.unpack(b, rl + 1, rl + ol) },
+                        nick = { table.unpack(b, rl + ol + 1, #b) } }
+            local hp = b[c.MON_HP + 1] * 256 + b[c.MON_HP + 2]
+            if hp > 0 then living[#living + 1] = m else fainted[#fainted + 1] = m end
+        end
+        -- living first, order kept: the engine sends out the first mon with HP (writes.lua W-4)
+        for _, m in ipairs(fainted) do living[#living + 1] = m end
+        if r.pending then rival_reply(r.pending.cmd, nil, "late_reply") end -- one parked reply (Gen 1)
+        r.pending = { cmd = cmd, mons = living }
+        -- rival_tick runs later this same frame end (after replies:step) and lands it if it can
+    end
+
+    function self:rival_tick()
+        local battle = reads.read_battle()
+        if not battle then return end
+        if battle.mode == 0 then return self:rival_close("battle over") end
+        local link, cur = wram_byte("wLinkMode"), cur_ot_mon()
+        if battle.mode ~= c.TRAINER_BATTLE or link ~= 0 or not battle.trainer or battle.trainer.class_raw == 0
+           or cur == nil then return end
+        local id, r = trainer_id_of(battle.trainer), self.rival
+        if not r or r.trainer_id ~= id then
+            if cur ~= 0xFF then return end -- joined after the send-out: no window to announce
+            self:rival_close("another trainer battle")
+            r = { trainer_id = id, frame = self.frame }
+            self.rival = r
+            send("trainer_battle_start", { trainer_id = id })
+        end
+        if cur ~= 0xFF and not r.sendout_frame then
+            r.sendout_frame = self.frame
+            log("[SLink-gen2] RIVAL_WINDOW frames=" .. (self.frame - r.frame))
+        end
+        if cur ~= 0xFF or self.frame - r.frame > Client.RIVAL_FRAMES then
+            r.closed = true
+            if r.pending then
+                local cmd = r.pending.cmd
+                r.pending = nil
+                rival_reply(cmd, nil, "late_reply")
+            end
+            return
+        end
+        if not r.pending or not self.writes_enabled or not safety.check(BATTLE_BENCH) then return end
+        local pend = r.pending
+        r.pending = nil
+        local ok, err = pcall(function()
+            writes:arm("rival_swap")
+            writes:write_enemy_party(pend.mons, { mode = battle.mode, link_mode = link, cur_ot_mon = cur })
+        end)
+        writes:disarm()
+        if ok then
+            r.applied = true
+            local ids = arr({})
+            for i, m in ipairs(pend.mons) do ids[i] = m.record[c.MON_SPECIES + 1] end
+            log("[SLink-gen2] rival team replaced: " .. #pend.mons .. " mon(s), trainer " .. id)
+            rival_reply(pend.cmd, ids)
+        else
+            rival_reply(pend.cmd, nil, tostring(err))
         end
     end
 
@@ -1661,6 +1776,7 @@ function Client.new(p)
         if self.frame % Client.BURIAL_NAG_FRAMES == 0 and burial_waiting() then show_burial() end
         self.replies:step()
         self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
+        self:rival_tick() -- W-4: announce a trainer battle; land a parked replace_rival_team (replies:step)
         self:run_deferred()
     end
 

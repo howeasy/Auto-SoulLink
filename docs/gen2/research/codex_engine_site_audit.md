@@ -1,5 +1,13 @@
 # Gen 2 engine-site and signal assumption audit
 
+**Historical record, input HEAD `4bf0f3bb`.** The client/adapter files this audit reviews (`L` =
+`lua/clients/gen2_crystal_client.lua`, `P` = `lua/games/gen2_crystal.lua`, `A` =
+`server/adapters/gen2_crystal.py`) were the legacy Gen 2 implementation, removed at the P3b.8
+cutover (see `server/adapters/__init__.py` `_RETIRED_GAME_IDS["gen2_crystal"]`). The current Gen 2
+client/adapter is `lua/gen2/*.lua` + `server/adapters/gen2_gsc.py` (+ `gen2_codec.py`,
+`gen2_rom_scan.py`); this audit's findings do not describe that code. Kept as audit evidence of the
+legacy client's state before the rewrite.
+
 Task `gen2-C2` / `cx-8172d76c`, Codex independent worker for Claude. SOURCE audit only; no implementation, build, emulator, or runtime qualification. Exclusive write lease: this file. Coordinator owns integration, independent review, and the guide/register. Dispatch acknowledged; no other write files claimed.
 
 ## Source cut and classification

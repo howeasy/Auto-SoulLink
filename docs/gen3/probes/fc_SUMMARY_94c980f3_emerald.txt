@@ -1,0 +1,31 @@
+# G4 final cut 94c980f352113f3b5772dc4e2c9bba7acb5308df -- tools/gen3_final_cut.py summary (written 2026-09-26T19:39:38Z)
+# RUN 24 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | profile_generated_check | §13.1 source | PASS | 1 | fc_profile_generated_check_94c980f3.txt |
+| 2 | write_checkpoint_generated_check | §13.1 source | PASS | 1 | fc_write_checkpoint_generated_check_94c980f3.txt |
+| 3 | area_map_generated_emerald | §13.1 source | PASS | 1 | fc_area_map_generated_emerald_94c980f3.txt |
+| 4 | unit_emerald | §13.1 source | PASS | 1 | fc_unit_emerald_94c980f3.txt |
+| 5 | states_emerald_town | §13.2 build | PASS | 1 | fc_states_emerald_town_94c980f3.txt |
+| 6 | states_emerald_battle | §13.2 build | PASS | 1 | fc_states_emerald_battle_94c980f3.txt |
+| 7 | states_emerald_trainer | §13.2 build | PASS | 1 | fc_states_emerald_trainer_94c980f3.txt |
+| 8 | checkpoint_emerald | §13.2b checkpoint | PASS | 1 | fc_checkpoint_emerald_94c980f3.txt |
+| 9 | faint_cmd_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_faint_cmd_gen3_em_as_a_94c980f3.txt |
+| 10 | reconnect_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_reconnect_gen3_em_as_a_94c980f3.txt |
+| 11 | deadzone_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_deadzone_gen3_em_as_a_94c980f3.txt |
+| 12 | link_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_link_gen3_em_as_a_94c980f3.txt |
+| 13 | boxsync_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_boxsync_gen3_em_as_a_94c980f3.txt |
+| 14 | linked_faint_active_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_linked_faint_active_gen3_em_as_a_94c980f3.txt |
+| 15 | whiteout_gen3_em_as_a | §13.3 duo | PASS | 1 | fc_whiteout_gen3_em_as_a_94c980f3.txt |
+| 16 | bootcheck_emerald_town | §13.4 item4 | PASS | 1 | fc_bootcheck_emerald_town_94c980f3.txt |
+| 17 | bootcheck_emerald_town_b | §13.4 item4 | PASS | 1 | fc_bootcheck_emerald_town_b_94c980f3.txt |
+| 18 | bootcheck_emerald_battle | §13.4 item4 | PASS | 1 | fc_bootcheck_emerald_battle_94c980f3.txt |
+| 19 | bootcheck_emerald_battle_b | §13.4 item4 | PASS | 1 | fc_bootcheck_emerald_battle_b_94c980f3.txt |
+| 20 | probe_gates_emerald | §13.5 probe | PASS | 1 | fc_probe_gates_emerald_94c980f3.txt |
+| 21 | shadow_negatives_emerald | §13.5 probe | PASS | 1 | fc_shadow_negatives_emerald_94c980f3.txt |
+| 22 | emerald_zip_build | §9 item5 EMERALD | PASS | 1 | fc_emerald_zip_build_94c980f3.txt |
+| 23 | emerald_zip_check | §9 item5 EMERALD | PASS | 1 | fc_emerald_zip_check_94c980f3.txt |
+| 24 | zip_boot_emerald | §9 item5 EMERALD | PASS | 1 | fc_zip_boot_emerald_94c980f3.txt |
+
+OVERALL: PASS (24/24 rows)

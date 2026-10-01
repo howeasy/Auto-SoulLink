@@ -49,7 +49,8 @@ P.STATES = {
     {name="script_running", terminal="script_context_not_shutdown_60", expectation="negative",
         expect_clauses={script_context_status=true}, min_samples=60,
         note="witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true}},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true,
+                   ["emerald/clean"]=true}},
 }
 
 -- C4-B2: the battle / native / sound reasons. Declarative: each row names the savestate to load
@@ -63,14 +64,14 @@ P.REASON_ROWS = {
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
         reason="battle_faint", witness="battle_input",
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true,
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true,
                    ["radical_red/companion"]=true},
         note="wild encounter parked at the action menu; no input"},
     {name="battle_input_trainer", terminal="battle_main_func==HandleTurnActionSelectionState and "
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
         reason="battle_commit", args={battler=0}, witness="battle_input_trainer",
         state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="trainer battle parked at the action menu (gBattleTypeFlags & BATTLE_TYPE_TRAINER); "
             .. "battler 0 is uncommitted so the guard holds. RR holds battle_commit: see "
             .. "battle_commit_held_rr"},
@@ -79,7 +80,7 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_comm_eq", witness_value=2,
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{idle=120}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
         note="A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN)"},
     {name="battle_animation", terminal="gBattleControllerExecFlags~=0 and "
         .. "gBattlerControllerFuncs[0]~=HandleInputChooseAction",
@@ -88,9 +89,9 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_exec_busy",
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{idle=30}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
-        note="two A presses commit a move; the animation holds the exec flags. FR/LG only: the "
-            .. "RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
+        note="two A presses commit a move; the animation holds the exec flags. Not on RR: the RR "
+            .. "pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
     {name="battle_faint_prompt", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
         expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_input=true,
                                                 battle_input_controller=true},
@@ -106,7 +107,7 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_not_input",
         state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
         inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="battle intro parked before the first action menu"},
     {name="battle_link", terminal="gBattleTypeFlags & 2",
         expectation="negative", expect_clauses={battle_not_link=true},
@@ -118,7 +119,7 @@ P.REASON_ROWS = {
         expectation="negative", expect_clauses={battle_outcome_open=true, battle_engine_loaded=true},
         reason="battle_faint", witness="battle_resolved",
         state_env="SLINK_CHECKPOINT_POSTBATTLE_STATE", state="slink_postbattle.State",
-        inputs={}, artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true,
+        inputs={}, artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true,
                               ["radical_red/companion"]=true},
         note="the state saved after a resolved battle"},
     {name="battle_commit_state3", terminal="gBattleCommunication[0]>=3",
@@ -127,8 +128,8 @@ P.REASON_ROWS = {
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},
                 {idle=240}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
-        note="the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill"},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        note="the commit guard: a committed battler (FR/LG 3/4, Emerald 4/5) must refuse the Variant-3 pre-fill"},
     {name="native_idle_field", terminal="companion beacon present and mailbox idle",
         expectation="positive", min_samples=60, reason="native", witness="native_idle",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
@@ -143,12 +144,12 @@ P.REASON_ROWS = {
         expectation="negative", expect_clauses={native_present=true},
         reason="native", witness="always",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
         note="the reason must refuse on a build with no companion"},
     {name="sound_driver", terminal="m4a SE1 ident == ID_NUMBER",
         expectation="positive", min_samples=60, reason="sound", witness="sound_driver",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
         note="the sound reason on a live driver; native_busy is model-only (the probe posts no op)"},
 }
 
@@ -230,6 +231,28 @@ P.REASON_ROWS[#P.REASON_ROWS + 1] = {name="battle_commit_held_rr",
     artifacts={["radical_red/companion"]=true},
     note="RR holds battle_commit (pack battle.commit_hold): the parked trainer menu must refuse "
         .. "it by battle_commit_hold"}
+-- E2-CKPT: Emerald-only rows, appended last so every FR/LG/RR index is unchanged. `custom` rows
+-- run in their own block (below), the rest through the generic reason-row runner with reason nil
+-- (the overworld check). The core seven run on Emerald too (dialog/save via P.emerald_menu).
+local EM = {["emerald/clean"]=true}
+for _, spec in ipairs({
+    {name="center_idle", terminal="center_1f_idle_300", expectation="positive", custom=true,
+        state_env="SLINK_CHECKPOINT_CENTER_STATE", state="slink_pokecenter.State", artifacts=EM,
+        note="Oldale Center 1F: CableClub_OnResume leaves the Union Room background tasks running"},
+    {name="map_popup", terminal="Task_MapNamePopUpWindow_live_field_settled", expectation="positive",
+        custom=true, min_samples=30,
+        state_env="SLINK_CHECKPOINT_CENTER_STATE", state="slink_pokecenter.State", artifacts=EM,
+        note="exit the Center: the warp into Oldale (show_map_name) starts the popup; sampled while "
+            .. "the popup task is live and the field is settled"},
+    {name="battle_intro_field", terminal="in_battle_mask_nonzero", expectation="negative",
+        expect_clauses={in_battle=true, callback1=true, callback2=true}, witness="in_battle",
+        state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State", inputs={}, artifacts=EM,
+        note="wild battle, first in_battle frame (before the action menu); overworld reason"},
+    {name="trainer_battle_field", terminal="in_battle_mask_nonzero", expectation="negative",
+        expect_clauses={in_battle=true, callback1=true, callback2=true}, witness="in_battle",
+        state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State", inputs={},
+        artifacts=EM, note="Youngster Calvin parked at the action menu; overworld reason"},
+}) do P.REASON_ROWS[#P.REASON_ROWS + 1] = spec end
 for _, spec in ipairs(P.REASON_ROWS) do P.STATES[#P.STATES + 1] = spec end
 P.REASON_BASE = #P.STATES - #P.REASON_ROWS + 1
 
@@ -301,7 +324,11 @@ function P.witnesses(cp, r8, r32)
             end
         end
     end
-    local comm_a = clause_of("battle_comm_0")
+    local comm_a, _, comm_c = clause_of("battle_comm_0")
+    -- witness_value is FR-numbered (STATE_WAIT_ACTION_CHOSEN == 1). Emerald's enum starts with
+    -- STATE_TURN_START_RECORD (pret pokeemerald battle_main.c:4118-4121), so every state is the
+    -- pack's battle_comm_0 expect minus 1 further on (E2-FIX-AB F-B).
+    local comm_shift = comm_c and type(comm_c.expect) == "number" and comm_c.expect - 1 or 0
     local main_a, _, main_c = clause_of("battle_main_func")
     -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
     local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
@@ -315,8 +342,12 @@ function P.witnesses(cp, r8, r32)
     local function w8(a) return r8(a) end
     local WIT = {}
     WIT.always = function() return true end
+    local ib = cp.predicates and cp.predicates.in_battle
+    WIT.in_battle = function()
+        return ib ~= nil and (r8(ib.address + (ib.offset or 0)) & (ib.mask or 0xFF)) ~= ib.expect
+    end
     WIT.battle_input = function()
-        return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == 1
+        return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == comm_c.expect
     end
     WIT.battle_input_trainer = function()
         return WIT.battle_input() and w32(type_a) & P.BATTLE_TYPE_TRAINER ~= 0
@@ -324,8 +355,8 @@ function P.witnesses(cp, r8, r32)
     WIT.battle_not_input = function()
         return main_c ~= nil and w32(main_a) ~= main_c.expect
     end
-    WIT.battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end
-    WIT.battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end
+    WIT.battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value + comm_shift end end
+    WIT.battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value + comm_shift end end
     -- flags ~= 0 alone also holds at the parked action menu (bit 0 pends on the input,
     -- C4-BW), which the battle_faint window admits; busy = not battler 0's action input
     WIT.battle_exec_busy = function()
@@ -666,6 +697,69 @@ function P.dialog_witness(G, cp, title)
            function() return before ~= nil and (G.pred(cp, "save_dialog_cb")) ~= before end
 end
 
+-- ── Emerald (card E2-CKPT) ─────────────────────────────────────────────────────────────────
+-- Emerald's START menu is gMenuCallback-driven under Task_ShowStartMenu (pret pokeemerald
+-- src/start_menu.c:560-633), not FR's sStartMenuCallback; the witnesses are the ones
+-- lua/tests/gen3_emerald_boot_check.lua drives the fixture saves with. Addresses from the .sym.
+P.EMERALD_SYMS = {"gMenuCallback", "Task_ShowStartMenu", "HandleStartMenuInput",
+    "StartMenuSaveCallback", "SaveStartCallback", "SaveCallback", "sStartMenuCursorPos",
+    "sNumStartMenuActions", "sCurrentStartMenuActions", "Task_MapNamePopUpWindow"}
+P.EM_MENU_ACTION_SAVE = 5            -- start_menu.c:51-58 (POKEDEX 0 .. SAVE 5)
+-- OldaleTown_PokemonCenter_1F map.json: warp 0 (7,8) is the arrival mat; the nurse (7,2) stands
+-- behind the counter row y=3, so (7,4) facing Up talks to her (..._EventScript_Nurse).
+P.EM_CENTER_ARRIVAL, P.EM_NURSE_FRONT = {7, 8}, {7, 4}
+
+--- {name = address} for `names` from a pret .sym ("addr l|g size name"); a missing name raises.
+function P.load_syms(path, names)
+    local want, out = {}, {}
+    for _, n in ipairs(names) do want[n] = true end
+    for line in io.lines(path) do
+        local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
+        if addr and want[name] and not out[name] then out[name] = tonumber(addr, 16) end
+    end
+    for _, n in ipairs(names) do assert(out[n], "symbol " .. n .. " missing from " .. path) end
+    return out
+end
+
+--- (ready, open, save_row) for Emerald's START menu over the pack's gTasks block. ready = the
+--- menu reads input; open = a save callback runs under the live menu task; save_row = the SAVE
+--- row index of this open (nil when the menu lists none).
+function P.emerald_menu(sy, cp, r8, r32)
+    local function live() return P.task_active(r8, r32, cp.tasks, sy.Task_ShowStartMenu) end
+    local function cb() return r32(sy.gMenuCallback) & ~1 end
+    local function ready() return live() and cb() == sy.HandleStartMenuInput end
+    local function open()
+        local c = cb()
+        return live() and (c == sy.StartMenuSaveCallback or c == sy.SaveStartCallback or c == sy.SaveCallback)
+    end
+    local function save_row()
+        for i = 0, r8(sy.sNumStartMenuActions) - 1 do
+            if r8(sy.sCurrentStartMenuActions + i) == P.EM_MENU_ACTION_SAVE then return i end
+        end
+    end
+    return ready, open, save_row
+end
+
+--- How many of the 14 logical ids appear exactly once, signed and stamped `ctr`, in the slot the
+--- game writes that counter to (gen3_boot_check.sectors_at's structure pass). Emerald needs its
+--- own: sectors_at's checksum pass carries FR/LG section sizes (SaveBlock2 0xF24, SaveBlock1
+--- 0x3D68), Emerald's differ, so a whole Emerald slot would never read 14 there.
+function P.slot_ids(r16, r32, ctr)
+    local first, seen, n = 14 * (ctr % 2), {}, 0
+    for s = first, first + 13 do
+        local b = s * 0x1000
+        local id = r16(b + 0xFF4)
+        if r32(b + 0xFF8) == 0x08012025 and r32(b + 0xFFC) == ctr and id < 14 and not seen[id] then
+            seen[id], n = true, n + 1
+        end
+    end
+    return n
+end
+
+function P.index_of(name)
+    for i, spec in ipairs(P.STATES) do if spec.name == name then return i end end
+end
+
 function P.run()
     local wt = assert(SLINK_ROOT or os.getenv("SLINK_ROOT"), "SLINK_ROOT required")
     local G = dofile(wt .. "/lua/tests/gen3_boot_check.lua")
@@ -754,7 +848,39 @@ function P.run()
             active.r15, active.cpsr, active.frame = regs.R15, regs.CPSR, deps.frame()
         end
     end
-    local dialog_armed, dialog_open = P.dialog_witness(G, cp, title)
+    local em = title == "emerald"
+    local em_ready, em_open, em_row
+    if em then
+        P.EM = P.load_syms(wt .. "/data/gen3/pret/pokeemerald.sym", P.EMERALD_SYMS)
+        P.SCRIPT_TILE = P.EM_NURSE_FRONT   -- this run only: the script row talks to the nurse
+        -- sGlobalScriptContextStatus is 0x03000E38 in pokeemerald.sym (FR 0x03000EA8); the pack binds it
+        P.SCRIPT_STATUS = P.load_syms(wt .. "/data/gen3/pret/pokeemerald.sym",
+            {"sGlobalScriptContextStatus"}).sGlobalScriptContextStatus
+        em_ready, em_open, em_row = P.emerald_menu(P.EM, cp, function(a) return memory.read_u8(a) end,
+            function(a) return memory.read_u32_le(a) end)
+    end
+    local dialog_armed, dialog_open
+    if em then dialog_armed, dialog_open = em_ready, em_open
+    else dialog_armed, dialog_open = P.dialog_witness(G, cp, title) end
+    -- Emerald: the SAVE row is read from the menu's own action list, never searched for
+    local function open_save_dialog_em()
+        for _ = 1, 5 do
+            for _ = 1, 300 do if G.pred_ok(cp, "field_controls_locked") then break end; G.advance() end
+            G.tap("Start", 3, 0)
+            for _ = 1, 120 do if em_ready() then break end; G.advance() end
+            if em_ready() then break end
+        end
+        local row = em_row()
+        if not (em_ready() and row) then return false end
+        for _ = 1, 16 do
+            if memory.read_u8(P.EM.sStartMenuCursorPos) == row then break end
+            G.tap("Down", 3, 13)
+        end
+        if memory.read_u8(P.EM.sStartMenuCursorPos) ~= row then return false end
+        G.tap("A", 3, 0)
+        for _ = 1, 60 do if em_open() then return true end; G.advance() end
+        return em_open()
+    end
     local function open_save_dialog()
         G.tap("Start",3,30)
         for attempt = 1,14 do
@@ -862,17 +988,23 @@ function P.run()
         G.idle(120); row.reached = row.samples > 0; finish(row)
 
         must_load(idle_state)
-        assert(open_save_dialog(), "save prompt not reached for dialog control")
+        assert((em and open_save_dialog_em or open_save_dialog)(), "save prompt not reached for dialog control")
         row = begin(4,function() return dialog_open() end)
         G.idle(120); row.reached = row.samples > 0; finish(row)
 
         local domain = assert(G.flash_domain(), "flash domain unavailable")
         local before, after = G.save_counter(domain), nil
+        if em then   -- this run's own G (dofile'd above): Emerald's slot is judged structurally
+            G.sectors_at = function(d, c)
+                return P.slot_ids(function(a) return memory.read_u16_le(a, d) end,
+                                  function(a) return memory.read_u32_le(a, d) end, c)
+            end
+        end
         assert(before >= 0, "no baseline flash counter")
         row = begin(5,function()
             local counter = G.save_counter(domain)
-            if counter > before then after = counter end
-            return counter > before and G.sectors_at(domain,counter) < 14
+            if G.counter_advanced(before, counter) then after = counter end
+            return G.counter_advanced(before, counter) and G.sectors_at(domain,counter) < 14
         end)
         local complete = false
         for i=1,7000 do
@@ -950,6 +1082,50 @@ function P.run()
             else row.reason = where end
             finish(row)
             back_out()
+        end
+
+        -- ── E2-CKPT custom Emerald rows ────────────────────────────────────────────────────
+        local ci = P.index_of("center_idle")
+        if plan[ci] then
+            local spec = P.STATES[ci]
+            local loaded, why = load(os.getenv(spec.state_env) or spec.state)
+            row = begin(ci, function() return true end)
+            if loaded then
+                G.idle(300)
+                row.reached = field() and row.samples == 300
+            else row.blocked, row.reason = "UNREACHED " .. why, why end
+            finish(row)
+        end
+        local pi = P.index_of("map_popup")
+        if plan[pi] then
+            local spec = P.STATES[pi]
+            local loaded, why = load(os.getenv(spec.state_env) or spec.state)
+            local tasks = assert(cp.tasks, "no tasks block")
+            local function popup()
+                return P.task_active(memory.read_u8, memory.read_u32_le, tasks, P.EM.Task_MapNamePopUpWindow)
+            end
+            local g0, n0 = G.map(cp)
+            row = begin(pi, function()
+                return popup() and field() and G.pred_ok(cp, "palette_fade_active")
+            end)
+            if not loaded then row.blocked = "UNREACHED " .. why end
+            -- off the arrival mat: hold Down until the warp changes the map, then stand still
+            for _ = 1, loaded and 48 or 0 do
+                joypad.set({Down=true}); G.advance()
+                local g, n = G.map(cp)
+                if g ~= g0 or n ~= n0 then break end
+            end
+            joypad.set({})
+            local seen = false
+            for _ = 1, loaded and 600 or 0 do
+                G.advance()
+                seen = seen or popup()
+                if seen and not popup() then break end
+            end
+            local g, n = G.map(cp)
+            row.reached = seen and (g ~= g0 or n ~= n0) and row.samples >= (spec.min_samples or 1)
+            if not row.reached then row.reason = string.format("popup seen=%s map=%d.%d", tostring(seen), g, n) end
+            finish(row)
         end
 
         -- ── C4-B2 reason rows: one generic runner, declarative specs ──────────────────────
@@ -1035,7 +1211,7 @@ function P.run()
         end
         for i = P.REASON_BASE, #P.STATES do
             if plan[i] and P.STATES[i].bw then bw_row(i, P.STATES[i])
-            elseif plan[i] then
+            elseif plan[i] and not P.STATES[i].custom then
                 local spec = P.STATES[i]
                 local loaded, why = load(os.getenv(spec.state_env) or spec.state)
                 -- until_witness: the mash runs to that state, and the row is only reached there

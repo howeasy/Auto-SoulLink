@@ -414,12 +414,18 @@ def test_read_balls_matches_pydec_rr_unencrypted_and_ewram():
     assert got == want == {"ball_count": 12, "has_pokeballs": True}
 
 
-def test_rr_pack_gracefully_lacks_trainer_ot_id_today():
-    """gen3_rr has no pret source and the old client never read SaveBlock2.playerTrainerId
-    either (P4 card C4-2a addendum 4/5): read_trainer must refuse with a reason, not guess."""
+def test_rr_reads_its_trainer_for_the_trade_journal():
+    """RR-DURABLE: the trade journal binds to the trainer, so gen3_rr now carries
+    SB2_NAME_OFFSET (the old client's production-tested generic playerName read at SB2+0)
+    beside its ROM-pinned SB2_OT_ID_OFFSET."""
     world = World(pack="gen3_rr", title="radical_red")
-    value, why = world.parts.reads.read_trainer()
-    assert value is None and "profile has no derived." in str(why)
+    sb2_addr = place_sb2(world, 0x0202402C)
+    sb2 = bytearray(0x20)
+    sb2[0:7] = codec.encode_name("B", 7)
+    sb2[0x0A:0x0E] = (0x2BDDC8BF).to_bytes(4, "little")
+    world.poke(sb2_addr, bytes(sb2))
+    trainer = lua_to_py(world.parts.reads.read_trainer())
+    assert (trainer["name"], trainer["ot_id"]) == ("B", 0x2BDDC8BF)
 
 
 def test_rr_location_and_badges_work_from_old_client_evidence():

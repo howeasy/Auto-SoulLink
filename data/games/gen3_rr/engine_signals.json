@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "477f9efebe0170d01741917b1da851ff07fa27f5d4059dbd6b128bec863e5510",
+  "sha256": "9eabff699cd807a0d3a6dce8e97ea860edf982cde965b792378cf522d8c137d4",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -67,6 +67,156 @@
               "rom_offset": 89036,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L3915-L3940",
               "symbol": "ReturnFromBattleToOverworld"
+            },
+            "borrowed_party_begin": {
+              "address": 151491328,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "RR School map5,2 NPC1(6,2) script09051ABF, builder callnative09051B87/09051BF2 ->09079300. Capture builder ENTRY before six CreateMon calls overwrite gPlayerParty, including ViewYourTeam before battle_begin. Preserve validated own raw records/keys/count and reset epoch, force borrowed state until matching restore; no gameplay event/capture/faint from the borrowed records. Nested/replayed begin must not replace the original own-party baseline.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC0462751000069E50608004D1209844202027D030408",
+                "rom_offset": 17273600
+              },
+              "expected_hex": "F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC046",
+              "function": {
+                "address": 151491328,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "context_size": 120,
+                "size": 100,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "RR School rental team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": "borrowed_party_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273600,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School rental team builder"
+            },
+            "borrowed_party_end": {
+              "address": 134529584,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.",
+              "capture_offset": 50,
+              "context": {
+                "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
+                "rom_offset": 311856
+              },
+              "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
+              "function": {
+                "address": 134529584,
+                "anchor_offset": 0,
+                "capture_offset": 50,
+                "context_size": 64,
+                "size": 64,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "LoadPlayerParty restored-party completion"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 311856,
+              "source": "rr_school_script_binary",
+              "symbol": "LoadPlayerParty restored-party completion"
+            },
+            "borrowed_party_opponent_begin": {
+              "address": 151490760,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 28,
+              "context": {
+                "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
+                "rom_offset": 17273032
+              },
+              "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046",
+              "function": {
+                "address": 151490760,
+                "anchor_offset": 0,
+                "capture_offset": 28,
+                "context_size": 72,
+                "size": 52,
+                "size_evidence": "52-byte executable span includes NOP090790FA; 72-byte context adds20-byte pool090790FC..0907910F",
+                "symbol": "RR School opponent team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": "borrowed_party_opponent_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273032,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School opponent team builder"
             },
             "capture_wild": {
               "address": 151510400,
@@ -175,6 +325,32 @@
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
             },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "replaces": "AddHatchedMonToParty (RR in-place)",
+              "rom_offset": 290302,
+              "rr_body": {
+                "address": 134507872,
+                "boundary_hex": "00B503480078FFF7",
+                "entry_hex": "30B585B00006000E03AC462121706421",
+                "extent_estimate": 192,
+                "extent_evidence": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty (RR in-place)"
+            },
             "map_load": {
               "address": 134571884,
               "capture_contract": "CB2_LoadMap only schedules callbacks; its return is NOT completed load. Normal CB2_LoadMap2 calls DoMapLoadLoop, then restores field callbacks; Quest Log branch does something else. Capture BEFORE final SetMainCallback2 on normal branch. Other map/load/return paths remain uncovered. BPRE.ld:1074 gives dispatcher 0805671C; its savedCallback literal at 08056748 is 0805674D.",
@@ -239,6 +415,114 @@
               "source": "cfru_detour",
               "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
               "symbol": "GiveMonToPlayer"
+            },
+            "nature_change": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, decoded valid species/flags and non-Bad-Egg/non-egg record; RR checksum is explicitly unused, never require checksum_ok=true/zero. unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.",
+              "capture_offset": 172,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 172,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR nature-changer special"
+            },
+            "nature_change_begin": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.",
+              "capture_offset": 168,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 168,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR Nature Changer PID preimage"
             },
             "pc_box_place": {
               "address": 134819864,
@@ -572,8 +856,9 @@
           }
         },
         "companion": {
-          "rom_md5": "6cf77ba4a63634a0fd452be6f206bfc3",
-          "rom_sha1": "ea5352f8a3b9073f8ae20870ad12857925d442cd",
+          "production": true,
+          "rom_md5": "70e7e746e573a2d00df5d3ef41d19d61",
+          "rom_sha1": "da579690db7d6933a0952a1f490312842793f71a",
           "sites": {
             "battle_begin": {
               "address": 134282652,
@@ -631,6 +916,156 @@
               "rom_offset": 89036,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L3915-L3940",
               "symbol": "ReturnFromBattleToOverworld"
+            },
+            "borrowed_party_begin": {
+              "address": 151491328,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "RR School map5,2 NPC1(6,2) script09051ABF, builder callnative09051B87/09051BF2 ->09079300. Capture builder ENTRY before six CreateMon calls overwrite gPlayerParty, including ViewYourTeam before battle_begin. Preserve validated own raw records/keys/count and reset epoch, force borrowed state until matching restore; no gameplay event/capture/faint from the borrowed records. Nested/replayed begin must not replace the original own-party baseline.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC0462751000069E50608004D1209844202027D030408",
+                "rom_offset": 17273600
+              },
+              "expected_hex": "F0B51726FF2387B06E4433701548164B03F0C8FD002507003C203906090E02004A431C21114B9B180A006A435B6A9A1864231C006C430E4BE41800233B38917E0290019300902000FFF77EFC0135320023212000074B03F0A5FD062DDCD107B0F0BDC046",
+              "function": {
+                "address": 151491328,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "context_size": 120,
+                "size": 100,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "RR School rental team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": "borrowed_party_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273600,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School rental team builder"
+            },
+            "borrowed_party_end": {
+              "address": 134529584,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.",
+              "capture_offset": 50,
+              "context": {
+                "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
+                "rom_offset": 311856
+              },
+              "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
+              "function": {
+                "address": 134529584,
+                "anchor_offset": 0,
+                "capture_offset": 50,
+                "context_size": 64,
+                "size": 64,
+                "size_evidence": "reviewed ROM code/return boundary",
+                "symbol": "LoadPlayerParty restored-party completion"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 311856,
+              "source": "rr_school_script_binary",
+              "symbol": "LoadPlayerParty restored-party completion"
+            },
+            "borrowed_party_opponent_begin": {
+              "address": 151490760,
+              "caller": {
+                "map": [
+                  5,
+                  2
+                ],
+                "npc_local_id": 1,
+                "script": 151329471
+              },
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 28,
+              "context": {
+                "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
+                "rom_offset": 17273032
+              },
+              "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046",
+              "function": {
+                "address": 151490760,
+                "anchor_offset": 0,
+                "capture_offset": 28,
+                "context_size": 72,
+                "size": 52,
+                "size_evidence": "52-byte executable span includes NOP090790FA; 72-byte context adds20-byte pool090790FC..0907910F",
+                "symbol": "RR School opponent team builder"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
+                "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": "borrowed_party_opponent_begin",
+                "end": "borrowed_party_end",
+                "party_base": 33702532,
+                "reset": "clear unmatched borrow on reset",
+                "restore": "active epoch only; exact own keys/count match",
+                "stride": 100
+              },
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17273032,
+              "source": "rr_school_script_binary",
+              "symbol": "RR School opponent team builder"
             },
             "capture_wild": {
               "address": 151510400,
@@ -739,6 +1174,32 @@
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
             },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "replaces": "AddHatchedMonToParty (RR in-place)",
+              "rom_offset": 290302,
+              "rr_body": {
+                "address": 134507872,
+                "boundary_hex": "00B503480078FFF7",
+                "entry_hex": "30B585B00006000E03AC462121706421",
+                "extent_estimate": 192,
+                "extent_evidence": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty (RR in-place)"
+            },
             "map_load": {
               "address": 134571884,
               "capture_contract": "CB2_LoadMap only schedules callbacks; its return is NOT completed load. Normal CB2_LoadMap2 calls DoMapLoadLoop, then restores field callbacks; Quest Log branch does something else. Capture BEFORE final SetMainCallback2 on normal branch. Other map/load/return paths remain uncovered. BPRE.ld:1074 gives dispatcher 0805671C; its savedCallback literal at 08056748 is 0805674D.",
@@ -803,6 +1264,114 @@
               "source": "cfru_detour",
               "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
               "symbol": "GiveMonToPlayer"
+            },
+            "nature_change": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, decoded valid species/flags and non-Bad-Egg/non-egg record; RR checksum is explicitly unused, never require checksum_ok=true/zero. unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.",
+              "capture_offset": 172,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 172,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR nature-changer special"
+            },
+            "nature_change_begin": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.",
+              "capture_offset": 168,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 168,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR Nature Changer PID preimage"
             },
             "pc_box_place": {
               "address": 134819864,

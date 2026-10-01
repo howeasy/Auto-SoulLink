@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE (PHYSICAL).** `tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json` is a committed PASS attestation covering R-1/R-2/R-3/R-4/R-5g on all three titles (13 passed, 0 skipped), pinned at code digest `e8ca0067` (commit `05f1b64c`, confirmed an ancestor of current HEAD `a88eb505`). `tools/verify_gen2_release.py --lane live-gates` passes clean (run 2026-09-26). Note: the tool's own `--list` help text for `live-new-gates` still reads 'R-1/R-2/R-3/R-4/R-5g have no committed receipt' (`tools/verify_gen2_release.py:171-172`) -- that description is stale against its own receipt; `tools/verify_gen2_release.py` is not this worker's file, flagged separately.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3b.3a, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

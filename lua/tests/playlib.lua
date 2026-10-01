@@ -502,8 +502,24 @@ function M.bind(H, opts)
         local want = stable_frames or 60
         local stable = 0
         for _ = 1, (budget or 6000) do
+            -- Scene advancement is a menu button policy, not a battle policy. Every caller
+            -- must finish its battle explicitly; unknown state cannot authorize a press.
+            if P.in_battle(cp) ~= false then
+                local why = "scene wait refused: battle active or unreadable"
+                H.phase("scene-wait-refused", why)
+                return false, why
+            end
             local quiet = quiet_fn(cp)
             if quiet and also then quiet = also() end
+            -- A binding's predicate may advance a frame. Recheck at the input/success edge. This
+            -- reread is forward-compat, not a response to an observed flip: every production
+            -- binding's in_battle is `not pred_ok(...)`, which is a pure read and cannot itself
+            -- change between the two calls (docs/gen3/research/r4_driver_scene_guard_2026-09-27.md).
+            if P.in_battle(cp) ~= false then
+                local why = "scene wait refused: battle active or unreadable"
+                H.phase("scene-wait-refused", why)
+                return false, why
+            end
             if quiet then
                 stable = stable + 1
                 if stable >= want then return true end
@@ -513,7 +529,7 @@ function M.bind(H, opts)
                 P.advance_scene(cp)
             end
         end
-        return false
+        return false, string.format("scene did not settle within budget (%d frames)", budget or 6000)
     end
 
     --- Leave a menu and get back to a field that HOLDS.

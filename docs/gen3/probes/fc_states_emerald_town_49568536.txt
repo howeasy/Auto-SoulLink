@@ -1,0 +1,20 @@
+# gen3_final_cut row=states_emerald_town item=§13.2_build cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python tools/mkstates_gen3.py --title emerald --kind town --out-dir C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/emerald --rom 'patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba'   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:59:45 cpu=80% emuhawk=0 python=5
+start_utc=2026-09-27T18:59:44Z tracked_clean_before=True
+seeded C:\slink-wt\g3-lane\patch\build\gen3_fixture_runs\mkstates_emerald_town\Pokemon - Emerald Version (USA, Europe).SaveRAM from C:\slink-wt\g3-lane\tests\fixtures\gen3\emerald_town.sav; states -> C:\slink-wt\g3-lane\patch\build\gen3_probe_states_c4p2\emerald
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] mkstates_gen3: RESULT: PASS emerald town states in C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/emerald  (5s)
+phase start frame=1 title=emerald kind=town dir=C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/emerald
+phase settled frame=702
+phase state-saved frame=732 slink_overworld.State at 0.10 (6,17), want 0.10 (6,17)
+phase state-saved frame=732 slink_door.State at 0.10 (6,17), want 0.10 (6,17) (Up enters the Center door)
+phase state-saved frame=949 slink_pokecenter.State at 2.2 (7,8), want 2.2 (7,8)
+phase state-saved frame=1069 slink_script.State at 2.2 (7,4), want 2.2 (7,4)
+RESULT: PASS emerald town states in C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/emerald
+exit=0 end_utc=2026-09-27T18:59:51Z tracked_clean_after=True classification=pass

@@ -13,9 +13,29 @@ from server.adapters.gen4_hgsspt import Gen4Adapter
 from server.manager import _calc_profile_for_run
 from server.server import SLinkServer
 
+# The expansion is REFUSED in production (ruling 39), so the one case below that resolves a
+# run's profile THROUGH the routing table runs inside the logged TEST-ONLY route. The adapter's
+# own calc_profile() needs no seam -- the refusal is about admission, not about the numbers.
+from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
+
 
 def test_rr_adapter_calc_profile():
     assert Gen3Adapter(is_rr=True).calc_profile() == {"gen": 9, "dex": "rr"}
+
+
+def test_gen3_expansion_adapter_calc_profile():
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    assert Gen3ExpansionAdapter().calc_profile() == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
+
+
+def test_gen3_expansion_adapter_calc_profile_is_none_off_gen_latest(monkeypatch):
+    """A build whose damage-mechanics config doesn't target the same generation
+    the calc's gen789 module implements can't be honestly mapped to gen:9."""
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    a = Gen3ExpansionAdapter()
+    a._config_macros = dict(a._config_macros)
+    a._config_macros["B_CRIT_MULTIPLIER"] = {**a._config_macros["B_CRIT_MULTIPLIER"], "value": 5}
+    assert a.calc_profile() is None
 
 
 def test_vanilla_frlg_adapter_calc_profile_has_sets():
@@ -44,7 +64,8 @@ def test_purergb_adapter_calc_profile_is_its_own_dex():
     # Gen1PureRGBAdapter subclasses Gen1Adapter; it must not inherit the vanilla dex/sets.
     from server.adapters.gen1_purergb import Gen1PureRGBAdapter
     assert Gen1PureRGBAdapter().calc_profile() == {
-        "gen": 1, "dex": "purergb", "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
+        "gen": 1, "dex": "purergb", "name": "pureRGB",
+        "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
 
 def test_base_default_calc_profile_is_none():
@@ -178,7 +199,51 @@ async def test_calc_tab_shown_for_rr(tmp_path):
     finally:
         await close()
 
+
+@pytest.mark.usefixtures("expansion_routed")
+def test_calc_profile_for_run_expansion_vs_expansion_shows_the_calc():
+    """XC1-XC3 wiring check: two expansion adapters agree on gen+dex through
+    shared_calc_profile/manager._calc_profile_for_run with zero changes to
+    manager.py itself (adapter-isolation)."""
+    run = {"game": ""}
+    status = {"players": {"a": {"rom_type": "emerald_expansion_28877d73"},
+                           "b": {"rom_type": "emerald_expansion_28877d73"}}}
+    assert _calc_profile_for_run(run, status) == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
+
+
+def test_shared_calc_profile_two_expansion_adapters_directly():
+    from server.adapters import shared_calc_profile
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    a, b = Gen3ExpansionAdapter(), Gen3ExpansionAdapter()
+    assert shared_calc_profile([a.calc_profile(), b.calc_profile()]) == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
+
+
 def test_emerald_adapter_uses_emerald_sets():
     from server.adapters.gen3_frlge import Gen3Adapter
     assert Gen3Adapter(rom_type="emerald").calc_profile()["sets"] == {"file": "Emerald.js", "var": "CUSTOMSETDEX_E"}
     assert _calc_profile_for_run({"game": "gen3_e"}, {"players": {}})["sets"]["file"] == "Emerald.js"
+
+
+def test_crystal_with_gold_keeps_the_gen2_calc_without_crystals_sets():
+    """Same rules, different trainer rosters: the calc stays up, Crystal's sets don't leak
+    onto the Gold player (review cx-66e7600f F4 -- the whole-dict compare hid the calc)."""
+    status = {"players": {"a": {"rom_type": "crystal"}, "b": {"rom_type": "gold"}}}
+    assert _calc_profile_for_run({"game": ""}, status) == {"gen": 2, "dex": "vanilla"}
+    both = {"players": {"a": {"rom_type": "crystal"}, "b": {"rom_type": "crystal"}}}
+    assert _calc_profile_for_run({"game": ""}, both)["sets"]["file"] == "Crystal.js"
+
+
+def test_server_calc_profile_crystal_with_gold(tmp_path):
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv._player_adapters["a"] = Gen2GSCAdapter(rom_type="crystal")
+    srv._player_adapters["b"] = Gen2GSCAdapter(rom_type="gold")
+    assert srv._calc_profile() == {"gen": 2, "dex": "vanilla"}
+
+def test_gen3_expansion_calc_profile_refuses_a_build_that_is_not_gen9():
+    """OMP cx-7cb40977 M1: every mechanics macro at GEN_LATEST is not enough; GEN_LATEST must be GEN_9."""
+    from server.adapters import get_adapter
+    a = get_adapter("gen3_exp")
+    for macro in ("GEN_LATEST", "B_CRIT_MULTIPLIER", "B_PHYSICAL_SPECIAL_SPLIT", "B_ABILITY_WEATHER"):
+        a._config_macros[macro] = {"value": 3}
+    assert a.calc_profile() is None

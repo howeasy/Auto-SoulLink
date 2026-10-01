@@ -9,14 +9,33 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, present=True, initial_seq=0, kind="companion"):
+    def __init__(self, present=True, initial_seq=0, kind="companion", scene_capability_model=False, abi=1,
+                 mutate_native=None, pack="gen3_rr"):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-        self.profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())
-        self.n = self.profile["native"]
-        self.ram = self.profile["titles"]["radical_red"]["ram"]
+        self.profile = json.loads((ROOT / f"data/games/{pack}/profile.json").read_text())
+        title = {"gen3_rr": "radical_red", "gen3_frlg": "firered", "gen3_emerald": "emerald"}[pack]
+        self.n = self.profile.get("native")
+        if abi == 2:
+            from tools.gen_gen3_profile import native_abi
+            layout = native_abi()
+            c = layout["constants"]
+            self.n = self.profile["native"] = {
+                "ABI": 2, "SIG": c["SLINK_SIGNATURE"], "abi_v2": layout,
+                "BASE": 0x0201B000,  # private MODEL arena; no admitted v2 profile
+            }
+            self.n.update({name.removeprefix("SLINK_"): value
+                           for name, value in c.items()
+                           if name.startswith("SLINK_OP_")})
+            for field, offset in (("BLOB_BUF", "SLINK_BLOB_OFFSET"), ("TEXT_BUF", "SLINK_TEXT_OFFSET"),
+                                  ("MENU_BUF", "SLINK_MENU_OFFSET"), ("INFO", "SLINK_INFO_OFFSET")):
+                self.n[field] = self.n["BASE"] + c[offset]
+        if mutate_native is not None:
+            mutate_native(self.n)
+        self.ram = self.profile["titles"][title]["ram"]
         self.bus = {}
         self.frame = 10
         self.events = []
+        self.logs = []
         self.output = []
         self.safe = True
         self.check_native_idle = False
@@ -25,6 +44,8 @@ class World:
         if present:
             self.put(self.n["BASE"], self.n["SIG"], 4)
             self.put(self.n["BASE"] + 4, self.n["ABI"], 2)
+            if abi == 2:
+                self.put(self.n["BASE"] + 0x40, 0x04, 4)  # CAP_NATIVE_SOUND, not trade
         runtime = self.lua
         io = runtime.table(read_u8=lambda a: self.read(a, 1),
                            read_u16=lambda a: self.read(a, 2),
@@ -43,14 +64,18 @@ class World:
             io=runtime.table(write_u8=self.write)))
         reads_mod = runtime.execute((ROOT / "lua/gen3/reads.lua").read_text(encoding="utf-8"))
         self.reads = reads_mod.new(runtime.table_from(
-            self.profile["titles"]["radical_red"], recursive=True), io)
+            self.profile["titles"][title], recursive=True), io)
         module = runtime.execute((ROOT / "lua/gen3/native.lua").read_text(encoding="utf-8"))
         self.native = module.new(runtime.table_from(self.profile, recursive=True), runtime.table(
             io=io, writes=self.writes, reads=self.reads, initial_seq=initial_seq,
             artifact_kind=kind,
             timeout_frames=5, send=lambda event, fields: self.events.append((event, fields)),
+            log=self.logs.append,
             in_battle=lambda: self.battle,
             panel_closed=lambda: (True, self.panel_result)))
+        if scene_capability_model:
+            # Queue/receipt MODEL only; this does not qualify a shipped v2 binding.
+            self.native.trade_capable = lambda *_: True
 
     def put(self, address, value, size=1):
         for i in range(size):
@@ -82,6 +107,514 @@ def test_absent_native_does_not_stage_or_write():
     assert w.native.play_sound(w.native, 25) == (None, "native absent")
     w.service()
     assert w.output == []
+
+
+def test_v2_mailbox_reads_capabilities_and_queues_only_epoch_handshake():
+    w = World(abi=2)
+    fields = w.native.mailbox(w.native)
+    assert fields.capabilities == 4 and fields.session_epoch == 0
+    assert w.native.trade_capable(w.native) is False
+    w.native.set_session_epoch(w.native, 0x12345678)
+    assert w.output == []
+    w.safe = False
+    w.service()
+    assert w.output == []
+    w.safe = True
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 0x12345678
+    assert [a for a, _ in w.output] == list(range(w.n["BASE"] + 0x44, w.n["BASE"] + 0x48))
+    assert w.native.mailbox(w.native).capabilities == 4
+    assert w.native.mailbox(w.native).session_epoch == 0x12345678
+
+
+@pytest.mark.parametrize("field", ["signature", "abi_version", "opcode", "seq", "status", "ack_seq",
+                                  "reason", "args", "result", "capabilities", "session_epoch"])
+def test_v2_rejects_shifted_mailbox_fields_before_any_io(field):
+    def shift(native):
+        native["abi_v2"]["structs"]["SlinkMailboxV2"]["fields"][field]["offset"] += 2
+    with pytest.raises(lupa.LuaError, match="v2 mailbox field offset"):
+        World(abi=2, mutate_native=shift)
+
+
+@pytest.mark.parametrize("opcode,value", [("OP_PLAY_SE", 20), ("OP_NOT_IN_ABI", 100)])
+def test_v2_rejects_opcodes_that_disagree_with_the_canonical_abi(opcode, value):
+    with pytest.raises(lupa.LuaError, match="v2 opcode mismatch"):
+        World(abi=2, mutate_native=lambda native: native.update({opcode: value}))
+
+
+def test_v2_rejects_an_omitted_canonical_opcode():
+    with pytest.raises(lupa.LuaError, match="v2 opcode missing"):
+        World(abi=2, mutate_native=lambda native: native.pop("OP_MATCH_CALL"))
+
+
+@pytest.mark.parametrize("epoch", [0, -1, 1.5, 0x100000000])
+def test_v2_rejects_invalid_epoch_without_writes(epoch):
+    w = World(abi=2)
+    assert w.native.set_session_epoch(w.native, epoch) == (None, "invalid session epoch")
+    w.service()
+    assert w.output == []
+
+
+@pytest.mark.parametrize("abi,reason,expected", [
+    (2, 11, "uncertain"), (2, 12, "identity"), (2, 13, "client_too_old"), (2, 99, None),
+    (1, 11, None), (1, 12, None), (1, 13, None),
+])
+def test_failure_reason_names_are_bound_to_mailbox_abi(abi, reason, expected):
+    w = World(abi=abi)
+    if abi == 2:
+        w.native.set_session_epoch(w.native, 1)
+        w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    w.service()
+    w.ack(status=3)
+    w.put(w.n["BASE"] + 14, reason, 2)
+    w.service()
+    assert results == [("native refused", 0, expected)]
+
+
+def test_v2_commands_require_handshake_and_refuse_changed_epoch():
+    w = World(abi=2)
+    assert w.native.play_sound(w.native, 25) == (None, "client_too_old")
+    assert w.output == []
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    before = len(w.output)
+    w.put(w.n["BASE"] + 0x44, 10, 4)
+    w.service()
+    assert len(w.output) == before and results[0][0] == "native epoch changed"
+
+
+@pytest.mark.parametrize("poison_first", [False, True])
+def test_native_epoch_zero_allows_only_a_new_handshake(poison_first):
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    if poison_first:
+        w.put(w.n["BASE"] + 0x44, 10, 4)
+        assert w.native.service(w.native) == (None, "native epoch changed")
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    before = len(w.output)
+    assert w.native.play_sound(w.native, 25) == (None, "client_too_old")
+    assert len(w.output) == before
+    handle = w.native.set_session_epoch(w.native, 11)
+    assert handle is not None and not isinstance(handle, tuple)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 11
+    assert [a for a, _ in w.output[before:]] == list(range(w.n["BASE"] + 0x44, w.n["BASE"] + 0x48))
+    w.native.play_sound(w.native, 25)
+    w.service()
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_PLAY_SE"]
+
+
+def test_native_epoch_zero_aborts_old_queued_work_before_rehandshake():
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    handle = w.native.set_session_epoch(w.native, 10)
+    assert handle is not None and not isinstance(handle, tuple)
+    assert results == [("native epoch cleared", None, None)]
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 10 and w.read(w.n["BASE"] + 6, 2) == 0
+
+
+@pytest.mark.parametrize("reader,offset", [("read_u16", 6), ("read_u32", 0x40), ("read_u32", 0x44)])
+def test_mailbox_read_failure_is_a_named_refusal_not_an_exception(reader, offset):
+    w = World(abi=2)
+    original = w.native_io[reader]
+
+    def unreadable(address):
+        if address == w.n["BASE"] + offset:
+            raise RuntimeError("synthetic mailbox read failure")
+        return original(address)
+
+    w.native_io[reader] = unreadable
+    assert w.native.mailbox(w.native) == (None, "native mailbox unreadable")
+    assert w.output == []
+
+
+def test_epoch_read_failure_aborts_without_writes_and_recovers_only_after_clear():
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    before = len(w.output)
+    original = w.native_io.read_u32
+
+    def unreadable(address):
+        if address == w.n["BASE"] + 0x44:
+            raise RuntimeError("synthetic epoch read failure")
+        return original(address)
+
+    w.native_io.read_u32 = unreadable
+    assert w.native.service(w.native) == (None, "native epoch unreadable")
+    assert results == [("native epoch unreadable", None, None)] and len(w.output) == before
+    w.native_io.read_u32 = original
+    assert w.native.play_sound(w.native, 25) == (None, "native epoch unreadable")
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    w.native.set_session_epoch(w.native, 10)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 10
+
+
+def test_v2_panel_and_control_do_not_inherit_v1_memory_layout():
+    w = World(abi=2)
+    assert w.native.link_panel(w.native, w.lua.table(rows=w.lua.table("hello"))) == (
+        None, "native panel absent")
+    assert w.native.config(w.native, w.lua.table(pc_trade_npc=True, battle_calc=True)) == (
+        None, "v2 control binding unavailable")
+    w.service()
+    assert w.output == []
+
+
+def match_call_world(*, pack="gen3_emerald", caps=0x40, present=True, kind="companion"):
+    w = World(abi=2, pack=pack, present=present, kind=kind)
+    w.put(w.n["BASE"] + 0x40, caps, 4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    return w
+
+
+def request_call(w, tag="fallen", data=None):
+    return w.native.request_match_call(w.native, tag,
+                                      w.lua.table_from(data, recursive=True) if data is not None else None)
+
+
+CALL_DATA = {"trainer_name": "BOB", "caller_mon": {"species_id": 392, "nickname": "RALTS"},
+             "receiver_mon": {"species_id": 298, "nickname": "DOTS"}}
+
+
+@pytest.mark.parametrize("pack,caps,present,kind", [
+    ("gen3_frlg", 0x40, True, "companion"), ("gen3_rr", 0x40, True, "companion"),
+    ("gen3_emerald", 0, True, "companion"), ("gen3_emerald", 0x40, False, "companion"),
+    ("gen3_emerald", 0xFFFFFFFF, True, "companion"),
+    ("gen3_emerald", 0x40, True, "clean"),
+])
+def test_match_call_has_zero_writes_without_emerald_companion_capability(pack, caps, present, kind):
+    w = match_call_world(pack=pack, caps=caps, present=present, kind=kind)
+    assert request_call(w, data=CALL_DATA) is False
+    w.service()
+    assert w.output == []
+
+
+def test_match_call_stages_bounded_u16_record_before_publishing_opcode():
+    w = match_call_world()
+    w.output.clear()
+    assert request_call(w, data=CALL_DATA) is True
+    assert w.output == []
+    w.service()
+    raw = w.raw(w.n["TEXT_BUF"], 36)
+    assert raw[:6] == bytes([1, 1, 0x88, 1, 0x2A, 1])
+    assert raw[6:14] == bytes([0xBC, 0xC9, 0xBC] + [0xFF] * 5)
+    assert raw[14:25] == bytes([0xCC, 0xBB, 0xC6, 0xCE, 0xCD] + [0xFF] * 6)
+    assert raw[25:36] == bytes([0xBE, 0xC9, 0xCE, 0xCD] + [0xFF] * 7)
+    assert w.raw(w.n["BASE"] + 16, 32) == bytes([1] + [0] * 31)
+    assert [a for a, _ in w.output[:36]] == list(range(w.n["TEXT_BUF"], w.n["TEXT_BUF"] + 36))
+    assert [a for a, _ in w.output[-2:]] == [w.n["BASE"] + 6, w.n["BASE"] + 7]
+    assert w.read(w.n["BASE"] + 6, 2) == 32
+    assert w.native.trade_capable(w.native) is False
+    assert all(a < w.n["BASE"] + 0xE00 for a, _ in w.output), "native-owned record/witness was written"
+
+
+@pytest.mark.parametrize("data", [None, {}, {"trainer_name": "\u2603"}])
+def test_match_call_generic_record_clears_previous_names(data):
+    w = match_call_world()
+    for offset in range(36):
+        w.put(w.n["TEXT_BUF"] + offset, 0xAA)
+    request_call(w, "dead_zone", data)
+    w.service()
+    assert w.raw(w.n["TEXT_BUF"], 36) == bytes([2, 0, 0, 0, 0, 0] + [0xFF] * 30)
+
+
+def test_match_call_clips_names_filters_controls_and_refuses_non_u16_species():
+    w = match_call_world()
+    request_call(w, data={"trainer_name": "ABCDEFGH", "caller_mon": {"nickname": "ABCDEFGHIJKL", "species_id": 65536},
+                         "receiver_mon": {"nickname": "\nA\u2603B", "species_id": -1}})
+    w.service()
+    raw = w.raw(w.n["TEXT_BUF"], 36)
+    assert raw[:6] == bytes([1, 1, 0, 0, 0, 0])
+    assert raw[6:14] == bytes([*range(0xBB, 0xC2), 0xFF])
+    assert raw[14:25] == bytes([*range(0xBB, 0xC5), 0xFF])
+    assert raw[25:36] == bytes([0xBB, 0xBC] + [0xFF] * 9)
+
+
+def test_match_call_never_invents_an_epoch_without_a_session_binding():
+    w = World(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    assert request_call(w) is False
+    w.service()
+    assert w.output == []
+
+
+def test_match_call_species_are_bounded_by_the_pack_species_table():
+    w = match_call_world()
+    request_call(w, data={**CALL_DATA, "caller_mon": {"species_id": 412}, "receiver_mon": {"species_id": 65535}})
+    w.service()
+    assert w.raw(w.n["TEXT_BUF"] + 2, 4) == bytes(4)
+
+
+def test_empty_zero_revision_witness_does_not_require_erased_stale_fields():
+    w = match_call_world()
+    call_witness(w, 0, epoch=999, seq=123, event=3, revision=0, delivered_frame=555)
+    request_call(w)
+    w.service()
+    assert len(call_posts(w)) == 1
+
+
+def test_automatic_match_call_handshake_stops_after_bounded_unsafe_attempts():
+    w = World(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.safe = False
+    w.native.bind_match_call_session(w.native, 7)
+    for _ in range(10):
+        w.service()
+    w.safe = True
+    for _ in range(10):
+        w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 0 and w.output == []
+    assert sum("match call handshake exhausted" in line for line in w.logs) == 1
+    w.native.bind_match_call_session(w.native, 7)  # explicit recovery
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 7
+
+
+def test_automatic_epoch_write_never_displaces_an_old_open_call():
+    w = World(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.put(w.n["BASE"] + 0x44, 6, 4)
+    call_witness(w, 2, epoch=6, seq=55, event=1, revision=2)
+    w.native.bind_match_call_session(w.native, 7)
+    for _ in range(10):
+        w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 6 and w.output == []
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.output == [], "rebind must repeat the ownership check"
+    call_witness(w, 4, epoch=6, seq=55, event=1, revision=4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 7
+
+
+def call_posts(w):
+    return [b for a, b in w.output if a == w.n["BASE"] + 6 and b == 32]
+
+
+def call_witness(w, phase, *, epoch=7, seq=None, event=None, revision=2, delivered_frame=0):
+    shape = w.n["abi_v2"]["structs"]["SlinkCallWitnessV2"]["fields"]
+    base = w.n["BASE"] + w.n["abi_v2"]["constants"]["SLINK_CALL_WITNESS_OFFSET"]
+    values = {"session_epoch": epoch, "seq": w.read(w.n["BASE"] + 8, 2) if seq is None else seq,
+              "event": w.read(w.n["TEXT_BUF"], 1) if event is None else event,
+              "revision": revision, "phase": phase, "delivered_frame": delivered_frame}
+    for name, value in values.items():
+        w.put(base + shape[name]["offset"], value, shape[name]["width"])
+
+
+def accepted_call(w, tag="fallen"):
+    assert request_call(w, tag, CALL_DATA)
+    w.service()
+    call_witness(w, 1)  # native publishes ARMED and its private copy before ACK
+    w.ack()
+    w.service()
+
+
+def test_match_call_ack_and_armed_are_not_delivery_or_record_release():
+    w = match_call_world()
+    accepted_call(w)
+    request_call(w, "dead_zone")
+    w.frame += 20000
+    w.service()
+    assert len(call_posts(w)) == 1
+    call_witness(w, 2, revision=4)
+    w.service()
+    w.frame += 20000
+    w.service()
+    assert len(call_posts(w)) == 1, "DELIVERED still owns the record until COMPLETE"
+    call_witness(w, 4, revision=6)
+    w.service()
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
+def test_match_call_gap_uses_emulator_frames_and_accepts_frame_zero_delivery():
+    w = match_call_world()
+    accepted_call(w)
+    call_witness(w, 4, revision=4, delivered_frame=0)
+    w.service()
+    request_call(w, "dead_zone")
+    w.frame += 10799
+    w.service()
+    assert len(call_posts(w)) == 1
+    w.frame += 1
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
+@pytest.mark.parametrize("change", [
+    {"epoch": 99}, {"seq": 99}, {"event": 3}, {"revision": 1}, {"revision": 0}, {"phase": 99},
+])
+def test_match_call_rejects_wrong_or_unstable_delivery_identity(change):
+    w = match_call_world()
+    accepted_call(w)
+    fields = {"phase": 4, "revision": 4, **change}
+    call_witness(w, **fields)
+    request_call(w, "dead_zone")
+    w.service()
+    w.frame += 20000
+    w.service()
+    assert len(call_posts(w)) == 1
+
+
+def test_match_call_torn_witness_cannot_release_the_inflight_record():
+    w = match_call_world()
+    accepted_call(w)
+    call_witness(w, 4, revision=4)
+    request_call(w, "dead_zone")
+    base = w.n["BASE"] + w.n["abi_v2"]["constants"]["SLINK_CALL_WITNESS_OFFSET"]
+    original = w.native_io.read_bytes
+
+    def torn(address, size):
+        out = original(address, size)
+        if address == base:
+            w.put(base + 6, w.read(base + 6, 2) + 2, 2)
+        return out
+
+    w.native_io.read_bytes = torn
+    w.service()
+    w.frame += 20000
+    w.service()
+    assert len(call_posts(w)) == 1
+
+
+def test_match_call_refusal_starts_no_gap():
+    w = match_call_world()
+    accepted_call(w)
+    request_call(w, "dead_zone")
+    call_witness(w, 3, revision=4)
+    w.service()
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
+def test_occupied_slot_fail_ack_does_not_attribute_the_older_owned_witness():
+    w = match_call_world()
+    request_call(w, "fallen")
+    w.service()
+    call_witness(w, 2, epoch=6, seq=55, event=1, revision=2)
+    w.ack(status=3)  # prompt refusal; producer preserves the older UI's witness
+    w.service()
+    request_call(w, "dead_zone")
+    w.service()
+    assert len(call_posts(w)) == 1
+    assert not any("delivered" in line for line in w.logs)
+    call_witness(w, 4, epoch=6, seq=55, event=1, revision=4)
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
+def test_match_call_priority_and_newest_equal_record_win_before_posting():
+    w = match_call_world()
+    w.safe = False
+    request_call(w, "first_link", {"trainer_name": "OLD"})
+    w.service()  # owned queue, but no publication while unsafe
+    request_call(w, "fallen", {"trainer_name": "EVE"})
+    request_call(w, "dead_zone", {"trainer_name": "LOW"})
+    request_call(w, "fallen", {"trainer_name": "BOB"})
+    w.safe = True
+    w.service()
+    assert len(call_posts(w)) == 1 and w.read(w.n["TEXT_BUF"], 1) == 1
+    assert w.raw(w.n["TEXT_BUF"] + 6, 3) == bytes([0xBC, 0xC9, 0xBC])
+
+
+def test_match_call_first_link_is_once_even_across_capability_loss():
+    w = match_call_world()
+    accepted_call(w, "first_link")
+    w.put(w.n["BASE"] + 0x40, 0, 4)
+    w.service()
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    call_witness(w, 4, revision=4)
+    w.frame += 20000
+    w.service()
+    assert request_call(w, "first_link") is False
+
+
+@pytest.mark.parametrize("failure,burned", [("stage", False), ("publish", True)])
+def test_first_link_once_flag_burns_only_when_publication_is_attempted(failure, burned):
+    class FailingCallWorld(World):
+        fault = None
+
+        def write(self, address, value, *_):
+            target = self.n["TEXT_BUF"] + 5 if self.fault == "stage" else self.n["BASE"] + 7
+            if self.fault and address == target:
+                raise RuntimeError("synthetic call write failure")
+            super().write(address, value)
+
+    w = FailingCallWorld(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    w.fault = failure
+    request_call(w, "first_link")
+    w.service()
+    w.fault = None
+    w.put(w.n["BASE"] + 6, 0, 2)
+    w.put(w.n["BASE"] + 10, 0, 2)
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.native.match_call_capable(w.native) is True
+    assert request_call(w, "first_link") is (not burned)
+    assert request_call(w, "fallen") is True
+
+
+def test_match_call_drops_queued_and_inflight_on_native_reset_without_replay():
+    w = match_call_world()
+    accepted_call(w)
+    request_call(w, "dead_zone")
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    base = w.n["BASE"] + w.n["abi_v2"]["constants"]["SLINK_CALL_WITNESS_OFFSET"]
+    for offset in range(32):
+        w.put(base + offset, 0)
+    w.service()
+    w.service()
+    assert len(call_posts(w)) == 1
+    request_call(w, "dead_zone")
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
+def test_match_call_foreign_open_ui_blocks_new_record_but_is_never_our_delivery():
+    w = match_call_world()
+    call_witness(w, 2, epoch=6, event=1, seq=55, delivered_frame=999999)
+    request_call(w, "dead_zone")
+    w.service()
+    assert call_posts(w) == []
+    call_witness(w, 4, epoch=6, event=1, seq=55, revision=4, delivered_frame=999999)
+    w.service()
+    assert len(call_posts(w)) == 1
+
+
+def test_match_call_does_not_reuse_an_old_matching_witness_revision():
+    w = match_call_world()
+    call_witness(w, 4, seq=1, event=1, revision=6)
+    request_call(w)
+    w.service()
+    w.ack()  # the old same-epoch/seq/event witness has not changed
+    w.service()
+    request_call(w, "dead_zone")
+    w.frame += 20000
+    w.service()
+    assert len(call_posts(w)) == 1
 
 
 def test_clean_artifact_does_not_trust_a_stale_companion_signature():
@@ -143,7 +676,7 @@ def test_refused_ui_has_the_exact_cancel_result(operation, cancel):
 
 def test_a_published_job_carries_its_own_dispatch_receipt():
     """The job table IS the handle: queued -> no flag, published -> the flag. Nothing infers it."""
-    w = World()
+    w = World(scene_capability_model=True)
     handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
     assert handle["posted"] is None                              # queued, not posted
     w.service()
@@ -151,8 +684,73 @@ def test_a_published_job_carries_its_own_dispatch_receipt():
     assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]   # the publish the receipt names
 
 
-def test_a_job_queued_behind_another_carries_no_receipt_yet():
+def test_partial_opcode_publication_is_distinct_from_no_dispatch():
+    class InterruptedWorld(World):
+        def write(self, address, value, *_):
+            if address == self.n["BASE"] + 7:
+                raise RuntimeError("high opcode byte failed")
+            super().write(address, value)
+
+    w = InterruptedWorld(scene_capability_model=True)
+    results = []
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *args: results.append(args))
+    w.service()
+    assert handle["posted"] is None
+    assert handle["publish_attempted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]
+    assert results[0][0] == "native dispatch interrupted"
+
+
+def test_shipped_native_declares_the_complete_trade_transport_interface():
     w = World()
+    for method in ("trade_visit", "trade_eligible", "trade_authorized", "prepare_trade", "withdraw_trade", "cancel", "transfer"):
+        assert w.native[method] is not None, method
+    arity = w.lua.eval('function(f) return debug.getinfo(f, "u").nparams end')
+    assert arity(w.native.transfer) == 6  # self, step, cmd, done, guard, milestone callback
+    assert w.native.trade_capable(w.native) is False
+
+
+def test_shipped_native_refuses_durable_scene_without_capability():
+    w = World()
+    results = []
+    result = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
+                               lambda *args: results.append(args), None, lambda *_: None)
+    assert result == (None, "durable_trade_unavailable")
+    w.service()
+    assert results == [("durable_trade_unavailable",)] and w.output == []
+
+
+def test_shipped_v1_scene_probe_without_progress_returns_and_posts_a_job():
+    """Proxy for lua/tests/test_live_tradescene.lua's direct transport call."""
+    w = World()
+    assert w.native.trade_capable(w.native) is False
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0))
+    assert not isinstance(handle, tuple) and handle is not None
+    w.service()
+    assert handle.posted is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]
+
+
+def test_progress_argument_does_not_block_unrelated_enemy_staging():
+    w = World()
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                               lambda *_: None, None, lambda *_: None)
+    assert not isinstance(handle, tuple)
+    w.service()
+    assert handle.posted is True
+
+
+def test_transfer_blob_length_uses_the_reads_facade_record_size():
+    w = World()
+    w.reads.PARTY_MON_SIZE = 80  # MODEL alternate record geometry, not a cartridge claim
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 80)), lambda *_: None)
+    assert not isinstance(handle, tuple)
+    w.service()
+    assert handle.posted is True
+
+
+def test_a_job_queued_behind_another_carries_no_receipt_yet():
+    w = World(scene_capability_model=True)
     first = w.native.play_sound(w.native, 25)
     second = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
     w.service()
@@ -176,7 +774,7 @@ def test_a_held_arm_sets_no_receipt_and_leaves_the_job_queued():
 
 
 def test_a_job_dropped_by_its_guard_carries_no_receipt():
-    w = World()
+    w = World(scene_capability_model=True)
     seen = []
     handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
                                lambda why, _r, _reason=None: seen.append(why),
@@ -205,7 +803,7 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
         holder["write"](w.writes)
         w.writes.disarm(w.writes)
 
-    w = World()
+    w = World(scene_capability_model=True)
     # writes.lua type-checks the allow predicate, and lupa hands a Python callable over as
     # userdata (not "function"), so the writer's predicate -- and the write itself, which needs
     # an explicit self when called from Python -- go through Lua.
@@ -287,10 +885,12 @@ def test_c511a_the_patch_handler_keeps_the_two_uses_apart():
     for part in ("RV_BATTLE_COMM", "RV_BATTLE_MAIN_FUNC", "RV_GMAIN_CB2", "RV_BATTLE_TYPE_LINK",
                  "RV_TRAINER_OPPONENT", "REASON_WINDOW_CLOSED", "stage_enemy_party(count)"):
         assert part in rival, part
-    trade = src[src.index("case OP_SET_ENEMY_PARTY:"):]
-    trade = trade[:trade.index("case OP_SET_PARTY_MON:")]
-    assert "RV_" not in trade, "opcode 16 must stay free of the window check"
-    assert "stage_enemy_party(count)" in trade
+    # RR-DURABLE (Codex Emerald ruling P1): on the durable build the raw trade stages 16/18
+    # are trade bypasses and are always refused by name; the trade stages through the producer.
+    raw = src[src.index("case OP_SET_ENEMY_PARTY:"):]
+    raw = raw[:raw.index("case OP_SPAWN_PEER_NPC:")]
+    assert "case OP_SET_PARTY_MON:" in raw and "ack(ST_FAIL, REASON_DURABLE_ONLY)" in raw
+    assert "stage_enemy_party" not in raw and "SLINK_BLOB_BUF" not in raw and "gPlayerParty" not in raw
 
 
 @pytest.mark.parametrize("lost_ack", [False, True])
@@ -589,6 +1189,7 @@ def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
     elif op == "OP_CHOOSE_PARTY_MON":
         native.choose_mon(native, L.table(token="t"))
     else:
+        native.trade_capable = lambda *_: True  # scene timeout MODEL, not binding admission
         assert native.transfer(native, "scene", L.table(slot=0), lambda *_: None)
     native.service(native)
     assert w.read(w.n["BASE"] + 6, 2) == w.n[op]

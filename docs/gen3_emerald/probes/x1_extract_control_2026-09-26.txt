@@ -1,0 +1,179 @@
+X1-EXTRACT / XF-3 - vanilla Emerald HEADER + CONTROL receipt, 2026-09-26
+
+Scope and pins
+--------------
+Assigned checkout: C:/slink-wt/em-x1, branch claude/gen3-emerald-x1.
+Base: 798b6c80c5e359cfc08963ed3f53e76f26bef070. Only leased files changed.
+No push, merge, emulator, live-client run, server edit, or release qualification.
+Owner ROM (read only): E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba
+SHA1: f3ae088181bf583e55daf962a92bb46f4f1d07b7
+pret: .cache/pret/pokeemerald @ c65e93f20a5275ab03b07d6f6411096a82a60ffd;
+tracked source clean, checked by the tool before vanilla layout/CONTROL.
+Symbols: data/gen3/pret/pokeemerald.sym
+SHA256: a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc
+Expansion clone: .cache/expansion-src @ e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7,
+shallow tag expansion/1.17.0, gitignored; no upstream source/ROM committed.
+
+Implementation contract
+-----------------------
+tools/extract_expansion_data.py reads GF at ROM 0x100 and scans 0x100..0x400
+for unique RHHEXP magic. GF version/language must be English Emerald (3/2).
+RHH supported version is 1.17.0; counts come from RHH, never layout counts.
+GF sources: pret and expansion src/rom_header_gf.c:18-105. RHH source:
+expansion src/rom_header_rhh.c:14-28 (explicit public-ABI offsets).
+
+Per-build layout is JSON schema 1, ROM-SHA1-bound, with provenance and separate
+table strides, field offsets/widths/counts/bit shifts/bit widths/signedness,
+inline/external/pointer names, evolution layout, terminator and ignored methods.
+See tool module docstring and vanilla_layout() for schema; the synthetic test's
+layout exercises expansion shapes but is explicitly NOT real expansion geometry.
+Counts include the zero record and unused slots, preserving ROM IDs.
+Names preserve ROM text/case and symbolic glyphs, e.g. {POKEBLOCK}; no prettifying.
+Families use connected evolution components, preferring the lowest unevolved
+root (Pichu 172, not Pikachu 25). A rootless cycle uses its minimum ID. Raw
+method/parameter/target edges remain in the pack. No later-generation baby
+species or form relationships are invented. National dex is read, not inferred
+from species IDs. Types and abilities retain numeric engine IDs, including 0.
+
+Vanilla struct sources: pret include/pokemon.h:297-338,355-360 and
+include/item.h:10-26. Strides 28/12/44/13 (species/moves/items/ability names) and
+evolution stride 8 are checked against published .sym sizes. Counts are parsed
+from pret include/constants/{species.h:420,moves.h:360,items.h:420,abilities.h:83};
+EVOS_PER_MON=5 from constants/pokemon.h:254. Name lengths are parsed from
+constants/global.h:94-108. NUM_SPECIES=412 excludes Egg at 412 but includes
+unused old-Unown slots 252-276 (constants/species.h:257-281,418-420).
+
+HEADER boundary: GF lacks evolution/national-dex pointers. Only those two use
+supplemental SOURCE addresses from the pinned symbol artifact:
+  sSpeciesToNationalPokedexNum 0x0831dc82, size 0x336 (.sym:40421)
+  gEvolutionTable             0x0832531c, size 0x4060 (.sym:40912)
+They are disclosed as supplemental_symbols in output; they are not HEADER facts.
+GF-derived pointers observed in the owner's ROM:
+  species names 0x083185c8; move names 0x0831977c; species 0x083203cc;
+  ability names 0x0831b6db; items 0x085839a0; moves 0x0831c898.
+
+CONTROL results (all rows, no exceptions)
+----------------------------------------
+Species names:       412 rows, diff 0 vs src/data/text/species_names.h.
+Species stats:       412 rows, diff 0: 6 base stats, 2 types, 2 ability slots,
+                     vs src/data/pokemon/species_info.h (incl. OLD_UNOWN macro).
+National dex:        412 rows, diff 0 vs src/pokemon.c:523 onward and
+                     include/constants/pokedex.h first enum (incl. old-Unown).
+Evolution edges:     412 rows, 184 nonzero edges across 172 rows, diff 0 vs
+                     src/data/pokemon/evolution.h; includes method and parameter.
+Evolution families:  412 rows / 228 components including NONE/unused rows, diff 0.
+                     Oracle is an independent source-derived graph walk;
+                     extractor uses union-find. Baby/branch/split anchors tested.
+Moves:               355 rows, diff 0 vs src/data/battle_moves.h and
+                     src/data/text/move_names.h: names plus all 9 BattleMove
+                     fields (effect/power/type/accuracy/pp/secondary chance/
+                     target/signed priority/flags).
+Items:               377 rows, diff 0 vs src/data/items.h: name, itemId, price,
+                     holdEffect, holdEffectParam, pocket; omitted C fields = 0.
+Ability names:       78 rows, diff 0 vs src/data/text/abilities.h:80 onward.
+Source comparisons resolve integer constants and TM/HM macros mechanically.
+They require complete source ID coverage and compare every extracted field.
+Unknown expressions/glyphs, invalid pointers/ranges, truncated/unterminated
+names/lists, wrong ROM pins, wrong/dirty pret source fail rather than skip.
+
+Server cross-check (reported facts, no server change)
+----------------------------------------------------
+Playable species names/types/national dex and ability names: diff 0.
+Server projection excludes species NONE and old-Unown 252-276; they remain in
+the full source CONTROL. Display-name comparison ignores case, whitespace and
+punctuation; full ROM/source names above do not. No server per-species base-stat
+or ability-slot table is asserted by this comparison.
+
+Eight shared EVO_FAMILY roots differ from vanilla's source graph:
+  ID   Name       ROM family   server family / later-gen root
+  113  Chansey       113       493 / Happiny
+  122  Mr. Mime      122       492 / Mime Jr.
+  143  Snorlax       143       499 / Munchlax
+  185  Sudowoodo     185       491 / Bonsly
+  226  Mantine       226       511 / Mantyke
+  242  Blissey       113       493 / Happiny
+  363  Roselia       363       459 / Budew
+  411  Chimecho      411       486 / Chingling
+Evidence: server/pokemon_data.py:360-380 (explicitly CFRU IDs); root names at
+:104-115; pret evolution.h:69 (Chansey->Blissey), with complete graph compared.
+These are server-table facts, not extraction errors. Cross-title family policy
+remains the coordinator's decision; this tool exports only the ROM graph.
+
+Nature Power (move 267): base shared server table accuracy 0 at
+server/data/moves/gen3_vanilla.py:636 vs Emerald ROM/source 95 at pret
+src/data/battle_moves.h:3474-3485. COVERED by the existing Emerald overlay:
+server/adapters/gen3_frlge.py:97-99,782-783. Effective Emerald move-data comparison
+of power/type/accuracy/pp for all 354 non-NONE moves has diff 0.
+
+Item 273: ROM/source '{POKEBLOCK} CASE' vs server display 'Pokéblock Case' is a
+glyph-rendering difference only (pret src/data/items.h:3320 onward and
+charmap.txt:52; server/data/items/gen3_vanilla.py:77). Output preserves it.
+
+Shared base ITEM_NAMES lacks 70 ROM rows. Of these, 68 are NONE/unused rows
+whose ROM/source name is '????????':
+  0, 52-62, 72, 82, 87-92, 99-102, 105, 112-120, 176-178,
+  226-253, 267, 347-348.
+All are mechanically matched against pret src/data/items.h in CONTROL.
+Remaining 375 Magma Emblem / 376 Old Sea Map are COVERED by EMERALD_OVERLAY
+(server/data/items/gen3_vanilla.py:92; adapters/gen3_frlge.py:667-668).
+Effective Emerald overlay-item comparison diff 0; pret item source :4515,:4528.
+
+Expansion evidence and outstanding inputs
+----------------------------------------
+GF expansion species/moves/items pointers are supported; the old GF name
+pointers are intentionally unset (expansion src/rom_header_gf.c:119-120).
+SpeciesInfo embeds speciesName, natDexNum and an evolutions pointer
+(include/pokemon.h:394-427,508); MoveInfo uses a name pointer and packed stats
+(include/move.h:97-118); ItemInfo uses a name pointer (include/item.h:69-90);
+AbilityInfo embeds its name (include/pokemon.h:567-580).
+ItemNameLength is the size limit including EOS: src/data/items.h:17,
+include/metaprogram.h:34, constants/global.h:154, rom_header_rhh.c:26,43.
+Evolution end is 0xffff (constants/pokemon.h:272); EVO_NONE has special semantics
+(:325), so the per-build layout explicitly supplies ignored_methods. Species
+natDexNum and MoveInfo fields are bitfields: offsetof alone is insufficient;
+the later probe must also derive masks/widths, e.g. with initialized constants.
+
+Provisional expansion struct-offset list: NONE. No hand-derived default is
+silently shipped. Exact expansion extraction awaits X0 ROM plus build-probe
+layout, bound to that ROM hash/compiler/config. No claim that synthetic tests
+validate the real expansion layout, all expansion hacks, or XG1 completion.
+The tool refuses to infer an expansion layout from vanilla or a version number.
+Real expansion source CONTROL/admission is still an open X1 follow-up.
+
+Reproduction and verification
+----------------------------
+From C:/slink-wt/em-x1 (Python 3.12):
+  python tools/extract_expansion_data.py --rom "E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba" --check --output .cache/x1-control.json
+  $env:SLINK_EMERALD_ROM = "E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"
+  python -m pytest tests/unit/test_extract_expansion_data.py -q -p no:randomly
+  python -m pytest tests/unit -q -p no:randomly -k "extract or gen3" -rs
+  ruff check tools/extract_expansion_data.py tests/unit/test_extract_expansion_data.py
+
+CONTROL output is gitignored; generated SHA256:
+8acaab99c32899d3ab4537ed641ed647bd51eaf6783c74ed354cba33b57f816c
+It contains every extracted row, the full input layout/provenance, empty
+source-difference lists, and explicit base/effective server comparison lists.
+No generated data pack/ROM/source clone is committed.
+
+Focused tests first passed 36/36; final results below include the added
+absent-source/present-wrong-ROM ordering falsifier. Tests mutate each table,
+family/dex, and layout offsets to prove CONTROL catches differences. Synthetic
+expansion tests cover non-default header position, RHH counts overriding layout
+counts, wide abilities, inline/pointer names, signed/packed move fields, price
+>65535, evolution termination/targets and bad headers/pointers/counts/ROM pins.
+Absent guards catch only absent paths. Wrong ROM/source never becomes a skip;
+no import-time fixture read. See tests/TESTING.md:239-264.
+
+First broad run: 3726 passed, 76 skipped, 10901 deselected in 141.29 s.
+Final focused: 37 passed, 0 skipped in 2.21 s.
+Final requested broad subset (with -rs): 3727 passed, 76 skipped, 10901 deselected
+in 121.92 s; exit 0. No X1 test skipped. Full gitignored log:
+.cache/x1-subset-final.log. Of the 76 skips, 72 name missing ROMs, decomp clones,
+ARM compiler, save fixtures, or shadow captures; four test_e2e_duo_scenario_selection
+cases intentionally skip because their Gen 3 packs boot from battery saves.
+Absent local ROM run (no SLINK_EMERALD_ROM override): 28 passed, 9 skipped in
+0.31 s; every skip names the absent worktree-local Emerald ROM. This separately
+tests unprovisioned behavior and is not substituted for the 37/37 control run.
+Ruff: all checks passed on both leased Python files. git diff --check: passed.
+These skips and deliberate deselections do not qualify any live
+gate. This receipt certifies only the exercised HEADER/vanilla CONTROL scope.

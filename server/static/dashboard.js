@@ -241,6 +241,17 @@ if (window._slinkDashInit) {
           && node.dataset.species === node._spriteFor) {
         return false;
       }
+      // The calc preview's visibility is calc-preview.js's: the server always sends
+      // display:none, and re-hiding it every poll is half the battle flash.
+      if (attrName === 'style' && node && node.classList && node.classList.contains('calc-preview')) {
+        return false;
+      }
+    };
+    // ...and so is its rendered table: the server's copy is empty, so the morph would remove
+    // it every 2 s and the page painted the gap until afterSettle re-rendered it.
+    Idiomorph.defaults.callbacks.beforeNodeRemoved = function(node) {
+      var p = node && node.parentElement;
+      if (p && p.classList && p.classList.contains('calc-preview')) return false;
     };
   }
   var SPRITE_OWNED = { src: 1, style: 1 };

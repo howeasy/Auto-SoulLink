@@ -1,0 +1,38 @@
+
+========== scenario: trade_reset_commit_gen3 ==========
+[duo] trade_reset_commit_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=b1e039f85706896a5ccc05ef7e236fc800237835
+[duo] server up: tcp=61922 http=61923 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_reset_commit_gen3_rp368q57
+[duo] timing server 1.1s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] RR reset initial native phase markers checked
+[duo] RR_RESET_INITIAL_ARCHIVE ..\..\Users\howar\AppData\Local\Temp\slink_duo_trade_reset_commit_gen3_rp368q57\rr_reset_initial a_sha256=b0b15e43cd7f632c799abb43d0906b10b494dce875c5c63ba7feca025ea7d965 b_sha256=cc5c353ed77187c66ba795dfca8b988ea3fad1dfe6b44c81aef737b1734b955a
+[duo] launched a phase=rr_reset_reload seed=False
+[duo] launched b phase=rr_reset_reload seed=False
+[duo] timing orchestrate 36.5s
+[duo] timing results 0.0s
+[duo] RESULT_LINE a: RESULT: PASS (cold-reloaded expected native save without runner SAVE)
+[duo] RESULT_LINE b: RESULT: PASS (cold-reloaded expected native save without runner SAVE)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] RR_RESET_NATIVE_SAVE side=a site=09f8ee33da230af7bea09e0bf773cdf04bb5bc998d613c3b3bc2fd26e2f8477f battery=09f8ee33da230af7bea09e0bf773cdf04bb5bc998d613c3b3bc2fd26e2f8477f counter=4->5 saves=1 extension=LIVE_RAM_MATCH
+[duo] RR_RESET_NATIVE_SAVE side=b site=8ad70218abbfdf32175ad122032007602bfdf2400fde145eb4c25f93753fd6e1 battery=8ad70218abbfdf32175ad122032007602bfdf2400fde145eb4c25f93753fd6e1 counter=4->6 saves=2 extension=LIVE_RAM_MATCH
+[duo] RR commit native battery/journal archived; cold reload and independent save/party/server outcome verified
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] trade_reset_commit_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_reset_commit_gen3_rp368q57
+
+========== summary ==========
+  trade_reset_commit_gen3: PASS (attempt 1 of 1)

@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -291,6 +292,24 @@ def test_two_new_accepted_hellos_are_not_one_reconnect():
     assert any("exactly one accepted reconnect hello" in p for p in problems), problems
 
 
+def test_gen3_reconnect_accepts_capability_refreshes_only_when_all_hellos_are_accepted():
+    """The durable Gen 3 client may refresh HELLO after native capability settles."""
+    before, after, events = _reconnect_snapshots()
+    refreshed = _with_new_events(events, *[
+        {"player": "a", "type": "hello", "text": "Connected (firered_rr, 2 mons)"}
+        for _ in range(3)
+    ])
+    assert duo.reconnect_same_problems(before, after, events, refreshed,
+                                       "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+    rejected = _with_new_events(refreshed,
+                                {"player": "a", "type": "hello", "text": "REJECTED — wrong OT"})
+    problems = duo.reconnect_same_problems(before, after, events, rejected,
+                                           "AAAA:1111:01", "1234",
+                                           allow_accepted_refreshes=True)
+    assert any("accepted reconnect hello" in p for p in problems), problems
+
+
 def test_a_log_at_the_entry_cap_still_finds_the_new_hello():
     """events.json is capped at 200 rows (server.py:79), so a reconnect at the cap drops the
     OLDEST row: the survivors are a prefix of the old list, not the whole of it."""
@@ -316,6 +335,24 @@ def test_wrong_save_reconnect_only_adds_a_rejected_hello():
                for p in duo.reconnect_wrong_problems(
                    b"same", b"same", status, events,
                    _with_new_events(rejected, {"player": "a", "type": "no_catch", "text": "bad"})))
+
+
+def test_gen3_wrong_save_allows_only_rejected_capability_refreshes():
+    _before, _after, events = _reconnect_snapshots()
+    status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
+                          "b": {"connected": True}}}
+    rejected = _with_new_events(events, *[
+        {"player": "a", "type": "hello", "text": "REJECTED — wrong save/slot"}
+        for _ in range(3)
+    ])
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, rejected,
+                                        allow_rejected_refreshes=True) == []
+    accepted = _with_new_events(rejected,
+                                {"player": "a", "type": "hello", "text": "Connected (firered_rr, 2 mons)"})
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, accepted,
+                                        allow_rejected_refreshes=True)
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, events,
+                                        allow_rejected_refreshes=True)
 
 
 def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
@@ -667,6 +704,8 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
 @pytest.mark.parametrize(("line", "classification"), [
     ("RESULT: FAIL (hunt ended out-of-balls)", "CAUSE_RNG"),
     ("RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", "CAUSE_RNG"),
+    ("RESULT: FAIL (hunt ended first-catch-battle-lost)", "CAUSE_RNG"),
+    ("RESULT: FAIL (link_new prerequisite failed: hunt ended first-catch-battle-lost)", "CAUSE_RNG"),
     ("RESULT: FAIL (linked capture was not returned)", "CONSEQUENCE"),
     ("RESULT: FAIL (linked capture was not returned to party)", "CONSEQUENCE"),
     ("RESULT: FAIL (force_faint never arrived)", "FINAL"),
@@ -686,6 +725,22 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
 ])
 def test_gen1_result_reason_table_is_exact(line, classification):
     assert duo.classify_gen1_result(line) == classification
+
+
+@pytest.mark.parametrize(("other", "retry"), [
+    ("RESULT: PASS (caught)\n", True),
+    ("RESULT: FAIL (linked capture was not returned)\n", True),
+    (None, True),
+    ("RESULT: FAIL (force_faint never arrived)\n", False),
+])
+def test_first_catch_loss_uses_only_the_existing_fresh_attempt_budget(other, retry):
+    cause = "RESULT: FAIL (link_new prerequisite failed: hunt ended first-catch-battle-lost)\n"
+    receipts = {"a": other, "b": cause}
+    name = "linked_faint_bench_battle_new"
+    assert duo.scenario_attempt_limit(name, "gen1_pure") == 3
+    assert duo.retryable_gen1_rng("gen1_pure", receipts, 1, 3, scenario=name) is retry
+    assert duo.retryable_gen1_rng("gen1_pure", receipts, 2, 3, scenario=name) is retry
+    assert not duo.retryable_gen1_rng("gen1_pure", receipts, 3, 3, scenario=name)
 
 
 def test_the_poison_rng_phrases_are_the_bodies_own_return_strings():
@@ -1062,6 +1117,94 @@ def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expe
     assert phase == expected
     assert route.encounters == encounters
     assert switches == ([] if start_active else [1] * encounters)
+
+
+@pytest.mark.parametrize(("opt_in", "party_after", "balls_after", "expected"), [
+    (True, 1, 1, "first-catch-battle-lost"),
+    (False, 1, 1, "pace-grass"),
+    (True, 2, 1, "caught"),
+    (True, 1, 0, "out-of-balls"),
+])
+def test_first_uncaught_route1_battle_is_terminal_only_when_opted_in(opt_in, party_after, balls_after, expected):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    balls = {"count": 1}
+    def rd(address):
+        return {1: 1, 2: 4, 3: balls["count"], 4: 0, 5: 14, 6: 0, 7: 14}.get(address, 0)
+    driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
+                       choose=lambda _name: lua.table(ok=True),
+                       commit_move=lambda _slot: lua.table(ok=False, why="battle_over"))
+    route = module.new(lua.table(player="b"), lua.table(driver=driver, step=lambda _buttons: None,
+        rd=rd, symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", stop_on_first_uncaught_battle=opt_in))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    overworld = lua.table(map=12, x=10, y=35, battle=0, battle_result=0, party_hp=19,
+                          party_count=party_after, font_loaded=False, joy_ignore=0)
+    _, phase = route.step(None, None, battle, 1)
+    assert phase == "wild-battle_over"
+    balls["count"] = balls_after
+    _, phase = route.step(None, None, overworld, 2)
+    assert phase == expected and route.encounters == 1
+    if expected == "first-catch-battle-lost":
+        _, again = route.step(None, None, battle, 3)
+        assert again == expected and route.encounters == 1  # no second grass encounter can qualify
+
+
+def test_actual_link_prerequisite_wording_is_the_retryable_hunt_terminal():
+    """Compose the real Lua carrier around a phase returned by the real Route 1 hunter."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    hunt_source = REPO / "lua/tests/gen1_rb_hunt_inputs.lua"
+    duo_source = (REPO / "lua/tests/duo/duo_gen1_main.lua").read_text(encoding="utf-8")
+    hunter = lua.eval(f'dofile("{hunt_source.as_posix()}")')
+    driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
+                       choose=lambda _name: lua.table(ok=True),
+                       commit_move=lambda _slot: lua.table(ok=False, why="battle_over"))
+    route = hunter.new(lua.table(player="b"), lua.table(driver=driver, step=lambda _buttons: None,
+        rd=lambda address: {1: 1, 2: 4, 3: 1, 4: 0, 5: 14, 6: 0, 7: 14}.get(address, 0),
+        symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", stop_on_first_uncaught_battle=True))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    overworld = lua.table(map=12, x=10, y=35, battle=0, battle_result=0, party_hp=19,
+                          party_count=1, font_loaded=False, joy_ignore=0)
+    route.step(None, None, battle, 1)
+    _, phase = route.step(None, None, overworld, 2)
+    assert phase == "first-catch-battle-lost"
+
+    wrap_source = re.search(r"(?ms)^local function link_prerequisite_failure\(why\).*?^end$", duo_source)
+    scenario_source = re.search(r"(?ms)^function scenarios.link_new\(\).*?^end$", duo_source)
+    assert wrap_source and scenario_source
+    lua.globals().LOST_PHASE = phase
+    prelude = '''
+local scenarios, D = {}, {scenario="linked_faint_bench_battle_new"}
+local function wait_go() return true end
+local function hunt(mode, options)
+    assert(mode == "catch" and options.stop_on_first_uncaught_battle == true)
+    return LOST_PHASE
+end
+'''
+    def compose(wrapper):
+        return lua.execute(prelude + wrapper + "\n" + scenario_source.group() +
+                           "\nreturn {scenarios.link_new, link_prerequisite_failure}")
+    funcs = compose(wrap_source.group())
+    passed, bare = funcs[1]()
+    assert passed is False and bare == "hunt ended first-catch-battle-lost"
+    nested = funcs[2](bare)
+    assert nested == "link_new prerequisite failed: " + bare
+    for reason in (bare, nested):
+        assert duo.classify_gen1_result("RESULT: FAIL (" + reason + ")") == "CAUSE_RNG"
+    pair = {"a": "RESULT: FAIL (linked capture was not returned)\n",
+            "b": "RESULT: FAIL (" + nested + ")\n"}
+    assert duo.retryable_gen1_rng("gen1_pure", pair, 1, 3, scenario="linked_faint_bench_battle_new")
+    assert not duo.retryable_gen1_rng("gen1_pure", pair, 3, 3, scenario="linked_faint_bench_battle_new")
+
+    changed = wrap_source.group().replace("link_new prerequisite failed: ", "link_new prerequisite changed: ")
+    assert changed != wrap_source.group()
+    altered = compose(changed)[2](bare)
+    assert duo.classify_gen1_result("RESULT: FAIL (" + altered + ")") == "FINAL"
+    assert not duo.retryable_gen1_rng("gen1_pure", {**pair, "b": "RESULT: FAIL (" + altered + ")\n"},
+                                      1, 3, scenario="linked_faint_bench_battle_new")
 
 
 # ── A0-H2: the post-result oracle registry, artifact provenance and the bag baseline ─────

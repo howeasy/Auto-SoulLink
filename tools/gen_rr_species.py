@@ -1,21 +1,44 @@
 #!/usr/bin/env python3
 """
-Generate RR-specific SPECIES_NAMES dict for pokemon_data.py.
+Generate the RR species-name catalog and ROM extension provenance.
 
 Radical Red uses a CUSTOM species numbering that differs from standard CFRU.
 Gen 9 mons, RR-exclusive Sevii forms, and some rearranged entries mean the
 standard CFRU species table is wrong for many IDs.
 
-Source: https://funnotbun.github.io/ (RR Dex)
-        -> data/species/species.h from the funnotbun repo
+Source: https://funnotbun.github.io/ (RR Dex) -> data/species/species.h from
+the funnotbun repo. That repo no longer exists on GitHub (confirmed 404,
+2026-09-26) -- the byte-for-byte pinned copy this now reads lives in
+data/gen3_rr_sources.lock.json (funnotbun_species_h), a Wayback Machine
+capture. See docs/gen3_requirements.md row F-7 and tools/fetch_rr_sources.py.
+
+Usage:
+    python tools/gen_rr_species.py --rom RR.gba  # regenerate catalog + ROM provenance
+    python tools/gen_rr_species.py --check     # regenerate in memory and diff
+                                                 # against the committed
+                                                 # data/games/gen3_frlge/rr_species.json
 """
 
+import argparse
 import json
 import re
-import urllib.request
+import sys
 from pathlib import Path
 
-SPECIES_H_URL = "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/species.h"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
+from rr_rom_encounters import default_rom_path, load_rom  # noqa: E402
+from rr_rom_species import display_metadata, extend_names  # noqa: E402
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+CANONICAL_OUTPUT = _REPO_ROOT / "data" / "games" / "gen3_frlge" / "rr_species.json"
+# The non-check write target -- kept identical to CANONICAL_OUTPUT so
+# `python tools/gen_rr_species.py` (no --check) actually updates the file
+# the --check mode (and every consumer) reads, instead of a stray
+# CWD-relative data/rr_species.json nothing imports.
+OUT_JSON = CANONICAL_OUTPUT
+PROVENANCE_OUTPUT = _REPO_ROOT / "data" / "gen3_rr_species_rom.json"
 
 # Special display name overrides
 SPECIAL_NAMES = {
@@ -119,33 +142,51 @@ def to_display(name):
     return name.replace("_", " ").title()
 
 
-def main():
-    print(f"Fetching {SPECIES_H_URL} ...")
-    data = urllib.request.urlopen(SPECIES_H_URL).read().decode()
-
+def _parse_names(data: str) -> dict[int, str]:
     entries = {}
     for m in re.finditer(r"#define\s+SPECIES_(\w+)\s+0x([0-9A-Fa-f]+)", data):
         name = m.group(1)
         num = int(m.group(2), 16)
         if name in ("NONE", "EGG"):
             continue
-        # Some IDs have duplicate defines (e.g. FARFETCHED and FARFETCHD both = 0x53)
-        # Keep the first one encountered
         if num not in entries:
             entries[num] = name
+    return {num: to_display(define_name) for num, define_name in sorted(entries.items())}
 
-    print(f"Parsed {len(entries)} species entries (max ID: {max(entries.keys())} = 0x{max(entries.keys()):X})")
 
-    # Build display names
-    names = {}
-    for num, define_name in sorted(entries.items()):
-        names[num] = to_display(define_name)
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rom", type=Path, default=default_rom_path(), help="pinned RR ROM (or SLINK_RR_ROM)")
+    parser.add_argument("--check", action="store_true",
+                        help="Regenerate in memory and diff against the "
+                             f"committed {CANONICAL_OUTPUT}; exit 1 on drift.")
+    args = parser.parse_args()
+
+    data = cached_source("funnotbun_species_h").decode("utf-8")
+    names, provenance = extend_names(load_rom(args.rom), _parse_names(data),
+        display_metadata(cached_source("jwowsquared_data_js").decode("utf-8")))
+    regen = json.dumps({str(k): v for k, v in sorted(names.items())}, indent=2)
+    proof = json.dumps(provenance, indent=2)+"\n"
+
+    if args.check:
+        committed = CANONICAL_OUTPUT.read_text(encoding="utf-8")
+        if regen == committed and PROVENANCE_OUTPUT.exists() and PROVENANCE_OUTPUT.read_text(encoding="utf-8") == proof:
+            print(f"OK: regenerated output matches {CANONICAL_OUTPUT} byte-for-byte "
+                  f"({len(names)} species).")
+            return 0
+        print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
+              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)\n"
+              f"{diff_snippet(committed, regen)}", file=sys.stderr)
+        return 1
+
+    print(f"Parsed {len(names)} species entries (max ID: {max(names.keys())} = 0x{max(names.keys()):X})")
 
     # Save intermediate JSON
-    out_json = Path("data/rr_species.json")
-    with open(out_json, "w") as f:
-        json.dump({str(k): v for k, v in sorted(names.items())}, f, indent=2)
-    print(f"Saved {len(names)} names to {out_json}")
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_JSON, "w", encoding="utf-8", newline="\n") as f:
+        f.write(regen)
+    PROVENANCE_OUTPUT.write_text(proof, encoding="utf-8", newline="\n")
+    print(f"Saved {len(names)} names to {OUT_JSON}")
 
     # Verify key entries
     checks = {
@@ -160,23 +201,8 @@ def main():
         ok = "✓" if expected.lower() in actual.lower() else "✗"
         print(f"  {ok} {sid:4d} (0x{sid:03X}): {actual}  (expected: {expected})")
 
-    # Now generate the SPECIES_NAMES dict for pokemon_data.py
-    print(f"\nGenerating SPECIES_NAMES dict with {len(names)} entries...")
-    lines = ["# RR 4.1 species names — generated from funnotbun/funnotbun.github.io species.h"]
-    lines.append("# DO NOT EDIT MANUALLY. Regenerate with: python tools/gen_rr_species.py")
-    lines.append(f"# Total: {len(names)} species (max ID: {max(names.keys())})")
-    lines.append("SPECIES_NAMES = {")
-    for num in sorted(names.keys()):
-        lines.append(f"    {num}: {names[num]!r},")
-    lines.append("}")
-
-    # Write to a temp file for review
-    out_py = Path("data/rr_species_names.py")
-    with open(out_py, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    print(f"Wrote Python dict to {out_py}")
-    print("Copy SPECIES_NAMES dict into server/pokemon_data.py to apply.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

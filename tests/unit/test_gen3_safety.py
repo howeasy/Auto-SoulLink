@@ -71,8 +71,11 @@ class World:
             g.put(n["base"] + n["abi_off"], n["abi"], 2)
             g.put(n["base"] + n["opcode_off"], 0, 2)
             g.put(n["base"] + n["status_off"], 2, 2)          # ST_OK, not ST_BUSY
-            g.put(n["info"] + n["info_drawn_off"], 1, 1)
-            g.put(n["info"] + n["info_ack_off"], 1, 1)
+            if n["abi"] == 2:
+                g.put(n["info"] + n["info_state_off"], 0, 1)
+            else:
+                g.put(n["info"] + n["info_drawn_off"], 1, 1)
+                g.put(n["info"] + n["info_ack_off"], 1, 1)
         snd = self.pack["sound"]
         if "player_se1" in snd:
             g.put(snd["player_se1"]["address"] + snd["ident_off"], snd["ident_magic"], 4)
@@ -976,15 +979,14 @@ def test_g5_rr_every_other_explode_shape_is_refused(kind, case):
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
-def test_g5_frlg_packs_admit_no_explode_handoff(title):
-    """FR/LG Explode is unchanged: the pack carries no Explode shape, so even the exact RR plan
-    with a hand-off tail is refused there (and Explode is not capable on FR/LG anyway)."""
-    assert "explode" not in committed_pack(title)["battle"]["handoff"]
+def test_frlg_packs_admit_the_bound_explode_handoff(title):
+    """FR/LG's independently symbol-bound plan has the same geometry as this test's literal control."""
+    assert "explode" in committed_pack(title)["battle"]["handoff"]
     ok, why, clauses = explode_parked(title, "clean").check_reason(
         "battle_commit", {"battler": 0, "plan": explode_h_plan()})
-    assert ok is False and clauses == ["battle_commit_handoff"]
+    assert ok is True and clauses == [], why
     w = explode_parked(title, "clean")
-    assert w.safety.handoff_entry(w.safety, 0, "explode") is None
+    assert w.safety.handoff_entry(w.safety, 0, "explode") is not None
     assert w.safety.handoff_entry(w.safety, 0) is not None
 
 

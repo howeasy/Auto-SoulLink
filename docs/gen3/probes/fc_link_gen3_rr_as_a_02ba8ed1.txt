@@ -1,0 +1,90 @@
+# gen3_final_cut row=link_gen3_rr_as_a item=§14_P5_RR_duo cut=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+# lane=C:/slink-wt/g3-lane3
+# command: python tools/e2e_duo.py --game gen3_rr --scenario link_gen3   (cwd=C:/slink-wt/g3-lane3)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T21:16:40 cpu=57% emuhawk=0 python=7
+start_utc=2026-09-28T01:16:39Z tracked_clean_before=True
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+[duo] server up: tcp=60851 http=60852 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_1vgo42r5
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=E5C1DFEF:2BDDC8BF b=64234AC4:D4223740
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): E5C1DFEF:2BDDC8BF <-> 64234AC4:D4223740 on route_1, alive
+[duo] timing orchestrate 10.1s
+[duo] timing results 0.0s
+[duo] RESULT_LINE a: RESULT: FAIL (the client sent sync_retrieve_failed for E5C1DFEF:2BDDC8BF)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] link_gen3: a client finished before 'both RESULT lines' (a: RESULT: FAIL (the client sent sync_retrieve_failed for E5C1DFEF:2BDDC8BF); b: no RESULT)
+--- link_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2523
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 2523
+[client] [SLink-gen3] write native 0x0203FD6C +21 frame 2523
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2523
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2523
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2523
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2523
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2523
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2523
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2523
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2524
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 2524
+[client] [SLink-gen3] write native 0x0203FD6C +21 frame 2524
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2524
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2524
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2524
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2524
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2524
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2524
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2524
+CAUGHT E5C1DFEF:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324
+WRITES 39
+RESULT: FAIL (the client sent sync_retrieve_failed for E5C1DFEF:2BDDC8BF)
+--- link_gen3 b result (last 25 lines) ---
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2513
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 2513
+[client] [SLink-gen3] write native 0x0203FD6C +24 frame 2513
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2513
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2513
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2513
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2513
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2513
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2513
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2513
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2553
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 2553
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 2553
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2553
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2553
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2553
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2553
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2553
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2553
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2553
+TX safe - {"event":"safe","player":"b","seq":70}
+TX sync_retrieve_done 64234AC4:D4223740 {"event":"sync_retrieve_done","key":"64234AC4:D4223740","player":"b","seq":72}
+CAUGHT 64234AC4:D4223740
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_1vgo42r5
+
+========== summary ==========
+  link_gen3: FAIL (attempt 1 of 3)
+exit=1 end_utc=2026-09-28T01:16:52Z tracked_clean_after=True classification=real

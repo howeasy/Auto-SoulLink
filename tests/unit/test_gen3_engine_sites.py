@@ -58,7 +58,16 @@ def test_pinned_sites_match_admitted_rom(name):
         assert site == resolved[kind]["site"]
         assert site["address"] % 2 == site["capture_offset"] % 2 == 0
         data = bytes.fromhex(site["expected_hex"])
-        assert 8 <= len(data) <= 16
+        if kind in ("nature_change_begin", "nature_change"):
+            assert len(data) == 206
+        elif kind == "borrowed_party_begin":
+            assert len(data) == 100
+        elif kind == "borrowed_party_opponent_begin":
+            assert len(data) == 52
+        elif kind == "borrowed_party_end":
+            assert len(data) == 64
+        else:
+            assert 8 <= len(data) <= 16
         assert rom[site["rom_offset"]:site["rom_offset"] + len(data)] == data
         assert site["address"] == 0x08000000 + site["rom_offset"]
     assert "UNVERIFIED" not in json.dumps(document)
@@ -81,6 +90,65 @@ def test_unknown_semantic_kind_never_emitted_even_if_bytes_exist():
     result = gen.resolve(candidate, "fr", bytes(0xD0000))
     assert result["status"] == "UNVERIFIED"
     assert "site" not in result
+
+
+@pytest.mark.parametrize("name", ["rr", "rr_companion"])
+def test_rr_nature_pair_is_same_unique_body_with_exact_pid_boundaries(roms, name):
+    if name not in roms:
+        pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    sites = []
+    for kind, capture in (("nature_change_begin", 0xA8), ("nature_change", 0xAC)):
+        c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(c, name, roms[name])
+        assert result["status"] == "PINNED"
+        site = result["site"]
+        assert site["address"] == 0x090B17CC and site["capture_offset"] == capture
+        assert site["point"] == ["R4", "R15", "CPSR"]
+        assert site["pair_contract"]["old_fields"] == ["PID", "OT"]
+        assert site["pair_contract"]["stride"] == 100
+        assert site["function"]["size"] == 206
+        assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [0x010B17CC]
+        sites.append(site)
+    assert sites[0]["expected_hex"] == sites[1]["expected_hex"]
+
+
+@pytest.mark.parametrize("name", ["fr", "lg"])
+def test_nature_pair_never_added_to_vanilla(roms, name):
+    if name not in roms:
+        pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    for kind in ("nature_change_begin", "nature_change"):
+        c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        assert gen.resolve(c, name, roms[name])["status"] == "UNVERIFIED"
+
+
+def test_rr_nature_wrong_identity_and_modified_store_are_refused(roms):
+    if "rr" not in roms:
+        pytest.skip(f"ROM not present: {ROM_SPECS['rr'][3]}")
+    altered = bytearray(roms["rr"])
+    altered[0x010B1874] ^= 1
+    for kind in ("nature_change_begin", "nature_change"):
+        c = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(c, "rr", bytes(altered))
+        assert result["status"] == "UNVERIFIED" and "site" not in result
+        assert "identity" in result["reason"]
+
+
+@pytest.mark.parametrize("name", ["rr", "rr_companion"])
+def test_rr_borrow_hooks_bind_builder_entry_and_completed_restore(roms, name):
+    if name not in roms: pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    for kind, address, capture in (("borrowed_party_begin", 0x09079300, 0),
+                                   ("borrowed_party_end", 0x0804C230, 0x32)):
+        candidate = next(c for c in gen.CANDIDATES if c["kind"] == kind)
+        result = gen.resolve(candidate, name, roms[name])
+        assert result["status"] == "PINNED"
+        site = result["site"]
+        assert (site["address"], site["capture_offset"]) == (address, capture)
+        assert site["point"] == ["R15", "CPSR"]
+        assert "active epoch" in site["pair_contract"]["restore"]
+        assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [address-0x08000000]
+    for vanilla in ("fr", "lg"):
+        if vanilla in roms:
+            assert gen.resolve(candidate, vanilla, roms[vanilla])["status"] == "UNVERIFIED"
 
 
 def test_duplicate_local_symbol_name_is_not_guessed():
@@ -177,7 +245,8 @@ def test_rr_faint_and_capture_wild_repinned_off_the_replaced_opcode_table(name):
 def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
     document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
     row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
-    assert len(row["sites"]) == 19
+    assert len(row["sites"]) == 25  # existing twenty plus nature and borrowed pairs
+    assert row["sites"]["hatch"]["address"] + row["sites"]["hatch"]["capture_offset"] == 0x08046E0A
     # compare EFFECTIVE hook addresses (address + capture_offset): the dead vanilla captures were
     # 0x080213C8 (tryfaintmon) and 0x0802D824 + 4 = 0x0802D828 (givecaughtmon) -- Codex cx-92870c43
     effective = {site["address"] + (site.get("capture_offset") or 0) for site in row["sites"].values()}
@@ -248,3 +317,26 @@ def test_disabled_rr_poison_is_not_a_fabricated_hp_site(name):
         assert result["status"] == "UNVERIFIED"
         assert "NO HP mutation" in result["reason"]
         assert result["detour"]["target"] == 0x090B20D4
+
+
+@pytest.mark.parametrize("name", ["rr", "rr_companion"])
+def test_opponent_begin_is_separate_from_own_team_builder(roms, name):
+    if name not in roms: pytest.skip(f"ROM not present: {ROM_SPECS[name][3]}")
+    candidate = next(c for c in gen.CANDIDATES if c["kind"] == "borrowed_party_opponent_begin")
+    result = gen.resolve(candidate, name, roms[name])
+    assert result["status"] == "PINNED"
+    site = result["site"]
+    assert site["address"] == 0x090790C8 and site["capture_offset"] == 0x1C
+    assert site["address"] != 0x09079300 and len(bytes.fromhex(site["expected_hex"])) == 52
+    assert site["pair_contract"]["end"] == "borrowed_party_end"
+    assert site["point"] == ["R15", "CPSR"]
+    assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [0x010790C8]
+    assert site["function"]["size"] == 52 and site["function"]["context_size"] == 72
+    assert site["pair_contract"]["accepted_begins"] == ["borrowed_party_begin", "borrowed_party_opponent_begin"]
+    end_candidate = next(c for c in gen.CANDIDATES if c["kind"] == "borrowed_party_end")
+    end_site = gen.resolve(end_candidate, name, roms[name])["site"]
+    assert end_site["pair_contract"]["begin"] == site["pair_contract"]["accepted_begins"]
+    assert "first active own baseline" in end_site["pair_contract"]["baseline_precedence"]
+    for vanilla in ("fr", "lg"):
+        if vanilla in roms:
+            assert gen.resolve(candidate, vanilla, roms[vanilla])["status"] == "UNVERIFIED"

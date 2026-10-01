@@ -90,7 +90,7 @@ real catchable species), so National Dex is not a stable key here the way it is 
 
 ## The other files of this pack (M1 first half — profile, sites, checkpoint, admission, species, moves, items, charmap)
 
-- `profile.json` — `tools/gen_gen1_profile.py --foundation purergb`: 180 RAM / 72 ROM symbols per title from
+- `profile.json` — `tools/gen_gen1_profile.py --foundation purergb`: 181 RAM / 72 ROM symbols per title from
   `data/purergb/*.sym`, `rom_sha1`/commit from `data/purergb_sources.lock.json`, `derived` constants with source
   asserts (`ball_items` [1,2,3,4,5,8], `opp_id_offset` 197, `bag_capacity` 30, `base_stats_stride` 35,
   `dex_count` 152 = dex ids 0..151, `species_count` 190, `rival_trainer_ids` [221,237,238], `hardware` cgb,
@@ -114,6 +114,9 @@ real catchable species), so National Dex is not a stable key here the way it is 
   records classified, `base_species` for forms, default typings, 9 transform edges; ROM-verified 34/0.
 - `evolutions.json` — `tools/gen_gen1_evos.py --foundation purergb`: edge-level like vanilla (76 method entries
   collapse to 72 edges / 79 families; forms resolve their family through `base_species`).
+- `gifts.json` — `tools/gen_gen1_gifts.py --foundation purergb`: narrative (non-static) grants,
+  same shape as `data/games/gen1_rby/gifts.json`; consumed by `tools/gen_gen1_area_map.py` for
+  the gift-interior area rule above.
 - `moves.json`, `items.json` — `tools/gen_moves_data.py` / `tools/gen_gen1_items.py` with `--foundation purergb`.
 - `charmap.json`, `charmap.lua` — `tools/gen_gen1_charmap.py`; the Lua twin carries glyphs/shortcuts/terminator
   only (name lengths come from `profile.derived`). Raw name bytes stay authoritative; decoding is display-only.

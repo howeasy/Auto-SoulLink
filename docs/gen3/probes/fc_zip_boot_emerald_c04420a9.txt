@@ -1,0 +1,39 @@
+# gen3_final_cut row=zip_boot_emerald item=§9_item5_EMERALD cut=c04420a95ea4f535d6bc1fe5bccadea7ce981645
+# lane=C:/slink-wt/g3-lane2
+# command: python tools/gen3_final_cut.py zip-boot --zip C:/slink-wt/g3-lane2/dist/SLink-player-g4-c04420a9.zip --lane C:/slink-wt/g3-lane2 --title emerald   (cwd=C:\slink-wt\g3-int)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T19:01:47 cpu=79% emuhawk=2 python=8
+start_utc=2026-09-27T23:01:46Z tracked_clean_before=True
+zip=C:/slink-wt/g3-lane2/dist/SLink-player-g4-c04420a9.zip
+extract=C:\Users\howar\AppData\Local\Temp\slink_zipboot_07w19tzu\extract entry=C:\Users\howar\AppData\Local\Temp\slink_zipboot_07w19tzu\extract\SLink-player-g4-c04420a9\lua\slink.lua
+fixture=C:/slink-wt/g3-lane2\tests\fixtures\gen3\emerald_town.sav
+server: python -m server.server --port 52676 --http-port 52677 (cwd=C:/slink-wt/g3-lane2)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua emerald.gba  (cwd=C:\Users\howar\AppData\Local\Temp\slink_zipboot_07w19tzu)
+--- C:\Users\howar\AppData\Local\Temp\slink_zipboot_07w19tzu\extract\SLink-player-g4-c04420a9\slink_lua.log ---
+=== SLink Lua boot Sun Sep 27 19:02:18 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/slink_zipboot_07w19tzu/extract/SLink-player-g4-c04420a9/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:52676 (non-blocking)…
+[SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:52676 (rom f3ae0881)
+[SLink] TCP connected to 127.0.0.1:52676
+[SLink-gen3] unhandled command dead_keys
+[SLink-gen3] writes ENABLED
+
+--- server log ---
+2026-09-27 19:01:48,474 [INFO] Logging to C:\Users\howar\AppData\Local\Temp\slink_zipboot_07w19tzu\data\slink.log
+2026-09-27 19:01:48,476 [INFO] SLink TCP server listening on ('127.0.0.1', 52676)
+2026-09-27 19:01:48,482 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-09-27 19:01:48,482 [INFO] SLink status page at http://127.0.0.1:52677/
+2026-09-27 19:02:19,019 [INFO] Client connected: ('127.0.0.1', 55731)
+2026-09-27 19:02:19,092 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-09-27 19:02:19,093 [INFO] [a] hello rom=emerald area='oldale_town' party=1
+2026-09-27 19:02:19,093 [INFO] [a] Identity locked: EMER (OT 53929808)
+2026-09-27 19:02:19,095 [INFO] Adapter switched to gen3_frlge (rom_type=emerald)
+2026-09-27 19:02:19,095 [INFO] Committed ROM type 'emerald' for this run
+2026-09-27 19:02:19,095 [INFO] Committed trainer name 'EMER' for player a
+2026-09-27 19:02:21,135 [INFO] Client disconnected: ('127.0.0.1', 55731)
+
+RESULT: PASS the extracted zip booted emerald on the new client
+exit=0 end_utc=2026-09-27T23:02:21Z tracked_clean_after=True classification=pass

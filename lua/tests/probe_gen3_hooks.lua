@@ -3,6 +3,8 @@
 -- callback addr=0800051A, raw R15=0800051C (NOT callback addr=...51C).
 -- games/gen3_frlge.lua:85,211-212: return pointer; archive/gen3-old-client:lua/mailbox.lua:13,475:
 -- 0203F800 is the signature/beacon, opcode is +6. No opcodes are dispatched.
+-- Emerald (E2): the frame site is the pack's frame_control (CallCallbacks ENTRY 0800051C) and the
+-- return site is battle_end's function entry, both read from data/games/gen3_emerald/engine_signals.json.
 local WT = os.getenv("SLINK_ROOT")
 assert(WT, "launch via tools/run_gate.py")
 local OUT = WT .. "/patch/build/probe_gen3_hooks_result.txt"
@@ -48,6 +50,7 @@ local function observer(label, expected, exec, readaddr)
         local ok, err = pcall(function()
             s.n = s.n + 1
             local pc, cpsr, frame = emu.getregister("R15"), emu.getregister("CPSR"), emu.framecount()
+            s.r15 = s.r15 or pc
             if exec and (addr ~= expected or type(pc) ~= "number" or type(cpsr) ~= "number"
                 or (cpsr & 32) == 0 or frame ~= armed) then s.bad = s.bad + 1 end
             local before = readaddr and memory.read_u8(readaddr, "System Bus") or nil
@@ -87,10 +90,32 @@ local function main()
     assert(rows.g == "PASS", "required domains/scopes unavailable")
     local game = dofile(WT .. "/lua/games/gen3_frlge.lua")
     local variant = os.getenv("SLINK_PROBE_VARIANT") or game.detect_variant()
-    assert(variant == "vanilla" or variant == "radical_red", "unsupported probe profile")
-    local p = assert(game.profiles[variant])
-    local anchor, ret = 0x0800051A, assert(p.RETURN_FROM_BATTLE_ADDR) & ~1
-    local base = variant == "radical_red" and 0x0203F800 or p.GMAIN_ADDR + 4
+    -- pack-driven titles: their sites and checkpoint come from the pack, not the old-client profile
+    -- (X3: the expansion reference build reads its own generated pack directory)
+    local PACK_DIR = { emerald = "gen3_emerald", emerald_expansion_28877d73 = "gen3_exp/28877d73" }
+    assert(variant == "vanilla" or variant == "radical_red" or PACK_DIR[variant], "unsupported probe profile")
+    local p = PACK_DIR[variant] == nil and assert(game.profiles[variant]) or nil
+    local anchor, ret, base
+    if PACK_DIR[variant] then
+        local dir = WT .. "/data/games/" .. PACK_DIR[variant]
+        local f = assert(io.open(dir .. "/engine_signals.json", "rb"))
+        local sites = dofile(WT .. "/lua/json_codec.lua").decode(f:read("a")).titles[variant].artifacts.clean.sites
+        f:close()
+        -- Anchor = site.address + capture_offset, mirroring lua/gen3/signals.lua:94's own
+        -- hook_address computation, not a bare site.address.
+        anchor = math.floor(sites.frame_control.address + (sites.frame_control.capture_offset or 0))
+        ret = math.floor(sites.battle_end.address + (sites.battle_end.capture_offset or 0))
+        -- The watch base is write_checkpoint.json's own gMain.callback2 predicate (address +
+        -- offset), not a literal "+4" beside a profile constant that happens to agree with it.
+        local cf = assert(io.open(dir .. "/write_checkpoint.json", "rb"))
+        local cp = dofile(WT .. "/lua/json_codec.lua").decode(cf:read("a"))[variant]
+        cf:close()
+        local cb2 = assert(cp.predicates.callback2, "no callback2 predicate in write_checkpoint")
+        base = math.floor(cb2.address + (cb2.offset or 0))
+    else
+        anchor, ret = 0x0800051A, assert(p.RETURN_FROM_BATTLE_ADDR) & ~1
+        base = variant == "radical_red" and 0x0203F800 or p.GMAIN_ADDR + 4
+    end
     log("BIND variant=" .. variant .. " return=" .. hex(ret) .. " watch=" .. hex(base))
     local primary = {}
     local a, af = observer("frame_control", anchor, true)
@@ -114,7 +139,7 @@ local function main()
     for _=1,2000 do step(1); if a.n >= 30 and ws[1].n > 0 then break end end
     row("a", ar and rr and a.n > 0 and a.bad == 0 and errors == 0 and dropped == 0 and "PASS" or "FAIL",
         "frame_hits=" .. a.n .. " bad=" .. a.bad .. " return_registration=" .. tostring(rr)
-        .. " expected_addr=" .. hex(anchor) .. " reference_raw_r15=0x0800051C")
+        .. " expected_addr=" .. hex(anchor) .. " first_raw_r15=" .. hex(a.r15))
     row("a-return", r.n > 0 and r.bad == 0 and "PASS" or "OPEN",
         "hits=" .. r.n .. " bad=" .. r.bad .. " battle_not_required=true")
     row("b-base", wr[1] and ws[1].n > 0 and ws[1].bad == 0 and "PASS" or "FAIL",

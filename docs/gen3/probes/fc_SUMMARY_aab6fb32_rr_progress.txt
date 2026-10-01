@@ -1,0 +1,49 @@
+# INCOMPLETE progress: 41 of 41 required RR rows; not a full-cut verdict.
+# G4 final cut aab6fb325780e8a4a94b1b33d0f04c74749a51d5 -- tools/gen3_final_cut.py summary (written 2026-10-01T15:59:29Z)
+# RUN 41 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | nature_change_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_nature_change_gen3_rr_as_a_aab6fb32.txt |
+| 2 | borrowed_party_battle_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_borrowed_party_battle_gen3_rr_as_a_aab6fb32.txt |
+| 3 | borrowed_party_menu_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_borrowed_party_menu_gen3_rr_as_a_aab6fb32.txt |
+| 4 | borrowed_party_opponent_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_borrowed_party_opponent_gen3_rr_as_a_aab6fb32.txt |
+| 5 | gift_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_gift_gen3_rr_as_a_aab6fb32.txt |
+| 6 | egg_hatch_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_egg_hatch_gen3_rr_as_a_aab6fb32.txt |
+| 7 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_gen3_rr_as_a_aab6fb32.txt |
+| 8 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_aab6fb32.txt |
+| 9 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_aab6fb32.txt |
+| 10 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_aab6fb32.txt |
+| 11 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_aab6fb32.txt |
+| 12 | evolve_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_evolve_gen3_rr_as_a_aab6fb32.txt |
+| 13 | npc_trade_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_npc_trade_gen3_rr_as_a_aab6fb32.txt |
+| 14 | link_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_link_gen3_rr_as_a_aab6fb32.txt |
+| 15 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_deadzone_gen3_rr_as_a_aab6fb32.txt |
+| 16 | reconnect_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_reconnect_gen3_rr_as_a_aab6fb32.txt |
+| 17 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_aab6fb32.txt |
+| 18 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_gen3_rr_as_a_aab6fb32.txt |
+| 19 | rival_swap_real_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_real_gen3_rr_as_a_aab6fb32.txt |
+| 20 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_native_absent_gen3_rr_as_a_aab6fb32.txt |
+| 21 | trade_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_gen3_rr_as_a_aab6fb32.txt |
+| 22 | trade_decline_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_decline_gen3_rr_as_a_aab6fb32.txt |
+| 23 | trade_lock_probe_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_lock_probe_gen3_rr_as_a_aab6fb32.txt |
+| 24 | trade_reset_commit_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_reset_commit_gen3_rr_as_a_aab6fb32.txt |
+| 25 | trade_reset_success_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_reset_success_gen3_rr_as_a_aab6fb32.txt |
+| 26 | infopanel_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_infopanel_gen3_rr_as_a_aab6fb32.txt |
+| 27 | infopanel_dex_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_infopanel_dex_gen3_rr_as_a_aab6fb32.txt |
+| 28 | linked_faint_active_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_clean_gen3_rr_as_a_aab6fb32.txt |
+| 29 | faint_cmd_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_clean_gen3_rr_as_a_aab6fb32.txt |
+| 30 | linked_faint_active_lhammer_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_lhammer_gen3_rr_as_a_aab6fb32.txt |
+| 31 | species_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_species_clause_gen3_rr_as_a_aab6fb32.txt |
+| 32 | gender_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_gender_clause_gen3_rr_as_a_aab6fb32.txt |
+| 33 | type_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_type_clause_gen3_rr_as_a_aab6fb32.txt |
+| 34 | release_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_release_gen3_rr_as_a_aab6fb32.txt |
+| 35 | ball_gate_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_ball_gate_gen3_rr_as_a_aab6fb32.txt |
+| 36 | species_family_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_species_family_gen3_rr_as_a_aab6fb32.txt |
+| 37 | shiny_bonus_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_shiny_bonus_gen3_rr_as_a_aab6fb32.txt |
+| 38 | rr_opcode_gates | G5-GATES-LIVE | PASS | 1 | fc_rr_opcode_gates_aab6fb32.txt |
+| 39 | rr_zip_build | §9 item5 RR | PASS | 1 | fc_rr_zip_build_aab6fb32.txt |
+| 40 | rr_zip_check | §9 item5 RR | PASS | 1 | fc_rr_zip_check_aab6fb32.txt |
+| 41 | zip_boot_radicalred | §9 item5 RR | PASS | 1 | fc_zip_boot_radicalred_aab6fb32.txt |
+
+OVERALL: PASS (41/41 rows)

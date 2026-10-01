@@ -1,0 +1,82 @@
+
+========== scenario: linked_faint_active_gen3 ==========
+[duo] linked_faint_active_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=fba2f186141e3a9ddf4e226cfaeb46c69cda321c
+[duo] server up: tcp=55067 http=55068 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_z1s8435x
+[duo] timing server 0.7s
+[duo] cleared 7 stale artifact(s) for linked_faint_active_gen3: e2e_linked_faint_active_gen3_a_1_witness.bin, e2e_linked_faint_active_gen3_a_attempt1_result.txt, e2e_linked_faint_active_gen3_a_result.txt, e2e_linked_faint_active_gen3_b_1_witness.bin, e2e_linked_faint_active_gen3_b_attempt1_result.txt, e2e_linked_faint_active_gen3_b_result.txt, e2e_linked_faint_active_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 10.7s
+[duo] timing results 107.4s
+[duo] RESULT_LINE a: RESULT: FAIL (helper: whiteout_heal_unsupported: lastHealLocation 0.10 warp=255 (6,17))
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] linked_faint_active_gen3: a=FAIL b=PASS
+--- linked_faint_active_gen3 a result ---
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 26792
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 26792
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 26792
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 26792
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 26792
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 26792
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 26792
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 26792
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 26792
+RX msgbox text=Route 103 is a dead zone!
+FORCED_HP0 504F4F4D:20250925 frame=29892 in_battle=1 battler=1
+ENGINE_FAINT_SITE frame=29897 active=0 battler0_slot=1 battle_hp=0 party_hp=0 counter=2
+TX faint 504F4F4D:20250925 {"area_id":"route_103","event":"faint","key":"504F4F4D:20250925","player":"a","seq":983}
+TX no_catch - {"area_id":"route_103","event":"no_catch","level":2,"player":"a","seq":1001,"species_id":309}
+TX safe - {"event":"safe","player":"a","seq":1002}
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/em-legs/lua/gen3/safety.lua:105: forbidden state: callback2)
+TX whiteout - {"event":"whiteout","player":"a","seq":1007}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town","player":"a","seq":1008}
+[client] [SLink-gen3] write overworld 0x02031208 +80 frame 30564
+[client] [SLink-gen3] write overworld 0x020244EC +100 frame 30564
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 30564
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 30564
+TX memorialize_done 4D55444B:20250925 {"box":13,"event":"memorialize_done","key":"4D55444B:20250925","player":"a","seq":1010}
+[client] [gen3] RESULT: FAIL whiteout_heal_unsupported: lastHealLocation 0.10 warp=255 (6,17)
+RESULT: FAIL (helper: whiteout_heal_unsupported: lastHealLocation 0.10 warp=255 (6,17))
+--- linked_faint_active_gen3 b result ---
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 26915
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 26915
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 26915
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 26915
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 26915
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 26915
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 26915
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 26915
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 26915
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 26915
+RX msgbox text=Route 103 is a dead zone!
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/em-legs/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-gen3] write overworld 0x02031268 +80 frame 26946
+[client] [SLink-gen3] write overworld 0x020244EC +100 frame 26946
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 26946
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 26946
+TX memorialize_done 4D55444B:DFDAF6DA {"box":13,"event":"memorialize_done","key":"4D55444B:DFDAF6DA","player":"b","seq":886}
+ACTIVE_OUTCOME 4D55444B:DFDAF6DA outcome=4 sent_out=1 whiteout_tx=0
+[client] [gen3] phase save-menu frame=27066 counter=2
+[client] [gen3] phase save-dialog frame=27126 row=3/6
+[client] [gen3] phase saved frame=27526 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=27747 counter=3
+SAVE_WITNESS linked_faint_active counter=2->3
+WRITES 33
+RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_z1s8435x
+
+========== summary ==========
+  linked_faint_active_gen3: FAIL (attempt 1 of 1)
+EXIT 1

@@ -1,0 +1,56 @@
+{
+  "cut": "623e95252e63e2d0d34d4c9ae5420799587f9ab3",
+  "observed_at_utc": "2026-09-30T11:08:47.546010+00:00",
+  "disposition": "Stopped owned runner after observed server trade cancellation and repeated saved/live mismatch; native trade success marker cannot complete. Twelve preceding exact-cut rows PASS. No failed row rerun.",
+  "private_journal": "Sealed genesis revision0 counter0 records[]; guard-read collision remains a hypothesis. Do not weaken saved/live verification.",
+  "files": [
+    {
+      "file": "a_result.txt",
+      "source": "C:\\slink-wt\\g3-rr-finish\\patch\\build\\e2e_trade_gen3_a_result.txt",
+      "sha256": "0154491aabdf68f57f4678fcb783821959f19f045a84f85d3d7937c2f67a6e10",
+      "bytes": 24964
+    },
+    {
+      "file": "b_result.txt",
+      "source": "C:\\slink-wt\\g3-rr-finish\\patch\\build\\e2e_trade_gen3_b_result.txt",
+      "sha256": "3e8436afdcb7bbe2785ab8f3da0d8626dd1af3edb59ac7d73711e324e5be3c44",
+      "bytes": 4218
+    },
+    {
+      "file": "slink.log",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\slink.log",
+      "sha256": "105d4b13f53d87a0e8a07f4536bbb9624e0a36b91bf1733a2dea5e8dbbefecf4",
+      "bytes": 3932
+    },
+    {
+      "file": "server.log",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\server.log",
+      "sha256": "10ea2e10b40253264695492340a6572c283980423995ea0801ede4d7b5400f39",
+      "bytes": 3501
+    },
+    {
+      "file": "links.json",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\links.json",
+      "sha256": "1b8b8d030e36dd662d7fe33a73616659534f1095c4773dd910c1e79c53c97e35",
+      "bytes": 2989
+    },
+    {
+      "file": "events.json",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\events.json",
+      "sha256": "a6510501208184bb32d9a61f9f632da476f1840cc130bfc07a78bac52f09112b",
+      "bytes": 1546
+    },
+    {
+      "file": "slink_gen3_trade.log",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\slink_gen3_trade.log",
+      "sha256": "cbf2a69a8279c03bd11e8f20b10ab14edbe6f6a8e13000d42d54dde32f9215ee",
+      "bytes": 85
+    },
+    {
+      "file": "slink_gen3_trade.guard",
+      "source": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_gen3_k45o2ib5\\slink_gen3_trade.guard",
+      "sha256": "584d6bf008cfa480f226f2ae4d4fa50762d675ebe09e2a98f17a6a0a0261714e",
+      "bytes": 34
+    }
+  ]
+}

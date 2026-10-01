@@ -1,4 +1,4 @@
-/* SLink companion patch — injected handlers (Thumb, freestanding C).
+#if !defined(SLINK_ARENA_PROBE) && !defined(SLINK_NATIVE_TRADE_PROBE) && !defined(SLINK_NATIVE_COMPANION) /* SLink companion patch — injected handlers (Thumb, freestanding C).
  *
  * Compiled by arm-none-eabi-gcc and linked at CODE_BASE (0x08378CA8) by slink.ld, so
  * slink_hook() sits exactly where the CallCallbacks hook `bl`s to (build.py writes that
@@ -52,13 +52,16 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
        OP_SHOW_INFO = 27,         /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
                                      async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
-       OP_RIVAL_SWAP = 28 };      /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
+       OP_RIVAL_SWAP = 28,        /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
                                      byte-copy basis as OP_SET_ENEMY_PARTY (16), but with the
                                      consumption-time window check + trainer context that must NOT
                                      apply to 16: the field trade stages with 16 and then runs
                                      OP_TRADE_SCENE (see that case's comment), so a window check on
                                      16 would reject every trade. See docs/gen3/research/
                                      rival_swap_refresh_window.md §5.3. */
+       /* RR-DURABLE: served by the shared durable producer through rr_trade_relay.h (with
+        * OP_TRADE_SCENE 21), never by the v1 switch. Numbers are abi.h's (asserted below). */
+       OP_TRADE_PREPARE = 29, OP_TRADE_WITHDRAW = 30, OP_TRADE_STATUS = 31 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Mailbox `reason` values for a ST_FAIL ack. 1..3 are used inline by the older cases in the
@@ -68,6 +71,7 @@ enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 #define REASON_BAD_ARGS       2u
 #define REASON_NOT_ON_FIELD   3u
 #define REASON_WINDOW_CLOSED  8u   /* OP_RIVAL_SWAP consumed outside the rival-swap window */
+#define REASON_DURABLE_ONLY   9u   /* RR-DURABLE: raw trade opcode 16/18 refused (trade bypass) */
 
 /* Rival-swap window (C5-11a, doc §5.3). Radical Red addresses, from the profile's `ram` block and
  * the C5-9 pins; ADDRESSES.md carries the table and the rebuild re-verifies them. */
@@ -451,13 +455,8 @@ typedef void (*PlaySE_t)(u16 songId);
 #define gSpecialVar_0x8004   0x020370C0u
 /* The FireRed `special` INDICES are WRONG on RR — CFRU/RR reordered gSpecials (the live spike proved
  * `special 170` was a no-op: the party menu never opened). So we invoke the native menus by ADDRESS via
- * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr). The party-menu internals ARE
- * symbol-mapped in BPRE.ld; a tiny trampoline replicates ChoosePartyMon's InitPartyMenu call. */
-typedef void (*InitPartyMenu_t)(u8 menuType, u8 layout, u8 action, u8 keepCursor, u8 msgId,
-                                void *task, void *callback);
-#define InitPartyMenu          ((InitPartyMenu_t)0x0811EA45u)
-#define TASK_HANDLE_CHOOSE_MON 0x0811FB29u   /* Task_HandleChooseMonInput (sets Var8004) */
-#define CB2_RETURN_TO_FIELD    0x080567DDu   /* CB2_ReturnToField (menu exit -> resume the field script) */
+ * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr); the party chooser goes through
+ * RR's ChoosePartyMonByMenuType (see slink_open_party_menu). */
 /* DoInGameTradeScene (RR) — RE'd via patch/tools/find_trade_scene.py (the FR `special` index is
  * reordered on RR, so we call it by ADDRESS via callnative). It's the tiny fn
  *   LockPlayerFieldControls(); CreateTask(Task_InGameTrade,10);
@@ -1031,18 +1030,26 @@ static void run_yesno_msgbox(void)
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
 }
 
-/* callnative target: open the native "Choose a POKeMON" menu by replicating ChoosePartyMon's
- * InitPartyMenu call (CHOOSE_SINGLE_MON / CHOOSE_AND_CLOSE). The chosen slot lands in Var8004 (0-5),
- * or SLOT_CANCEL (7) on B; Task_HandleChooseMonInput writes it and exits via CB2_ReturnToField, which
- * resumes our field script's waitstate. */
+/* callnative target: open the native "Choose a POKeMON" menu through RR's own
+ * ChoosePartyMonByMenuType (0x081283A8, byte-for-byte pret FR party_menu.c): it sets
+ * gFieldCallback2 (0x03005024) = CB2_FadeFromPartyMenu (0x081283E4) and calls
+ * InitPartyMenu(type, SINGLE, CHOOSE_AND_CLOSE, FALSE, CHOOSE_MON, Task_HandleChooseMonInput,
+ * CB2_ReturnToField). The chosen slot lands in Var8004 (0-5), or SLOT_CANCEL (7) on B. On the way
+ * back CB2_FadeFromPartyMenu fades in and Task_PartyMenuWaitForFade (0x081283FC) runs
+ * ScriptContext2_Disable + EnableBothScriptContexts, which resumes our waitstate so the script
+ * reaches `end`. (Calling InitPartyMenu directly skipped gFieldCallback2: the script sat in
+ * waitstate forever, sGlobalScriptContextStatus stuck at 1, and the client's overworld checkpoint
+ * refused every later write -- the RR duo's initiator never got its native trade scene.) */
+#define ChoosePartyMonByMenuType ((void (*)(u8))0x081283A9u)
+#define PARTY_MENU_TYPE_CHOOSE_SINGLE_MON 3u
 __attribute__((used))
 static void slink_open_party_menu(void)
 {
-    InitPartyMenu(3, 0, 11, 0, 0, (void *)TASK_HANDLE_CHOOSE_MON, (void *)CB2_RETURN_TO_FIELD);
+    ChoosePartyMonByMenuType(PARTY_MENU_TYPE_CHOOSE_SINGLE_MON);
 }
 
 /* Field script: `callnative slink_open_party_menu ; waitstate ; end` (callasm = 0x23 + fn ptr). The FR
- * `special` index path is dead on RR (see the defines above), so we call InitPartyMenu by address. */
+ * `special` index path is dead on RR (see the defines above), so we call the chooser by address. */
 static void run_party_chooser(void)
 {
     volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
@@ -1078,6 +1085,15 @@ static void ui_done(u16 st, u8 result0)
     MB->ack_seq = MENU->seq; MB->opcode = 0;
 }
 
+/* Copy a fixed-width game name field (at most n glyphs, 0xFF-terminated only when shorter) into a
+ * string buffer, always terminating it: pret StringCopy10 semantics. */
+static void copy_name(volatile u8 *dst, volatile const u8 *src, u32 n)
+{
+    u32 i = 0;
+    for (; i < n && src[i] != FEOS; i++) dst[i] = src[i];
+    dst[i] = FEOS;
+}
+
 /* Poll whichever async native-UI op OP_SHOW_MENU / OP_CHOOSE_PARTY_MON / OP_TRADE_SCENE set up, and
  * ack when it resolves. Each kind has its own start/done signal (the field script starts a frame or
  * two after SetupScript). All time out so a lost UI can't wedge the mailbox. */
@@ -1104,25 +1120,31 @@ static void drive_ui(void)
         return;
     }
 
-    /* kind == 3: native trade scene — the CB2 leaves the field, runs, then returns. */
+    /* kind == 3: native trade scene — the CB2 leaves the field, runs, then returns. It is the
+     * durable producer's scene (rt_scene_start), so this only FOLLOWS it: phase 2 = back on the
+     * field, 3 = never started / timed out. rt_scene_poll owns the mailbox answer. */
     {
         u32 cb = R32(gMain + 0x04);
         if (MENU->phase == 0) {                    /* waiting for the scene to take over the screen */
             if (MENU->fieldCb && cb != MENU->fieldCb) { MENU->phase = 1; MENU->frames = 0; }
-            else if (++MENU->frames > 180) ui_done(ST_FAIL, 0);   /* never started */
+            else if (++MENU->frames > 180) { MENU->phase = 3; MENU->pending = 0; }   /* never started */
             return;
         }
         /* The in-game-trade text reads the RECEIVED-mon name + OT from sInGameTrades[Var8004] (our stale
          * chooser slot -> a default like "Rukia"). Override gStringVar3 (received nickname) + gStringVar1
          * (OT) from the mon we actually staged in gEnemyParty[0], each frame, so "X sent over Y" names the
          * real traded mon. (gStringVar2 = the sent mon is already correct.) Party-mon plaintext (NO_ENCRYPT):
-         * nickname @ +0x08 (11 b), otName @ +0x14 (8 b). gStringVar1=0x02021CD0, gStringVar3=0x02021D04. */
-        { volatile u8 *nk = (volatile u8 *)(gEnemyParty + 0x08), *ot = (volatile u8 *)(gEnemyParty + 0x14);
-          volatile u8 *v3 = (volatile u8 *)0x02021D04u, *v1 = (volatile u8 *)0x02021CD0u;
-          for (u32 i = 0; i < 11; i++) v3[i] = nk[i];
-          for (u32 i = 0; i < 8;  i++) v1[i] = ot[i]; }
-        if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
-        else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
+         * nickname @ +0x08 (10 b, then language), otName @ +0x14 (7 b, then markings); gStringVar1 =
+         * 0x02021CD0, gStringVar3 = 0x02021D04. A full-length name has NO 0xFF inside its field, so copy
+         * StringCopy10-style and terminate: gStringVar3 is 20 bytes and gStringVar4 (0x02021D18) follows
+         * it, so an unterminated gStringVar3 made StringExpandPlaceholders(gStringVar4, "{STR_VAR_1} sent
+         * over {STR_VAR_3}") read its own output and copy forever -- the RR duo's 10-glyph "Aaaaaaaaaa"
+         * wrote 'a' (0xD5 = 213) over EWRAM up to gPlayerPartyCount and gPlayerParty (writer 0x080090AA
+         * in StringExpandPlaceholders, called from 0x08053594, src 0x0202400A -> dest 0x02024029). */
+        copy_name((volatile u8 *)0x02021D04u, (volatile const u8 *)(gEnemyParty + 0x08), 10);
+        copy_name((volatile u8 *)0x02021CD0u, (volatile const u8 *)(gEnemyParty + 0x14), 7);
+        if (cb == MENU->fieldCb) { MENU->phase = 2; MENU->pending = 0; }           /* back on the field */
+        else if (++MENU->frames > 5400) { MENU->phase = 3; MENU->pending = 0; }    /* ~90 s safety */
     }
 }
 
@@ -1786,7 +1808,7 @@ static void drive_events(void)
  * So take over id 8 instead: a second PLAYER row that only SetUpStartMenu_Link ever appends, and
  * which lua/tests/test_live_startmenu.lua proves absent from the menu a real player opens. build.py
  * repoints three table words at the strings and callback below (each verified before it is
- * written) plus the SetUpStartMenu redirect literal at the wrapper. Four words, no relocation.
+ * written) plus the SetUpStartMenu redirect literal at the wrapper, and the page-switch rebuild literal. Five words, no relocation.
  *
  * The callback deliberately does NOT draw. It bumps a counter and closes the menu, which is what
  * makes this step gateable on its own: the entry can be proven to appear and fire before a single
@@ -1825,17 +1847,200 @@ u8 slink_startmenu_cb(void)
     return StartMenu_Exit();
 }
 
+/* RR's own SetUpStartMenu (0x090BE178, disassembled) builds the order from these, in this order:
+ *   link (0x0805642D != 0)  -> SetUpStartMenu_Link   [1 2 8 5 6]
+ *   InUnionRoom()           -> SetUpStartMenu_UnionRoom [1 2 3 5 6]
+ *   GetSafariZoneFlag()     -> [7 (0) (1) 2 3 5 EXIT]
+ *   page byte == 1          -> the DexNav/PC tools page [(9) (10) .. 12]
+ *   else, the main page     -> [(0 POKEDEX) (1) (2) (3) (4) 5 EXIT]
+ * where EXIT is id 6, or id 11 ("Exit" + the R page hint) once the tools page exists. The row count
+ * therefore varies with FLAG_SYS_POKEDEX_GET & co. (6 before the Pokedex, 7 after), so splice by
+ * SHAPE, not by count: only the main page, SOULLINK right before its EXIT, at most 8 rows (CFRU's
+ * AddStartMenuWindow hook sizes the window 2n-1 tiles: 8 rows = 15, still on screen; 9 bytes of
+ * sStartMenuOrder). Link, union room and Safari get no row; the tools page ends in EXIT id 12, so
+ * the EXIT test below already leaves it alone. */
+#define StartMenu_IsLinkMenu ((u8 (*)(void))0x0805642Du)  /* RR SetUpStartMenu's link test */
+#define InUnionRoom          ((u8 (*)(void))0x0811B0D1u)
+#define GetSafariZoneFlag    ((u8 (*)(void))0x080A0E91u)  /* FlagGet(0x800) */
+#define START_EXIT    6
+#define START_EXIT_R  11
+
 void slink_setup_start_menu(void)
 {
     SetUpStartMenu_Orig();
     if (!SI->enable) return;
-    /* Splice ONLY into the exact menu shape test_live_startmenu.lua validated — 6 rows ending in EXIT.
-     * Any other shape (the link menu, a future RR revision) is left alone rather than guessed at. */
-    if (R8(sNumStartMenuActions) != 6 || R8(sStartMenuOrder + 5) != 6) return;
-    R8(sStartMenuOrder + 5) = 8;   /* SOULLINK takes EXIT's place... */
-    R8(sStartMenuOrder + 6) = 6;   /* ...and EXIT moves down, staying last */
-    R8(sNumStartMenuActions) = 7;
+    u8 n = R8(sNumStartMenuActions);
+    if (n == 0 || n > 7) return;
+    if (StartMenu_IsLinkMenu() || InUnionRoom() || GetSafariZoneFlag()) return;
+    u8 exit = R8(sStartMenuOrder + n - 1);
+    if (exit != START_EXIT && exit != START_EXIT_R) return;   /* not a shape we RE'd: leave it */
+    R8(sStartMenuOrder + n - 1) = 8;   /* SOULLINK takes EXIT's place... */
+    R8(sStartMenuOrder + n) = exit;    /* ...and EXIT moves down, staying last */
+    R8(sNumStartMenuActions) = n + 1;
 }
+
+/* RR's page switch (L/R on the main/tools page) rebuilds through 0x090BE30C, which is
+ * `push {r4,lr}; bl 0x090BE178; <draw the window>; pop {r4,pc}` -- a DIRECT bl that bypasses the
+ * 0x0806ED58 literal, so switching back to the main page would drop SOULLINK. build.py repoints that
+ * function's only reference (the callback literal at 0x090BDD54) here: replay its prologue with our
+ * wrapper, then fall into its own tail at 0x090BE312 (reads nothing we clobber; pops {r4,pc}). */
+__attribute__((naked, used)) void slink_start_menu_redraw(void)
+{
+    __asm__ volatile(
+        ".syntax unified            \n"
+        ".thumb                     \n"
+        "push {r4, lr}              \n"
+        "bl   slink_setup_start_menu\n"
+        "ldr  r0, =0x090BE313       \n"
+        "bx   r0                    \n"
+        ".ltorg                     \n");
+}
+
+/* ---- RR-DURABLE: durable native trade (the shared FR/LG producer via rr_trade_relay.h) -----
+ * PREPARE 29 runs the native "save the game?" dialog (pre-save), SCENE 21 the in-game trade
+ * scene and then a native post-save, WITHDRAW 30 / STATUS 31 as on FR/LG. The witness, the
+ * shadow mailbox and the producer state live in the free EWRAM tail after SlinkInfo
+ * (ADDRESSES.md; test_live_ewramtail). Every engine address below is FR's: the functions are
+ * byte-identical in RR and every RAM word is loaded by the same RR literal pools (verified
+ * against the ROM for this card). The old v1 raw trade-scene path (OP_TRADE_SCENE ack on field
+ * return) is gone: opcode 21 now always belongs to the producer. */
+#include "rr_trade_relay.h"
+_Static_assert((int)OP_TRADE_SCENE == (int)SLINK_OP_TRADE_SCENE
+               && (int)OP_TRADE_PREPARE == (int)SLINK_OP_TRADE_PREPARE
+               && (int)OP_TRADE_WITHDRAW == (int)SLINK_OP_TRADE_WITHDRAW
+               && (int)OP_TRADE_STATUS == (int)SLINK_OP_TRADE_STATUS,
+               "RR v1 trade opcode numbers are the producer's");
+#define RT_BASE          0x0203FE50u   /* shadow SlinkMailboxV2; +0x40 caps, +0x44 epoch, +0x48 phase */
+#define RT_WITNESS_ADDR  (RT_BASE + SLINK_WITNESS_OFFSET)
+#define RT_STATE_ADDR    (RT_BASE + 0xA0u)
+#define RT_PRESAVE       (*(volatile u8 *)(RT_BASE + 0x110u))   /* 1 while our save dialog runs */
+#define RT_SHADOW  ((volatile SlinkMailboxV2 *)RT_BASE)
+#define RT_WITNESS ((volatile SlinkTradeWitnessV2 *)RT_WITNESS_ADDR)
+#define RT_STATE   ((SlinkTradeProducer *)RT_STATE_ADDR)
+_Static_assert(0xA0u + sizeof(SlinkTradeProducer) <= 0x110u, "producer state/ui overlap");
+_Static_assert(RT_BASE + 0x111u <= 0x02040000u, "durable trade block past EWRAM end");
+#define sGlobalScriptContextStatus 0x03000EA8u   /* 2 = CONTEXT_SHUTDOWN (idle) */
+#define gReceivedRemoteLinkPlayers 0x03003F64u
+#define gLinkTransferringData      0x030030E4u
+#define sSaveDialogCB              0x03000FA4u
+#define SAVE_PRINTING_CB           0x0806F925u   /* SaveDialogCB_PrintSavingDontTurnOffPower|1 */
+#define SAVE_WRITING_CB            0x0806F941u   /* SaveDialogCB_DoSave|1 */
+#define Field_AskSaveTheGame       0x0806F67Cu
+#define SaveMapView                ((void (*)(void))0x080590D9u)
+#define SaveQuestLogData           ((void (*)(void))0x08112451u)
+#define TrySavingData              ((u8 (*)(u8))0x080DA365u)     /* CFRU-detoured body, FR entry */
+#define ItemIsMail                 ((u8 (*)(u16))0x080980F9u)
+
+static int rt_safe(void *unused)
+{
+    (void)unused;
+    return R32(gMain + 4) == CB2_OVERWORLD && !R8(sScriptContext2Enabled)
+        && R8(sGlobalScriptContextStatus) == 2u && !R8(gPlayerAvatar + 3)   /* tileTransitionState */
+        && !(R8(gPaletteFadeActive) & 0x80u)
+        && !R8(gReceivedRemoteLinkPlayers) && !R8(gLinkTransferringData)
+        && !(R8(gMain + 0x439u) & 2u)                                     /* gMain.inBattle */
+        && !MENU->pending;                                                /* no v1 native UI in flight */
+}
+static int rt_locate(void *unused, uint32_t pid, uint32_t ot)
+{
+    (void)unused;
+    u32 count = R8(gPlayerPartyCount);
+    if (!count || count > 6) return -1;
+    int found = -1;
+    for (u32 i = 0; i < count; i++) {
+        u32 mon = gPlayerParty + MON_SIZE * i;
+        if (R32(mon) == pid && R32(mon + 4) == ot) {
+            if (found != -1) return -1;
+            found = (int)i;
+        }
+    }
+    return found;
+}
+/* CFRU records are plaintext in fixed order: species/held item at +0x20/+0x22, the box flags
+ * byte (isBadEgg bit0, isEgg bit2) at +0x13, the party mail id at +0x55. */
+static int rt_incoming(void *unused, const uint8_t *r)
+{
+    (void)unused;
+    u16 species = (u16)(r[0x20] | (r[0x21] << 8)), item = (u16)(r[0x22] | (r[0x23] << 8));
+    if (!species || (r[0x13] & 0x05u) || r[0x55] != 0xFFu || ItemIsMail(item)) return 0;
+    u32 count = R8(gPlayerPartyCount);
+    if (!count || count > 6) return 0;
+    for (u32 i = 0; i < count; i++) {
+        u32 mon = gPlayerParty + MON_SIZE * i;
+        if (R32(mon) == tp_word(r) && R32(mon + 4) == tp_word(r + 4)) return 0;
+    }
+    return 1;
+}
+static void rt_callnative(u32 fn)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    s[0] = 0x23;                                                 /* callnative */
+    s[1] = (u8)fn; s[2] = (u8)(fn >> 8); s[3] = (u8)(fn >> 16); s[4] = (u8)(fn >> 24);
+    s[5] = 0x27; s[6] = 0x02;                                    /* waitstate ; end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+static int rt_pre_start(void *unused)
+{
+    if (!rt_safe(unused)) return 0;
+    R16(gSpecialVar_Result) = 0xFFFFu;
+    RT_PRESAVE = 1;
+    rt_callnative(Field_AskSaveTheGame | 1u);
+    return 1;
+}
+static int rt_pre_poll(void *unused)
+{
+    u32 cb = R32(sSaveDialogCB);
+    if (RT_PRESAVE && rt_safe(unused) && R16(gSpecialVar_Result) != 0xFFFFu) {
+        RT_PRESAVE = 0;
+        return R16(gSpecialVar_Result) == 1u ? 1 : -1;               /* SAVE_SUCCESS */
+    }
+    return (cb == SAVE_PRINTING_CB || cb == SAVE_WRITING_CB) ? 2 : 0;
+}
+static const SlinkTradeEngine rt_engine;
+/* RR publishes COMMIT_ENTERED EARLIER than FR/LG: at scene launch (the no-return boundary),
+ * after the producer's slot/identity recheck, not at TradeMons entry. It is NOT evidence that
+ * TradeMons ran. The in-game scene cannot be cancelled once launched, so after this barrier a
+ * timeout, launch failure or reset is UNCERTAIN, WITHDRAW is too late (14), never UNCHANGED,
+ * and no evolution suppression is needed. Success still needs the scene's return, the received
+ * PID/OT at the slot and the native post-save (Codex Emerald ruling P2). */
+static int rt_scene_start(void *unused, unsigned slot, const uint8_t *record)
+{
+    if (!rt_safe(unused)) return 0;
+    if (!slink_trade_commit_entered(RT_STATE, RT_WITNESS, slot, &rt_engine)) return 0;
+    for (u32 i = 0; i < MON_SIZE; i++) R8(gEnemyParty + i) = record[i];
+    for (u8 s = 1; s < 6; s++) R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
+    R8(gEnemyPartyCount) = 1;
+    R16(gSpecialVar_0x8004) = 0;
+    if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);
+    MENU->kind = 3; MENU->phase = 0; MENU->frames = 0; MENU->pending = 1;
+    run_trade_scene((u8)slot);
+    return 1;
+}
+static int rt_scene_poll(void *unused)
+{
+    if (MENU->kind != 3) return -1;
+    if (MENU->pending) return 0;                      /* drive_ui is still following the scene */
+    if (MENU->phase != 2) return -1;                  /* never started, or the 90 s bound */
+    return rt_safe(unused) ? 1 : 0;
+}
+static int rt_post_save(void *unused)
+{
+    if (!rt_safe(unused)) return 0;
+    SaveMapView();
+    SaveQuestLogData();
+    return TrySavingData(0) == SLINK_SAVE_OK;         /* SAVE_NORMAL -> SAVE_STATUS_OK */
+}
+static int rt_received(void *unused, unsigned slot, uint32_t *pid, uint32_t *ot)
+{
+    (void)unused;
+    if (slot >= R8(gPlayerPartyCount)) return 0;
+    *pid = R32(gPlayerParty + MON_SIZE * slot);
+    *ot = R32(gPlayerParty + MON_SIZE * slot + 4);
+    return 1;
+}
+static uint32_t rt_frame(void *unused) { (void)unused; return R32(gMain + 0x24); }  /* vblankCounter2 */
+static const SlinkTradeEngine rt_engine = { 0, rt_safe, rt_locate, rt_incoming, rt_pre_start,
+    rt_pre_poll, rt_scene_start, rt_scene_poll, rt_post_save, rt_received, rt_frame };
 
 /* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte
  * copy from SLINK_BLOB_BUF (caller staged count*100 raw party-mon bytes), zeroing maxHP (+0x58)
@@ -1886,6 +2091,9 @@ void slink_hook(void)
         }
     }
     drive_ui();                   /* async native UI (menu / party chooser / trade scene) publisher */
+    if (rr_trade_relay((volatile u32 *)MAILBOX_ADDR, RT_SHADOW, RT_STATE, RT_WITNESS,
+                       (const volatile u8 *)SLINK_BLOB_BUF, &rt_engine))
+        return;                   /* PREPARE/SCENE/WITHDRAW/STATUS: the durable trade producer's */
 
     u16 op = MB->opcode;
     if (op == 0) return;          /* idle */
@@ -1955,35 +2163,12 @@ void slink_hook(void)
         break;
     }
 
-    case OP_SET_ENEMY_PARTY: {   /* args: [0]=count. Lua staged count*100 raw party-mon bytes in
-                                    SLINK_BLOB_BUF. Faithful byte-copy into gEnemyParty (preserves the
-                                    partner's EXACT mons: moves/IVs/EVs/PID/item) — NOT CreateMon, which
-                                    would lose all of that. The active-foe gBattleMons refresh stays in
-                                    Lua (refreshActiveEnemyBattlers): CFRU substruct decrypt has no clean
-                                    engine fn. RR/CFRU party-mon layout == enemy-mon layout (NO_ENCRYPT),
-                                    so a raw memcpy is sufficient — same basis as M.writeEnemyParty. */
-        u8 count = MB->args[0];
-        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
-        stage_enemy_party(count);
-        break;
-    }
-
-    case OP_SET_PARTY_MON: {     /* TRADE: faithful 100-byte blob copy into gPlayerParty[slot].
-                                    args: [0]=slot [1]=bump (1 = ensure party count covers the slot).
-                                    Lua staged ONE complete party-mon (the partner's traded half) in
-                                    SLINK_BLOB_BUF. Same basis as OP_SET_ENEMY_PARTY (RR NO_ENCRYPT ->
-                                    raw memcpy preserves species/moves/IVs/EVs/PID/item exactly), but
-                                    into the PLAYER party. A trade replaces an existing slot, so the
-                                    count is unchanged unless `bump` is set (defensive). */
-        u8 slot = MB->args[0];
-        u8 bump = MB->args[1];
-        if (slot > 5) { ack(ST_FAIL, 2); return; }
-        volatile u8 *src = (volatile u8 *)SLINK_BLOB_BUF;
-        volatile u8 *dst = (volatile u8 *)(gPlayerParty + (u32)slot * MON_SIZE);
-        for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
-        if (bump && R8(gPlayerPartyCount) < slot + 1) R8(gPlayerPartyCount) = slot + 1;
-        break;
-    }
+    case OP_SET_ENEMY_PARTY:      /* RR-DURABLE: the raw trade stage (16) and raw record copy (18) */
+    case OP_SET_PARTY_MON:        /* are trade bypasses on this build. The durable producer stages
+                                     the incoming record itself (rr_trade_relay); the rival swap
+                                     keeps its own opcode 28. Always refused, by name. */
+        ack(ST_FAIL, REASON_DURABLE_ONLY);
+        return;
 
     case OP_SPAWN_PEER_NPC: {     /* args: [0]=gfxId [1]=localId [2..3]=x [4..5]=y [6]=movement */
         u8  gfx     = MB->args[0];
@@ -2074,20 +2259,7 @@ void slink_hook(void)
         return;
     }
 
-    case OP_TRADE_SCENE: {        /* args[0]=slot. Run the NATIVE trade animation+evolution: trades
-                                     gPlayerParty[slot] with the mon staged in gEnemyParty[0] (caller
-                                     must OP_SET_ENEMY_PARTY count=1 first). ASYNC: ack ST_BUSY; drive_ui
-                                     acks ST_OK when the scene returns to the field. */
-        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
-        if (MB->args[0] > 5) { ack(ST_FAIL, 2); return; }
-        if (!on_field()) { ack(ST_FAIL, 3); return; }            /* also keeps fieldCb from caching a
-                                                                  * transient menu CB2 (stale-cb hang) */
-        if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);   /* dispatched from the field */
-        run_trade_scene(MB->args[0]);
-        MENU->kind = 3; MENU->phase = 0; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
-        MB->status = ST_BUSY; MB->opcode = 0;
-        return;
-    }
+    /* OP_TRADE_SCENE (21) is the durable producer's (rr_trade_relay above), never reaches here. */
 
     /* opcodes 10 OP_APPLY_DAMAGE, 11 OP_CURE_STATUS, 12 OP_SET_RULES REMOVED — no case here, so
      * they fall through to default: ack(ST_FAIL, 1), the same as any unknown/older opcode. */
@@ -2235,3 +2407,108 @@ void slink_hook(void)
 
     ack(ST_OK, 0);
 }
+
+#elif defined(SLINK_NATIVE_TRADE_PROBE) || defined(SLINK_NATIVE_COMPANION)
+#include "trade_targets/native_trade.h"
+#else /* diagnostic build only; preserve v1 source line citations above */
+/* Diagnostic-only InitHeap replacement, no UPS/admission/capability publication.
+ * Source equivalence: pokefirered c75f3523 src/malloc.c:186-191. The builder
+ * verifies the complete base and overwritten entry before injecting this probe.
+ * Positive mode clamps gHeap; negative mode deliberately leaves its old extent.
+ * Both attempt a native allocation that reaches the proposed reservation.
+ */
+#include <stdint.h>
+typedef void (*ProbeFirstHeader)(void *, uint32_t);
+typedef void *(*ProbeAllocate)(void *, uint32_t);
+typedef void (*ProbeFree)(void *, void *);
+#include "trade_targets/abi.h"
+
+/* Scene census only, not the v2 trade protocol. Host stages an O-33 incoming
+ * record at arena+0x400 and request=1 at +0x40; no ACK/DONE or SLNK beacon.
+ * The three states at +0x44 mean script queued, scene entered, field returned.
+ * Reimplements the original CallCallbacks guards verbatim (main.c:241-250).
+ */
+__attribute__((used))
+void slink_frame_probe(void)
+{
+    typedef uint8_t (*Check)(void);
+    typedef void (*Callback)(void);
+    typedef void (*Setup)(const uint8_t *);
+    if (((Check)(SLINK_TARGET_SAVE_FAILED_SCREEN | 1u))()
+        || ((Check)(SLINK_TARGET_HELP_CALLBACK | 1u))()) return;
+    volatile uint32_t *request = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x40u);
+    volatile uint32_t *phase = request + 1;
+    volatile uint32_t *callbacks = (volatile uint32_t *)SLINK_TARGET_GMAIN;
+    volatile uint8_t *incoming = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x400u);
+    if (*request == 1 && callbacks[1] == SLINK_TARGET_FIELD_CALLBACK
+        && !*(volatile uint8_t *)SLINK_TARGET_FIELD_LOCK) {
+        volatile uint8_t *enemy = (volatile uint8_t *)SLINK_TARGET_ENEMY_PARTY;
+        for (unsigned i=0;i<100;i++) enemy[i]=incoming[i];
+        *(volatile uint8_t *)SLINK_TARGET_ENEMY_COUNT = 1;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_SLOT_VAR = 0;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_TABLE_VAR = 0;
+        volatile uint8_t *script = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x300u);
+        uint32_t function = SLINK_TARGET_TRADE_SCENE | 1u;
+        script[0]=0x23; /* callnative, then waitstate/end */
+        for (unsigned i=0;i<4;i++) script[1+i]=(uint8_t)(function>>(8*i));
+        script[5]=0x27; script[6]=0x02;
+        *request=0; *phase=1;
+        ((Setup)(SLINK_TARGET_SCRIPT_SETUP | 1u))((const uint8_t *)script);
+    }
+    if (*phase == 1 && callbacks[1] != SLINK_TARGET_FIELD_CALLBACK) *phase=2;
+    if (*phase == 2) {
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR1,
+            SLINK_TARGET_STR_VAR1_SIZE, incoming+0x14, 7);
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR3,
+            SLINK_TARGET_STR_VAR3_SIZE, incoming+0x08, 10);
+        if (callbacks[1] == SLINK_TARGET_FIELD_CALLBACK) *phase=3;
+    }
+    if (callbacks[0]) ((Callback)callbacks[0])();
+    if (callbacks[1]) ((Callback)callbacks[1])();
+}
+
+__attribute__((section(".text.entry"), used))
+void slink_heap_probe(void *heap, uint32_t size)
+{
+    uint32_t requested = size;
+    int selected = (uint32_t)heap == SLINK_TARGET_HEAP_BASE && size == SLINK_TARGET_HEAP_SIZE;
+    if (selected && SLINK_ARENA_PROBE != 2) size -= SLINK_TARGET_ARENA_SIZE;
+    *(volatile uint32_t *)SLINK_TARGET_HEAP_START_PTR = (uint32_t)heap;
+    *(volatile uint32_t *)SLINK_TARGET_HEAP_SIZE_PTR = size;
+    ((ProbeFirstHeader)(SLINK_TARGET_PUT_FIRST_HEADER | 1u))(heap, size);
+    if (selected) {
+        volatile uint32_t *receipt = (volatile uint32_t *)SLINK_TARGET_ARENA_CANDIDATE;
+        receipt[0] = 0; /* diagnostic in progress; exclude stress allocation from scene peaks */
+        receipt[1] = SLINK_ARENA_PROBE;
+        receipt[2] = requested;
+        receipt[3] = size;
+        volatile uint32_t *canary = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0xF00u);
+        for (unsigned i = 0; i < 16; i++) canary[i] = 0xC0DEC0DEu;
+        /* Native FR asserts (does not return) on exhaustion. Allocate the
+         * largest fitting block in each mode, fill it and observe the boundary.
+         * Unclamped mode reaches the candidate arena; clamped mode must not. */
+        uint32_t wanted = (SLINK_ARENA_PROBE == 3 ? requested : size) - 32u;
+        /* Mode4 is the actual scene census: do not taint free heap contents
+         * with the allocator stress pattern used by the isolated controls. */
+        void *allocation = 0;
+        if (SLINK_ARENA_PROBE != 4)
+            allocation = ((ProbeAllocate)(SLINK_TARGET_ALLOC_INTERNAL | 1u))(heap, wanted);
+        if (allocation) {
+            volatile uint8_t *bytes = allocation;
+            for (uint32_t i = 0; i < size - 32u; i++) bytes[i] = 0xA5u;
+            ((ProbeFree)(SLINK_TARGET_FREE_INTERNAL | 1u))(heap, allocation);
+        }
+        unsigned intact = 1;
+        for (unsigned i = 0; i < 16; i++) if (canary[i] != 0xC0DEC0DEu) intact = 0;
+        receipt[1] = SLINK_ARENA_PROBE;
+        receipt[2] = requested;
+        receipt[3] = size;
+        receipt[4] = allocation != 0;
+        receipt[5] = intact;
+        receipt[6] = (uint32_t)allocation;
+        receipt[7] = wanted;
+        receipt[0] = 0x32505241u; /* ARP2 completion marker last; not SLNK */
+    }
+}
+
+#endif /* SLINK_ARENA_PROBE */

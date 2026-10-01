@@ -761,14 +761,48 @@ def parse_boss_sheet(ws, ws_formulas=None) -> list[dict]:
 
 _AREA_OVERRIDES = {
     # Areas where the display name doesn't map 1:1 to an area_id snake_case.
-    "S.S. ANNE":            "ss_anne",
-    "S.S. AQUA":            "ss_aqua",
+    #
+    # card RR-PT2 (2026-09-27): a bare building/room name is never an
+    # area_id the RR/FRLG client actually emits (lua/gen3/client.lua's
+    # area_now() only reports data/games/gen3_frlge/area_map.json's coarse
+    # per-town/dungeon ids; gen3_frlge_locations.lua's fine per-room names
+    # feed loc_name for DISPLAY only). server.py's player_area_id is STICKY
+    # -- it only updates on a non-empty coarse reading (server.py
+    # "area_enter"/"hello" handlers), so while standing in a building with
+    # no area_map.json entry of its own (a gym, a hideout floor, a hotel),
+    # the effective area for trainers_for_area()/the Upcoming Key Trainers
+    # widget stays whatever coarse area the player last walked in FROM --
+    # exactly tools/gen_gen3_trainers.py's area_of_map() nearest-mapped-area
+    # BFS rule (vanilla FR/LG trainers are resolved the same way; see its
+    # module docstring). Every entry below that targets a building/room
+    # (not a route/town/dungeon area_map.json already names directly) is
+    # that BFS result, verified against pinned pret pokefirered
+    # data/maps/*/map.json warps/connections
+    # (data/gen3_sources.lock.json commit c75f352304d529f6ba92d4f74b9cf8b5c3810788):
+    # docs/gen3/research/rr_priority_regen_2026-09-26.md records the map-by-map
+    # trace for each.
+    "S.S. ANNE":            "vermilion_city",
+    # "S.S. Aqua" (a Johto ferry in vanilla GSC/HGSS) has no map at all in
+    # pret pokefirered's decomp (data/games/gen3_frlge/gen3_frlge_locations.lua
+    # -- generated from that same decomp -- has no s.s._aqua/ss_aqua entry of
+    # any kind, fine or coarse, unlike every other place in this table).
+    # RR is a FireRed hack (Kanto+Sevii map set only; card RR-PT3's game-fact
+    # ruling: no Johto towns exist), so there's no reachable area_id to map
+    # this to -- dropped rather than guessed. If the sheet actually uses this
+    # text for a real Kanto encounter, add the correct mapping here instead
+    # of reinstating "ss_aqua" (not a coarse id; caught by the
+    # _AREA_OVERRIDES_are_coarse test).
     "POKÉMON LEAGUE":       "indigo_plateau",
     "POKEMON LEAGUE":       "indigo_plateau",
     "INDIGO PLATEAU":       "indigo_plateau",
     "MT. MOON":             "mt_moon",
     "MT. EMBER":            "mt_ember",
-    "MT. SILVER":           "mt_silver",
+    # "Mt. Silver" (a Johto/Kanto-border postgame area, first in GSC/HGSS)
+    # has no map in pret pokefirered's decomp -- gen3_frlge_locations.lua has
+    # no mt_silver entry, fine or coarse, unlike Mt. Ember/Mt. Moon just
+    # above which are both real FireRed maps. RR being FireRed-based (Kanto+
+    # Sevii only), there's no reachable area_id here -- dropped rather than
+    # guessed; see the S.S. Aqua comment above for the same reasoning.
     "POKÉMON TOWER":        "pokemon_tower",
     "POKEMON TOWER":        "pokemon_tower",
     "PKMN TOWER":           "pokemon_tower",
@@ -776,8 +810,15 @@ _AREA_OVERRIDES = {
     "POKEMON MANSION":      "pokemon_mansion",
     "POKÉMON MANSION ENTRANCE": "pokemon_mansion",
     "POKEMON MANSION ENTRANCE": "pokemon_mansion",
-    "ROCKET HIDEOUT":       "rocket_hideout",
-    "ROCKET WAREHOUSE":     "rocket_warehouse",
+    "ROCKET HIDEOUT":       "celadon_city",
+    # "Rocket Warehouse" is Five Island's FiveIsland_RocketWarehouse -- a real
+    # fine location (gen3_frlge_locations.lua "1:114" =
+    # "five_island_rocket_warehouse", named/prefixed the same way every other
+    # child-of-a-town fine id in that table is) but with no area_map.json
+    # entry of its own, same sticky-coarse situation as Rocket Hideout above:
+    # its only warp leads back to Five Island (area_map.json "3:16"), so
+    # that's the coarse id the client actually reports while inside it.
+    "ROCKET WAREHOUSE":     "five_island",
     "DIGLETT'S CAVE":       "digletts_cave",
     "DIGLETTS CAVE":        "digletts_cave",
     "VIRIDIAN FOREST":      "viridian_forest",
@@ -797,19 +838,31 @@ _AREA_OVERRIDES = {
     "LOST CAVE":            "lost_cave",
     "NAVEL ROCK":           "navel_rock",
     "BIRTH ISLAND":         "birth_island",
-    "FARAWAY ISLAND":       "faraway_island",
-    "FAR. ISLAND":          "faraway_island",
+    # "Faraway Island" (Mew, added in Emerald -- see
+    # data/games/gen3_emerald/area_map.json's "faraway_island") has no map at
+    # all in pret pokefirered's decomp: gen3_frlge_locations.lua covers every
+    # other Sevii/mystery-gift island (Birth Island, Navel Rock, even the
+    # unused "prototype_sevii_isle_6..9" maps) but no faraway_island of any
+    # kind. RR being FireRed-based, there's no reachable area_id -- dropped
+    # rather than guessed; see the S.S. Aqua comment above.
     "TANOBY RUINS":         "tanoby_ruins",
     "SILPH CO.":            "silph_co",
     "SILPH CO":             "silph_co",
     "TRAINER TOWER":        "trainer_tower",
-    "NUGGET BRIDGE":        "nugget_bridge",
-    "NUGG. BRIDGE":         "nugget_bridge",
+    # "Nugget Bridge" is community shorthand for the bridge section of
+    # Route 24 -- pret pokefirered has no separate map for it (data/maps has
+    # exactly one MAP_ROUTE24 covering the whole route including the
+    # bridge), so the client only ever reports "route_24" there.
+    "NUGGET BRIDGE":        "route_24",
+    "NUGG. BRIDGE":         "route_24",
     "BOND BRIDGE":          "bond_bridge",
     "KINDLE ROAD":          "kindle_road",
     "CAPE BRINK":           "cape_brink",
     "SEVAULT CANYON":       "sevault_canyon",
-    "CHRONO ISLAND":        "chrono_island",
+    # "Chrono Island" isn't a real Sevii/FRLG location at all (not in
+    # gen3_frlge_locations.lua, fine or coarse) -- likely an RR-invented or
+    # mis-transcribed sheet name. No reachable area_id -- dropped rather than
+    # guessed; see the S.S. Aqua comment above.
     "GREEN PATH":           "green_path",
     "CANYON ENTRANCE":      "sevault_canyon",
     "OAK'S LABORATORY":     "oaks_lab",
@@ -820,19 +873,70 @@ _AREA_OVERRIDES = {
     "CERULEAN CITY GYM":    "cerulean_city",
     "VERMILION CITY GYM":   "vermilion_city",
     "VERMILLION CITY GYM":  "vermilion_city",
+    # Plain city name (no "GYM" suffix) — the RR client/area_map.json emits
+    # "vermilion_city" (one L); the community sheet spells the city both
+    # ways depending on tab (Trainer Order uses the double-L "Vermillion").
+    "VERMILION CITY":       "vermilion_city",
+    "VERMILLION CITY":      "vermilion_city",
     "CELADON CITY GYM":     "celadon_city",
     "FUCHSIA CITY GYM":     "fuchsia_city",
     "FUSCHIA CITY GYM":     "fuchsia_city",      # Nuzlocke Redux typo
     "SAFFRON CITY GYM":     "saffron_city",
     "CINNABAR ISLAND GYM":  "cinnabar_island",
     "VIRIDIAN CITY GYM":    "viridian_city",
-    "CELADON CITY GAME CORNER": "celadon_city_game_corner",
-    "GAME CORNER":             "celadon_city_game_corner",
-    "ROCKET HIDE.":            "rocket_hideout",
-    "ROCKET HIDE":             "rocket_hideout",
+    # Celadon Game Corner (CeladonCity_GameCorner/_PrizeRoom): no
+    # area_map.json entry of its own either -- same sticky-coarse mechanism
+    # as Rocket Hideout below (card RR-PT2 follow-up, 2026-09-27): a fine
+    # gen3_frlge_locations.lua-only id like "celadon_city_game_corner" is
+    # ONLY what a hello ever reports, before player_area_id has taken any
+    # coarse reading this session; server.py's trainer panel
+    # (player_area_id.get(pid) or player_area.get(pid)) receives the sticky
+    # coarse value in every other case, so this fine id is effectively
+    # unreachable in play, exactly like the 11 keys fixed above.
+    "CELADON CITY GAME CORNER": "celadon_city",
+    "GAME CORNER":             "celadon_city",
+    # Rocket Hideout's floors (RocketHideout_B1F..B4F) have no area_map.json
+    # entry of their own; its entrance is inside the Game Corner, which also
+    # has none. BFS over pret's warps lands two hops out, at Celadon City.
+    "ROCKET HIDE.":            "celadon_city",
+    "ROCKET HIDE":             "celadon_city",
     "CERULEA. CAVE":           "cerulean_cave",
     "CHAMPION":             "indigo_plateau",
     "ELITE FOUR":           "indigo_plateau",
+    # Celadon Hotel (CeladonCity_Hotel): no area_map.json entry; its own
+    # warp leads straight back to Celadon City.
+    "CELADON HOTEL":        "celadon_city",
+    "CELADON CITY HOTEL":   "celadon_city",
+    # Cinnabar Island Gym (CinnabarIsland_Gym): no area_map.json entry;
+    # BFS lands on the town, same as every other Kanto "X City Gym" above.
+    "CINNABAR GYM":         "cinnabar_island",
+    # "Cinnabar Isl." (Rivals sheet) is the OUTDOOR island map itself
+    # (MAP_CINNABAR_ISLAND, area_map.json "3:8"), just abbreviated with a
+    # trailing period the default normalizer doesn't strip into the
+    # existing "cinnabar_island" id.
+    "CINNABAR ISL.":        "cinnabar_island",
+    # "Dig House" (Team Rocket sheet, between the Cerulean Gym and S.S.
+    # Anne fights) is Diglett's Cave's entrance building
+    # (DiglettsCave_NorthEntrance/SouthEntrance) -- area_map.json already
+    # tags both "digletts_cave" directly (no BFS needed).
+    "DIG HOUSE":            "digletts_cave",
+    # "Joyful" (Postgame sheet header "JOYFUL\nGAME CORNER\n...") is Two
+    # Island's Joyful Game Corner (TwoIsland_JoyfulGameCorner): no
+    # area_map.json entry; BFS lands on Two Island.
+    "JOYFUL":               "two_island",
+    # "Mansion F4"/"Pokemon Mansion 4F": vanilla Pokemon Mansion has only
+    # four interior maps (1F/2F/3F/B1F), all four already sharing the one
+    # area_map.json id "pokemon_mansion" -- whichever floor RR calls "4F",
+    # it's covered.
+    "MANSION F4":           "pokemon_mansion",
+    "POKEMON MANSION 4F":   "pokemon_mansion",
+    "POKÉMON MANSION 4F":   "pokemon_mansion",
+    # Pewter Museum (PewterCity_Museum_1F/2F): no area_map.json entry; BFS
+    # lands on Pewter City, same as the vanilla Brock-at-the-gym case.
+    "PEWTER MUSEUM":        "pewter_city",
+    # "Treasure Bea." (Postgame sheet) truncates "Treasure Beach" -- an id
+    # area_map.json already has at "3:46" for this exact map.
+    "TREASURE BEA.":        "treasure_beach",
     # RR has multiple "Route 22" encounters (early + late game). Both map
     # to the single area_id reported by the game ("route_22"); the renderer
     # uses level_cap proximity to distinguish them into separate rows.
@@ -912,11 +1016,15 @@ def parse_calc_sets(path: Path) -> list[dict]:
     the same shape as parse_boss_sheet.
     """
     if not path.exists():
-        return []
+        raise FileNotFoundError(
+            f"{path}: primary trainer-party source is missing -- this would "
+            f"silently drop every calc-sourced trainer from the roster rather "
+            f"than fail loudly."
+        )
     txt = path.read_text(encoding="utf-8")
     m = re.match(r"\s*var\s+SETDEX_SV\s*=\s*(\{.+\});\s*$", txt, re.S)
     if not m:
-        return []
+        raise ValueError(f"{path}: SETDEX_SV assignment not found/parseable")
     data = json.loads(m.group(1))
     # Invert: trainer_label → [mon, ...]
     raw: dict[str, list[dict]] = defaultdict(list)
@@ -1108,56 +1216,13 @@ def _pick_trainer_id(name_index: dict[str, list[dict]],
     return available[0]["rt_id"]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--src",
-                        default=str(_REPO_ROOT / "rr_trainers_dump.xlsx"),
-                        help="Path to the downloaded xlsx (default: repo root)")
-    parser.add_argument("--out", default=str(_OUT_PATH),
-                        help=f"Output path (default: {_OUT_PATH})")
-    parser.add_argument("--from-json", action="store_true",
-                        help="No spreadsheet: re-canonicalise the committed roster "
-                             "(--out) through the calc-name table and re-emit it "
-                             "plus slink_priority.js")
-    parser.add_argument("--setdex", action="store_true",
-                        help="Canonicalise the calc's own set files (normal.js, "
-                             "hardcore.js) in place through the calc-name table")
-    args = parser.parse_args()
-
-    if args.setdex:
-        errors = []
-        for path in _CALC_SETDEX_PATHS:
-            keys, values, errs = canonicalise_setdex(path)
-            errors += errs
-            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
-        if errors:
-            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
-            return 1
-        return 0
-
-    if args.from_json:
-        out = Path(args.out)
-        out_doc = json.loads(out.read_text(encoding="utf-8"))
-        errors = canonicalise_parties(out_doc["parties"])
-        if errors:
-            print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
-                  "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
-            return 1
-        _write_outputs(out_doc, out)
-        return 0
-
-    try:
-        from openpyxl import load_workbook
-    except ImportError:
-        print("openpyxl required: pip install openpyxl", file=sys.stderr)
-        return 1
-
-    src = Path(args.src)
-    if not src.exists():
-        print(f"Source xlsx not found: {src}", file=sys.stderr)
-        return 1
-
-    print(f"Loading {src}…")
+def _build_roster(src: Path) -> tuple[dict, list[str]]:
+    """Parse `src` (the RR trainer spreadsheet xlsx) into (out_doc, errors) --
+    the roster doc gen_rr_priority_trainers.py writes to
+    rr_priority_trainers.json, and any calc-name errors from
+    canonicalise_parties(). Split out of main() so --check can regenerate
+    into memory without touching the committed output or the calc set files."""
+    from openpyxl import load_workbook
     # Two views: data_only=True evaluates formulas (so we read computed
     # level/move values); the formula-form view exposes raw `=IMAGE("url")`
     # cells so we can pull trainer sprite URLs.
@@ -1478,7 +1543,13 @@ def main() -> int:
     trainers_by_area: dict[str, list[int]] = defaultdict(list)
     assigned_area: dict[int, str] = {}    # rt_id → primary area
 
-    def _attach(area: str, rt_id: int, *, primary: bool) -> None:
+    def _attach(area: str, rt_id: int, *, primary: bool, source: str) -> None:
+        """Add rt_id to trainers_by_area[area]. On the FIRST (primary) attach
+        for an id, also write the area back onto parties[id]["area"] (so the
+        two stay in sync -- previously (b)/(c)/(d) only updated
+        trainers_by_area, leaving parties[id]["area"] blank for every id they
+        placed) plus "area_source" recording which step placed it, for
+        reviewability of the heuristic (non-header) placements."""
         if not area:
             return
         if rt_id in trainers_by_area[area]:
@@ -1486,12 +1557,16 @@ def main() -> int:
         trainers_by_area[area].append(rt_id)
         if primary and rt_id not in assigned_area:
             assigned_area[rt_id] = area
+            info = parties.get(str(rt_id))
+            if info is not None:
+                info["area"] = area
+                info["area_source"] = source
 
     # (a) Header-derived areas. Each trainer attaches to exactly ONE area
     # (the one its own sheet header stated).
     for rt_id_str, info in parties.items():
         if info.get("area"):
-            _attach(info["area"], int(rt_id_str), primary=True)
+            _attach(info["area"], int(rt_id_str), primary=True, source="sheet_header")
 
     # Build a queue of unassigned ids per (Title-cased name) so secondary
     # sources can hand out one location at a time.
@@ -1516,7 +1591,7 @@ def main() -> int:
                 continue
             rt_id = _claim_unassigned(name)
             if rt_id is not None:
-                _attach(area_id, rt_id, primary=True)
+                _attach(area_id, rt_id, primary=True, source="name_claim")
 
     # (c) Trainer Order — fills in anything redux didn't cover.
     for trainer_name, area_id, _is_optional in order_pairs:
@@ -1524,7 +1599,28 @@ def main() -> int:
             continue
         rt_id = _claim_unassigned(trainer_name.title())
         if rt_id is not None:
-            _attach(area_id, rt_id, primary=True)
+            _attach(area_id, rt_id, primary=True, source="trainer_order")
+
+    # (d) Gym Leader rematch tiers inherit their base fight's area (card
+    # RR-PT2). The Trainer Order sheet is a single first-playthrough pass —
+    # it has exactly one row per leader name, so (c) claims only ONE
+    # unassigned same-name id (the base fight) and leaves every post-E4
+    # "Kanto Rematch"/"Postgame" tier of the SAME leader unassigned forever:
+    # they fight at the SAME gym, just later, so they belong in the same
+    # area as the leader's own already-assigned fight. Scoped to class
+    # "Gym Leader" only — a name-only match would be wrong for classes
+    # reused across many unrelated fights (e.g. "Grunt", "Rival").
+    leader_area_by_name: dict[str, str] = {}
+    for rt_id_str, info in parties.items():
+        if info.get("class") == "Gym Leader" and int(rt_id_str) in assigned_area:
+            leader_area_by_name.setdefault(info["name"], assigned_area[int(rt_id_str)])
+    for rt_id_str, info in parties.items():
+        rid = int(rt_id_str)
+        if rid in assigned_area or info.get("class") != "Gym Leader":
+            continue
+        area = leader_area_by_name.get(info["name"])
+        if area:
+            _attach(area, rid, primary=True, source="rematch_inherit")
 
     # 6) Serialize.
     out_doc = {
@@ -1550,17 +1646,108 @@ def main() -> int:
     }
 
     errors = canonicalise_parties(parties)
-    if errors:
-        print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
-              "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
-        return 1
-    _write_outputs(out_doc, Path(args.out))
     print(f"  trainers_by_area : {len(trainers_by_area)} areas")
     print(f"  unmatched        : {len(unmatched)}")
     if unmatched[:10]:
         print("  first 10 unmatched:")
         for u in unmatched[:10]:
             print(f"    - {u}")
+    return out_doc, errors
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--src", default=None,
+                        help="Path to a downloaded xlsx, overriding the pinned "
+                             "cache (data/gen3_rr_sources.lock.json's "
+                             "rr_priority_trainers_sheet_xlsx) -- NOT hash-"
+                             "verified; default is the pinned cache.")
+    parser.add_argument("--out", default=str(_OUT_PATH),
+                        help=f"Output path (default: {_OUT_PATH})")
+    parser.add_argument("--from-json", action="store_true",
+                        help="No spreadsheet: re-canonicalise the committed roster "
+                             "(--out) through the calc-name table and re-emit it "
+                             "plus slink_priority.js")
+    parser.add_argument("--setdex", action="store_true",
+                        help="Canonicalise the calc's own set files (normal.js, "
+                             "hardcore.js) in place through the calc-name table")
+    parser.add_argument("--check", action="store_true",
+                        help="No writes: parse the pinned spreadsheet "
+                             "(data/gen3_rr_sources.lock.json's "
+                             "rr_priority_trainers_sheet_xlsx, fetched via "
+                             "tools/fetch_rr_sources.py) and diff the roster "
+                             "against the committed --out; exit 1 on drift.")
+    args = parser.parse_args()
+
+    if args.setdex:
+        errors = []
+        for path in _CALC_SETDEX_PATHS:
+            keys, values, errs = canonicalise_setdex(path)
+            errors += errs
+            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
+        if errors:
+            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        return 0
+
+    if args.from_json:
+        out = Path(args.out)
+        out_doc = json.loads(out.read_text(encoding="utf-8"))
+        errors = canonicalise_parties(out_doc["parties"])
+        if errors:
+            print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+                  "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        _write_outputs(out_doc, out)
+        return 0
+
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        print("openpyxl required: pip install openpyxl", file=sys.stderr)
+        return 1
+
+    if args.check or args.src is None:
+        from fetch_rr_sources import cached_source_path
+        src = cached_source_path("rr_priority_trainers_sheet_xlsx")
+        if args.src is not None:
+            print(f"NOTE: --src {args.src!r} ignored -- --check always reads "
+                  f"the pinned cache.", file=sys.stderr)
+    else:
+        print(f"WARNING: --src {args.src} overrides the pinned cache "
+              f"(data/gen3_rr_sources.lock.json's "
+              f"rr_priority_trainers_sheet_xlsx) -- its content is NOT hash-"
+              f"verified against the pin.", file=sys.stderr)
+        src = Path(args.src)
+        if not src.exists():
+            print(f"Source xlsx not found: {src}", file=sys.stderr)
+            return 1
+
+    out_doc, errors = _build_roster(src)
+    if errors:
+        print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+              "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+        return 1
+
+    if args.check:
+        out = Path(args.out)
+        regen = json.dumps(out_doc, indent=2, ensure_ascii=False)
+        committed = out.read_text(encoding="utf-8")
+        if regen == committed:
+            print(f"OK: regenerated roster matches {out} byte-for-byte "
+                  f"({len(out_doc['parties'])} trainers). Note: this only checks "
+                  f"the JSON roster, not the calc/slink_priority.js supplement.")
+            return 0
+        from fetch_rr_sources import diff_snippet
+        print(f"DRIFT: regenerated roster ({len(regen)} bytes) != "
+              f"{out} ({len(committed)} bytes) -- the pinned spreadsheet snapshot "
+              "no longer reproduces the committed roster (see the lock file's "
+              "rr_priority_trainers_sheet_xlsx note: this is a community-edited "
+              "Google Sheet with no immutable revision).", file=sys.stderr)
+        print(diff_snippet(committed, regen), file=sys.stderr)
+        return 1
+
+    _write_outputs(out_doc, Path(args.out))
     return 0
 
 

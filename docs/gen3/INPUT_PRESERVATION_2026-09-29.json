@@ -1,0 +1,402 @@
+{
+  "evidence": "LOCAL_ARTIFACT_INTEGRITY",
+  "not_qualification": true,
+  "files": [
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\expansion-output\\reference\\pokeemerald.elf",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\expansion-output\\reference\\pokeemerald.elf",
+      "size": 35972280,
+      "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\expansion-output\\reference\\pokeemerald.gba",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\expansion-output\\reference\\pokeemerald.gba",
+      "size": 33554432,
+      "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\expansion-output\\reference\\pokeemerald.map",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\expansion-output\\reference\\pokeemerald.map",
+      "size": 4623407,
+      "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\expansion-output\\reference\\pokeemerald.sym",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\expansion-output\\reference\\pokeemerald.sym",
+      "size": 4812449,
+      "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\expansion-output\\reference\\receipt.json",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\expansion-output\\reference\\receipt.json",
+      "size": 5480,
+      "sha256": "5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\.cache\\slink-upr\\PokeRandoZX.jar",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\upr\\PokeRandoZX-28292b59.jar",
+      "size": 1112618,
+      "sha256": "28292b595a411e78beef851e0cd5017a5d4ff592eca9a1db3f8939b0f7ab6e56"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\slink_RR.gba",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\roms\\slink_RR-d945a8d8.gba",
+      "size": 33554432,
+      "sha256": "d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-firered-trade\\probe.bin",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-firered-trade\\probe.bin",
+      "size": 8625,
+      "sha256": "bd51519dc1aed3fc9f4fd2a3c0e3c05074de79bd7f8de6b6d4be8d31b043a548"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-firered-trade\\probe.elf",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-firered-trade\\probe.elf",
+      "size": 16164,
+      "sha256": "95d559e7332e63c513414d16ea0acca9149038b5b98158b7a69fef79fcdd8821"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-firered-trade\\probe.gba",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-firered-trade\\probe.gba",
+      "size": 16777216,
+      "sha256": "421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-firered-trade\\probe.o",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-firered-trade\\probe.o",
+      "size": 14264,
+      "sha256": "be076e0596c517177a9a000f1a551f3306ab493b7cdf865d00a4f6668ea0209f"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-firered-trade\\receipt.json",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-firered-trade\\receipt.json",
+      "size": 3016,
+      "sha256": "a1a00b7c1a5feedad9cc3472946e572c6e03ad3fe334ba22ce5933fe513c6af3"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-leafgreen-trade\\probe.bin",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-leafgreen-trade\\probe.bin",
+      "size": 8625,
+      "sha256": "1fb07c118376bfbc72cc56f043c1359ef81131d287c1212c8cc8b858c8b45199"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-leafgreen-trade\\probe.elf",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-leafgreen-trade\\probe.elf",
+      "size": 16920,
+      "sha256": "2e370ece8e6a9c923c8816b114efa07127b591be68ff98e35dedfce07f3bbdb4"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-leafgreen-trade\\probe.gba",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-leafgreen-trade\\probe.gba",
+      "size": 16777216,
+      "sha256": "a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-leafgreen-trade\\probe.o",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-leafgreen-trade\\probe.o",
+      "size": 14264,
+      "sha256": "66807b735fbbc6412cc3961fe1e244c35ba5305d48269ccb788c4f7deb24b496"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\candidate-leafgreen-trade\\receipt.json",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\candidate-leafgreen-trade\\receipt.json",
+      "size": 3018,
+      "sha256": "3249a517566337c8f8708a009d5839161ace4c3c562c5b7b1dc6c84e188a54fc"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\boxsync_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\boxsync_a.shadow.log",
+      "size": 204,
+      "sha256": "bd4fb3d715b2961a96d9f315cc1f4888d8c06a65e3d8ac8b6d537385d2be240a"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\boxsync_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\boxsync_a_old_client.shadowrun.jsonl",
+      "size": 117203,
+      "sha256": "cf700354a955550304461119159ee8cb9aa2e7eb57e57f997c6a230cbdcd6eef"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\boxsync_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\boxsync_b.shadow.log",
+      "size": 204,
+      "sha256": "bd4fb3d715b2961a96d9f315cc1f4888d8c06a65e3d8ac8b6d537385d2be240a"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\boxsync_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\boxsync_b_old_client.shadowrun.jsonl",
+      "size": 117203,
+      "sha256": "0628e3379ef581558fb69a9a6e4482a7924824fb99cca1afaf671a9178c9a53e"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\explode_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\explode_a.shadow.log",
+      "size": 204,
+      "sha256": "bd4fb3d715b2961a96d9f315cc1f4888d8c06a65e3d8ac8b6d537385d2be240a"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\explode_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\explode_a_old_client.shadowrun.jsonl",
+      "size": 144348,
+      "sha256": "df4f8663663ae1a68d4fdbaf00bf8a29e1d6a3ef6fed4dae1dd5c716b562913d"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\explode_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\explode_b.shadow.log",
+      "size": 316,
+      "sha256": "5615daf9ee3a9e4a4040a74675e5b503e45afd8befe8d9cb77cc0b1050046da6"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\explode_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\explode_b_old_client.shadowrun.jsonl",
+      "size": 49960,
+      "sha256": "b689fd0bd2c6ce767166ee918dd7391747da4e9cf6341e4028c5484b13f4cc1d"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\faint_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\faint_a.shadow.log",
+      "size": 93,
+      "sha256": "fa496a7580e3809c32253784c429cab8a9cf9a9ffa2c9ca4f785bf3127648e90"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\faint_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\faint_a_old_client.shadowrun.jsonl",
+      "size": 67736,
+      "sha256": "ef41d911ffb03cfb48a3ce51ac78f8bf6d94faec4eb72726438121d1a898a398"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\faint_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\faint_b.shadow.log",
+      "size": 93,
+      "sha256": "fa496a7580e3809c32253784c429cab8a9cf9a9ffa2c9ca4f785bf3127648e90"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\faint_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\faint_b_old_client.shadowrun.jsonl",
+      "size": 61593,
+      "sha256": "fca1f6eaef8ba7d132d2fc9adf3fb8896283c0f0da9995e33517b1c4ba45a05d"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\fr_play.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\fr_play.shadow.log",
+      "size": 10053,
+      "sha256": "3598f47ad0331b9ef12e9c5d79ebeb80783920a1b372cbf666e5f81ca689d412"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\fr_play_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\fr_play_result.txt",
+      "size": 2063,
+      "sha256": "f8c7dc897fd108a105710be9a5ce7514c47f52422ade8d731e14585c81a873fc"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\ghost_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\ghost_a.shadow.log",
+      "size": 764,
+      "sha256": "820d0cbef2bbc394b0f577dfb5e583468b8abd0e62327cccd98a5e1a0d2dc78b"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\ghost_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\ghost_a_old_client.shadowrun.jsonl",
+      "size": 1141183,
+      "sha256": "7fddcbde0ddc3f648606127f53395f5e81f5b9f46f39315f13c63d2b71aefb8a"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\ghost_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\ghost_b.shadow.log",
+      "size": 540,
+      "sha256": "c154c96e1ac127a2cc54f565d46db5bbcefb52499f1e67ab11b340964dc05e00"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\ghost_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\ghost_b_old_client.shadowrun.jsonl",
+      "size": 668194,
+      "sha256": "078d8d5c3da870b502ea009f751d4ccff7b3347a2492588af76e4d0a66ddbc71"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\infopanel_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\infopanel_a.shadow.log",
+      "size": 93,
+      "sha256": "fa496a7580e3809c32253784c429cab8a9cf9a9ffa2c9ca4f785bf3127648e90"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\infopanel_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\infopanel_a_old_client.shadowrun.jsonl",
+      "size": 113858,
+      "sha256": "e37e6b920c72b72b8de49bb7bf52861ff306c574ad6390471a8b3f0d8a69af86"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\infopanel_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\infopanel_b.shadow.log",
+      "size": 93,
+      "sha256": "fa496a7580e3809c32253784c429cab8a9cf9a9ffa2c9ca4f785bf3127648e90"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\infopanel_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\infopanel_b_old_client.shadowrun.jsonl",
+      "size": 113787,
+      "sha256": "1f081f3cb87f909fd82dd8ecfa7a30d0dccad7573a108edf580fe6fd35f2ffd9"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\reads_dump_fr.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\reads_dump_fr.txt",
+      "size": 7478,
+      "sha256": "779d138eab8052c4e10720e552d481775adcef1b95c8a59187e632ca41c44123"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\reads_dump_rr.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\reads_dump_rr.txt",
+      "size": 6448,
+      "sha256": "2621ddb8de205ed402e651aa0b46dba9d9b7e179a5e60ea85b2093c63dcd57aa"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_battle_to_field.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_battle_to_field.shadow.log",
+      "size": 4412,
+      "sha256": "02ae525f4d7c0906e02e370ed5a2f0d3fadc0ae41b6496e4c599e35a7690f40d"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_battle_to_field_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_battle_to_field_result.txt",
+      "size": 2235,
+      "sha256": "d6d231f359764604494a0510038ee775c34ea5471cef9dd209ae9a00c6ba2ffc"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_door_warp.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_door_warp.shadow.log",
+      "size": 689,
+      "sha256": "cc061eba71ec880b22454c898ce0204a2faffeabe97043db0385269eefa334e9"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_door_warp_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_door_warp_result.txt",
+      "size": 670,
+      "sha256": "dbae02aa1bc24451b7575fa1af48dc50bb3b489f0ec03cbb1ba361db1a7a9c3b"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_pc_ops.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_pc_ops.shadow.log",
+      "size": 760,
+      "sha256": "1b9cae7c58553e6431150a77184161c1dd9d93498a7abcf8731905a17bc8d9c9"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_pc_ops_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_pc_ops_result.txt",
+      "size": 729,
+      "sha256": "b134a12209a3eca2052b5e9b2ec1056d45d92f17f1570218dfc85f190bd26e13"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_save.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_save.shadow.log",
+      "size": 570,
+      "sha256": "b9d8c68c65f0b905110c1befc531b1514ad5a2c5efadab505a361159ebbdc817"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_save_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_save_result.txt",
+      "size": 522,
+      "sha256": "f77db7cb58268b9534075eac5e887cf5b520636b73480a8d1911babf576ff590"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_wild_catch.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_wild_catch.shadow.log",
+      "size": 201,
+      "sha256": "d30fe03dd494c3089b28e89db411816e14b679f3bb3840fcbd7240bbe7e66918"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_wild_catch_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_wild_catch_result.txt",
+      "size": 460,
+      "sha256": "884d76d68c7b41f9c61193251e887883830678af5dde8f2bde133533fd53dc16"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_wild_faint.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_wild_faint.shadow.log",
+      "size": 4627,
+      "sha256": "ada18b454e2a725b415f4c624494740c722fad07d411e2541fee0c867bda1f91"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\rr_play_wild_faint_result.txt",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\rr_play_wild_faint_result.txt",
+      "size": 1994,
+      "sha256": "5ef08548ebb230460af0b53a2fac19cfece2619b62782a52281091c4acc1301d"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\trade_a.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\trade_a.shadow.log",
+      "size": 1212,
+      "sha256": "20d9eb759f915960cb3f6f8e4adb0fa615624867346acb6a3dc9c416d5378fea"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\trade_a_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\trade_a_old_client.shadowrun.jsonl",
+      "size": 1173643,
+      "sha256": "381ab2521376a03ea714d937fec34374ced6a4c1cd62de29a700105f65561431"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\trade_b.shadow.log",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\trade_b.shadow.log",
+      "size": 1212,
+      "sha256": "20d9eb759f915960cb3f6f8e4adb0fa615624867346acb6a3dc9c416d5378fea"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\trade_b_old_client.shadowrun.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\trade_b_old_client.shadowrun.jsonl",
+      "size": 1175648,
+      "sha256": "85f2e9aed7368ebfecc210690619b417a1b88261bb867eda640f44d67644f643"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\wire_off_explode_a.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\wire_off_explode_a.jsonl",
+      "size": 149219,
+      "sha256": "fc08790e93bbda5dae3f90a79373e670c1146ddc9c4af6399b9997f2f7868477"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\wire_off_explode_b.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\wire_off_explode_b.jsonl",
+      "size": 52256,
+      "sha256": "3d2581fde982ded7ba63356c63dfe7af37ff96f3574a321c0c640e11a3415457"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\wire_on_explode_a.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\wire_on_explode_a.jsonl",
+      "size": 147022,
+      "sha256": "c0c6b8791072be90aa2e682ae72d21fa208e4a4c45a5ffbd3dfb4007dec69f79"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\patch\\build\\shadow_wire\\wire_on_explode_b.jsonl",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\shadow_wire\\wire_on_explode_b.jsonl",
+      "size": 49960,
+      "sha256": "6c5226aa8c0dee85ed69de6f4a30bb18adb3313ea1b70335eedf3de255724b98"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\data\\.rr_src_cache\\funnotbun_base_stats_c",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\rr_src_cache\\funnotbun_base_stats_c",
+      "size": 1058311,
+      "sha256": "2cd667a4a03079aa3f0674c08206d19b70fef34db0102dd3e23cc9a2f404a470"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\data\\.rr_src_cache\\funnotbun_species_h",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\rr_src_cache\\funnotbun_species_h",
+      "size": 45004,
+      "sha256": "775bedd9b0afd37b5e62f9d18558302992aa4149dd1150c96033ee04dadf71cd"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\data\\.rr_src_cache\\funnotbun_wild_encounter_tables_c",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\rr_src_cache\\funnotbun_wild_encounter_tables_c",
+      "size": 142814,
+      "sha256": "24ebfcda8be7e0fce44cd47165d0acb70154d2e05c825a9480112351c6429ea9"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\data\\.rr_src_cache\\jwowsquared_data_js",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\rr_src_cache\\jwowsquared_data_js",
+      "size": 4602537,
+      "sha256": "04c9dc94b6a7e3d33f5dcb5e804487466e7a249f4d340cf19853d70f37596df9"
+    },
+    {
+      "source": "C:\\slink-wt\\g3-int\\data\\.rr_src_cache\\rr_priority_trainers_sheet_xlsx.xlsx",
+      "stable": "C:\\slink-cache\\gen3-inputs\\2026-09-29\\rr_src_cache\\rr_priority_trainers_sheet_xlsx.xlsx",
+      "size": 1182028,
+      "sha256": "01f2c28698ce300cbb93b1e0176154ae205eb42e32c370d32dce9360bcd6a4a0"
+    }
+  ]
+}

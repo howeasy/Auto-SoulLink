@@ -37,6 +37,11 @@ REASON_TERMINALS = {
     "sound_driver": "m4a SE1 ident == ID_NUMBER",
     "battle_commit_held_rr": "battle_main_func==HandleTurnActionSelectionState and "
         "gBattleCommunication[0]==1 and BATTLE_TYPE_TRAINER",
+    # E2-CKPT: Emerald-only rows, appended after battle_commit_held_rr (indices 33..36)
+    "center_idle": "center_1f_idle_300",
+    "map_popup": "Task_MapNamePopUpWindow_live_field_settled",
+    "battle_intro_field": "in_battle_mask_nonzero",
+    "trainer_battle_field": "in_battle_mask_nonzero",
 }
 # 2B-INTEGRATE-PROBE: the G4 2b battle-window rows, P.STATES indices 23..31, in run order
 # (N8 last: its bag helper can end the whole run). name -> gen3_battle_window_rows row.
@@ -280,7 +285,10 @@ def test_every_negative_row_declares_expect_clauses(module):
             "battle_over": {"battle_outcome_open", "battle_engine_loaded"},
             "battle_commit_state3": {"battle_commit_guard"},
             "native_absent": {"native_present"},
-            "battle_commit_held_rr": {"battle_commit_hold"}}
+            "battle_commit_held_rr": {"battle_commit_hold"},
+            # E2-CKPT: Emerald battles under the overworld reason
+            "battle_intro_field": {"in_battle", "callback1", "callback2"},
+            "trainer_battle_field": {"in_battle", "callback1", "callback2"}}
     got = {r.name: set(r.expect_clauses.keys()) for r in probe.STATES.values() if r.expectation == "negative"}
     assert got == want
     row = lua.table_from({"expectation": "negative", "samples": 5, "yes": 0, "reached": True})
@@ -369,7 +377,10 @@ def test_real_safety_frame_end_sampling_and_save_witness_are_wired():
     # C4-B2: the reason runner passes the row's reason/args through; core rows carry neither, so
     # this is a byte-identical `safety:check(nil, nil, nil)` for them.
     assert "safety:check(nil, active.write_reason, active.args)" in SOURCE
-    assert "counter > before and G.sectors_at(domain,counter) < 14" in SOURCE
+    # the row-5 latch goes through the shared torn-read guard (gen3_boot_check.lua
+    # M.counter_advanced), never a bare `counter > before` (0xFFFFFF05 torn read, 2026-09-27)
+    assert "G.counter_advanced(before, counter) and G.sectors_at(domain,counter) < 14" in SOURCE
+    assert "counter > before" not in SOURCE
     assert "G.sectors_at(domain,after) >= 14" in SOURCE
     assert 'FAIL not run' in SOURCE and "passed = false" in SOURCE
     assert "WRITE_SURFACE none (predicate-only probe)" in SOURCE and "WRITE_LOG" not in SOURCE
@@ -386,7 +397,7 @@ def test_artifact_rows_are_negative_and_gated(module):
         assert rows[name].expectation == "negative"
     assert set(rows["pc_menu"].artifacts.keys()) == {"radical_red/companion"}
     assert set(rows["script_running"].artifacts.keys()) == {
-        "firered/clean", "leafgreen/clean", "radical_red/companion"}
+        "firered/clean", "leafgreen/clean", "radical_red/companion", "emerald/clean"}
     assert all(rows[n].artifacts is None for n in TERMINALS if n not in ("pc_menu", "script_running"))
 
 
@@ -513,7 +524,7 @@ def parked_menu(pack, type_flags):
 
     def addr(n):
         return cl[n]["address"] + cl[n].get("offset", 0)
-    return {addr("battle_main_func"): cl["battle_main_func"]["expect"], addr("battle_comm_0"): 1,
+    return {addr("battle_main_func"): cl["battle_main_func"]["expect"], addr("battle_comm_0"): cl["battle_comm_0"]["expect"],
             addr("battle_not_link"): type_flags}
 
 
@@ -537,6 +548,27 @@ def run_reason_row(lua, probe, WIT, name, frames=180):
             probe.tally(row, True, "ok", None, 0x1F)
     row.reached = held > 0
     return row
+
+
+EMERALD_PACK = json.loads((ROOT / "data/games/gen3_emerald/write_checkpoint.json").read_text(encoding="utf-8"))["emerald"]
+
+
+def test_emerald_battle_witnesses_follow_the_pack_comm_numbering(module):
+    """E2 F-B: Emerald parks the action menu at gBattleCommunication[0] == 2, not FR's 1."""
+    lua, probe = module
+    comm = next(c for c in EMERALD_PACK["battle"]["clauses"] if c["name"] == "battle_comm_0")
+    assert comm["expect"] == 2
+    mem = parked_menu(EMERALD_PACK, 0xC)
+    W = witness_table(lua, probe, EMERALD_PACK, mem)
+    assert W.battle_input() is True and W.battle_input_trainer() is True
+
+    def holds(name, value):
+        mem[comm["address"] + comm.get("offset", 0)] = value
+        spec = next(r for r in probe.STATES.values() if r.name == name)
+        return probe.row_witness(W, spec)[0]()
+    assert holds("battle_input_wild", 1) is False       # FR's number is not Emerald's menu
+    assert holds("battle_move_menu", 3) is True and holds("battle_move_menu", 2) is False
+    assert holds("battle_commit_state3", 4) is True and holds("battle_commit_state3", 3) is False
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
@@ -902,7 +934,7 @@ def test_b2_a_helper_finish_mid_run_keeps_every_completed_row_line(module):
     assert "PROBE battle_input_wild FAIL not run" in later
     # the run itself: every row end goes through finish(), and the script row precedes the
     # reason rows (the last of which, bw_n8_item, can end the run)
-    assert SOURCE.count("finish(row)") == 12 and SOURCE.count("active = nil") == 3
+    assert SOURCE.count("finish(row)") == 14 and SOURCE.count("active = nil") == 3   # +2 E2-CKPT custom rows
     assert SOURCE.index("if plan[9] then") < SOURCE.index("for i = P.REASON_BASE, #P.STATES do")
     assert "P.summary(rows, plan, title, kind, ok and callback_error == nil, G.log)" in SOURCE
 
@@ -1102,7 +1134,7 @@ def test_rr_parked_trainer_commit_is_a_held_refusal_row(module, kind):
     from tests.unit.test_gen3_safety import rr_battle_world
     lua, probe = module
     rows = {r.name: r for r in probe.STATES.values()}
-    assert set(rows["battle_input_trainer"].artifacts.keys()) == {"firered/clean", "leafgreen/clean"}
+    assert set(rows["battle_input_trainer"].artifacts.keys()) == {"firered/clean", "leafgreen/clean", "emerald/clean"}
     held = rows["battle_commit_held_rr"]
     assert set(held.artifacts.keys()) == {"radical_red/companion"}
     assert (held.reason, held.args.battler, held.witness, held.state) == (

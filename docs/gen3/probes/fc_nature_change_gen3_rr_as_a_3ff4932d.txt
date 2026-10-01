@@ -1,0 +1,95 @@
+# gen3_final_cut row=nature_change_gen3_rr_as_a item=§14_P5_RR_duo cut=3ff4932d6e64f61c8e07a922d42e46d60d8c69b6
+# lane=C:\slink-wt\rr-complete
+# command: python tools/e2e_duo.py --game gen3_rr --scenario nature_change_gen3 --keep-data --wire-log --lane rr-full-nature_change_gen3_rr_as_a-3ff4932d   (cwd=C:\slink-wt\rr-complete)
+# env: SLINK_STATE_DIR=C:\slink-wt\rr-complete\patch\build\state-full-nature_change_gen3_rr_as_a-3ff4932d
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-10-01T10:38:43 cpu=15% emuhawk=0 python=7
+start_utc=2026-10-01T14:38:42Z tracked_clean_before=True
+
+========== scenario: nature_change_gen3 ==========
+[duo] nature_change_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=3ff4932d6e64f61c8e07a922d42e46d60d8c69b6
+[duo] server up: tcp=56136 http=56137 data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for nature_change_gen3: e2e_nature_change_gen3_a_1_witness.bin, e2e_nature_change_gen3_a_1_witness_ext.bin, e2e_nature_change_gen3_a_attempt1_result.txt, e2e_nature_change_gen3_a_result.txt, e2e_nature_change_gen3_b_1_witness.bin, e2e_nature_change_gen3_b_1_witness_ext.bin, e2e_nature_change_gen3_b_attempt1_result.txt, e2e_nature_change_gen3_b_result.txt, e2e_nature_change_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv path=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv path=C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=route_1 encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 151.7s
+[duo] RESULT_LINE a: RESULT: FAIL (no nature ACK)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before a: native Nature Changer and migration ACK
+[duo] nature_change_gen3: a client finished before 'a: native Nature Changer and migration ACK' (a: RESULT: FAIL (no nature ACK); b: no RESULT)
+--- nature_change_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/rr-complete/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TIMEOUT waiting for nature migration ACK [tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 27
+RESULT: FAIL (no nature ACK)
+--- nature_change_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5073
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 5073
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 5073
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5073
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5073
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5073
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5073
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5073
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5073
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5073
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\nature_change_gen3_a_gen3_new.jsonl
+[duo] wire log: C:\slink-wt\rr-complete\tests\fixtures\gen3\wire\nature_change_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_nature_change_gen3_f4_oi5uv
+
+========== summary ==========
+  nature_change_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-10-01T14:41:16Z tracked_clean_after=True classification=real

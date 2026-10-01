@@ -8,6 +8,99 @@ ships without the owner's authority. Rows marked **GATE** must land before the n
 Evidence ids: `cx-…` are OMP (magi) task ids; reviews are read-only and every finding was checked against the
 source before it was accepted here.
 
+## Status (2026-09-26, local master `1d02702f`, not pushed)
+
+The post-RC batch is **complete**. Everything below is merged to local master with Gen 1 and Gen 3.
+Gen 2 evidence is 98/98 sweep cells re-pinned at CODE_DIGEST `e8ca0067` (after the Gen 3 land).
+`verify_gen2_release.py --lane release-evidence` on a provisioned box is red only on the owner's
+G4 signature and the three overlay rows, which stay BUILT until G4 + `tools/gen_gen2_admission.py
+--promote-overlays`. The card bodies below are the design record; this table is the current state.
+
+| Card | State | Evidence |
+|---|---|---|
+| KEY-SCOPE-5 | DONE | `4bd32cec` `ad1290fa` `628bfc87`; hello/reset review cx-2985fe38 `8418c931`, rollback-on-exception `543cd1dc` |
+| SP-LOWWATER | DONE | `db93e52c` `42f63152` `fa9b9626`; `sp_lowwater_gate` receipts pinned |
+| REVIEW-P4-HASH | DONE in the doc sweep | `docs/gen2/reviews/` historical headers |
+| PHONE-NAMES | DONE | `e6d7761d` `0857cbe7`; Opus regression review clean |
+| TITLE-VERSION A (version text) | DONE | `SLINK v0.0.0-dev` on the main menu (`patch/gen2/src/version.asm`) |
+| TITLE-VERSION B (logo) | PARKED | owner 2026-09-25 "Logo can wait" |
+| POISON-DUO-CAP | DECIDED | duo keeps the native Wade fight; the gate's Gold poison leg boots the O-33 `gold_synth_psn` fixture (`75888449`, scoped to the gate by `0f64dd93`) |
+| TRAINER-SEED-A, TRADE-EVOLVE-CATCH | NOT NEEDED | both cells passed in the post-RC and Gen 3-merge sweeps; the fallbacks stay described below |
+| TRAINER-FAINT-LIVE-TURN | DONE | `822d4352` |
+| GEN1-ENEMY-MAXHP | DONE | `0fbbeaca` `b86b5942`; merged with the calc lane's foe dict (maxHP stays plausibility-gated) |
+| MASTER-MERGE | DONE | Gen 2 on local master `062977a9`, then Gen 3 landed; current master `1d02702f` |
+| PER-PLAYER-TITLES-PERSISTED | OPEN (note) | restart persistence of per-player titles; not scheduled |
+| ADMISSION-MIXED-KINDS-VERDICT | DONE | `f0565960` |
+| GEN1-UPR-FORK-SOURCE | DONE | `9e7a8d5c`; the 0001-0010 jar pinned `f8e40a83` |
+| GEN1-GATE-REWRITES-RECEIPTS | DONE | `592a3f0c` `54db2b95` (capture is opt-in) |
+| GEN2-CALC | DONE | `2aaab0ff` `b1bbf4c0`; Crystal trainer sets `8858df36`; browser-verified by the calc lane |
+| CLAUSE-BENCH-LIMITS | KEPT BY DESIGN | see the card |
+| BOARD-AMBIGUOUS | DONE | cherry-picked as `a2ea8ea6` |
+| TEMP-LANES | DONE | `trl` `tr2` `tr3` `spd` `sp2` removed; `Temp/fs1..fs4` are the live sweep lanes |
+| PURERGB-OVERLAY-EOL | DONE | `65b3c4b1` |
+| OMP-TIMEOUTS | PROCESS RULE | headless OMP tasks state their kill limit in the task text |
+
+Found after the batch and also done: an unprovisioned checkout (no `.cache/gen2-build`) ran 0 unit tests.
+The fix is a named "not cloned" skip (`87779879`, `3d8e8999`, `50d307bf`; rule in `tests/TESTING.md`).
+The Gen 2 duo boot RTC is pinned to 11:00 (`67c5161a`).
+
+## PARKED for the next forced Gen 2 re-sweep: DIGEST-DOCS + CRYSTAL-PACK-README
+
+**DONE 2026-09-26** with the owner-authorized re-sweep ("Do whatever resweep you need"): the digest drops
+`DOC_SUFFIXES` under the packs with a guard test, and the README below is in place.
+
+Both change the Gen 2 CODE_DIGEST, so they land together with the next re-sweep that a shared-code
+change forces anyway (the owner can choose to pay the ~2 h now instead). Agreed with Gen1-Collab2 on
+2026-09-26.
+
+1. **DIGEST-DOCS: a defect, not a convenience.** `tools/gen2_code_digest.py` says docs are "harness
+   and prose, so they are not included", but `CODE_SCOPE`/`is_production()` take every file under
+   `data/games/gen2_{crystal,gold,silver}/` whatever its suffix. The comment describes behaviour the
+   code doesn't have. Today the only such file is `data/games/gen2_crystal/README.md` (the packs hold
+   66 `.json`, 3 `.lua`, 1 `.md`). Fix, fail-safe: exclude an explicit list of documentation suffixes
+   (`.md`, `.txt`, `.rst`) and add a unit test asserting that every remaining file under the three
+   packs is `.json` or `.lua`, so a new file type forces a decision instead of silently leaving the
+   digest. Not an allowlist: that would fail UNSAFE on a new behavioural file type.
+2. **CRYSTAL-PACK-README.** The pack is live (`gen2_gsc` reads all three per-title packs); its README
+   still describes the removed `gen2_crystal` adapter. Replacement text, ready to drop in:
+
+````markdown
+# Gen 2 data pack: Crystal
+
+One of three per-title packs (`data/games/gen2_crystal`, `gen2_gold`, `gen2_silver`) that
+`server/adapters/gen2_gsc.py` reads for Crystal, Gold and Silver alike, with
+`server/adapters/gen2_codec.py` (save and party structs) and `server/adapters/gen2_rom_scan.py`.
+The legacy `gen2_crystal` *adapter* this directory was once named after was removed at P3b.8
+(`server/adapters/__init__.py`); the directory name now just names the title.
+
+**These files are inside the Gen 2 CODE_DIGEST** (`tools/gen2_code_digest.py`): editing any file
+here, this README included, makes every Gen 2 receipt stale until the next evidence sweep.
+
+## Status
+
+Current Gen 2 evidence and verdicts: `python tools/verify_gen2_release.py --list` and
+`docs/gen2/PLAN.md`. The companion overlays are BUILT, not ADMITTED, until the owner's G4.
+
+## Files
+
+Generated from the pinned decomp (pret/pokecrystal; `data/gen2_sources.lock.json`) by
+`tools/gen_gen2_<name>.py`; each generator's `--check` verifies the committed file.
+
+- `profile.json`: RAM/SRAM symbols and constants for this title (`gen_gen2_profile.py`)
+- `admission.json`: admitted artifact rows (clean and overlay) (`gen_gen2_admission.py`)
+- `engine_signals.json`, `write_checkpoint.json`: engine sites and write windows the client arms
+- `species_index.json`, `moves.json`, `items.json`, `evolutions.json`, `trainers.json`
+- `area_map.json`, `map_names.json`, `encounter_tables.json` (Morn/Day/Nite), `static_encounters.json`, `gifts.json`
+- `charmap.lua`: the text charmap the Lua client uses
+- `receipts/`: shipped qualification, engine-site, write-window and O-33 synth receipts the client re-validates at load
+
+## Notes
+
+- Mon identity key: `gen2_codec.key()`.
+- Memorial box: the last box, `NUM_BOXES - 1` (`gen2_gsc.py`, `memorial_box_index`).
+- Test inputs: an absent `.cache/gen2-build` clone is a named skip; see `tests/TESTING.md`.
+````
+
 ## Ordering
 
 1. KEY-SCOPE-5: **GATE before Gen 3 rides this server**. It is also an owner decision whether Gen 2's release waits for it.

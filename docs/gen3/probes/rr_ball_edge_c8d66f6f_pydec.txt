@@ -1,0 +1,11 @@
+attempt 1 of 8
+IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=c14eb7f55f5e4cc16cae88d4a53f1f6851321cae86b8ef93eaf0e479bbb0f52f b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=327197e1b9fe9deb377da7eb49139f63034df144ce40d4a0d4884d2b853f8a81 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=c8d66f6f66decc0b2914748325172ccd47c5af92
+RESULT_LINE a: RESULT: PASS (caught BDC414F7:2BDDC8BF)
+RESULT_LINE b: RESULT: PASS (caught D9CF101C:D4223740)
+SAVE_WITNESS_SHA256 inst=a site=900a5813bad14c600903eac9c37f306491c189eae3b452e9038e65e7c565acd3 file=900a5813bad14c600903eac9c37f306491c189eae3b452e9038e65e7c565acd3 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+SAVE_WITNESS_SHA256 inst=b site=7daae973e663c6a84f5576474a3ed0b4147a0f18a160331a37d33f89f839d07f file=7daae973e663c6a84f5576474a3ed0b4147a0f18a160331a37d33f89f839d07f match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+BAG_BALLS baseline=10 final=9 throws=1 inst=a native_grant=10
+BAG_BALLS baseline=10 final=9 throws=1 inst=b native_grant=10
+link: BDC414F7:2BDDC8BF <-> D9CF101C:D4223740 alive on route_1 and saved once in each party
+ball gate: pre-ball native faint suppressed; native reward activates; post-ball real catch/link saved
+PYDEC: PASS asserted scenario facts

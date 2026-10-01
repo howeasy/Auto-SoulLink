@@ -101,17 +101,18 @@ POKECRYSTAL = ROOT / ".cache/gen2-build/pokecrystal"
 BATTLE_MENU_HEADER = POKECRYSTAL / "engine/battle/menu.asm"
 
 
-def source_battle_menu_grid():
-    """BattleMenuHeader's geometry as the pinned pokecrystal source states it -- the same derivation the
-    U1 live lane makes (tests/live/test_gen2_frame_align.py:battle_menu_grid), from the same sources.
+def source_battle_menu_grid(title="crystal"):
+    """BattleMenuHeader geometry from the selected title's pinned source. Crystal remains the
+    default for the independent U1 menu-grid controls.
     Screens in this file are drawn from THIS, never from the gate's constant, so a constant that drifts
     from the source is caught by the reader tests and not mirrored by the screen they are handed."""
-    return cached(("source-battle-grid",), _source_battle_menu_grid)
+    return cached(("source-battle-grid", title), lambda: _source_battle_menu_grid(title))
 
 
-def _source_battle_menu_grid():
+def _source_battle_menu_grid(title="crystal"):
+    source = context(title)
     data = re.search(r"^BattleMenuHeader:$(.*?)^SafariBattleMenuHeader:",
-                     BATTLE_MENU_HEADER.read_text(encoding="utf-8"), re.M | re.S)[1]
+                     source.read_source("engine/battle/menu.asm"), re.M | re.S)[1]
     flags = re.search(r"^\s*db (.*?) ; flags$", data.split(".MenuData:")[1], re.M)[1]
     assert "STATICMENU_CURSOR" in flags and "NO_TOP_SPACING" not in flags, flags
     left, top = map(int, re.search(r"menu_coords (\d+), (\d+),", data).groups())
@@ -120,7 +121,7 @@ def _source_battle_menu_grid():
     labels = re.findall(r'db "([^"]*)@"', data)
     assert len(labels) == rows * columns and "PACK" in labels, labels
     assert re.search(r'^PlacePKMNText::\s+db "<PK><MN>@"',
-                     (POKECRYSTAL / "home/text.asm").read_text(encoding="utf-8"), re.M)
+                     source.read_source("home/text.asm"), re.M)
     return {"x": left + 2, "y": top + 2, "rows": rows, "columns": columns, "spacing": spacing,
             "labels": [["<PK>", "<MN>"] if label == "<PKMN>" else list(label) for label in labels]}
 
@@ -490,7 +491,7 @@ class Sim:
         # here rather than from the gate's constant): the gate reads this screen at the pinned cells,
         # exactly as the running cartridge draws it, so a wrong constant fails here too.
         yield from self.menu("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], "RUN", columns=2,
-                             grid=source_battle_menu_grid())
+                             grid=source_battle_menu_grid(self.title))
         yield from self.text("Got away safely!")
         self.put("wBattleMode", [0])
 

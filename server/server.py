@@ -202,6 +202,36 @@ def _build_mon_entry(key, detail, adapter):
     }
 
 
+def _foe_detail(em, adapter):
+    """A client enemy_party entry reshaped as the party detail _build_mon_entry reads. The one
+    place both calc paths (/api/calc/mons and the board preview) build an enemy from, so the
+    preview can't model a different foe than the full calc does."""
+    detail = {
+        "species_id":   em.get("species_id", 0),
+        "level":        em.get("level", 0),
+        "nickname":     "",
+        "hp":           em.get("hp", 0),
+        # No default: an enemy the client hasn't decoded a battle struct for
+        # yet (or a generation that doesn't send one) stays maxHP=None, not a
+        # fake maxHP=1 that used to force hp_pct to 100.
+        "maxHP":        em.get("maxHP"),
+        "held_item_id": em.get("held_item_id", 0),
+        "ability_id":   em.get("ability_id", 0),
+        "ability_name": "",
+        "moves":        em.get("moves", []),
+        "status_cond":  em.get("status_cond", 0),
+        "stat_stages":  em.get("stat_stages"),
+        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
+        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
+        # carries stat exp. adapter.calc_stats() ignores both when absent.
+        "dvs_raw":      em.get("dvs_raw"),
+        "blob_hex":     em.get("blob_hex"),
+        "pp":           em.get("pp"),
+    }
+    detail["calc_stats"] = adapter.calc_stats(detail)
+    return detail
+
+
 def _calc_trainer_label(brief, enemy):
     """The calc setdex trainer key for a roster trainer ("*Rival Blue Set 2" -> "Rival Blue",
     the key the bridge's trainer index uses), or "" when there is no roster calc_label or
@@ -456,6 +486,24 @@ _FOUNDATION_ABSENT = object()
 _KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
 
 
+def _randomized_binding_error(rom_type, kind, committed_rom_type, committed_kind, *, candidate_class=None) -> str:
+    """Both halves of the run identity require an explicit randomized-title binding."""
+    from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
+
+    for title, declared, prefix, cls in (
+        (rom_type, kind, "", candidate_class),
+        (committed_rom_type, committed_kind, "committed run: ", None),
+    ):
+        if declared not in ("rand", "rand_overlay") or (prefix and not title):
+            continue
+        cls = cls or (adapter_class_for_rom_type(title) if isinstance(title, str) else None) or GameRulesAdapter
+        supports = getattr(cls, "supports_randomized", None)
+        if not callable(supports) or not supports(title):
+            return (f"{prefix}randomized cartridges are not supported for {title}: "
+                    "no randomized-ROM binding")
+    return ""
+
+
 def prompt_event_type(text: str) -> str | None:
     """The events-log row a capture reply's gui_prompt stands for: "violation", "reroll" or None.
 
@@ -538,6 +586,7 @@ class SLinkServer:
         self.player_area_id: dict[str, str] = {"a": "", "b": ""}  # raw area_id for state lookups
         self.player_ball_count: dict[str, int] = {"a": 0, "b": 0}
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
+        self.player_gender: dict[str, int | None] = {"a": None, "b": None}
         self.player_kanto_badges: dict[str, int] = {"a": 0, "b": 0}
         self.trainer_name: dict[str, str] = {
             "a": self.state.trainer_names.get("a", ""),
@@ -696,7 +745,7 @@ class SLinkServer:
             self._rom_contract_mtime = mtime
 
     def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str,
-                           foundation: object = _FOUNDATION_ABSENT) -> str:
+                           foundation: object = _FOUNDATION_ABSENT, rom_content: object = None) -> str:
         """Why this hello cannot join the committed run, or "" when it can.
 
         The run is locked to one FOUNDATION and to one pairing kind. A foundation is a
@@ -737,6 +786,9 @@ class SLinkServer:
         if artifact_kind not in _KNOWN_ARTIFACT_KINDS:
             return (f"Bad artifact_kind for slot {player_id.upper()}: {artifact_kind!r} is not "
                     f"a known kind (expected one of {sorted(_KNOWN_ARTIFACT_KINDS)})")
+        if refused := _randomized_binding_error(
+                rom_type, artifact_kind, self.state.rom_type, self.state.artifact_kind):
+            return refused
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
         if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
@@ -746,11 +798,14 @@ class SLinkServer:
         # patch, a randomized vanilla dump) is a clean-layout artifact -- the patch is per
         # cartridge and announced per player (`panel`), so a clean Red beside a patched Blue is
         # the ordinary vanilla pairing, not a mixed one (review: Fable 2026-09-20 #1).
-        def _kind(rt: str, kind: str) -> str:
+        def _kind(rt: str, kind: str, content: object = None) -> str:
             cls = adapter_class_for_rom_type(rt) if rt else None
-            return (cls or GameRulesAdapter).pairing_kind(kind)
+            title_aware = getattr(cls, "pairing_kind_for_title", None)
+            if title_aware is not None:
+                return title_aware(rt, kind, content)
+            return (cls or GameRulesAdapter).pairing_kind_for(kind, content)
 
-        got_kind = _kind(rom_type, artifact_kind)
+        got_kind = _kind(rom_type, artifact_kind, rom_content)
         want_kind = _kind(self.state.rom_type or "", self.state.artifact_kind or "")
         if want_kind and got_kind != want_kind:
             return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
@@ -763,6 +818,18 @@ class SLinkServer:
         Returns the admission record; never raises. A player who cannot be admitted is not
         an error condition, it is a run that has not started for them yet.
         """
+        payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
+        refused = _randomized_binding_error(
+            msg.get("rom_type", self.state.rom_type), kind, self.state.rom_type, self.state.artifact_kind,
+            candidate_class=type(self.adapter))
+        if not refused and (kind in ("rand", "rand_overlay") or (not self._rom_contract and payload)):
+            refused = self.adapter.refused_rom_content(payload, artifact_kind=kind)
+        if refused:
+            if kind in ("rand", "rand_overlay"):
+                # Unverified reconnects must not display a previous cartridge's tables.
+                # The caller still rolls back the staged identity/rule state on refusal.
+                getattr(self, "_player_adapters", {}).pop(player_id, None)
+            return {"state": "rejected", "reason": refused}
         if not self._rom_contract:
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
         if self._rom_contract.get("unreadable"):
@@ -894,12 +961,9 @@ class SLinkServer:
 
     def _calc_profile(self) -> dict | None:
         """The damage-calc profile shared by both players' adapters, or None if either
-        game has no verified calc numbers yet, or the two players' games disagree."""
-        a = self.adapter_for("a").calc_profile()
-        b = self.adapter_for("b").calc_profile()
-        if a is None or b is None or a != b:
-            return None
-        return a
+        game has no verified calc numbers yet, or the two games' calc rules disagree."""
+        from server.adapters import shared_calc_profile
+        return shared_calc_profile(self.adapter_for(pid).calc_profile() for pid in ("a", "b"))
 
     def _trainer_panel_html(self, area_id: str, player_id: str = "",
                             key_prefix: str = "",
@@ -943,9 +1007,14 @@ class SLinkServer:
 
         # Resolve briefs.
         briefs: list[tuple[int, dict]] = []
+        player_gender = getattr(self, "player_gender", {}).get(player_id)
         for rt_id in trainer_ids:
             brief = adapter.trainer_brief(rt_id)
             if brief:
+                required = brief.get("required_player_gender")
+                if (type(player_gender) is int and player_gender in (0, 1)
+                        and type(required) is int and required in (0, 1) and required != player_gender):
+                    continue
                 briefs.append((rt_id, brief))
 
         # Bucket by (name, cap_bucket) — candidates for grouping. Then
@@ -1179,7 +1248,7 @@ class SLinkServer:
                         f'data-pid="{html.escape(player_id, quote=True)}" '
                         f'data-tid="{v_rt_id}" '
                         f'data-calc-label="{html.escape(v_calc_label, quote=True)}" '
-                        f'title="Open this variant in RR Calc Prep tab">'
+                        f'title="Open this variant in the Calc Prep tab">'
                         f'&#9876;</button>'
                         f'</div>'
                         f'{_render_party(v_party)}'
@@ -1232,7 +1301,7 @@ class SLinkServer:
                 f'data-pid="{html.escape(player_id, quote=True)}" '
                 f'data-tid="{rt_id}" '
                 f'data-calc-label="{html.escape(brief.get("calc_label", "") or "", quote=True)}" '
-                f'title="Open in RR Calc Prep tab (reuses calc tab if open)">&#9876;</button>'
+                f'title="Open in the Calc Prep tab (reuses calc tab if open)">&#9876;</button>'
                 f'</summary>'
                 f'<div class="tr-party">{mons_html}</div>'
                 f'</details>'
@@ -1286,11 +1355,12 @@ class SLinkServer:
                     out[stat] = raw - 6
             return out
 
-        # Same shape /api/calc/mons sends (base.calc_stats contract): None when the adapter
-        # can't decode it. The enemy's raw dvs_raw/blob_hex ride along on dfn already --
-        # _enrich_battle_state's enemy_party is a shallow copy of the client's own dict --
-        # so this is the same call handle_calc_mons makes, no reconstruction needed.
-        enemy_calc_stats = adapter.calc_stats(dfn)
+        # The enemy exactly as /api/calc/mons builds it (_foe_detail): calc spelling, held
+        # item, ability and calc_stats. Nature stays None -- no client sends an enemy's
+        # personality, so neither calc path can know it.
+        foe = _build_mon_entry("foe", _foe_detail(dfn, adapter), adapter)
+        if not foe:
+            return None
         return {
             "gen": profile.get("gen"),
             "dex": profile.get("dex"),
@@ -1307,13 +1377,16 @@ class SLinkServer:
             "player_status": status(atk),
             "player_boosts": boosts(atk["stat_stages"]),
             "player_calc_stats": atk["calc_stats"],
-            "enemy_species": dfn.get("species_name") or "",
-            "enemy_level": dfn.get("level", 0),
+            "enemy_species": foe["species_name"],
+            "enemy_level": foe["level"],
+            "enemy_nature": foe["nature"],
+            "enemy_ability": foe["ability_name"],
+            "enemy_item": foe["item_name"],
             "enemy_hp_pct": (max(0, min(100, int(dfn.get("hp", 0) / dfn["maxHP"] * 100)))
                               if dfn.get("maxHP") else None),
             "enemy_status": status(dfn),
             "enemy_boosts": boosts(dfn.get("stat_stages")),
-            "enemy_calc_stats": enemy_calc_stats,
+            "enemy_calc_stats": foe["calc_stats"],
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -1626,7 +1699,7 @@ class SLinkServer:
                     # passed through, never a falsey-coerced value.
                     _mixed = self._mixed_games_error(
                         player_id, _rt, msg.get("artifact_kind", "clean"),
-                        msg.get("foundation", _FOUNDATION_ABSENT))
+                        msg.get("foundation", _FOUNDATION_ABSENT), msg.get("rom_content"))
                     if _mixed:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
                         self.state.identity_error[player_id] = _mixed
@@ -1990,6 +2063,18 @@ class SLinkServer:
             for index, mon in enumerate(party) if mon.get("key")
         }
 
+    def _with_run_identity(self, commands: list) -> list:
+        """Bind recovery clients to the existing run; an unmanaged run has no fabricated ID."""
+        if self.adapter.supports_trade_recovery():
+            for command in commands:
+                if command.get("cmd") == "config":
+                    command["run_id"] = self._run_id or ""
+            if any(c.get("cmd") == "config" for c in commands):
+                # A fresh client must learn the run binding before retiring journal records.
+                commands = [c for c in commands if c.get("cmd") != "trade_final"] + [
+                    c for c in commands if c.get("cmd") == "trade_final"]
+        return commands
+
     def _dispatch(self, player_id: str, msg: dict) -> list:
         event = msg.get("event", "unknown")
         # enemy_party is client JSON read by every battle view: keep only a list of objects.
@@ -2019,6 +2104,10 @@ class SLinkServer:
         # snapshot that diff_party turns into captures, which is exactly a semantic event.
         if event != "hello" and not self.is_admitted(player_id):
             return [{"cmd": "noop", "refused": "admission"}]
+
+        refused = self.state.refuse_hidden_event(player_id, msg)
+        if refused is not None:
+            return refused  # before presentation enrichment or command/census mutation
 
         if event == "hello":
             # ── Transactional hello (Codex cx-2985fe38 F1/F2) ──────────────────────────
@@ -2106,7 +2195,10 @@ class SLinkServer:
                 loc     = msg.get("loc_name", "")
                 party_n = len(msg.get("party", []))
                 log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
-                self._ingest_box_census(player_id, msg)
+                defer_trade_census = self.adapter.supports_trade_recovery() or (
+                    ("party_hidden" in msg or "trade_outstanding" in msg) and self.adapter.refused_trade_recovery())
+                if not defer_trade_census:
+                    self._ingest_box_census(player_id, msg)
 
                 # Run state machine first (handles identity lock check).
                 cmds = self.state.handle_event(player_id, msg)
@@ -2121,7 +2213,10 @@ class SLinkServer:
                 _rollback_hello()
                 self._log_event(player_id, "hello",
                                 "REJECTED — wrong save/slot", area or loc)
-                return cmds
+                return self._with_run_identity(cmds)
+
+            if defer_trade_census:
+                self._ingest_box_census(player_id, msg)
 
             # ACCEPTED. The staged rom_type/panel/panel_abi/sfx/adapter are already applied
             # above; only the presentation follow-ups (panel re-send, adapter-switch log)
@@ -2141,9 +2236,19 @@ class SLinkServer:
                 _dirty = True
                 log.info(f"Committed ROM type '{rom}' for this run")
             if not self.state.artifact_kind:
-                # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact
-                self.state.artifact_kind = {"named": "clean"}.get(
-                    msg.get("artifact_kind", "clean"), msg.get("artifact_kind", "clean"))
+                # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact; a
+                # kind the cartridge's content pairs differently (pairing_kind_for) commits that
+                # effective kind, so the partner is paired against what the ROM holds.
+                from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
+                _declared = msg.get("artifact_kind", "clean")
+                _cls = adapter_class_for_rom_type(rom) or GameRulesAdapter
+                # same title-aware rule as _mixed_games_error._kind: a rand hello is never
+                # normalised to clean by another title's proof (gen3_frlge.pairing_kind_for_title)
+                _title_aware = getattr(_cls, "pairing_kind_for_title", None)
+                _by_content = (_title_aware(rom, _declared, msg.get("rom_content")) if _title_aware
+                               else _cls.pairing_kind_for(_declared, msg.get("rom_content")))
+                self.state.artifact_kind = (_by_content if _by_content != _cls.pairing_kind(_declared)
+                                            else {"named": "clean"}.get(_declared, _declared))
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
                 # follow the committed kind from here on (base adapter: no-op). Every
@@ -2161,6 +2266,8 @@ class SLinkServer:
             # per-player adapter's constructor default, is what a Gen 2 partner's own
             # adapter must carry, including on the very first hello that commits it.
             self._bind_player_adapter(player_id, msg.get("rom_type", ""))
+            gender = msg.get("player_gender")
+            self.player_gender[player_id] = gender if type(gender) is int and gender in (0, 1) else None
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -2182,17 +2289,18 @@ class SLinkServer:
             stats_before = copy.deepcopy(self.state.mon_stats)
             if msg.get("rom_content"):
                 self._ingest_rom_content(player_id, msg["rom_content"])
-            if "pc_boxes" in msg:
+            if "pc_boxes" in msg and not self.state.party_snapshot_withheld(player_id, msg):
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
                         self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
-            # Seed party_details from snapshot
-            self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
-            for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det, player_id)
+            # A withheld party preserves the last display, without refreshing its evidence.
+            if not self.state.party_snapshot_withheld(player_id, msg):
+                self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
+                for k, det in self.party_details[player_id].items():
+                    self._cache_mon_info(k, det, player_id)
             if _dirty or self.state.mon_stats != stats_before:
                 self.state._save()
             # Seed battle state from hello (so page reflects battle immediately)
@@ -2202,7 +2310,7 @@ class SLinkServer:
                 self.battle_state[player_id]["is_trainer_battle"] = bool(msg["is_trainer_battle"])
             if "enemy_party" in msg:
                 self.battle_state[player_id]["enemy_party"] = msg["enemy_party"]
-            return cmds
+            return self._with_run_identity(cmds)
         elif event == "area_enter":
             area = msg.get("area_id", "")
             loc  = msg.get("loc_name", "")
@@ -2304,6 +2412,8 @@ class SLinkServer:
         elif event == "safe":
             log.debug(f"[{player_id}] safe state")
         elif event == "tick":
+            gender = msg.get("player_gender")
+            self.player_gender[player_id] = gender if type(gender) is int and gender in (0, 1) else None
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -2312,7 +2422,7 @@ class SLinkServer:
                 self.player_kanto_badges[player_id] = msg["kanto_badges"]
             if "trainer_name" in msg:
                 self.trainer_name[player_id] = msg["trainer_name"]
-            if "pc_boxes" in msg:
+            if "pc_boxes" in msg and not self.state.party_snapshot_withheld(player_id, msg):
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
@@ -2405,7 +2515,8 @@ class SLinkServer:
         # On tick, replace party_details entirely from the authoritative party snapshot.
         # This prevents captures that went straight to the PC box (full-party captures)
         # from appearing as phantom party mons between ticks.
-        if "party" in msg and event == "tick":
+        if ("party" in msg and event == "tick"
+                and not self.state.party_snapshot_withheld(player_id, msg)):
             self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det, player_id)
@@ -2532,7 +2643,7 @@ class SLinkServer:
                                         f"{'⚠' if _kind == 'violation' else '🔁'} {_prompt_text}", _area_id)
 
         self._emit_obs_triggers(player_id, msg, cmds, _pre_area_state, _pre_battle)
-        return cmds
+        return self._with_run_identity(cmds)
 
 
     def _emit_obs_triggers(self, player_id: str, msg: dict, cmds: list,
@@ -2777,6 +2888,10 @@ class SLinkServer:
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
                     "awaiting_save": s.awaiting_save.get(pid, False),  # BURIAL-VISIBLE
+                    **({"trade_recovery": {"hidden": s.party_hidden[pid],
+                                          "pending": s.trade_recovery_pending[pid],
+                                          "problem": s.trade_recovery_errors[pid]}}
+                       if self.adapter.supports_trade_recovery() else {}),
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.
@@ -3041,33 +3156,9 @@ class SLinkServer:
                 trainer_label = " ".join(filter(None, [opp_class, opp_name])) if is_trainer else "Wild"
                 tid = bs.get("trainer_id") or 0
                 for ei, em in enumerate(bs.get("enemy_party", [])):
-                    esid  = em.get("species_id", 0)
-                    if not esid:
+                    if not em.get("species_id", 0):
                         continue
-                    detail = {
-                        "species_id":   esid,
-                        "level":        em.get("level", 0),
-                        "nickname":     "",
-                        "hp":           em.get("hp", 0),
-                        # No default: an enemy the client hasn't decoded a battle struct for
-                        # yet (or a generation that doesn't send one) stays maxHP=None, not a
-                        # fake maxHP=1 that used to force hp_pct to 100.
-                        "maxHP":        em.get("maxHP"),
-                        "held_item_id": em.get("held_item_id", 0),
-                        "ability_id":   em.get("ability_id", 0),
-                        "ability_name": "",
-                        "moves":        em.get("moves", []),
-                        "status_cond":  em.get("status_cond", 0),
-                        "stat_stages":  em.get("stat_stages"),
-                        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
-                        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
-                        # carries stat exp. adapter.calc_stats() ignores both when absent.
-                        "dvs_raw":      em.get("dvs_raw"),
-                        "blob_hex":     em.get("blob_hex"),
-                        "pp":           em.get("pp"),
-                    }
-                    detail["calc_stats"] = adapter.calc_stats(detail)
-                    entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
+                    entry = _build_mon_entry(f"foe-{ei}", _foe_detail(em, adapter), adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
@@ -4049,8 +4140,7 @@ class SLinkServer:
         Falls back to gen3_frlge if the adapter's game dir doesn't exist.
         """
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        game_id = self.adapter.game_id if self.adapter else "gen3_frlge"
-        game_dir = os.path.join(base_dir, "data", "games", game_id)
+        game_dir = os.path.join(base_dir, "data", "games", self._area_pack())
         if not os.path.isdir(game_dir):
             game_dir = os.path.join(base_dir, "data", "games", "gen3_frlge")
         area_ids: set[str] = set()
@@ -4086,6 +4176,13 @@ class SLinkServer:
                     if isinstance(entry, dict) and entry.get("area_id"):
                         area_ids.add(entry["area_id"])
         return sorted(area_ids)
+
+    def _area_pack(self) -> str:
+        """The data/games/<dir> of the active game's area maps: the adapter's `area_pack` when
+        it names one (titles sharing an adapter can have their own maps), else its game_id."""
+        if not self.adapter:
+            return "gen3_frlge"
+        return getattr(self.adapter, "area_pack", None) or self.adapter.game_id
 
     async def handle_obs_areas(self, request):
         """GET /api/obs/areas — grouped area list for the active game.
@@ -4348,18 +4445,10 @@ class SLinkServer:
                     seen_keys.add(cap.key)
             result[f"{pid}_options"] = opts
 
-        # Build area list
-        try:
-            _base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            # Try adapter-specific area map first, fall back to gen3_frlge
-            _game_id = self.adapter.game_id if self.adapter else "gen3_frlge"
-            _map_path = os.path.join(_base_dir, "data", "games", _game_id, "area_map.json")
-            if not os.path.exists(_map_path):
-                _map_path = os.path.join(_base_dir, "data", "games", "gen3_frlge", "area_map.json")
-            with open(_map_path) as _mf:
-                _all_area_ids = sorted({v for v in json.load(_mf).values() if v})
-        except Exception:
-            _all_area_ids = []
+        # Build area list: the active game's own area maps, via the shared loader.
+        # It has no cross-game fallback -- a game that ships no map (gen3_exp) gets []
+        # and then only the areas its own run has entered, never another game's catalog.
+        _all_area_ids = self._load_known_area_ids()
         all_area_set = set(_all_area_ids)
         for extra_src in [s.area_states.keys(), s.pending_captures.keys()]:
             for extra in extra_src:
@@ -4798,6 +4887,7 @@ class SLinkServer:
         self.player_area_id = {"a": "", "b": ""}
         self.player_ball_count = {"a": 0, "b": 0}
         self.player_badges = {"a": 0, "b": 0}
+        self.player_gender = {"a": None, "b": None}
         self.player_kanto_badges = {"a": 0, "b": 0}
         self.trainer_name = {"a": "", "b": ""}
         self.pc_boxes = {"a": [], "b": []}
@@ -4964,6 +5054,9 @@ class SLinkServer:
         foundation implements the generation (`reports_box_census`), where a missing one is no
         census. Any box mutation makes the census stale until the next complete scan."""
         event, bc = msg.get("event"), self.box_census[player_id]
+        if self.state.party_snapshot_withheld(player_id, msg):
+            bc["boxes"] = None  # retained display is not collision evidence
+            return
         if event == "hello":
             bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
         elif "pc_boxes_generation" in msg:
@@ -4989,8 +5082,20 @@ class SLinkServer:
 
     def _journal_trade(self, rec: dict) -> None:
         """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
+        names = []
+        for pid, partner in (("a", "b"), ("b", "a")):
+            # Commit is published after the link swap and trade evolution, before the
+            # next party tick. Resolve the received identity from the updated link;
+            # the display caches can still describe its pre-trade species/holder.
+            key = ((rec.get(f"{pid}_new") or rec[f"{partner}_key"])
+                   if rec["outcome"] == "committed" else rec[f"{pid}_key"])
+            entry = self.state.entry_for(pid, key)
+            mon = entry and getattr(entry, pid)
+            name = ((mon.nickname or self.adapter_for(pid).species_name(mon.species))
+                    if mon and mon.key == key else "")
+            names.append(name or self._mon_display_name(pid, key))
         self._log_event("", f"trade_{rec['outcome']}",
-                        f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
+                        f"{names[0]} <-> {names[1]}: {rec['verdict']} {rec['problem']}".strip(),
                         key=rec["token"])
 
     def _presentation_key_in_use(self, key: str, player_id: str | None = None,
@@ -5464,8 +5569,14 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
                manager_port: int = 0, verbose: bool = False,
-               wire_log: str = None):
+               wire_log: str = None, test_only_route: list = None):
     _configure_logging(data_dir, verbose)
+    # TEST-ONLY ROUTES (ruling 39). A server process routes only what it was told to: absent
+    # the flag the registry answers for itself and refuses everything an owner ruling refuses.
+    # Each route it IS told to open is logged by set_test_only_routes with production:false, so
+    # a run that used the seam can never be read as a production one.
+    from server.adapters import set_test_only_routes
+    set_test_only_routes(test_only_route or ())
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
         if os.path.exists(links_path):
@@ -5572,7 +5683,13 @@ if __name__ == "__main__":
     parser.add_argument("--wire-log",     default=None, metavar="DIR",
                         help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
     parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
-        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
+                        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
+    parser.add_argument("--test-only-route", action="append", default=[], metavar="ROM_TYPE",
+                        help="TEST-ONLY: route a ruling-refused rom_type in THIS process "
+                             "(repeatable). The gen3_exp duos use it for the Emerald expansion, "
+                             "which every production server refuses by name (ruling 39). No "
+                             "client message, run registry or Manager row can set it, and each "
+                             "route it opens is logged with production:false")
     args = parser.parse_args()
     allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
@@ -5588,4 +5705,5 @@ if __name__ == "__main__":
                      pc_trade_npc=args.pc_trade_npc,
                      manager_port=args.manager_port,
                      verbose=args.verbose,
-                     wire_log=args.wire_log))
+                     wire_log=args.wire_log,
+                     test_only_route=args.test_only_route))

@@ -1,0 +1,47 @@
+duo instance a scenario=faint_cmd_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:62277 (non-blocking)…
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:62277 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:62277
+[client] [SLink] TCP connected to 127.0.0.1:62277
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+READY 504F4F4D:20250925
+RX memorialize key=504F4F4D:20250925
+RX game_over
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 692
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 692
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 692
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 692
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 692
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 692
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 692
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 692
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 692
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 692
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 692
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 692
+[client] [SLink-gen3] write overworld 0x02031210 +80 frame 692
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 692
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 692
+TX memorialize_done 504F4F4D:20250925 {"box":13,"event":"memorialize_done","key":"504F4F4D:20250925","player":"a","seq":8}
+[client] [gen3] phase save-menu frame=752 counter=2
+[client] [gen3] phase save-dialog frame=812 row=3/6
+[client] [gen3] phase saved frame=1212 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_a_1_witness.bin bytes=131072 saves=1 frame=1441 counter=3
+SAVE_WITNESS faint_cmd counter=2->3
+WRITES 15
+RESULT: PASS (memorialized 504F4F4D:20250925)

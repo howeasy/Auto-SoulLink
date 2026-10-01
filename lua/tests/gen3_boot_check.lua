@@ -265,6 +265,19 @@ local function sector_checksum(domain, base, size)
     return ((sum >> 16) + sum) & 0xFFFF
 end
 
+--- True only when `after` is the save counter's legitimate next value. pret's TrySavingData
+--- (src/save.c HandleWriteSector) advances gSaveCounter by exactly 1 per real save, so a polled
+--- read that returns anything else while the write is in flight is a torn read, not a second
+--- save: PHYSICAL whiteout_gen3 side B 2026-09-27, `phase saved frame=17926 counter=4->
+--- 4294967045` (0xFFFFFF05) then "sector 14: counter is not 4294967045" -- the low byte of the
+--- new counter had committed to flash with the upper three words still erased (0xFF). Wraps
+--- like the u32 the game stores, though no real run gets anywhere near it. Shared by every
+--- save-counter latch (gen3_emerald_boot_check.lua, gen3_scripted_play.lua's EMH.save_via_menu);
+--- callers that see it return false must keep polling, not treat it as a completed save.
+function M.counter_advanced(before, after)
+    return after == ((before + 1) & 0xFFFFFFFF)
+end
+
 --- The save written at counter `ctr`, judged the way gen3_codec.qualify_flash judges a slot:
 --- returns (n, why) where n is how many of the 14 logical ids 0..13 appear EXACTLY ONCE in
 --- the ONE physical slot the game writes that counter to (pret save.c HandleWriteSector:
@@ -519,7 +532,7 @@ function M.save_via_menu(cp, domain, attempts)
         tick = tick + 1
         if tick % 16 ~= 0 then return false end   -- 32 sector reads: not every frame
         after = M.save_counter(domain)
-        return after > before
+        return M.counter_advanced(before, after)
     end)
     if not moved then
         M.shot("stuck")

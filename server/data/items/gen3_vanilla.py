@@ -86,3 +86,7 @@ ITEM_NAMES: dict[int, str] = {
     368:"Rainbow Pass", 369:"Tea", 370:"MysticTicket", 371:"AuroraTicket",
     372:"Powder Jar", 373:"Ruby", 374:"Sapphire",
 }
+
+# Emerald-only ids on top of ITEM_NAMES (pret pokeemerald include/constants/items.h:417-418,
+# src/data/items.h ITEM_MAGMA_EMBLEM / ITEM_OLD_SEA_MAP); ids 1-374 are shared (PLAN §1).
+EMERALD_OVERLAY: dict[int, str] = {375: "Magma Emblem", 376: "Old Sea Map"}

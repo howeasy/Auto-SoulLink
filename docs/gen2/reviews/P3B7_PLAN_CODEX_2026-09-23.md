@@ -1,5 +1,12 @@
 # P3b.7 dispatch plan (Codex Gen2-Part2, card gen2-P3b7-plan, 2026-09-23)
 
+**Historical record, superseded.** This plan's blockers (server rows selecting the legacy
+`gen2_crystal` adapter, `Entry.build` production composition unimplemented, etc.) describe the
+state before the P3b.8 cutover. `gen2_crystal` was since removed (`server/adapters/__init__.py`
+`_RETIRED_GAME_IDS`); Gen 2 is now served by `gen2_gsc.py` + `lua/gen2/*.lua`, and the Gen 2 RC
+evidence (98/98 sweep cells, tag `gen2-rc-evidence-2026-09-25`) postdates this plan. See
+`docs/gen2/PLAN.md` for current status.
+
 READ-ONLY plan pinned at `347c8000` (production and duo files unchanged since `1bb69b41`). Delivered in the Codex
 transcript; recorded by the coordinator. The write leases below are PROPOSED; each needs coordinator dispatch + ACK.
 

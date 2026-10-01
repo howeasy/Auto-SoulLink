@@ -1,0 +1,24 @@
+attempt 1 of 1
+IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=ea586077a64a7058fa33b432768c1da52b46db576f222211bafebe30c1bf34e9 profile.json=42e31a5cb4aa8f97f894997d0c01c427f97ebb720d8701c00375228006f1d1f7 source=c9c215f79382f996903795e777118bdf2a81e82c
+TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-09-27 23:07:16,748 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+RESULT_LINE a: RESULT: PASS (natural faint of the active linked 4D55444B:20250925)
+RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+SAVE_WITNESS_SHA256 inst=a site=4f5feb410b9ed044344944fda8b75c9484cc1e9ef324d8893469012447ef5cca file=4f5feb410b9ed044344944fda8b75c9484cc1e9ef324d8893469012447ef5cca match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=28f863f04c14088f2dba74f20edab9e588611b1e0655acdc424f28978dc2e065 file=28f863f04c14088f2dba74f20edab9e588611b1e0655acdc424f28978dc2e065 match=true saves=1 counter=3->4 rtc=normalized
+linked_faint_active[wild]: engine faint 4D55444B:20250925 -> force_faint -> the hand-off commit on active 4D55444B:DFDAF6DA -> engine KO in battle with no input; memorials saved (last mon kept: none)
+MARKER a: TX faint 4D55444B:20250925 {"area_id":"route_103","event":"faint","key":"4D55444B:20250925","player":"a","seq":459}
+MARKER a: TX memorialize_done 4D55444B:20250925 {"box":13,"event":"memorialize_done","key":"4D55444B:20250925","player":"a","seq":462}
+MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_a_1_witness.bin bytes=131072 saves=1 frame=15038 counter=3
+MARKER b: READY_ACTIVE 4D55444B:DFDAF6DA case=wild
+MARKER b: RX force_faint key=4D55444B:DFDAF6DA
+MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 4D55444B:DFDAF6DA
+MARKER b: ACTIVE_COMMIT 4D55444B:DFDAF6DA frame=14912 writes=5 attempted=38 handoff=1 status3=0x80 ctrl=0x0805A209 counter=0 last_move=0 pp=35/40/0/0 why="active faint committed" case=wild
+MARKER b: HANDOFF 4D55444B:DFDAF6DA from=0x0805A209 to=0x08059DB1 frames=1 exec_bit0=0
+MARKER b: ACTIVE_KO 4D55444B:DFDAF6DA frame=15395 in_battle=1 battle_hp=0 status3=0x0 pp=35/40/0/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=38 case=wild
+MARKER b: ACTIVE_FAINT_SITE 4D55444B:DFDAF6DA frame=15395 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+MARKER b: SENT_OUT slot=1 battler_slot=1
+MARKER b: ACTIVE_OUTCOME 4D55444B:DFDAF6DA outcome=4 sent_out=1 whiteout_tx=0
+MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=17078 counter=4
+MARKER b: FORCED_HP0 4D55444B:DFDAF6DA frame=15395 in_battle=1 battler=1
+MARKER b: TX memorialize_done 4D55444B:DFDAF6DA {"box":13,"event":"memorialize_done","key":"4D55444B:DFDAF6DA","player":"b","seq":529}
+PYDEC: PASS asserted scenario facts

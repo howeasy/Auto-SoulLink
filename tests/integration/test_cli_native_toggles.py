@@ -69,10 +69,11 @@ def test_state_defaults():
 
 
 def test_state_non_default_constructs():
-    """Non-default values thread through __init__ cleanly."""
+    """Non-default values thread through __init__ cleanly -- except native_messages, which is
+    forced off for the Gen 3 RC (owner ruling 2026-09-23, d3c69de7; server/state.py)."""
     s = SoulLinkState(native_messages=True, native_sounds=True,
                       battle_calc=False, pc_trade_npc=False)
-    assert s.native_messages is True
+    assert s.native_messages is False
     assert s.native_sounds is True
     assert s.battle_calc is False
     assert s.pc_trade_npc is False
@@ -85,7 +86,7 @@ def test_toggles_round_trip_through_save_load(tmp_path, monkeypatch):
                           native_sounds=True, battle_calc=False, pc_trade_npc=False)
     state._save()
     reloaded = SoulLinkState.load(data_dir=str(tmp_path))
-    assert reloaded.native_messages is True
+    assert reloaded.native_messages is False  # forced off for the Gen 3 RC, as above
     assert reloaded.native_sounds is True
     assert reloaded.battle_calc is False
     assert reloaded.pc_trade_npc is False

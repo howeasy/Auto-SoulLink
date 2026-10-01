@@ -1,0 +1,38 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario infopanel_dex_gen3   (cwd=C:/slink-wt/rrduo)
+# lane=C:/slink-wt/rrduo sha=539e0aea46a05787a76cffdf761dce18ec765c7f tracked_clean=True runner=subagent RR-duo-receipts 2026-09-26 run=1/2
+# companion=patch/build/slink_RR.gba md5=c372c428c8f41cbbde5c71d6408233dd (verified before run)
+# verdict: PASS -- START -> SOULLINK drew the server's link_panel rows (2 pairs, post-Pokedex 7-row menu shape), closed by A and by B; PYDEC asserted scenario facts.
+--- runner output ---
+
+========== scenario: infopanel_dex_gen3 ==========
+[duo] infopanel_dex_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d8a0e23df0cf43af8f5c3367995f9b3ff453871884b4cb7c74af090ae5f87d4d profile.json=a5e8fd7008b55fb810e404ec52b68b3b9b7ab661cb6543a5cc869a585e124e41 source=539e0aea46a05787a76cffdf761dce18ec765c7f
+[duo] server up: tcp=54342 http=54343 data=C:\Users\howar\AppData\Local\Temp\slink_duo_infopanel_dex_gen3_lc9_uccj
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 4.6s
+[duo] timing results 2.8s
+[duo] RESULT_LINE a: RESULT: PASS (panel drawn from 7 server rows, closed by A and by B)
+[duo] RESULT_LINE b: RESULT: PASS (idle)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] infopanel_gen3: START -> SOULLINK drew the server's link_panel rows (2 pair(s)), A and B each close it
+[duo] MARKER b: WRITES 13
+[duo] timing oracle 0.1s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] infopanel_dex_gen3: a=PASS b=PASS
+
+========== summary ==========
+  infopanel_dex_gen3: PASS (attempt 1 of 1)
+EXIT:0

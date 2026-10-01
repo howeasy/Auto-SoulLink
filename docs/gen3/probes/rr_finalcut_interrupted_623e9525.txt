@@ -1,0 +1,347 @@
+
+[final_cut] === faint_cmd_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: faint_cmd_gen3 ==========
+[duo] faint_cmd_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=59816 http=59817 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_9vejjstf
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_9vejjstf path=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_9vejjstf\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_9vejjstf path=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_9vejjstf\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint F56D8C1D:2BDDC8BF -> force_faint B F56D8C1D:D4223740; re-queued to A: ['memorialize', 'game_over']
+[duo] timing orchestrate 6.8s
+[duo] timing results 7.5s
+[duo] RESULT_LINE a: RESULT: PASS (memorialized F56D8C1D:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized F56D8C1D:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=5edc280e3ae32cbb47a5ebcd60084fb9a7e617e101346d0dad628ebc11f0ce04 file=5edc280e3ae32cbb47a5ebcd60084fb9a7e617e101346d0dad628ebc11f0ce04 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=27911c457dcfc4f34a55d2a04a1434026463a73512545a036c2b9936ed5f358d file=27911c457dcfc4f34a55d2a04a1434026463a73512545a036c2b9936ed5f358d match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] faint_cmd: F56D8C1D:2BDDC8BF and F56D8C1D:D4223740 saved once each in box 25; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: RX memorialize key=F56D8C1D:2BDDC8BF
+[duo] MARKER a: TX memorialize_done F56D8C1D:2BDDC8BF {"box":24,"event":"memorialize_done","key":"F56D8C1D:2BDDC8BF","player":"a","seq":7}
+[duo] MARKER b: RX force_faint key=F56D8C1D:D4223740
+[duo] MARKER b: FORCED_HP0 F56D8C1D:D4223740 frame=692 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F56D8C1D:D4223740
+[duo] MARKER b: TX memorialize_done F56D8C1D:D4223740 {"box":24,"event":"memorialize_done","key":"F56D8C1D:D4223740","player":"b","seq":7}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 692
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+
+========== summary ==========
+  faint_cmd_gen3: PASS (attempt 1 of 1)
+
+[final_cut] === linked_faint_active_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario linked_faint_active_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: linked_faint_active_gen3 ==========
+[duo] linked_faint_active_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=59838 http=59839 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_018hmv2t
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_018hmv2t path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_018hmv2t\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_018hmv2t path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_018hmv2t\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 9.7s
+[duo] timing results 42.1s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+[duo] SAVE_WITNESS_SHA256 inst=a site=f73bb0fa07845211886e21492c40459b3ecdfc4931a5d3b11c8de14b52256037 file=f73bb0fa07845211886e21492c40459b3ecdfc4931a5d3b11c8de14b52256037 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=07afaf14087283fc92d12d884c52ad046c269e935b09039805147537781d1353 file=07afaf14087283fc92d12d884c52ad046c269e935b09039805147537781d1353 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[wild]: engine faint EBEF11DA:2BDDC8BF -> force_faint -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: none)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=5300 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":160}
+[duo] MARKER a: TX memorialize_done EBEF11DA:2BDDC8BF {"box":24,"event":"memorialize_done","key":"EBEF11DA:2BDDC8BF","player":"a","seq":213}
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_a_1_witness.bin bytes=131072 saves=1 frame=8032 counter=5
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=wild
+[duo] MARKER b: RX force_faint key=EBEF11DA:D4223740
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 EBEF11DA:D4223740
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=5342 writes=5 attempted=1215 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed" case=wild
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=5575 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=1411 case=wild
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=6626 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8461 counter=5
+[duo] MARKER b: FORCED_HP0 EBEF11DA:D4223740 frame=5575 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done EBEF11DA:D4223740 {"box":24,"event":"memorialize_done","key":"EBEF11DA:D4223740","player":"b","seq":226}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_gen3: PASS (attempt 1 of 1)
+
+[final_cut] === linked_faint_active_whiteout_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario linked_faint_active_whiteout_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=64708 http=64709 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_emvyghz8
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_emvyghz8 path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_emvyghz8\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_emvyghz8 path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_emvyghz8\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 9.7s
+[duo] timing results 44.0s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (whiteout))
+[duo] SAVE_WITNESS_SHA256 inst=a site=2e43ea8e37e24cc912636d19dd3d475d9807fc004c2bc5f34a55a338335ca3e9 file=2e43ea8e37e24cc912636d19dd3d475d9807fc004c2bc5f34a55a338335ca3e9 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=835a0506ef6ece973de085895423879e69dd197a8caea604c79d3dc56bb17851 file=835a0506ef6ece973de085895423879e69dd197a8caea604c79d3dc56bb17851 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[whiteout]: engine faint EBEF11DA:2BDDC8BF -> force_faint -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: a,b)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=5776 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":177}
+[duo] MARKER a: RX memorialize key=EBEF11DA:2BDDC8BF
+[duo] MARKER a: RX game_over
+[duo] MARKER a: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:2BDDC8BF
+[duo] MARKER a: LAST_MON_KEPT EBEF11DA:2BDDC8BF
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_whiteout_gen3_a_1_witness.bin bytes=131072 saves=1 frame=7415 counter=4
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=whiteout
+[duo] MARKER b: RX force_faint key=EBEF11DA:D4223740
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 EBEF11DA:D4223740
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=5762 writes=5 attempted=1346 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed" case=whiteout
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=6006 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=1644 case=whiteout
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=7052 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: TX whiteout - {"event":"whiteout","player":"b","seq":228}
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=2 sent_out=nil whiteout_tx=1
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_whiteout_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8752 counter=4
+[duo] MARKER b: FORCED_HP0 EBEF11DA:D4223740 frame=6006 in_battle=1 battler=1
+[duo] MARKER b: RX memorialize key=EBEF11DA:D4223740
+[duo] MARKER b: RX game_over
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:D4223740
+[duo] MARKER b: LAST_MON_KEPT EBEF11DA:D4223740
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_whiteout_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: PASS (attempt 1 of 1)
+
+[final_cut] === boxsync_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario boxsync_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=64889 http=64890 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_szfg23oh
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_szfg23oh path=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_szfg23oh\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_szfg23oh path=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_szfg23oh\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 24.2s
+[duo] timing results 7.4s
+[duo] RESULT_LINE a: RESULT: PASS (round trip of F56D8C1D:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (round trip of F56D8C1D:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=a16198796b191d18455d712473d2ad18f3a048a4bbe5cd2a509c28f48bafc5db file=a16198796b191d18455d712473d2ad18f3a048a4bbe5cd2a509c28f48bafc5db match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=85824726ce927c582e6b3e94122ed5c330c912a75d147f15d3c005db65f35572 file=85824726ce927c582e6b3e94122ed5c330c912a75d147f15d3c005db65f35572 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] boxsync: F56D8C1D:2BDDC8BF / F56D8C1D:D4223740 deposited and withdrawn, saved once in party with the fixture record
+[duo] MARKER a: TX party_to_box F56D8C1D:2BDDC8BF {"event":"party_to_box","key":"F56D8C1D:2BDDC8BF","player":"a","seq":80,"stats":{"attack":9,"defense":9,"level":4,"maxHP":18,"pp1":35,"pp2":20,"pp3":0,"pp4":0,"spAtk":9,"spDef":10,"speed":8}}
+[duo] MARKER a: BOXED_OBSERVED F56D8C1D:2BDDC8BF box=0:0
+[duo] MARKER a: TX box_to_party F56D8C1D:2BDDC8BF {"area_id":"","event":"box_to_party","key":"F56D8C1D:2BDDC8BF","player":"a","seq":101}
+[duo] MARKER a: RETURNED_OBSERVED F56D8C1D:2BDDC8BF slot=1
+[duo] MARKER b: RX box_mon key=F56D8C1D:D4223740
+[duo] MARKER b: TX stats_cache F56D8C1D:D4223740 {"event":"stats_cache","key":"F56D8C1D:D4223740","player":"b","seq":79,"stats":{"attack":9,"defense":9,"level":4,"maxHP":18,"pp1":35,"pp2":20,"pp3":0,"pp4":0,"spAtk":9,"spDef":10,"speed":8}}
+[duo] MARKER b: BOXED_OBSERVED F56D8C1D:D4223740 box=0:0
+[duo] MARKER b: RX party_mon key=F56D8C1D:D4223740
+[duo] MARKER b: TX sync_retrieve_done F56D8C1D:D4223740 {"event":"sync_retrieve_done","key":"F56D8C1D:D4223740","player":"b","seq":100}
+[duo] MARKER b: RETURNED_OBSERVED F56D8C1D:D4223740 slot=1
+[duo] timing oracle 0.9s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)
+
+[final_cut] === whiteout_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario whiteout_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=64940 http=64941 data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_bxsvzc64
+[duo] timing server 1.2s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_bxsvzc64 path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_bxsvzc64\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_bxsvzc64 path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_bxsvzc64\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped F56D8C1D:2BDDC8BF and F56D8C1D:D4223740
+[duo] queued for a: {'cmd': 'box_mon', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] timing orchestrate 103.2s
+[duo] timing results 5.6s
+[duo] RESULT_LINE a: RESULT: PASS (pair F56D8C1D:2BDDC8BF rebuilt after the whiteout; the write landed in the Center)
+[duo] RESULT_LINE b: RESULT: PASS (pair F56D8C1D:D4223740 rebuilt after the whiteout)
+[duo] SAVE_WITNESS_SHA256 inst=a site=5622a2a6a1910312add36a63968e1daac861a0c9b303aa4439272f6c9b254f29 file=5622a2a6a1910312add36a63968e1daac861a0c9b303aa4439272f6c9b254f29 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=eda13d9478a94a9e27ea24235befed956d4fa4c599c170974332d1227639efe0 file=eda13d9478a94a9e27ea24235befed956d4fa4c599c170974332d1227639efe0 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] whiteout: A whited out, the pair F56D8C1D:2BDDC8BF / F56D8C1D:D4223740 was rebuilt from both PCs and saved in party, still alive
+[duo] MARKER a: BOXED_OBSERVED F56D8C1D:2BDDC8BF box=0:0
+[duo] MARKER a: TX whiteout - {"event":"whiteout","player":"a","seq":525}
+[duo] MARKER a: RX party_mon key=F56D8C1D:2BDDC8BF
+[duo] MARKER a: TX sync_retrieve_done F56D8C1D:2BDDC8BF {"event":"sync_retrieve_done","key":"F56D8C1D:2BDDC8BF","player":"a","seq":541}
+[duo] MARKER a: RX rebuild_done
+[duo] MARKER a: RETURNED_OBSERVED F56D8C1D:2BDDC8BF slot=1
+[duo] MARKER a: RX rebuild_start text=REBUILDING: Aaaaaaaaaa
+[duo] MARKER a: WHITED_OUT at map=1284 at=(7,4)
+[duo] MARKER a: CENTER_STATE map=5.4 at=(7,4) frame=15961 tasks=[08079DBD,0806E811,0806E83D,081199FD,0807F45D,080F8B35,08119D35] storage_state=-1 script_status=2 result=1 menu_cursor=0 cpu=[R15=0x08002FB6,CPSR=0x0000003F,R14=0x080066B9!] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] overworld_writes_before=0
+[duo] MARKER a: WRITE_IN_CENTER map=5.4 at=(7,4) frame=16324 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=1 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x20000092,R14=0x000001C4] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed F56D8C1D:2BDDC8BF slot=1 record=0x020242E8+100@16324 | ack map=5.4 at=(7,4) frame=16447 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x20000092,R14=0x000001C4] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_LIVE start_menu F56D8C1D:2BDDC8BF map=5.4 at=(7,4) frame=17788 tasks=[08079E0D,0806E811,0806E83D,081199FD,0806F1F1,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=4 cpu=[R15=0x08003358,CPSR=0x0000003F,R14=0x08005BF5!] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: RX box_mon key=F56D8C1D:2BDDC8BF
+[duo] MARKER a: CONTROL_REFUSED start_menu box_mon F56D8C1D:2BDDC8BF clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.4 at=(7,4) frame=18422 tasks=[08079E0D,0806E811,0806E83D,081199FD,0806F1F1,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=4 cpu=[R15=0x08002F9C,CPSR=0xFFFFFFFFA000003F,R14=0x080066D1!] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER b: RX box_mon key=F56D8C1D:D4223740
+[duo] MARKER b: TX stats_cache F56D8C1D:D4223740 {"event":"stats_cache","key":"F56D8C1D:D4223740","player":"b","seq":324,"stats":{"attack":9,"defense":9,"level":4,"maxHP":18,"pp1":35,"pp2":20,"pp3":0,"pp4":0,"spAtk":9,"spDef":10,"speed":8}}
+[duo] MARKER b: BOXED_OBSERVED F56D8C1D:D4223740 box=0:0
+[duo] MARKER b: RX party_mon key=F56D8C1D:D4223740
+[duo] MARKER b: TX sync_retrieve_done F56D8C1D:D4223740 {"event":"sync_retrieve_done","key":"F56D8C1D:D4223740","player":"b","seq":516}
+[duo] MARKER b: RETURNED_OBSERVED F56D8C1D:D4223740 slot=1
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] whiteout_gen3: a=PASS b=PASS
+
+========== summary ==========
+  whiteout_gen3: PASS (attempt 1 of 1)
+
+[final_cut] === link_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario link_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=54846 http=54847 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_d8bqqv5f
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_d8bqqv5f path=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_d8bqqv5f\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_d8bqqv5f path=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_d8bqqv5f\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=E5C1DFEF:2BDDC8BF b=806B726F:D4223740
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): E5C1DFEF:2BDDC8BF <-> 806B726F:D4223740 on route_1, alive
+[duo] timing orchestrate 17.6s
+[duo] timing results 7.5s
+[duo] RESULT_LINE a: RESULT: PASS (caught E5C1DFEF:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (caught 806B726F:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=3023251623f223c23c31194883cad610d962ee6ca4b6bfb76f2bd0103e96c83e file=3023251623f223c23c31194883cad610d962ee6ca4b6bfb76f2bd0103e96c83e match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=07a0ffb4b23e3e77c06b894a35bcdb29e67ee5bde1992d58d48c853faa76e83e file=07a0ffb4b23e3e77c06b894a35bcdb29e67ee5bde1992d58d48c853faa76e83e match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=b native_grant=0
+[duo] link: E5C1DFEF:2BDDC8BF <-> 806B726F:D4223740 alive on route_1 and saved once in each party
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)
+
+[final_cut] === deadzone_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario deadzone_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=54877 http=54878 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__gpups07
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__gpups07 path=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__gpups07\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__gpups07 path=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__gpups07\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] B caught 7D165DB1:D4223740 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's 7D165DB1:D4223740 retired
+[duo] timing orchestrate 22.2s
+[duo] timing results 6.8s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture 7D165DB1:D4223740 retired)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f4ce892c57fe749149d8ade930d3c0e0e6ca26789337433ff769a45d9cd03a1d file=f4ce892c57fe749149d8ade930d3c0e0e6ca26789337433ff769a45d9cd03a1d match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=23dcb0f16727023696b535f092292ca84a5e119551b29263dbf77ece85746f11 file=23dcb0f16727023696b535f092292ca84a5e119551b29263dbf77ece85746f11 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] deadzone: route_1 locked by A's no_catch (species 288); B's 7D165DB1:D4223740 saved only in the memorial box
+[duo] MARKER b: FAINTED 7D165DB1:D4223740 frame=3371 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=7D165DB1:D4223740
+[duo] MARKER b: TX memorialize_done 7D165DB1:D4223740 {"box":24,"event":"memorialize_done","key":"7D165DB1:D4223740","player":"b","seq":98}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 1 of 3)
+
+[final_cut] === reconnect_gen3_rr_as_a attempt 1  $ python tools/e2e_duo.py --game gen3_rr --scenario reconnect_gen3  (cwd=C:/slink-wt/g3-rr-finish)
+
+========== scenario: reconnect_gen3 ==========
+[duo] reconnect_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=623e95252e63e2d0d34d4c9ae5420799587f9ab3
+[duo] server up: tcp=54940 http=54941 data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_u93aixwx
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_u93aixwx path=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_u93aixwx\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_u93aixwx path=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_u93aixwx\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s

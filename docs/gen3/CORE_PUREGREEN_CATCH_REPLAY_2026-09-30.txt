@@ -1,0 +1,42 @@
+Changed target cut8d8a77e2 PHYSICAL PASS attempt1/3. Real catch/link/bench faint/native saves qualify successful path; failed-first-catch termination/retry branch is MODEL-proved, not observed on this successful attempt. Original failure preserved separately.
+
+
+========== scenario: linked_faint_bench_battle_new ==========
+[duo] linked_faint_bench_battle_new: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=49939 http=49940 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_bench_battle_new_8ju81zf0
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for linked_faint_bench_battle_new: e2e_linked_faint_bench_battle_new_a_attempt1_result.txt, e2e_linked_faint_bench_battle_new_a_result.txt, e2e_linked_faint_bench_battle_new_b_attempt1_result.txt, e2e_linked_faint_bench_battle_new_b_result.txt, e2e_linked_faint_bench_battle_new_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=7693:C131:99 b=C3D4:FA81:B0
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=B9B9:C131:66 b=BC69:FA81:A5
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): B9B9:C131:66 <-> BC69:FA81:A5 on route_1, alive
+[duo] timing orchestrate 22.2s
+[duo] timing results 15.9s
+[duo] a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+[duo] SAVE_WITNESS_SHA256 inst=a site=5954e2b58b7aa8f513d902327b2ae5ac32e4dfb727bbdadf36c8be208729095b file=5954e2b58b7aa8f513d902327b2ae5ac32e4dfb727bbdadf36c8be208729095b match=true saves=2
+[duo] b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+[duo] SAVE_WITNESS_SHA256 inst=b site=1155bf1b4d5caf2ff53edda96b12c5fd88e3f40f621b6ebaccff13bf547badfd file=1155bf1b4d5caf2ff53edda96b12c5fd88e3f40f621b6ebaccff13bf547badfd match=true saves=2
+[duo] server DEAD propagation precedes final MEMORIAL, cause=battle
+[duo] a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+[duo] a saved living starter; linked key B9B9:C131:66 absent from party/current box
+[duo] a Box 12 B9B9:C131:66 HP0000/status00; initialized checksums/terminators valid
+[duo] b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+[duo] b saved living starter; linked key BC69:FA81:A5 absent from party/current box
+[duo] b Box 12 BC69:FA81:A5 HP0000/status00; initialized checksums/terminators valid
+[duo] bench-in-battle: force_faint RX in battle, bench 0000/00 0 frame(s) after RX with no loop head run, loop-head backstop in_battle=1 moved nothing, before BATTLE_RESULT, active battler 0013 moves 0A2D0000 untouched
+[duo] D-6/W-1 server battle cause and ordered engine receipts valid
+[duo] timing oracle 0.1s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_bench_battle_new: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_bench_battle_new_8ju81zf0
+
+========== summary ==========
+  linked_faint_bench_battle_new: PASS (attempt 1 of 3)

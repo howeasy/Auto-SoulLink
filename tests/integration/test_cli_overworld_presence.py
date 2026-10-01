@@ -46,7 +46,8 @@ def test_state_default_overworld_presence_false():
 
 
 def test_state_on_constructs():
-    """SoulLinkState(overworld_presence=True) initializes cleanly."""
+    """SoulLinkState(overworld_presence=True) initializes cleanly -- and ignores the flag while the
+    peer ghost is deferred post-RC (tests/unit/test_overworld_presence_deferred.py)."""
     from server.state import SoulLinkState
     s = SoulLinkState(overworld_presence=True)
-    assert s.overworld_presence is True
+    assert s.overworld_presence is False

@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE (PHYSICAL).** `tools/e2e_duo.py` Gen 2 rows + `tools/gen2_duo_oracles.py`, `tests/e2e/test_duo_gen2_new.py`, `tests/gen2_release_requirements.json` (66 `gen2_trade*`/scenario registrations across C-C/G-S/C-G) all present. `tools/verify_gen2_release.py --lane duo-pairs` and `--lane duo-link` both PASS (run 2026-09-26); 98/98 sweep cells pinned at code digest `e8ca0067`, tag `gen2-rc-evidence-2026-09-25`.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3b.7, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

@@ -1,0 +1,120 @@
+Observed RED at9513bea7: root-containment and Gold model wrong-source failures.
+
+FF                                                                       [100%]
+================================== FAILURES ===================================
+___________ test_manifest_binds_current_overlay_artifacts[titles1] ____________
+
+titles = ('gold', 'silver')
+
+    @pytest.mark.parametrize("titles", [("crystal", "crystal"), ("gold", "silver"), ("crystal", "gold")])
+    def test_manifest_binds_current_overlay_artifacts(titles):
+        doc = manifest(titles)
+>       assert lane_module().validate_manifest(doc) == doc
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\test_gen2_trade_lane.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tools\gen2_trade_lane.py:91: in validate_manifest
+    base = _repo_path(root, f".cache/gen2-build/{base_repo}/{source['filename']}").read_bytes()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools\gen2_trade_lane.py:53: in _repo_path
+    _need(path.is_relative_to(root), "artifact path escapes repository")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+condition = False, message = 'artifact path escapes repository'
+
+    def _need(condition, message):
+        if not condition:
+>           raise ValueError(f"{ATTRIBUTION}: {message}")
+E           ValueError: HARNESS_ONLY_OVERLAY: artifact path escapes repository
+
+tools\gen2_trade_lane.py:37: ValueError
+_ test_synthetic_route_completes_and_the_receipt_qualifies[gold-battle-default] _
+
+tmp_path = WindowsPath('C:/Users/howar/AppData/Local/Temp/pytest-of-howar/pytest-13023/test_synthetic_route_completes0')
+title = 'gold', target = 'battle', identity = 'default'
+
+    @pytest.mark.parametrize("title,target,identity", [("crystal", "town", "default"), ("crystal", "battle", "default"),
+                                                       ("gold", "battle", "default"), ("silver", "town", "default"),
+                                                       ("crystal", "town", "ot2")])
+    def test_synthetic_route_completes_and_the_receipt_qualifies(tmp_path, title, target, identity):
+        root = make_root(tmp_path, title)
+        spec, env = make_env(root, title, target, identity)
+        sim = Sim(LuaRuntime(unpack_returned_tuples=True), title, target, identity)
+        verdict, text = run(root, env, sim)
+>       assert verdict.startswith("RESULT: PASS"), text
+E       AssertionError: [test_gen2_scripted_gate] played-route candidate / fixture qualification stage
+E           case gold_battle attempt model-1 facts 8275fc080a60
+E           phase new-game @0
+E           phase leave-bedroom @269
+E           phase mom @276
+E           phase to-elm @517
+E           phase starter @531
+E           phase o10-balls @764
+E           O-10 staged 10 Poke Ball(s) (tests/validation only; not natural acquisition)
+E           phase leave-elm @765
+E           phase to-route29 @788
+E           phase route29-grass @807
+E           screen 01 |                    |
+E           screen 02 |                    |
+E           screen 03 |                    |
+E           screen 04 |                    |
+E           screen 05 |                    |
+E           screen 06 |                    |
+E           screen 07 |                    |
+E           screen 08 |                    |
+E           screen 09 |                    |
+E           screen 10 |                    |
+E           screen 11 |                    |
+E           screen 12 |                    |
+E           screen 13 |                    |
+E           screen 14 |                    |
+E           screen 15 |                    |
+E           screen 16 |                    |
+E           screen 17 |                    |
+E           screen 18 |                    |
+E         RESULT: FAIL [string "<python>"]:715: route failed: [Errno 2] No such file or directory: 'C:\\slink-wt\\g3-core\\.cache\\gen2-build\\pokecrystal\\engine\\battle\\menu.asm'
+E         
+E       assert False
+E        +  where False = <built-in method startswith of str object at 0x000001C6CDEED450>('RESULT: PASS')
+E        +    where <built-in method startswith of str object at 0x000001C6CDEED450> = 'RESULT: FAIL [string "<python>"]:715: route failed: [Errno 2] No such file or directory: \'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\gen2-build\\\\pokecrystal\\\\engine\\\\battle\\\\menu.asm\''.startswith
+
+tests\unit\test_gen2_scripted_gate.py:626: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_gen2_trade_lane.py::test_manifest_binds_current_overlay_artifacts[titles1]
+FAILED tests/unit/test_gen2_scripted_gate.py::test_synthetic_route_completes_and_the_receipt_qualifies[gold-battle-default]
+2 failed in 4.94s
+
+
+Verified in-root copies; same validator. Closure69PASS63allowedCrystalSourceSKIP.
+
+s.s................sss.sssssssssssssssssssss.sssssssssssssssssss........ [ 54%]
+................s...s.sssss.s.....ssssss.s.s..ss............             [100%]
+=========================== short test summary info ===========================
+SKIPPED [2] tests\unit\test_gen2_trade_lane.py:48: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [3] tests\unit\test_gen2_trade_lane.py:77: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [20] tests\unit\test_gen2_trade_lane.py:101: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [2] tests\unit\test_gen2_trade_lane.py:153: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:174: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:199: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:222: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:245: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:273: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:283: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:316: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:338: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:350: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_gen2_trade_lane.py:376: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [2] tests\unit\test_gen2_trade_lane.py:417: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [3] tests\unit\test_gen2_trade_lane.py:493: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [3] tests\unit\test_gen2_trade_lane.py:548: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\conftest.py:138: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [2] tests\unit\test_e2e_duo_trade.py:117: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [4] tests\unit\test_e2e_duo_trade.py:138: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_e2e_duo_trade.py:170: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [4] tests\unit\test_e2e_duo_trade.py:262: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_e2e_duo_trade.py:316: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [3] tests\unit\test_e2e_duo_trade.py:343: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+SKIPPED [2] tests\unit\test_e2e_duo_trade.py:396: pokecrystal not cloned: C:\slink-wt\g3-core\.cache\gen2-build\pokecrystal
+69 passed, 63 skipped in 11.78s
+

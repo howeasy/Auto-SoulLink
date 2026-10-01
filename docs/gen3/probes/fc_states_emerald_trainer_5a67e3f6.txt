@@ -1,0 +1,17 @@
+# gen3_final_cut row=states_emerald_trainer item=§13.2_build cut=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+# lane=C:/slink-wt/g3-lane2
+# command: python tools/mkstates_gen3.py --title emerald --kind trainer --out-dir C:/slink-wt/g3-lane2/patch/build/gen3_probe_states_c4p2/emerald --rom 'patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba'   (cwd=C:/slink-wt/g3-lane2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af
+--- attempt 1 of 1 ---
+LOAD 2026-09-28T13:33:35 cpu=90% emuhawk=3 python=12
+start_utc=2026-09-28T17:33:33Z tracked_clean_before=True
+seeded C:\slink-wt\g3-lane2\patch\build\gen3_fixture_runs\mkstates_emerald_trainer\Pokemon - Emerald Version (USA, Europe).SaveRAM from C:\slink-wt\g3-lane2\tests\fixtures\gen3\emerald_trainer.sav; states -> C:\slink-wt\g3-lane2\patch\build\gen3_probe_states_c4p2\emerald
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] mkstates_gen3: RESULT: PASS emerald trainer states in C:/slink-wt/g3-lane2/patch/build/gen3_probe_states_c4p2/emerald  (7s)
+phase start frame=1 title=emerald kind=trainer dir=C:/slink-wt/g3-lane2/patch/build/gen3_probe_states_c4p2/emerald
+phase settled frame=702
+phase state-saved frame=2204 slink_pretrainer.State main=0803BE75 comm0=2 flags=00000001 ctrl=08057589 outcome=0 type=0000000C hp0=0
+RESULT: PASS emerald trainer states in C:/slink-wt/g3-lane2/patch/build/gen3_probe_states_c4p2/emerald
+exit=0 end_utc=2026-09-28T17:33:43Z tracked_clean_after=True classification=pass

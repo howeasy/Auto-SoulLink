@@ -1,0 +1,20 @@
+# gen3_final_cut row=states_firered_battle item=§1.1_build cut=66184e35595578da7c8edbd00b08daf32015542d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/mkstates_gen3.py --title firered --kind battle --out-dir C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/firered --rom 'patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba'   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:10:24 cpu=40% emuhawk=0 python=4
+start_utc=2026-09-27T18:10:22Z tracked_clean_before=True
+seeded C:\slink-wt\g3-lane\patch\build\gen3_fixture_runs\mkstates_firered_battle\Pokemon - FireRed Version (USA).SaveRAM from C:\slink-wt\g3-lane\tests\fixtures\gen3\firered_party_battle.sav; states -> C:\slink-wt\g3-lane\patch\build\gen3_probe_states_c4p2\firered
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] mkstates_gen3: RESULT: PASS battle states in C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/firered  (5s)
+phase start frame=1 title=firered kind=battle dir=C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/firered
+phase field frame=778 map=(3,19)
+phase settled frame=1087
+phase state-saved frame=1327 slink_preintro.State main=080123BD comm0=0 flags=00000000 ctrl=0802E311 outcome=0 type=00000000 hp0=0
+phase state-saved frame=1829 slink_prebattle.State main=08014041 comm0=1 flags=00000001 ctrl=0802E439 outcome=0 type=00000004 hp0=27
+phase state-saved frame=1883 slink_postbattle.State main=08015851 comm0=4 flags=00000000 ctrl=0802E3B5 outcome=4 type=00000004 hp0=27
+RESULT: PASS battle states in C:/slink-wt/g3-lane/patch/build/gen3_probe_states_c4p2/firered
+exit=0 end_utc=2026-09-27T18:10:30Z tracked_clean_after=True classification=pass

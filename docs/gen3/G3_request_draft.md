@@ -1,5 +1,7 @@
 # Gen 3 (P3) Shadow observer gate request — G3 evidence assembly
 
+> **SIGNED 2026-09-23** by the owner as written (PLAN §14.1). Kept as the signed record.
+
 **Ready to request G3 owner review.** FR clean and RR companion each have PHYSICAL positives for
 the seven battle/catch/map kinds, `pc_move`'s deposit/withdraw/box-place/release branches, and
 `save`. FR's new PC/save evidence is the run-28e SHADOW fires, keyed readbacks, 14/14-sector save
