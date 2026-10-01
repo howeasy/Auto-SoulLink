@@ -344,9 +344,10 @@ def test_a_borrowed_party_freezes_the_diff_and_the_tick_party():
     assert "party" in w.events("tick")[-1]
 
 
-def test_rr_prebattle_party_loan_holds_own_commands_and_borrowed_whiteout_until_restore():
+@pytest.mark.parametrize("begin_kind", ["borrowed_party_begin", "borrowed_party_opponent_begin"])
+def test_rr_prebattle_party_loan_holds_own_commands_and_borrowed_whiteout_until_restore(begin_kind):
     w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
-    w.fire("borrowed_party_begin")
+    w.fire(begin_kind)
     w.set_party([mon_record(C, 0x9999, species=7, hp=0)])
     w.fire("faint")
     w.fire("whiteout")

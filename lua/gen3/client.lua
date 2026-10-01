@@ -1395,7 +1395,7 @@ function Client.new(p)
                                      close_authority(sig)
                                      sig.borrowed_party = borrowed_party ~= nil
                                  end,
-                                 borrowed_party_begin = borrowed_begin, borrowed_party_end = borrowed_end,
+                                 borrowed_party_begin = borrowed_begin, borrowed_party_opponent_begin = borrowed_begin, borrowed_party_end = borrowed_end,
                                  trade_begin = capture_trade_before,
                                  pc_release_begin = release_begin, pc_release = release_done,
                                  hatch = capture_hatch,
