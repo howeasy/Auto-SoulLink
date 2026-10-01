@@ -107,6 +107,7 @@ class World:
         self.json = L.eval(f'dofile("{JSON}")')
         net = L.table(connected=lambda: self.connected, pump=lambda: None,
                       send=self._send, receive=self._receive)
+        self.net = net
         hud = L.table(
             show=lambda *a: self.hud.append(("show",) + tuple(_py(x) for x in a)),
             prompt=lambda *a: self.hud.append(("prompt",) + tuple(_py(x) for x in a)),
@@ -381,6 +382,23 @@ def test_the_resend_waits_for_a_tick_that_actually_goes_out():
     assert [{k: m[k] for k in msg} for m in w.events("key_change")] == [msg, msg]
 
 
+def test_hidden_tick_cannot_consume_newer_census_retry_credit():
+    w = World()
+    w.step_to(60)
+    w.st.box_ok, w.st.box_gen = True, 1
+    w.begin_alias(OLD, NEW, reason="nature_change")
+    w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="box census unavailable")
+    w.step()
+    w.driver.tick_fields = lambda: w.lua.table_from({"party_hidden": True})
+    w.s.send_tick(w.s)
+    assert w.events("tick")[-1]["party_hidden"] is True
+    assert len(w.events("key_change")) == 1
+    assert w.identity.pending.retry_gen is not None
+    w.driver.tick_fields = lambda: w.lua.table_from({"in_battle": False})
+    w.s.send_tick(w.s)
+    assert len(w.events("key_change")) == 2 and w.identity.pending.retry_gen is None
+
+
 def test_a_refusal_with_no_stamped_message_sends_nothing_and_stays_armed():
     """Identity:begin_alias never sets `msg` (the driver stamps the message it sent). Without one
     there is nothing to re-send, and inventing an empty key_change puts an unwireable event on
@@ -483,3 +501,62 @@ def test_an_ack_before_the_force_faint_in_one_reply_drops_the_stale_old_key_comm
     assert w.identity.pending is None, "the ACK consumed the alias"
     assert fainted == [], "nothing resolves the old key once the ACK has landed"
     assert any("key not in party" in line for line in w.logs), w.logs
+
+
+@pytest.mark.parametrize("initial_hidden", [False, True])
+def test_real_gen3_server_and_core_hidden_window_finishes_same_pair_once(tmp_path, initial_hidden):
+    from tests.unit.test_gen3_trade_server import _server,_mon,KEYS
+    from server.state import LinkEntry,LinkStatus,MonInfo
+    srv=_server(tmp_path,"firered_rr")
+    old,new=KEYS["a"],"00000003:00000011"
+    link=LinkEntry(area_id="route_1",status=LinkStatus.ALIVE,
+                   a=MonInfo(key=old,species=1,level=12),b=MonInfo(key=KEYS["b"],species=4,level=12))
+    srv.state.links.append(link);srv.state._index_entry(link)
+    srv._dispatch("a",{"event":"tick","party":[_mon("a")],"pc_boxes":[],"pc_boxes_generation":4})
+    if initial_hidden:
+        srv._dispatch("a",{"event":"tick","party_hidden":True})
+    else:
+        srv._dispatch("a",{"event":"tick","party":[_mon("a",key=new)]}) # stale census, old party key reconciled away
+    w=World();w.step_to(60);w.st.box_ok,w.st.box_gen=True,4
+    w.set_party((old,0));w.s.seq=152
+    responses=[]
+    def wire(line):
+        w._send(line)
+        msg=json.loads(str(line))
+        if msg["event"] in ("key_change","tick"):
+            commands=srv._dispatch("a",msg);responses.extend(commands);w.reply(*commands)
+    w.net.send=wire
+    w.begin_alias(old,new,reason="nature_change");w.set_party((new,0));w.step()
+    assert responses[-1]["reason"]==("party hidden" if initial_hidden else "box census unavailable")
+    hidden=lambda:w.lua.table_from({"party_hidden":True})
+    w.driver.tick_fields=hidden;w.s.send_tick(w.s);w.step()
+    assert len(w.events("key_change"))==1 and w.identity.pending.retry_gen is not None
+    def visible():
+        return w.lua.table_from({"party":w.json.array(w.lua.table_from([w.lua.table_from(_mon("a",key=new))])),
+            "pc_boxes":w.json.array(w.lua.table()),"pc_boxes_generation":int(w.st.box_gen),"in_battle":False})
+    w.driver.tick_fields=visible;w.s.send_tick(w.s);w.step()
+    assert len(w.events("key_change"))==2
+    assert w.identity.pending is None  # migrated ACK ends the alias; retirement is for nonmigrated ACK
+    assert srv.state.entry_for("a",new) is link and srv.state.entry_for("a",old) is None
+    assert link.status==LinkStatus.ALIVE
+    assert len([c for c in responses if c["cmd"]=="key_change_ack" and c.get("migrated") is True])==1
+    w.s.send_tick(w.s);w.step()
+    assert len(w.events("key_change"))==2
+
+
+@pytest.mark.parametrize("hidden,connected,tick_ok", [(True,True,True),(False,False,True),(False,True,False)])
+def test_retry_credit_survives_unpublished_or_hidden_tick(hidden,connected,tick_ok):
+    w=World();w.step_to(60);w.st.box_ok,w.st.box_gen=True,1
+    w.begin_alias(OLD,NEW);w.command(cmd="key_change_rejected",old_key=OLD,new_key=NEW,reason="party hidden");w.step()
+    w.connected=connected
+    w.driver.tick_fields=lambda:(w.lua.table_from({"party_hidden":hidden}) if tick_ok else None)
+    w.s.send_tick(w.s)
+    assert w.identity.pending.retry_gen is not None and len(w.events("key_change"))==1
+
+
+def test_hidden_rejection_for_another_pair_cannot_arm_current_alias():
+    w=World();w.step_to(60);w.st.box_ok,w.st.box_gen=True,1
+    w.begin_alias(OLD,NEW)
+    scans=w.calls.get("rescan_boxes",0)
+    w.command(cmd="key_change_rejected",old_key=OLD,new_key=NEW2,reason="party hidden");w.step()
+    assert w.identity.pending.retry_gen is None and w.calls.get("rescan_boxes",0)==scans

@@ -469,6 +469,11 @@ class SoulLinkState:
         if (self.adapter.supports_trade_recovery() and self.party_hidden[player_id]
                 and event in self.HIDDEN_PARTY_EVENTS):
             log.warning("[%s] %s refused: party hidden; waiting for a trustworthy snapshot", player_id, event)
+            old_key, new_key = msg.get("old_key"), msg.get("new_key")
+            if (event == "key_change" and isinstance(old_key, str) and old_key
+                    and isinstance(new_key, str) and new_key and old_key != new_key):
+                return [{"cmd": "key_change_rejected", "old_key": old_key,
+                         "new_key": new_key, "reason": "party hidden"}]
             return [{"cmd": "noop", "refused": "party_hidden"}]
         return None
 

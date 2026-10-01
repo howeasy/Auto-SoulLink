@@ -65,6 +65,31 @@ def _snapshot(st) -> dict:
     })
 
 
+def test_hidden_gen3_key_change_is_keyed_retryable_rejection_without_mutation(tmp_path):
+    from tests.unit.test_gen3_trade_server import _server, KEYS
+    srv = _server(tmp_path, "firered_rr")
+    srv.state.party_hidden["a"] = True
+    before = _snapshot(srv.state)
+    old, new = KEYS["a"], "00000003:00000011"
+    commands = srv._dispatch("a", {"event": "key_change", "old_key": old,
+                                  "new_key": new, "reason": "nature_change"})
+    assert _one(commands, "key_change_rejected") == {
+        "cmd": "key_change_rejected", "old_key": old, "new_key": new, "reason": "party hidden"}
+    assert _snapshot(srv.state) == before
+    assert srv._dispatch("a", {"event": "faint", "key": old}) == [{"cmd": "noop", "refused": "party_hidden"}]
+
+
+@pytest.mark.parametrize("fields", [{}, {"old_key": "a"}, {"old_key": [], "new_key": "b"},
+                                    {"old_key": "a", "new_key": ""}, {"old_key": "a", "new_key": "a"}])
+def test_malformed_hidden_key_change_keeps_existing_noop_shape(tmp_path, fields):
+    from tests.unit.test_gen3_trade_server import _server
+    srv = _server(tmp_path, "firered_rr")
+    srv.state.party_hidden["a"] = True
+    before = _snapshot(srv.state)
+    assert srv._dispatch("a", {"event": "key_change", **fields}) == [{"cmd": "noop", "refused": "party_hidden"}]
+    assert _snapshot(srv.state) == before
+
+
 # ── acknowledgement ──────────────────────────────────────────────────────────────────────
 
 def test_an_accepted_change_is_acked_in_the_same_reply(st):

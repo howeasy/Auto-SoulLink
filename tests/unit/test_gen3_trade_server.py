@@ -874,7 +874,10 @@ def test_hidden_player_cannot_mutate_game_state(tmp_path, caplog, title, via, ev
     elif event == "whiteout":
         msg = {"event": event}
     call = state.handle_event if via == "state" else srv._dispatch
-    assert call("a", msg) == [{"cmd": "noop", "refused": "party_hidden"}]
+    expected = ([{"cmd": "key_change_rejected", "old_key": KEYS["a"],
+                  "new_key": "00000009:00000011", "reason": "party hidden"}]
+                if event == "key_change" else [{"cmd": "noop", "refused": "party_hidden"}])
+    assert call("a", msg) == expected
     assert snapshot() == before
     assert event in caplog.text and "party hidden" in caplog.text
 

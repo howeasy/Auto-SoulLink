@@ -65,7 +65,8 @@ local DEFERRED_CMDS = { box_mon = true, party_mon = true, memorialize = true }
 -- KEY-SCOPE-5: key_change refusals that retire nothing (lua/gen1/client.lua Client.RETRYABLE_REJECTIONS,
 -- reason strings verbatim). The alias stays, and the change is re-sent after the next complete box
 -- census; every other reason is terminal (U5).
-local RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true }
+local RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true,
+                              ["party hidden"] = true }
 
 local function hud_color(cmd)
     if type(cmd.color) == "table" then return cmd.color[1], cmd.color[2], cmd.color[3], cmd.duration end
@@ -300,9 +301,10 @@ function Session.new(p)
             -- the player sees no refusal for a change that is still in flight (HUD is player-facing
             -- only, owner ruling 2026-09-25).
             local a = identity.pending
-            if a and a.old_key == cmd.old_key then
+            if a and a.old_key == cmd.old_key and a.new_key == cmd.new_key then
                 a.retry_gen = game.box_generation and (game.box_generation()) or nil
-                if cmd.reason == "box census unavailable" and game.rescan_boxes then game.rescan_boxes() end
+                if (cmd.reason == "box census unavailable" or cmd.reason == "party hidden")
+                   and game.rescan_boxes then game.rescan_boxes() end
             end
             log("key_change refused (will retry): " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
         elseif c == "key_change_rejected" then
@@ -336,8 +338,7 @@ function Session.new(p)
         if a and a.msg and a.retry_gen and game.box_generation then
             local gen, complete = game.box_generation()
             if complete and gen and gen > a.retry_gen then
-                a.retry_gen = nil
-                send("key_change", a.msg)
+                if send("key_change", a.msg) then a.retry_gen = nil end
             end
         end
     end
@@ -369,8 +370,8 @@ function Session.new(p)
         -- the resend rides the tick that carries the newer census: a tick that went nowhere
         -- published no census, so re-sending on it only earns the same refusal again
         if f then
-            send("tick", f)
-            resend_refused_change()
+            local published = send("tick", f)
+            if published and self.hello_sent and f.party_hidden ~= true then resend_refused_change() end
         end
     end
 
