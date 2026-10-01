@@ -2,16 +2,22 @@
 """Gen 4 (HGSS) scripted-route planner: from the player's saved position to the nearest wild-
 encounter grass tile, derived ONLY from ROM / pret data (no screenshots).
 
-    python tools/gen4_routes.py plan --save S.SaveRAM --rom HG.nds --pret <pokeheartgold> [--out route.json]
+    python tools/gen4_routes.py plan [--game HG|hge] --save S.SaveRAM --rom X.nds --pret <pokeheartgold> [--out route.json]
+    python tools/gen4_routes.py run  [--game HG|hge]       # live, lane C:/slink/g4/route[_hge]
 
 Sources (pokeheartgold @ad7a3afa; ROM files read through ndspy):
-  * Save position: general block + 0x1234 = array 5 (SAVE_LOCAL_FIELD_DATA,
+  * Save position (HG; hge reads its own offset from the hge pack, see GAMES): general block +
+    0x1234 = array 5 (SAVE_LOCAL_FIELD_DATA,
     include/constants/save_arrays.h:13), whose first member is `currentPosition` = Location
     {mapId, warpId, x, y, direction} (include/field_types_def.h:10-16, Location is 5 x int;
     src/save_local_field_data.c:13-27, the next four members are four more Locations). The
     general block starts at the bank base (server/adapters/gen4_codec.py:417-420 rejects any
     other start), and the block's own 5-Location layout is what pins 0x1234: real-map Locations
     sit at +0x00 and +0x50 only.
+  * hge (hg-engine build fc517576): the matrix (a/0/4/1), land data (a/0/6/5) and zone events
+    (a/0/3/2) NARCs are byte-identical to HG's (tests/unit/test_gen4_routes.py pins the hashes;
+    docs/gen4/research/hge_data_delta.md section 3), so the pret events are reused. hge's
+    Location sits at general+0x1424 because its earlier save arrays are larger.
   * Map matrix: NARC a/0/4/1 (NARC_fielddata_mapmatrix_map_matrix = 41), member 0 = "EVERYWHERE",
     the single Johto overworld matrix; layout per src/map_matrix.c `MapMatrix_MapMatrixData_Load`:
     u8 width,height,hasHeaders,hasAltitudes,nameLen,name[],u16 headers[w*h],(u8 alt[w*h]),u16 landIds[w*h].
@@ -79,8 +85,18 @@ from tools.gen4_fixtures import (  # noqa: E402
 DEFAULT_ROM = Path("E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds")
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")
 DEFAULT_PRET = Path("E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold")
+HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")  # owner hge save: Cyndaquil L5, OOO
 
-LOCAL_FIELD_OFF = 0x1234  # general-block offset of save array 5 (see the module docstring)
+# Per-title save Location: the pack's profile.location names array 5's general-block offset
+# (HG 0x1234, hge 0x1424: hge's earlier arrays are larger) and the Location field offsets. The
+# save image carries no array-header table (it lives in the in-RAM SaveData), so the pack's
+# FILE-checked `general_off_of_array` is the source; plan_route's matrix map-id check refuses a
+# wrong one. game -> (pack profile.json, title key, codec profile, default ROM/save/lane/tag)
+HGE_ROM = REPO / ".cache/gen4/hge/build-fc5175764983/test.nds"
+GAMES = {
+    "HG": (REPO / "data/games/gen4_hgss/profile.json", "heartgold", "hgss"),
+    "hge": (REPO / "data/games/gen4_hge/profile.json", "heartgold_hge", "hge"),
+}
 MATRIX_NARC, LAND_NARC = "a/0/4/1", "a/0/6/5"
 TERRAIN_OFF, CELL = 0x14, 32
 DOOR_BAND = range(0x68, 0x70)  # TILE_BEHAVIOR_104..111: what a warp tile must decode to
@@ -159,14 +175,30 @@ class World:
 
 
 # --- loaders ---------------------------------------------------------------------------------
-def save_position(save_path) -> dict:
-    """{map, warp, x, y, dir} from the newest bank's LocalFieldData.currentPosition."""
+def location_spec(game: str = "HG") -> dict:
+    """The pack's save-Location spec for `game` (array id, general-block offset, field offsets)."""
+    if game not in GAMES:
+        raise RouteError("unknown_game", f"{game!r} is not one of {sorted(GAMES)}")
+    path, title, _ = GAMES[game]
+    loc = json.loads(_need(path, f"{game} pack").read_text(encoding="utf-8"))["titles"][title][
+        "profile"
+    ]["location"]
+    return {**loc, "general_off": loc["file_cross_check"]["general_off_of_array"]}
+
+
+def save_position(save_path, game: str = "HG") -> dict:
+    """{map, warp, x, y, dir} from the newest bank's LocalFieldData.currentPosition, at the
+    general-block offset the `game` pack records (see GAMES)."""
     p = Path(save_path)
     if not p.is_file():
         raise RomAbsent(f"save absent: {p}")
-    s = parse_save(p.read_bytes(), "hgss")
-    m, w, x, y, d = struct.unpack_from("<iiiii", s.general, LOCAL_FIELD_OFF)
-    return {"map": m, "warp": w, "x": x, "y": y, "dir": d}
+    spec = location_spec(game)
+    s = parse_save(p.read_bytes(), GAMES[game][2])
+    base = spec["general_off"]
+    return {
+        k: struct.unpack_from("<i", s.general, base + spec[f"{k}_off"])[0]
+        for k in ("map", "warp", "x", "y", "dir")
+    }
 
 
 def _need(path: Path, what: str) -> Path:
@@ -267,7 +299,28 @@ def _terrain(f: bytes, lid: int) -> tuple[int, ...]:
     return struct.unpack_from("<1024H", f, TERRAIN_OFF + extra)
 
 
-def load_world(rom_path=DEFAULT_ROM, pret=DEFAULT_PRET) -> World:
+def _matrix_members(pret: Path) -> dict[int, int]:
+    """header id -> map-matrix NARC member (`.matrixId = NARC_map_matrix_map_matrix_0071_...`)."""
+    ids = {
+        n: int(v)
+        for n, v in re.findall(
+            r"#define (MAP_\w+)\s+(\d+)",
+            _need(pret / "include/constants/maps.h", "maps.h").read_text(encoding="utf-8"),
+        )
+    }
+    text = _need(pret / "src/data/map_headers.h", "map_headers.h").read_text(encoding="utf-8")
+    return {
+        ids[name]: int(m.group(1))
+        for name, body in re.findall(r"\[(MAP_\w+)\]\s*=\s*\{(.*?)\n\s*\},", text, re.S)
+        if name in ids
+        and (m := re.search(r"\.matrixId\s*=\s*NARC_map_matrix_map_matrix_(\d+)_", body))
+    }
+
+
+def load_world(rom_path=DEFAULT_ROM, pret=DEFAULT_PRET, matrix=0, header=None) -> World:
+    """Johto overworld by default (matrix member 0). An interior is a 1x1 matrix member whose
+    cell has no header table: pass its `matrix` member and its `header` id (see _matrix_members);
+    interior tile coordinates are local, as in its zone_event warps/objects."""
     import ndspy.narc
     import ndspy.rom
 
@@ -275,12 +328,12 @@ def load_world(rom_path=DEFAULT_ROM, pret=DEFAULT_PRET) -> World:
     _need(rom_path, "ROM")
     _need(pret, "pret source")
     rom = ndspy.rom.NintendoDSRom.fromFile(str(rom_path))
-    mat = ndspy.narc.NARC(rom.getFileByName(MATRIX_NARC)).files[0]
+    mat = ndspy.narc.NARC(rom.getFileByName(MATRIX_NARC)).files[matrix]
     land = ndspy.narc.NARC(rom.getFileByName(LAND_NARC))
     w, h, has_hdr, has_alt, nlen = mat[:5]
     o = 5 + nlen
     n = w * h
-    headers = list(struct.unpack_from(f"<{n}H", mat, o)) if has_hdr else [0] * n
+    headers = list(struct.unpack_from(f"<{n}H", mat, o)) if has_hdr else [header or 0] * n
     o += 2 * n if has_hdr else 0
     o += n if has_alt else 0
     lands = list(struct.unpack_from(f"<{n}H", mat, o))
@@ -351,7 +404,7 @@ def _pace_pair(world: World, t: tuple[int, int]) -> tuple[int, int] | None:
     return None
 
 
-def plan_route(world: World, start: dict, wild_lookup=None) -> dict:
+def plan_route(world: World, start: dict, wild_lookup=None, game: str = "HG") -> dict:
     """Walk from `start` ({map,x,y,dir}) to the nearest grass tile that has a horizontal grass
     neighbour (the pace pair). Refuses a start whose map id does not match the matrix."""
     sx, sy = start["x"], start["y"]
@@ -389,7 +442,7 @@ def plan_route(world: World, start: dict, wild_lookup=None) -> dict:
     mid = world.map_at(*path[-1])
     route = {
         "version": 1,
-        "game": "HG",
+        "game": game,
         "start": {**_loc(world, (sx, sy)), "dir": start.get("dir")},
         "steps": steps,
         "grass_edge_after_step": edge_idx,  # None when the start is already on/at the grass
@@ -418,8 +471,133 @@ def plan_route(world: World, start: dict, wild_lookup=None) -> dict:
         "water_tiles": [list(t) for t in path if world.is_water(*t)],
         "map_name": world.names.get(mid),
     }
-    if wild_lookup:
+    if wild_lookup:  # hge's encounter NARC a/0/3/7 is byte-identical (hge_data_delta.md section 1)
         route["wild_land_hg_day"] = wild_lookup(world.names.get(mid))
+    return route
+
+
+# --- errands: a one-NPC house visit that a story gate demands before the route is walkable ----------
+# An hge save (and any save taken before Mom hands over the Pokegear) cannot leave New Bark west:
+# coord event T20_002 fires on every pass and walks the player back (scr_seq_0842_T20.s:269-,
+# `GoToIfSet FLAG_GOT_POKEGEAR`; the Pokegear is given by Mom in the player's house,
+# scr_seq_0845_T20R0201.s:116-124). The errand is enter -> talk -> exit, one leg each; every leg
+# re-plans from the position the previous one logged, like a cutscene resync.
+ERRANDS = {"pokegear": ("MAP_NEW_BARK_PLAYER_HOUSE_1F", "obj_T20R0201_gsmama")}
+ERRAND_PHASES = ("enter", "talk", "exit")
+
+
+@dataclass
+class Errand:
+    house_id: int
+    outer_id: int
+    house: World  # the interior (local coordinates)
+    door_out: tuple[int, int]  # the outdoor warp tile into the house
+    door_in: tuple[int, int]  # the interior warp tile back out
+    npc: tuple[int, int]
+
+
+def _bank_json(pret: Path, bank: int) -> list[dict]:
+    edir = _need(pret / "files/fielddata/eventdata/zone_event", "zone_event json dir")
+    return [
+        json.loads(f.read_text(encoding="utf-8")) for f in sorted(edir.glob(f"{bank:03d}_*.json"))
+    ]
+
+
+def load_errand(rom_path, pret, name: str, outer_id: int) -> Errand:
+    if name not in ERRANDS:
+        raise RouteError("unknown_errand", f"{name!r} is not one of {sorted(ERRANDS)}")
+    house_const, npc_id = ERRANDS[name]
+    pret = Path(pret)
+    ids = {
+        n: int(v)
+        for n, v in re.findall(
+            r"#define (MAP_\w+)\s+(\d+)\b",
+            _need(pret / "include/constants/maps.h", "maps.h").read_text(encoding="utf-8"),
+        )
+    }
+    house_id = ids[house_const]
+    banks = _parse_header_banks(pret)
+    house = load_world(rom_path, pret, _matrix_members(pret)[house_id], house_id)
+    outer_names = {n for n, v in ids.items() if v == outer_id}
+    door_out = [
+        (w["x"], w["z"])
+        for d in _bank_json(pret, banks[outer_id])
+        for w in d.get("warps", [])
+        if w["header"] == house_const
+    ]
+    inner = _bank_json(pret, banks[house_id])
+    door_in = [
+        (w["x"], w["z"]) for d in inner for w in d.get("warps", []) if w["header"] in outer_names
+    ]
+    npc = [(o["x"], o["z"]) for d in inner for o in d.get("objects", []) if o["id"] == npc_id]
+    if len(door_out) != 1 or len(door_in) != 1 or len(npc) != 1:
+        raise RouteError(
+            "errand_data",
+            f"{name}: door_out={door_out} door_in={door_in} npc={npc} ({house_const})",
+        )
+    return Errand(house_id, outer_id, house, door_out[0], door_in[0], npc[0])
+
+
+def _runs(world: World, path: list[tuple[int, int]]) -> list[dict]:
+    steps: list[dict] = []
+    for a, b in zip(path, path[1:], strict=False):
+        d = _dir_of(a, b)
+        if steps and steps[-1]["dir"] == d:
+            steps[-1]["n"] += 1
+            steps[-1]["to"] = _loc(world, b)
+        else:
+            steps.append({"dir": d, "n": 1, "to": _loc(world, b)})
+    return steps
+
+
+def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str = "HG") -> dict:
+    """One errand leg from `start`: enter (outdoors -> door), talk (house -> beside Mom, facing
+    her), exit (house -> door). The tile in front of a door/NPC is the goal; the door step is
+    flagged `warp` and the NPC turn is `talk.face`."""
+    if phase not in ERRAND_PHASES:
+        raise RouteError("unknown_phase", phase)
+    if phase == "enter":
+        w, target, dest = world, errand.door_out, errand.house_id
+    else:
+        w, target, dest = errand.house, errand.npc if phase == "talk" else errand.door_in, None
+    sx, sy = start["x"], start["y"]
+    actual = w.map_at(sx, sy)
+    if actual != start["map"]:
+        raise RouteError(
+            "map_mismatch", f"start map {start['map']} but ({sx},{sy}) is in map {actual}"
+        )
+    free = replace(w, blocked=w.blocked - {(sx, sy)})
+    path = _search(
+        free,
+        (sx, sy),
+        lambda t: abs(t[0] - target[0]) + abs(t[1] - target[1]) == 1,
+        SEARCH_LIMIT,
+    )
+    if not path:
+        raise RouteError("no_path", f"{phase}: no walkable tile beside {target} from ({sx},{sy})")
+    steps = _runs(w, path)
+    last = path[-1]
+    route = {
+        "version": 1,
+        "game": game,
+        "kind": "errand",
+        "phase": phase,
+        "start": {**_loc(w, (sx, sy)), "dir": start.get("dir")},
+        "steps": steps,
+        "tiles": len(path) - 1,
+    }
+    if phase == "talk":
+        route["talk"] = {"face": _dir_of(last, target)}
+    else:  # the door step: arrival coordinates are not assumed, the leg logs them
+        dest = dest if dest is not None else errand.outer_id
+        steps.append(
+            {
+                "dir": _dir_of(last, target),
+                "n": 1,
+                "warp": True,
+                "to": {"map": dest, "x": -1, "y": -1},
+            }
+        )
     return route
 
 
@@ -483,6 +661,8 @@ def run_lane(
     save=DEFAULT_SAVE,
     pret=DEFAULT_PRET,
     *,
+    game="HG",
+    errand=None,
     lane="route",
     tag="route",
     initial_time="2010-01-01T12:00:00",
@@ -492,7 +672,8 @@ def run_lane(
 ) -> dict:
     """Plan + drive the route live. Leg 1 boots the staged save copy; a RESYNC (a coord-event
     cutscene advanced with A) saves a state, the next leg re-plans from the logged position and
-    resumes from that state. Returns the last leg's parsed result."""
+    resumes from that state. `errand` ("pokegear") prepends the enter/talk/exit legs of a house
+    visit (see ERRANDS). Returns the last leg's parsed result."""
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
@@ -504,11 +685,18 @@ def run_lane(
     rom_staged = stage_rom(rom, ld)
     stage_save(save, ld, sha1_of(rom_staged), rom_basename=rom_staged.name)
     world = load_world(rom, pret)
-    start = save_position(save)
+    start = save_position(save, game)
+    err = load_errand(rom, pret, errand, start["map"]) if errand else None
+    phases = list(ERRAND_PHASES) if err else []
+    max_legs += len(phases)
     load_state = ""
     result: dict = {}
     for leg in range(1, max_legs + 1):
-        route = plan_route(world, start, wild_land_day(Path(pret)))
+        leg_start = start
+        if phases:
+            route = plan_errand(world, err, phases.pop(0), start, game)
+        else:
+            route = plan_route(world, start, wild_land_day(Path(pret)), game)
         rpath = ld / f"{tag}_leg{leg}.json"
         rpath.write_text(json.dumps(route, indent=1), encoding="utf-8")
         log = ld / f"{tag}_leg{leg}.log"
@@ -548,30 +736,58 @@ def run_lane(
             return result
         start = {"map": int(m[1]), "x": int(m[2]), "y": int(m[3]), "dir": int(m[4])}
         load_state = m[5].strip()
+        if route.get("kind") != "errand" and (start["map"], start["x"], start["y"]) == (
+            leg_start["map"],
+            leg_start["x"],
+            leg_start["y"],
+        ):  # the same script fired again and put us back: re-planning would repeat it forever
+            result["status"] = "RESYNC_LOOP"
+            return result
     return result
 
 
 # --- CLI -------------------------------------------------------------------------------------
+def _defaults(a) -> None:
+    """Fill the per-game defaults for options left unset (hge: its own ROM, save, lane, tag)."""
+    hge = a.game == "hge"
+    a.rom = a.rom or str(HGE_ROM if hge else DEFAULT_ROM)
+    a.save = a.save or str(HGE_SAVE if hge else DEFAULT_SAVE)
+    a.pret = a.pret or str(DEFAULT_PRET)
+    if hasattr(a, "lane"):
+        a.lane = a.lane or ("route_hge" if hge else "route")
+        a.tag = a.tag or a.lane
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
-    p.add_argument("--save", default=str(DEFAULT_SAVE))
-    p.add_argument("--rom", default=str(DEFAULT_ROM))
-    p.add_argument("--pret", default=str(DEFAULT_PRET))
+    r = sub.add_parser("run", help="plan and drive the route live in lane C:/slink/g4/route[_hge]")
+    for q in (p, r):
+        q.add_argument("--game", choices=sorted(GAMES), default="HG")
+        q.add_argument("--save")
+        q.add_argument("--rom")
+        q.add_argument("--pret")
     p.add_argument("--out")
-    r = sub.add_parser("run", help="plan and drive the route live in lane C:/slink/g4/route")
-    r.add_argument("--save", default=str(DEFAULT_SAVE))
-    r.add_argument("--rom", default=str(DEFAULT_ROM))
-    r.add_argument("--pret", default=str(DEFAULT_PRET))
-    r.add_argument("--lane", default="route")
+    r.add_argument("--lane")
+    r.add_argument("--tag", help="state/log name prefix (default: the lane name)")
+    r.add_argument("--errand", choices=sorted(ERRANDS), help="house visit before the route")
     r.add_argument("--timeout", type=int, default=900)
     r.add_argument("--pace-max", type=int)
     a = ap.parse_args(argv)
+    _defaults(a)
     if a.cmd == "run":
         try:
             res = run_lane(
-                a.rom, a.save, a.pret, lane=a.lane, timeout=a.timeout, pace_max=a.pace_max
+                a.rom,
+                a.save,
+                a.pret,
+                game=a.game,
+                errand=a.errand,
+                lane=a.lane,
+                tag=a.tag,
+                timeout=a.timeout,
+                pace_max=a.pace_max,
             )
         except RomAbsent as exc:
             print(f"SKIP: {exc}", file=sys.stderr)
@@ -583,9 +799,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"leg {res['leg']} wall {res['wall']}s status {res['status']} {res['detail']}")
         return 0 if res["status"] == "BATTLE" else 1
     try:
-        start = save_position(a.save)
+        start = save_position(a.save, a.game)
         world = load_world(a.rom, a.pret)
-        route = plan_route(world, start, wild_land_day(Path(a.pret)))
+        route = plan_route(world, start, wild_land_day(Path(a.pret)), a.game)
     except RomAbsent as exc:
         print(f"SKIP: {exc}", file=sys.stderr)
         return 2

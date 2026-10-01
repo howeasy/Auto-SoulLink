@@ -509,6 +509,8 @@ writes no game memory: the only side effects are `joypad.set`, `savestate.save`/
 | Save | `E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM` | a real battery save outside the player's house in New Bark Town; staged (never written in place) |
 | pret | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` | supplies the event/terrain behaviour sources and the Johto encounter table |
 | Emulator | `E:/Howard/Bizhawk/EmuHawk.exe` | absent is a named **SKIP** (exit 2), not a FAIL |
+| hge ROM (`--game hge`) | `.cache/gen4/hge/build-fc5175764983/test.nds` | the matrix, land-data and zone-event NARCs (`a/0/4/1`, `a/0/6/5`, `a/0/3/2`) are byte-identical to HG's, so the pret events are reused (a unit test pins the hashes) |
+| hge save | `C:/slink/g4/saves/hge_a_OOO_630.SaveRAM` | Cyndaquil L5 outside the player's house, **no Pokégear yet**; Location at `general + 0x1424` |
 
 ### Plan only (no emulator)
 
@@ -517,8 +519,10 @@ python tools/gen4_routes.py plan --out route.json
 ```
 
 Prints the route as JSON and exits 0, or `FAIL: <reason>` (exit 1) / `SKIP: <input absent>`
-(exit 2). The planner reads the position from the save at `general + 0x1234`
-(`SAVE_LOCAL_FIELD_DATA.currentPosition`), the Johto cell map from NARC `a/0/4/1`, the tile
+(exit 2). The planner reads the position from the save at the offset the game's pack records
+(`profile.location.file_cross_check.general_off_of_array`: HG `0x1234`, hge `0x1424` because hge's
+earlier arrays are larger; array 5, `SAVE_LOCAL_FIELD_DATA.currentPosition`; a wrong offset is
+refused by the matrix map-id check), the Johto cell map from NARC `a/0/4/1`, the tile
 attributes from `a/0/6/5` at `0x14 + the u16 at +0x12`, and the event tiles from
 `files/fielddata/eventdata/zone_event/<bank>_*.json`.
 
@@ -527,7 +531,14 @@ attributes from `a/0/6/5` at `0x14 + the u16 at +0x12`, and the event tiles from
 ```bash
 python tools/gen4_routes.py run                    # lane C:/slink/g4/route by default
 python tools/gen4_routes.py run --lane route2 --timeout 900 --pace-max 4000
+python tools/gen4_routes.py run --game hge --errand pokegear   # lane C:/slink/g4/route_hge, tag route_hge
 ```
+
+`--game hge` swaps in the hge ROM, save, lane and state prefix. `--errand pokegear` prepends three
+legs (enter the player's house, talk to Mom, exit) for a save without the Pokégear: coord event
+T20_002 otherwise walks the player back on every pass, and the run stops with status
+`RESYNC_LOOP` instead of repeating it. States are then `route_hge_leg5_*` (legs 1-3 errand, 4 the
+Elm-call cutscene resync, 5 the walk and battle).
 
 Leg 1 boots the staged save; a coord-event cutscene is cleared with A, savestated, and reported
 as `RESULT RESYNC map=… x=… y=… dir=… state=…`, after which the next leg re-plans from that
@@ -542,7 +553,8 @@ position and resumes from the state (at most 4 legs). Every leg writes
   water (each is refused by the planner, not stepped on),
 * the chain `fs -> +0 -> +4` (overlay id 12) `-> +0x1C -> +0x30` resolves to a battle context with
   a non-zero enemy species (`docs/gen4/research/battle_pointer.md`),
-* the log names the species and the phase: `RESULT BATTLE phase=pace species=PIDGEY(16) level=2 …`,
+* the log names the species and the phase: `RESULT BATTLE phase=pace species=PIDGEY(16) level=2
+  player=155 …` (the SETTLED chain; `player` is `battleMons[0]`, 155 = Cyndaquil on both saves),
   or `phase=approach` when the encounter fired on the way to the grass instead of while pacing,
 * `<tag>_battle_settled.png` shows the FIGHT menu.
 
@@ -564,10 +576,10 @@ Anything else is exit 1 with `RESULT FAIL <why>` in the log, plus a `fail.png`.
 ### Headless
 
 ```bash
-python -m pytest tests/unit/test_gen4_routes.py -v     # 18 tests, no emulator
+python -m pytest tests/unit/test_gen4_routes.py -v     # 28 tests, no emulator
 ```
 
-The three real-data cases skip by name when the ROM/pret/save is absent and fail when an input
+The real-data cases skip by name when the ROM/pret/save is absent and fail when an input
 is present but wrong. `test_real_every_warp_tile_decodes_to_a_door` is the load-bearing one: a
 warp tile is a door by construction, so it pins the land-data offset, the row-major order and
 the matrix index in a single assertion.

@@ -13,7 +13,7 @@ from tools import gen4_routes as gr
 ROM, PRET, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_PRET, gr.DEFAULT_SAVE
 
 
-def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None):
+def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None, header=7):
     """One 32x32 land cell from ascii rows: '#' collision, '.' floor, 'g' encounter grass,
     '~' surfable water; header id 7 (named "TST")."""
     words = [0x8006] * 1024
@@ -23,13 +23,13 @@ def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None)
     return gr.World(
         1,
         1,
-        [7],
+        [header],
         [0],
         {0: tuple(words)},
         set(blocked),
         set(soft),
         water or frozenset({0x15}),
-        {7: "TST"},
+        {header: "TST"},
         frozenset(warps),
         dict(scripts or {}),
     )
@@ -211,6 +211,91 @@ def test_save_position_absent_is_a_named_skip(tmp_path):
         gr.save_position(tmp_path / "nope.SaveRAM")
 
 
+# --- errands (enter / talk / exit a house) ----------------------------------------------------------
+def _errand():
+    outer = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 3)})
+    house = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 1), (2, 3)}, header=8)
+    return outer, gr.Errand(8, 7, house, (4, 3), (2, 3), (4, 1))
+
+
+def test_errand_enter_ends_with_a_flagged_door_step():
+    outer, err = _errand()
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    last = r["steps"][-1]
+    assert last["warp"] and last["dir"] == "Down" and last["to"]["map"] == 8
+    tiles = gr.replay(outer, {**r, "steps": r["steps"][:-1]})
+    assert tiles[-1] == (4, 2)  # the tile in front of the door
+    _check_never_blocked(outer, {**r, "steps": r["steps"][:-1]})
+
+
+def test_errand_talk_faces_the_npc_and_exit_leaves_by_the_door():
+    _, err = _errand()
+    t = gr.plan_errand(err.house, err, "talk", {"map": 8, "x": 1, "y": 2, "dir": 0})
+    end = gr.replay(err.house, t)[-1]
+    assert abs(end[0] - 4) + abs(end[1] - 1) == 1 and "warp" not in json.dumps(t["steps"])
+    assert gr.DIRS[t["talk"]["face"]] == (4 - end[0], 1 - end[1])  # toward the NPC
+    x = gr.plan_errand(err.house, err, "exit", {"map": 8, "x": 1, "y": 2, "dir": 0})
+    assert x["steps"][-1]["warp"] and x["steps"][-1]["to"]["map"] == 7
+
+
+def test_errand_refuses_a_wrong_start_map_and_a_bad_phase():
+    outer, err = _errand()
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_errand(outer, err, "enter", {"map": 8, "x": 1, "y": 1, "dir": 0})
+    assert e.value.reason == "map_mismatch"
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_errand(outer, err, "dance", _start(1, 1))
+    assert e.value.reason == "unknown_phase"
+
+
+# --- per-game save Location (pack-derived) ---------------------------------------------------------
+class _FakeSave:
+    def __init__(self, general):
+        self.general = general
+
+
+def _fake_general(game, loc):
+    off = gr.location_spec(game)["general_off"]
+    g = bytearray(0x40000)
+    struct.pack_into("<5i", g, off, *loc)
+    return bytes(g)
+
+
+def test_location_offset_comes_from_the_pack_per_game():
+    assert gr.location_spec("HG")["general_off"] == 0x1234  # the old hard-coded constant
+    assert gr.location_spec("hge")["general_off"] == 0x1424  # hge's earlier arrays are larger
+    assert gr.location_spec("hge")["array_id"] == 5
+    with pytest.raises(gr.RouteError) as e:
+        gr.location_spec("pt")
+    assert e.value.reason == "unknown_game"
+
+
+@pytest.mark.parametrize("game", ["HG", "hge"])
+def test_save_position_reads_the_game_pack_offset(game, tmp_path, monkeypatch):
+    sav = tmp_path / "x.SaveRAM"
+    sav.write_bytes(b"x")
+    g = _fake_general(game, (7, -1, 1, 1, 1))
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeSave(g))
+    pos = gr.save_position(sav, game)
+    assert pos == {"map": 7, "warp": -1, "x": 1, "y": 1, "dir": 1}
+    r = gr.plan_route(_world(ROWS), pos, game=game)
+    assert r["game"] == game
+
+
+def test_a_wrong_pack_offset_is_refused(tmp_path, monkeypatch):
+    sav = tmp_path / "x.SaveRAM"
+    sav.write_bytes(b"x")
+    g = _fake_general("hge", (7, -1, 1, 1, 1))
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeSave(g))
+    good = gr.location_spec("hge")
+    for bad in (good["general_off"] + 4, good["general_off"] - 0x1424 + 0x1234):
+        monkeypatch.setattr(gr, "location_spec", lambda _g, bad=bad: {**good, "general_off": bad})
+        pos = gr.save_position(sav, "hge")
+        with pytest.raises(gr.RouteError) as e:  # a shifted read is not a real Location
+            gr.plan_route(_world(ROWS), pos)
+        assert e.value.reason == "map_mismatch"
+
+
 # --- real data (named skips) ---------------------------------------------------------------------
 @pytest.fixture(scope="module")
 def real():
@@ -260,3 +345,44 @@ def test_real_wrong_map_id_refused(real):
     world, pos = real
     with pytest.raises(gr.RouteError):
         gr.plan_route(world, {**pos, "map": 33})
+
+
+# --- hge real data ---------------------------------------------------------------------------------
+HGE_ROM, HGE_SAVE = gr.HGE_ROM, gr.HGE_SAVE
+
+
+def test_real_hge_world_files_are_byte_identical_to_vanilla():
+    """hge reuses the pret events because the matrix, land-data and zone-event NARCs are the same
+    bytes in both ROMs (hge_data_delta.md section 3); a rebuilt hge that changes any needs its own
+    event source."""
+    import hashlib
+
+    ndspy_rom = pytest.importorskip("ndspy.rom")
+    for p, what in ((ROM, "HG ROM"), (HGE_ROM, "hge ROM")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    a = ndspy_rom.NintendoDSRom.fromFile(str(ROM))
+    b = ndspy_rom.NintendoDSRom.fromFile(str(HGE_ROM))
+    for name in (gr.MATRIX_NARC, gr.LAND_NARC, "a/0/3/2"):
+        assert (
+            hashlib.sha1(a.getFileByName(name)).digest()
+            == hashlib.sha1(b.getFileByName(name)).digest()
+        ), f"{name} differs between HG and hge"
+
+
+def test_real_hge_save_position_matches_the_pack_cross_check():
+    if not Path(HGE_SAVE).exists():
+        pytest.skip(f"hge save absent: {HGE_SAVE}")
+    pos = gr.save_position(HGE_SAVE, "hge")
+    # the pack's FILE cross-check: Location (60,-1,685,396,1) on this save
+    assert (pos["map"], pos["warp"], pos["x"], pos["y"], pos["dir"]) == (60, -1, 685, 396, 1)
+
+
+def test_real_pokegear_errand_data_matches_the_decomp():
+    for p, what in ((HGE_ROM, "hge ROM"), (PRET, "pokeheartgold source")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    e = gr.load_errand(HGE_ROM, PRET, "pokegear", 60)
+    # zone_event 057_T20 warp -> player house 1F; 060_T20R0201 door warp and Mom (gsmama)
+    assert (e.house_id, e.door_out, e.door_in, e.npc) == (63, (695, 396), (3, 10), (6, 7))
+    assert e.house.map_at(3, 10) == 63 and e.house.attr(3, 10) is not None

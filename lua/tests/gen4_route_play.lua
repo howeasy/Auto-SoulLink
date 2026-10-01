@@ -183,6 +183,16 @@ local function wait_stable(n)
   return false
 end
 
+-- errand legs (route.kind == "errand"): a quiet stop that the next leg re-plans from
+local function errand_stop(name)
+  if not wait_stable(60) then finish("FAIL", "errand_not_stable", name, pos_s(loc())) end
+  local l = loc()
+  say("errand", name, "stopped at", pos_s(l))
+  local p = save_state(name)
+  shot(name)
+  finish("RESYNC", string.format("map=%d x=%d y=%d dir=%d state=%s", l.map, l.x, l.y, l.dir, p))
+end
+
 -- hold `dir` until the location reads (tx,ty); returns frames used or nil+reason
 local function step(dir, tx, ty)
   local before = loc()
@@ -235,8 +245,10 @@ local function report_battle(b, phase, extra)
   local b2 = battle()
   say("settled after", SETTLE_FRAMES, "frames; chain", b2 and describe(b2) or "GONE")
   save_state("battle_settled"); shot("battle_settled")
-  finish("BATTLE", string.format("phase=%s species=%s(%d) level=%d map=%d x=%d y=%d %s",
-    phase, species_name(b.species), b.species, b.level,
+  -- report the SETTLED chain: hge fills the enemy level a few frames after the chain appears
+  local r = b2 or b
+  finish("BATTLE", string.format("phase=%s species=%s(%d) level=%d player=%d map=%d x=%d y=%d %s",
+    phase, species_name(r.species), r.species, r.level, r.pspecies,
     lb and lb.map or -1, lb and lb.x or -1, lb and lb.y or -1, extra))
 end
 
@@ -249,6 +261,20 @@ for i = 1, #steps do
   local d = DELTA[s.dir]
   for k = 1, s.n do
     local tx, ty = cur.x + d[1], cur.y + d[2]
+    if s.warp then
+      -- a door: hold the direction until the warp task starts, release, wait for the new map
+      local m0, ok = cur.map, false
+      for _ = 1, 600 do
+        local l, tm = loc(), taskman()
+        if l and l.map == s.to.map and idle_now() then ok = true; break end
+        if (tm and tm ~= 0) or (l and l.map ~= m0) then joypad.set({}) else joypad.set({[s.dir] = true}) end
+        emu.frameadvance()
+      end
+      joypad.set({})
+      if not ok then finish("FAIL", "warp_timeout", string.format("seg%d toward map %d", i, s.to.map), pos_s(loc())) end
+      say("warped", pos_s(loc()))
+      errand_stop(route.phase)
+    end
     local fr, why, before = step(s.dir, tx, ty)
     if not fr then
       if why == "task" then
@@ -285,6 +311,30 @@ for i = 1, #steps do
     edge_done = true
   end
   cur = loc()
+end
+if route.kind == "errand" then -- only `talk` reaches here: face the NPC, A through the dialogue
+  local want = {Up = 0, Down = 1, Left = 2, Right = 3}
+  local face = route.talk.face
+  for _ = 1, 60 do
+    local l = loc()
+    if l and l.dir == want[face] then break end
+    joypad.set({[face] = true})
+    emu.frameadvance()
+  end
+  joypad.set({})
+  for _ = 1, 20 do emu.frameadvance() end
+  shot("talk_pre")
+  -- A until the dialogue task starts (a press in the turn frames is swallowed)
+  for try = 1, 6 do
+    for _ = 1, 4 do joypad.set({A = true}); emu.frameadvance() end -- set per frame: it lasts one
+    joypad.set({})
+    for _ = 1, 30 do emu.frameadvance() end
+    local tm = taskman()
+    say("talk A try", try, "taskman", hex(tm or 0), "pos", pos_s(loc()))
+    if tm and tm ~= 0 then break end
+  end
+  shot("talk_post")
+  interrupted("talk to NPC " .. face)
 end
 if edge_after == nil and not edge_done then
   wait_stable(30); say("grass edge = start", pos_s(loc())); save_state("grass_edge"); shot("grass_edge")
