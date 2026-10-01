@@ -355,6 +355,84 @@ def test_open_kind_trade_done_reports_a_key_change_with_the_npc_trade_reason():
     assert kc["old_key"] == KB and kc["new_key"] == key_of(C, 0x9999) and kc["reason"] == "npc_trade"
 
 
+def test_rr_nature_change_pairs_actual_pid_preimage_before_same_frame_store():
+    w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
+    w.regs["R4"] = w.party_base() + 100
+    w.fire("nature_change_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, OT, species=5)])
+    w.fire("nature_change")
+    w.step()
+    assert [(e["old_key"], e["new_key"], e["reason"]) for e in w.events("key_change")] == [
+        (KB, key_of(C, OT), "nature_change")]
+    assert all(not w.events(name) for name in ("capture", "faint", "party_to_box", "box_to_party"))
+
+
+def test_rr_nature_change_waits_for_visible_journal_before_alias():
+    from tests.unit.gen3_trade_journal_model import JournalModel
+
+    model = JournalModel()
+    w = World("gen3_rr", "radical_red", "companion", journal=model)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    journal = model.journal
+    original_hidden = journal.hidden
+    held = {"yes": True}
+    journal.hidden = lambda self: held["yes"] or original_hidden(self)
+    w.regs["R4"] = w.party_base() + 100
+    w.fire("nature_change_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, OT, species=5)])
+    w.fire("nature_change")
+    w.step(2)
+    assert w.events("key_change") == []
+    held["yes"] = False
+    w.step(3)
+    assert [(e["old_key"], e["new_key"], e["reason"]) for e in w.events("key_change")] == [
+        (KB, key_of(C, OT), "nature_change")]
+
+
+@pytest.mark.parametrize("slot", range(6))
+@pytest.mark.parametrize("next_frame", [False, True])
+def test_rr_nature_change_tracks_exact_party_slot_across_frame_boundary(slot, next_frame):
+    mons = [mon_record(A + i, OT, species=5) for i in range(6)]
+    w = World("gen3_rr", "radical_red", "companion")
+    w.set_party(mons)
+    w.step_to(60)
+    w.regs["R4"] = w.party_base() + slot * 100
+    w.fire("nature_change_begin")
+    if next_frame:
+        w.step()
+    changed = list(mons)
+    changed[slot] = mon_record(C + slot, OT, species=5)
+    w.set_party(changed)
+    w.fire("nature_change")
+    w.step()
+    assert [(m["old_key"], m["new_key"], m["reason"]) for m in w.events("key_change")] == [
+        (key_of(A + slot, OT), key_of(C + slot, OT), "nature_change")]
+    assert all(not w.events(kind) for kind in ("capture", "faint", "party_to_box", "box_to_party"))
+
+
+@pytest.mark.parametrize("failure", ["no_begin", "pointer", "reset", "unchanged", "bad_flags", "egg"])
+def test_rr_nature_change_refuses_unpaired_or_invalid_pid_store(failure):
+    from server.adapters import gen3_codec as codec
+
+    w = live("gen3_rr", "radical_red", "companion", pids=(A, B))
+    ptr = w.party_base() + codec.PARTY_MON_SIZE
+    w.regs["R4"] = ptr
+    if failure != "no_begin":
+        w.fire("nature_change_begin")
+    if failure == "reset":
+        w.client.driver.on_reset()
+    if failure == "pointer":
+        w.regs["R4"] = w.party_base()
+    if failure != "unchanged":
+        w.set_party([mon_record(A, OT), mon_record(C, OT, species=5, is_egg=1 if failure == "egg" else 0)])
+    if failure == "bad_flags":
+        w.poke_int(ptr + codec._OFF_FLAGS, 0, 1)
+    w.fire("nature_change")
+    w.step()
+    assert w.events("key_change") == []
+
+
 @pytest.mark.parametrize("same_frame", [True, False], ids=["captured-emerald-timing", "separate-frame-control"])
 @pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
 def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):

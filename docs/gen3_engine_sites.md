@@ -43,7 +43,8 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | save | PINNED | PINNED | PINNED | PINNED |
 | poison_faint | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 | borrowed_party | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
-| nature_change | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| nature_change | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
+| nature_change_begin | UNVERIFIED | UNVERIFIED | PINNED | PINNED |
 | hatch | PINNED | PINNED | PINNED | PINNED |
 | pc_deposit | PINNED | PINNED | PINNED | PINNED |
 | pc_withdraw | PINNED | PINNED | PINNED | PINNED |
@@ -369,14 +370,25 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 
 ### nature_change — RR nature-changer special
 
-[pret src/pokemon.c#L3686-L3706](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c#L3686-L3706). RR-specific PID identity update; existing client.lua:3399-3557 is only a local behavior reference. The linked vanilla source is a contrast, NOT evidence for the special.
+[pret include/constants/pokemon.h#L5](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5). RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, valid record checksum, unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
-| rr | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 906 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 913 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
+| rr | PINNED | 090B17CC / +AC / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090B17CC / +AC / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+
+### nature_change_begin — RR Nature Changer PID preimage
+
+[pret include/constants/pokemon.h#L5](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5). RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only Nature Changer; not applicable to vanilla FR/LG; bytes, if shown, are diagnostic only |
+| lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only Nature Changer; not applicable to vanilla FR/LG; bytes, if shown, are diagnostic only |
+| rr | PINNED | 090B17CC / +A8 / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090B17CC / +A8 / 10B17CC | 6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7 | SOURCE only; capture contract above |
 
 ### hatch — AddHatchedMonToParty
 
@@ -596,4 +608,4 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 
 ## NOT VERIFIED
 
-RR borrowed_party and nature_change remain UNVERIFIED. Poison's replacement is disabled; its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need separate evidence; the mutation sites here are not a claim of complete gameplay coverage. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.
+RR borrowed_party remains UNVERIFIED. Nature Changer paired PID sites are SOURCE pinned by the exact NPC script and unique ROM body, not PHYSICAL qualified. Poison's replacement is disabled; its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need separate evidence; the mutation sites here are not a claim of complete gameplay coverage. No emulator was run on this card. PINNED rows still need per-artifact natural-play positive/negative receipts, snapshot validity, semantic reduction, duplicate suppression and full caller coverage before P3 can close a row. Do not infer that byte-match tests physically qualify faint/capture/PC/trade/evolution/poison, all map paths, RR borrowed-party/nature changes, or flash persistence. Profile/save/checkpoint files are outside this lease.

@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "f7d0729773fd0e8a5eec72ada0d542d711bd30334f1463d0c73852e08e3562e6",
+  "sha256": "c975213628da2336dbfb716a6d7e46e4e64fc9092c7a5cea1bd9bf2345359a65",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -265,6 +265,114 @@
               "source": "cfru_detour",
               "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
               "symbol": "GiveMonToPlayer"
+            },
+            "nature_change": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, valid record checksum, unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.",
+              "capture_offset": 172,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 172,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR nature-changer special"
+            },
+            "nature_change_begin": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.",
+              "capture_offset": 168,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 168,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR Nature Changer PID preimage"
             },
             "pc_box_place": {
               "address": 134819864,
@@ -856,6 +964,114 @@
               "source": "cfru_detour",
               "source_url": "https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/catching.c#L600-L620",
               "symbol": "GiveMonToPlayer"
+            },
+            "nature_change": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, valid record checksum, unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.",
+              "capture_offset": 172,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 172,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR nature-changer special"
+            },
+            "nature_change_begin": {
+              "address": 151721932,
+              "caller": {
+                "map": [
+                  5,
+                  4
+                ],
+                "npc_local_id": 5,
+                "option": 0,
+                "script": 151306580
+              },
+              "capture_contract": "RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, is authoritative; SOURCE only.",
+              "capture_offset": 168,
+              "context": {
+                "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+                "rom_offset": 17504204
+              },
+              "expected_hex": "6422334B1B88F0B514005C430022314B89B0E418304E11000290200001F094FC002207000B21200001F08EFC012305043B402D0C390000932800284B01F081FC274B0390200001F07CFC002204900121200001F079FC030C06040193360C214F01F073FC059001F070FC059B00041843049B002B20D10790012307989843009B1843194B079001F05CFC029B9842E6D1124B0799280001F054FC039B9842DED107AA00212000114B01F04BFC2000104B01F047FC09B0F0BD0127019B00047740000C5F4047403F0407430797D4E7",
+              "function": {
+                "address": 151721932,
+                "anchor_offset": 0,
+                "capture_offset": 168,
+                "size": 206,
+                "size_evidence": "ROM code through branch090B1898; literals begin090B189C",
+                "symbol": "RR_NatureChanger_PIDMutation"
+              },
+              "mode": "thumb",
+              "pair_contract": {
+                "begin": "nature_change_begin",
+                "end": "nature_change",
+                "mon_register": "R4",
+                "new_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "old_fields": [
+                  "PID",
+                  "OT"
+                ],
+                "party_base": 33702532,
+                "reset": "same epoch required; clear unmatched preimage on reset",
+                "slot_address": 33779904,
+                "stride": 100
+              },
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 17504204,
+              "source": "rr_script_special_binary",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/include/constants/pokemon.h#L5",
+              "symbol": "RR Nature Changer PID preimage"
             },
             "pc_box_place": {
               "address": 134819864,

@@ -148,6 +148,27 @@ CANDIDATES = [
               reason="no pinned RR special entry/store/caller context"),
 ]
 
+# RR-only additions do not change either vanilla pack's emitted sites.
+CANDIDATES.append(candidate(
+    "nature_change_begin", "RR Nature Changer PID preimage", "include/constants/pokemon.h#L5",
+    "RR map 5,4 local NPC5 at (8,2), script0904C154 option0 -> Nature Changer script0904C3D6. "
+    "Twenty-one callnative wrappers call090B17CC. Paired preimage at090B1874 immediately before "
+    "SetMonData(MON_DATA_PERSONALITY=0); R4=gPlayerParty+100*VAR8004. Read old raw PID/OT from "
+    "the same valid aligned party record; preserve scalar preimage, slot, mon pointer and reset epoch. "
+    "No wire event at begin. Pair only same record/slot/epoch with nature_change; clear on reset "
+    "or mismatch and emit nothing if missing/invalid/unchanged. ROM binary, not upstream routine, "
+    "is authoritative; SOURCE only.", reason="RR-only Nature Changer; not applicable to vanilla FR/LG"))
+_nature = next(c for c in CANDIDATES if c["kind"] == "nature_change")
+_nature["source"] = "include/constants/pokemon.h#L5"
+_nature["inventory"] = (
+    "RR Nature Changer paired postimage at090B1878 after SetMonData(PERSONALITY=0), before "
+    "CalculateMonStats. R4 is the same aligned party record as nature_change_begin at090B1874. "
+    "Require validated old/new scalar PID+OT, same slot/pointer/reset epoch, valid record checksum, "
+    "unchanged OT and changed PID; emit one key_change reason=nature_change after successful pairing. "
+    "Never reconstruct old PID from final RAM or correlate by species/similarity. Begin has no event; "
+    "drop mismatched/absent/unchanged pairs and clear on reset. Capture is synchronous engine delivery; "
+    "do not let a queued signal reread only the final record. SOURCE only, natural-play proof unrun.")
+
 
 
 # C2-3b: offsets are relative to independently resolved FR/LG function symbols.
@@ -822,12 +843,37 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
                 "clean ROM has no aligned direct literal. Companion-only literal is patch data; "
                 "MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. "
                 "Indirect/synthesized addressing remains possible; no unique begin/restore pair established."}
-    if kind == "nature_change":
-        hits = find_offsets(rom, (0x02024284).to_bytes(4, "little"))
-        return {"status": "UNVERIFIED", "reason":
-                f"party-base 02024284 has {len(hits)} literal matches; no unique nature-special PID "
-                "write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search "
-                "did not provide an RR special address; a generic PID store is not sufficient attribution."}
+    if kind in ("nature_change_begin", "nature_change"):
+        from tools.research.rr_special_lifecycle import census, MUTATOR, MUTATOR_END
+        try:
+            facts = census(rom)["nature"]
+            if (facts["anchor_occurrences"] != 1 or facts["code_sha256"] !=
+                    "d9a37097cd0f5b8871109981c41a1b53dbc0dd274daeb6144ddb330080a2c045"):
+                raise ValueError("Nature Changer body is missing, changed or ambiguous")
+            flat = MUTATOR - ROM_BASE
+            data = rom[flat:flat + MUTATOR_END - MUTATOR]
+            capture = (facts["before_pid_store"] if kind == "nature_change_begin"
+                       else facts["after_pid_store"]) - MUTATOR
+            site = make_site(rom, flat, data, capture_offset=capture,
+                             symbol=c["symbol"], point=["R4", "R15", "CPSR"])
+            site.update(source="rr_script_special_binary",
+                        source_url=PRET + "include/constants/pokemon.h#L5",
+                        capture_contract=c["inventory"],
+                        context={"rom_offset": flat, "expected_hex": data.hex().upper()},
+                        function={"address": MUTATOR, "size": len(data),
+                                  "capture_offset": capture, "anchor_offset": 0,
+                                  "symbol": "RR_NatureChanger_PIDMutation",
+                                  "size_evidence": "ROM code through branch090B1898; literals begin090B189C"},
+                        caller={"map": facts["map"], "npc_local_id": 5,
+                                "script": facts["npc"]["script"], "option": 0},
+                        pair_contract={"begin": "nature_change_begin", "end": "nature_change",
+                                       "mon_register": "R4", "slot_address": facts["slot_address"],
+                                       "party_base": facts["party_base"], "stride": 100,
+                                       "old_fields": ["PID", "OT"], "new_fields": ["PID", "OT"],
+                                       "reset": "same epoch required; clear unmatched preimage on reset"})
+            return {"status": "PINNED", "site": site, "matches": [flat]}
+        except ValueError as exc:
+            return {"status": "UNVERIFIED", "reason": str(exc)}
     if kind not in RR_BODIES:
         return None
     b, contract = RR_BODIES[kind][name], RR_CONTRACTS[kind]
@@ -1076,7 +1122,8 @@ def document(inventory: dict) -> str:
               "- pytest tests/unit/test_gen3_engine_sites.py -q checks every emitted pin, exclusion, "
               "wrong ROM, ambiguous/odd matches and the retained RR-tail trap.",
               "", "## NOT VERIFIED", "",
-              "RR borrowed_party and nature_change remain UNVERIFIED. Poison's replacement is disabled; "
+              "RR borrowed_party remains UNVERIFIED. Nature Changer paired PID sites are SOURCE pinned "
+              "by the exact NPC script and unique ROM body, not PHYSICAL qualified. Poison's replacement is disabled; "
               "its old tails remain excluded. Replacement extents are explicit estimates, not symbol sizes. "
               "Additional paths (multi-move, Shedinja creation, final trade scene/evolution completion) need "
               "separate evidence; the mutation sites here are not a claim of complete gameplay coverage. "

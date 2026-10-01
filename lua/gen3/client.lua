@@ -212,6 +212,8 @@ function Client.new(p)
     -- It is only as good as the signals that close it (C5-11d): a reset (drv.on_reset) revokes it,
     -- and so does a signal source that stopped delivering -- see live_authority below.
     local rival_authority = nil
+    local nature_preimage = nil
+    local nature_completed = nil
     local sig_src = nil          -- the signal source drv.start armed; its health gates the authority
     local st = {
         known = {},        -- already acquired non-egg keys (party + boxes)
@@ -537,6 +539,15 @@ function Client.new(p)
     -- OPEN kind (not PHYSICAL; G3_request_draft.md:72-74): an in-game NPC trade replaces the
     -- record at the traded slot. Reported as key_change reason npc_trade (the Gen 1 contract);
     -- never for a link trade (docs/protocol.md §3.2), so skipped while a native trade runs.
+    local function emit_identity_change(old, k, m, party, reason)
+        st.known[k] = true
+        if m.hp and m.hp > 0 then st.alive[k] = true end
+        session.identity:begin_alias(old, k, m, party, io.framecount())
+        -- Keep the exact message on the alias for the existing retryable box-census refusal.
+        session.identity.pending.msg = { old_key = old, new_key = k, reason = reason,
+                                         new_species = m.species, new_nickname = m.nickname }
+        send("key_change", session.identity.pending.msg)
+    end
     local function settle_trade(party)
         local before = st.trade
         st.trade = nil
@@ -545,15 +556,18 @@ function Client.new(p)
             local old = before[m.slot]
             local k = key(m)
             if old and old ~= k then
-                st.known[k] = true
-                if m.hp and m.hp > 0 then st.alive[k] = true end
-                session.identity:begin_alias(old, k, m, party, io.framecount())
-                -- KEY-SCOPE-5: kept on the alias so a retryable refusal can resend this exact
-                -- message once a newer complete box census has gone out (core/session.lua).
-                session.identity.pending.msg = { old_key = old, new_key = k, reason = "npc_trade",
-                                                 new_species = m.species, new_nickname = m.nickname }
-                send("key_change", session.identity.pending.msg)
+                emit_identity_change(old, k, m, party, "npc_trade")
             end
+        end
+    end
+    local function settle_nature(party)
+        local pair = nature_completed
+        nature_completed = nil
+        if not pair or pair.epoch ~= trade_reset_epoch then return end
+        local mon = party[pair.after.slot + 1]
+        if mon and key(mon) == pair.after.key and pair.before.key ~= pair.after.key
+           and mon.is_egg ~= 1 and mon.is_egg_flag ~= 1 then
+            emit_identity_change(pair.before.key, pair.after.key, mon, party, "nature_change")
         end
     end
 
@@ -624,7 +638,7 @@ function Client.new(p)
 
     local function settle()
         local f = st.flags
-        if not next(f) then return end
+        if not next(f) and not nature_completed then return end
         if f.save and io.saveram then pcall(io.saveram) end
         f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
         if recovery_hidden() then
@@ -673,6 +687,7 @@ function Client.new(p)
             if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
             if f.pc then settle_pc(party, area_id, f.release) end
             if f.trade then settle_trade(party) end
+            if nature_completed then settle_nature(party) end
         end
         if f.whiteout then
             send("whiteout", {})
@@ -1064,6 +1079,8 @@ function Client.new(p)
     end
     function drv.on_reset()
         st.release_snapshot = nil
+        nature_preimage = nil
+        nature_completed = nil
         st.eggs = {}
         trade_reset_epoch = trade_reset_epoch + 1
         -- Pre-CONTINUE validation can see OT=0 after a real cleared boot interval.
@@ -1294,11 +1311,42 @@ function Client.new(p)
                 end
             end
         end
+        local function nature_record(sig)
+            local ptr, base = sig.point and sig.point.R4, call("party_base")
+            local count = io.read_u8(a.PARTY_COUNT_ADDR)
+            if not ptr or not base or not count or count < 1 or count > 6
+               or ptr < base or (ptr - base) % R.PARTY_MON_SIZE ~= 0 then return end
+            local slot = (ptr - base) // R.PARTY_MON_SIZE
+            if slot >= count then return end
+            local party = party_read()
+            local mon = party and party[slot + 1]
+            if not mon or mon.slot ~= slot or mon.checksum_ok == false
+               or mon.has_species ~= 1 or mon.is_bad_egg ~= 0
+               or mon.is_egg == 1 or mon.is_egg_flag == 1 then return end
+            local pid, ot = io.read_u32(ptr), io.read_u32(ptr + 4)
+            if key(mon) ~= string.format("%08X:%08X", pid, ot) then return end
+            return {ptr=ptr, slot=slot, pid=pid, ot=ot, species=mon.species,
+                    key=key(mon), epoch=trade_reset_epoch}
+        end
+        local function nature_begin(sig)
+            nature_preimage = nature_record(sig)
+        end
+        local function nature_done(sig)
+            local before = nature_preimage
+            nature_preimage = nil
+            if not before or before.epoch ~= trade_reset_epoch
+               or not sig.point or sig.point.R4 ~= before.ptr then return end
+            local after = nature_record(sig)
+            if not after or after.slot ~= before.slot or after.ot ~= before.ot
+               or after.pid == before.pid or after.species ~= before.species then return end
+            sig.nature_before, sig.nature_after, sig.nature_epoch = before, after, trade_reset_epoch
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
                                  whiteout = close_authority, trade_begin = capture_trade_before,
                                  pc_release_begin = release_begin, pc_release = release_done,
-                                 hatch = capture_hatch})
+                                 hatch = capture_hatch,
+                                 nature_change_begin = nature_begin, nature_change = nature_done})
         return sig_src
     end
 
@@ -1341,6 +1389,9 @@ function Client.new(p)
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL
             st.trade = sig.trade_reset_epoch == trade_reset_epoch and sig.trade_before or nil
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
+        elseif k == "nature_change" and sig.nature_before and sig.nature_epoch == trade_reset_epoch then
+            nature_completed = {before=sig.nature_before, after=sig.nature_after, epoch=trade_reset_epoch}
+            f.nature = true
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3
         -- evolution keeps PID:OTID, so the key is unchanged and the next tick carries the
