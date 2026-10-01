@@ -4084,7 +4084,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 44, "difficulty": 50}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 44, "difficulty": 50}]
     },
     "304": {
       "const": "TRAINER_CAMPER_MICKEY_3",
@@ -5416,7 +5416,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 40, "difficulty": 50}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 40, "difficulty": 50}]
     },
     "415": {
       "const": "TRAINER_PSYCHIC_M_JARED",
@@ -5488,7 +5488,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 42, "difficulty": 50, "ability_override": "TRPOKE_ABILITY_OVERRIDE_SECOND"}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 42, "difficulty": 50, "ability_override": "TRPOKE_ABILITY_OVERRIDE_SECOND"}]
     },
     "421": {
       "const": "TRAINER_BIRD_KEEPER_GS_BRET",
@@ -5800,7 +5800,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 38, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’D", "level": 45, "difficulty": 50}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 38, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’d", "level": 45, "difficulty": 50}]
     },
     "447": {
       "const": "TRAINER_BIRD_KEEPER_GS_VANCE_2",
@@ -7600,7 +7600,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 36, "difficulty": 50}, {"species_id": 22, "name": "Fearow", "level": 36, "difficulty": 50}, {"species_id": 17, "name": "Pidgeotto", "level": 37, "difficulty": 50}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 36, "difficulty": 50}, {"species_id": 22, "name": "Fearow", "level": 36, "difficulty": 50}, {"species_id": 17, "name": "Pidgeotto", "level": 37, "difficulty": 50}]
     },
     "597": {
       "const": "TRAINER_BIRD_KEEPER_GS_EASTON",
@@ -7672,7 +7672,7 @@
       "double": false,
       "ai_flags": 1,
       "items": [{"id": 57, "name": "X Attack"}],
-      "party": [{"species_id": 83, "name": "Farfetch’D", "level": 50, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’D", "level": 52, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’D", "level": 53, "difficulty": 50}]
+      "party": [{"species_id": 83, "name": "Farfetch’d", "level": 50, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’d", "level": 52, "difficulty": 50}, {"species_id": 83, "name": "Farfetch’d", "level": 53, "difficulty": 50}]
     },
     "603": {
       "const": "TRAINER_PICNICKER_ERIN_4",

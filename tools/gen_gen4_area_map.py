@@ -144,6 +144,9 @@ def cli(build, description: str) -> int:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
     out_dir = Path(args.out_dir)
+    if not files:  # an empty file set would make all([]) pass vacuously
+        print("FAIL: the generator produced no files", file=sys.stderr)
+        return 1
     results = [finish(out_dir / name, text, args.check) for name, text in files.items()]  # no short-circuit: report every file
     return 0 if all(results) else 1
 
@@ -173,8 +176,9 @@ def slug(text: str) -> str:
 
 
 def titled(name: str) -> str:
-    """msg names are upper-case (BULBASAUR, MR. MIME, HO-OH): Capitalise each word/hyphen part."""
-    return re.sub(r"[A-Za-z]+", lambda m: m.group(0)[0].upper() + m.group(0)[1:].lower(), name)
+    """msg names are upper-case (BULBASAUR, MR. MIME, HO-OH, FARFETCH'D): Capitalise each word/hyphen part;
+    a letter after an apostrophe stays lower-case (Farfetch'd)."""
+    return re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*", lambda m: m.group(0)[0].upper() + m.group(0)[1:].lower(), name)
 
 
 def _field(body: str, name: str) -> str:
@@ -246,6 +250,12 @@ def build_model(clone: Path) -> dict:
             unmapped[mid] = f"unused-only map section ({aid})"
             map_area[mid] = None
 
+    # `_UNUSED_` dummy maps stay in the maps->area table (map_area) but are not listed as a place in the area:
+    # they live in the separate `unused_maps` field.
+    for v in areas.values():
+        v["unused_maps"] = [m for m in v["maps"] if "UNUSED" in maps.rows[m]["const"]]
+        v["maps"] = [m for m in v["maps"] if m not in v["unused_maps"]]
+
     # D10: Safari sub-areas. They own no static map; the parent owns the 15 Safari maps.
     areas["safari_zone"]["safari_area_resolution"] = SAFARI_RESOLUTION
     for name in SAFARI_AREAS:
@@ -258,6 +268,7 @@ def build_model(clone: Path) -> dict:
             "safari_area_const": f"SAFARI_ZONE_AREA_{name}",
             "safari_area_id": safari_ids[f"SAFARI_ZONE_AREA_{name}"],
             "maps": [],
+            "unused_maps": [],
         }
     return {"maps": maps, "areas": areas, "map_area": map_area, "unmapped": unmapped, "sec_ids": sec_ids, "sec_name": sec_name}
 

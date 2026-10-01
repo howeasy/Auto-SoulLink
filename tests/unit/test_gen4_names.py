@@ -156,7 +156,7 @@ def test_hgss_names(hgss):
     sp = hgss["species"]
     assert sp["1"] == {"name": "BULBASAUR", "dex": 1}
     assert sp["493"] == {"name": "ARCEUS", "dex": 493}
-    assert sp["494"] == {"name": "Egg", "dex": None}
+    assert sp["494"] == {"name": "Egg", "dex": None, "placeholder": True}
     assert hgss["moves"]["467"] == "Shadow Force"
     assert hgss["items"]["1"] == "Master Ball"
     assert hgss["abilities"]["1"] == "Stench"
@@ -190,3 +190,42 @@ def test_check_ok_then_red_on_one_edited_name(mode, tmp_path):
     assert doc["moves"]["467"] in text
     target.write_text(text.replace('"Shadow Force"', '"Shadow Farce"', 1), encoding="utf-8", newline="\n")
     assert g.main([mode, "--check", "--out-dir", str(out)]) == 1
+
+
+# ── G2 review fixes (OMP cx-e1b48fc8): form-chain guard, placeholders, unnamed forms ─────────────
+
+
+def test_form_chain_guard_raises_a_named_error_on_a_cycle_or_missing_root():
+    """Revert: restore the bare `while root not in dex: root = bases[root]` -> the cycle never ends, the
+    missing root is a KeyError instead of FormChainError."""
+    dex = {1: 1, 2: 2}
+    assert g.canonical_root(10, {10: 1}, dex) == 1
+    assert g.canonical_root(11, {11: 10, 10: 2}, dex) == 2  # a form that maps to another form
+    with pytest.raises(g.FormChainError, match="cyclic"):
+        g.canonical_root(10, {10: 11, 11: 12, 12: 10}, dex)
+    with pytest.raises(g.FormChainError, match="cyclic"):
+        g.canonical_root(10, {10: 10}, dex)
+    with pytest.raises(g.FormChainError, match="ends at 99"):
+        g.canonical_root(10, {10: 99}, dex)
+
+
+def test_placeholder_ids_are_marked_and_forms_keep_the_raw_name():
+    sp = committed("hge")["species"]
+    placeholders = sorted(int(k) for k, v in sp.items() if v.get("placeholder"))
+    assert placeholders == [0, *range(494, 544), 1314, 1315] and len(placeholders) == 53
+    assert all(v["dex"] is None and "base" not in v for k, v in sp.items() if v.get("placeholder"))
+    assert sp["494"]["name"] == "Egg" and sp["0"]["name"] == "-----"
+    unnamed = {k: v for k, v in sp.items() if "raw_name" in v}
+    assert len(unnamed) == 398 and all(v["raw_name"] == "-----" and "base" in v for v in unnamed.values())
+    assert sp["1076"] == {"name": "Venusaur (form 1076)", "raw_name": "-----", "dex": 3, "base": 3}
+    assert not any(v["name"] == "-----" and "base" in v for v in sp.values()), "an unnamed form kept the dash name"
+    assert [k for k, v in sp.items() if v["name"] == "-----"] == [str(i) for i in (0, *range(496, 544), 1314, 1315)]
+    hgss = committed("hgss")["species"]
+    assert sorted(int(k) for k, v in hgss.items() if v.get("placeholder")) == [0, 494, 495]
+
+
+def test_unnamed_form_fallback_is_applied_by_the_generator(hge):
+    """The committed-JSON test above cannot see a generator revert; this one regenerates (skips without the ROM)."""
+    sp = hge["species"]
+    assert sp["1076"]["name"] == "Venusaur (form 1076)" and sp["1076"]["raw_name"] == "-----"
+    assert sum(1 for v in sp.values() if v.get("placeholder")) == 53

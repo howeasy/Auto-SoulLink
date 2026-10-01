@@ -17,11 +17,16 @@ local BLOCK, HEADER, TAIL = 0x20, 8, 0x88
 -- Variants as data (mirrors gen4_codec.PROFILES): exp field width, hge 9-bit ability (abilityMSB
 -- = bit 31 of the block A exp word) and hge hidden-ability bit (block B +0x19 bit 6; bit 0 is
 -- HGSS_shinyLeaves, bit 7 the crit flag: pret pokemon_types_def.h:96-98, fork pokemon.h:21-23).
+-- max_species / max_item / max_move bound the box_plausible guard (highest valid id, from the committed
+-- data/games/gen4_*/names.json tables: hgss 493 / 536 / 467; hge counts forms: 1475 / 2684 / 922). Pt has no
+-- names.json here: its species/move bounds are the HGSS ones and its item bound is the HGSS table size (a
+-- safe upper bound, a too-small one would flag real mons).
 Pk4.PROFILES = {
-    hgss = { exp_bits = 32, ability_msb = false, hidden_ability = false },
-    hge  = { exp_bits = 21, ability_msb = true,  hidden_ability = true },
-    pt   = { exp_bits = 32, ability_msb = false, hidden_ability = false },
+    hgss = { exp_bits = 32, ability_msb = false, hidden_ability = false, max_species = 493,  max_item = 536,  max_move = 467 },
+    hge  = { exp_bits = 21, ability_msb = true,  hidden_ability = true,  max_species = 1475, max_item = 2684, max_move = 922 },
+    pt   = { exp_bits = 32, ability_msb = false, hidden_ability = false, max_species = 493,  max_item = 536,  max_move = 467 },
 }
+local MAX_EXP = 1640000 -- exp at level 100 on the largest curve (Fluctuating)
 
 -- Row = (pid >> 13) & 31 (== (pid & 0x3E000) >> 13); rows 24-31 repeat rows 0-7 (% 24).
 -- Column = logical block A..D, value = stored byte offset of that block.
@@ -145,6 +150,7 @@ function Pk4.mon_key(pid, otid) return string.format("%08X:%08X", pid, otid) end
 -- Extra over the oracle: hidden_ability (hge only; the oracle leaves it undecoded).
 function Pk4.decode_plain(plain, profile)
     local p = type(plain) == "string" and arr(plain) or plain
+    if #p ~= Pk4.BOX_MON_SIZE and #p ~= Pk4.PARTY_MON_SIZE then return nil, "size" end
     local a, b, c, d = HEADER, HEADER + BLOCK, HEADER + 2 * BLOCK, HEADER + 3 * BLOCK
     local pid, flags, csum = u(p, 0, 4), u(p, 4, 2), u(p, 6, 2)
     local otid, expword = u(p, a + 4, 4), u(p, a + 8, 4)
@@ -168,7 +174,7 @@ function Pk4.decode_plain(plain, profile)
         friendship = p[a + 0x0C + 1], markings = p[a + 0x0E + 1], language = p[a + 0x0F + 1],
         evs = slice(p, a + 0x10, 6),
         moves = words(p, b, 4), pp = slice(p, b + 8, 4), pp_ups = slice(p, b + 12, 4),
-        ivs = ivs, is_egg = (ivword >> 30) & 1 == 1, has_nickname = (ivword >> 31) & 1 == 1,
+        ivs = ivs, is_egg = ((ivword >> 30) & 1) == 1, has_nickname = ((ivword >> 31) & 1) == 1,
         fateful = fgf & 1, gender = (fgf >> 1) & 3, form = fgf >> 3,
         nickname_raw = words(p, c, 11), origin_game = origin, ot_name_raw = words(p, d, 8),
         ball = ball, met_level = p[d + 0x1C + 1] & 0x7F, ot_gender = p[d + 0x1C + 1] >> 7,
@@ -178,6 +184,12 @@ function Pk4.decode_plain(plain, profile)
         nature = pid % 25,
         shiny = (sid ~ tid ~ (pid >> 16) ~ (pid & 0xFFFF)) < 8,
     }
+    -- The box checksum is order-invariant, so a wrong PID decrypts to scrambled blocks without a refusal;
+    -- this range check on the decoded head is the guard (the party tail has its own, tail_plausible).
+    local ok = mon.species >= 1 and mon.species <= (profile.max_species or math.huge)
+        and mon.held_item <= (profile.max_item or math.huge) and mon.exp <= MAX_EXP and mon.met_level <= 100
+    for _, mv in ipairs(mon.moves) do ok = ok and mv <= (profile.max_move or math.huge) end
+    mon.box_plausible = ok
     if profile.hidden_ability then mon.hidden_ability = (p[b + 0x19 + 1] >> 6) & 1 end
     if #p == Pk4.PARTY_MON_SIZE then
         mon.status, mon.level, mon.capsule = u(p, TAIL, 4), p[TAIL + 4 + 1], p[TAIL + 5 + 1]

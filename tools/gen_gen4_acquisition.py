@@ -37,6 +37,7 @@ Exit: 0 ok, 1 drift / wrong pin / unclassified producer / differing script membe
 from __future__ import annotations
 
 import argparse
+import bisect
 import functools
 import hashlib
 import re
@@ -77,6 +78,16 @@ ZONE_POLICY = {
     "safari": {"zone": "own", "plan": "D10", "note": "one zone per Safari area, resolved at runtime"},
 }
 HV = {"heartgold": 7, "soulsilver": 8}  # include/config.h VERSION_HEARTGOLD/SOULSILVER, compared by GetGameVersion
+SITE_COUNT = 61  # script sites for COMMANDS at the pin (docs/gen4/research/acquisition.md)
+# Mon-making script commands deliberately outside COMMANDS. Key = command; a count change fails generation so
+# new producers cannot appear unnoticed.
+OUT_OF_SCOPE = {
+    "GiveDaycareEgg": {"count": 1, "why": "daycare egg grant: the hatch is the O-15 gift catch (see C producer GiveEggToPlayer)"},
+    "RetrieveDaycareMon": {"count": 1, "why": "daycare withdrawal: the mon already has a Soul Link key (see C producer open_question)"},
+    "MysteryGift": {"count": 14, "why": "external distribution, not observable (src/scrcmd_mystery_gift.c)"},
+    "NPCTradeExec": {"count": 11, "why": "executes the LoadNPCTrade record; counted 1:1 with LoadNPCTrade per file, the exchange itself is the LoadNPCTrade site"},
+    "GetFossilPokemon": {"count": 2, "why": "fills the fossil species var that a GiveMon site consumes (resolved as `candidates` via sFossilPokemonMap)"},
+}
 INPUTS = [
     "include/constants/maps.h",
     "src/data/map_headers.h",
@@ -179,6 +190,38 @@ def entry_start(lines: list[str], idx: int) -> int:
     return idx
 
 
+BLOCK_END = re.compile(r"^\s*(End|Return|GoTo|EndMovement|ScrDefEnd|InitScriptEntryEnd|\.balign)\b")
+
+
+def entry_roots(lines: list[str], hit: int) -> list[str]:
+    """Script entries (scr_seq_* labels) that can reach line `hit`: walk label references (Call/GoTo*) and
+    fall-through backwards from the hit's label block. Shared subroutines (e.g. `Call _0801` from three
+    starter-choice entries) have several roots; entry_start() alone would silently pick the textually nearest."""
+    lab = [(i, m[1]) for i, ln in enumerate(lines) if (m := re.match(r"^(\w+):\s*$", ln))]
+    starts, names = [i for i, _ in lab], [n for _, n in lab]
+    refs: dict[str, list[int]] = {}
+    for i, ln in enumerate(lines):
+        if not re.match(r"^\w+:\s*$", ln):
+            for w in set(re.findall(r"\w+", ln)):
+                refs.setdefault(w, []).append(i)
+    blk = lambda i: bisect.bisect_right(starts, i) - 1  # noqa: E731
+    seen, todo = {blk(hit)}, [blk(hit)]
+    while todo:
+        k = todo.pop()
+        if k < 0:
+            continue
+        preds = [blk(i) for i in refs.get(names[k], [])]
+        if k > 0:
+            last = next((lines[x] for x in range(starts[k] - 1, starts[k - 1], -1) if lines[x].strip()), "")
+            if not BLOCK_END.match(last):
+                preds.append(k - 1)  # falls into this label
+        for q in preds:
+            if q >= 0 and q not in seen:
+                seen.add(q)
+                todo.append(q)
+    return sorted(names[k] for k in seen if k >= 0 and names[k].startswith("scr_seq_"))
+
+
 def assignments(lines: list[str], lo: int, hi: int, var: str, ctx: Ctx) -> list[tuple[int, str, object]]:
     """Writes to `var` in lines[lo:hi]: (line, 'lit', value) for SetVar/SetOrCopyVar literals,
     (line, 'cmd', command) for commands that fill it at runtime (Get*, CopyVar, ...)."""
@@ -244,6 +287,9 @@ def resolve(arg: str, kind: str, lines: list[str], hit: int, ctx: Ctx):
     if not re.match(r"^VAR_", var):
         return {"resolution": "unresolved", "reason": f"unrecognised argument {arg!r}"}
     lo = entry_start(lines, hit)
+    roots = entry_roots(lines, hit)
+    if roots and roots != [lines[lo].rstrip(":")]:
+        return {"resolution": "unresolved", "var": var, "reason": "cross_entry", "detail": f"the site is shared code reached from {len(roots)} script entries; {var} is set by the caller, so it is not statically one value", "entries": roots}
     vp = version_paths(lines, lo, hit, ctx)
     if isinstance(vp, tuple) and vp[0] == "unparsed":
         return {"resolution": "unresolved", "reason": vp[1]}
@@ -263,11 +309,19 @@ def resolve(arg: str, kind: str, lines: list[str], hit: int, ctx: Ctx):
                 for ver in HV:
                     per.setdefault(ver, wrap(pre[-1][2]))
                 return {"resolution": "version_branch", "by_version": per, "branch_line": g_line}
-    # Last writes to the variable before the site, file-wide (shared code is reached from several
-    # entries). A literal 0 is a reset, not a value. If the last real write is a runtime command the
-    # value is runtime; otherwise the trailing run of literal writes is the candidate set.
-    events = [a for a in assignments(lines, 0, hit, var, ctx) if not (a[1] == "lit" and a[2] == 0)]
+    # Last writes to the variable before the site, WITHIN the site's own script entry (lo = its
+    # scr_seq_* label). A literal 0 is a reset, not a value. If the last real write is a runtime
+    # command the value is runtime; otherwise the trailing run of literal writes is the candidate set.
+    # A write that exists only in an EARLIER entry is never promoted: that entry is a different
+    # script, so the site is unresolved (`cross_entry`).
+    def real(a: tuple) -> bool:
+        return not (a[1] == "lit" and a[2] == 0)
+
+    events = [a for a in assignments(lines, lo, hit, var, ctx) if real(a)]
     if not events:
+        outside = [a[0] for a in assignments(lines, 0, lo, var, ctx) if real(a)]
+        if outside:
+            return {"resolution": "unresolved", "var": var, "reason": "cross_entry", "detail": f"{var} is written only outside this script entry (lines {outside}; the entry starts at line {lo + 1})", "outside_entry_lines": outside}
         return {"resolution": "unresolved", "var": var, "reason": f"no assignment of {var} before the site"}
     if events[-1][1] == "cmd":
         line, _k, cmd = events[-1]
@@ -431,13 +485,15 @@ def build_doc(clone: Path) -> dict:
     script_dir = clone / "files/fielddata/script/scr_seq"
     files = sorted(script_dir.glob("*.s"))
     sites: list[dict] = []
-    branch_files: dict[str, list[int]] = {}
+    branch_files: set[str] = set()  # script files holding a site AND a GetGameVersion branch
     for path in files:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         hits = [(i, SCAN_RE.match(line)) for i, line in enumerate(lines)]
         hits = [(i, m) for i, m in hits if m]
         if not hits:
             continue
+        if any("GetGameVersion" in ln for ln in lines):
+            branch_files.add(path.name)
         m = re.match(r"scr_seq_(\d+)_(\w+?)(?:_hdr)?\.s$", path.name)
         token = m[2] if m else None
         assert token in ctx.maps.by_token, f"{path.name}: script token {token!r} names no map"
@@ -490,10 +546,10 @@ def build_doc(clone: Path) -> dict:
             elif cmd == "LoadNPCTrade":
                 site |= {"npc_record": int(args[0])}
             site["status"] = status_of(site)
+            assert_in_own_entry(site, lines, i)
             sites.append(site)
-            if re.search(r"GetGameVersion", "\n".join(lines)):
-                branch_files.setdefault(path.name, [])
-    assert len(sites) == sum(Counter(s["command"] for s in sites).values())
+    assert len(sites) == SITE_COUNT, f"script site count {len(sites)} != pinned {SITE_COUNT}"
+    out_of_scope = scan_out_of_scope(files)
 
     # resolve loan species from the NPC record and mark them resolved
     records = npc_records(ctx, sites)
@@ -551,6 +607,7 @@ def build_doc(clone: Path) -> dict:
             "scope": "bounded candidate inventory: script sites for the 9 commands plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)",
         },
         "zone_policy": ZONE_POLICY,
+        "out_of_scope_commands": out_of_scope,
         "special_modes": {
             "bug_contest": {
                 "area": "bug_catching_contest",
@@ -573,6 +630,36 @@ def build_doc(clone: Path) -> dict:
     return doc
 
 
+def assert_in_own_entry(site: dict, lines: list[str], hit: int) -> None:
+    """Every resolution that cites `set_at_lines` must cite writes inside the site's own script entry
+    (a write in another entry is a different script: resolve() reports that as cross_entry)."""
+    lo = entry_start(lines, hit)
+    for field, v in site.items():
+        if isinstance(v, dict) and v.get("set_at_lines"):
+            bad = [n for n in v["set_at_lines"] if not (lo < n <= hit)]  # 1-based line n is index n-1 >= lo
+            assert not bad, f"{site['id']} {field}: set_at_lines {bad} lie outside the site's entry (starts at line {lo + 1})"
+
+
+def scan_out_of_scope(files: list[Path]) -> dict:
+    """Mon-making script commands that are NOT in COMMANDS, with counts + file:line pinned so growth fails
+    loudly. Also pins LoadNPCTrade / NPCTradeExec 1:1 per file (the exchange record is loaded then executed)."""
+    pat = re.compile(r"^\s*(" + "|".join([*OUT_OF_SCOPE, "LoadNPCTrade"]) + r")\b")
+    found: dict[str, list[str]] = {c: [] for c in [*OUT_OF_SCOPE, "LoadNPCTrade"]}
+    per_file = {"LoadNPCTrade": Counter(), "NPCTradeExec": Counter()}
+    for f in files:
+        for n, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            if m := pat.match(line):
+                found[m[1]].append(f"{f.name}:{n}")
+                if m[1] in per_file:
+                    per_file[m[1]][f.name] += 1
+    assert per_file["LoadNPCTrade"] == per_file["NPCTradeExec"], f"LoadNPCTrade / NPCTradeExec are not 1:1 per file: {dict(per_file['LoadNPCTrade'])} vs {dict(per_file['NPCTradeExec'])}"
+    out = {}
+    for cmd, spec in OUT_OF_SCOPE.items():
+        assert len(found[cmd]) == spec["count"], f"out-of-scope command {cmd}: {len(found[cmd])} sites, pinned {spec['count']} ({found[cmd]})"
+        out[cmd] = {"count": len(found[cmd]), "sites": found[cmd], "why": spec["why"]}
+    return out
+
+
 def status_of(site: dict) -> str:
     states = [v["resolution"] for k, v in site.items() if isinstance(v, dict) and "resolution" in v]
     for bad in ("unresolved", "candidates", "version_branch"):
@@ -585,7 +672,7 @@ def unresolved_reason(site: dict) -> str:
     parts = []
     for k, v in site.items():
         if isinstance(v, dict) and v.get("resolution") in ("unresolved", "candidates"):
-            parts.append(f"{k}: {v.get('reason') or v.get('runtime') or 'candidate set, the runtime choice is not statically known'}")
+            parts.append(f"{k}: {v.get('reason') or v.get('runtime') or 'candidate set, the runtime choice is not statically known'}" + (f" ({v['detail']})" if v.get("detail") else ""))
     return "; ".join(parts)
 
 

@@ -108,7 +108,9 @@ def test_real_save_records_match_the_python_oracle(pk4, which):
         assert bytes(py(plain_lua)) == plain_py
         assert bytes(py(enc_fn(plain_lua))) == raw, "encrypt(decrypt(x)) != x"
         oracle = (codec.decode_party_mon if party else codec.decode_box_mon)(raw, prof)
-        assert_matches_oracle(decode_lua(pk4, raw, profile, party), oracle)
+        got = decode_lua(pk4, raw, profile, party)
+        assert_matches_oracle(got, oracle)
+        assert got["box_plausible"] is True, f"{which}: a real record was flagged implausible (species {got['species']})"
         decoded += 1
     assert decoded, f"{which}: no populated slot to compare (the test would prove nothing)"
 
@@ -239,3 +241,75 @@ def test_module_loads_with_no_globals_leaked():
     before = set(py(dump()))
     lua.eval("function(s) return assert(load(s, '=pk4'))() end")(MODULE.read_text(encoding="utf-8"))
     assert set(py(dump())) == before
+
+
+# -- G2 review fixes (OMP cx-e1b48fc8) -----------------------------------------------------------
+PROFILE_NAMES = {"hgss": "gen4_hgss", "hge": "gen4_hge"}
+
+
+def test_decode_plain_short_or_long_input_is_a_size_refusal_not_a_raise(pk4):
+    """Revert: delete the size guard at the top of decode_plain -> lupa raises (nil index) on a short input."""
+    _, mod = pk4
+    for n in (0, 10, 0x87, 0x89, 0xEB, 0xED):
+        got = mod.decode_plain(b"\0" * n, mod.PROFILES.hgss)
+        assert tuple(got) == (None, "size"), n
+    assert tuple(mod.decode_box_mon(b"\0" * 10, mod.PROFILES.hgss)) == (None, "size")
+    raw = enc(build_plain(0xDEADBEEF, party=False))
+    plain, _why = mod.decrypt_box(raw), None
+    assert mod.decode_plain(plain, mod.PROFILES.hgss) is not None  # the guard does not refuse a real record
+
+
+def test_egg_and_nickname_flags_decode_and_are_parenthesised(pk4):
+    """The two flag reads must not rely on operator precedence. The decode equality is the behaviour
+    control; the source check is the revert control (the precedence-dependent form decodes the same in
+    Lua 5.3+ but is the one that throws under the C-style parse)."""
+    _, mod = pk4
+    p = bytearray(build_plain(0xDEADBEEF, party=False))
+    struct.pack_into("<I", p, 8 + 0x20 + 0x10, 0x4000_0000 | 0x1F)  # egg bit 30 only, no nickname flag
+    raw = enc(bytes(p))
+    got = decode_lua(pk4, raw, "hgss", False)
+    assert got["is_egg"] is True and got["has_nickname"] is False
+    assert_matches_oracle(got, codec.decode_box_mon(raw, codec.PROFILES["hgss"]))
+    src = MODULE.read_text(encoding="utf-8")
+    assert "((ivword >> 30) & 1) == 1" in src and "((ivword >> 31) & 1) == 1" in src
+
+
+def test_box_plausible_flags_a_scrambled_box_record_that_the_checksum_cannot(pk4):
+    """Revert: make `mon.box_plausible = true` (or drop the species/held-item/move bounds) -> False case fails."""
+    _, mod = pk4
+    good = enc(build_plain(0x0002_0000 | 0x77, party=True))
+    bad = bytearray(good)
+    struct.pack_into("<I", bad, 0, 0x0004_0000 | 0x77)  # wrong PID: other shuffle row, same checksum-valid sum
+    bad = bytes(bad)
+    assert tuple(mod.decrypt_box(bad[:0x88]))[0] is not None  # the checksum did NOT catch it
+    assert py(mod.decode_box_mon(good[:0x88], mod.PROFILES.hgss))["box_plausible"] is True
+    assert py(mod.decode_box_mon(bad[:0x88], mod.PROFILES.hgss))["box_plausible"] is False
+    assert py(mod.decode_party_mon(bad, mod.PROFILES.hgss))["box_plausible"] is False
+    assert py(mod.decode_party_mon(good, mod.PROFILES.hgss))["box_plausible"] is True
+
+
+def test_box_plausible_bounds_come_from_the_profile(pk4):
+    """hge counts forms (species up to 1475, items up to 2684); the same record is implausible on hgss."""
+    _, mod = pk4
+    raw = enc(build_plain(0x0001_0001, party=False, species=1400))
+    assert py(mod.decode_box_mon(raw, mod.PROFILES.hge))["box_plausible"] is True
+    assert py(mod.decode_box_mon(raw, mod.PROFILES.hgss))["box_plausible"] is False
+    for species in (0, 494, 1476):
+        r = enc(build_plain(0x0001_0001, party=False, species=species))
+        assert py(mod.decode_box_mon(r, mod.PROFILES.hgss))["box_plausible"] is False, species
+    over_exp = enc(build_plain(0x0001_0001, party=False, exp=2_000_000))
+    assert py(mod.decode_box_mon(over_exp, mod.PROFILES.hgss))["box_plausible"] is False
+
+
+@pytest.mark.parametrize("profile", sorted(PROFILE_NAMES))
+def test_profile_bounds_equal_the_committed_names_tables(pk4, profile):
+    import json
+
+    _, mod = pk4
+    names = json.loads((ROOT / "data/games" / PROFILE_NAMES[profile] / "names.json").read_text(encoding="utf-8"))
+    p = mod.PROFILES[profile]
+    top_species = max(int(k) for k, v in names["species"].items() if not v.get("placeholder"))
+    assert p.max_species == (top_species if profile == "hge" else 493)
+    assert p.max_item == len(names["items"]) - 1 and p.max_move == len(names["moves"]) - 1
+    if profile == "hge":
+        assert len(names["species"]) == 1476 and p.max_species == len(names["species"]) - 1

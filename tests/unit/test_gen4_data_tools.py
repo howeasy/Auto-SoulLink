@@ -164,14 +164,14 @@ def test_area_map_and_locations_counts():
 
 
 def mid_in(area: dict, aid: str, mid: int) -> bool:
-    return mid in area["areas"][aid]["maps"]
+    return mid in area["areas"][aid]["maps"] or mid in area["areas"][aid]["unused_maps"]
 
 
 def test_special_zones_bug_contest_and_safari_are_their_own_areas():
     area = load("area_map.json")
     assert area["areas"]["bug_catching_contest"]["maps"] == [487]
     assert area["areas"]["bug_catching_contest"]["special"] == "bug_contest"
-    assert area["areas"]["national_park"]["maps"] == [96, 488], "the contest map must not stay in National Park"
+    assert area["areas"]["national_park"]["maps"] == [96] and area["areas"]["national_park"]["unused_maps"] == [488], "the contest map must not stay in National Park"
     sub = {a: v for a, v in area["areas"].items() if v["parent"] == "safari_zone"}
     assert len(sub) == 12 and all(v["maps"] == [] and v["special"] == "safari" for v in sub.values())
     assert len(area["areas"]["safari_zone"]["maps"]) == 15
@@ -533,3 +533,207 @@ def test_real_member_hash_mismatch_fails_generation(hge_inputs, monkeypatch, cap
     monkeypatch.setattr(acq, "narc_member_hashes", flipped)
     rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
     assert rc == 1 and "member 21" in err and "differs" in err
+
+
+# ── G2 review fixes (OMP cx-ec4c0e87): cross-entry resolution, namespaces, guards ─────────────────
+# Each control below names the revert that must turn it red.
+
+
+class _StubCtx:
+    """The three things resolve() reads from Ctx."""
+
+    species = {"SPECIES_A": 1, "SPECIES_B": 2}
+    fossils: dict = {}
+
+    @staticmethod
+    def sp(sid: int) -> dict:
+        return {"id": sid, "name": f"S{sid}"}
+
+
+def _script(text: str) -> list[str]:
+    return text.strip("\n").splitlines()
+
+
+def _site(lines: list[str]) -> int:
+    return next(i for i, ln in enumerate(lines) if "GiveMon" in ln)
+
+
+def test_resolve_does_not_borrow_a_write_from_another_entry():
+    """Revert: scan from line 0 instead of entry_start() in resolve() -> literal Species A (wrong script)."""
+    lines = _script("""
+scr_seq_X_000:
+	SetVar VAR_SPECIAL_x8004, SPECIES_A
+	End
+
+scr_seq_X_001:
+	GiveMon VAR_SPECIAL_x8004, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+""")
+    r = acq.resolve("VAR_SPECIAL_x8004", "species", lines, _site(lines), _StubCtx)
+    assert r["resolution"] == "unresolved" and r["reason"] == "cross_entry" and r["outside_entry_lines"] == [2]
+    own = _script("""
+scr_seq_X_000:
+	SetVar VAR_SPECIAL_x8004, SPECIES_A
+	End
+
+scr_seq_X_001:
+	SetVar VAR_SPECIAL_x8004, SPECIES_B
+	GiveMon VAR_SPECIAL_x8004, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+""")
+    r = acq.resolve("VAR_SPECIAL_x8004", "species", own, _site(own), _StubCtx)
+    assert r["resolution"] == "literal" and r["value"]["id"] == 2 and r["set_at_lines"] == [6]
+
+
+def test_resolve_refuses_a_shared_subroutine_with_several_callers():
+    """The Oak's Lab shape: entries each SetVar then `Call _0801`, the GiveMon lives in _0801 after the LAST
+    entry. Textually the nearest entry owns it, but it is reached from all of them. Revert: drop the
+    entry_roots() check -> literal for the last entry's value only."""
+    lines = _script("""
+scr_seq_X_000:
+	SetVar VAR_SPECIAL_x8004, SPECIES_A
+	Call _0801
+	End
+
+scr_seq_X_001:
+	SetVar VAR_SPECIAL_x8004, SPECIES_B
+	Call _0801
+	End
+
+_0801:
+	GiveMon VAR_SPECIAL_x8004, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	Return
+""")
+    assert acq.entry_roots(lines, _site(lines)) == ["scr_seq_X_000", "scr_seq_X_001"]
+    r = acq.resolve("VAR_SPECIAL_x8004", "species", lines, _site(lines), _StubCtx)
+    assert r["resolution"] == "unresolved" and r["reason"] == "cross_entry" and r["entries"] == ["scr_seq_X_000", "scr_seq_X_001"]
+
+
+def test_resolve_keeps_a_local_label_inside_one_entry_literal():
+    """Control for the control above: a jump-only label called only from its own entry stays resolvable."""
+    lines = _script("""
+scr_seq_X_000:
+	SetVar VAR_SPECIAL_x8004, SPECIES_A
+	Call _0801
+	End
+
+_0801:
+	GiveMon VAR_SPECIAL_x8004, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	Return
+""")
+    assert acq.entry_roots(lines, _site(lines)) == ["scr_seq_X_000"]
+    r = acq.resolve("VAR_SPECIAL_x8004", "species", lines, _site(lines), _StubCtx)
+    assert r["resolution"] == "literal" and r["set_at_lines"] == [2]
+
+
+def test_generator_asserts_set_at_lines_stay_inside_the_entry():
+    """Revert: delete the assert in assert_in_own_entry() -> no raise."""
+    lines = _script("""
+scr_seq_X_000:
+	SetVar VAR_SPECIAL_x8004, SPECIES_A
+	End
+
+scr_seq_X_001:
+	SetVar VAR_SPECIAL_x8004, SPECIES_B
+	GiveMon VAR_SPECIAL_x8004, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+""")
+    bad = {"id": "x", "species": {"resolution": "literal", "value": 1, "set_at_lines": [2]}}
+    with pytest.raises(AssertionError, match="outside the site's entry"):
+        acq.assert_in_own_entry(bad, lines, _site(lines))
+    acq.assert_in_own_entry({"id": "x", "species": {"resolution": "literal", "set_at_lines": [6]}}, lines, _site(lines))
+
+
+def test_committed_oak_lab_starter_is_cross_entry_not_candidates():
+    doc = load("acquisition.json")
+    by_id = {s["id"]: s for s in doc["script_sites"]}
+    site = by_id["scr_seq_0740_T01R0301:629"]
+    assert site["status"] == "unresolved" and site["species"]["reason"] == "cross_entry" and len(site["species"]["entries"]) == 3
+    assert "set_at_lines" not in site["species"]
+    assert site["id"] in {u["id"] for u in doc["unresolved"]}
+    assert doc["inventory"]["status_counts"]["unresolved"] == 1
+    # every set_at_lines citation in the committed data is one increasing run ending before the site
+    for s in by_id.values():
+        for v in s.values():
+            if isinstance(v, dict) and v.get("set_at_lines"):
+                assert v["set_at_lines"] == sorted(v["set_at_lines"]) and v["set_at_lines"][-1] < s["line"], s["id"]
+
+
+def test_safari_encounter_keys_join_area_map_and_acquisition(clone):
+    """Revert: drop the `safari_` prefix in encounters safari_for() -> keys are bare ('plains')."""
+    assert set(json.loads(enc.build(clone)["encounters.json"])["safari"]["areas"]) == set(load("encounters.json")["safari"]["areas"])  # generator, not just the file
+    safari = set(load("encounters.json")["safari"]["areas"])
+    area_sub = {a for a, v in load("area_map.json")["areas"].items() if v["parent"] == "safari_zone"}
+    assert safari == area_sub and len(safari) == 12 and all(k.startswith("safari_") for k in safari)
+    assert safari == set(load("acquisition.json")["special_modes"]["safari"]["areas"])
+
+
+def test_titled_keeps_a_letter_after_an_apostrophe_lowercase():
+    """Revert: use the old r"[A-Za-z]+" pattern -> Farfetch'D."""
+    assert base.titled("FARFETCH'D") == "Farfetch'd" and base.titled("FARFETCH’D") == "Farfetch’d"
+    assert base.titled("MR. MIME") == "Mr. Mime" and base.titled("HO-OH") == "Ho-Oh" and base.titled("MIME JR.") == "Mime Jr."
+    assert "’D" not in (DATA / "trainers.json").read_text(encoding="utf-8")
+
+
+def test_site_count_is_a_real_pin(clone, monkeypatch):
+    """Revert: restore the tautology `len(sites) == sum(Counter(...))` -> a changed count is not caught."""
+    assert acq.SITE_COUNT == 61
+    monkeypatch.setattr(acq, "SITE_COUNT", 60)
+    with pytest.raises(AssertionError, match="script site count 61 != pinned 60"):
+        acq.build_doc(clone)
+
+
+def test_out_of_scope_commands_are_counted_and_pinned(clone, monkeypatch, tmp_path):
+    """Revert: delete the count assert in scan_out_of_scope() (or the 1:1 assert) -> no raise."""
+    doc = load("acquisition.json")["out_of_scope_commands"]
+    assert {c: v["count"] for c, v in doc.items()} == {"GiveDaycareEgg": 1, "RetrieveDaycareMon": 1, "MysteryGift": 14, "NPCTradeExec": 11, "GetFossilPokemon": 2}
+    assert all(len(v["sites"]) == v["count"] and all(":" in x for x in v["sites"]) for v in doc.values())
+    files = sorted((clone / "files/fielddata/script/scr_seq").glob("*.s"))
+    assert acq.scan_out_of_scope(files) == doc
+    with monkeypatch.context() as mp:
+        mp.setitem(acq.OUT_OF_SCOPE, "MysteryGift", {**acq.OUT_OF_SCOPE["MysteryGift"], "count": 13})
+        with pytest.raises(AssertionError, match="MysteryGift: 14 sites, pinned 13"):
+            acq.scan_out_of_scope(files)
+    # LoadNPCTrade / NPCTradeExec 1:1 per file: a synthetic file with a load and no exec
+    f = tmp_path / "scr_seq_9999_X.s"
+    f.write_text("scr_seq_X_000:\n\tLoadNPCTrade 1\n\tEnd\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="not 1:1 per file"):
+        acq.scan_out_of_scope([f])
+    committed_loads = sum(1 for s in load("acquisition.json")["script_sites"] if s["command"] == "LoadNPCTrade")
+    assert committed_loads == doc["NPCTradeExec"]["count"]
+
+
+def test_every_map_enc_bank_exists_in_the_bank_table(clone, monkeypatch):
+    """Revert: delete the `set(users) <= set(banks)` assert in encounters build() -> no raise."""
+    real = base.Maps
+
+    class Bogus(real):
+        def __init__(self, c):
+            super().__init__(c)
+            self.rows[next(iter(self.rows))]["enc_bank"] = "NOT_A_BANK"
+
+    monkeypatch.setattr(base, "Maps", Bogus)
+    with pytest.raises(AssertionError, match="NOT_A_BANK"):
+        enc.build(clone)
+
+
+def test_cli_with_no_files_fails(clone, monkeypatch, capsys):
+    """Revert: drop the empty-set guard in cli() -> rc 0 (all([]) is True)."""
+    monkeypatch.setattr(sys, "argv", ["x", "--pret", str(clone), "--check"])
+    assert base.cli(lambda c: {}, "x") == 1
+    assert "no files" in capsys.readouterr().err
+
+
+def test_unused_maps_are_not_listed_as_area_places(clone):
+    """Revert: delete the unused_maps partition in build_model() -> UNUSED consts back in `maps`."""
+    model = base.build_model(clone)  # the generator itself, not just the committed file
+    assert all("UNUSED" not in model["maps"].rows[m]["const"] for v in model["areas"].values() for m in v["maps"])
+    area, loc = load("area_map.json"), load("locations.json")["locations"]
+    total_unused = 0
+    for aid, v in area["areas"].items():
+        assert not any("UNUSED" in loc[str(m)]["const"] for m in v["maps"]), aid
+        assert all("UNUSED" in loc[str(m)]["const"] for m in v["unused_maps"]), aid
+        assert set(v["maps"]).isdisjoint(v["unused_maps"])
+        total_unused += len(v["unused_maps"])
+    assert total_unused == 23 and area["areas"]["national_park"]["unused_maps"] == [488]
+    # the map -> area table still carries them, so the join is maps U unused_maps
+    for mid, aid in area["maps"].items():
+        assert aid is None or int(mid) in area["areas"][aid]["maps"] + area["areas"][aid]["unused_maps"]

@@ -765,12 +765,12 @@
       "map_const": "MAP_PALLET_TOWN_OAKS_LAB",
       "map_token": "T01R0301",
       "area": "pallet_town",
-      "species": {"resolution": "candidates", "var": "VAR_SPECIAL_x8004", "candidates": [{"id": 1, "name": "Bulbasaur"}, {"id": 7, "name": "Squirtle"}, {"id": 4, "name": "Charmander"}], "set_at_lines": [522, 559, 596], "runtime": "which value the script reaches is decided by menu/flag flow"},
+      "species": {"resolution": "unresolved", "var": "VAR_SPECIAL_x8004", "reason": "cross_entry", "detail": "the site is shared code reached from 3 script entries; VAR_SPECIAL_x8004 is set by the caller, so it is not statically one value", "entries": ["scr_seq_T01R0301_007", "scr_seq_T01R0301_008", "scr_seq_T01R0301_009"]},
       "level": {"resolution": "literal", "value": 5},
       "held_item": {"resolution": "literal", "value": 0},
       "form": {"resolution": "literal", "value": 0},
       "ability": {"resolution": "literal", "value": 0},
-      "status": "candidates"
+      "status": "unresolved"
     },
     {
       "id": "scr_seq_0750_T03:396",
@@ -2394,8 +2394,8 @@
     {
       "id": "scr_seq_0740_T01R0301:629",
       "kind": "gift",
-      "status": "candidates",
-      "why": "species: which value the script reaches is decided by menu/flag flow"
+      "status": "unresolved",
+      "why": "species: cross_entry (the site is shared code reached from 3 script entries; VAR_SPECIAL_x8004 is set by the caller, so it is not statically one value)"
     },
     {
       "id": "scr_seq_0755_T03R0101:359",

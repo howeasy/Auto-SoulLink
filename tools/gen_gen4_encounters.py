@@ -171,7 +171,7 @@ def safari_for(sp: Species, areas: list[dict]) -> dict:
                     for b in d["bonus_mons"]
                 ],
             }
-        out[a["area"].removeprefix("SAFARI_ZONE_AREA_").lower()] = {"const": a["area"], **entry}
+        out["safari_" + a["area"].removeprefix("SAFARI_ZONE_AREA_").lower()] = {"const": a["area"], **entry}
     return out
 
 
@@ -191,6 +191,7 @@ def build(clone: Path) -> dict[str, str]:
     for i, e in enumerate(enc):
         token = index[i]
         banks[token] = {"index": i, "json_map": e["map"], "maps": users.get(token, []), "areas": sorted({area_of[m] for m in users.get(token, []) if area_of[m]}), "version_split": has_split(e)}
+    assert set(users) <= set(banks), f"maps name encounter banks that do not exist: {sorted(set(users) - set(banks))}"
     unused = [t for t, b in banks.items() if not b["maps"]]
 
     doc = {
