@@ -496,10 +496,23 @@
   "cleanup": {
     "worktree": "C:/slink-wt/rr-complete",
     "branch": "codex/rr-complete",
-    "status": "PENDING after evidence commit"
+    "git_metadata": "E:/Google Drive/SLink/.git/worktrees/rr-complete",
+    "status": "BLOCKED_BY_AUTOMATIC_APPROVAL_REVIEW",
+    "reason": "blocked by policy",
+    "operation": "Verify exact owned root, unlink five owned cache junction objects, git worktree remove --force, git branch -d after merge reachability check",
+    "execution": "Rejected at CreateProcess before command ran; directory, registration, branch and five junction objects remain. No ACL, trust or alternative deletion bypass attempted.",
+    "verified_at_utc": "2026-10-01T16:08:30.095262+00:00",
+    "source_head": "aab6fb325780e8a4a94b1b33d0f04c74749a51d5",
+    "all_work_integrated": true
   },
   "foreign_untracked_preserved": {
     "lua/memory_gba.lua": "8518b82cf0fd10141c8029d05781e2394e7d5dfe42a27883ccf8e6b7ebe85b55",
     "server/adapters/gen2_crystal.py": "0590a8b52e2e5e0938ca2d7e0206bace50b7ae826de0995eba2933a27ac65d06"
-  }
+  },
+  "delivery_commit": "47f520d8a4feecbf3c39489f4f63cd370c53bb4e",
+  "independent_closing_checks": [
+    "cx-beeb34d1 receipt/headline check",
+    "cx-2eeb55eb current documentation/link/evidence review",
+    "cx-1c0fcf31 executed archive all1364entry hash/CRC check"
+  ]
 }
