@@ -157,3 +157,26 @@ def test_school_approach_is_actual_adjacent_plain_tile_not_assumed_counter():
     assert abs(facts["approach"][0]-npc["x"])+abs(facts["approach"][1]-npc["y"])==1
     # The former (6,4) is two tiles away and cannot directly interact on plain6,3.
     assert facts["approach"]!=[npc["x"],npc["y"]+2]
+
+def test_leading_inactive_restore_does_not_qualify_or_hide_real_pair():
+    r=runner("battle");texts=receipts(r)
+    early='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end'})+'\n'
+    texts['a']=texts['a'].replace('BORROW_SIGNAL ',early+'BORROW_SIGNAL ',1)
+    d.saved_oracle(r,texts)
+    # Keep the actual early LoadPlayerParty, but remove the post-borrow restore.
+    marker='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end'})
+    before,after=texts['a'].rsplit(marker,1)
+    texts['a']=before+after
+    with pytest.raises(RuntimeError,match='begin/end'):d.saved_oracle(r,texts)
+
+@pytest.mark.parametrize('fault',['only_early_end','wrong_begin','extra_distinct_begin'])
+def test_restore_prefix_never_supplies_missing_or_wrong_borrow_proof(fault):
+    r=runner("battle");texts=receipts(r)
+    if fault=='only_early_end':
+        texts['a']=texts['a'].replace('"kind": "borrowed_party_begin"','"kind": "borrowed_party_end"')
+    elif fault=='wrong_begin':
+        texts['a']=texts['a'].replace('"kind": "borrowed_party_begin"','"kind": "borrowed_party_opponent_begin"')
+    else:
+        texts['a']=texts['a'].replace('BORROW_BATTLE ',
+            'BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_opponent_begin'})+'\nBORROW_BATTLE ',1)
+    with pytest.raises(RuntimeError,match='begin/end'):d.saved_oracle(r,texts)

@@ -121,7 +121,12 @@ def saved_oracle(run,results):
         if tx_messages(operation,event):raise RuntimeError("borrow emitted "+event)
     if mode=="battle" and tx_messages(operation,"faint"):raise RuntimeError("borrowed KO emitted own faint")
     signals=rows(text,"BORROW_SIGNAL")
-    if not signals or signals[0].get("kind")!=facts["begin_kind"] or not any(s.get("kind")=="borrowed_party_end" for s in signals):
+    # School's common entry calls LoadPlayerParty before selecting a loan. That
+    # registered end has no active borrow authority; only this leading prefix is ignored.
+    while signals and signals[0].get("kind")=="borrowed_party_end":
+        signals=signals[1:]
+    if (len(signals)<2 or signals[0].get("kind")!=facts["begin_kind"]
+            or any(s.get("kind")!="borrowed_party_end" for s in signals[1:])):
         raise RuntimeError("registered begin/end borrow evidence missing")
     if restored.get("key")!=target or restored.get("borrowed") is not False:raise RuntimeError("restore names wrong ownparty")
     problems=h.gen3_receipt_problems("a",text,required=["BORROW_BASELINE ","BORROW_RESTORED ","SAVE_WITNESS "],
