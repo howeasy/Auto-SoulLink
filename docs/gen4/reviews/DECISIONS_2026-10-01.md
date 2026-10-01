@@ -25,3 +25,14 @@
 - **The fourth hook is probe-only:** the C1-1/C1-2b phase cases use a fourth hook as an independent raw-observer oracle. Its cost does not count against the production budget.
 - **Row f's criterion becomes:** at least 60 fps at the pack's production cap (3), and an observed failure above it (4 hooks at 57.9) as the red control. This keeps D6 as written and does not reopen it.
 - **Risk:** the margin at 3 hooks is about 10% on this machine. The pack target of 2 per phase (79.7 fps) remains the design goal. A slower host will need its own measurement.
+
+## Coordinator ruling: box-mon setup for row i and the pc phase (owner 2026-10-01: "I am not playing all the way to getting balls. Sorry. Figure it out")
+
+- **Starter-only saves.** The owner supplies saves with the starter only. hge's second save gives D15 a second trainer ID.
+- **Setup is SYNTH.** A box-depositable Pokémon comes from a disclosed SYNTH setup step: `tools/gen4_synth_save.py party2`.
+  - It clones the starter into party slot 1 with a new PID, a "SYNTH" nickname and re-keyed encryption.
+  - It recomputes the newest bank's CRC.
+  - It writes lane copies only, with a sidecar recording the hashes.
+- **The behaviour under test runs natively from normal inputs:** walk to the Cherrygrove Pokémon Center PC, deposit one mon (box write plus the modified flag), then a native SAVE and a cold reload.
+- **Receipts are labelled.** Every receipt that uses this setup carries `setup: SYNTH` and the sidecar hash.
+- **Scope:** this does not apply to row o. Row o and the story-gated legs keep PLAN §7's rule against staging party data.
