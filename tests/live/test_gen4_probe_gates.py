@@ -1,0 +1,718 @@
+"""G1 a--n authoring/replay and opt-in serial PHYSICAL collection.
+
+Offline: python -m pytest tests/live/test_gen4_probe_gates.py -m 'not live' -q
+Live (coordinator's one lane): SLINK_LIVE=1 python -m pytest this_file -m live -q -rs
+Set SLINK_GEN4_<TITLE>_SAVE, SLINK_GEN4_PROBE_SCENARIO, SLINK_GEN4_ROW_O.
+Absent files are named skips/OPEN; malformed or mismatched present inputs fail.
+No offline test launches an emulator. A partial probe never closes G1.
+"""
+from __future__ import annotations
+
+import copy
+import datetime
+import hashlib
+import importlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import time
+import uuid
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "lua/tests/probe_gen4_hooks.lua"
+ROWS = tuple("abcdefghijklmn")
+ROW_RE = re.compile(r"^PROBE ([a-o]) (PASS|FAIL|OPEN) (\{.*\})$")
+TITLE_PACK = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
+CORE = "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS"
+
+
+def digest(path: Path, algorithm="sha256") -> str:
+    h = hashlib.new(algorithm)
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def input_file(path: Path, name: str) -> Path:
+    if not path.is_file():
+        pytest.skip(f"OPEN {name}: absent input {path}")
+    return path
+
+
+def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None) -> dict:
+    """No stale neighbour, duplicate row, wrong artifact, MODEL-as-PHYSICAL or tail accepted."""
+    lines = text.splitlines()
+    assert lines and lines[-1] in {"RESULT: PASS", "RESULT: FAIL", "RESULT: OPEN"}, "missing terminal RESULT"
+    assert sum(line.startswith("RESULT:") for line in lines) == 1, "multiple RESULT lines"
+    rows = {}
+    for line in lines[:-1]:
+        match = ROW_RE.fullmatch(line)
+        assert match, f"malformed receipt line: {line[:160]}"
+        row, status, raw = match.groups()
+        assert row not in rows, f"duplicate row {row}"
+        payload = json.loads(raw)
+        assert payload["title"] == title and payload["rom_sha1"].lower() == rom_sha1.lower(), "wrong artifact binding"
+        assert payload["level"] == "PHYSICAL", "MODEL evidence cannot close physical rows"
+        if run_id is not None:
+            assert payload["run_id"] == run_id, "stale/wrong-run receipt"
+        rows[row] = (status, payload)
+    statuses = [status for status, _ in rows.values()]
+    expected = "FAIL" if "FAIL" in statuses else "OPEN" if "OPEN" in statuses else "PASS"
+    assert lines[-1] == f"RESULT: {expected}", "terminal status contradicts row statuses"
+    return rows
+
+
+def row_o(path: Path | None, title: str, sha1: str, source_head: str) -> tuple[str, dict]:
+    """C1-8 owns its mechanism/oracle. Consume its row, never synthesize success."""
+    if path is None or not path.is_file():
+        return "OPEN", {"reason": f"C1-8 row o receipt absent: {path or 'SLINK_GEN4_ROW_O'}"}
+    rows = parse_receipt(path.read_text(encoding="utf-8"), title=title, rom_sha1=sha1)
+    assert "o" in rows, "present C1-8 input contains no row o"
+    status, payload = rows["o"]
+    assert payload.get("source_head") == source_head, "row o belongs to a different source cut"
+    assert payload.get("producer") == "C1-8", "row o must identify its producer"
+    if status == "PASS":
+        assert payload.get("oracle") and payload.get("negative_control"), "row o PASS lacks independent oracle/red control"
+    return status, payload
+
+
+def finish_rows(api, observations: dict, errors: dict, external_o: tuple[str, dict]) -> tuple[str, dict]:
+    rows = {}
+    for row in ROWS:
+        if row in errors:
+            rows[row] = errors[row]
+            continue
+        outcome = api.evaluate(row, to_lua(api._runtime, observations.get(row)))
+        status, reason = outcome if isinstance(outcome, tuple) else (outcome, None)
+        rows[row] = (status, {"observation": observations.get(row), "reason": reason})
+    rows["o"] = external_o
+    statuses = [s for s, _ in rows.values()]
+    return ("FAIL" if "FAIL" in statuses else "OPEN" if "OPEN" in statuses else "PASS"), rows
+
+
+class LuaProbe:
+    """Keep the Lua runtime attached without modifying the returned Lua table."""
+    def __init__(self, runtime, api):
+        self._runtime = runtime
+        self._api = api
+
+    def __getattr__(self, key):
+        return self._api[key]
+
+
+def to_lua(runtime, value):
+    if isinstance(value, dict):
+        return runtime.table_from({k: to_lua(runtime, v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return runtime.table_from([to_lua(runtime, v) for v in value])
+    return value
+
+
+def from_lua(value):
+    if hasattr(value, "items"):
+        return {k: from_lua(v) for k, v in value.items()}
+    return value
+
+
+@pytest.fixture
+def api():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.globals().SLINK_GEN4_PROBE_TEST = True
+    return LuaProbe(runtime, runtime.execute(SCRIPT.read_text(encoding="utf-8")))
+
+
+def examples():
+    """Hypothetical observations for red/revert oracle tests; never physical receipts."""
+    return {
+        "a": {"arm": {"frames": 10, "hits": 10, "badpc": 0, "badword": 0},
+              "thumb": {"frames": 10, "hits": 10, "badpc": 0, "badword": 0}, "negative_hits": 0},
+        "b": {"accepted": 1, "dropped": 1, "inactive_drop": True, "active_fault": True,
+              "full_pin_reject": True, "badpc": 0, "badword": 0},
+        "c": {"jit": False, "use_real_time": False, "quiet_changes": 0,
+              "table_transitions": [{"frame": 2, "before": "off", "after": "129 active"}],
+              "changes": [{"frame": 2, "region": 0, "id": 129, "kind": "load"}],
+              "causes": [{"frame": 1, "region": 0, "id": 129, "kind": "load", "source": "pinned internal entry"}]},
+        "d": {"hits": 10, "timing": "before", "host_hits": 0, "wrong_hits": 0},
+        "e": {"before": 10, "kept": 10, "removed": 0, "reloaded": 0},
+        "f": {"fps": [200, 100, 87, 73, 64, 58], "restored": 200, "restored_four": 64, "realtime": 60, "phase_max": 3},
+        "g": {"domains": {"Main RAM": 4194304, "Shared WRAM": 32768, "ARM7 WRAM": 65536,
+                          "SRAM": 524288, "Instruction TCM": 32768, "Data TCM": 16384, "ARM9 System Bus": 0},
+              "registers": {f"ARM9 r{i}": 0 for i in range(16)}, "bogus_refused": True},
+        "h": {"pointer": 0x2200000, "field_save": 0x2200000, "signature": "23", "expected_signature": "23",
+              "identity": "1234", "expected_identity": "1234", "invalid_rejected": True,
+              "signature_rejected": True, "provenance_rejected": True},
+        "i": {"written": 9, "target": 9, "original": 10, "no_write": 10, "box_dirty": 2,
+              "box_target": 2, "box_original": 1, "box_without_dirty": 1, "cold_reload": 9, "save_completed": True},
+        "j": {"hash": "1" * 32, "sha1": "2" * 40, "md5": "1" * 32, "patched_hash": "3" * 40},
+        "k": {"first": "pinned", "second": "pinned", "unpinned": "wallclock", "frame_first": 1035, "frame_second": 1035},
+        "l": {"overworld": True, "no_buttons_overworld": False, "other_boot_buttons": 0},
+        "m": {"histograms": {p: {"123": 10} for p in ("overworld", "menu", "battle", "save")},
+              "halt": 0x2001000, "idle_hits": 5, "save_same_as_idle": False},
+        "n": {"model": {"last_event": 1, "second_drain": 0, "after_close": 0, "reset_event": 1,
+                        "close_ok": False, "retained": 1, "fault": True, "rearm": False,
+                        "failed_last": 1, "failed_second": 0, "partial_fault": True, "partial_retained": 1,
+                        "fifth": False, "peak": 4},
+              "physical": {"first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
+                           "static_pc": True, "reset": True, "peak": 3, "live_after_close": 0,
+                           "pending_at_close": 1, "second_drain": 0,
+                           "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}},
+    }
+
+
+NEGATIVES = {
+    "a": ("negative_hits", 1), "b": ("active_fault", False), "c": ("quiet_changes", 1),
+    "d": ("host_hits", 1), "e": ("reloaded", 1), "f": ("restored", 40),
+    "g": ("bogus_refused", False), "h": ("signature_rejected", False),
+    "i": ("box_without_dirty", 2), "j": ("patched_hash", "1" * 32),
+    "k": ("unpinned", "pinned"), "l": ("no_buttons_overworld", True),
+    "m": ("save_same_as_idle", True), "n": ("physical", {"first_expected": 1, "first_seen": 0}),
+}
+
+
+@pytest.mark.parametrize("row", ROWS)
+def test_row_red_and_revert(api, row):
+    positive = examples()[row]
+    assert api.evaluate(row, to_lua(api._runtime, positive)) == "PASS"
+    negative = copy.deepcopy(positive)
+    key, value = NEGATIVES[row]
+    negative[key] = value
+    assert api.evaluate(row, to_lua(api._runtime, negative))[0] == "FAIL"
+    assert api.evaluate(row, to_lua(api._runtime, positive)) == "PASS"
+    assert api.evaluate(row, None)[0] == "OPEN"
+
+
+def test_registry_close_construction_reset_budget(api):
+    registry = api._runtime.execute((REPO / "lua/hook_registry.lua").read_text(encoding="utf-8"))
+    measured = from_lua(api.phase_controls(registry))
+    assert measured["last_event"] == measured["reset_event"] == measured["failed_last"] == 1
+    assert measured["second_drain"] == measured["failed_second"] == measured["after_close"] == 0
+    assert measured["close_ok"] is False and measured["fault"] and not measured["rearm"]
+    assert measured["retained"] == measured["partial_retained"] == 1 and measured["partial_fault"]
+    assert measured["peak"] == 4 and not measured["fifth"]
+    # Repeat after cleanup: leaked owner reservations would reject construction here.
+    assert from_lua(api.phase_controls(registry)) == measured
+
+
+def test_overlay_residency_unsigned_word_full_extent_controls(api):
+    r = api._runtime
+    site = {"id": "faint", "symbol": "BtlCmd_TryFaintMon", "address": 0x2200000,
+            "image": "ov130", "overlay_id": 130, "extent": 8, "mode": "thumb",
+            "register_hex": "ffffffff11223344", "fire_hex": "ffffffff"}
+    title = {"symbols": {site["symbol"]: {"address": site["address"], "image": "ov130", "mode": "thumb"}},
+             "overlays": {"130": {"ram": site["address"], "size": 8}}}
+    yes, no = r.eval("function() return true end"), r.eval("function() return false end")
+    assert api.capture(to_lua(r, site), site["address"], -1, 0, site["address"] + 4, yes)["word"] == 0xFFFFFFFF
+    assert api.capture(to_lua(r, site), site["address"], 0, 0, 0, no) is None
+    with pytest.raises(Exception, match="active owner fire pin mismatch"):
+        api.capture(to_lua(r, site), site["address"], 0, 0, site["address"] + 4, yes)
+    good_bytes = r.eval('function() return "ffffffff11223344" end')
+    api.validate_site(to_lua(r, title), to_lua(r, site), good_bytes, yes)
+    # First four bytes remain correct; corruption beyond callback width MUST reject.
+    corrupt = dict(site, register_hex="ffffffff11223345")
+    with pytest.raises(Exception, match="full registration pin mismatch"):
+        api.validate_site(to_lua(r, title), to_lua(r, corrupt), good_bytes, yes)
+    assert not api.valid_handle("00000000-0000-0000-0000-000000000000")
+    assert api.valid_handle("12345678-0000-0000-0000-000000000000")
+
+
+def test_census_omitted_internal_cause_goes_red(api):
+    original = examples()["c"]
+    assert api.census_ok(to_lua(api._runtime, original))
+    negative = copy.deepcopy(original)
+    negative["causes"] = []
+    assert not api.census_ok(to_lua(api._runtime, negative))
+    assert api.evaluate("c", to_lua(api._runtime, negative))[0] == "FAIL"
+    assert api.census_ok(to_lua(api._runtime, original))
+
+
+def test_cpu_distribution_control_is_not_window_length(api):
+    r = api._runtime
+    assert api.same_distribution(to_lua(r, {"halt": 50, "irq": 50}), to_lua(r, {"halt": 100, "irq": 100}))
+    assert not api.same_distribution(to_lua(r, {"halt": 50, "irq": 50}), to_lua(r, {"halt": 10, "irq": 90}))
+
+
+def test_host_write_control_changes_then_restores_and_can_be_red(api):
+    r = api._runtime
+    r.execute('''VALUE=16; WRITTEN={}; HOST_HITS=0
+        reader=function() return VALUE end
+        writer=function(_,v) WRITTEN[#WRITTEN+1]=v; VALUE=v end''')
+    api.host_write_control(r.globals().reader, r.globals().writer, 100)
+    assert list(r.globals().WRITTEN.values()) == [17, 16] and r.globals().VALUE == 16
+    r.execute('''writer=function(_,v) VALUE=v; HOST_HITS=HOST_HITS+1 end''')
+    api.host_write_control(r.globals().reader, r.globals().writer, 100)
+    obs = examples()["d"]
+    obs["host_hits"] = r.globals().HOST_HITS
+    assert api.evaluate("d", to_lua(r, obs))[0] == "FAIL"
+
+
+def test_register_name_guard_refuses_before_read_and_masks_signed(api):
+    r = api._runtime
+    r.execute('CALLS=0; reader=function() CALLS=CALLS+1; return -1 end')
+    names = to_lua(r, {"ARM9 r15": -1})
+    with pytest.raises(Exception, match="unknown register name"):
+        api.read_register(names, r.globals().reader, "ARM9 bogus")
+    assert r.globals().CALLS == 0
+    assert api.read_register(names, r.globals().reader, "ARM9 r15") == 0xFFFFFFFF
+
+
+def test_probe_fake_io_terminal_receipt_without_console(api):
+    """Execute the actual entry point against absent field prerequisites, not just its oracle."""
+    r = api._runtime
+    json_api = r.execute((REPO / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    cfg = {"profile": "pack.json", "title": "heartgold", "mode": "rtc-repeat", "rom_sha1": "2" * 40,
+           "rom_md5": "1" * 32, "run_id": "fake", "boot_frames": 1, "requested_rate": 300}
+    pack = {"schema": "gen4-profile-v1", "titles": {"heartgold": {"rom": {"sha1": cfg["rom_sha1"], "md5": cfg["rom_md5"]},
+            "symbols": {"sRTCWork": {"address": 100}, "sFieldSysPtr": {"address": 200}, "sSaveDataPtr": {"address": 300}},
+            "sites": {}, "profile": {}, "overlays": {}, "overlay_table": {}}}}
+    r.globals().FAKE_CFG, r.globals().FAKE_PACK = json.dumps(cfg), json.dumps(pack)
+    r.globals().FAKE_JSON = json_api
+    r.execute('''
+        SLINK_GEN4_PROBE_TEST=false; SLINK_ROOT="fake-root"; WRITES={}; FRAME=0
+        os.getenv=function(key) if key=="SLINK_GEN4_PROBE_CONFIG" then return "cfg.json" end
+            if key=="SLINK_GEN4_PROBE_OUT" then return "receipt.txt" end end
+        dofile=function(path) if path:match("json_codec.lua$") then return FAKE_JSON end; error(path) end
+        io.open=function(path,mode)
+            if mode=="rb" then return {read=function() return path=="cfg.json" and FAKE_CFG or FAKE_PACK end,close=function() end} end
+            WRITES[#WRITES+1]=path
+            return {write=function(_,...) TERMINAL=table.concat({...}) end,close=function() end}
+        end
+        memory={getmemorydomainlist=function() return {} end,read_u32_le=function() return 1 end,
+            read_bytes_as_array=function(_,n) local t={}; for i=1,n do t[i]=0 end; return t end}
+        emu={getregisters=function() return {} end,getregister=function() error("bogus") end,
+            framecount=function() return FRAME end,limitframerate=function() end}
+        client={exit=function() EXITED=true end,speedmode=function() end}
+        gameinfo={getromhash=function() return string.rep("1",32) end}
+        event={}; joypad={set=function() end}
+        console={log=function() error("console traffic forbidden") end}
+    ''')
+    r.execute(SCRIPT.read_text(encoding="utf-8"))
+    assert list(r.globals().WRITES.values()) == ["receipt.txt"]
+    assert r.globals().EXITED
+    rows = parse_receipt(r.globals().TERMINAL, title="heartgold", rom_sha1="2" * 40, run_id="fake")
+    assert set(rows) == set(ROWS) and rows["l"][0] == "OPEN"
+
+
+@pytest.mark.parametrize("guard", ["residency", "full_pin", "last_drain", "close_fault"])
+def test_reverted_semantic_guard_is_detected(api, guard):
+    from lupa import LuaRuntime
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    replacements = {
+        "residency": ('if site.image~="arm9" and not resident(site.overlay_id) then return nil end', ''),
+        "full_pin": ('check(bytes(site.address,site.extent):lower()==site.register_hex:lower(), "full registration pin mismatch")', ''),
+        "last_drain": ('for _,e in ipairs(reg:drain()) do self.ready_events[#self.ready_events+1]=e end', ''),
+        "close_fault": ('self.failure="phase cleanup failed: "..phase', 'self.failure=nil'),
+    }
+    original, mutant = replacements[guard]
+    assert source.count(original) == 1
+    r = LuaRuntime(unpack_returned_tuples=True)
+    r.globals().SLINK_GEN4_PROBE_TEST = True
+    broken = r.execute(source.replace(original, mutant))
+    if guard in {"last_drain", "close_fault"}:
+        registry = r.execute((REPO / "lua/hook_registry.lua").read_text(encoding="utf-8"))
+        measured = from_lua(broken.phase_controls(registry))
+        assert measured["last_event"] != 1 if guard == "last_drain" else not measured["fault"]
+    else:
+        site = {"id": "x", "symbol": "s", "address": 100, "image": "ov1", "overlay_id": 1,
+                "mode": "thumb", "extent": 8, "fire_hex": "04030201", "register_hex": "01020304ffffffff"}
+        if guard == "residency":
+            with pytest.raises(Exception, match="callback PC mismatch"):
+                broken.capture(to_lua(r, site), 100, 0, 0, 0, r.eval("function() return false end"))
+        else:
+            title = {"symbols": {"s": {"address": 100, "image": "ov1", "mode": "thumb"}}, "overlays": {"1": {"ram": 100, "size": 8}}}
+            # The mutant accepts corrupt bytes beyond the fire word; the original rejects.
+            assert broken.validate_site(to_lua(r, title), to_lua(r, site), r.eval('function() return "0102030400000000" end'),
+                                        r.eval("function() return true end"))
+    assert api.evaluate("n", to_lua(api._runtime, examples()["n"])) == "PASS"
+
+
+def receipt(row="a", status="PASS", **overrides):
+    payload = {"title": "heartgold", "rom_sha1": "2" * 40, "level": "PHYSICAL", "run_id": "current", **overrides}
+    return f"PROBE {row} {status} {json.dumps(payload)}\nRESULT: {status}\n"
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "stale", "model", "wrong_rom", "tail", "false_pass"])
+def test_receipt_rejection_controls(mutation):
+    text = receipt()
+    if mutation == "duplicate":
+        text = text.splitlines()[0] + "\n" + text
+    elif mutation == "stale":
+        text = receipt(run_id="old")
+    elif mutation == "model":
+        text = receipt(level="MODEL")
+    elif mutation == "wrong_rom":
+        text = receipt(rom_sha1="0" * 40)
+    elif mutation == "tail":
+        text += "noise\n"
+    else:
+        text = receipt(status="OPEN").replace("RESULT: OPEN", "RESULT: PASS")
+    with pytest.raises(AssertionError):
+        parse_receipt(text, title="heartgold", rom_sha1="2" * 40, run_id="current")
+    assert "a" in parse_receipt(receipt(), title="heartgold", rom_sha1="2" * 40, run_id="current")
+
+
+def test_required_row_o_absent_open_present_wrong_fail(api, tmp_path):
+    absent = row_o(None, "heartgold", "2" * 40, "cut")
+    assert absent[0] == "OPEN"
+    overall, rows = finish_rows(api, examples(), {}, absent)
+    assert overall == "OPEN" and len(rows) == 15
+    path = tmp_path / "o.txt"
+    path.write_text(receipt("o", source_head="wrong", producer="C1-8", oracle="independent", negative_control="red"))
+    with pytest.raises(AssertionError, match="different source cut"):
+        row_o(path, "heartgold", "2" * 40, "cut")
+    path.write_text(receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red"))
+    assert finish_rows(api, examples(), {}, row_o(path, "heartgold", "2" * 40, "cut"))[0] == "PASS"
+
+
+def fixture_module():
+    input_file(REPO / "tools/gen4_fixtures.py", "C1-4 fixture module")
+    module = importlib.import_module("tools.gen4_fixtures")
+    for name in ("write_nds_run_config", "stage_rom", "stage_save"):
+        if not hasattr(module, name):
+            pytest.skip(f"OPEN C1-4 function absent: tools.gen4_fixtures.{name}")
+    return module
+
+
+def scenario_input(title):
+    path = os.environ.get("SLINK_GEN4_PROBE_SCENARIO")
+    if not path:
+        return {}  # Missing routes stay OPEN in their rows; no guessed battle/save inputs.
+    value = json.loads(input_file(Path(path), "normal-button scenario").read_text(encoding="utf-8"))
+    assert value["schema"] == "gen4-probe-scenario-v1", "wrong scenario schema"
+    return value["titles"].get(title, {})
+
+
+def emulator_pids():
+    command = "Get-CimInstance Win32_Process -Filter \"Name='EmuHawk.exe'\" | Select-Object -ExpandProperty ProcessId | ConvertTo-Json -Compress"
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+                            capture_output=True, text=True, timeout=15, check=True)
+    values = json.loads(result.stdout) if result.stdout.strip() else []
+    return values if isinstance(values, list) else [values]
+
+
+def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
+    """Fresh private directory; only this Popen's PID is ever stopped. Preserve failures."""
+    assert not lane.exists(), f"refusing stale run directory {lane}"
+    lane.mkdir(parents=True)
+    staged = module.stage_rom(source, lane)
+    rom = staged.parent / "probe.nds"
+    staged.rename(rom)
+    # Only the j control mutates a private copy; one header padding byte, not game data.
+    if case == "patched-rom":
+        raw = bytearray(rom.read_bytes())
+        raw[-1] ^= 1
+        rom.write_bytes(raw)
+    battery = module.stage_save(save, lane, cfg["rom_sha1"], rom_basename=rom.name)
+    config_path = lane / "config.ini"
+    settings = module.write_nds_run_config(base, config_path, initial_time=cfg["initial_time"],
+                                          lane_saveram_dir=battery.parent, saveram_name_hint=battery.name)
+    if case == "rtc-unpinned":
+        settings["CoreSyncSettings"][CORE]["UseRealTime"] = True
+        config_path.write_text(json.dumps(settings), encoding="utf-8")
+    mode = "persistence" if cfg.get("persistence") else "baseline" if case.startswith(("baseline", "phase-")) else case
+    cfg = dict(cfg, mode=mode, profile=str(profile).replace("\\", "/"),
+               run_id=lane.parent.name + "/" + lane.name, state_path=str(lane / "reload.State").replace("\\", "/"))
+    request, response = lane / "perf-ready.txt", lane / "perf-processes.json"
+    cfg["perf_request"], cfg["perf_response"] = str(request), str(response)
+    cfg["jit"] = settings["CoreSyncSettings"][CORE]["EnableJIT"]
+    cfg["use_real_time"] = settings["CoreSyncSettings"][CORE]["UseRealTime"]
+    if case == "patched-rom":
+        cfg["allow_hash_control"] = True
+    cfg_path, out = lane / "probe.json", lane / "receipt.txt"
+    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    shutil.copyfile(SCRIPT, lane / "probe.lua")
+    env = dict(os.environ, SLINK_ROOT=str(REPO).replace("\\", "/"), SLINK_GEN4_PROBE_CONFIG=str(cfg_path),
+               SLINK_GEN4_PROBE_OUT=str(out))
+    emulator = os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe")
+    input_file(Path(emulator), "EmuHawk")
+    proc = subprocess.Popen([emulator, "--config=config.ini", "--lua=probe.lua", "rom/probe.nds"],
+                            cwd=lane, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    deadline = time.monotonic() + int(os.environ.get("SLINK_GEN4_PROBE_TIMEOUT", "600"))
+    try:
+        while proc.poll() is None and time.monotonic() < deadline:
+            if request.is_file() and not response.is_file():
+                inventory = {"foreign_pids": [pid for pid in emulator_pids() if pid != proc.pid],
+                             "checked_at_utc": datetime.datetime.now(datetime.UTC).isoformat()}
+                temp = response.with_suffix(".tmp")
+                temp.write_text(json.dumps(inventory), encoding="utf-8")
+                temp.replace(response)
+            if out.is_file():
+                tail = out.read_text(encoding="utf-8").splitlines()[-1:]
+                if tail and tail[0] in {"RESULT: PASS", "RESULT: FAIL", "RESULT: OPEN"}:
+                    break
+            time.sleep(0.25)
+        assert out.is_file(), f"no terminal probe receipt in {lane}; exit={proc.poll()}"
+        text = out.read_text(encoding="utf-8")
+        rows = parse_receipt(text, title=title, rom_sha1=cfg["rom_sha1"], run_id=cfg["run_id"])
+        assert set(rows) == set(ROWS), f"missing a--n rows: {set(ROWS) - set(rows)}"
+        for _, payload in rows.values():
+            assert payload["script_sha256"] == digest(SCRIPT) and payload["profile_sha256"] == digest(profile), "wrong source/profile receipt"
+            assert payload["callback_errors"] == 0, f"callback faults: {lane}"
+        assert proc.poll() is not None or time.monotonic() < deadline, f"probe timed out: {lane}"
+        # Let client.exit flush its battery. A forced termination is never durability evidence.
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pytest.fail(f"EmuHawk did not exit gracefully after terminal receipt: {lane}")
+        return rows, battery
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+
+
+def codec_module():
+    input_file(REPO / "server/adapters/gen4_codec.py", "C1-3 independent PYDEC codec")
+    return importlib.import_module("server.adapters.gen4_codec")
+
+
+def source_witness(codec, decoded):
+    """Footer geometry and trainer bytes come from the independent source-save decoder."""
+    footer = decoded.general[-decoded.profile.footer_size:]
+    assert decoded.profile.footer_fields == ("count", "size", "magic", "slot", "crc"), "unhandled footer format"
+    assert decoded.profile.player_off is not None, "PlayerProfile offset unavailable"
+    start = decoded.profile.player_off + 4
+    decoded.player()  # Exercise the independent decoder before using this witness.
+    return {"signature_footer_offset": 4, "signature_hex": footer[4:-2].hex(),
+            "identity_hex": decoded.general[start:start + 20].hex()}
+
+
+def census_file_pins(source, artifact, title, internal_loads=()):
+    generator = importlib.import_module("tools.gen_gen4_pack")
+    images = generator.load_images(source, raw_arm9=title == "heartgold_hge")
+    result = {}
+    for name in ("HandleLoadOverlay", "UnloadOverlayByID", *(entry["symbol"] for entry in internal_loads)):
+        site = next(s for s in artifact["sites"].values() if s["symbol"] == name)
+        measured = images.read(site["image"], site["address"], site["extent"]).hex()
+        assert measured == site["register_hex"], f"present declared-image FILE pin mismatch: {name}"
+        assert int.from_bytes(bytes.fromhex(measured[:8]), "little") == int(site["fire_hex"], 16), "fire pin endian mismatch"
+        result[name] = measured
+    return result
+
+
+def mutation_specs(codec, decoded, artifact, scenario):
+    """Modify existing native records only; no new mon, flags, story or synthetic fixture."""
+    p = artifact["profile"]
+    if p.get("party_off") is None:
+        return None, "i: pack party geometry is OPEN"
+    party = decoded.party()
+    if not party:
+        return None, "i: played fixture has no party mon"
+    index = scenario.get("party_slot", 0)
+    assert 0 <= index < len(party), "wrong party slot"
+    mon = party[index]
+    assert mon["tail_plausible"] and mon["hp"] > 0, "wrong/invalid source party representation"
+    if mon["hp"] <= 1:
+        return None, "i: fixture needs a naturally healthy party mon (>1 HP)"
+    offset = decoded.profile.party_off + 8 + index * codec.PARTY_MON_SIZE
+    raw = decoded.general[offset:offset + codec.PARTY_MON_SIZE]
+    plain = bytearray(codec.decrypt_party(raw))
+    target = mon["hp"] - 1
+    struct.pack_into("<H", plain, codec.TAIL_OFF + 6, target)
+    after = codec.encrypt_party(bytes(plain))
+    assert codec.decode_party_mon(after, decoded.profile)["hp"] == target
+    assert raw[:codec.TAIL_OFF] == after[:codec.TAIL_OFF], "HP-only edit changed box checksum/body"
+
+    def changes(before, after):
+        return [{"offset": i, "value": b} for i, (a, b) in enumerate(zip(before, after, strict=True)) if a != b]
+
+    party_spec = {"operation": "party-write", "array_id": p["save"]["array_ids"]["party"],
+                  "record_offset": p["party_off"]["mons_off"] + index * p["pkm"]["party_size"],
+                  "flags_offset": 4, "before_hex": raw.hex(), "after_hex": after.hex(),
+                  "write": True, "changes": changes(raw, after)}
+    specs = {"party-write": party_spec, "no-write": dict(party_spec, operation="no-write", write=False, changes=[]),
+             "slot": index, "key": mon["key"], "original": mon["hp"], "target": target}
+    if p.get("pc", {}).get("box_modified_flag_off") is None:
+        specs["box_open"] = "i: pack box modified geometry is OPEN"
+        return specs, None
+    occupied = [(box, slot, m) for box, data in enumerate(decoded.boxes()) for slot, m in data["mons"].items()]
+    if not occupied:
+        specs["box_open"] = "i: played fixture needs an existing occupied PC slot for modified-bit control"
+        return specs, None
+    box, slot, box_mon = occupied[0]
+    pc_off = decoded.profile.boxes_off + box * decoded.profile.box_stride + slot * codec.BOX_MON_SIZE
+    raw_box = decoded.pc[pc_off:pc_off + codec.BOX_MON_SIZE]
+    box_plain = bytearray(codec.decrypt_box(raw_box))
+    box_target = box_mon["friendship"] ^ 1
+    box_plain[codec.HEADER_SIZE + 0xC] = box_target
+    after_box = codec.encrypt_box(bytes(box_plain))
+    assert codec.decode_box_mon(after_box, decoded.profile)["friendship"] == box_target
+    box_spec = {"operation": "box-write", "array_id": p["save"]["array_ids"]["pcstorage"],
+                "record_offset": p["pc"]["box_base"] + box * p["pc"]["box_stride"] + slot * p["pc"]["mon_stride"],
+                "flags_offset": 4, "box": box, "before_hex": raw_box.hex(), "after_hex": after_box.hex(),
+                "write": True, "dirty": True, "changes": changes(raw_box, after_box)}
+    return {**specs, "box-write": box_spec, "box-no-dirty": dict(box_spec, operation="box-no-dirty", dirty=False),
+            "box": box, "box_slot": slot, "box_key": box_mon["key"], "box_original": box_mon["friendship"],
+            "box_target": box_target}, None
+
+
+def persistence_rows(module, codec, decoded, title, source, save, profile, artifact, base, batch, cfg):
+    if not cfg.get("persistence_route"):
+        return None, "i: native SAVE normal-button route absent"
+    specs, reason = mutation_specs(codec, decoded, artifact, cfg)
+    if specs is None:
+        return None, reason
+    samples, written_battery = {}, None
+    for case in ("party-write", "no-write", "box-write", "box-no-dirty"):
+        if case not in specs:
+            continue
+        rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case,
+                                     {**cfg, "persistence": specs[case]})
+        status, payload = rows["i"]
+        if status == "FAIL":
+            raise AssertionError(f"persistence instrumentation FAIL: {batch / case}: {payload}")
+        observation = payload.get("observation")
+        if not observation or observation.get("save_finish_hits", 0) < 1:
+            return None, payload.get("reason", f"i: {case} native-save evidence absent")
+        result = codec.parse_save(battery.read_bytes(), decoded.profile)
+        assert codec.counter_newer(result.counter, decoded.counter) > 0, f"{case}: no newer coherent native save bank"
+        if case.startswith("box"):
+            mon = result.boxes()[specs["box"]]["mons"][specs["box_slot"]]
+            assert mon["key"] == specs["box_key"], "box identity drift"
+            samples[case] = mon["friendship"]
+        else:
+            mon = result.party()[specs["slot"]]
+            assert mon["key"] == specs["key"], "party identity drift"
+            samples[case] = mon["hp"]
+            if case == "party-write":
+                written_battery = battery
+    assert written_battery is not None
+    # Cold boot a second isolated emulator from the actual newly written battery.
+    cold_cfg = dict(cfg, save_witness=source_witness(codec, codec.parse_save(written_battery.read_bytes(), decoded.profile)),
+                    cold_readback=specs["party-write"])
+    cold, _ = launch_probe(module, title, source, written_battery, profile, base, "cold-reload", batch / "cold-reload", cold_cfg)
+    runtime = cold["i"][1].get("observation", {})
+    if not runtime.get("runtime_hex"):
+        return None, cold["i"][1].get("reason", "i: cold RAM party readback absent")
+    reloaded = codec.decode_party_mon(bytes.fromhex(runtime["runtime_hex"]), decoded.profile)
+    assert reloaded["key"] == specs["key"], "cold-reload identity drift"
+    return {"written": samples["party-write"], "no_write": samples["no-write"], "original": specs["original"],
+            "target": specs["target"], "box_dirty": samples.get("box-write"), "box_without_dirty": samples.get("box-no-dirty"),
+            "box_original": specs.get("box_original"), "box_target": specs.get("box_target"), "cold_reload": reloaded["hp"],
+            "box_open": specs.get("box_open"),
+            "save_completed": True, "oracle": "server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
+@pytest.mark.live
+@pytest.mark.skipif(os.environ.get("SLINK_LIVE") != "1", reason="OPEN G1 physical probe requires SLINK_LIVE=1; one owned emulator lane")
+@pytest.mark.parametrize("title", TITLE_PACK)
+def test_gen4_hook_probe(api, title):
+    module = fixture_module()
+    pins = importlib.import_module("tools.gen4_pins")
+    source = Path(os.environ.get("SLINK_GEN4_" + title.upper(), pins.default_locations().roms[title]))
+    input_file(source, f"{title} ROM")
+    profile = input_file(REPO / "data/games" / TITLE_PACK[title] / "profile.json", f"C1-2 {title} profile")
+    save_env = "SLINK_GEN4_" + title.upper() + "_SAVE"
+    if not os.environ.get(save_env):
+        pytest.skip(f"OPEN populated played save: {save_env} unset")
+    save = input_file(Path(os.environ[save_env]), f"{title} played save")
+    base = input_file(Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini")), "BizHawk base config")
+    pack = json.loads(profile.read_text(encoding="utf-8"))
+    assert pack["schema"] == "gen4-profile-v1", "wrong profile schema"
+    rom_sha1, rom_md5 = digest(source, "sha1"), digest(source, "md5")
+    artifact = pack["titles"][title]
+    assert artifact["rom"]["sha1"] == rom_sha1 and artifact["rom"]["md5"] == rom_md5, "present ROM/profile mismatch"
+    source_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    supplied = scenario_input(title)
+    cfg = {"title": title, "rom_sha1": rom_sha1, "rom_md5": rom_md5, "jit": False, "use_real_time": False,
+           "requested_rate": 300, "initial_time": "2010-01-01T12:00:00", "sample_frames": 600,
+           "boot_frames": 6000, "phase_max": max(artifact["phases"][name]["cap"] for name in ("battle", "pc")),
+           "qualify_performance": os.environ.get("SLINK_GEN4_PROBE_QUALIFY") == "1",
+           **supplied}
+    assert cfg["requested_rate"] == 300, "development route must request 300%"
+    assert cfg["sample_frames"] >= 120 and cfg["boot_frames"] > 0, "invalid sample windows"
+    cfg["code_sha256"], cfg["profile_sha256"] = digest(SCRIPT), digest(profile)
+    codec = codec_module()
+    decoded = codec.parse_save(save.read_bytes(), "hge" if title == "heartgold_hge" else "hgss")
+    cfg["save_witness"] = source_witness(codec, decoded)
+    cfg["census_image_bytes"] = census_file_pins(source, artifact, title, cfg.get("internal_loads", ()))
+    if "phase_cases" not in cfg and artifact.get("phase_cases"):
+        cfg["phase_cases"] = artifact["phase_cases"]
+    if os.environ.get("SLINK_GEN4_PROBE_SKIP_PERF_REASON"):
+        cfg["skip_perf_reason"] = os.environ["SLINK_GEN4_PROBE_SKIP_PERF_REASON"]
+    root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", "C:/slink/g4/probe-gates"))
+    assert " " not in str(root.resolve()) and "google drive" not in str(root.resolve()).lower(), "short non-Drive lane root required"
+    batch = root / (title + "-" + uuid.uuid4().hex[:12])
+    batch.mkdir(parents=True, exist_ok=False)
+    before_save = digest(save)
+    observations, errors = {}, {}
+    try:
+        collected = {}
+        for case in ("baseline", "rtc-repeat", "rtc-unpinned", "no-buttons", "patched-rom"):
+            rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case, cfg)
+            collected[case] = rows
+        for row, (status, payload) in collected["baseline"].items():
+            if payload.get("observation") is not None:
+                observations[row] = payload["observation"]
+            if status == "FAIL" or payload.get("observation") is None:
+                errors[row] = (status, payload)
+        if "j" in observations:
+            observations["j"]["patched_hash"] = collected["patched-rom"]["j"][1].get("observation", {}).get("hash")
+        if "k" in observations:
+            repeat = collected["rtc-repeat"]["k"][1].get("observation", {})
+            unpinned = collected["rtc-unpinned"]["k"][1].get("observation", {})
+            observations["k"].update(second=repeat.get("first"), frame_second=repeat.get("frame_first"), unpinned=unpinned.get("first"))
+        if "l" in observations:
+            observations["l"]["no_buttons_overworld"] = collected["no-buttons"]["l"][1].get("observation", {}).get("overworld")
+        persistence, reason = persistence_rows(module, codec, decoded, title, source, save, profile, artifact, base, batch, cfg)
+        if persistence is not None:
+            observations["i"] = persistence
+            errors.pop("i", None)
+        else:
+            errors["i"] = ("OPEN", {"reason": reason})
+        if cfg.get("phase_cases"):
+            assert {case["name"] for case in cfg["phase_cases"]} >= {"battle", "pc", "reset"}, "phase cases must cover battle, static PC and reset"
+            measured = []
+            open_cases = [f"{case['name']}: {case['open']}" for case in cfg["phase_cases"] if case.get("open")]
+            if open_cases:
+                errors["n"] = ("OPEN", {"reason": "n: uncovered phase callers/predicates: " + "; ".join(open_cases)})
+            for index, case in enumerate(cfg["phase_cases"]):
+                if open_cases:
+                    break
+                rows, _ = launch_probe(module, title, source, save, profile, base, f"phase-{index}", batch / f"phase-{index}",
+                                       {**cfg, "phase_case": case, "route": case["route"]})
+                p = rows["n"][1].get("observation", {}).get("physical")
+                assert p is not None, f"phase case lacks physical measurement: {case['name']}"
+                measured.append(p)
+            if "n" in observations and measured:
+                observations["n"]["physical"] = {
+                    "first_expected": sum(p["first_expected"] for p in measured), "first_seen": sum(p["first_seen"] for p in measured),
+                    "last_expected": sum(p["last_expected"] for p in measured), "last_seen": sum(p["last_seen"] for p in measured),
+                    "static_pc": any(p["static_pc"] for p in measured), "reset": any(p["reset"] for p in measured),
+                    "peak": max(p["peak"] for p in measured), "live_after_close": sum(p["live_after_close"] for p in measured),
+                    "max_cost": max(p["max_cost"] for p in measured),
+                    "pending_at_close": sum(p["pending_at_close"] for p in measured),
+                    "second_drain": sum(p["second_drain"] for p in measured),
+                    "baseline_fps": 1, "restored_fps": min(p["restored_fps"] / p["baseline_fps"] for p in measured),
+                    "cases": measured,
+                }
+                errors.pop("n", None)
+        external = os.environ.get("SLINK_GEN4_ROW_O")
+        required_o = row_o(Path(external.format(title=title)) if external else None, title, rom_sha1, source_head)
+        result, rows = finish_rows(api, observations, errors, required_o)
+        text = []
+        for row, (status, payload) in rows.items():
+            payload = {**payload, "schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
+                       "source_head": source_head, "level": "PHYSICAL", "run_id": batch.name,
+                       "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "requested_rate": 300}
+            text.append(f"PROBE {row} {status} {json.dumps(payload, sort_keys=True)}")
+        text.append(f"RESULT: {result}")
+        (batch / "combined.txt").write_text("\n".join(text) + "\n", encoding="utf-8")
+        assert result != "FAIL", f"G1 FAIL; preserved receipt {batch / 'combined.txt'}"
+        if result == "OPEN":
+            missing = "; ".join(f"{row}: {payload.get('reason')}" for row, (status, payload) in rows.items() if status == "OPEN")
+            pytest.skip(f"OPEN G1 {title}: {missing}; receipt {batch / 'combined.txt'}")
+    finally:
+        assert digest(save) == before_save, "original save was modified"

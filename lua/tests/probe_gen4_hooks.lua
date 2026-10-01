@@ -1,0 +1,842 @@
+-- G1 instrumentation, not a production NDS binding. Addresses/pins come from C1-2.
+-- No console traffic in callbacks or frame loops. One terminal io.open receipt.
+-- Offline consumers set SLINK_GEN4_PROBE_TEST=true and receive the test API.
+local M = {}
+local ROWS = "abcdefghijklmn"
+local BUS = "ARM9 System Bus"
+local function need(value, name)
+    if value == nil then error({open=name}, 0) end
+    return value
+end
+local function check(value, name) assert(value, name) end
+local function u32(value) return value & 0xFFFFFFFF end
+local function count(t) local n=0; for _ in pairs(t) do n=n+1 end; return n end
+function M.same_distribution(a,b)
+    local na,nb=0,0
+    for _,v in pairs(a) do na=na+v end; for _,v in pairs(b) do nb=nb+v end
+    if na==0 or nb==0 then return nil end
+    for k,v in pairs(a) do if v*nb~=(b[k] or 0)*na then return false end end
+    for k,v in pairs(b) do if v*na~=(a[k] or 0)*nb then return false end end
+    return true
+end
+local function clone(t)
+    if type(t)~="table" then return t end
+    local result={}; for k,v in pairs(t) do result[k]=clone(v) end; return result
+end
+local function word(hex)
+    check(type(hex)=="string" and #hex==8 and hex:match("^%x+$"), "fire_hex must be four bytes")
+    -- C1-2 fire_hex() formats the decoded LE u32, not its on-ROM byte spelling.
+    return tonumber(hex,16)
+end
+local function byte_word(hex)
+    local n=0; for i=0,3 do n=n | (tonumber(hex:sub(2*i+1,2*i+2),16) << (8*i)) end
+    return n
+end
+function M.read_register(names,reader,name)
+    check(names[name]~=nil,"unknown register name: "..name)
+    return u32(reader(name))
+end
+function M.host_write_control(read_byte,write_byte,address)
+    local original=read_byte(address)
+    local ok,why=pcall(write_byte,address,original~1)
+    local restored,restore_error=pcall(write_byte,address,original)
+    check(restored,"host write restore failed: "..tostring(restore_error))
+    check(ok,"host write control failed: "..tostring(why))
+    check(read_byte(address)==original,"host write restore readback")
+end
+function M.valid_handle(h)
+    return type(h)=="string" and h~="" and h:gsub("[%-%{%}]", ""):match("^0+$")==nil
+end
+function M.resident(title, read, id)
+    local t=need(title.overlay_table,"overlay_table")
+    check(t.regions==3 and t.per_region==8 and t.entry_size==8, "overlay table geometry")
+    -- MAIN only: the other two regions are still included in the transition census.
+    for i=0,t.per_region-1 do
+        local p=t.address+i*t.entry_size
+        if read(p+t.active_off)~=0 and read(p+t.id_off)==id then return true end
+    end
+    return false
+end
+function M.validate_site(title, site, bytes, resident)
+    local sym=need(title.symbols[site.symbol],"symbol:"..tostring(site.symbol))
+    if site.hge_status=="REPLACED" then
+        local replacement=need(title.hge_replacements and title.hge_replacements[site.symbol],"hge replacement export:"..site.symbol)
+        check(replacement.address==site.address and replacement.image==site.image and type(site.mode_evidence)=="string",
+            "hge replacement export provenance")
+        sym={address=replacement.address,image=replacement.image,mode=site.mode}
+    end
+    check(site.address%2==0 and site.address==sym.address, "site must use even symbol address")
+    check(site.image==sym.image and site.mode==sym.mode, "site symbol provenance")
+    check(site.mode=="thumb" or site.mode=="arm", "site instruction mode")
+    word(site.fire_hex)
+    check(type(site.register_hex)=="string" and site.register_hex:match("^%x+$")
+        and #site.register_hex==site.extent*2 and site.extent>=4, "full registration extent")
+    check(byte_word(site.register_hex:sub(1,8))==word(site.fire_hex), "fire/registration pin disagreement")
+    if site.image~="arm9" then
+        check(site.image=="ov"..tostring(site.overlay_id), "declared overlay identity")
+        local ov=need(title.overlays[tostring(site.overlay_id)],"overlay:"..site.overlay_id)
+        check(site.address>=ov.ram and site.address+site.extent<=ov.ram+ov.size, "overlay extent")
+    end
+    if site.image=="arm9" or resident(site.overlay_id) then
+        check(bytes(site.address,site.extent):lower()==site.register_hex:lower(), "full registration pin mismatch")
+    end
+    return clone(site)
+end
+function M.save_witness_ok(title, pointer, field_save, signature, identity, expected)
+    local symbol=title.symbols.sSaveDataPtr
+    local declared=title.profile.save_ptr
+    return pointer>0 and pointer%4==0 and pointer==field_save
+        and declared.symbol=="sSaveDataPtr" and declared.address==symbol.address
+        and symbol.section==".bss" and symbol.image=="arm9"
+        and signature==expected.signature_hex and identity==expected.identity_hex
+end
+function M.capture(site, addr, val, flags, pc, resident)
+    -- Collision rejection MUST precede the fire-word check.
+    if site.image~="arm9" and not resident(site.overlay_id) then return nil end
+    check(u32(addr)==site.address, "callback address mismatch")
+    check(u32(pc)==site.address+(site.mode=="thumb" and 4 or 8), "callback PC mismatch")
+    check(u32(val)==word(site.fire_hex), "active owner fire pin mismatch")
+    return {id=site.id,address=u32(addr),word=u32(val),pc=u32(pc),flags=u32(flags)}
+end
+
+-- Probe-only composition over the REAL shared registry. Track external handles, not
+-- cumulative status().registered. A failed close retains its owner and freezes re-arm.
+function M.composite(Registry, binding)
+    local s={phases={},handles={},ready_events={},failure=nil,peak=0,costs={}}
+    function s:live_handles() return count(self.handles) end
+    function s:enter(phase, sites)
+        if self.failure then return nil,self.failure end
+        if self.phases[phase] then return nil,"phase already armed" end
+        if #sites==0 then return true end
+        if self:live_handles()+#sites>4 then self.failure="phase hook budget exceeded"; return nil,self.failure end
+        local before=os.clock()
+        local reg,err,partial=Registry.new({owner="g4probe."..phase,sites=sites,max_pending=4096,
+            validate=binding.validate,valid_handle=M.valid_handle,capture=binding.capture,
+            register=function(site,callback,name)
+                local h=binding.register(site,callback,name)
+                if M.valid_handle(h) then self.handles[h]=phase end
+                self.peak=math.max(self.peak,self:live_handles())
+                return h
+            end,
+            unregister=function(h)
+                local result=binding.unregister(h)
+                if result~=false then self.handles[h]=nil end
+                return result
+            end})
+        self.costs[#self.costs+1]=os.clock()-before
+        if not reg then
+            self.failure=err; if partial then self.phases[phase]=partial end
+            return nil,err
+        end
+        self.phases[phase]=reg; return true
+    end
+    function s:drain()
+        local out=self.ready_events; self.ready_events={}
+        for _,reg in pairs(self.phases) do
+            for _,e in ipairs(reg:drain()) do out[#out+1]=e end
+            local status=reg:status()
+            if status.failed or status.handler_error then self.failure=status.failed or status.handler_error end
+        end
+        return out
+    end
+    function s:leave(phase)
+        local reg=self.phases[phase]; if not reg then return true end
+        -- Last queued event remains observable exactly once, even after close fails.
+        for _,e in ipairs(reg:drain()) do self.ready_events[#self.ready_events+1]=e end
+        local before=os.clock()
+        local ok,result=pcall(reg.close,reg)
+        self.costs[#self.costs+1]=os.clock()-before
+        if not ok or result~=true then self.failure="phase cleanup failed: "..phase; return false end
+        local status=reg:status()
+        if status.failed or status.handler_error then self.failure=status.failed or status.handler_error end
+        self.phases[phase]=nil; return true
+    end
+    function s:close()
+        local keys={}; for phase in pairs(self.phases) do keys[#keys+1]=phase end
+        local ok=true; for _,phase in ipairs(keys) do if not self:leave(phase) then ok=false end end
+        return ok and self:live_handles()==0
+    end
+    return s
+end
+
+function M.phase_controls(Registry)
+    local result={level="MODEL"}
+    local callbacks,active,serial={}, {},0
+    local fail_remove,fail_register=false,false
+    local binding={validate=function(site) return site end,capture=function(site) return {id=site.id} end}
+    binding.register=function(site,cb)
+        if fail_register and site.id=="second" then return "00000000-0000-0000-0000-000000000000" end
+        serial=serial+1; local h="control-"..serial; active[h]=true; callbacks[site.id]=cb; return h
+    end
+    binding.unregister=function(h) if fail_remove then return false end; active[h]=nil; return true end
+    local s=M.composite(Registry,binding)
+    check(s:enter("empty",{}),"zero-site phase")
+    check(s:enter("pc",{{id="last"}}),"static PC construct")
+    callbacks.last(); s:leave("pc")
+    result.last_event=#s:drain(); result.second_drain=#s:drain(); result.after_close=s:live_handles()
+    check(s:enter("reset",{{id="reset"}}),"reset construct")
+    callbacks.reset(); s:close(); result.reset_event=#s:drain()
+    check(s:enter("failedclose",{{id="last"}}),"failed-close construct")
+    callbacks.last(); fail_remove=true
+    result.close_ok=s:leave("failedclose"); result.retained=s:live_handles()
+    result.fault=s.failure~=nil; result.rearm=s:enter("failedclose",{{id="last"}})==true
+    result.failed_last=#s:drain(); result.failed_second=#s:drain()
+    fail_remove=false; check(s:close(),"control cleanup must release owner")
+    -- Partial construction plus failed cleanup must retain the first handle.
+    local p=M.composite(Registry,binding); fail_register=true; fail_remove=true
+    p:enter("partial",{{id="first"},{id="second"}})
+    result.partial_fault=p.failure~=nil; result.partial_retained=p:live_handles()
+    fail_register=false; fail_remove=false; check(p:close(),"partial control cleanup")
+    local budget=M.composite(Registry,binding)
+    check(budget:enter("budget",{{id="one"},{id="two"},{id="three"},{id="four"}}),"four-hook budget")
+    result.fifth=budget:enter("fifth",{{id="five"}})==true
+    result.peak=budget.peak; check(budget:close(),"budget cleanup")
+    return result
+end
+
+local validators={}
+validators.a=function(x)
+    for _,mode in ipairs({"arm","thumb"}) do
+        local v=need(x[mode],"a:"..mode)
+        check(v.frames>0 and v.hits==v.frames and v.badpc==0 and v.badword==0,"per-frame "..mode.." hook")
+    end
+    check(need(x.negative_hits,"a:never-executed control")==0,"never-executed hook fired")
+end
+validators.b=function(x)
+    check(need(x.accepted,"b:faint command")>0,"no owning-overlay faint hit")
+    if need(x.dropped,"b:wrong-overlay physical collision")==0 then error({open="b:wrong-overlay physical collision unobserved"},0) end
+    check(x.inactive_drop==true and x.active_fault==true and x.full_pin_reject==true,
+        "residency / active fault / full registration controls")
+    check(x.badpc==0 and x.badword==0,"active callback corruption")
+end
+function M.census_ok(x)
+    local used={}
+    for _,change in ipairs(x.changes) do
+        local found=false
+        for i,cause in ipairs(x.causes) do
+            if not used[i] and cause.id==change.id and cause.region==change.region
+                and cause.kind==change.kind and change.frame>=cause.frame and change.frame-cause.frame<=1
+                and type(cause.source)=="string" and cause.source~="" then used[i]=true; found=true; break end
+        end
+        if not found then return false end
+    end
+    return true
+end
+validators.c=function(x)
+    check(x.jit==false and x.use_real_time==false,"unpinned core settings")
+    check(#need(x.changes,"c:table transitions")>0,"empty transition census")
+    check(#need(x.table_transitions,"c:full 24-entry table transition trace")>0,"empty raw table trace")
+    need(x.causes,"c:load/unload/internal causes")
+    check(M.census_ok(x),"unexplained table transition: pinned load/unload/internal cause required")
+    check(need(x.quiet_changes,"c:load-free window")==0,"load-free window changed")
+    local red=clone(x); table.remove(red.causes,1)
+    check(not M.census_ok(red),"omitted cause did not make census red")
+end
+validators.d=function(x)
+    check(need(x.hits,"d:game stores")>0,"game store callback absent")
+    check(x.timing=="before" or x.timing=="after","write timing ambiguous")
+    check(x.host_hits==0 and x.wrong_hits==0,"host/wrong-address callback fired")
+end
+validators.e=function(x)
+    check(need(x.before,"e:liveness")>0 and x.kept>0,"liveness control dead")
+    check(x.removed==0 and need(x.reloaded,"e:private savestate reload")==0,"hook survived removal/reload")
+end
+validators.f=function(x)
+    local fps=need(x.fps,"f:0..5 hook samples")
+    for i=1,6 do check(type(fps[i])=="number" and fps[i]>0,"invalid benchmark sample") end
+    for i=2,5 do check(fps[i]<fps[i-1],"overhead curve not decreasing") end
+    check(fps[2]/fps[1]>=0.35 and fps[2]/fps[1]<=0.7,"first registered hook cost differs from research curve")
+    check(fps[5]>=60 and fps[6]<fps[5],"four/five-hook performance control")
+    check(need(x.restored_four,"f:fifth-hook removal sample")>=fps[5]*0.9,"fifth hook removal did not restore four-hook throughput")
+    check(x.restored>=fps[1]*0.9,"unregister did not restore baseline throughput")
+    check(need(x.realtime,"f:explicit 100% performance qualification")>=59 and x.realtime<=62,
+        "real-time frame delivery")
+    check(x.phase_max<=4 and x.phase_max>=1,"phase maximum missing")
+end
+validators.g=function(x)
+    for name,size in pairs({["Main RAM"]=4194304,["Shared WRAM"]=32768,["ARM7 WRAM"]=65536,
+        SRAM=524288,["Instruction TCM"]=32768,["Data TCM"]=16384,[BUS]=0}) do check(x.domains[name]==size,"domain:"..name) end
+    for i=0,15 do check(x.registers["ARM9 r"..i]~=nil,"register ARM9 r"..i) end
+    check(x.bogus_refused==true,"bogus register silently accepted")
+end
+validators.h=function(x)
+    check(need(x.pointer,"h:SaveData pointer")>0 and x.pointer==x.field_save,"SaveData / FieldSystem disagreement")
+    check(need(x.signature,"h:independent page signature")==x.expected_signature,"page signature mismatch")
+    check(need(x.identity,"h:loaded-save identity")==x.expected_identity,"loaded-save identity mismatch")
+    check(x.invalid_rejected and x.signature_rejected and x.provenance_rejected,"SaveData negative controls")
+end
+validators.i=function(x)
+    -- These values must be filled by independent Python decode of the *same* run's
+    -- SaveRAM and a cold reload. Lua receipt claims never provide their own oracle.
+    check(need(x.written,"i:PYDEC native-save party field")==x.target and x.target~=x.original,"party write did not persist")
+    check(x.no_write==x.original,"no-write control changed")
+    check(need(x.box_dirty,"i:PYDEC occupied-box dirty control")==x.box_target and x.box_target~=x.box_original,"dirty box control did not persist")
+    check(need(x.box_without_dirty,"i:PYDEC occupied-box without-dirty control")==x.box_original,"box write without modified bit persisted")
+    check(x.cold_reload==x.target and x.save_completed==true,"cold reload/save boundary absent")
+end
+validators.j=function(x)
+    local h=need(x.hash,"j:gameinfo ROM hash"):lower()
+    check(h==x.sha1:lower() or h==x.md5:lower(),"loaded ROM hash differs from pinned file")
+    local patched=need(x.patched_hash,"j:one-byte patched ROM boot"):lower()
+    check(patched~=x.sha1:lower() and patched~=x.md5:lower(),"one-byte ROM control unchanged")
+end
+validators.k=function(x)
+    check(need(x.first,"k:first pinned boot")==need(x.second,"k:second pinned boot"),"pinned RTC differs")
+    check(need(x.unpinned,"k:unpinned RTC control")~=x.first,"unpinned RTC identical")
+    check(x.frame_first==x.frame_second,"RTC compared at different frame counts")
+end
+validators.l=function(x)
+    check(need(x.overworld,"l:CONTINUE with A/Start")==true,"buttons-only CONTINUE failed")
+    check(need(x.no_buttons_overworld,"l:no-button boot")==false,"no-button boot reached overworld")
+    check(x.other_boot_buttons==0,"CONTINUE used non A/Start input")
+end
+validators.m=function(x)
+    for _,p in ipairs({"overworld","menu","battle","save"}) do
+        local hist=need(x.histograms[p],"m:verified phase "..p)
+        check(count(hist)>0,"empty CPU histogram")
+    end
+    check(need(x.halt,"m:OS_Halt symbol")>0 and x.idle_hits>0,"idle-thread PC not observed")
+    check(x.save_same_as_idle==false,"save/script PC distribution matches idle")
+end
+validators.n=function(x)
+    local m=need(x.model,"n:real registry controls")
+    check(m.last_event==1 and m.second_drain==0 and m.after_close==0 and m.reset_event==1,"last-event/reset drain")
+    check(m.close_ok==false and m.retained==1 and m.fault and not m.rearm,"failed-close fault/accounting")
+    check(m.failed_last==1 and m.failed_second==0 and m.partial_fault and m.partial_retained==1,
+        "failed-construction retention")
+    check(not m.fifth and m.peak==4,"hook budget control")
+    local p=need(x.physical,"n:pack phase predicates + earliest/last producer oracle")
+    check(p.first_expected>0 and p.first_seen==p.first_expected and p.last_seen==p.last_expected and p.last_expected>0,
+        "first/last producer lost")
+    check(p.static_pc and p.reset and p.peak<=4 and p.live_after_close==0,"phase coverage/accounting")
+    check(need(p.pending_at_close,"n:physical queued-last-event close")>0 and p.second_drain==0,"physical last-event close not exercised")
+    check(p.max_cost<1/60 and p.restored_fps>=p.baseline_fps*0.9,"phase timing/cleanup performance")
+end
+function M.evaluate(row, observation)
+    local ok,why=pcall(function() validators[row](need(observation,row..":observation")) end)
+    if ok then return "PASS" end
+    if type(why)=="table" and why.open then return "OPEN",why.open end
+    return "FAIL",tostring(why)
+end
+
+local function run()
+    local root=assert(SLINK_ROOT or os.getenv("SLINK_ROOT"),"SLINK_ROOT required")
+    local json=dofile(root.."/lua/json_codec.lua")
+    local function read_json(path)
+        local f=assert(io.open(path,"rb"),"cannot read "..path); local raw=f:read("a"); f:close()
+        local parsed=assert(json.decode(raw))
+        local function strip_null(t)
+            for key,v in pairs(t) do
+                if v==json.null then t[key]=nil elseif type(v)=="table" then strip_null(v) end
+            end
+        end
+        strip_null(parsed); return parsed
+    end
+    local cfg=read_json(assert(os.getenv("SLINK_GEN4_PROBE_CONFIG"),"SLINK_GEN4_PROBE_CONFIG required"))
+    local out=assert(os.getenv("SLINK_GEN4_PROBE_OUT"),"SLINK_GEN4_PROBE_OUT required")
+    local observations,errors,owned={},{},{}
+    local callback_errors,callback_error_detail=0,nil
+    local started,advanced=os.clock(),0
+    local title,pack
+    local function guarded(row,fn)
+        local ok,result=pcall(fn)
+        if ok then observations[row]=result else errors[row]=type(result)=="table" and result or tostring(result) end
+    end
+    local function bytes(a,n)
+        local b=memory.read_bytes_as_array(a,n,BUS); local t={}
+        for i=1,n do t[i]=string.format("%02x",b[i]) end; return table.concat(t)
+    end
+    local function read(a) return u32(memory.read_u32_le(a,BUS)) end
+    local function symbol(name) return need(title.symbols[name],"symbol:"..name).address end
+    local function site(name)
+        for id,s in pairs(title.sites) do if s.symbol==name then local t=clone(s); t.id=id; return t end end
+        error({open="site:"..name},0)
+    end
+    local function resident(id) return M.resident(title,read,id) end
+    local function register(s,cb,name,validate)
+        if validate~=false then M.validate_site(title,s,bytes,resident) end
+        local h=event.on_bus_exec(function(...)
+            local good,why=pcall(cb,...)
+            if not good then callback_errors=callback_errors+1; callback_error_detail=tostring(why) end
+        end,s.address,name,BUS)
+        check(M.valid_handle(h),"exec registration returned zero GUID: "..name); owned[h]=true; return h
+    end
+    local function remove(h)
+        local ok,v=pcall(event.unregisterbyid,h)
+        check(ok and v~=false,"unregister failed: "..tostring(h)); owned[h]=nil
+    end
+    local histogram,phase={},"boot"
+    local phase_monitor
+    local changes,causes,prior={}, {},{}
+    local table_transitions,prior_raw={},nil
+    local census_enabled=false
+    local function snapshot()
+        local t=title.overlay_table; local now,raw={},{}
+        for r=0,t.regions-1 do for i=0,t.per_region-1 do
+            local p=t.address+(r*t.per_region+i)*t.entry_size
+            local id,active=read(p+t.id_off),read(p+t.active_off)
+            raw[#raw+1]=string.format("%08x%08x",id,active)
+            if active~=0 then now[r..":"..id]={region=r,id=id} end
+        end end
+        local current=table.concat(raw)
+        if current~=prior_raw then table_transitions[#table_transitions+1]={frame=emu.framecount(),before=prior_raw,after=current} end
+        prior_raw=current
+        for key,v in pairs(now) do if not prior[key] then
+            changes[#changes+1]={frame=emu.framecount(),region=v.region,id=v.id,kind="load"}
+        end end
+        for key,v in pairs(prior) do if not now[key] then
+            changes[#changes+1]={frame=emu.framecount(),region=v.region,id=v.id,kind="unload"}
+        end end
+        prior=now
+    end
+    local phase_valid
+    local function step(buttons)
+        if phase_monitor then phase_monitor.before() end
+        joypad.set(buttons or {}); emu.frameadvance()
+        advanced=advanced+1
+        if phase_monitor then phase_monitor.after() end
+        if census_enabled then snapshot() end
+        local observed=phase
+        if phase_valid and not phase_valid(phase) then observed="unverified" end
+        local pc=u32(emu.getregister("ARM9 r15")); local h=histogram[observed] or {}; histogram[observed]=h
+        local key=string.format("%08x",pc); h[key]=(h[key] or 0)+1
+    end
+    local function idle(n,fast)
+        for _=1,n do
+            if fast then joypad.set({}); emu.frameadvance(); advanced=advanced+1 else step() end
+        end
+    end
+    local function idle_field()
+        local fs,sp=read(symbol("sFieldSysPtr")),read(symbol("sSaveDataPtr"))
+        if fs==0 or sp==0 then return false end
+        local p=need(title.profile.probe_field,"profile.probe_field offsets")
+        for _,key in ipairs({"sub","save","task","live","launched_app","field_app","paused","save_driver","save_driver_data_off","save_state"}) do
+            need(p[key],"profile.probe_field."..key)
+        end
+        local sub=read(fs+p.sub)
+        if not (sub~=0 and read(fs+p.save)==sp and read(fs+p.task)==0 and read(fs+p.live)~=0
+            and read(sub+p.launched_app)==0 and read(sub+p.field_app)~=0 and read(sub+p.paused)==0) then return false end
+        local driver=read(fs+p.save_driver); if driver==0 then return false end
+        local data=read(driver+p.save_driver_data_off)
+        return data~=0 and memory.read_u8(data+p.save_state,BUS)==1
+    end
+    phase_valid=function(label)
+        if label=="boot" or label=="route-unverified" then return true end
+        if label=="overworld" then return idle_field() end
+        local p=title.profile.probe_field
+        local fs=read(symbol("sFieldSysPtr")); if fs==0 then return false end
+        local sub=read(fs+need(p.sub,"profile.probe_field.sub")); if sub==0 then return false end
+        local battle=site("BtlCmd_TryFaintMon")
+        if label=="battle" then return resident(battle.overlay_id) end
+        if label=="menu" then return not resident(battle.overlay_id) and
+            (read(fs+p.task)~=0 or read(sub+p.launched_app)~=0) end
+        if label=="save" or label=="script" then
+            if read(sub+p.launched_app)~=0 then return false end
+            local driver=read(fs+need(p.save_driver,"profile.probe_field.save_driver"))
+            if driver==0 then return false end
+            local data=read(driver+p.save_driver_data_off); if data==0 then return false end
+            local state=memory.read_u8(data+p.save_state,BUS)
+            if label=="save" then return state>=2 and state<=7 end
+            return state==1 and read(fs+p.task)~=0
+        end
+        return false
+    end
+    local function array_addr(id)
+        local save=read(symbol("sSaveDataPtr")); local g=title.profile.save
+        check(save~=0 and id>=0 and id<g.array_header_count,"invalid SaveArray pointer/id")
+        local h=save+g.array_headers_off+id*g.array_header_size
+        check(read(h+g.array_header_fields.id)==id,"runtime SaveArray header ID mismatch")
+        local offset,size=read(h+g.array_header_fields.offset),read(h+g.array_header_fields.size)
+        check(size>0 and offset+size<=g.dynamic_region_size,"runtime SaveArray extent")
+        return save+g.dynamic_region_off+offset,size
+    end
+    local function play_route(route)
+        for _,leg in ipairs(route or {}) do
+            local buttons={}; for _,button in ipairs(leg.buttons or {}) do
+                check(({A=true,B=true,X=true,Y=true,Start=true,Select=true,Up=true,Down=true,Left=true,Right=true,L=true,R=true})[button],"non-button route input")
+                buttons[button]=true
+            end
+            phase="route-unverified"
+            if leg.phase then phase=leg.phase end -- verified each frame against pack field/overlay predicates
+            check(type(leg.frames)=="number" and leg.frames%1==0 and leg.frames>0 and leg.frames<=12000,"route frame bound")
+            for _=1,leg.frames do step(buttons) end
+        end
+    end
+    local ok,fatal=pcall(function()
+        pack=read_json(cfg.profile)
+        check(pack.schema=="gen4-profile-v1","profile schema")
+        title=need(pack.titles[cfg.title],"profile title:"..cfg.title)
+        check(title.rom.sha1:lower()==cfg.rom_sha1:lower() and title.rom.md5:lower()==cfg.rom_md5:lower(),"profile/file hash mismatch")
+        emu.limitframerate(true); client.speedmode(cfg.requested_rate)
+        guarded("g",function()
+            local domains={}; for _,name in pairs(memory.getmemorydomainlist()) do domains[name]=memory.getmemorydomainsize(name) end
+            local registers=emu.getregisters()
+            local accepted,v=pcall(emu.getregister,"ARM9 no_such_register")
+            local safe=pcall(M.read_register,registers,emu.getregister,"ARM9 no_such_register")
+            return {domains=domains,registers=registers,bogus_refused=not safe,
+                raw_core_bogus_accepted=accepted,raw_core_bogus_value=accepted and v or nil,
+                refusal_owner="probe register-name guard (production NDS binding must retain this guard)"}
+        end)
+        guarded("j",function() return {hash=gameinfo.getromhash(),sha1=cfg.rom_sha1,md5=cfg.rom_md5} end)
+        if cfg.mode=="patched-rom" then return end -- hash control needs no CONTINUE/new-game route
+        -- Boot census has its own bounded hook set; never overlaps the bench set.
+        local census_handles={}
+        guarded("c",function()
+            for _,entry in ipairs({{"HandleLoadOverlay","load"},{"UnloadOverlayByID","unload"}}) do
+                local s=site(entry[1]); local kind=entry[2]
+                -- Boot instrumentation precedes ARM9 decompression. Pin the declared
+                -- image independently from the ROM before registration, then require
+                -- the full RAM pin on every execution. This is not the production
+                -- warm registration path exercised by a/b/n.
+                local file_pin=need(cfg.census_image_bytes and cfg.census_image_bytes[entry[1]],"c:declared-image FILE pin before bootstrap")
+                M.validate_site(title,s,function(a,n)
+                    check(a==s.address and n==s.extent,"declared-image FILE read extent"); return file_pin
+                end,function() return true end)
+                census_handles[#census_handles+1]=register(s,function(a,v,flags)
+                    if not M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident) then return end
+                    M.validate_site(title,s,bytes,resident)
+                    causes[#causes+1]={frame=emu.framecount(),id=u32(emu.getregister("ARM9 r0")),region=0,kind=kind,
+                        source=entry[1]..":"..s.id}
+                end,"g4c."..kind,false)
+            end
+            -- hge needs explicit pinned internal entry sites; no numeric allowance.
+            for _,entry in ipairs(cfg.internal_loads or {}) do
+                local s=site(entry.symbol)
+                check(type(entry.source)=="string" and entry.source~="","internal loader source required")
+                local pin=need(cfg.census_image_bytes[entry.symbol],"c:internal loader declared-image FILE pin")
+                M.validate_site(title,s,function() return pin end,function() return true end)
+                census_handles[#census_handles+1]=register(s,function(a,v,flags)
+                    if not M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident) then return end
+                    M.validate_site(title,s,bytes,resident)
+                    local id=entry.id
+                    if entry.id_register then
+                        id=M.read_register(emu.getregisters(),emu.getregister,entry.id_register)
+                        if entry.id and id~=entry.id then return end
+                    end
+                    need(id,"c:internal loader ID argument/constant")
+                    causes[#causes+1]={frame=emu.framecount(),id=id,region=entry.region,kind="load",source=entry.source}
+                end,"g4c.internal."..entry.symbol,false)
+            end
+            check(#census_handles<=4,"census hook budget")
+            census_enabled=true
+            return {jit=cfg.jit,use_real_time=cfg.use_real_time,changes=changes,causes=causes,table_transitions=table_transitions,
+                pin_timing="declared-image FILE before boot registration; full RAM pin at every callback"}
+        end)
+        local stable,boot_ok=0,false
+        guarded("l",function()
+            for i=1,cfg.boot_frames do
+                local good=idle_field(); if good then stable=stable+1 else stable=0 end
+                if stable>=60 then boot_ok=true; break end
+                local buttons={}
+                if cfg.mode~="no-buttons" then
+                    local p=i%40; if p<3 then buttons.A=true elseif p>=20 and p<23 then buttons.Start=true end
+                end
+                step(buttons)
+            end
+            return {overworld=boot_ok,other_boot_buttons=0,boot_frame=emu.framecount()}
+        end)
+        local rtc=symbol("sRTCWork")
+        guarded("k",function()
+            return {first=bytes(rtc+(cfg.rtc_offset or 0x10),cfg.rtc_size or 0x1C),frame_first=emu.framecount()}
+        end)
+        if cfg.mode=="cold-reload" then
+            check(boot_ok and idle_field(),"cold readback not at idle overworld")
+            guarded("i",function()
+                local p=need(cfg.cold_readback,"i:cold readback descriptor")
+                local addr,size=array_addr(p.array_id)
+                check(p.record_offset+#p.before_hex/2<=size,"cold record extent")
+                return {runtime_hex=bytes(addr+p.record_offset,#p.before_hex/2),operation="cold-reload"}
+            end)
+            return
+        end
+        if cfg.mode=="persistence" then
+            check(boot_ok,"persistence CONTINUE did not reach verified overworld")
+            guarded("i",function()
+                local p=need(cfg.persistence,"i:independently encoded mutation")
+                local addr,size=array_addr(p.array_id); addr=addr+p.record_offset
+                check(p.record_offset>=0 and p.record_offset+#p.before_hex/2<=size,"record outside runtime SaveArray")
+                check(bytes(addr,#p.before_hex/2)==p.before_hex,"runtime record differs from independently decoded save preimage")
+                check(memory.read_u16_le(addr+p.flags_offset,BUS)&3==0,"locked representation refused")
+                local modified
+                if p.box then
+                    local base=array_addr(p.array_id)
+                    local off=need(title.profile.pc.box_modified_flag_off,"i:verified box modified offset")
+                    modified=base+off
+                    check(read(modified)&(1<<p.box)==0,"box already dirty; no-dirty control invalid")
+                end
+                if p.write then
+                    check(idle_field(),"persistence mutation outside idle overworld")
+                    for _,change in ipairs(p.changes) do
+                        check(change.offset>=0 and change.offset<#p.before_hex/2,"mutation byte outside record")
+                        memory.write_u8(addr+change.offset,change.value,BUS)
+                    end
+                    if modified and p.dirty then memory.write_u32_le(modified,read(modified)|(1<<p.box),BUS) end
+                    check(bytes(addr,#p.after_hex/2)==p.after_hex,"record mutation readback mismatch")
+                end
+                local finished=0; local s=site("Save_WriteManFinish")
+                local h=register(s,function(a,v,flags)
+                    if M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident) then finished=finished+1 end
+                end,"g4i.native-save")
+                play_route(need(cfg.persistence_route,"i:native SAVE normal-button route")); idle(120); remove(h)
+                check(finished>0,"no native save-finish execution")
+                return {runtime_hex=bytes(addr,#p.before_hex/2),save_finish_hits=finished,operation=p.operation,
+                    modified=modified and read(modified),level="INSTRUMENTATION"}
+            end)
+            return
+        end
+        if cfg.mode~="baseline" then return end
+        if errors.l then error(errors.l,0) end
+        check(boot_ok,"CONTINUE did not reach verified overworld")
+        phase="overworld"; local quiet_before=#changes; idle(cfg.sample_frames)
+        if observations.c then observations.c.quiet_changes=#changes-quiet_before end
+        if observations.c then
+            local stats={loads=0,unloads=0,newly_active_ids=0,residency_changes=#changes,table_transitions=#table_transitions}
+            for _,v in ipairs(causes) do if v.kind=="load" then stats.loads=stats.loads+1 else stats.unloads=stats.unloads+1 end end
+            for _,v in ipairs(changes) do if v.kind=="load" then stats.newly_active_ids=stats.newly_active_ids+1 end end
+            observations.c.counts=stats
+        end
+        for _,h in ipairs(census_handles) do remove(h) end; census_enabled=false
+        guarded("h",function()
+            local p=read(symbol("sSaveDataPtr")); local fs=read(symbol("sFieldSysPtr"))
+            local witness=need(cfg.save_witness,"h:independent source-save witness offsets")
+            local geom=title.profile.save
+            local spec=p+geom.slot_specs_off
+            local footer=p+geom.dynamic_region_off+read(spec+geom.slot_spec_fields.offset)
+                +read(spec+geom.slot_spec_fields.size)-geom.chunk_footer.size
+            local signature=bytes(footer+witness.signature_footer_offset,#witness.signature_hex/2)
+            local trainer=need(title.profile.trainer,"profile.trainer verified identity offsets")
+            local header=p+geom.array_headers_off+trainer.array_id*geom.array_header_size
+            local trainer_addr=p+geom.dynamic_region_off+read(header+geom.array_header_fields.offset)+trainer.profile_off_in_array
+            local identity=bytes(trainer_addr,#witness.identity_hex/2)
+            local field_save=read(fs+title.profile.probe_field.save)
+            check(M.save_witness_ok(title,p,field_save,signature,identity,witness),"SaveData page/identity/provenance refusal")
+            local bogus=clone(title); bogus.profile.save_ptr.symbol="gSystem"
+            local bad_sig=signature:sub(1,-3)..(signature:sub(-2)=="00" and "01" or "00")
+            return {pointer=p,field_save=read(fs+title.profile.probe_field.save),signature=signature,
+                expected_signature=witness.signature_hex,identity=identity,expected_identity=witness.identity_hex,
+                invalid_rejected=not M.save_witness_ok(title,0,field_save,signature,identity,witness),
+                signature_rejected=not M.save_witness_ok(title,p,field_save,bad_sig,identity,witness),
+                provenance_rejected=not M.save_witness_ok(bogus,p,field_save,signature,identity,witness)}
+        end)
+        guarded("a",function()
+            local x={negative_hits=0}; local handles={}
+            for _,entry in ipairs({{"OS_WaitIrq","arm"},{"VBlankCB_DmaTasksFramecounter","thumb"}}) do
+                local s=site(entry[1]); local v={frames=cfg.sample_frames,hits=0,badpc=0,badword=0}; x[entry[2]]=v
+                handles[#handles+1]=register(s,function(a,val)
+                    v.hits=v.hits+1
+                    if u32(a)~=s.address or u32(emu.getregister("ARM9 r15"))~=s.address+(s.mode=="thumb" and 4 or 8) then v.badpc=v.badpc+1 end
+                    if u32(val)~=word(s.fire_hex) then v.badword=v.badword+1 end
+                end,"g4a."..entry[2])
+            end
+            handles[#handles+1]=register(site("DoSoftReset"),function() x.negative_hits=x.negative_hits+1 end,"g4a.negative")
+            idle(cfg.sample_frames); for _,h in ipairs(handles) do remove(h) end; return x
+        end)
+        guarded("d",function()
+            need(event.on_bus_write,"API:event.on_bus_write")
+            local offset=need(title.profile.system.vblank_counter_off,"profile.system.vblank_counter_off")
+            local addr=symbol("gSystem")+offset
+            local hits,wrong,timing=0,0,{}
+            local h=event.on_bus_write(function(_,v)
+                hits=hits+1; local current=memory.read_u8(addr,BUS)
+                timing[current==(u32(v)&255) and "after" or "before"]=true
+            end,addr,"g4d.store",BUS)
+            check(M.valid_handle(h),"write hook zero GUID"); owned[h]=true
+            local wrong_addr=need(title.profile.probe_wrong_write_offset,"profile.probe_wrong_write_offset")+symbol("gSystem")
+            local w=event.on_bus_write(function() wrong=wrong+1 end,wrong_addr,"g4d.wrong",BUS)
+            check(M.valid_handle(w),"negative write hook zero GUID"); owned[w]=true
+            M.host_write_control(function(a) return memory.read_u8(a,BUS) end,
+                function(a,v) memory.write_u8(a,v,BUS) end,addr)
+            local host=hits
+            idle(cfg.sample_frames); remove(h); remove(w)
+            return {hits=hits,timing=count(timing)==1 and next(timing) or "ambiguous",host_hits=host,wrong_hits=wrong}
+        end)
+        guarded("e",function()
+            local n,kept=0,0; local s=site("OS_WaitIrq")
+            local h=register(s,function() n=n+1 end,"g4e.remove")
+            local live=register(s,function() kept=kept+1 end,"g4e.keep")
+            idle(60); local before=n; remove(h); n=0; idle(60); local removed=n
+            need(savestate and savestate.save,"API:savestate.save")
+            local path=need(cfg.state_path,"e:private savestate path")
+            savestate.save(path); savestate.load(path); idle(60)
+            local live_before=kept; idle(60)
+            remove(live); return {before=before,removed=removed,reloaded=n,kept=kept-live_before}
+        end)
+        guarded("f",function()
+            if cfg.skip_perf_reason then error({open="f:performance not rerun: "..cfg.skip_perf_reason},0) end
+            local request=need(cfg.perf_request,"f:coordinator process inventory handshake")
+            local marker=assert(io.open(request,"w")); marker:write("ready\n"); marker:close()
+            local deadline=os.time()+20
+            local inventory
+            repeat
+                local response=io.open(cfg.perf_response,"rb")
+                if response then local raw=response:read("a"); response:close(); inventory=assert(json.decode(raw))
+                else idle(1,true) end
+            until inventory or os.time()>=deadline
+            need(inventory,"f:process inventory response absent")
+            if #inventory.foreign_pids>0 then error({open="f:concurrent load; foreign EmuHawk PIDs "..table.concat(inventory.foreign_pids,",")},0) end
+            local candidates={"OS_WaitIrq","VBlankCB_DmaTasksFramecounter","DoSoftReset","Task_Blackout","Main_RunOverlayManager"}
+            local fps={}
+            emu.limitframerate(false); client.speedmode(cfg.requested_rate)
+            local handles={}
+            for hooks=0,5 do
+                if hooks>0 then handles[hooks]=register(site(candidates[hooks]),function() end,"g4f."..hooks) end
+                local start=os.clock(); idle(cfg.sample_frames,true); fps[hooks+1]=cfg.sample_frames/(os.clock()-start)
+            end
+            remove(handles[5]); handles[5]=nil
+            local start=os.clock(); idle(cfg.sample_frames,true); local restored_four=cfg.sample_frames/(os.clock()-start)
+            for _,h in ipairs(handles) do remove(h) end
+            start=os.clock(); idle(cfg.sample_frames,true); local restored=cfg.sample_frames/(os.clock()-start)
+            local realtime
+            if cfg.qualify_performance then
+                emu.limitframerate(true); client.speedmode(100)
+                local handles={}; for i=1,cfg.phase_max do handles[i]=register(site(candidates[i]),function() end,"g4f.rt."..i) end
+                -- os.time is wall time; use >=1200 frames to bound integer-second error.
+                local wall=os.time(); idle(math.max(3600,cfg.sample_frames),true); local elapsed=os.time()-wall
+                realtime=math.max(3600,cfg.sample_frames)/elapsed
+                for _,h in ipairs(handles) do remove(h) end
+                emu.limitframerate(false); client.speedmode(cfg.requested_rate)
+            end
+            return {fps=fps,restored=restored,restored_four=restored_four,realtime=realtime,phase_max=cfg.phase_max,
+                requested_rate=cfg.requested_rate,process_inventory=inventory}
+        end)
+        guarded("n",function() return {model=M.phase_controls(dofile(root.."/lua/hook_registry.lua"))} end)
+        -- Battle and save routes are coordinator-supplied normal inputs. Labels alone
+        -- are never phase proof: verify the pack's predicate before including a census.
+        local b={accepted=0,dropped=0,badpc=0,badword=0}
+        guarded("b",function()
+            if cfg.phase_case then error({open="b:separate phase-budget run; faint observer not armed"},0) end
+            need(cfg.route and #cfg.route>0 and true or nil,"b:normal-input battle/faint/collision route")
+            local s=site("BtlCmd_TryFaintMon")
+            local inactive=function() return false end
+            b.inactive_drop=M.capture(s,s.address,0,0,s.address,inactive)==nil
+            b.active_fault=not pcall(M.capture,s,s.address,word(s.fire_hex)~1,0,s.address+(s.mode=="thumb" and 4 or 8),function() return true end)
+            local corrupt=clone(s); corrupt.register_hex=corrupt.register_hex:sub(1,-3)..(corrupt.register_hex:sub(-2)=="00" and "01" or "00")
+            b.full_pin_reject=not pcall(M.validate_site,title,corrupt,function() return s.register_hex end,function() return true end)
+            register(s,function(a,val,flags)
+                if not resident(s.overlay_id) then b.dropped=b.dropped+1; return end
+                if bytes(s.address,s.extent)~=s.register_hex then b.badword=b.badword+1; return end
+                local good,err=pcall(M.capture,s,a,val,flags,emu.getregister("ARM9 r15"),resident)
+                if good then b.accepted=b.accepted+1 else b.badword=b.badword+1; b.error=tostring(err) end
+            end,"g4b.faint")
+            return b
+        end)
+        -- One phase case per fresh boot keeps the independent always-on producer
+        -- observer + phase registry within four external handles. It falsifies a
+        -- late activation predicate rather than excusing the one-frame table lag.
+        guarded("n",function()
+            local result=observations.n or {model=M.phase_controls(dofile(root.."/lua/hook_registry.lua"))}
+            local case=need(cfg.phase_case,"n:normal-input phase case (static PC and reset cases required)")
+            local predicate=need(case.predicate,"n:executable pack phase predicate")
+            check(case.source and case.source~="","phase predicate source required")
+            local producer=clone(need(title.sites[case.producer_site],"n:independent producer site")); producer.id=case.producer_site
+            local sites={}; for _,id in ipairs(case.sites) do local s=clone(need(title.sites[id],"n:phase site:"..id)); s.id=id; sites[#sites+1]=s end
+            check(#sites>0 and #sites+1<=4,"producer observer + phase handle budget")
+            local baseline_start=os.clock(); idle(cfg.sample_frames,true); local baseline=cfg.sample_frames/(os.clock()-baseline_start)
+            local oracle,seen={},{}
+            local active
+            local h=register(producer,function(a,v,flags)
+                -- The oracle does not reuse the composition's residency gate. It
+                -- sees a producer inside its caller predicate even if the overlay
+                -- table lags. Reusing M.capture here would hide the same first hit
+                -- from both sides and falsely pass a late arm.
+                if active() and bytes(producer.address,producer.extent)==producer.register_hex then
+                    check(u32(a)==producer.address and u32(v)==word(producer.fire_hex),"independent producer address/word")
+                    check(u32(emu.getregister("ARM9 r15"))==producer.address+(producer.mode=="thumb" and 4 or 8),"independent producer PC")
+                    oracle[#oracle+1]=emu.framecount()
+                end
+            end,"g4n.oracle")
+            local binding={validate=function(s) return M.validate_site(title,s,bytes,resident) end,
+                register=function(s,cb,name) return register(s,cb,name,false) end,
+                unregister=function(handle) remove(handle); return true end,
+                capture=function(s,a,v,flags)
+                    local e=M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident)
+                    if e then M.validate_site(title,s,bytes,resident); e.frame=emu.framecount() end; return e
+                end}
+            local composite=M.composite(dofile(root.."/lua/hook_registry.lua"),binding)
+            local armed=false
+            active=function()
+                local base=read(symbol(predicate.symbol))
+                for _,offset in ipairs(predicate.deref or {}) do if base==0 then return false end; base=read(base+offset) end
+                if base==0 then return false end
+                local value=read(base+predicate.offset)
+                if predicate.nonzero then return value~=0 end
+                return value==predicate.value
+            end
+            local pending_at_close=0
+            phase_monitor={before=function()
+                local enabled=active()
+                if enabled and not armed then composite:enter(case.name,sites); armed=true
+                elseif not enabled and armed then
+                    pending_at_close=pending_at_close+composite.phases[case.name]:status().pending
+                    composite:leave(case.name); armed=false
+                end
+            end,after=function()
+                -- Deliberately retain the event at a phase-exit boundary until leave
+                -- exercises the physical drain-before-close path in the next pre-pump.
+                if active() or not armed then
+                    for _,e in ipairs(composite:drain()) do if e.id==case.producer_site then seen[#seen+1]=e.frame end end
+                end
+                check(not composite.failure,"phase composite fault: "..tostring(composite.failure))
+                check(composite:live_handles()+1<=4,"physical observer + phase budget")
+            end,finish=function()
+                for _,reg in pairs(composite.phases) do pending_at_close=pending_at_close+reg:status().pending end
+                composite:close()
+                for _,e in ipairs(composite:drain()) do if e.id==case.producer_site then seen[#seen+1]=e.frame end end
+                local second_drain=#composite:drain()
+                remove(h)
+                local before=os.clock(); idle(cfg.sample_frames,true); local restored=cfg.sample_frames/(os.clock()-before)
+                local maxcost=0; for _,cost in ipairs(composite.costs) do maxcost=math.max(maxcost,cost) end
+                local matched=#oracle==#seen
+                for i,f in ipairs(oracle) do if seen[i]~=f then matched=false end end
+                result.physical={first_expected=#oracle,first_seen=matched and #seen or 0,last_expected=#oracle,last_seen=matched and #seen or 0,
+                    static_pc=case.name=="pc" and producer.image=="arm9",reset=case.name=="reset",peak=composite.peak+1,
+                    live_after_close=composite:live_handles(),max_cost=maxcost,restored_fps=restored,baseline_fps=baseline,
+                    pending_at_close=pending_at_close,second_drain=second_drain,
+                    oracle_frames=oracle,seen_frames=seen,phase=case.name,predicate_source=case.source}
+            end}
+            return result
+        end)
+        play_route(cfg.route)
+        if phase_monitor then local monitor=phase_monitor; phase_monitor=nil; monitor.finish() end
+        guarded("m",function()
+            local halt=symbol("OS_Halt"); local idlehist=histogram.overworld or {}
+            local pc=string.format("%08x",halt+0xC) -- measured idle-thread instruction is base+4, PC pipeline +8
+            local saved=histogram.save
+            return {histograms=histogram,halt=halt,idle_hits=idlehist[pc] or 0,
+                save_same_as_idle=saved and M.same_distribution(saved,idlehist)}
+        end)
+    end)
+    if not ok then
+        if type(fatal)~="table" or not fatal.open then
+            -- An active phase/route fault must not be softened to OPEN merely
+            -- because its partially collected observation already exists.
+            errors[phase_monitor and "n" or "m"]=tostring(fatal)
+        end
+        for row in ROWS:gmatch(".") do if not observations[row] and not errors[row] then errors[row]=fatal end end
+    end
+    local cleanup_error
+    for h in pairs(owned) do local good,why=pcall(remove,h); if not good then cleanup_error=tostring(why) end end
+    local lines,overall={},"PASS"
+    for row in ROWS:gmatch(".") do
+        local status,why=M.evaluate(row,observations[row])
+        if errors[row] then
+            status=type(errors[row])=="table" and errors[row].open and "OPEN" or "FAIL"
+            why=type(errors[row])=="table" and errors[row].open or tostring(errors[row])
+        end
+        if cleanup_error then status="FAIL"; why="retained handles: "..cleanup_error end
+        if callback_errors>0 then status="FAIL"; why="callback fault: "..tostring(callback_error_detail) end
+        if status=="FAIL" then overall="FAIL" elseif status=="OPEN" and overall=="PASS" then overall="OPEN" end
+        local payload={schema="gen4-probe-row-v1",run_id=cfg.run_id,title=cfg.title,rom_sha1=cfg.rom_sha1,
+            level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
+            script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
+        payload.advanced_frames=advanced; payload.elapsed_clock_seconds=os.clock()-started
+        payload.achieved_fps=advanced/math.max(0.001,payload.elapsed_clock_seconds)
+        lines[#lines+1]="PROBE "..row.." "..status.." "..assert(json.encode(payload))
+    end
+    lines[#lines+1]="RESULT: "..overall
+    local f=assert(io.open(out,"w"),"cannot publish probe receipt: "..out)
+    f:write(table.concat(lines,"\n"),"\n"); f:close(); pcall(client.exit)
+end
+if SLINK_GEN4_PROBE_TEST then return M end
+run()
+return M
