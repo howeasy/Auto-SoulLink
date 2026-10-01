@@ -177,19 +177,14 @@ def test_pc_boxes_decode_and_corruption_is_named():
         bad.boxes()
 
 
-def test_platinum_footer_has_block_counter_and_unknown_offsets_stay_unknown():
+def test_platinum_footer_has_block_counter():
     # Same save, Pt footer {count, blockCounter, size, magic, blockID, crc}: 0x14 bytes.
     assert PT.footer_size == 0x14 and PT.magic_off == 12 and HGSS.footer_size == 0x10
     img = image(bank_bytes(PT, 2, 2, gen_size=0x1000, pc_at=0x1000, pc_size=0x2000), None)
     save = codec.parse_save(img, "pt")
     assert (save.bank, save.counter, len(save.pc)) == (0, 2, 0x2000)
-    with pytest.raises(codec.Gen4CodecError) as exc:
-        save.party()
-    assert exc.value.reason == "party_offset_unknown"
     assert PT.modified_off is None and PT.box_stride == 0xFF0 and PT.cur_box_off == 0
-    with pytest.raises(codec.Gen4CodecError) as exc:
-        save.player()
-    assert exc.value.reason == "player_offset_unknown"
+    assert (PT.party_off, PT.player_off, PT.block_align) == (0x98, 0x64, 4)  # FILE, real Pt save
     # a Pt-footer save is not an HGSS-footer save: the magic sits at a different footer offset
     with pytest.raises(codec.Gen4CodecError):
         codec.parse_save(img, "hgss")
@@ -273,9 +268,26 @@ def test_real_hge_save_geometry_boxes_and_empty_party(hge_image):
 
 
 def test_real_platinum_save_decode():
-    img = real_save("SLINK_GEN4_PT_SAVE", None, "Platinum battery save (the local AutoSaveRAM is blank 0xFF)")
+    # owner-made Pt save 2026-10-01 (sha1 fb40fdeb...): one save, so only bank 1 is written
+    img = real_save("SLINK_GEN4_PT_SAVE", "Pokemon - Platinum Version (USA).SaveRAM",
+                    "Platinum battery save")
     save = codec.parse_save(img, "pt")
-    assert save.pc and save.general
+    me = save.player()
+    assert (me["name"], me["tid"], me["sid"], me["version"]) == ("TTT", 44361, 13120, 12)
+    (mon,) = save.party()
+    assert (mon["species"], mon["level"], mon["otid"]) == (387, 6, me["id"])
+    assert len(save.boxes()) == 18
+
+
+def test_real_soulsilver_save_decode():
+    # owner-made SS starter save 2026-10-01 (sha1 a554fbcc...); distinct trainer from the HG save
+    img = real_save("SLINK_GEN4_SS_SAVE", "Pokemon - SoulSilver Version (USA).SaveRAM",
+                    "SoulSilver battery save")
+    save = codec.parse_save(img, "hgss")
+    me = save.player()
+    assert (me["name"], me["tid"], me["sid"], me["version"]) == ("DDDD", 25944, 16585, 8)
+    (mon,) = save.party()
+    assert (mon["species"], mon["level"], mon["otid"]) == (158, 5, me["id"])
 
 
 def test_local_blank_platinum_save_is_refused_not_decoded():

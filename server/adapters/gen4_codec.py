@@ -151,6 +151,7 @@ class Profile:
     names_stride: int | None       # bytes per box name (20 u16)
     player_off: int | None         # general-block offset of PlayerProfile
     notes: str = ""
+    block_align: int = 0x100       # HGSS PC block starts 0x100-aligned; Pt's starts at 0xCF2C
 
     @property
     def footer_size(self) -> int:
@@ -163,8 +164,8 @@ class Profile:
 
 SAVE_CHUNK_MAGIC = 0x20060623  # include/save.h:18
 _HGSS_FOOTER = ("<IIIHH", ("count", "size", "magic", "slot", "crc"))  # include/save.h:33-39
-# include/savedata.h:8-15 in pokeplatinum; the u8/u16 padding is C-alignment derived and has
-# NOT been confirmed on a real Pt save (the only local one is blank).
+# include/savedata.h:8-15 in pokeplatinum; layout and the CRC span (size - 0x14) FILE-checked
+# on the owner's Pt save 2026-10-01.
 _PT_FOOTER = ("<IIIIBxH", ("count", "block_counter", "size", "magic", "slot", "crc"))
 
 PROFILES: dict[str, Profile] = {
@@ -187,11 +188,13 @@ PROFILES: dict[str, Profile] = {
     ),
     "pt": Profile(
         "pt", 32, False, *_PT_FOOTER, slot_field="slot",
-        party_off=None, party_off_verified=False,   # unknown: no real Pt save exists locally
+        party_off=0x98, party_off_verified=True,    # FILE: owner's Pt save (Turtwig at +0xA0)
         box_count=18, boxes_off=4, box_stride=0xFF0,  # {u32 currentBoxID; boxMons[18][30]}
         cur_box_off=0, modified_off=None,           # no per-box modified flag (fullSaveRequired)
-        names_off=None, names_stride=None, player_off=None,
-        notes="platinum_bind.md; bind-only, SOURCE level",
+        names_off=None, names_stride=None,
+        player_off=0x64,                            # FILE: OT name at +0x68, id at +0x78
+        notes="platinum_bind.md; bind-only; party/player/footer FILE-checked on a real Pt save",
+        block_align=4,  # FILE: owner's Pt save, PC block at bank+0xCF2C
     ),
 }
 
@@ -350,7 +353,6 @@ def is_empty_slot(raw: bytes) -> bool:
 # ---------------------------------------------------------------------------
 SAVE_SIZE = 0x80000
 BANK_SIZE = 0x40000
-BLOCK_ALIGN = 0x100
 
 
 def _crc_table() -> tuple[int, ...]:
@@ -413,7 +415,7 @@ def _scan_bank(image: bytes, bank: int, profile: Profile) -> dict[int, Block]:
             start = foot + fsize - size
             if slot in (0, 1) and size > fsize:
                 blk = Block(bank, slot, "torn", start, size, f["count"])
-                if start < base or (slot == 0 and start != base) or start % BLOCK_ALIGN:
+                if start < base or (slot == 0 and start != base) or start % profile.block_align:
                     blk.reason = "geometry"
                 elif crc16_ccitt(image[start : foot]) != f["crc"]:
                     blk.reason = "crc"
