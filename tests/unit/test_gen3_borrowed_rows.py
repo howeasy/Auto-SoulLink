@@ -26,12 +26,18 @@ def receipts(r):
     parsed=c.parse_flash(image,cfru=True);count=parsed["sb1"][0x34]
     raw=[parsed["sb1"][0x38+i*100:0x38+(i+1)*100].hex() for i in range(count)]
     facts=d.own_facts(r)
+    # Same order the retained 3008cd9b cut observed: leading inactive end, begin,
+    # held window, registered loan end, queued HP0 write, restore marker.
+    own=r._gen3_fixture_saved("a")[0][1]
     values=[("BORROW_BASELINE",dict(key=r._link_keys["a"],raw_party_hex=raw,rom_sha1=facts["rom_sha1"])),
-            ("BORROW_SIGNAL",dict(kind="borrowed_party_begin")),
-            ("BORROW_BATTLE",dict(outcome=2)),("BORROW_SIGNAL",dict(kind="borrowed_party_end")),
-            ("BORROW_RESTORED",dict(key=r._link_keys["a"],borrowed=False))]
+            ("BORROW_SIGNAL",dict(kind="borrowed_party_begin",frame=300)),
+            ("BORROW_BATTLE",dict(outcome=2)),("BORROW_SIGNAL",dict(kind="borrowed_party_end",frame=400)),
+            ("BORROW_RESTORED",dict(key=r._link_keys["a"],borrowed=False,frame=500,
+                                    hp=own["hp"] if r.scenario.endswith("_battle_gen3") else 0))]
     return {"a":"\n".join(tag+" "+json.dumps(value) for tag,value in values)+"\nSAVE_WITNESS borrowed counter=4->5\n",
             "b":"RESULT: PASS (idle peer; no save)\n"}
+
+
 
 
 def test_actual_duorun_rom_route_and_both_rows():
@@ -130,12 +136,23 @@ def test_actual_route_composes_rr_dialogue_recovery_outside_incidental_wrapper()
     assert lua.execute("return play.step==original_step") is True
 
 
-def opponent_model():
-    """Actual DuoRun fixture/codec records, with the command's own-HP0 consequence."""
-    r=runner("opponent");texts=receipts(r)
-    texts["a"]=texts["a"].replace('"kind": "borrowed_party_begin"','"kind": "borrowed_party_opponent_begin"')
+def held_model(case="opponent"):
+    """Actual DuoRun fixture/codec records for a non-battle row, carrying the command's
+    own-HP0 consequence in the retained cut's order: held window, registered loan ends,
+    queued force_faint HP0 write, restore marker."""
+    r=runner(case);texts=receipts(r)
+    if case=="opponent":
+        texts["a"]=texts["a"].replace('"kind": "borrowed_party_begin"','"kind": "borrowed_party_opponent_begin"')
     held=dict(frames=120,party_write_count=0,hidden_ticks=4,start_frame=100,end_frame=220)
     texts["a"]=texts["a"].replace("SAVE_WITNESS ","BORROW_HELD "+json.dumps(held)+"\nSAVE_WITNESS ")
+    # The queued force_faint's own-party HP0 landing, logged exactly as the client
+    # logs it: slot1's hp field of the real party base, after the registered loan
+    # ends (menu 7091 after 6862/6900/7053; opponent 6460 after 6231/6269/6422).
+    borrow=d.own_facts(r)["borrow"]
+    hp_off,hp_len=next((off,size) for name,off,size in c._PARTY_TAIL if name=="hp")
+    hp_at=borrow["party_base"]+c.PARTY_MON_SIZE+hp_off
+    texts["a"]=texts["a"].replace("SAVE_WITNESS ",
+        "[client] [SLink-gen3] write overworld 0x%X +%d frame 460\nSAVE_WITNESS "%(hp_at,hp_len))
     a,b=r._gen3_fixture_saved("a"),r._gen3_fixture_saved("b")
     from copy import deepcopy
     a=deepcopy(a);a[0][1]["hp"]=0
@@ -144,7 +161,7 @@ def opponent_model():
     return r,texts
 
 def test_opponent_row_uses_native_option1_and_new_begin_kind():
-    r,texts=opponent_model();facts=d.own_facts(r)
+    r,texts=held_model();facts=d.own_facts(r)
     assert facts["menu_option"]==1 and facts["begin_kind"]=="borrowed_party_opponent_begin"
     d.saved_oracle(r,texts)
     # A ViewYourTeam hook cannot qualify the different ViewOpponent producer.
@@ -160,11 +177,11 @@ def test_school_approach_is_actual_adjacent_plain_tile_not_assumed_counter():
 
 def test_leading_inactive_restore_does_not_qualify_or_hide_real_pair():
     r=runner("battle");texts=receipts(r)
-    early='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end'})+'\n'
+    early='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end','frame':200})+'\n'
     texts['a']=texts['a'].replace('BORROW_SIGNAL ',early+'BORROW_SIGNAL ',1)
     d.saved_oracle(r,texts)
     # Keep the actual early LoadPlayerParty, but remove the post-borrow restore.
-    marker='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end'})
+    marker='BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_end','frame':400})
     before,after=texts['a'].rsplit(marker,1)
     texts['a']=before+after
     with pytest.raises(RuntimeError,match='begin/end'):d.saved_oracle(r,texts)
@@ -180,6 +197,41 @@ def test_restore_prefix_never_supplies_missing_or_wrong_borrow_proof(fault):
         texts['a']=texts['a'].replace('BORROW_BATTLE ',
             'BORROW_SIGNAL '+json.dumps({'kind':'borrowed_party_opponent_begin'})+'\nBORROW_BATTLE ',1)
     with pytest.raises(RuntimeError,match='begin/end'):d.saved_oracle(r,texts)
+
+def test_borrow_oracle_binds_hold_loan_end_queued_HP0_and_restore_markers():
+    for case in ("menu","opponent"):
+        r,texts=held_model(case);notes=[]
+        r._pydec_note=notes.append
+        d.saved_oracle(r,texts)
+        assert any("held end 220 < loan end 400 < own HP0 460 <= restore 500" in n for n in notes),notes
+
+@pytest.mark.parametrize("fault",["restore_before_held_end","loan_end_inside_hold","hp_written_inside_loan",
+                                   "wrong_party_address","hp_write_absent","restore_frame_absent"])
+def test_fabricated_borrow_order_is_refused(fault):
+    """Structure alone let a restore that precedes the hold it claims to follow through."""
+    r,texts=held_model("menu")
+    if fault=="restore_before_held_end":
+        texts["a"]=texts["a"].replace('"frame": 500','"frame": 210')
+    elif fault=="loan_end_inside_hold":
+        texts["a"]=texts["a"].replace('"borrowed_party_end", "frame": 400','"borrowed_party_end", "frame": 200')
+    elif fault=="hp_written_inside_loan":
+        texts["a"]=texts["a"].replace("frame 460","frame 380")
+    elif fault=="wrong_party_address":
+        # Same party region and width, but slot0's HP field rather than the target's.
+        hp_off=next(o for n,o,_ in c._PARTY_TAIL if n=="hp")
+        base=d.own_facts(r)["borrow"]["party_base"]
+        texts["a"]=texts["a"].replace("0x%X"%(base+c.PARTY_MON_SIZE+hp_off),"0x%X"%(base+hp_off))
+    elif fault=="hp_write_absent":
+        texts["a"]="".join(line for line in texts["a"].splitlines(True) if "write overworld" not in line)
+    else:
+        texts["a"]=texts["a"].replace(', "frame": 500','')
+    with pytest.raises(RuntimeError,match="borrow order"):d.saved_oracle(r,texts)
+
+def test_restored_marker_must_follow_the_loan_end_without_a_held_window():
+    r=runner("battle");texts=receipts(r)
+    d.saved_oracle(r,texts)
+    texts["a"]=texts["a"].replace('"borrowed_party_end", "frame": 400','"borrowed_party_end", "frame": 600')
+    with pytest.raises(RuntimeError,match="borrow order"):d.saved_oracle(r,texts)
 
 def test_actual_menu_cancel_block_quits_main_menu_instead_of_reentering_loan():
     from lupa import LuaRuntime

@@ -105,6 +105,12 @@ def saved_oracle(run,results):
     run._gen3_flush_boundary()
     baseline=one(text,"BORROW_BASELINE");held=one(text,"BORROW_HELD") if mode!="battle" else None
     restored=one(text,"BORROW_RESTORED")
+    # Party-region client writes the run already logged, in frame order. The queued
+    # force_faint logs its own landing here; this reads it, it does not add one.
+    base=facts["borrow"]["party_base"]
+    party_writes=sorted(((int(a,16),int(n),int(f)) for a,n,f in
+                         re.findall(r"write \S+ 0x([0-9A-Fa-f]+) \+(\d+) frame (\d+)",text)
+                         if int(a,16)<base+600 and int(a,16)+int(n)>base),key=lambda w:w[2])
     raw=[bytes.fromhex(x) for x in baseline["raw_party_hex"]]
     if baseline.get("rom_sha1")!=facts["rom_sha1"] or len(raw)<2 or any(len(x)!=100 for x in raw):
         raise RuntimeError("borrow baseline ROM/party raw invalid")
@@ -124,11 +130,8 @@ def saved_oracle(run,results):
         window=(held.get("start_frame"),held.get("end_frame"))
         if any(type(v) is not int for v in window) or window[1]-window[0]<120:
             raise RuntimeError("borrow menu lacks actual 120-frame bound")
-        for address,length,frame in re.findall(r"write \S+ 0x([0-9A-Fa-f]+) \+(\d+) frame (\d+)",text):
-            address,length,frame=int(address,16),int(length),int(frame)
-            base=facts["borrow"]["party_base"]
-            if window[0]<=frame<=window[1] and address<base+600 and address+length>base:
-                raise RuntimeError("logged client write touched loan during held window")
+        for _,_,frame in party_writes:
+            if window[0]<=frame<=window[1]:raise RuntimeError("logged client write touched loan during held window")
         if run._links_json():raise RuntimeError("menu command control must not create a link")
     else:
         if party!=before:raise RuntimeError("native borrowed fight changed own party")
@@ -150,9 +153,37 @@ def saved_oracle(run,results):
     if (len(signals)<2 or signals[0].get("kind")!=facts["begin_kind"]
             or any(s.get("kind")!="borrowed_party_end" for s in signals[1:])):
         raise RuntimeError("registered begin/end borrow evidence missing")
+    # Structure alone cannot order these. The observed run is held end -> registered
+    # loan end(s) -> the queued command's own-party HP0 write -> restore marker; a
+    # restore that precedes the hold it claims to follow is not that run.
+    paired_end,restored_frame=signals[1].get("frame"),restored.get("frame")
+    if type(paired_end) is not int or type(restored_frame) is not int:
+        raise RuntimeError("borrow order: registered end or restore marker carries no frame")
+    if paired_end>restored_frame:
+        raise RuntimeError(f"borrow order: registered loan end {paired_end} follows restore marker {restored_frame}")
+    order=f"loan end {paired_end}"
+    if mode!="battle":
+        if paired_end<=window[1]:
+            raise RuntimeError(f"borrow order: registered loan end {paired_end} did not follow the held window ending {window[1]}")
+        # The queued force_faint lands on this mon's own HP field -- the codec's record
+        # layout over the census party base, not merely some party-region write.
+        hp_off,hp_len=next((off,size) for name,off,size in c._PARTY_TAIL if name=="hp")
+        hp_at=base+1*c.PARTY_MON_SIZE+hp_off
+        spans=[frame for address,length,frame in party_writes if address==hp_at and length==hp_len]
+        if spans and spans[0]<=paired_end:
+            raise RuntimeError(f"borrow order: target HP field was written at {spans[0]}, inside the loan that ends {paired_end}")
+        if not spans or spans[0]>restored_frame:
+            raise RuntimeError(f"borrow order: target HP landing {spans[0] if spans else None} is not between loan end {paired_end} and restore {restored_frame}")
+        if before[1]["hp"]<=0:
+            raise RuntimeError("borrow order: baseline own target was already fainted")
+        if restored.get("hp")!=0:
+            raise RuntimeError(f"borrow order: restore marker logged hp {restored.get('hp')!r}, not the awaited own HP0")
+        order=f"held end {window[1]} < loan end {paired_end} < own HP0 {spans[0]}"
+    order+=f" <= restore {restored_frame}"
     if restored.get("key")!=target or restored.get("borrowed") is not False:raise RuntimeError("restore names wrong ownparty")
     problems=h.gen3_receipt_problems("a",text,required=["BORROW_BASELINE ","BORROW_RESTORED ","SAVE_WITNESS "],
              ordered=[("BORROW_BASELINE ","BORROW_RESTORED "),("BORROW_RESTORED ","SAVE_WITNESS ")])
     if "SAVE_WITNESS " in results["b"]:problems.append("idle B unexpectedly saved")
     if problems:raise RuntimeError("; ".join(problems))
-    run._pydec_note("borrowed "+mode+": real registered lifecycle, independent saved own records, idle peer")
+    run._pydec_note("borrowed "+mode+": real registered lifecycle, independent saved own records, idle peer"
+                    "; borrow order "+order)

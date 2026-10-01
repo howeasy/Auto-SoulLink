@@ -139,7 +139,7 @@ return function(ctx)
     else
         -- Primary party_menu.c CursorCB_Enter: selected order stores slot+1;
         -- RR Flag0930-clear native validator accepts a nonempty selection; max is3.
-        -- Select only present UI records, then let native Start/CONFIRM validate it.
+        -- Select only observed live-party records, then let native Start/CONFIRM validate it.
         local available=ctx.party()
         if not available or #available<1 or #available>6 then return false,"loan UI party unreadable" end
         local selection_count=math.min(#available,facts.party_selection_max)
@@ -216,7 +216,9 @@ return function(ctx)
     if mode~="battle" and not ctx.wait_until(function() local m=ctx.find(key);return m and m.hp==0 end,120,"own queuedHP0") then
         return false,"held command did not land on restored own target"
     end
-    ctx.jlog("BORROW_RESTORED",{key=key,borrowed=borrowed(),hp=ctx.find(key).hp})
+    -- Frame-stamped after the actual HP0 wait, so the server oracle binds the held
+    -- window, the registered loan ends, the queued write and this marker by order.
+    ctx.jlog("BORROW_RESTORED",{key=key,borrowed=borrowed(),hp=ctx.find(key).hp,frame=ctx.emulator.framecount()})
     if not ctx.wait_go("SAVE") then return false,"save permission absent" end
     return ctx.save("borrowed")
 end
