@@ -351,8 +351,11 @@ def test_actual_native_selection_uses_available_party_and_start_confirmation(ava
         ctx.task_live=function(name) return state=='popup' and name=='Task_HandleSelectionMenuInput' end
         ctx.G={idle=function() end,pred_ok=function() return true end,shot=function() end,
             tap=function(button)
-                if button=='Right' or button=='Down' then at=math.min(at+1,AVAILABLE-1)
-                elseif button=='Up' then at=math.max(0,at-1)
+                -- RR lays the loan out in TWO columns: row inputs step +/-2, column inputs +/-1.
+                if button=='Down' then at=math.min(at+2,AVAILABLE-1)
+                elseif button=='Up' then at=math.max(0,at-2)
+                elseif button=='Right' then at=math.min(at+1,AVAILABLE-1)
+                elseif button=='Left' then at=math.max(0,at-1)
                 elseif button=='Start' then starts=starts+1;at=6
                 elseif button=='A' and at==6 then confirmed=true
                 elseif button=='A' and state=='choose' then state='popup'
@@ -367,3 +370,38 @@ def test_actual_native_selection_uses_available_party_and_start_confirmation(ava
         return run()
     ''')
     assert result==(True,available,1 if available==2 else 0)
+
+
+SCENARIO="lua/tests/duo/scenario_gen3_borrowed.lua"
+RR_GRID_STEP={"Down":2,"Up":-2,"Right":1,"Left":-1}   # 0/1, 2/3, 4/5 per the retained cursor shot
+_GRID_STEP=[None]
+
+def _grid_step():
+    """The scenario's ACTUAL rr_grid_step, executed as written."""
+    if _GRID_STEP[0] is None:
+        from lupa import LuaRuntime
+        source=(ROOT/SCENARIO).read_text()
+        start=source.index('        local function rr_grid_step(at,to)')
+        end=source.index("\n        end\n",start)+len("\n        end\n")
+        _GRID_STEP[0]=LuaRuntime().execute(source[start:end]+"\nreturn rr_grid_step\n")
+    return _GRID_STEP[0]
+
+def _walk(start,to):
+    """The scenario's own 12-press budget over RR's two-column grid."""
+    step,at,presses=_grid_step(),start,[]
+    for _ in range(12):
+        if at==to:break
+        button=step(at,to);presses.append(button)
+        at=max(0,min(at+RR_GRID_STEP[button],5))
+    return at==to,presses,at
+
+@pytest.mark.parametrize('start,slot',[(a,b) for a in range(6) for b in range(6)])
+def test_actual_rr_grid_selection_movement_reaches_every_loan_cell(start,slot):
+    """Every ordered pair of visible cells, including 0->1, 2->4 and the live 1->2 stall."""
+    reached,presses,at=_walk(start,slot)
+    assert reached,f"cursor stuck at {at} after {presses}: {start}->{slot}"
+
+def test_actual_rr_grid_selection_movement_refuses_a_cell_off_the_grid():
+    """The stall branch is reachable: no input reaches a cell the two-column grid lacks."""
+    reached,presses,at=_walk(0,7)
+    assert not reached and at<=5,(presses,at)

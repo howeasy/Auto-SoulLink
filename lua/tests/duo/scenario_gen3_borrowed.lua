@@ -140,6 +140,15 @@ return function(ctx)
         -- Primary party_menu.c CursorCB_Enter: selected order stores slot+1;
         -- RR Flag0930-clear native validator accepts a nonempty selection; max is3.
         -- Select only observed live-party records, then let native Start/CONFIRM validate it.
+        -- RR's loan chooser is a 2-column grid (the retained borrow_selection_cursor
+        -- artifact: slots 0/1 row0, 2/3 row1, 4/5 row2), so column parity decides a
+        -- Left/Right press and only the row decides Up/Down. The previous
+        -- at==0/"Right" heuristic treated the grid as a single column and oscillated
+        -- (Down 1->3, then Up 3->1) when reaching slot 2.
+        local function rr_grid_step(at,to)
+            if at%2~=to%2 then return to%2>at%2 and "Right" or "Left" end
+            return to>at and "Down" or "Up"
+        end
         local available=ctx.party()
         if not available or #available<1 or #available>6 then return false,"loan UI party unreadable" end
         local selection_count=math.min(#available,facts.party_selection_max)
@@ -150,7 +159,7 @@ return function(ctx)
             if not ctx.wait_until(picker,30,"fade-ready loan chooser") then return false,"loan chooser not ready" end
             for _=1,12 do
                 if cursor()==slot then break end
-                local at=cursor();ctx.G.tap(at==0 and "Right" or (at<slot and "Down" or "Up"),3,20)
+                local at=cursor();ctx.G.tap(rr_grid_step(at,slot),3,20)
             end
             if cursor()~=slot then
                 selection_trace("cursor_stalled",slot)
