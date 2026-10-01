@@ -994,7 +994,6 @@ class SoulLinkState:
             return
         if player_id != pt["initiator"]:
             return
-        pt["age"] = 0                                  # progress — reset the abandonment watchdog
         try:
             slot = int(msg.get("slot", 7))
         except (TypeError, ValueError):
@@ -1003,6 +1002,24 @@ class SoulLinkState:
             self.pending_trade = None
             self.queued_commands[player_id].append({
                 "cmd": "msgbox", "text": "Trade canceled.", "fb": "prompt"})
+            return
+        if pt.get("choice_deferred"):
+            return  # replayed picks cannot replace the held choice or renew its watchdog
+        pt["age"] = 0                                  # progress — reset the abandonment watchdog
+        if (self.adapter.supports_trade_recovery() and all(self.trade_prepare.values())
+                and (any(self.party_hidden.values()) or any(self.trade_recovery_pending.values()))):
+            # Cached identity pins the selection only; it cannot authorize a trade while hidden.
+            mine = next((b for b in self.partner_blobs[player_id] if b.get("slot") == slot), None)
+            entry = self.entry_for(player_id, mine.get("key", "")) if mine else None
+            partner = _partner(player_id)
+            other = (entry.b if player_id == "a" else entry.a) if entry else None
+            theirs = next((b for b in self.partner_blobs[partner]
+                           if other and b.get("key") == other.key), None)
+            if not mine or not theirs:
+                self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
+                return
+            pt["choice_deferred"] = {"slot": slot, "key": mine["key"],
+                                     "partner_key": theirs["key"], "partner_slot": theirs["slot"]}
             return
         match = next((p for p in self._eligible_trade_pairs(player_id) if p[0] == slot), None)
         if match is None:                              # not a linked mon -> re-prompt (capped)
@@ -1093,7 +1110,7 @@ class SoulLinkState:
             else:                                          # B-press / cancel (0x7F) → abort silently
                 self.pending_trade = None
             return
-        if player_id == pt["initiator"] and phase in ("confirming", "preparing", "applying"):
+        if player_id == pt["initiator"] and phase in ("choosing", "confirming", "preparing", "applying"):
             # The initiator's cartridge left its offer (timed out, B, a late ack): an explicit
             # `withdraw` (never a bare choice 0, which a Gen 3 menu replay can carry) cancels it
             # BEFORE anything is applied, or a later YES would apply the partner side alone.
@@ -1170,6 +1187,21 @@ class SoulLinkState:
 
     def _resume_prepared_trade_on_visible_snapshot(self):
         pt = self.pending_trade
+        if (self.adapter.supports_trade_recovery() and pt and pt.get("phase") == "choosing"
+                and pt.get("choice_deferred") and not any(self.party_hidden.values())
+                and not any(self.trade_recovery_pending.values())):
+            choice = pt["choice_deferred"]
+            initiator = pt["initiator"]
+            match = next((p for p in self._eligible_trade_pairs(initiator)
+                          if p[0] == choice["slot"] and p[1] == choice["key"]
+                          and p[3].get("key") == choice["partner_key"]
+                          and p[3].get("slot") == choice["partner_slot"]), None)
+            if not all(self.trade_prepare.values()) or match is None:
+                self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
+            else:
+                del pt["choice_deferred"]
+                self._handle_mon_chosen(initiator, {"token": pt["token"], "slot": choice["slot"]})
+            return
         if (self.adapter.supports_trade_recovery() and pt and pt.get("phase") == "menu"
                 and pt.get("menu_deferred") and not any(self.party_hidden.values())
                 and not any(self.trade_recovery_pending.values())):

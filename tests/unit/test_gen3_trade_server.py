@@ -86,6 +86,92 @@ def _applying(tmp_path, *, prepare_only=False, before_confirm=False, title=None)
     return srv, entry, token
 
 
+def _hidden_picker(tmp_path, *, hidden_player="a", recovery=False):
+    srv = _server(tmp_path, "firered_rr")
+    entry = LinkEntry(area_id="duo", status=LinkStatus.ALIVE,
+                      a=MonInfo(key=KEYS["a"], species=1, level=12),
+                      b=MonInfo(key=KEYS["b"], species=4, level=12))
+    srv.state.links.append(entry)
+    srv.state._index_entry(entry)
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    assert srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0}) == [
+        {"cmd": "choose_mon", "token": token}]
+    if recovery:
+        srv.state.trade_recovery_pending[hidden_player] = True
+    else:
+        srv._dispatch(hidden_player, {"event": "tick", "party_hidden": True})
+    reply = srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 0})
+    assert reply == [{"cmd": "noop"}]  # withheld visibility must not reopen the picker
+    assert srv.state.pending_trade["phase"] == "choosing"
+    return srv, entry, token
+
+
+def test_rr_hidden_picker_resumes_exact_choice_without_duplicate_prompt(tmp_path):
+    srv, _entry, token = _hidden_picker(tmp_path)
+    srv.state.pending_trade["age"] = 10
+    assert srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 0}) == [{"cmd": "noop"}]
+    assert srv.state.pending_trade["age"] >= 10
+    srv._dispatch("a", {"event": "tick", "party": [_mon("a")]})
+    assert srv.state.pending_trade["phase"] == "confirming"
+    assert sum(c["cmd"] == "show_menu" for c in srv.state.queued_commands["b"]) == 1
+    assert srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 0}) == [{"cmd": "noop"}]
+    srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
+    assert srv.state.pending_trade["phase"] == "preparing"
+
+
+@pytest.mark.parametrize("change", ["key", "slot", "partner_slot", "dead", "blocked", "capability", "abnormal", "keeps_one", "clash"])
+def test_rr_hidden_picker_cancels_changed_pair_before_authorization(tmp_path, change):
+    srv, entry, _token = _hidden_picker(tmp_path)
+    party = [_mon("a")]
+    if change == "key": party[0]["key"] = "different:00000011"
+    if change == "slot": party[0]["slot"] = 1
+    if change == "partner_slot":
+        srv._dispatch("b", {"event": "tick", "party": [_mon("b", slot=1)]})
+    if change == "dead": entry.status = LinkStatus.DEAD
+    if change == "blocked": srv.state.trade_blocked["b"] = True
+    if change == "capability": srv.state.trade_prepare["b"] = False
+    if change == "abnormal": party[0]["level"] = 0
+    if change == "keeps_one":
+        party[0]["hp"] = 0
+        srv._dispatch("b", {"event": "tick", "party": [_mon("b", hp=0)]})
+    if change == "clash":
+        clash = LinkEntry(area_id="clash", status=LinkStatus.ALIVE,
+                         a=MonInfo(key=KEYS["b"], species=4, level=12),
+                         b=MonInfo(key="other:00000022", species=1, level=12))
+        srv.state.links.append(clash)
+        srv.state._index_entry(clash)
+    srv._dispatch("a", {"event": "tick", "party": party})
+    assert srv.state.pending_trade is None
+    assert not any(c["cmd"] in ("show_menu", "apply_prepare", "apply_trade")
+                   for commands in srv.state.queued_commands.values() for c in commands)
+
+
+@pytest.mark.parametrize("hidden_player,recovery", [("b", False), ("a", True), ("b", True)])
+def test_rr_hidden_picker_waits_for_both_visibility_and_recovery(tmp_path, hidden_player, recovery):
+    srv, _entry, token = _hidden_picker(tmp_path, hidden_player=hidden_player, recovery=recovery)
+    srv._dispatch("a", {"event": "tick", "party": [_mon("a")]})
+    assert srv.state.pending_trade["phase"] == "choosing"
+    assert srv.state._trade_to_json() is None  # an uncommitted choice cannot survive restart
+    if recovery: srv.state.trade_recovery_pending[hidden_player] = False
+    srv._dispatch(hidden_player, {"event": "tick", "party": [_mon(hidden_player)]})
+    assert srv.state.pending_trade["phase"] == "confirming"
+    assert srv.state.pending_trade["token"] == token
+
+
+@pytest.mark.parametrize("stop", ["cancel", "withdraw", "watchdog"])
+def test_rr_hidden_picker_remains_cancelable_and_bounded(tmp_path, stop):
+    srv, _entry, token = _hidden_picker(tmp_path)
+    if stop == "cancel":
+        srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 7})
+    elif stop == "withdraw":
+        srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0, "withdraw": True})
+    else:
+        srv.state.TRADE_WATCHDOG_EVENTS = 2
+        for _ in range(4): srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    assert srv.state.pending_trade is None
+
+
 @pytest.mark.parametrize("event", ["hello", "tick", "safe"])
 @pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
 def test_hidden_snapshot_preserves_last_good_party_and_display(tmp_path, event, title):
