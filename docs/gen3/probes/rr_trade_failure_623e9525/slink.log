@@ -1,0 +1,36 @@
+2026-09-30 06:58:48,179 [INFO] __main__: Logging to C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_k45o2ib5\slink.log
+2026-09-30 06:58:48,180 [INFO] __main__: SLink [duo-d29219e9293749e99b334dfdcc145315] TCP server listening on ('127.0.0.1', 53343)
+2026-09-30 06:58:48,188 [WARNING] __main__: Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-09-30 06:58:48,188 [INFO] __main__: SLink [duo-d29219e9293749e99b334dfdcc145315] status page at http://127.0.0.1:53344/
+2026-09-30 06:58:48,270 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:48 -0400] "GET /api/status HTTP/1.1" 200 3360 "-" "Python-urllib/3.12"
+2026-09-30 06:58:50,846 [INFO] __main__: Client connected: ('127.0.0.1', 53353)
+2026-09-30 06:58:50,883 [INFO] __main__: Client connected: ('127.0.0.1', 53354)
+2026-09-30 06:58:54,144 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "GET /api/status HTTP/1.1" 200 3360 "-" "Python-urllib/3.12"
+2026-09-30 06:58:54,346 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "GET /api/status HTTP/1.1" 200 3360 "-" "Python-urllib/3.12"
+2026-09-30 06:58:54,379 [INFO] __main__: [a] admission: admitted — no randomized-ROM contract for this run
+2026-09-30 06:58:54,379 [INFO] __main__: [a] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,379 [INFO] server.state: [a] Identity locked: B (OT 73595513)
+2026-09-30 06:58:54,381 [INFO] __main__: Adapter switched to gen3_frlge (rom_type=firered_rr)
+2026-09-30 06:58:54,382 [INFO] __main__: Committed ROM type 'firered_rr' for this run
+2026-09-30 06:58:54,382 [INFO] __main__: Committed trainer name 'B' for player a
+2026-09-30 06:58:54,414 [INFO] __main__: [b] admission: admitted — no randomized-ROM contract for this run
+2026-09-30 06:58:54,414 [INFO] __main__: [b] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,414 [INFO] server.state: [b] Identity locked: BB (OT 35590121)
+2026-09-30 06:58:54,416 [INFO] __main__: Committed trainer name 'BB' for player b
+2026-09-30 06:58:54,455 [INFO] __main__: [a] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,483 [INFO] __main__: [b] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,532 [INFO] __main__: [a] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,551 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "GET /api/status HTTP/1.1" 200 13567 "-" "Python-urllib/3.12"
+2026-09-30 06:58:54,559 [INFO] __main__: [b] hello rom=firered_rr area='route_1' party=2
+2026-09-30 06:58:54,564 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "POST /api/debug/set_pokeballs HTTP/1.1" 200 233 "-" "Python-urllib/3.12"
+2026-09-30 06:58:54,567 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "POST /api/debug/set_pokeballs HTTP/1.1" 200 233 "-" "Python-urllib/3.12"
+2026-09-30 06:58:54,569 [INFO] __main__: [inject_link] A:Aaaaaaaaaa(F56D8C1D) <-> B:Aaaaaaaaaa(F56D8C1D) area=duo
+2026-09-30 06:58:54,569 [INFO] aiohttp.access: 127.0.0.1 [30/Sep/2026:06:58:54 -0400] "POST /api/inject_link HTTP/1.1" 200 324 "-" "Python-urllib/3.12"
+2026-09-30 06:59:25,247 [INFO] __main__: [a] no_catch area='route_1'
+2026-09-30 06:59:25,247 [INFO] server.state: [DEAD ZONE] route_1  reason=no_catch  triggered_by=a  partner_had_capture=False
+2026-09-30 06:59:25,247 [INFO] server.state: dead zone route_1: a no catch, partner had no pending capture
+2026-09-30 06:59:37,758 [INFO] __main__: [a] area_enter → 'viridian_city'
+2026-09-30 06:59:39,934 [INFO] __main__: [a] area_enter → 'viridian_city_pokemon_center_1f'
+2026-09-30 06:59:42,794 [INFO] server.state: [a] trade_request → action menu (Trade/Say hey) token=t1
+2026-09-30 06:59:43,878 [INFO] server.state: [a] chose slot 1 → partner-confirm F56D8C1D<->F56D8C1D
+2026-09-30 07:03:48,213 [INFO] server.backup: Rolling backup saved (C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_k45o2ib5\backups)

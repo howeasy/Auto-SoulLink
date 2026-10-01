@@ -1,0 +1,20 @@
+# Scope: interrupted partial RR cut, 12 completed of 28 planned rows; trade diagnostic stopped before a runner verdict.
+# G4 final cut 623e95252e63e2d0d34d4c9ae5420799587f9ab3 -- tools/gen3_final_cut.py summary (written 2026-09-30T10:58:46Z)
+# RUN 12 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_faint_cmd_gen3_rr_as_a_623e9525.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_linked_faint_active_gen3_rr_as_a_623e9525.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_linked_faint_active_whiteout_gen3_rr_as_a_623e9525.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_boxsync_gen3_rr_as_a_623e9525.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_whiteout_gen3_rr_as_a_623e9525.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_link_gen3_rr_as_a_623e9525.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS (resumed) | 0 | fc_deadzone_gen3_rr_as_a_623e9525.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_reconnect_gen3_rr_as_a_623e9525.txt |
+| 9 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_623e9525.txt |
+| 10 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_gen3_rr_as_a_623e9525.txt |
+| 11 | rival_swap_real_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_real_gen3_rr_as_a_623e9525.txt |
+| 12 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_native_absent_gen3_rr_as_a_623e9525.txt |
+
+OVERALL: PASS (12/12 rows)

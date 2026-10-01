@@ -1,0 +1,43 @@
+# gen3_final_cut row=release_gen3_rr_as_a item=§14_P5_RR_duo cut=617c7360e05788fb46f96ef7b83c2837b47365f9
+# lane=C:/slink-wt/g3-rr-finish
+# command: python tools/e2e_duo.py --game gen3_rr --scenario release_gen3   (cwd=C:/slink-wt/g3-rr-finish)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T09:47:20 cpu=26% emuhawk=0 python=3
+start_utc=2026-09-30T13:47:19Z tracked_clean_before=True
+
+========== scenario: release_gen3 ==========
+[duo] release_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=617c7360e05788fb46f96ef7b83c2837b47365f9
+[duo] server up: tcp=62911 http=62912 data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_fsmmq2o1
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_fsmmq2o1 path=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_fsmmq2o1\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_fsmmq2o1 path=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_fsmmq2o1\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 27.7s
+[duo] timing results 11.4s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=7b10f3b2f8e8b7aa036f4e312e6516ac5033e57fc296d44815997c784b017db3 file=7b10f3b2f8e8b7aa036f4e312e6516ac5033e57fc296d44815997c784b017db3 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=08baa8ccce93987b6e30eeaddf8eb084c1e56daec3cad3a736fcbd49b08e0f95 file=08baa8ccce93987b6e30eeaddf8eb084c1e56daec3cad3a736fcbd49b08e0f95 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] release: native PC removal F56D8C1D:2BDDC8BF; boxed partner F56D8C1D:D4223740 retired and memorial saved
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] release_gen3: a=PASS b=PASS
+
+========== summary ==========
+  release_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-30T13:48:01Z tracked_clean_after=True classification=pass

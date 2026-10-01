@@ -1,0 +1,73 @@
+duo instance b scenario=trade_gen3 phase=initial title=radical_red attempt=1
+speedmode requested=300 call=ok
+[client] [SLink] TCP connecting to 127.0.0.1:53343 (non-blocking)…
+DUO_JOURNAL scope=attempt-private path=C:/Users/howar/AppData/Local/Temp/slink_duo_trade_gen3_k45o2ib5/slink_gen3_trade guard=unchanged
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:53343 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:53343
+[client] [SLink] TCP connected to 127.0.0.1:53343
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 618
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 619
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 619
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+JITTER requested=0 applied=0 attempt=1
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 621
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 621
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 6123
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 6123
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 6123
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 6123
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 6123
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 6123
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 6123
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 6123
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 6123
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 6123
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 6123
+RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+[client] [SLink-gen3] write native 0x0203F900 +38 frame 9453
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 9453
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 9453
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 9453
+TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":299,"token":"t1"}
+ACCEPTED choice=1
+TRACE wait frame=9472 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED 
+RX msgbox text=Trade canceled - party withheld.
+Wait for a fresh snapshot.

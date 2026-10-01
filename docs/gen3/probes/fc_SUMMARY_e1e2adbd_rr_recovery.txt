@@ -1,0 +1,11 @@
+# Scope: three explicit recovery controls, separate from standard28 RR rows. Completed 3 of3 planned.
+# G4 final cut e1e2adbdf7c0fb3090a76986aba5d31b5e863ffd -- tools/gen3_final_cut.py summary (written 2026-10-01T02:28:38Z)
+# RUN 3 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | trade_lock_probe_gen3_rr_as_a | RR explicit recovery qualification | PASS | 1 | fc_trade_lock_probe_gen3_rr_as_a_e1e2adbd.txt |
+| 2 | trade_reset_success_gen3_rr_as_a | RR explicit recovery qualification | PASS | 1 | fc_trade_reset_success_gen3_rr_as_a_e1e2adbd.txt |
+| 3 | trade_reset_commit_gen3_rr_as_a | RR explicit recovery qualification | PASS | 1 | fc_trade_reset_commit_gen3_rr_as_a_e1e2adbd.txt |
+
+OVERALL: PASS (3/3 rows)

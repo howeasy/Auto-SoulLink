@@ -1,0 +1,10 @@
+attempt 1 of 1
+IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=617c7360e05788fb46f96ef7b83c2837b47365f9
+JOURNAL_PROBE_ROOT root=C:\slink-wt\g3-rr-finish guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard counter_before=0
+LOCK_HELD pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard started_utc=2026-09-30T13:53:57.8729395Z
+JOURNAL_PROBE_SERVER_HIDDEN both=true
+LOCK_HELD pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard started_utc=2026-09-30T13:53:57.8729395Z LOCK_RELEASED pid=43160 guard=C:\slink-wt\g3-rr-finish\slink_gen3_trade.guard released_utc=2026-09-30T13:53:58.1084511Z
+JOURNAL_PROBE_SERVER_RECOVERED both=true
+RESULT_LINE a: RESULT: FAIL (no choose_mon)
+RESULT_LINE b: (none)
+PYDEC: FAIL client RESULT before a: A traded

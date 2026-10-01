@@ -1,0 +1,46 @@
+{
+  "cut": "c9a3a0ac1b38de904fbd6f808e38d4c66f01dc7f",
+  "disposition": "Actual native trade and three saves both sides; independent oracle FAIL received moves differ from starting fixture. No qualification PASS. No unchanged retry.",
+  "files": [
+    {
+      "name": "a_result.txt",
+      "sha256": "34648d07c55cf13f1f7f7ae58ef386bca78278f80932bf92d2c46c97bcf6ab7d",
+      "bytes": 15276
+    },
+    {
+      "name": "b_result.txt",
+      "sha256": "12373f42fa878b38531c802db8b2bc08446c1480309ff2d7f50a04b2f6dc7afe",
+      "bytes": 12046
+    },
+    {
+      "name": "pydec_result.txt",
+      "sha256": "91f91c9a811ca2e7a1d6014a05f0b14c92fb4798bf9ae64d10043ad8421c4764",
+      "bytes": 2763
+    },
+    {
+      "name": "links.json",
+      "sha256": "4c5a4f1b3189db1f3bfcc3a47ba14a19af1ac3ed860d14c2be0b65210b90e9d9",
+      "bytes": 3149
+    },
+    {
+      "name": "slink.log",
+      "sha256": "69ca6dea5032e8b2fa8ea65c1aeb9a7a62402b4df3dc3fe7ec3d8a303d307d41",
+      "bytes": 4682
+    },
+    {
+      "name": "server.log",
+      "sha256": "c46875d3af096b1dffe6ed014a0889c36efdb461a10727f468de1b55af7efa02",
+      "bytes": 4146
+    },
+    {
+      "name": "slink_gen3_trade.log",
+      "sha256": "ebf864d808fb3a0f826589a5d62ba18d7a39c69d588db247f22729c6d8beb2b6",
+      "bytes": 1191
+    },
+    {
+      "name": "slink_gen3_trade.guard",
+      "sha256": "6450eca7d77f932737555d75d545ff63f6d334b924425b6bb98154a1459731dd",
+      "bytes": 36
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+attempt 1 of 1
+IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=c9a3a0ac1b38de904fbd6f808e38d4c66f01dc7f
+RESULT_LINE a: RESULT: PASS (traded F56D8C1D:2BDDC8BF for F56D8C1D:D4223740)
+RESULT_LINE b: RESULT: PASS (traded F56D8C1D:D4223740 for F56D8C1D:2BDDC8BF)
+SAVE_WITNESS_SHA256 inst=a site=0b9cdb4079d7ee98876372708a3cf66b9affe8f40daa5066c4ec6b5149a731b0 file=0b9cdb4079d7ee98876372708a3cf66b9affe8f40daa5066c4ec6b5149a731b0 match=true saves=3 counter=4->7 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+SAVE_WITNESS_SHA256 inst=b site=3e2080fbab7803a6bff374ee33a690da830bf04ee15b014134cf0644ccc9e961 file=3e2080fbab7803a6bff374ee33a690da830bf04ee15b014134cf0644ccc9e961 match=true saves=3 counter=4->7 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+MARKER a: TALKED npc=(2,3) player=(3,3) facing=Left pi_count=0->1
+MARKER a: TX trade_request - {"event":"trade_request","player":"a","seq":250}
+MARKER a: RX show_choices text=OAK: Took you long enough.
+MARKER a: TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":253,"token":"t1"}
+MARKER a: RX choose_mon
+MARKER a: TX mon_chosen - {"event":"mon_chosen","player":"a","seq":258,"slot":1,"token":"t1"}
+MARKER a: RX apply_prepare
+MARKER a: TX apply_ready - {"event":"apply_ready","ok":true,"player":"a","seq":298,"token":"t1"}
+MARKER a: RX apply_trade
+MARKER a: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:D4223740","new_species":1324,"player":"a","seq":395,"slot":1,"token":"t1"}
+MARKER a: TRADED gave=F56D8C1D:2BDDC8BF got=F56D8C1D:D4223740 slot=1 species=1324 level=4
+MARKER a: RX msgbox text=Traded Aaaaaaaaaa for Aaaaaaaaaa!
+MARKER b: RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+MARKER b: TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":251,"token":"t1"}
+MARKER b: RX apply_prepare
+MARKER b: TX apply_ready - {"event":"apply_ready","ok":true,"player":"b","seq":285,"token":"t1"}
+MARKER b: RX apply_trade
+MARKER b: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:2BDDC8BF","new_species":1324,"player":"b","seq":385,"slot":1,"token":"t1"}
+MARKER b: TRADED gave=F56D8C1D:D4223740 got=F56D8C1D:2BDDC8BF slot=1 species=1324 level=5
+MARKER b: RX msgbox text=Traded Aaaaaaaaaa for Aaaaaaaaaa!
+PYDEC: FAIL b: received F56D8C1D:2BDDC8BF differs from a's record in ['moves']

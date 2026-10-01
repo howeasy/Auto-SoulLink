@@ -1,0 +1,38 @@
+{
+  "cut": "617c7360e05788fb46f96ef7b83c2837b47365f9",
+  "status": "FAIL no choose_mon; externalguardbothhidden/recovered passes, menuaction0duringhidden snapshot droppedtransaction. Nojournalintent.",
+  "files": [
+    {
+      "file": "a_result.txt",
+      "sha256": "f60cc149962d99673aeb92400ad6014cc4dba24e2008870006026288158c13b8"
+    },
+    {
+      "file": "b_result.txt",
+      "sha256": "8ba46ac7d95ba8ea5c9fc95b173a2eac262ead05848b36c49b2f28c9ced030cb"
+    },
+    {
+      "file": "pydec_result.txt",
+      "sha256": "1aa33e2ffc82aa2279c3b011b8a0ddb70c227d9a2ff35567c550a4128dcf5a59"
+    },
+    {
+      "file": "slink.log",
+      "sha256": "981bea10491f9bc90b0f871c18b54f904649d4a235ff863fb5c99638fdb4a996"
+    },
+    {
+      "file": "server.log",
+      "sha256": "1f4e821252829725225558c5d45c3aebbfc21e6dde27de81155a93642566538a"
+    },
+    {
+      "file": "links.json",
+      "sha256": "c65382395b13c62ded566a0238d3a14ca9adb32fca3c0720c73549942f7c05ce"
+    },
+    {
+      "file": "slink_gen3_trade.log",
+      "sha256": "cbf2a69a8279c03bd11e8f20b10ab14edbe6f6a8e13000d42d54dde32f9215ee"
+    },
+    {
+      "file": "slink_gen3_trade.guard",
+      "sha256": "584d6bf008cfa480f226f2ae4d4fa50762d675ebe09e2a98f17a6a0a0261714e"
+    }
+  ]
+}

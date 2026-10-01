@@ -1,0 +1,9 @@
+# Scope: three explicit RR recovery controls; separate from the standard 28-row RR cut.
+# G4 final cut 617c7360e05788fb46f96ef7b83c2837b47365f9 -- tools/gen3_final_cut.py summary (written 2026-09-30T13:56:21Z)
+# RUN 0 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | trade_lock_probe_gen3_rr_as_a | RR explicit recovery qualification | FAIL exit=1 | 1 | fc_trade_lock_probe_gen3_rr_as_a_617c7360.txt |
+
+OVERALL: FAIL (0/1 rows)
