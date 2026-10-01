@@ -39,7 +39,7 @@ def test_actual_duorun_rom_route_and_both_rows():
         r=runner(case);f=d.own_facts(r)
         # School's raw destination warp is (4,7); retained cd888b59 physical
         # destination confirms it. Center's separate +1 landing cannot be transferred here.
-        assert f["arrival"]==[4,7] and len(f["paths"]["city"])==13 and len(f["paths"]["school"])==5
+        assert f["arrival"]==[4,7] and len(f["paths"]["city"])==13 and len(f["paths"]["school"])==6
         assert f["menu_option"]==(0 if case=="menu" else 3)
         assert r.cfg["no_save"]==("b",)
 
@@ -126,5 +126,34 @@ def test_actual_route_composes_rr_dialogue_recovery_outside_incidental_wrapper()
     result=lua.execute("local fn=dofile(ROOT..'/lua/tests/duo/scenario_gen3_borrowed.lua'); return pcall(fn,c)")
     ok,msg=result[:2]
     assert not ok and "MODEL_REACHED_SCHOOL" in str(msg), result
-    assert lua.globals().F.clears>0 and lua.globals().F.x==6 and lua.globals().F.y==4
+    assert lua.globals().F.clears>0 and lua.globals().F.x==6 and lua.globals().F.y==3
     assert lua.execute("return play.step==original_step") is True
+
+
+def opponent_model():
+    """Actual DuoRun fixture/codec records, with the command's own-HP0 consequence."""
+    r=runner("opponent");texts=receipts(r)
+    texts["a"]=texts["a"].replace('"kind": "borrowed_party_begin"','"kind": "borrowed_party_opponent_begin"')
+    held=dict(frames=120,party_write_count=0,hidden_ticks=4,start_frame=100,end_frame=220)
+    texts["a"]=texts["a"].replace("SAVE_WITNESS ","BORROW_HELD "+json.dumps(held)+"\nSAVE_WITNESS ")
+    a,b=r._gen3_fixture_saved("a"),r._gen3_fixture_saved("b")
+    from copy import deepcopy
+    a=deepcopy(a);a[0][1]["hp"]=0
+    r._gen3_saved=lambda pid:a if pid=="a" else b
+    r._links_json=lambda:[]
+    return r,texts
+
+def test_opponent_row_uses_native_option1_and_new_begin_kind():
+    r,texts=opponent_model();facts=d.own_facts(r)
+    assert facts["menu_option"]==1 and facts["begin_kind"]=="borrowed_party_opponent_begin"
+    d.saved_oracle(r,texts)
+    # A ViewYourTeam hook cannot qualify the different ViewOpponent producer.
+    texts["a"]=texts["a"].replace('borrowed_party_opponent_begin','borrowed_party_begin')
+    with pytest.raises(RuntimeError,match="begin/end"): d.saved_oracle(r,texts)
+
+def test_school_approach_is_actual_adjacent_plain_tile_not_assumed_counter():
+    facts=d.own_facts(runner("opponent"))
+    npc=facts["borrow"]["npc"]
+    assert abs(facts["approach"][0]-npc["x"])+abs(facts["approach"][1]-npc["y"])==1
+    # The former (6,4) is two tiles away and cannot directly interact on plain6,3.
+    assert facts["approach"]!=[npc["x"],npc["y"]+2]

@@ -636,7 +636,7 @@ SCENARIOS["nature_change_gen3"] = {
 
 # Native School loan lifecycle: menu-time command hold/cancel and real battle restore.
 # Both use the existing battle2 battery and ordinary inputs; the idle peer does not save.
-for _borrow_case in ("menu", "battle"):
+for _borrow_case in ("menu", "opponent", "battle"):
     SCENARIOS[f"borrowed_party_{_borrow_case}_gen3"] = {
         "flags": [], "timeout": 2400, "frames": 3000000,
         "games": ("gen3_rr",), "target": "battle2", "explicit_only": True,
@@ -8476,6 +8476,10 @@ class DuoRun:
         return orchestrate(self)
 
     def orchestrate_borrowed_party_battle_gen3(self):
+        from gen3_borrowed_rows import orchestrate
+        return orchestrate(self)
+
+    def orchestrate_borrowed_party_opponent_gen3(self):
         from gen3_borrowed_rows import orchestrate
         return orchestrate(self)
 

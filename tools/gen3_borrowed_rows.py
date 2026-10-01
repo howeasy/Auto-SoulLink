@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROWS={name:dict(flags=[],timeout=2400,frames=3000000,games=("gen3_rr",),target="battle2",
                explicit_only=True,scenario_module="borrowed",no_save=("b",),
                oracle="assert_borrowed_party_gen3_saved")
-      for name in ("borrowed_party_menu_gen3","borrowed_party_battle_gen3")}
+      for name in ("borrowed_party_menu_gen3","borrowed_party_battle_gen3","borrowed_party_opponent_gen3")}
 
 
 def own_facts(run):
@@ -27,7 +27,11 @@ def own_facts(run):
     # Raw School warp destination, independently witnessed at cd888b59:
     # expected5.2(4,8) failed against actual5.2(4,7). Center's +1 is not transferable.
     arrival=[dest.x,dest.y]
-    paths=dict(city=city.bfs((26,27),(door.x,door.y+1)),school=school.bfs(tuple(arrival),(6,4)))
+    npc=facts["borrowed_party"]["npc"]
+    approach=[npc["x"],npc["y"]+1]
+    if school.collision[approach[1]][approach[0]]!=0 or school.behaviour[approach[1]][approach[0]]!=0:
+        raise RuntimeError("school adjacent interaction tile changed")
+    paths=dict(city=city.bfs((26,27),(door.x,door.y+1)),school=school.bfs(tuple(arrival),tuple(approach)))
     if any(p is None or len(p)>=100 for p in paths.values()):raise RuntimeError("school BFS route absent")
     x,y=26,27
     for direction in paths["city"]:
@@ -35,27 +39,34 @@ def own_facts(run):
         x,y=x+dx,y+dy
         if city.behaviour[y][x]!=0 or any((event.x,event.y)==(x,y) for event in city.coords):
             raise RuntimeError("school city path no longer has plain tiles without coordinate scripts")
-    labels=[(0x091153D2,"View Your Team"),(0x091153F0,"Start Battle")]
+    labels=[(0x091153D2,"View Your Team"),(0x091153E1,"View Opp[AD] Team"),(0x091153F0,"Start Battle")]
     from tools.rr_ingame_trades import decode_text
     if any(decode_text(rom[a-0x08000000:a-0x08000000+50])!=text for a,text in labels):
         raise RuntimeError("school ordinary menu labels changed")
     if rom[0x1051BA0:0x1051BAE].hex()!="5c0907000000725111098a561109":
         raise RuntimeError("school trainerbattle9 command changed")
     if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
-    return dict(case="menu" if run.scenario=="borrowed_party_menu_gen3" else "battle",
-                rom_sha1=facts["rom_sha1"],arrival=arrival,paths=paths,school_flags=flags,
-                menu_option=0 if run.scenario=="borrowed_party_menu_gen3" else 3,
+    # Exact native option1 branch and callnative builder; no injected party.
+    if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"
+            or rom[0x1051C11:0x1051C16].hex()!="23c9900709"):
+        raise RuntimeError("school ViewOpponent option/caller changed")
+    case={"borrowed_party_menu_gen3":"menu","borrowed_party_battle_gen3":"battle",
+          "borrowed_party_opponent_gen3":"opponent"}[run.scenario]
+    return dict(case=case,
+                rom_sha1=facts["rom_sha1"],arrival=arrival,approach=approach,paths=paths,school_flags=flags,
+                menu_option={"menu":0,"battle":3,"opponent":1}[case],
+                begin_kind="borrowed_party_opponent_begin" if case=="opponent" else "borrowed_party_begin",
                 selected_order_address=0x0203C750,confirm_slot=6,borrow=facts["borrowed_party"])
 
 
 def orchestrate(run):
     facts=own_facts(run);mode=facts["case"]
     ka,kb=run._gen3_prelude(link_slot=1 if mode=="battle" else None)
-    if mode=="menu":run._link_keys={"a":ka[1],"b":kb[1]}
+    if mode!="battle":run._link_keys={"a":ka[1],"b":kb[1]}
     run._gen3_area_control()
     lines={inst:["TARGET "+json.dumps(run._link_keys[inst]),"BORROW "+json.dumps(facts)] for inst in ("a","b")}
     run.go(lines)
-    if mode=="menu":
+    if mode!="battle":
         run._gen3_mark("a",r"^BORROW_MENU_READY ","native borrowed ViewYourTeam")
         run.queue_command("a",{"cmd":"force_faint","key":run._link_keys["a"]})
         run._gen3_mark("a",r"^BORROW_HELD ","command held 120 frames without loan write")
@@ -70,7 +81,7 @@ def saved_oracle(run,results):
     from server.adapters import gen3_codec as c
     facts=own_facts(run);mode=facts["case"];text=results["a"]
     run._gen3_flush_boundary()
-    baseline=one(text,"BORROW_BASELINE");held=one(text,"BORROW_HELD") if mode=="menu" else None
+    baseline=one(text,"BORROW_BASELINE");held=one(text,"BORROW_HELD") if mode!="battle" else None
     restored=one(text,"BORROW_RESTORED")
     raw=[bytes.fromhex(x) for x in baseline["raw_party_hex"]]
     if baseline.get("rom_sha1")!=facts["rom_sha1"] or len(raw)<2 or any(len(x)!=100 for x in raw):
@@ -82,10 +93,10 @@ def saved_oracle(run,results):
     if len(party)!=len(before) or boxes!=run._gen3_fixture_saved("a")[1]:
         raise RuntimeError("borrow changed own membership or boxes")
     for i,(old,new) in enumerate(zip(before,party)):
-        mutable={"hp"} if mode=="menu" and i==1 else set()
+        mutable={"hp"} if mode!="battle" and i==1 else set()
         changed=h.gen3_record_diff(old,new,rr=True,mutable=mutable)
         if changed:raise RuntimeError(f"borrow changed own record{i}: {changed}")
-    if mode=="menu":
+    if mode!="battle":
         if party[1]["hp"]!=0 or held.get("frames",0)<120 or held.get("party_write_count")!=0 or held.get("hidden_ticks",0)<1:
             raise RuntimeError("borrow menu lacks held-write/hidden-window/ownHP0 proof")
         window=(held.get("start_frame"),held.get("end_frame"))
@@ -110,7 +121,7 @@ def saved_oracle(run,results):
         if tx_messages(operation,event):raise RuntimeError("borrow emitted "+event)
     if mode=="battle" and tx_messages(operation,"faint"):raise RuntimeError("borrowed KO emitted own faint")
     signals=rows(text,"BORROW_SIGNAL")
-    if not signals or signals[0].get("kind")!="borrowed_party_begin" or not any(s.get("kind")=="borrowed_party_end" for s in signals):
+    if not signals or signals[0].get("kind")!=facts["begin_kind"] or not any(s.get("kind")=="borrowed_party_end" for s in signals):
         raise RuntimeError("registered begin/end borrow evidence missing")
     if restored.get("key")!=target or restored.get("borrowed") is not False:raise RuntimeError("restore names wrong ownparty")
     problems=h.gen3_receipt_problems("a",text,required=["BORROW_BASELINE ","BORROW_RESTORED ","SAVE_WITNESS "],

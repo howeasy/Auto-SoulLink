@@ -4,7 +4,7 @@ return function(ctx)
     local facts,key=ctx.go_value("BORROW"),ctx.go_value("TARGET")
     if not facts or not key then return false,"missing own-ROM borrow facts/target" end
     local mode=facts.case
-    if mode~="menu" and mode~="battle" then return false,"invalid borrowed case" end
+    if mode~="menu" and mode~="battle" and mode~="opponent" then return false,"invalid borrowed case" end
     if ctx.player=="b" then
         if not ctx.wait_until(ctx.partner_done,2400,"borrow subject finished") then return false,"subject absent" end
         local result=ctx.partner_result() or ""
@@ -36,7 +36,7 @@ return function(ctx)
     signals.drain=function(self)
         local out=drain(self)
         for _,sig in ipairs(out) do
-            if sig.kind=="borrowed_party_begin" or sig.kind=="borrowed_party_end" then
+            if sig.kind=="borrowed_party_begin" or sig.kind=="borrowed_party_opponent_begin" or sig.kind=="borrowed_party_end" then
                 ctx.jlog("BORROW_SIGNAL",{kind=sig.kind,point=sig.point,frame=ctx.emulator.framecount()})
             end
         end
@@ -74,7 +74,7 @@ return function(ctx)
         route_trace("school_door_warp")
         ctx.SP.warp_to(ctx.cp,"Up",30,{group=5,num=2,x=facts.arrival[1],y=facts.arrival[2]},"School door")
         route_trace("school_counter_path")
-        ctx.follow_path("borrow_school",facts.paths.school,facts.arrival,{6,4},"School counter")
+        ctx.follow_path("borrow_school",facts.paths.school,facts.arrival,facts.approach,"School NPC approach")
     end)
     if not ok then route_trace("route_failed");return false,"borrow transit: "..tostring(why) end
     local own=ctx.party() or {};local pre={}
@@ -90,7 +90,7 @@ return function(ctx)
     for _=1,facts.menu_option do ctx.G.tap("Down",3,20) end
     ctx.G.tap("A",3,20)
     if not ctx.mash_until(picker,120,"A") or not borrowed() then return false,"native loan picker/lifecycle absent" end
-    if mode=="menu" then
+    if mode~="battle" then
         local loan={};for _,m in ipairs(ctx.party() or {}) do loan[#loan+1]=hex(raw(m.slot)) end
         local start=#ctx.write_lines();local ready_frame=ctx.emulator.framecount()
         ctx.jlog("BORROW_MENU_READY",{key=key,frame=ctx.emulator.framecount()})
@@ -152,7 +152,7 @@ return function(ctx)
     if not ctx.mash_until(function() return field() and not borrowed() and ctx.find(key) end,180,"A") then
         return false,"own party restore/site missing"
     end
-    if mode=="menu" and not ctx.wait_until(function() local m=ctx.find(key);return m and m.hp==0 end,120,"own queuedHP0") then
+    if mode~="battle" and not ctx.wait_until(function() local m=ctx.find(key);return m and m.hp==0 end,120,"own queuedHP0") then
         return false,"held command did not land on restored own target"
     end
     ctx.jlog("BORROW_RESTORED",{key=key,borrowed=borrowed(),hp=ctx.find(key).hp})
