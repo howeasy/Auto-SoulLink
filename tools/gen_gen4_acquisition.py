@@ -22,13 +22,22 @@ area, roamers are extra catches, the Bug-Catching Contest and Safari are their o
 catch is awarded at the result, not in the contest). Unsupported/unresolved producers are listed in
 `unresolved`; hg-engine has its own authored inventory and is NOT covered here (UNVERIFIED).
 
+hge mode (data/games/gen4_hge/acquisition.json): the hg-engine build runs the same script NARC members and
+NPC trade records, so the script-side sections are the vanilla ones, PROVED by hashing the 47 member files
+holding the sites (and the trade NARC) in both ROMs. The C side is NOT shared: hge replaces GiveMon, GiveEgg,
+GiveTogepiEgg, _CreateTradeMon, the PC place functions, ... so the hge producer inventory is scanned from the
+fork's src/ (see section "hge mode" below) and every vanilla producer is marked replaced / kept.
+
 Usage:
   python tools/gen_gen4_acquisition.py [--pret PATH] [--check]
-Exit: 0 ok, 1 drift / wrong pret commit / unclassified producer, 2 pret clone absent.
+  python tools/gen_gen4_acquisition.py hge [--check] [--pret P] [--rom HGE_ROM] [--vanilla-rom ROM] [--src FORK] [--xmap MAP]
+Exit: 0 ok, 1 drift / wrong pin / unclassified producer / differing script member, 2 an input is absent (named).
 """
 
 from __future__ import annotations
 
+import argparse
+import functools
 import hashlib
 import re
 import struct
@@ -37,7 +46,9 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gen4_pins  # noqa: E402
 import gen_gen4_area_map as base  # noqa: E402
+import gen_gen4_names as names  # noqa: E402  (ROM/fork locators + Absent/Mismatch, shared with the names tool)
 
 COMMANDS = ("GiveMon", "GiveEgg", "GiveTogepiEgg", "GiveSpikyEarPichu", "GiveLoanMon", "CreateRoamer", "WildBattle", "LoadNPCTrade", "ChooseStarter")
 SCAN_RE = re.compile(r"^\s*(" + "|".join(COMMANDS) + r")\b(.*)$")
@@ -411,6 +422,10 @@ def scan_c(clone: Path) -> tuple[list[dict], list[str]]:
 
 
 def build(clone: Path) -> dict[str, str]:
+    return {"acquisition.json": base.dumps(build_doc(clone), 3)}
+
+
+def build_doc(clone: Path) -> dict:
     ctx = Ctx(clone)
     cf = c_facts(ctx)
     script_dir = clone / "files/fielddata/script/scr_seq"
@@ -555,7 +570,7 @@ def build(clone: Path) -> dict[str, str]:
         "runtime_branches": branches,
         "unresolved": unresolved,
     }
-    return {"acquisition.json": base.dumps(doc, 3)}
+    return doc
 
 
 def status_of(site: dict) -> str:
@@ -574,7 +589,540 @@ def unresolved_reason(site: dict) -> str:
     return "; ".join(parts)
 
 
+# --------------------------------------------------------------------------- hge mode
+#
+# The hg-engine fork (pinned commit) builds the ROM data/games/gen4_hge describes. What carries over from the
+# vanilla inventory and what does not (docs/gen4/research/hge_data_delta.md section 4):
+#   script sites / npc records / runtime branches  carry over IF the script NARC members holding the sites and the
+#                  trade NARC are byte-identical in the two ROMs -- compared here, a difference fails generation
+#   C producers    do NOT carry over: hge replaces engine functions (hooks file) with its own C in src/. The hge
+#                  inventory is scanned from the fork's src/ and classified like the vanilla one; each vanilla
+#                  producer is then marked replaced / patched_inline / kept by resolving the hooks to vanilla
+#                  functions (xMAP address ranges). Hooks are written in the fork's `hooks` file as
+#                  `<arm9|overlay> <name> <addr> [reg]`; an address is absolute (02xxxxxx) or an offset form
+#                  (08xxxxxx = 0x02000000 + offset for arm9, overlay RAM base + offset otherwise).
+
+HGE_SCHEMA = "gen4-hge-acquisition-v1"
+HGE_OUT = base.REPO / "data" / "games" / "gen4_hge"
+SCRIPT_NARC, TRADE_NARC = "a/0/1/2", "a/1/1/2"
+HGE_C_APIS = (
+    "PokeParty_Add",
+    "Party_AddMon",
+    "PokeParaSet",
+    "CreateBoxMonData",
+    "SetEggStats",
+    "GiveMon",
+    "GiveEgg",
+    "Party_SafeCopyMonToSlot_ResetAprijuiceModifiers",
+    "PCStorage_PlaceMonInFirstEmptySlotInAnyBox",
+    "PCStorage_PlaceMonInBoxFirstEmptySlot",
+    "PCStorage_PlaceMonInBoxByIndexPair",
+)
+DIRECT_WRITE = "party_slot_write_from_save_misc"  # pseudo-API: `*slot = saveMiscData->storedMons[..]` (DNA Splicers)
+DIRECT_WRITE_RE = re.compile(r"\*\w+\s*=\s*saveMiscData->storedMons\[")
+
+# Fork call sites. Key = (file, enclosing function, API); n = ACTIVE call sites (preprocessor-evaluated against
+# include/config.h + include/debug.h), inactive = call sites compiled out. `hook` = the hooks-file name that
+# routes vanilla code to the function (default = the function name; None = reached only from other fork C).
+HGE_PRODUCERS: dict[tuple[str, str, str], dict] = {
+    ("src/field/enemy_party.c", "AddWildPartyPokemon", "PokeParty_Add"): _p(n=1, cls="not_acquisition", kind="wild_enemy_generation", note="wild enemy into the BattleSetup party (replaces addGeneratedMonToBattleSetupParty); catching still goes through the kept Task_GetPokemon"),
+    ("src/field/enemy_party.c", "MakeTrainerPokemonParty", "PokeParaSet"): _p(n=1, cls="not_acquisition", kind="trainer_party", note="builds a trainer's enemy party (replaces CreateNPCTrainerParty)"),
+    ("src/field/enemy_party.c", "MakeTrainerPokemonParty", "PokeParty_Add"): _p(n=1, cls="not_acquisition", kind="trainer_party", note="one loop call (vanilla has 4 unrolled call sites)"),
+    ("src/field/script_commands.c", "ScrCmd_GiveEgg", "PokeParty_Add"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveEgg"], note="GiveEgg command: species arg is species|form<<11, honours the hidden-ability script flag"),
+    ("src/field/script_commands.c", "ScrCmd_GiveEgg", "SetEggStats"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveEgg"], note="egg creation (level 1)"),
+    ("src/field/script_commands.c", "ScrCmd_GiveTogepiEgg", "PokeParty_Add"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveTogepiEgg"], note="Mr. Pokemon's Togepi egg; the fork then reads the freed buffer for SaveMisc_SetTogepiPersonalityGender (use after free)"),
+    ("src/field/script_commands.c", "ScrCmd_GiveTogepiEgg", "SetEggStats"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveTogepiEgg"], note="Togepi egg creation (species fixed in C, level 1, Extrasensory added)"),
+    ("src/field_roamer.c", "Save_CreateRoamerByID", "PokeParaSet"): _p(n=1, cls="not_acquisition", kind="roamer_generation", scripts=["CreateRoamer"], note="temp mon whose IVs/personality seed the roamer save record; the catch goes through the kept Task_GetPokemon"),
+    ("src/individual/PartyMenu_HandleUseItemOnMon.c", "UseItemMonAttrChangeCheck", DIRECT_WRITE): _p(n=1, cls="not_acquisition", kind="dna_splicers_restore", hook="PartyMenu_HandleUseItemOnMon", open_question="DNA Splicers move the fused Reshiram/Zekrom out of the party into save misc storage (storedMons) and write it back; while stored it is in neither party nor box, so the storage watcher must treat the restore as a known-key party gain", note="direct struct write into the party slot, no PokeParty_Add; hge-only mechanic"),
+    ("src/npc_trade.c", "_CreateTradeMon", "PokeParaSet"): _p(n=1, cls="acquisition", kind="npc_trade_mon", scripts=["LoadNPCTrade", "GiveLoanMon"], note="builds the received/loaned mon from the NPCTrade record; insertion stays in the kept vanilla NPCTrade_ReceiveMonToSlot / NPCTrade_MakeAndGiveLoanMon"),
+    ("src/pokemon.c", "GiveMon", "PokeParaSet"): _p(n=1, cls="script_dispatch", kind="gift", scripts=["GiveMon"], note="shared GiveMon helper (replaced): adds forme/ability/ball/encounterType args"),
+    ("src/pokemon.c", "GiveMon", "PokeParty_Add"): _p(n=1, cls="script_dispatch", kind="gift", scripts=["GiveMon"], note="shared GiveMon helper adds to the party and updates the Pokedex"),
+    ("src/pokemon_storage_system.c", "PCStorage_InitializeBoxes", "CreateBoxMonData"): _p(n=0, inactive=1, cls="not_acquisition", kind="debug_pc_fill", note="compiled out: DEBUG_INIT_PC_BOXES_WITH_MONS is not defined"),
+    ("src/pokemon_storage_system.c", "PCStorage_PlaceMonInFirstEmptySlotInAnyBox", "PCStorage_PlaceMonInBoxFirstEmptySlot"): _p(n=1, cls="infrastructure", kind="storage_helper", note="internal call of the storage helper itself"),
+    ("src/starters.c", "CreateStarter_CreateMon", "PokeParaSet"): _p(n=1, cls="acquisition", kind="starter", scripts=["ChooseStarter"], hook="CreateStarterMon_hook", note="wraps the CreateMon call inside the kept vanilla CreateStarter so starters can carry a form; Party_AddMon is the kept vanilla call"),
+    ("src/test_battle.c", "TestBattle_OverridePokemon", "PokeParaSet"): _p(n=0, inactive=1, cls="not_acquisition", kind="debug_test_battle", hook=None, note="compiled out: DEBUG_BATTLE_SCENARIOS is not defined"),
+    ("src/test_battle.c", "TestBattle_OverrideParties", "PokeParaSet"): _p(n=0, inactive=1, cls="not_acquisition", kind="debug_test_battle", hook=None, note="compiled out: DEBUG_BATTLE_SCENARIOS is not defined"),
+    ("src/test_battle.c", "TestBattle_OverrideParties", "PokeParty_Add"): _p(n=0, inactive=1, cls="not_acquisition", kind="debug_test_battle", hook=None, note="compiled out: DEBUG_BATTLE_SCENARIOS is not defined"),
+}
+# Fork definitions of the insert/create primitives the producers go through. Key = (file, API).
+HGE_DEFINITIONS: dict[tuple[str, str], dict] = {
+    ("src/pokemon.c", "GiveMon"): _p(n=1, cls="script_dispatch", kind="gift", scripts=["GiveMon"], note="replaces the vanilla GiveMon helper; the script command ScrCmd_GiveMon is kept"),
+    ("src/pokemon.c", "CreateBoxMonData"): _p(n=1, cls="infrastructure", kind="mon_creation_core", note="replaces vanilla CreateBoxMon (CreateMon calls it): EVERY mon built with CreateMon/PokeParaSet on hge goes through this function"),
+    ("src/pokemon_storage_system.c", "PCStorage_PlaceMonInFirstEmptySlotInAnyBox"): _p(n=1, cls="infrastructure", kind="storage_insert", note="30-box rewrite; callers: bug-contest result with a full party, Pal Park (vanilla code, kept)"),
+    ("src/pokemon_storage_system.c", "PCStorage_PlaceMonInBoxFirstEmptySlot"): _p(n=1, cls="infrastructure", kind="storage_insert", note="30-box rewrite; the party-full catch store (Task_GetPokemon, kept)"),
+    ("src/pokemon_storage_system.c", "PCStorage_PlaceMonInBoxByIndexPair"): _p(n=1, cls="infrastructure", kind="storage_move", note="PC deposit/withdraw/move of an existing mon; not an acquisition"),
+}
+# Hooked functions that touch mons but neither create nor insert one (recorded so they are not mistaken for producers).
+HGE_REPLACED_OTHER = {
+    "sub_0206D328": ("hatch_stats", "egg -> mon hatch rewrite (carries over the hidden ability); the hatch is the O-15 gift catch of the vanilla daycare egg"),
+    "GetMonEvolution": ("evolution_dispatch", "evolution dispatch replaced (species change of an existing mon, same key)"),
+    "SetFixedWildEncounter": ("wild_slot_choice", "hooks:469 patches vanilla chooseAbilityCoercedSlot (static/magnet-pull slot choice), not a mon producer"),
+    "ScrCmd_CreateRoamer": ("roamer_script_command", "script command shim in src/script_new_cmds.c; calls the replaced Save_CreateRoamerByID"),
+    "Save_CreateRoamerByID": ("roamer_save_record", "builds the roamer save record (see the PokeParaSet row)"),
+    "ScrCmd_DaycareSanitizeMon": ("daycare_sanitize", "daycare sanitize script command"),
+    "SetupAndStartTutorialBattle": ("tutorial_battle", "tutorial battle setup; synthetic parties, the save is untouched"),
+}
+HGE_NOTES = {
+    ("src/battle/battle_command.c", "Task_GetPokemon"): "inline hooks are capture-experience and critical-capture, not the catch store; the Party_AddMon call is shared and the PC call lands in hge's replaced PCStorage_PlaceMonInBoxFirstEmptySlot. Byte-level equality of the call sites is not checked (SOURCE only)",
+    ("src/npc_trade.c", "NPCTrade_ReceiveMonToSlot"): "the received mon is built by the replaced _CreateTradeMon in the trade-work setup (another function); this slot copy is kept",
+    ("src/get_egg.c", "GiveEggToPlayer"): "daycare egg creation is kept; the later hatch goes through the replaced sub_0206D328 (see replaced_non_producers)",
+    ("src/choose_starter.c", "CreateStarter"): "inline hooks wrap the species list, the CreateMon call (CreateStarter_CreateMon, forms) and the hidden ability; the Party_AddMon call is kept",
+}
+HGE_FACT_FILES = ["src/starters.c", "src/field_roamer.c", "src/field/script_commands.c", "rom.ld"]
+ROAMER_RE = re.compile(r"case (ROAMER_\w+):\s*species = (SPECIES_\w+);\s*level = (\d+);")
+
+
+def _blank(match: re.Match) -> str:
+    return re.sub(r"[^\n]", " ", match[0])
+
+
+def code_lines(path: Path) -> list[str]:
+    """Source lines with /* */ and // comments blanked (line numbers preserved)."""
+    text = re.sub(r"/\*.*?\*/", _blank, path.read_text(encoding="utf-8", errors="replace"), flags=re.S)
+    return [ln.split("//", 1)[0] for ln in text.splitlines()]
+
+
+_PP = re.compile(r"\s*#\s*(ifdef|ifndef|if|elif|else|endif)\b(.*)")
+
+
+def active_map(lines: list[str], defined: set[str]) -> list[bool]:
+    """Per line: is it compiled in? Handles #ifdef/#ifndef/#if defined(..) &&,||/#else/#endif against `defined`."""
+    stack: list[tuple[bool, bool]] = []
+    cur, out = True, []
+    for line in lines:
+        m = _PP.match(line)
+        if m:
+            d, rest = m[1], m[2].strip()
+            if d in ("ifdef", "ifndef"):
+                c = (rest.split()[0] in defined) == (d == "ifdef")
+            elif d == "if":
+                expr = re.sub(r"defined\s*\(?\s*(\w+)\s*\)?", lambda x: str(x[1] in defined), rest).replace("&&", " and ").replace("||", " or ")
+                if not re.fullmatch(r"(True|False|and|or|\(|\)|\s)+", expr):
+                    raise ValueError(f"unsupported preprocessor condition: #if {rest}")
+                c = eval(expr)  # noqa: S307 -- charset-checked above
+            elif d == "elif":
+                raise ValueError("#elif is not supported")
+            if d in ("ifdef", "ifndef", "if"):
+                stack.append((cur, c))
+                cur = cur and c
+            elif d == "else":
+                par, c = stack[-1]
+                cur = par and not c
+            else:  # endif
+                cur = stack.pop()[0]
+        out.append(cur)
+    return out
+
+
+def enclosing(lines: list[str], i: int) -> str | None:
+    for j in range(i, -1, -1):
+        ln = re.sub(r"__attribute__\(\((?:[^()]|\([^()]*\))*\)\)\s*", "", lines[j])
+        if re.match(r"^[A-Za-z_][\w\s\*]*\b(\w+)\([^;]*$", ln) and not ln.startswith(("static const", "return", "else", "if", "for", "while", "switch")):
+            return re.match(r"^[A-Za-z_][\w\s\*]*?\b(\w+)\(", ln)[1]
+    return None
+
+
+def fork_defines(src: Path) -> set[str]:
+    out: set[str] = set()
+    for rel in ("include/config.h", "include/debug.h"):
+        out |= set(re.findall(r"^\s*#\s*define\s+(\w+)", (src / rel).read_text(encoding="utf-8"), re.M))
+    return out
+
+
+def scan_hge_c(src: Path, defined: set[str]) -> tuple[list[dict], list[dict], list[str]]:
+    """Scan src/**/*.c of the fork. Returns (call producers, definitions, problems); anything not in
+    HGE_PRODUCERS / HGE_DEFINITIONS (or a changed count) is a problem and fails generation."""
+    pat = re.compile(r"(?<![\w])(" + "|".join(HGE_C_APIS) + r")\(")
+    calls: dict[tuple[str, str, str], dict[str, list[int]]] = {}
+    defs: dict[tuple[str, str], list[int]] = {}
+    for p in sorted((src / "src").rglob("*.c")):
+        rel = p.relative_to(src).as_posix()
+        lines = code_lines(p)
+        if not any(pat.search(ln) or DIRECT_WRITE_RE.search(ln) for ln in lines):
+            continue  # only files holding a producer need their #if state evaluated
+        try:
+            act = active_map(lines, defined)
+        except ValueError as exc:
+            raise names.Mismatch(f"{rel}: {exc}") from exc
+        for i, line in enumerate(lines):
+            m = pat.search(line)
+            api = m[1] if m else DIRECT_WRITE if DIRECT_WRITE_RE.search(line) else None
+            if api is None:
+                continue
+            if line[:1] in " \t" or api == DIRECT_WRITE:
+                slot = calls.setdefault((rel, enclosing(lines, i), api), {"lines": [], "inactive_lines": []})
+                slot["lines" if act[i] else "inactive_lines"].append(i + 1)
+            elif ";" not in line and re.match(r"^[A-Za-z_][\w\s\*]*\b" + api + r"\(", re.sub(r"__attribute__\(\((?:[^()]|\([^()]*\))*\)\)\s*", "", line)):
+                if act[i]:
+                    defs.setdefault((rel, api), []).append(i + 1)
+    problems = []
+    for key, got in calls.items():
+        want = HGE_PRODUCERS.get(key)
+        if want is None:
+            problems.append(f"unclassified hge C producer {key} at lines {got['lines'] + got['inactive_lines']}: classify it in HGE_PRODUCERS")
+        elif (want["n"], want.get("inactive", 0)) != (len(got["lines"]), len(got["inactive_lines"])):
+            problems.append(f"hge C producer {key} has {len(got['lines'])} active / {len(got['inactive_lines'])} inactive call sites, table says {want['n']} / {want.get('inactive', 0)}")
+    problems += [f"classified hge C producer {k} no longer found in the source" for k in HGE_PRODUCERS if k not in calls]
+    for key, lns in defs.items():
+        want = HGE_DEFINITIONS.get(key)
+        if want is None:
+            problems.append(f"unclassified hge C definition {key} at lines {lns}: classify it in HGE_DEFINITIONS")
+        elif want["n"] != len(lns):
+            problems.append(f"hge C definition {key} has {len(lns)} definitions, table says {want['n']}")
+    problems += [f"classified hge C definition {k} no longer found in the source" for k in HGE_DEFINITIONS if k not in defs]
+    out = [{"file": k[0], "function": k[1], "api": k[2], **got, **{a: b for a, b in HGE_PRODUCERS[k].items() if a not in ("n", "inactive")}} for k, got in sorted(calls.items(), key=lambda kv: (kv[0][0], kv[0][1] or "", kv[0][2])) if k in HGE_PRODUCERS]
+    odefs = [{"file": k[0], "api": k[1], "lines": defs[k], **{a: b for a, b in HGE_DEFINITIONS[k].items() if a != "n"}} for k in sorted(defs) if k in HGE_DEFINITIONS]
+    return out, odefs, problems
+
+
+# ---- vanilla address space: xMAP functions, main.lsf regions, hooks
+
+XMAP_FN = re.compile(r"^\s+([0-9A-F]{8}) ([0-9A-F]{8}) \.text\s+(\w+)\s+\((\w+)\.o\)", re.M)
+
+
+def locate_xmap(arg: str | None) -> Path:
+    path = Path(arg or gen4_pins.default_locations().assets["heartgold_xmap"])
+    if not path.is_file():
+        raise names.Absent(f"heartgold_xmap not found at {path} (pass --xmap)")
+    want = gen4_pins.MAP_SPECS["heartgold_xmap"][0]
+    have = hashlib.sha256(path.read_bytes()).hexdigest()
+    if have != want:
+        raise names.Mismatch(f"{path} sha256 {have} != pinned {want} (heartgold_xmap)")
+    return path
+
+
+class Vanilla:
+    """Vanilla HG functions (xMAP), their region (arm9 / overlay id from main.lsf) and the fork's active hooks."""
+
+    def __init__(self, xmap: Path, lsf_text: str, bases: dict[int, int], hooks_text: str, defined: set[str]):
+        self.funcs = [(int(a, 16), int(s, 16), n, o) for a, s, n, o in XMAP_FN.findall(xmap.read_text(encoding="utf-8", errors="replace")) if int(s, 16)]
+        self.region: dict[str, str | int] = {}
+        cur: str | int | None = None
+        ov = -1
+        for line in lsf_text.splitlines():
+            s = line.strip()
+            if s.startswith("Static "):
+                cur = "arm9"
+            elif s.startswith("Overlay "):
+                ov += 1
+                cur = ov
+            m = re.match(r"Object\s+\S*?(\w+)\.o$", s)
+            if m and cur is not None:
+                self.region.setdefault(m[1], cur)
+        lines = hooks_text.splitlines()
+        self.hooks, self.skipped = [], 0
+        for ln, act in zip(lines, active_map(lines, defined), strict=True):
+            p = ln.split()
+            if not act or ln.lstrip().startswith("#") or len(p) < 3 or not re.fullmatch(r"[0-9A-Fa-f]{8}", p[2]):
+                continue
+            region: str | int = "arm9" if p[0] == "arm9" else int(p[0])
+            raw = int(p[2], 16)
+            if raw >> 24 == 2:
+                addr = raw
+            elif raw >> 24 == 8:
+                addr = (0x02000000 if region == "arm9" else bases[region]) + (raw & 0xFFFFFF)
+            else:
+                self.skipped += 1
+                continue
+            self.hooks.append({"region": region, "name": p[1], "addr": addr})
+
+    def find(self, name: str, obj: str | None = None) -> list[tuple[int, int, str, str]]:
+        return [f for f in self.funcs if f[2] == name and (obj is None or f[3] == obj)]
+
+    def containing(self, region, addr: int):
+        return next((f for f in self.funcs if self.region.get(f[3]) == region and f[0] <= addr < f[0] + f[1]), None)
+
+    def replaced_names(self) -> set[str]:
+        """Vanilla functions whose entry bytes a hook overwrites (full replacement)."""
+        out = set()
+        for h in self.hooks:
+            fn = self.containing(h["region"], h["addr"])
+            if fn and fn[0] == h["addr"]:
+                out.add(fn[2])
+        return out
+
+    def hooks_in(self, fn) -> list[dict]:
+        return [h for h in self.hooks if h["region"] == self.region.get(fn[3]) and fn[0] <= h["addr"] < fn[0] + fn[1]]
+
+    def status(self, fn) -> tuple[str, list[dict]]:
+        hs = self.hooks_in(fn)
+        return ("replaced" if any(h["addr"] == fn[0] for h in hs) else "patched_inline" if hs else "kept"), hs
+
+
+# ---- the two ROMs
+
+@functools.cache
+def _rom(path: str):
+    import ndspy.rom
+
+    return ndspy.rom.NintendoDSRom.fromFile(path)
+
+
+@functools.cache
+def narc_member_hashes(rom: str, narc: str) -> tuple[str, ...]:
+    """sha256 of every member of a NARC inside the ROM (ndspy)."""
+    import ndspy.narc
+
+    return tuple(hashlib.sha256(f).hexdigest() for f in ndspy.narc.NARC(_rom(rom).getFileByName(narc)).files)
+
+
+@functools.cache
+def overlay_bases(rom: str) -> dict[int, int]:
+    return {i: o.ramAddress for i, o in _rom(rom).loadArm9Overlays().items()}
+
+
+def script_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tuple[dict, dict, list[str]]:
+    """Hash every NARC member in both ROMs. The members holding the sites and every trade record must be equal."""
+    problems = []
+    v, h = narc_member_hashes(vanilla, SCRIPT_NARC), narc_member_hashes(hge, SCRIPT_NARC)
+    if len(v) != len(h):
+        problems.append(f"{SCRIPT_NARC} has {len(v)} members in the vanilla ROM and {len(h)} in the hge ROM")
+    members = {int(re.match(r"scr_seq_(\d+)_", s["file"])[1]): s["file"] for s in sites}
+    proof = {}
+    for n in sorted(members):
+        if n >= min(len(v), len(h)):
+            problems.append(f"{SCRIPT_NARC} member {n} ({members[n]}) is missing")
+            continue
+        proof[str(n)] = {"file": members[n], "vanilla_sha256": v[n], "hge_sha256": h[n]}
+        if v[n] != h[n]:
+            problems.append(f"{SCRIPT_NARC} member {n} ({members[n]}) differs between the vanilla and hge ROMs: the acquisition sites in it are not shared")
+    differing = [n for n in range(min(len(v), len(h))) if v[n] != h[n]]
+    script = {"narc": SCRIPT_NARC, "member_count": len(h), "site_member_count": len(members), "site_members": proof, "members_differing_in_hge": differing, "differing_members_holding_sites": sorted(set(differing) & set(members))}
+    tv, th = narc_member_hashes(vanilla, TRADE_NARC), narc_member_hashes(hge, TRADE_NARC)
+    if tv != th:
+        problems.append(f"{TRADE_NARC} (NPC trade records) differs between the vanilla and hge ROMs: {[i for i in range(min(len(tv), len(th))) if tv[i] != th[i]] or 'member count'}")
+    trade = {"narc": TRADE_NARC, "member_count": len(th), "members": {str(i): {"vanilla_sha256": tv[i], "hge_sha256": th[i]} for i in range(min(len(tv), len(th)))}, "all_equal": tv == th}
+    return script, trade, problems
+
+
+# ---- fork facts that script resolution relies on
+
+def fact_checks(pret: Path, src: Path) -> tuple[list[dict], list[str]]:
+    """The species/level the C side supplies for starters, roamers and the Togepi egg must equal the vanilla ones
+    (they resolve the c_source fields of the shared script sites)."""
+    rows = []
+    cs, st = base.read(pret, "src/choose_starter.c"), base.read(src, "src/starters.c")
+    sc = base.read(src, "src/field/script_commands.c")
+    pm = base.read(pret, "src/field/scrcmd_pokemon_misc.c")
+    pairs = {
+        "starter_species": (re.findall(r"SPECIES_\w+", re.search(r"const int species\[\] = \{(.*?)\}", cs, re.S)[1]), re.findall(r"SPECIES_\w+", re.search(r"sStarterChoices\[3\] = \{(.*?)\}", st, re.S)[1])),
+        "starter_level": (int(re.search(r"CreateMon\(mon, species\[i\], (\d+)", cs)[1]), int(re.search(r"PokeParaSet\(mon, species, (\d+)", st)[1])),
+        "roamers": (ROAMER_RE.findall(base.read(pret, "src/field_roamer.c")), ROAMER_RE.findall(base.read(src, "src/field_roamer.c"))),
+        "togepi_egg_species": (re.search(r"BOOL ScrCmd_GiveTogepiEgg.*?SetEggStats\(mon, (SPECIES_\w+)", pm, re.S)[1], re.search(r"SetEggStats\(togepi, (SPECIES_\w+)", sc)[1]),
+    }
+    problems = []
+    for fact, (v, h) in pairs.items():
+        rows.append({"fact": fact, "vanilla": v, "hge": h, "equal": v == h})
+        if v != h:
+            problems.append(f"hge C fact {fact} differs from pret: vanilla {v} vs hge {h}; the c_source resolution of the shared script sites no longer holds")
+    return rows, problems
+
+
+def pret_callees(pret: Path, rel: str, name: str) -> set[str] | None:
+    """Identifiers called inside the pret C definition of `name` (None when the function is not in that file)."""
+    m = re.search(r"^[^\s#/][^\n;]*\b" + re.escape(name) + r"\([^;]*?\)\s*\{.*?^\}", base.read(pret, rel), re.M | re.S)
+    return set(re.findall(r"\b(\w+)\(", m[0].split("{", 1)[1])) if m else None
+
+
+def romld_addresses(src: Path) -> dict[str, int]:
+    return {n: int(a, 16) for n, a in re.findall(r"^(\w+)\s*=\s*(0x[0-9A-Fa-f]{8})\s*\|\s*1;", (src / "rom.ld").read_text(encoding="utf-8"), re.M)}
+
+
+# ---- build
+
+def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: str, xmap: Path, hge_sha1: str, vanilla_sha1: str) -> str:
+    vdoc = build_doc(pret)
+    sites = vdoc["script_sites"]
+    defined = fork_defines(src)
+    script, trade, problems = script_member_proof(str(vanilla_rom), str(hge_rom), sites)
+    calls, defs, scan_problems = scan_hge_c(src, defined)
+    problems += scan_problems
+    facts, fact_problems = fact_checks(pret, src)
+    problems += fact_problems
+
+    van = Vanilla(xmap, base.read(pret, "main.lsf"), overlay_bases(str(vanilla_rom)), (src / "hooks").read_text(encoding="utf-8"), defined)
+    by_name: dict[str, list[dict]] = {}
+    for h in van.hooks:
+        by_name.setdefault(h["name"], []).append(h)
+
+    def replaces(row_name: str, hook: str | None) -> dict | None:
+        """Resolve a fork function to the vanilla function its hook patches."""
+        if hook is None:
+            return None
+        hs = by_name.get(hook, [])
+        if not hs:
+            problems.append(f"fork function {row_name}: no active hook named {hook} in the hooks file (never reached from vanilla code?)")
+            return None
+        fn = van.containing(hs[0]["region"], hs[0]["addr"])
+        if fn is None:
+            problems.append(f"fork function {row_name}: hook {hook} at {hs[0]['addr']:08X} is inside no vanilla function in the xMAP")
+            return None
+        return {"hook": hook, "region": hs[0]["region"], "hook_addr": f"{hs[0]['addr']:08X}", "object": fn[3], "function": fn[2], "function_addr": f"{fn[0]:08X}", "how": "full_replacement" if hs[0]["addr"] == fn[0] else "inline_patch"}
+
+    for row in calls:
+        row["replaces"] = replaces(f"{row['file']}:{row['function']}", row.get("hook", row["function"]))
+        row.pop("hook", None)
+    for row in defs:
+        row["replaces"] = replaces(f"{row['file']}:{row['api']}", row["api"])
+
+    other = [{"hook": hook, "kind": kind, "why": why, "replaces": replaces(hook, hook)} for hook, (kind, why) in sorted(HGE_REPLACED_OTHER.items())]
+    # replaced vanilla functions that matter to acquisition: those the fork rewrites as a producer/primitive/mon-touching helper
+    replaced = {r["replaces"]["function"] for r in calls + defs + other if r["replaces"]} & van.replaced_names()
+
+    # API names the fork calls -> the vanilla function behind them, and whether it is hooked
+    ld = romld_addresses(src)
+    api_res = {}
+    for api in sorted(({r["api"] for r in calls} | {r["api"] for r in defs}) - {DIRECT_WRITE}):
+        if api in ld:
+            fn = next((f for f in van.funcs if f[0] == ld[api]), None)
+            how = "rom.ld import"
+        elif api in by_name:
+            fn = van.containing(by_name[api][0]["region"], by_name[api][0]["addr"])
+            how = "defined in the fork, hooked over the vanilla function"
+        else:
+            problems.append(f"API {api}: neither a rom.ld import nor a hook")
+            continue
+        if fn is None:
+            problems.append(f"API {api}: no vanilla xMAP function at its address")
+            continue
+        status, hs = van.status(fn)
+        pf = next(iter(sorted((pret / "src").rglob(fn[3] + ".c"))), None)
+        callees = pret_callees(pret, pf.relative_to(pret).as_posix(), fn[2]) if pf else None
+        api_res[api] = {
+            "vanilla_function": fn[2],
+            "object": fn[3],
+            "addr": f"{fn[0]:08X}",
+            "how": how,
+            "vanilla_status": status,
+            "hooks": [h["name"] for h in hs],
+            "direct_callees_replaced": sorted((callees or set()) & replaced),
+        }
+
+    # every vanilla producer: replaced / patched_inline / kept (+ its callee)
+    vrows = []
+    for p in vdoc["c_producers"]:
+        obj = Path(p["file"]).stem
+        fns = van.find(p["function"], obj)
+        callee = van.find(p["api"])
+        if len(fns) != 1 or len(callee) != 1:
+            problems.append(f"vanilla producer {p['file']}:{p['function']} / {p['api']} does not resolve to one xMAP function ({len(fns)} / {len(callee)})")
+            continue
+        status, hs = van.status(fns[0])
+        cstatus = van.status(callee[0])[0]
+        called = sorted((pret_callees(pret, p["file"], p["function"]) or set()) & replaced)
+        summary = "replaced" if status == "replaced" else "kept_callee_replaced" if called else status
+        vrows.append(
+            {
+                "file": p["file"],
+                "function": p["function"],
+                "api": p["api"],
+                "cls": p["cls"],
+                "kind": p["kind"],
+                "region": van.region[obj],
+                "function_status": status,
+                "function_hooks": [h["name"] for h in hs],
+                "api_status": cstatus,
+                "function_callees_replaced": called,
+                "hge_status": summary,
+                "hge_counterparts": sorted({f"{r['file']}:{r['function']}" for r in calls if r["replaces"] and (r["replaces"]["object"], r["replaces"]["function"]) == (obj, p["function"])}),
+                **({"scripts": p["scripts"]} if p.get("scripts") else {}),
+                **({"open_question": p["open_question"]} if p.get("open_question") else {}),
+            }
+        )
+        if (p["file"], p["function"]) in HGE_NOTES:
+            vrows[-1]["note"] = HGE_NOTES[(p["file"], p["function"])]
+
+    if problems:
+        raise names.Mismatch("; ".join(problems))
+
+    reach = {c for r in calls + defs + vrows for c in r.get("scripts", [])}
+    counts = Counter(r["hge_status"] for r in vrows)
+    unresolved = [u for u in vdoc["unresolved"] if u["id"] not in ("hg_engine",) and (u["status"] != "open_policy")]
+    unresolved += [
+        {"id": f"{r['file']}:{r['lines'][0]}", "kind": r["kind"], "status": "open_policy", "why": r["open_question"]}
+        for r in calls
+        if r.get("open_question")
+    ]
+    unresolved += [{"id": f"{r['file']}:{r['function']}", "kind": r["kind"], "status": "open_policy", "why": r["open_question"]} for r in vrows if r.get("open_question") and r["hge_status"] in ("kept", "kept_callee_replaced")]
+    unresolved.append({"id": "hge_runtime_receipt", "kind": "runtime", "status": "open", "why": "GiveMon, ScrCmd_GiveEgg, ScrCmd_GiveTogepiEgg, _CreateTradeMon and the PC place functions are replaced C: an hge runtime acquisition receipt is still required (this inventory is SOURCE + ROM data only)"})
+    inputs = {rel: hashlib.sha256((src / rel).read_bytes()).hexdigest() for rel in sorted({"hooks", "include/config.h", "include/debug.h", *HGE_FACT_FILES} | {r["file"] for r in calls + defs})}
+    doc = {
+        "_note": "GENERATED by tools/gen_gen4_acquisition.py hge from the pinned hg-engine fork, the pinned hge ROM and pret/pokeheartgold -- do not edit. Script sites, NPC trade records and runtime branches are the vanilla HGSS ones, valid because script_narc/trade_narc prove the members holding them are byte-identical in both ROMs; the C inventory is scanned from the fork (hge replaces engine code).",
+        "_schema": HGE_SCHEMA,
+        "rom_sha1": hge_sha1,
+        "vanilla_rom_sha1": vanilla_sha1,
+        "source": {
+            "fork_commit": commit,
+            "inputs": inputs,
+            "pret": vdoc["source"],
+            "xmap": {"name": "heartgold_xmap", "sha256": gen4_pins.MAP_SPECS["heartgold_xmap"][0]},
+            "main_lsf_sha256": hashlib.sha256((pret / "main.lsf").read_bytes()).hexdigest(),
+            "active_hooks": len(van.hooks),
+            "hooks_with_unknown_address_form": van.skipped,
+        },
+        "script_narc": script,
+        "trade_narc": trade,
+        "inventory": {
+            "script_site_count": len(sites),
+            "script_command_counts": vdoc["inventory"]["script_command_counts"],
+            "script_file_count_with_sites": vdoc["inventory"]["script_file_count_with_sites"],
+            "npc_record_count": len(vdoc["npc_trade_records"]),
+            "npc_classification": vdoc["inventory"]["npc_classification"],
+            "c_producer_count": len(calls),
+            "c_call_site_count": sum(len(r["lines"]) for r in calls),
+            "c_inactive_call_site_count": sum(len(r["inactive_lines"]) for r in calls),
+            "c_definition_count": len(defs),
+            "vanilla_producer_count": len(vrows),
+            "vanilla_producer_status_counts": dict(sorted(counts.items())),
+            "commands_without_a_c_producer": sorted(set(COMMANDS) - reach - {"CreateRoamer", "WildBattle"}),
+            "scope": "script sites = the vanilla 61 (members proven identical); C side = call sites and definitions of the 11 producer APIs in the fork's src/ plus the status of every vanilla producer",
+        },
+        "zone_policy": vdoc["zone_policy"],
+        "special_modes": vdoc["special_modes"],
+        "script_sites": sites,
+        "npc_trade_records": vdoc["npc_trade_records"],
+        "runtime_branches": vdoc["runtime_branches"],
+        "c_fact_checks": facts,
+        "api_resolution": api_res,
+        "c_producers": calls,
+        "c_definitions": defs,
+        "replaced_non_producers": other,
+        "vanilla_c_producers": vrows,
+        "unresolved": unresolved,
+    }
+    return base.dumps(doc, 3)
+
+
+def main_hge(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="gen_gen4_acquisition.py hge", description="hge acquisition coverage map from the pinned hg-engine fork + ROMs")
+    ap.add_argument("--check", action="store_true", help="regenerate in memory and diff vs the committed JSON")
+    ap.add_argument("--pret", help=f"pokeheartgold clone (default ${base.ENV_CLONE} or the gen4_pins location)")
+    ap.add_argument("--rom", help="hge ROM (default: the pinned cache build)")
+    ap.add_argument("--vanilla-rom", help="vanilla HeartGold ROM (default: the gen4_pins location)")
+    ap.add_argument("--src", help="hg-engine fork clone")
+    ap.add_argument("--xmap", help="heartgoldus.xMAP")
+    ap.add_argument("--out-dir", default=str(HGE_OUT))
+    args = ap.parse_args(argv)
+    try:
+        pret = base.locate_clone(args.pret)
+        base.verify_clone(pret)
+        hge_rom, hge_sha1 = names.locate_rom("hge", args.rom)
+        van_rom, van_sha1 = names.locate_rom("hgss", args.vanilla_rom)
+        src, commit = names.locate_src("hge", args.src)
+        xmap = locate_xmap(args.xmap)
+        text = build_hge(pret, hge_rom, van_rom, src, commit, xmap, hge_sha1, van_sha1)
+    except (base.PretAbsent, names.Absent) as exc:
+        print(f"OPEN: {exc}", file=sys.stderr)
+        return 2
+    except (base.PretMismatch, names.Mismatch) as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+    return 0 if base.finish(Path(args.out_dir) / "acquisition.json", text, args.check) else 1
+
+
 def main() -> int:
+    if sys.argv[1:2] == ["hge"]:
+        return main_hge(sys.argv[2:])
     return base.cli(build, __doc__.splitlines()[0])
 
 

@@ -23,6 +23,7 @@ import gen4_pins  # noqa: E402
 import gen_gen4_acquisition as acq  # noqa: E402
 import gen_gen4_area_map as base  # noqa: E402
 import gen_gen4_encounters as enc  # noqa: E402
+import gen_gen4_names as names  # noqa: E402
 import gen_gen4_trainers as trn  # noqa: E402
 
 DATA = ROOT / "data" / "games" / "gen4_hgss"
@@ -329,3 +330,206 @@ def test_unclassified_c_producer_fails_generation(clone, tmp_path, monkeypatch):
 def test_npc_narc_parse_matches_record_count(clone):
     recs = acq.parse_npc_narc((clone / "files/a/1/1/2").read_bytes())
     assert len(recs) == 13 and recs[0]["give_species"] == 95 and recs[4]["give_species"] == 78
+
+
+# ── hge mode: tools/gen_gen4_acquisition.py hge -> data/games/gen4_hge/acquisition.json ──────────
+# Script-side sections are the vanilla ones (proved by member hashes of both ROMs); the C inventory is
+# scanned from the pinned hg-engine fork. ROM/fork/xMAP absent -> skip BY NAME; present but wrong -> FAIL.
+
+HGE_DATA = ROOT / "data" / "games" / "gen4_hge"
+
+
+def load_hge() -> dict:
+    return json.loads((HGE_DATA / "acquisition.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def hge_inputs() -> dict:
+    """pret clone, hge ROM, vanilla ROM, fork clone, xMAP -- all at their pins."""
+    try:
+        pret = base.locate_clone()
+        base.verify_clone(pret)
+        hge_rom, hge_sha = names.locate_rom("hge", None)
+        van_rom, van_sha = names.locate_rom("hgss", None)
+        src, commit = names.locate_src("hge", None)
+        xmap = acq.locate_xmap(None)
+    except (base.PretAbsent, names.Absent) as exc:
+        pytest.skip(f"hge acquisition input not available: {exc}")
+    except (base.PretMismatch, names.Mismatch) as exc:
+        pytest.fail(str(exc))
+    return {"pret": pret, "hge_rom": hge_rom, "hge_sha": hge_sha, "van_rom": van_rom, "van_sha": van_sha, "src": src, "commit": commit, "xmap": xmap}
+
+
+def hge_args(i: dict, **override: str) -> list[str]:
+    a = {"pret": str(i["pret"]), "rom": str(i["hge_rom"]), "vanilla-rom": str(i["van_rom"]), "src": str(i["src"]), "xmap": str(i["xmap"]), **override}
+    return ["hge"] + [x for k, v in a.items() for x in (f"--{k}", v)]
+
+
+def test_hge_check_mode_matches_committed(hge_inputs, monkeypatch, capsys):
+    rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
+    assert rc == 0, f"hge acquisition drifted from the committed JSON: {err}"
+
+
+def test_hge_check_mode_detects_drift(hge_inputs, monkeypatch, capsys, tmp_path):
+    """Control: a one-byte edit of the committed file must turn --check red."""
+    text = (HGE_DATA / "acquisition.json").read_text(encoding="utf-8")
+    (tmp_path / "acquisition.json").write_text(text.replace(hge_inputs["commit"], "0" * 40, 1), encoding="utf-8")
+    rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check", "--out-dir", str(tmp_path)], monkeypatch, capsys)
+    assert rc == 1 and "DRIFT" in err
+
+
+@pytest.mark.parametrize("flag", ["rom", "vanilla-rom", "src", "xmap"])
+def test_hge_absent_input_is_open_and_names_it(flag, hge_inputs, monkeypatch, capsys, tmp_path):
+    missing = tmp_path / f"no-{flag}"
+    rc, err = run_tool(acq, [*hge_args(hge_inputs, **{flag: str(missing)}), "--check"], monkeypatch, capsys)
+    assert rc == 2 and "OPEN" in err and str(missing) in err
+
+
+def test_hge_wrong_rom_fails_not_skips(hge_inputs, monkeypatch, capsys, tmp_path):
+    fake = tmp_path / "not-the-pinned-rom.nds"
+    fake.write_bytes(b"\0" * 64)
+    rc, err = run_tool(acq, [*hge_args(hge_inputs, rom=str(fake)), "--check"], monkeypatch, capsys)
+    assert rc == 1 and "FAIL" in err and "pinned" in err
+
+
+def test_hge_committed_provenance_and_member_proof():
+    doc = load_hge()
+    pins = gen4_pins.ROM_SPECS
+    assert doc["_schema"] == acq.HGE_SCHEMA
+    assert doc["rom_sha1"] == pins["heartgold_hge"][0] and doc["vanilla_rom_sha1"] == pins["heartgold"][0]
+    assert doc["source"]["fork_commit"] == gen4_pins.SOURCE_COMMITS["hg_engine_fork"]
+    assert doc["source"]["pret"]["commit"] == PIN
+    assert doc["source"]["inputs"] and all(len(h) == 64 for h in doc["source"]["inputs"].values())
+    assert {"hooks", "include/config.h", "include/debug.h"} <= set(doc["source"]["inputs"])
+    script, trade = doc["script_narc"], doc["trade_narc"]
+    assert script["site_member_count"] == len(script["site_members"]) == 47 and script["member_count"] == 965
+    assert all(m["vanilla_sha256"] == m["hge_sha256"] and len(m["hge_sha256"]) == 64 for m in script["site_members"].values())
+    assert script["members_differing_in_hge"] == [3] and script["differing_members_holding_sites"] == []
+    assert trade["all_equal"] and trade["member_count"] == 13
+    assert all(m["vanilla_sha256"] == m["hge_sha256"] for m in trade["members"].values())
+
+
+def test_hge_script_sections_are_the_vanilla_ones():
+    van, hge = load("acquisition.json"), load_hge()
+    for key in ("script_sites", "npc_trade_records", "runtime_branches", "zone_policy", "special_modes"):
+        assert hge[key] == van[key], key
+    inv = hge["inventory"]
+    assert inv["script_site_count"] == 61 and inv["npc_record_count"] == 13 and inv["commands_without_a_c_producer"] == []
+    assert not any(u["id"] == "hg_engine" for u in hge["unresolved"]) and any(u["id"] == "hge_runtime_receipt" for u in hge["unresolved"])
+
+
+def test_hge_c_producer_counts_are_pinned():
+    doc = load_hge()
+    inv = doc["inventory"]
+    assert inv["c_producer_count"] == len(doc["c_producers"]) == 18
+    assert inv["c_call_site_count"] == 14 and inv["c_inactive_call_site_count"] == 4 and inv["c_definition_count"] == len(doc["c_definitions"]) == 5
+    assert inv["vanilla_producer_count"] == len(doc["vanilla_c_producers"]) == 25
+    assert inv["vanilla_producer_status_counts"] == {"kept": 10, "kept_callee_replaced": 8, "patched_inline": 1, "replaced": 6}
+    by_fn = {(r["file"], r["function"], r["api"]): r["hge_status"] for r in doc["vanilla_c_producers"]}
+    assert by_fn[("src/script_pokemon_util.c", "GiveMon", "Party_AddMon")] == "replaced"
+    assert by_fn[("src/field/scrcmd_pokemon_misc.c", "ScrCmd_GiveTogepiEgg", "Party_AddMon")] == "replaced"
+    assert by_fn[("src/scrcmd_party.c", "ScrCmd_GiveMon", "GiveMon")] == "kept_callee_replaced", "the script command is kept, its helper is not"
+    assert by_fn[("src/battle/battle_command.c", "Task_GetPokemon", "Party_AddMon")] == "kept_callee_replaced"
+    assert by_fn[("src/choose_starter.c", "CreateStarter", "Party_AddMon")] == "patched_inline"
+    assert by_fn[("src/get_egg.c", "GiveEggToPlayer", "Party_AddMon")] == "kept"
+    assert doc["api_resolution"]["PokeParty_Add"]["vanilla_function"] == "Party_AddMon" and doc["api_resolution"]["PokeParty_Add"]["vanilla_status"] == "kept"
+    assert doc["api_resolution"]["CreateBoxMonData"]["vanilla_status"] == "replaced"
+    for r in doc["c_producers"]:
+        assert r["cls"] in {"acquisition", "not_acquisition", "external", "infrastructure", "script_dispatch"}, r
+
+
+def test_hge_c_scan_matches_the_tables(hge_inputs):
+    calls, defs, problems = acq.scan_hge_c(hge_inputs["src"], acq.fork_defines(hge_inputs["src"]))
+    assert problems == [] and len(calls) == 18 and len(defs) == 5
+
+
+def test_unclassified_hge_c_producer_fails_generation(hge_inputs, monkeypatch, capsys):
+    """Control (revert-tested by deleting the unclassified-producer problem in scan_hge_c): a classified
+    producer that leaves the table, or a changed call count, is reported -- and `hge` exits 1."""
+    src, defined = hge_inputs["src"], acq.fork_defines(hge_inputs["src"])
+    victim = ("src/pokemon.c", "GiveMon", "PokeParty_Add")
+    monkeypatch.setitem(acq.HGE_PRODUCERS, victim, {**acq.HGE_PRODUCERS[victim], "n": 2})
+    assert any("1 active" in p for p in acq.scan_hge_c(src, defined)[2])
+    monkeypatch.delitem(acq.HGE_PRODUCERS, victim)
+    assert any("unclassified hge C producer" in p and "pokemon.c" in p for p in acq.scan_hge_c(src, defined)[2])
+    rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
+    assert rc == 1 and "unclassified hge C producer" in err
+
+
+def test_hge_scan_flags_a_new_producer_in_a_synthetic_fork(tmp_path):
+    """ROM-free control: a PokeParty_Add in an unknown function is reported; commented-out calls are not call sites
+    and #ifdef'd-out ones are carried as inactive lines."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "x.c").write_text(
+        "#ifdef OFF\nvoid Dead(void)\n{\n    PokeParty_Add(p, m);\n}\n#endif\n"
+        "// PokeParty_Add(p, m);\n"
+        "void Fresh(void)\n{\n    /* PokeParty_Add(a, b); */\n    PokeParty_Add(p, m);\n}\n",
+        encoding="utf-8",
+    )
+    _calls, _defs, problems = acq.scan_hge_c(tmp_path, set())
+    problems = [p for p in problems if p.startswith("unclassified")]  # the real table's rows are all "no longer found" here
+    assert len(problems) == 2
+    assert any("'Fresh'" in p and "[11]" in p for p in problems) and any("'Dead'" in p and "[4]" in p for p in problems)
+
+
+def test_hge_active_map_handles_ifdef_else_and_defined_expressions():
+    lines = ["a", "#ifdef A", "b", "#else", "c", "#endif", "#if defined(A) && defined(B)", "d", "#endif", "#ifndef B", "e", "#endif"]
+
+    def live(defined: set[str]) -> list[str]:
+        return [ln for ln, on in zip(lines, acq.active_map(lines, defined), strict=True) if on and not ln.startswith("#")]
+
+    assert live({"A"}) == ["a", "b", "e"]
+    assert live({"A", "B"}) == ["a", "b", "d"]
+    assert live(set()) == ["a", "c", "e"]
+    with pytest.raises(ValueError, match="unsupported"):
+        acq.active_map(["#if FOO >= 3", "x", "#endif"], set())
+
+
+SITES = [{"file": "scr_seq_0002_A.s"}, {"file": "scr_seq_0005_B.s"}]
+
+
+def synthetic_hashes(monkeypatch, *, flip: dict[str, set[int]] | None = None, drop: dict[str, int] | None = None):
+    """narc_member_hashes stub: 10 script members and 3 trade members in both ROMs; `flip` changes the listed hge
+    members, `drop` truncates the hge narc (member-count mismatch)."""
+    flip, drop = flip or {}, drop or {}
+
+    def fake(rom: str, narc: str) -> tuple[str, ...]:
+        n = drop.get(narc, 10 if narc == acq.SCRIPT_NARC else 3) if rom == "hge" else (10 if narc == acq.SCRIPT_NARC else 3)
+        return tuple(("x" if rom == "hge" and i in flip.get(narc, set()) else "h") + f"{narc}{i}" for i in range(n))
+
+    monkeypatch.setattr(acq, "narc_member_hashes", fake)
+
+
+def test_member_hash_equality_is_red_on_one_differing_site_member(monkeypatch):
+    """Control (revert-tested by deleting the `v[n] != h[n]` problem in script_member_proof): one differing
+    script member that holds a site fails; a differing member that holds none (member 3 in the real build) does not."""
+    synthetic_hashes(monkeypatch)
+    script, trade, problems = acq.script_member_proof("vanilla", "hge", SITES)
+    assert problems == [] and script["site_member_count"] == 2 and trade["all_equal"]
+    synthetic_hashes(monkeypatch, flip={acq.SCRIPT_NARC: {5}})
+    script, _t, problems = acq.script_member_proof("vanilla", "hge", SITES)
+    assert len(problems) == 1 and "member 5 (scr_seq_0005_B.s) differs" in problems[0]
+    assert script["differing_members_holding_sites"] == [5]
+    synthetic_hashes(monkeypatch, flip={acq.SCRIPT_NARC: {3}})
+    script, _t, problems = acq.script_member_proof("vanilla", "hge", SITES)
+    assert problems == [] and script["members_differing_in_hge"] == [3]
+    synthetic_hashes(monkeypatch, flip={acq.TRADE_NARC: {1}})
+    assert any("NPC trade records" in p for p in acq.script_member_proof("vanilla", "hge", SITES)[2])
+    synthetic_hashes(monkeypatch, drop={acq.SCRIPT_NARC: 4})
+    assert any("members in" in p or "missing" in p for p in acq.script_member_proof("vanilla", "hge", SITES)[2])
+
+
+def test_real_member_hash_mismatch_fails_generation(hge_inputs, monkeypatch, capsys):
+    """Control on the real ROMs (monkeypatched hash): one flipped hge member hash turns generation red."""
+    real = acq.narc_member_hashes
+    hge_rom = str(hge_inputs["hge_rom"])
+
+    def flipped(rom: str, narc: str) -> tuple[str, ...]:
+        h = list(real(rom, narc))
+        if narc == acq.SCRIPT_NARC and rom == hge_rom:
+            h[21] = "f" * 64  # scr_seq_0021_D17R0110 (Ho-Oh) holds sites
+        return tuple(h)
+
+    monkeypatch.setattr(acq, "narc_member_hashes", flipped)
+    rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
+    assert rc == 1 and "member 21" in err and "differs" in err
