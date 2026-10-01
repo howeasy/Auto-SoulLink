@@ -80,8 +80,11 @@ def nature_oracle(run, results):
         raise RuntimeError('nature changed partner saved records')
     changes=tx_messages(text,'key_change')
     expected=dict(old_key=old_key,new_key=new_key,reason='nature_change')
-    if len(changes)!=1 or any(changes[0].get(k)!=v for k,v in expected.items()):
-        raise RuntimeError('nature requires exactly one production identity migration')
+    if not changes or any(any(change.get(k)!=v for k,v in expected.items()) for change in changes):
+        raise RuntimeError('nature requires one unique production identity migration')
+    semantic=[{k:v for k,v in change.items() if k!='seq'} for change in changes]
+    if any(change!=semantic[0] for change in semantic[1:]):
+        raise RuntimeError('nature retry changed semantic payload')
     if any(tx_messages(operation,event) for event in ('capture','party_to_box','box_to_party','faint','no_catch')):
         raise RuntimeError('nature emitted gameplay churn')
     signals=rows(text,'NATURE_SIGNAL')

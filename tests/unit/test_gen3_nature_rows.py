@@ -94,5 +94,30 @@ def test_producer_faults_fail_closed(producer,fault):
     elif fault=='unmigrated': results['a']=results['a'].replace('"migrated": true','"migrated": false')
     elif fault=='save': results['a']=results['a'].replace('counter=2->3','counter=2->2')
     elif fault=='bad_checksum': mon['checksum_ok']=False
-    elif fault=='duplicate': results['a']+=next(l for l in results['a'].splitlines() if l.startswith('TX key_change'))+'\n'
+    elif fault=='duplicate': results['a']+=next(l for l in results['a'].splitlines() if l.startswith('TX key_change')).replace('nature_change','unproven_change')+'\n'
     with pytest.raises((RuntimeError,ValueError)): n.nature_oracle(run,results)
+
+def test_identical_retransmission_passes_actual_oracle(producer):
+    run,results,_=producer
+    line=next(l for l in results['a'].splitlines() if l.startswith('TX key_change'))
+    results['a']=results['a'].replace(line,line+'\n'+line)
+    n.nature_oracle(run,results)
+
+def test_extra_native_mutation_is_not_a_retry(producer):
+    run,results,_=producer
+    signals=[line for line in results['a'].splitlines() if line.startswith('NATURE_SIGNAL')]
+    results['a']+='\n'.join(signals)+'\n'
+    with pytest.raises(RuntimeError,match='registered points'):n.nature_oracle(run,results)
+
+def test_retry_sequence_may_change_but_payload_may_not(producer):
+    run,results,_=producer
+    line=next(l for l in results['a'].splitlines() if l.startswith('TX key_change'))
+    raw=line.split(' ',3)[3]
+    message=json.loads(raw)
+    message['seq']=2
+    retry='TX key_change - '+json.dumps(message)
+    # Wire sequence belongs to transport; every semantic field must remain identical.
+    results['a']=results['a'].replace(line,line+'\n'+retry)
+    n.nature_oracle(run,results)
+    results['a']=results['a'].replace(retry,retry.replace('nature_change','other'))
+    with pytest.raises(RuntimeError,match='unique production'): n.nature_oracle(run,results)

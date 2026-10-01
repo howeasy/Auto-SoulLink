@@ -25,11 +25,13 @@ return function(ctx)
     local function field() return ctx.play.on_field(ctx.cp)
         and ctx.G.pred_ok(ctx.cp,"script_context_status")
         and ctx.G.pred_ok(ctx.cp,"field_controls_locked") end
+    local mutations=0
     local signals, drain=ctx.session.signals,ctx.session.signals.drain
     signals.drain=function(self)
         local out=drain(self)
         for _,sig in ipairs(out) do
             if sig.kind=="nature_change_begin" or sig.kind=="nature_change" then
+                if sig.kind=="nature_change" then mutations=mutations+1 end
                 ctx.jlog("NATURE_SIGNAL",{kind=sig.kind,point=sig.point})
             end
         end
@@ -77,7 +79,25 @@ return function(ctx)
     ctx.G.tap("A",3,20)
     if not ctx.mash_until(list,120,"A") then return false,"native ListMenu nature list absent" end
     ctx.frames(60);ctx.G.tap("A",3,20) -- first native nature option, ROM-derived target
-    if not ctx.mash_until(function() return ctx.sent("key_change")==1 end,180,"A") then
+    joypad.set({})
+    if not ctx.wait_until(function() return mutations>=1 end,180,"first registered nature mutation") then
+        return false,"registered nature mutation absent"
+    end
+    -- The native mutation is autonomous after selecting the list row. A is now
+    -- permitted only to dismiss its still-active script; never on an idle field.
+    local pulse=0
+    if not ctx.wait_until(function()
+        joypad.set({})
+        if field() then return true end
+        if mutations~=1 then error("extra native nature mutation") end
+        pulse=pulse+1
+        if pulse%16==0 and (not ctx.G.pred_ok(ctx.cp,"script_context_status")
+                           or not ctx.G.pred_ok(ctx.cp,"field_controls_locked")) then
+            joypad.set({A=true})
+        end
+    end,120,"nature script dismissal without reopening") then return false,"nature script did not finish" end
+    joypad.set({})
+    if not ctx.wait_until(function() return ctx.sent("key_change")>=1 end,120,"nature migration publication") then
         return false,"registered nature migration absent"
     end
     local change=ctx.last_sent("key_change")
@@ -88,7 +108,8 @@ return function(ctx)
     end,120,"nature migration ACK")
     if not ack then return false,"no nature ACK" end
     ctx.jlog("NATURE_ACK",ack)
-    if not ctx.mash_until(field,120,"A") then return false,"nature script did not finish" end
+    if mutations~=1 then return false,"extra native nature mutation" end
+    joypad.set({})
     ctx.log("NATURE_CHANGED "..change.new_key)
     if not ctx.wait_go("SAVE") then return false,"no save permission" end
     return ctx.save("nature")
