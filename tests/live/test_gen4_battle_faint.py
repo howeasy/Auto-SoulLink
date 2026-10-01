@@ -6,7 +6,7 @@ Offline (always): python -m pytest tests/live/test_gen4_battle_faint.py -m 'not 
 Live (the coordinator's ONE emulator lane, granted separately):
   SLINK_LIVE=1 python -m pytest tests/live/test_gen4_battle_faint.py -m live -q -rs
   Input: the C1-9 state C:/slink/g4/route/route_leg2_battle_settled.State (copied into the lane,
-  never written in route/). hge needs SLINK_GEN4_HGE_FAINT_STATE + SLINK_GEN4_HEARTGOLD_HGE_SAVE.
+  never written in route/). hge: route_hge leg5 state + hge_a_OOO_630 save, lane faint_hge (env overrides).
 No offline test launches an emulator. A scenario that cannot reach its oracle is a NAMED SKIP (OPEN),
 never a pass. Never kill by image name: only this Popen's PID and this lane's own EmuHawk."""
 
@@ -28,7 +28,16 @@ from tools import gen4_fixtures as g4, gen4_pins
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_battle_faint.lua"
-LANE_ROOT = Path("C:/slink/g4/faint")
+LANE_ROOT = Path("C:/slink/g4/faint")  # HG; hge uses LANES["heartgold_hge"]
+LANES = {"heartgold": LANE_ROOT, "heartgold_hge": Path("C:/slink/g4/faint_hge")}
+HGE_STATE = Path("C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State")
+HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")
+# the route log of each state must name the settled FIGHT-menu battle (title -> (RESULT regex, settled regex))
+STATE_LOGS = {
+    "heartgold": (r"RESULT BATTLE species=16 level=2\b", r"settled after \d+ frames; chain .* hp=13/13 player=155"),
+    "heartgold_hge": (r"RESULT BATTLE .*species=PIDGEY\(16\) level=3\b",
+                      r"settled after \d+ frames; chain .* enemy=16 L3 hp=16/16 player=155"),
+}
 ROUTE_STATE = Path("C:/slink/g4/route/route_leg2_battle_settled.State")
 ROUTE_LOG = ROUTE_STATE.with_name("route_leg2.log")
 EMUHAWK = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
@@ -58,17 +67,17 @@ def need(path: Path, name: str) -> Path:
     return path
 
 
-def check_state(state: Path, log: Path) -> Path:
-    """The C1-9 state must be the FIGHT menu of the wild Pidgey L2 battle (player's Cyndaquil).
+def check_state(state: Path, log: Path, title: str = "heartgold") -> Path:
+    """The route state must be the settled FIGHT menu of the wild Pidgey battle (player's Cyndaquil).
     Absent skips by name; a present state that is not a BizHawk state or whose route log does not
     name that battle fails."""
     need(state, "C1-9 battle state")
     head = state.read_bytes()[:4]
     assert head == b"PK\x03\x04" and state.stat().st_size > 1 << 20, f"{state} is not a BizHawk state"
     text = need(log, "C1-9 route log").read_text(encoding="utf-8", errors="replace")
-    assert re.search(r"RESULT BATTLE species=16 level=2\b", text), "route log does not name the Pidgey L2 battle"
-    assert re.search(r"settled after \d+ frames; chain .* hp=13/13 player=155", text), \
-        "route log does not show the settled FIGHT menu (Pidgey 13/13, Cyndaquil)"
+    result_re, settled_re = STATE_LOGS[title]
+    assert re.search(result_re, text), "route log does not name the Pidgey L2 battle"
+    assert re.search(settled_re, text), "route log does not show the settled FIGHT menu (Pidgey, Cyndaquil)"
     return state
 
 
@@ -89,9 +98,31 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
     return status, payload
 
 
+# The end-of-turn command whose entry the S2 seam hooks. HG: command 11 (UpdateFieldConditionExtra). hge replaces
+# command 9 (ServerFieldConditionCheck, `hooks:376`) with C that runs ALL end-of-turn effects, calls
+# CheckIfAnyoneShouldFaint at its loop top (ServerFieldConditionCheck.c:127) and ends in TURN_END (:1944), so hge never
+# dispatches commands 10/11 (live: trace 9 -> 12). The address and pin are read from the ROM's own dispatch table.
+UFCE_CMD = {"heartgold": 11, "heartgold_hge": 9}
+UFCE_NAME = {11: "BattleControllerPlayer_UpdateFieldConditionExtra", 9: "hge_ServerFieldConditionCheck_entry"}
+CMD_TABLE = 0x0226CA90  # sPlayerBattleCommands (xMAP / hge rom.ld:710)
+
+
+def seam_overrides(title: str, rom: Path) -> dict:
+    """{"ufce": {addr, pin, cmd, name}} derived from the ROM table entry, never typed in."""
+    cmd = UFCE_CMD[title]
+    ov12, _ = rom_images(rom)
+    entry = struct.unpack_from("<I", ov12.data, CMD_TABLE + 4 * cmd - ov12.ramAddress)[0]
+    addr = entry & ~1
+    pin = struct.unpack_from("<I", ov12.data, addr - ov12.ramAddress)[0]
+    return {"ufce": {"addr": addr, "pin": pin, "cmd": cmd, "name": UFCE_NAME[cmd]}}
+
+
 def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state: Path, source_head: str,
-                 profile: Path, fault: str | None = None, max_frames: int = 5400) -> dict:
-    return {"run_id": f"{lane.parent.name}/{lane.name}", "title": title, "rom_sha1": rom_sha1,
+                 profile: Path, fault: str | None = None, max_frames: int = 5400,
+                 seams: dict | None = None) -> dict:
+    prof = json.loads(profile.read_text(encoding="utf-8"))["titles"][title]["profile"]
+    pack = {"save": prof["save"], "battle": prof["battle"]}  # offsets come from the pack, never hard-coded
+    return {"pack": pack, "seams": seams or {}, "run_id": f"{lane.parent.name}/{lane.name}", "title": title, "rom_sha1": rom_sha1,
             "scenario": scenario, "state_path": state.as_posix(), "shot_dir": lane.as_posix(),
             "requested_rate": 300, "fault": fault, "max_frames": max_frames, "move_right": True,
             "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head}
@@ -111,7 +142,7 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     assert title in PACK, title
     need(EMUHAWK, "EmuHawk")
     profile = REPO / "data/games" / PACK[title] / "profile.json"
-    lane = LANE_ROOT / f"{title}_{scenario}{'_' + fault if fault else ''}_{time.strftime('%H%M%S')}"
+    lane = LANES[title] / f"{title}_{scenario}{'_' + fault if fault else ''}_{time.strftime('%H%M%S')}"
     assert not lane.exists(), f"refusing stale run directory {lane}"
     lane.mkdir(parents=True)
     rom = g4.stage_rom(rom_src, lane)
@@ -124,7 +155,7 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     shutil.copyfile(state, lane_state)  # route/ is never written, nor read by the emulator
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     cfg = build_config(title=title, rom_sha1=rom_sha1, scenario=scenario, lane=lane, state=lane_state,
-                       source_head=head, profile=profile, fault=fault)
+                       source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom))
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
     out = lane / "receipt.txt"
     env = dict(os.environ, SLINK_ROOT=REPO.as_posix(), SLINK_GEN4_FAINT_CONFIG=(lane / "probe.json").as_posix(),
@@ -284,14 +315,10 @@ def _live_inputs(title: str):
         state = check_state(ROUTE_STATE, ROUTE_LOG)
         save = need(Path(os.environ.get("SLINK_GEN4_HEARTGOLD_SAVE", DEFAULT_SAVE)), "heartgold played save")
     else:
-        if not os.environ.get("SLINK_GEN4_HGE_FAINT_STATE"):
-            pytest.skip("OPEN hge: no hge FIGHT-menu state (SLINK_GEN4_HGE_FAINT_STATE unset); "
-                        "the hge seam is proven by FILE bytes only")
-        state = need(Path(os.environ["SLINK_GEN4_HGE_FAINT_STATE"]), "hge battle state")
-        save_env = os.environ.get("SLINK_GEN4_HEARTGOLD_HGE_SAVE")
-        if not save_env:
-            pytest.skip("OPEN hge: SLINK_GEN4_HEARTGOLD_HGE_SAVE unset")
-        save = need(Path(save_env), "hge played save")
+        state_path = Path(os.environ.get("SLINK_GEN4_HGE_FAINT_STATE", HGE_STATE))
+        log = state_path.with_name(state_path.name.replace("_battle_settled.State", ".log"))
+        state = check_state(state_path, log, title)
+        save = need(Path(os.environ.get("SLINK_GEN4_HEARTGOLD_HGE_SAVE", HGE_SAVE)), "hge played save")
     rom = gen4_pins.default_locations().roms[title]
     return state, need(rom, f"{title} ROM"), save
 
@@ -314,7 +341,7 @@ def test_live_row_o_scenario(title, scenario):
     if status == "OPEN":
         pytest.skip(f"OPEN {scenario}: {payload.get('reason')} ({out})")
     if kind == "primary":  # the only receipt row_o() will accept as the physical row
-        shutil.copyfile(out, LANE_ROOT / f"row_o_{title}_{scenario}.txt")
+        shutil.copyfile(out, LANES[title] / f"row_o_{title}_{scenario}.txt")
 
 
 @pytest.mark.live
@@ -327,3 +354,19 @@ def test_live_instrument_controls_go_red_when_a_check_is_disabled(fault):
     status, payload, lane, _ = launch("heartgold", "seam_turnend", state, rom, save, fault=fault)
     assert status == "FAIL" and FAULTS[fault] in payload["reason"], (status, payload.get("reason"))
     assert payload["observation"].get("write") is None, "a write happened despite red instrument controls"
+
+
+@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+def test_s2_seam_is_derived_from_the_rom_dispatch_table(title):
+    """FILE: HG derives the Lua default (command 11); hge derives its command-9 entry, the vanilla address
+    patched by hooks:376 (a trampoline, so its pin differs from the vanilla UFCE bytes)."""
+    rom = gen4_pins.default_locations().roms[title]
+    if not rom.is_file():
+        pytest.skip(f"OPEN {title} ROM absent: {rom}")
+    seam = seam_overrides(title, rom)["ufce"]
+    m = lua_api()
+    if title == "heartgold":
+        assert (seam["addr"], seam["pin"], seam["cmd"]) == (m.SEAMS.ufce.addr, m.SEAMS.ufce.pin, m.SEAMS.ufce.cmd)
+    else:
+        assert (seam["addr"], seam["cmd"]) == (0x022494DC, 9)
+        assert seam["pin"] != m.SEAMS.ufce.pin  # replaced entry bytes, not the vanilla function

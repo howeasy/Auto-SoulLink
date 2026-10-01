@@ -43,7 +43,7 @@ def plain_mon(pid, otid, species, hp, maxhp):
 class World:
     """Byte-addressed main RAM with the HGSS battle chain and a 2-slot save party."""
 
-    def __init__(self, *, btype=0, hp=20, maxhp=20, ehp=13):
+    def __init__(self, *, btype=0, hp=20, maxhp=20, ehp=13, save_hdr=0x23014):
         self.m = bytearray(0x400000)
         w = self.w32
         w(FS_PTR, FS)
@@ -54,7 +54,7 @@ class World:
         w(MAN + 0x1C, BS)
         w(BS + 0x30, CTX)
         w(BS + 0x2C, btype)
-        w(SAVE + 0x23014 + 2 * 16 + 8, PARTY_OFF)
+        w(SAVE + save_hdr + 2 * 16 + 8, PARTY_OFF)
         self.recs = [plain_mon(PID, OTID, 155, hp, maxhp), plain_mon(0x0BADF00D, 0x777, 155, 11, 11)]
         self.party_ptr = [0x022C8000, 0x022C9000]  # trainerParty[0] (player), [1] (enemy)
         raw = [codec.encrypt_party(r) for r in self.recs]
@@ -524,3 +524,25 @@ def test_smoke_seam_drops_wrong_state_stale_pointers_and_wrong_overlay_hits(tmp_
 def test_smoke_lost_copy_back_turns_the_primary_oracle_red(tmp_path, monkeypatch):
     status, payload, _ = run_probe(tmp_path, monkeypatch, "seam_turnend", copyback=False)
     assert status == "FAIL" and "copy-back lost the zero" in payload["reason"]
+
+
+def test_pack_profile_drives_the_hge_save_header_offset():
+    """hge's SaveData header table sits at 0x2F014 (pack), HG's at 0x23014: configure() must follow the pack."""
+    import json
+
+    def load(title, pack):
+        prof = json.loads((SCRIPT.parents[2] / f"data/games/{pack}/profile.json").read_text(encoding="utf-8"))
+        return prof["titles"][title]["profile"]
+
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    rt.globals().SLINK_GEN4_FAINT_TEST = True
+    m = rt.execute(SCRIPT.read_text(encoding="utf-8"))
+    hge = load("heartgold_hge", "gen4_hge")
+    assert hge["save"]["array_headers_off"] == 0x2F014
+    w = World(save_hdr=0x2F014)
+    assert m.want_from_save(w.mem(rt), 0)[1] == "save_party"  # HG defaults cannot see the hge table
+    m.configure(rt.table_from({"save": {k: v for k, v in hge["save"].items() if isinstance(v, (int, str))}
+                               | {"array_header_fields": rt.table_from(hge["save"]["array_header_fields"]),
+                                  "array_ids": rt.table_from(hge["save"]["array_ids"])},
+                               "battle": rt.table_from(hge["battle"])}))
+    assert m.want_from_save(w.mem(rt), 0).pid == PID

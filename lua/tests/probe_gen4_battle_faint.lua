@@ -27,6 +27,14 @@ M.L = {
   FAINT_SHIFT = 24, CMD_SELECT = 5, CMD_UFCE = 11, CMD_TURN_END = 12,
 }
 local L = M.L
+-- Per-title offsets come from the pack profile (cfg.pack, from data/games/<pack>/profile.json); the defaults above
+-- are HG. hge differs in the SaveData header table (0x2F014 vs 0x23014).
+function M.configure(pack)
+  local sv, b = pack.save, pack.battle
+  L.SAVE_HDR, L.SAVE_DYN, L.HDR_SIZE = sv.array_headers_off, sv.dynamic_region_off, sv.array_header_size
+  L.HDR_OFFSET, L.PARTY_ID = sv.array_header_fields.offset, sv.array_ids.party
+  L.bs_ctx, L.ctx_mons, L.ctx_sel, L.mon_hp, L.mon_size = b.ctx_off, b.mons_off, b.selected_off, b.hp_off, b.mon_size
+end
 local BT_DOUBLES, BT_UNSUPPORTED = 0x02, 0x1C -- link | multi | tag: refuse (OPEN, no live case)
 
 -- Exec seams. Addresses are pret xMAP (HG) and the pinned hge build (BYTE-IDENTICAL ov12 extents,
@@ -319,6 +327,9 @@ local function run()
   local f = assert(io.open(assert(os.getenv("SLINK_GEN4_FAINT_CONFIG"), "SLINK_GEN4_FAINT_CONFIG required"), "rb"))
   local cfg = assert(json.decode(f:read("a"))); f:close()
   local out = assert(os.getenv("SLINK_GEN4_FAINT_OUT"), "SLINK_GEN4_FAINT_OUT required")
+  if cfg.pack then M.configure(cfg.pack) end
+  -- per-build seam override (hge folds commands 9-11 into command 9: the wrapper derives addr/pin from the ROM table)
+  for k, v in pairs(cfg.seams or {}) do M.SEAMS[k] = v end
   local scn = assert(M.SCENARIOS[cfg.scenario], "unknown scenario " .. tostring(cfg.scenario))
   local fault = (cfg.fault ~= json.null) and cfg.fault or nil
   local opts = {fault = fault}
@@ -457,7 +468,7 @@ local function run()
         local sel = mem.r8(ch.ctx + L.ctx_sel)
         local party = mem.r32(ch.bs + L.bs_party)
         local php = (inram(party) and sel < 6) and (M.rec_hp(mem, party + L.party_mons + L.rec_size * sel)) or -1
-        if cmd == L.CMD_TURN_END or cmd == L.CMD_UFCE then seen12[fr] = true end
+        if cmd == L.CMD_TURN_END or cmd == seam.cmd then seen12[fr] = true end -- seam.cmd: 11 on HG, 9 on hge
         if cmd ~= L.CMD_SELECT then left5 = true end
         if write_frame and out_b ~= 0 and not first_out then first_out, outv = fr, out_b end
         if write_frame and cmd == 22 and not script_frame then script_frame = fr end -- RUN_SCRIPT after the write

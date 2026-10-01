@@ -307,3 +307,37 @@ Receipts: `C:/slink/g4/faint/heartgold_<scenario>_<hhmmss>/receipt.txt` (final r
   (3) dense post-write screenshots; (4) `seam_ufce_bit` promoted to primary (owner ruling).
 - **Still OPEN:** replacement prompt (2+ mon party), doubles/TAG/multi, NPC follower, trainer battles, Future Sight /
   Perish / switch / run as live paths, the `poll_fightmenu` exploratory scenario (not run), hge.
+
+## 10. Live result, hge (card C1-8C, 2026-10-01; PHYSICAL, build `cb2dc435`, singles wild Pidgey L3, Cyndaquil "POOP" L5, one-mon party)
+
+State `C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State`, save copy of `hge_a_OOO_630`, lane `C:/slink/g4/faint_hge`.
+Final receipts: `heartgold_hge_seam_turnend_170701`, `..._seam_ufce_bit_170839`, `..._battle_only_170750`,
+`..._party_only_170813` (each `receipt.txt`); primaries also in `C:/slink/g4/faint_hge/row_o_heartgold_hge_<scenario>.txt`.
+
+| Scenario | Status | Seam / cmd | write -> result | Result byte | Save HP at `HealParty` entry / after |
+|---|---|---|---|---|---|
+| `seam_turnend` | PASS | TurnEnd `0x0224A958`, cmd 12 | 1 frame | 2 | 0 / 20 |
+| `seam_ufce_bit` | PASS | **cmd 9 entry `0x022494DC`** + FAINTED bit | 188 frames | 2 | 0 / 20 |
+| `battle_only`, `party_only` (controls) | PASS (red) | TurnEnd | no result in 1500 frames | none | no heal |
+
+- **The TurnEnd seam fires on hge** (the claim of section 5 holds physically): 1 hit, 0 wrong-image/stale/bad-state;
+  the replaced `BattleContext_Main` still dispatches command 12 to the vanilla TurnEnd. HG-identical oracle values.
+- **hge difference: commands 10 and 11 are never dispatched.** The live trace goes `40 -> 9 -> 12` (and `9 -> 22 -> 9`
+  inside a turn). hge's command 9 (`ServerFieldConditionCheck`, `hooks:376`, address from the ROM table entry 9 =
+  `0x022494DC`, a trampoline) runs all end-of-turn effects, calls `CheckIfAnyoneShouldFaint` at its loop top
+  (`ServerFieldConditionCheck.c:127`) and ends in TURN_END (`:1944`). The HG S2 address (`0x0224A70C`) therefore never
+  fires on hge (live run 170420: 0 hits, OPEN, not a pass); the S2 seam on hge is **command 9 entry**, derived by the wrapper
+  from the ROM dispatch table (`UFCE_CMD`), with the pin read from the ROM, never typed in. The write there precedes the
+  end-of-turn effects of that turn (weather etc.), a slightly earlier point than HG's.
+- **The FAINTED bit still drives the normal faint on hge** (`BtlCmd_TryFaintMon` replacement does not matter: the
+  consumer `CheckIfAnyoneShouldFaint` is byte-identical): bit consumed within 2 frames (command 22), sprite gone, HP bar
+  gone, "POOP fainted!" (`seam_ufce_bit_w146.png` in the 170540 run, same behaviour in 170839). S1 on hge, as on HG,
+  leaves the sprite and a stale 17/20 bar and prints "You have no more Pokemon that can fight" (`seam_turnend_w60/w144.png`,
+  run 170247).
+- **`HealParty` (`0x02090C1C`) and `Task_Blackout` (`0x02052858`) are kept in hge**: identical arm9 bytes (FILE),
+  and the observers fired live (blackout heal at save HP 0, nurse heal at 20).
+- **hge differences handled by the pack, not by constants in the probe:** the SaveData header table is at `0x2F014`
+  (pack `array_headers_off`; HG `0x23014`); `cfg.pack` feeds it and the battle offsets to the probe (`M.configure`). The
+  first hge run (170202) failed `save_party` for exactly that reason before the fix.
+- **Counter fix:** `hits_without_poll_sight` now looks for the seam's own command (11 HG, 9 hge) or 12.
+- **Foreign EmuHawk PIDs** seen before the first hge boot: 53068 and 52416 (a gen3 duo run, `patch/build/duo_*`); untouched.
