@@ -203,6 +203,7 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
+               "Task_MultichoiceMenu_HandleInput", "Task_YesNoMenu_HandleInput",
                "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon", "Task_ReleaseMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
@@ -618,6 +619,11 @@ local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G =
 ctx.native_candidate = native_candidate
 
 function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
+function ctx.follow_path(name, path, from, to, label)
+    assert(type(path) == "table" and #path < 100, "unbounded native path")
+    SP.PATHS[name] = {from=from, to=to, dirs=path, battles=false}
+    play.follow(cp, name, label)
+end
 function ctx.fail(why) finish(false, why) end
 function ctx.rx_after(index, pred)
     for i = (index or 0) + 1, #rx do if pred(rx[i].msg) then return rx[i].msg, i end end
@@ -1096,6 +1102,12 @@ function ctx.face(dir)
 end
 --- Is the pret function `name` (one of SYMS) an active task right now?
 function ctx.task_live(name) return party_task(assert(S[name], "no SYMS entry " .. name)) end
+-- A row may supply an own-ROM verified task address without extending shared title facts.
+function ctx.task_address_live(address)
+    assert(type(address)=="number" and address>=0x08000000 and address<0x0A000000 and address%2==0,
+           "invalid own-ROM task address")
+    return party_task(address)
+end
 --- A pret static (one of SYMS) read now: `width` bytes (1/2/4) at S[name] + `offset`. Read-only;
 --- a callback compares against S[fn] | 1 (Thumb).
 function ctx.peek(name, width, offset)
@@ -1886,7 +1898,7 @@ if wants_routes then
     },S,log)
 end
 if D.active_faint_case == "whiteout" or D.scenario == "ball_gate_gen3"
-    or D.scenario == "release_gen3" then
+    or D.scenario == "release_gen3" or D.scenario == "nature_change_gen3" then
     --- fn() with every incidental battle FLED instead of fought (T2's proven escape policy,
     --- gen3_routes.lua with_incidental_escape); the lone-lead walks of linked_faint_active's
     --- whiteout case (W3, live FR-as-A at b0483efe: the walk back fought a Route 1 encounter,

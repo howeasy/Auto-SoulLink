@@ -623,6 +623,17 @@ for _rule in ("species", "gender", "type"):
         "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch", "gen3_rr": "battle2"},
         "scenario_module": "clause", "rule_kind": _rule, "oracle": f"assert_{_rule}_clause_gen3_saved",
     }
+# RR nature change (Sol's client + pack + census sites). explicit_only: the row needs the
+# qualified nature_change_begin/end pair, so it never joins an automatic --scenario all
+# sweep; tools/gen3_final_cut.py's RR plan selects explicit_only rows explicitly. The
+# target is battle2, the RR fixture whose party has the LINKED mon in slot 1.
+SCENARIOS["nature_change_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 2000000,
+    "games": ("gen3_rr",), "target": "battle2",
+    "explicit_only": True, "nature_change": True,
+    "scenario_module": "nature", "oracle": "assert_nature_change_gen3_saved",
+}
+
 SCENARIOS["release_gen3"] = {
     "flags": [], "timeout": 2400, "frames": 3000000,
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
@@ -8441,6 +8452,14 @@ class DuoRun:
     def assert_ball_gate_gen3_saved(self, results):
         from gen3_clause_rows import ball_gate_oracle
         return ball_gate_oracle(self, results)
+
+    def orchestrate_nature_change_gen3(self):
+        from gen3_nature_rows import orchestrate
+        return orchestrate(self)
+
+    def assert_nature_change_gen3_saved(self, results):
+        from gen3_nature_rows import nature_oracle
+        return nature_oracle(self, results)
 
     def orchestrate_release_gen3(self):
         from gen3_clause_rows import orchestrate_release
