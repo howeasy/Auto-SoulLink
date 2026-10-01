@@ -9,6 +9,8 @@ import copy
 import hashlib
 import json
 import re
+import struct
+from pathlib import Path
 
 import pytest
 
@@ -223,8 +225,13 @@ def test_committed_hge_and_pt_open_fields_are_explicit():
     hge = _pack("hge")
     assert hge["artifact_status"] == "RECORDED_NOT_ADMITTED"
     t = hge["titles"]["heartgold_hge"]
-    assert t["profile"]["party_off"] is None and t["profile"]["box_modified_flag_off"] is None
-    assert "party_off" in t["open"] and "box_modified_flag_off" in t["open"] and "hge_internal_overlay_loads" in t["open"]
+    assert t["profile"]["box_modified_flag_off"] is None  # needs a PHYSICAL mutation/save/reload
+    assert "box_modified_flag_off" in t["open"] and "hge_internal_overlay_loads" in t["open"]
+    # resolved by the populated owner save: the party header is FILE-confirmed, the trainer is the vanilla layout
+    po = t["profile"]["party_off"]
+    assert (po["value"], po["max_off"], po["count_off"], po["mons_off"], po["array_id"]) == (0x90, 0, 4, 8, 2)
+    assert "party_off" not in t["open"] and "trainer" not in t["open"] and "0xCAB4" in po["evidence"]["rejected_candidate"]
+    assert t["profile"]["trainer"]["array_id"] == 1 and t["profile"]["trainer"]["identity"]["general_off_of_profile"] == 0x64
     assert (t["profile"]["boxes"], t["profile"]["memorial_box"], t["profile"]["pkm"]["exp_bits"]) == (30, 29, 21)
     assert (t["profile"]["battle"]["ability_off"], t["profile"]["battle"]["ability_width"]) == (0x7A, 2)
     assert t["sites"]["battle_faint_cmd"]["image"] == "ov130" and t["sites"]["battle_faint_cmd"]["address"] == 0x023CEDD0
@@ -351,13 +358,193 @@ def test_hgss_probe_field_values_types_and_evidence():
         assert "padding" in prof["probe_wrong_write_offset_evidence"]
 
 
-def test_hge_and_pt_probe_fields_are_null_with_open_reasons():
+def test_hge_probe_fields_are_vanilla_projections_and_pt_stays_open():
     hge = _pack("hge")["titles"]["heartgold_hge"]
-    pf = hge["profile"]["probe_field"]
-    assert pf["save"] == 0x0C and pf["task"] == 0x10 and hge["profile"]["system"]["vblank_counter_off"] == 0x2C
+    prof = hge["profile"]
+    pf, ev = prof["probe_field"], prof["probe_field_evidence"]
+    assert pf == _pack("hgss")["titles"]["heartgold"]["profile"]["probe_field"]  # same offsets as vanilla, none left null
+    assert prof["system"]["vblank_counter_off"] == 0x2C
+    assert ev["save"]["class"] == ev["task"]["class"] == "SOURCE"  # the only two the fork header declares
     for key in PROBE_KEYS - {"save", "task"}:
-        assert pf[key] is None and hge["profile"]["probe_field_evidence"][key]["class"] == "OPEN", key
-    assert "probe_field" in hge["open"]
+        assert ev[key]["class"] == "SOURCE_PROJECTION" and "probe_field_hge_checks" in ev[key]["cite"], key
+    checks = prof["probe_field_hge_checks"]
+    assert checks["field_system_new"]["alloc_size"] == 0x128
+    assert {"FieldSystem_LaunchApplication", "OverlayManager_Run", "ov01_021F68DC", "Battle_Run"} <= {
+        f["symbol"] for f in checks["functions_byte_identical"]}
+    assert "probe_field" in hge["open"]  # still a PHYSICAL cell
     pt = _pack("pt")["titles"]["platinum"]
     assert pt["profile"]["probe_field"] is None and "probe_field" in pt["open"]
     assert pt["profile"]["probe_wrong_write_offset"] is None
+
+
+def test_hge_hidden_ability_is_bit_6_of_the_two_bit_field_not_bit_0():
+    ha = _pack("hge")["titles"]["heartgold_hge"]["profile"]["pkm"]["hidden_ability"]
+    assert (ha["block"], ha["byte_off"], ha["field_bits"], ha["bit"], ha["mask"]) == ("B", 0x19, [6, 7], 6, 0x40)
+    assert ha["mask"] == 1 << ha["bit"] and "Leaf Crown" in ha["note"] and "FILE" in ha["evidence"]
+    assert "hidden_ability" not in _pack("hgss")["titles"]["heartgold"]["profile"]["pkm"]
+
+
+# ---- Part A data gaps: location / Pt party+trainer+footer / hge party+trainer ---------------------------
+SAVES = Path("C:/slink/g4/saves")
+SAVE_OF = {"hgss": ("hg_base_26310.SaveRAM", "hgss"), "hge": ("hge_a_OOO_630.SaveRAM", "hge"), "pt": ("pt_TTT_44361.SaveRAM", "pt")}
+
+
+def _general(mode: str) -> bytes:
+    name, variant = SAVE_OF[mode]
+    if not (SAVES / name).is_file():
+        pytest.skip(f"absent input save: {SAVES / name}")
+    from server.adapters.gen4_codec import parse_save
+    return parse_save((SAVES / name).read_bytes(), variant).general
+
+
+def _profile(mode: str) -> dict:
+    title = {"hgss": "heartgold", "hge": "heartgold_hge", "pt": "platinum"}[mode]
+    return _pack(mode)["titles"][title]["profile"]
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge", "pt"])
+def test_location_offsets_match_the_20_byte_location_struct(mode):
+    prof = _profile(mode)
+    loc = prof["location"]
+    offs = [loc[k] for k in ("map_off", "warp_off", "x_off", "y_off", "dir_off")]
+    assert loc["struct_size"] == 20 == 5 * 4 and offs == [0, 4, 8, 12, 16]  # 5 x s32, packed, in struct order
+    assert all(o % 4 == 0 and o + 4 <= loc["struct_size"] for o in offs) and len(set(offs)) == 5
+    ids = prof["save"]["array_ids"]
+    assert loc["array_id"] == ids["field_overworld_state" if mode == "pt" else "local_field_data"] == (11 if mode == "pt" else 5)
+    assert loc["evidence"].startswith("SOURCE") and loc["file_cross_check"]["general_off_of_array"] > 0
+    assert (loc.get("y_field") == "z") == (mode == "pt")
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge", "pt"])
+def test_pack_offsets_decode_the_owner_saves(mode):
+    """FILE: the pack's own numbers applied to the real saves give the known party header, identity and a real Location."""
+    prof, general = _profile(mode), _general(mode)
+    po = prof["party_off"]
+    assert struct.unpack_from("<II", general, po["value"]) == (6, 1) and (po["max_off"], po["count_off"], po["mons_off"]) == (0, 4, 8)
+    tr, loc = prof["trainer"], prof["location"]
+    base = tr["identity"]["general_off_of_profile"]
+    assert base == tr["identity"]["id_general_off"] - tr["id_off"] == (0x68 if mode == "pt" else 0x64)
+    assert struct.unpack_from("<I", general, base + tr["id_off"])[0] & 0xFFFF == {"hgss": 26310, "hge": 630, "pt": 44361}[mode]
+    assert general[base + tr["version_off"]] == {"hgss": 7, "hge": 7, "pt": 12}[mode]
+    map_id, warp, x, y, d = struct.unpack_from("<5i", general, loc["file_cross_check"]["general_off_of_array"])
+    assert 0 < map_id < 1000 and -1 <= warp < 50 and 0 < x < 3000 and 0 < y < 3000 and -1 <= d <= 3
+
+
+def test_pt_footer_formula_matches_the_real_general_block_footer():
+    sv = _profile("pt")["save"]
+    ft, bi = sv["footer"], sv["block_info"]
+    assert (ft["size"], ft["signature"], ft["block_count"]) == (0x14, 0x20060623, 2) and bi["entry_size"] == 0xC
+    assert bi["table_off"] == sv["table_off"] + sv["entry_count"] * sv["entry_size"] == 0x20284
+    assert "blockInfo[b].offset + blockInfo[b].size - size" in ft["addr"] and "block_id == b" in ft["valid_when"]
+    general = _general("pt")  # block 0: offset 0, size == the general length, footer in its last 0x14 bytes
+    foot, f = general[len(general) - ft["size"]:], ft["fields"]
+    assert struct.unpack_from("<I", foot, f["signature"])[0] == ft["signature"]
+    assert struct.unpack_from("<I", foot, f["size"])[0] == len(general) and foot[f["block_id"]] == ft["blocks"]["normal"]
+
+
+# ---- G1 phase cases (row n) -----------------------------------------------------------------------------
+def _title(mode: str = "hgss") -> dict:
+    pack = _pack(mode)
+    return copy.deepcopy(next(iter(pack["titles"].values())))
+
+
+def _red(title: dict, needle: str) -> None:
+    errs = g.validate_phase_cases(title)
+    assert any(needle in e for e in errs), errs
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_committed_phase_cases_validate_and_cover_the_candidates(mode):
+    pack = _pack(mode)
+    for name, t in pack["titles"].items():
+        assert g.validate_phase_cases(t) == [], name
+        assert [c["name"] for c in t["phase_cases"]] == ["battle", "battle_arm", "battle_disarm", "reset"]
+        assert [c["name"] for c in t["phase_cases_blocked"]] == ["pc"]
+        for phase in ("battle", "pc"):
+            cases = [c for c in t["phase_cases"] + t["phase_cases_blocked"] if c["phase"] == phase]
+            chosen = {s for c in cases for s in c["sites"]}
+            skipped = set(t["phase_cases_excluded"][phase])
+            assert chosen | skipped == set(t["phases"][phase]["candidate_sites"]) and not chosen & skipped, (name, phase)
+            assert all(isinstance(why, str) and why for why in t["phase_cases_excluded"][phase].values())
+        for c in t["phase_cases"]:
+            assert c["predicate"] == {"symbol": "sFieldSysPtr", "deref": [0, 4], "offset": 0x0C, "value": 12}
+            assert c["predicate_file_check"]["ovy_id"] == 12 and c["status"] == "ROUTE_LEGS_PARTLY_NEW"
+            assert c["producer_site"] in c["sites"] and len(c["sites"]) + 1 <= 4 and c["open"]  # honest: nothing is closed
+            assert c["route"][0] in ("gen4_routes:battle_settled",) and all(leg in c["route_status"] for leg in c["route"])
+        pc = t["phase_cases_blocked"][0]
+        assert pc["predicate"]["value"] == pc["predicate_file_check"]["ovy_id"] == 14 and pc["status"] == "BLOCKED_NO_FIXTURE"
+        assert "1 party mon" in pc["blocked_reason"]
+
+
+def test_hg_and_ss_phase_cases_are_identical():
+    pack = _pack("hgss")
+    hg, ss = pack["titles"]["heartgold"], pack["titles"]["soulsilver"]
+    for key in ("phase_cases", "phase_cases_blocked", "phase_cases_excluded"):
+        assert hg[key] == ss[key], key
+
+
+def test_predicate_is_tied_to_the_probe_field_chain_and_the_rom_template():
+    t = _title()
+    pf = t["profile"]["probe_field"]
+    assert all(c["predicate"]["deref"] == [pf["sub"], pf["launched_app"]] for c in t["phase_cases"])
+    assert t["symbols"]["sFieldSysPtr"]["address"] == 0x021D4158 and "sFieldSysPtr" in t["symbols"]
+    t["phase_cases"][0]["predicate"]["deref"] = [0, 8]
+    _red(t, "probe_field")
+    t = _title()
+    t["phase_cases"][0]["predicate"]["value"] = 13  # the template in the ROM says 12
+    _red(t, "ROM template ovy_id")
+    t = _title()
+    t["phase_cases"][0]["predicate"]["nonzero"] = True  # value AND nonzero is ambiguous
+    _red(t, "exactly one of value / nonzero")
+
+
+def test_wrong_predicate_symbol_goes_red():
+    t = _title()
+    t["phase_cases"][0]["predicate"]["symbol"] = "sNotInTheXmap"
+    _red(t, "predicate.symbol")
+    t = _title()
+    t["phase_cases"][0]["predicate"]["symbol"] = "gSystem"  # a real xMAP symbol is accepted by this check (the chain check catches it)
+    assert not any("predicate.symbol" in e for e in g.validate_phase_cases(t))
+
+
+def test_sites_above_the_cap_go_red():
+    t = _title()
+    battle = t["phases"]["battle"]
+    assert battle["cap"] == 3
+    t["phase_cases"][0]["sites"] = [*battle["candidate_sites"][:4]]  # 4 candidates > cap 3
+    _red(t, "exceed the battle cap 3")
+    t = _title()
+    t["phase_cases_blocked"][0]["sites"] = t["phases"]["pc"]["candidate_sites"][:3]  # cap 2
+    _red(t, "exceed the pc cap 2")
+
+
+def test_producer_must_be_one_of_the_armed_sites():
+    # the probe compares its always-on observer with the REGISTRY events of producer_site, so a producer outside `sites` can never match
+    t = _title()
+    t["phase_cases"][0]["producer_site"] = "encounter_result"
+    _red(t, "must be one of sites")
+
+
+def test_case_site_outside_candidate_sites_goes_red():
+    t = _title()
+    t["phase_cases"][0]["sites"][1] = "pc_swap_by_index_pair"  # a pc candidate in a battle case
+    _red(t, "is not a battle candidate_site")
+    t = _title()
+    t["phase_cases"][0]["sites"][1] = "per_frame_arm"  # a probe-phase site
+    _red(t, "is not a battle candidate_site")
+
+
+def test_every_unexercised_caller_must_be_listed_once_with_a_reason():
+    t = _title()
+    t["phase_cases"][0]["open"].pop()
+    _red(t, "why_open")
+    t = _title()
+    row = t["phase_cases"][0]["caller_matrix"]["sites"][0]["callers"][0]
+    row["exercised_by_route"], row["exercised_by"] = True, ["pc_exit_app"]  # claims coverage by a leg outside the route
+    _red(t, "leg that is not in the route")
+    t = _title()
+    t["phase_cases"][0]["route"].append("teleport")  # a leg without a route_status
+    _red(t, "named legs")
+    t = _title()
+    t["phase_cases"][0]["caller_matrix"]["sites"].pop()
+    _red(t, "caller_matrix.sites")

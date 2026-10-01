@@ -37,13 +37,16 @@
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
-    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
     "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 (struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a cross-check, the runtime reads the array header)",
     "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
     "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
+    "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe compares an independent always-on observer of the same address with the registry events), predicate {symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
     "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
+    "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
   },
   "titles": {
@@ -58,8 +61,10 @@
         "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
+        "save.footer.runtime": "RAM footer address (block_info + footer.addr) is SOURCE only; lua/gen4/reads.lua still uses a structural page-table check for Platinum until it consumes save.footer / save.block_info",
         "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
-        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)"
+        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)",
+        "trainer.badges": "TrainerInfo has one badgeMask byte (8 Sinnoh badges): trainer.badge_mask_off, no johto/kanto pair"
       },
       "overlay_table": {
         "active_off": 4,
@@ -708,8 +713,34 @@
           "app_clause": "FieldSystem_IsRunningApplication = processManager(+0x00)->parent/child",
           "taskman_clause": "NOT valid (+0x10 is a transient FieldTask*)"
         },
+        "location": {
+          "array_id": 11,
+          "dir_off": 16,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/location.h:18-24 (Location: mapHeaderID, warpId, x, z, faceDirection), include/field_overworld_state.h:13-14 (FieldOverworldState.player is the first member), src/field_overworld_state.c:42-45, include/constants/savedata/save_table.h:23 (SAVE_TABLE_ENTRY_FIELD_OVERWORLD_STATE = 11)",
+          "file_cross_check": {
+            "evidence": "FILE: owner Pt save pt_TTT_44361: Location (411,-1,116,886,1) at general+0x1280 with entrance/previous at +0x14/+0x28 and exit at +0x50, matching the struct order player, entrance, previous, special, exit",
+            "general_off_of_array": 4736
+          },
+          "map_off": 0,
+          "struct_size": 20,
+          "warp_off": 4,
+          "x_off": 8,
+          "y_field": "z",
+          "y_off": 12
+        },
         "memorial_box": null,
         "mons_per_box": 30,
+        "party_off": {
+          "array_id": 2,
+          "base": "general_block",
+          "count_off": 4,
+          "evidence": {
+            "platinum": "FILE (owner Pt save pt_TTT_44361: max=6 @+0x98, count=1 @+0x9C, Turtwig species 387 at +0xA0 via codec.parse_save(img,'pt')); SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/party.h:11-15 (Party: capacity, currentCount, pokemon[6])"
+          },
+          "max_off": 0,
+          "mons_off": 8,
+          "value": 152
+        },
         "pc": {
           "array_id": 37,
           "box_base": 4,
@@ -744,6 +775,19 @@
             "system": 0
           },
           "array_ids_note": "pc_boxes counted from the SaveTableEntryID enum (SAVE_TABLE_ENTRY_PC_BOXES = 37, MAX = 38); platinum_bind.md says 38, which is SAVE_TABLE_ENTRY_MAX",
+          "block_info": {
+            "entry_count": 2,
+            "entry_fields": {
+              "block_id": 0,
+              "offset": 4,
+              "sector_start": 1,
+              "sectors_in_use": 2,
+              "size": 8
+            },
+            "entry_size": 12,
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:17-23,59-60 (SaveBlockInfo; SaveData order: pageInfo then blockInfo), src/savedata.c:852-870 (offset = running sum of block sizes, size = entries + footer); the 0x20284 start follows from the same struct layout as table_off",
+            "table_off": 131716
+          },
           "body_off": 20,
           "body_size": 131072,
           "entry_count": 38,
@@ -758,7 +802,13 @@
           "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-62, include/constants/savedata/save_table.h:65-66",
           "field_off": 8,
           "footer": {
-            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID)",
+            "addr": "SaveData + body_off + blockInfo[b].offset + blockInfo[b].size - size",
+            "block_count": 2,
+            "blocks": {
+              "boxes": 1,
+              "normal": 0
+            },
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID), src/savedata.c:313-325,327-350,361-373 (SaveBlockFooter_Ptr / _Validate / _Set: the footer sits in the RAM body at the end of each block); FILE: owner Pt save pt_TTT_44361 general block ends with a 0x14-byte footer (counter 1, blockCounter 1, size 0xCF2C = the block length, signature, blockID 0); RAM address is SOURCE only (no Platinum emulator work, D3)",
             "fields": {
               "block_counter": 4,
               "block_id": 16,
@@ -767,7 +817,9 @@
               "signature": 12,
               "size": 8
             },
-            "signature": 537265699
+            "signature": 537265699,
+            "size": 20,
+            "valid_when": "signature == 0x20060623 and footer.size == blockInfo[b].size and footer.block_id == b"
           },
           "runtime_confirmation": "OPEN: no Platinum emulator work in this release (D3)",
           "table": "pageInfo",
@@ -781,6 +833,33 @@
         "system": {
           "symbol": "gSystem",
           "vblank_counter_off": null
+        },
+        "trainer": {
+          "appearance_off": 27,
+          "array_id": 1,
+          "badge_mask_evidence": "SOURCE (TrainerInfo.badgeMask, ONE u8 of 8 Sinnoh badges; no johto/kanto pair, so reads.badges has no Pt shape)",
+          "badge_mask_off": 26,
+          "evidence": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/save_player.h:9-16 (PlayerSave: options u16 + 2 pad, then TrainerInfo @+4), include/trainer_info.h:9-21 (name[8] u16, id u32 @0x10, money u32 @0x14, gender/language/badgeMask/appearance/gameCode u8 @0x18..0x1C); src/save_player.c:27-31; FILE: owner Pt save pt_TTT_44361 (array at general+0x64, profile +0x68): TTT, TID 44361 / SID 13120, money 3500, gameCode 12",
+          "gender_off": 24,
+          "id_evidence": "FILE (TID 44361 / SID 13120 on the owner Pt save)",
+          "id_off": 16,
+          "identity": {
+            "general_off_evidence": "FILE (Pt save: PlayerSave array at general+0x64, TrainerInfo +4)",
+            "general_off_of_profile": 104,
+            "id_general_off": 120,
+            "id_is": "u32: TID in the low half, SID in the high half"
+          },
+          "language_off": 25,
+          "money_off": 20,
+          "name_chars": 8,
+          "name_off": 0,
+          "name_terminator": 65535,
+          "profile_off_in_array": 4,
+          "version_evidence": "FILE (gameCode 12 = VERSION_PLATINUM on the owner Pt save; pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/versions.h:17)",
+          "version_off": 28,
+          "version_values": {
+            "platinum": 12
+          }
         }
       },
       "rom": {

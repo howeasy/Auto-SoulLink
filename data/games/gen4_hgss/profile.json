@@ -83,13 +83,16 @@
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
-    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
     "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 (struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a cross-check, the runtime reads the array header)",
     "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
     "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
+    "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe compares an independent always-on observer of the same address with the registry events), predicate {symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
     "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
+    "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
   },
   "titles": {
@@ -758,6 +761,1406 @@
           "size": 19712
         }
       },
+      "phase_cases": [
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "dispatch"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "script"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: run_from_wild"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle",
+          "open": [
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "battle_outcome_copy: outcome PLAYER_FLED (5) - covered only by a leg this case's route does not include: run_from_wild",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_faint_cmd",
+          "route": [
+            "gen4_routes:battle_settled",
+            "fight_until_enemy_faints",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_faint_cmd",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle_arm",
+          "open": [
+            "battle_outcome_copy: outcome WIN (1) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_start_ov12",
+          "route": [
+            "gen4_routes:battle_settled",
+            "run_from_wild",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
+            "run_from_wild": "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)"
+          },
+          "site_rationale": {
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "dispatch"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "script"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: run_from_wild"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle_disarm",
+          "open": [
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "battle_outcome_copy: outcome PLAYER_FLED (5) - covered only by a leg this case's route does not include: run_from_wild",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_outcome_copy",
+          "route": [
+            "gen4_routes:battle_settled",
+            "fight_until_enemy_faints",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness"
+          },
+          "sites": [
+            "battle_faint_cmd",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "covered only by a leg this case's route does not include: exit_battle_to_overworld"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by_route": true,
+                "kind": "reset"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "dispatch",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              }
+            ]
+          },
+          "name": "reset",
+          "open": [
+            "battle_faint_cmd: RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_faint_cmd: subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls) - covered only by a leg this case's route does not include: exit_battle_to_overworld",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_start_ov12",
+          "reset_note": "DoSoftReset (pokeheartgold@ad7a3afa src/main.c:205-214) restarts the program; sFieldSysPtr is .bss (xMAP) so the start-up zero-fill clears it; the stale-RAM window between the reset and that clear (the chain can still read the dead heap) is the PHYSICAL question this case measures (live_after_close must be 0)",
+          "route": [
+            "gen4_routes:battle_settled",
+            "soft_reset_in_fight_menu",
+            "boot_continue_to_overworld"
+          ],
+          "route_status": {
+            "boot_continue_to_overworld": "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
+            "soft_reset_in_fight_menu": "NEW button script: hold Start+Select+L+R in the FIGHT menu (pokeheartgold@ad7a3afa src/main.c:101-104)"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_faint_cmd"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        }
+      ],
+      "phase_cases_blocked": [
+        {
+          "blocked_reason": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "ScrCmd_158 (PC terminal script) -> PCBox_LaunchApp -> FieldSystem_LaunchApplication",
+                "cite": "pokeheartgold@ad7a3afa src/scrcmd_c.c:1987-1991; src/launch_application.c:406-408",
+                "covered_by": [
+                  "gen4_pc:reach_pc_terminal",
+                  "pc_open_storage"
+                ],
+                "exercised_by": [
+                  "gen4_pc:reach_pc_terminal",
+                  "pc_open_storage"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "PCBox_Exit returns TRUE -> manager deleted, unk4 = NULL",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "pc_exit_app"
+                ],
+                "exercised_by": [
+                  "pc_exit_app"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov14_021E6318 (PC app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_command.c:7025",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other phase predicate; needs a full-party catch"
+                  },
+                  {
+                    "caller": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate)",
+                    "cite": "pokeheartgold@ad7a3afa src/pokemon_storage_system.c:58",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other phase predicate (field task)"
+                  },
+                  {
+                    "caller": "ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18479,18601,20198",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 70)"
+                  }
+                ],
+                "site": "pc_place_first_in_box"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "ov14_021E6100 (PC app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1046",
+                    "covered_by": [
+                      "pc_withdraw_box_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_withdraw_box_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov14_021E62C8 (PC app; also calls the first-empty site)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1272",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov70_022409C0 / ov70_022418A4 (OVY_70 app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18318,20186",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 70)"
+                  },
+                  {
+                    "caller": "ov112_021EE628 (Pokewalker connect app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_112.s:17489",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 112)"
+                  }
+                ],
+                "site": "pc_delete_by_index_pair"
+              }
+            ]
+          },
+          "name": "pc",
+          "open": [
+            "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
+            "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
+            "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)",
+            "pc_delete_by_index_pair: ov70_022409C0 / ov70_022418A4 (OVY_70 app) - other overlay predicate (14 != 70)",
+            "pc_delete_by_index_pair: ov112_021EE628 (Pokewalker connect app) - other overlay predicate (14 != 112)"
+          ],
+          "phase": "pc",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/scrcmd_c.c:1991: PCBox_LaunchApp sets unk4; the first deposit/withdraw is a menu action in PCBox_Main (ov14), many frames after the launch, so the arm precedes it with a wide margin",
+            "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 14
+          },
+          "predicate_chain": "as battle, true when u32[man+0xC] == 14",
+          "predicate_file_check": {
+            "address": 34579476,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_14)",
+            "exec": 35543405,
+            "exit": 35543433,
+            "image": "arm9",
+            "init": 35543297,
+            "ovy_id": 14,
+            "ovy_id_off": 12,
+            "symbol": "sOverlayTemplate_PCBox$10493"
+          },
+          "producer_site": "pc_place_first_in_box",
+          "route": [
+            "gen4_pc:reach_pc_terminal",
+            "pc_open_storage",
+            "pc_deposit_first_party_mon",
+            "pc_withdraw_box_mon",
+            "pc_exit_app"
+          ],
+          "route_status": {
+            "gen4_pc:reach_pc_terminal": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_deposit_first_party_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_exit_app": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_open_storage": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_withdraw_box_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal"
+          },
+          "site_rationale": {
+            "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
+            "pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG (the probe's static_pc), replaced into ov129 on hge"
+          },
+          "sites": [
+            "pc_place_first_in_box",
+            "pc_delete_by_index_pair"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, PCBox_Exit, OVY_14}), src/scrcmd_c.c:1987-1991 (the only PCBox_LaunchApp caller)",
+          "status": "BLOCKED_NO_FIXTURE"
+        }
+      ],
+      "phase_cases_excluded": {
+        "battle": {
+          "battle_controller_try_faint": "turn-end replacement/loss sweep (static TryFaintMon, 6 callers at pokeheartgold@ad7a3afa src/battle/battle_controller_player.c:828,1181,1575,3201,3365,3877); BtlCmd_TryFaintMon already covers script-driven HP events and the sweep seam is a C1-8 question, not needed to qualify the registry",
+          "blackout": "needs a lost battle (no normal route) and runs under the field task after the manager is gone",
+          "encounter_result": "not on the wild-grass path: Task_WildEncounter (pokeheartgold@ad7a3afa src/encounter.c:349-399) reads setup->winFlag inline; Encounter_GetResult has 4 callers (pokeheartgold@ad7a3afa src/encounter.c:145,215,243,277: Task_StartEncounter and three scripted-battle tasks) none reachable by the wild-grass route, and it runs after the manager is gone",
+          "party_add_mon": "fires before the battle (enemy party build, pokeheartgold@ad7a3afa src/field/encounter_check.c:1355, OVY_2) and for catches/gifts/eggs/trades; a catch needs Poke Balls (bag not measured on the owner saves) and no battle-app predicate covers the pre-battle call"
+        },
+        "pc": {
+          "pc_place_by_index_pair": "UI wrappers ov14_021E611C/ov14_021E61BC; cap 2 (the deposit/withdraw pair covers the PC app)",
+          "pc_place_first_any_box": "callers are script/bug-contest acquisitions (scrcmd_12.c:68, overlay_bug_contest.c:227), not the PC UI",
+          "pc_swap_by_index_pair": "UI wrapper ov14_021E637C (box-to-box move); cap 2"
+        }
+      },
       "phases": {
         "always": {
           "activation": null,
@@ -986,6 +2389,20 @@
           "save_data_off": 12,
           "symbol": "sFieldSysPtr",
           "width": 4
+        },
+        "location": {
+          "array_id": 5,
+          "dir_off": 16,
+          "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_types_def.h:10-16 (Location: 5 x int), src/save_local_field_data.c:13-27 (LocalFieldData.currentPosition is the first member), include/constants/save_arrays.h:13 (SAVE_LOCAL_FIELD_DATA = 5)",
+          "file_cross_check": {
+            "evidence": "FILE: owner HG save: Location (60,-1,695,397,1) at general+0x1234; the five-Location block repeats at +0x14.. and +0x50 (tools/gen4_routes.py docstring)",
+            "general_off_of_array": 4660
+          },
+          "map_off": 0,
+          "struct_size": 20,
+          "warp_off": 4,
+          "x_off": 8,
+          "y_off": 12
         },
         "memorial_box": 17,
         "mons_per_box": 30,
@@ -2757,6 +4174,1406 @@
           "size": 19712
         }
       },
+      "phase_cases": [
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "dispatch"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "script"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: run_from_wild"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle",
+          "open": [
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "battle_outcome_copy: outcome PLAYER_FLED (5) - covered only by a leg this case's route does not include: run_from_wild",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_faint_cmd",
+          "route": [
+            "gen4_routes:battle_settled",
+            "fight_until_enemy_faints",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_faint_cmd",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle_arm",
+          "open": [
+            "battle_outcome_copy: outcome WIN (1) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_start_ov12",
+          "route": [
+            "gen4_routes:battle_settled",
+            "run_from_wild",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
+            "run_from_wild": "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)"
+          },
+          "site_rationale": {
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "reset",
+                "why_open": "covered only by a leg this case's route does not include: soft_reset_in_fight_menu"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "dispatch"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "script"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116",
+                    "covered_by": [
+                      "fight_until_enemy_faints",
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "outcome WIN (1)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "variant"
+                  },
+                  {
+                    "caller": "outcome PLAYER_FLED (5)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [
+                      "run_from_wild"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "covered only by a leg this case's route does not include: run_from_wild"
+                  },
+                  {
+                    "caller": "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "variant",
+                    "why_open": "needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_outcome_copy"
+              }
+            ]
+          },
+          "name": "battle_disarm",
+          "open": [
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "battle_outcome_copy: outcome PLAYER_FLED (5) - covered only by a leg this case's route does not include: run_from_wild",
+            "battle_outcome_copy: outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6) - needs a lost, drawn, caught or foe-fled battle; no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: DoSoftReset (no return) while the battle app is up - covered only by a leg this case's route does not include: soft_reset_in_fight_menu",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_outcome_copy",
+          "route": [
+            "gen4_routes:battle_settled",
+            "fight_until_enemy_faints",
+            "exit_battle_to_overworld"
+          ],
+          "route_status": {
+            "exit_battle_to_overworld": "NEW button script: A/B until the probe's idle_field overworld check holds again",
+            "fight_until_enemy_faints": "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: the strictest disarm-timing witness"
+          },
+          "sites": [
+            "battle_faint_cmd",
+            "battle_outcome_copy"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        },
+        {
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+                "covered_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by": [
+                  "gen4_routes:battle_settled"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              },
+              {
+                "caller": "Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:132",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:208",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:236",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:269",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:419",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:496",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:595",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:663",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "no normal-input route in the inventory reaches this"
+              },
+              {
+                "caller": "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true",
+                "cite": "pokeheartgold@ad7a3afa src/frontier/frontier_cmd_arcade.c:138",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "launch",
+                "why_open": "outside the predicate; Battle Frontier is not a release scenario"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls)",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "exit_battle_to_overworld"
+                ],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "covered only by a leg this case's route does not include: exit_battle_to_overworld"
+              },
+              {
+                "caller": "DoSoftReset (no return) while the battle app is up",
+                "cite": "pokeheartgold@ad7a3afa src/main.c:101-104,205-214",
+                "covered_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by": [
+                  "soft_reset_in_fight_menu"
+                ],
+                "exercised_by_route": true,
+                "kind": "reset"
+              },
+              {
+                "caller": "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+                "cite": "pokeheartgold@ad7a3afa src/encounter.c:373-375",
+                "covered_by": [],
+                "exercised_by": [],
+                "exercised_by_route": false,
+                "kind": "exit",
+                "why_open": "no normal-input route in the inventory reaches this (needs a lost battle)"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; the only caller)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_022378C0.s:4282; pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:75-77",
+                    "covered_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by": [
+                      "gen4_routes:battle_settled"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  }
+                ],
+                "site": "battle_start_ov12"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "dispatch",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893",
+                    "covered_by": [
+                      "fight_until_enemy_faints"
+                    ],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "covered only by a leg this case's route does not include: fight_until_enemy_faints"
+                  },
+                  {
+                    "caller": "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+                    "cite": "pokeheartgold@ad7a3afa grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0159_HealingWish",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0159_HealingWish.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  },
+                  {
+                    "caller": "subscript_0261_LunarDance",
+                    "cite": "pokeheartgold@ad7a3afa files/battledata/script/subscript/subscript_0261_LunarDance.s:10",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "script",
+                    "why_open": "no normal-input route in the inventory reaches this"
+                  }
+                ],
+                "site": "battle_faint_cmd"
+              }
+            ]
+          },
+          "name": "reset",
+          "open": [
+            "battle_faint_cmd: RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_faint_cmd: subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage) - covered only by a leg this case's route does not include: fight_until_enemy_faints",
+            "battle_faint_cmd: subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...) - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0159_HealingWish - no normal-input route in the inventory reaches this",
+            "battle_faint_cmd: subscript_0261_LunarDance - no normal-input route in the inventory reaches this",
+            "activation: Task_StartEncounter (trainer/scripted/legendary battles) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020508B8 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_02050960 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_020509F0 -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_SafariEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_BugContestEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_PalParkEncounter -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Task_TutorialBattle -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp - no normal-input route in the inventory reaches this",
+            "activation: Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT fs->unk0->unk4, so the launched-app predicate is never true - outside the predicate; Battle Frontier is not a release scenario",
+            "exit: Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets unk4 = NULL (predicate falls) - covered only by a leg this case's route does not include: exit_battle_to_overworld",
+            "exit: loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone - no normal-input route in the inventory reaches this (needs a lost battle)"
+          ],
+          "phase": "battle",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New (src/field_system.c:132): the chain is true from that instruction on",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            "pokeheartgold@ad7a3afa src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later (BSTATE_INIT), battle_start_ov12 two iterations later (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:48-51,75-77); every iteration ends in OS_WaitIrq (src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is after battle_outcome_copy (pokeheartgold@ad7a3afa src/battle/battle_022378C0.c:112-116 runs before BSTATE_END_INIT)"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 12
+          },
+          "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+          "predicate_file_check": {
+            "address": 34579588,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_12)",
+            "exec": 33809325,
+            "exit": 33809345,
+            "image": "arm9",
+            "init": 33809321,
+            "ovy_id": 12,
+            "ovy_id_off": 12,
+            "symbol": "gOverlayTemplate_Battle"
+          },
+          "producer_site": "battle_start_ov12",
+          "reset_note": "DoSoftReset (pokeheartgold@ad7a3afa src/main.c:205-214) restarts the program; sFieldSysPtr is .bss (xMAP) so the start-up zero-fill clears it; the stale-RAM window between the reset and that clear (the chain can still read the dead heap) is the PHYSICAL question this case measures (live_after_close must be 0)",
+          "route": [
+            "gen4_routes:battle_settled",
+            "soft_reset_in_fight_menu",
+            "boot_continue_to_overworld"
+          ],
+          "route_status": {
+            "boot_continue_to_overworld": "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
+            "gen4_routes:battle_settled": "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
+            "soft_reset_in_fight_menu": "NEW button script: hold Start+Select+L+R in the FIGHT menu (pokeheartgold@ad7a3afa src/main.c:101-104)"
+          },
+          "site_rationale": {
+            "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+            "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness"
+          },
+          "sites": [
+            "battle_start_ov12",
+            "battle_faint_cmd"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+          "status": "ROUTE_LEGS_PARTLY_NEW"
+        }
+      ],
+      "phase_cases_blocked": [
+        {
+          "blocked_reason": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "caller_matrix": {
+            "activation": [
+              {
+                "caller": "ScrCmd_158 (PC terminal script) -> PCBox_LaunchApp -> FieldSystem_LaunchApplication",
+                "cite": "pokeheartgold@ad7a3afa src/scrcmd_c.c:1987-1991; src/launch_application.c:406-408",
+                "covered_by": [
+                  "gen4_pc:reach_pc_terminal",
+                  "pc_open_storage"
+                ],
+                "exercised_by": [
+                  "gen4_pc:reach_pc_terminal",
+                  "pc_open_storage"
+                ],
+                "exercised_by_route": true,
+                "kind": "launch"
+              }
+            ],
+            "exit": [
+              {
+                "caller": "PCBox_Exit returns TRUE -> manager deleted, unk4 = NULL",
+                "cite": "pokeheartgold@ad7a3afa src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190",
+                "covered_by": [
+                  "pc_exit_app"
+                ],
+                "exercised_by": [
+                  "pc_exit_app"
+                ],
+                "exercised_by_route": true,
+                "kind": "exit"
+              }
+            ],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n",
+            "sites": [
+              {
+                "callers": [
+                  {
+                    "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov14_021E6318 (PC app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
+                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_command.c:7025",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other phase predicate; needs a full-party catch"
+                  },
+                  {
+                    "caller": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate)",
+                    "cite": "pokeheartgold@ad7a3afa src/pokemon_storage_system.c:58",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other phase predicate (field task)"
+                  },
+                  {
+                    "caller": "ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18479,18601,20198",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 70)"
+                  }
+                ],
+                "site": "pc_place_first_in_box"
+              },
+              {
+                "callers": [
+                  {
+                    "caller": "ov14_021E6100 (PC app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1046",
+                    "covered_by": [
+                      "pc_withdraw_box_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_withdraw_box_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov14_021E62C8 (PC app; also calls the first-empty site)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1272",
+                    "covered_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by": [
+                      "pc_deposit_first_party_mon"
+                    ],
+                    "exercised_by_route": true,
+                    "kind": "direct"
+                  },
+                  {
+                    "caller": "ov70_022409C0 / ov70_022418A4 (OVY_70 app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18318,20186",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 70)"
+                  },
+                  {
+                    "caller": "ov112_021EE628 (Pokewalker connect app)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_112.s:17489",
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "other overlay predicate (14 != 112)"
+                  }
+                ],
+                "site": "pc_delete_by_index_pair"
+              }
+            ]
+          },
+          "name": "pc",
+          "open": [
+            "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
+            "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
+            "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)",
+            "pc_delete_by_index_pair: ov70_022409C0 / ov70_022418A4 (OVY_70 app) - other overlay predicate (14 != 70)",
+            "pc_delete_by_index_pair: ov112_021EE628 (Pokewalker connect app) - other overlay predicate (14 != 112)"
+          ],
+          "phase": "pc",
+          "precedes_first_event": [
+            "pokeheartgold@ad7a3afa src/scrcmd_c.c:1991: PCBox_LaunchApp sets unk4; the first deposit/withdraw is a menu action in PCBox_Main (ov14), many frames after the launch, so the arm precedes it with a wide margin",
+            "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"
+          ],
+          "predicate": {
+            "deref": [
+              0,
+              4
+            ],
+            "offset": 12,
+            "symbol": "sFieldSysPtr",
+            "value": 14
+          },
+          "predicate_chain": "as battle, true when u32[man+0xC] == 14",
+          "predicate_file_check": {
+            "address": 34579476,
+            "evidence": "FILE: OverlayManagerTemplate {init, exec, exit, ovy_id} read from the declared ROM at the xMAP symbol (OVY_14)",
+            "exec": 35543405,
+            "exit": 35543433,
+            "image": "arm9",
+            "init": 35543297,
+            "ovy_id": 14,
+            "ovy_id_off": 12,
+            "symbol": "sOverlayTemplate_PCBox$10493"
+          },
+          "producer_site": "pc_place_first_in_box",
+          "route": [
+            "gen4_pc:reach_pc_terminal",
+            "pc_open_storage",
+            "pc_deposit_first_party_mon",
+            "pc_withdraw_box_mon",
+            "pc_exit_app"
+          ],
+          "route_status": {
+            "gen4_pc:reach_pc_terminal": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_deposit_first_party_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_exit_app": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_open_storage": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+            "pc_withdraw_box_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal"
+          },
+          "site_rationale": {
+            "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
+            "pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG (the probe's static_pc), replaced into ov129 on hge"
+          },
+          "sites": [
+            "pc_place_first_in_box",
+            "pc_delete_by_index_pair"
+          ],
+          "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, PCBox_Exit, OVY_14}), src/scrcmd_c.c:1987-1991 (the only PCBox_LaunchApp caller)",
+          "status": "BLOCKED_NO_FIXTURE"
+        }
+      ],
+      "phase_cases_excluded": {
+        "battle": {
+          "battle_controller_try_faint": "turn-end replacement/loss sweep (static TryFaintMon, 6 callers at pokeheartgold@ad7a3afa src/battle/battle_controller_player.c:828,1181,1575,3201,3365,3877); BtlCmd_TryFaintMon already covers script-driven HP events and the sweep seam is a C1-8 question, not needed to qualify the registry",
+          "blackout": "needs a lost battle (no normal route) and runs under the field task after the manager is gone",
+          "encounter_result": "not on the wild-grass path: Task_WildEncounter (pokeheartgold@ad7a3afa src/encounter.c:349-399) reads setup->winFlag inline; Encounter_GetResult has 4 callers (pokeheartgold@ad7a3afa src/encounter.c:145,215,243,277: Task_StartEncounter and three scripted-battle tasks) none reachable by the wild-grass route, and it runs after the manager is gone",
+          "party_add_mon": "fires before the battle (enemy party build, pokeheartgold@ad7a3afa src/field/encounter_check.c:1355, OVY_2) and for catches/gifts/eggs/trades; a catch needs Poke Balls (bag not measured on the owner saves) and no battle-app predicate covers the pre-battle call"
+        },
+        "pc": {
+          "pc_place_by_index_pair": "UI wrappers ov14_021E611C/ov14_021E61BC; cap 2 (the deposit/withdraw pair covers the PC app)",
+          "pc_place_first_any_box": "callers are script/bug-contest acquisitions (scrcmd_12.c:68, overlay_bug_contest.c:227), not the PC UI",
+          "pc_swap_by_index_pair": "UI wrapper ov14_021E637C (box-to-box move); cap 2"
+        }
+      },
       "phases": {
         "always": {
           "activation": null,
@@ -2985,6 +5802,20 @@
           "save_data_off": 12,
           "symbol": "sFieldSysPtr",
           "width": 4
+        },
+        "location": {
+          "array_id": 5,
+          "dir_off": 16,
+          "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_types_def.h:10-16 (Location: 5 x int), src/save_local_field_data.c:13-27 (LocalFieldData.currentPosition is the first member), include/constants/save_arrays.h:13 (SAVE_LOCAL_FIELD_DATA = 5)",
+          "file_cross_check": {
+            "evidence": "FILE: owner HG save: Location (60,-1,695,397,1) at general+0x1234; the five-Location block repeats at +0x14.. and +0x50 (tools/gen4_routes.py docstring)",
+            "general_off_of_array": 4660
+          },
+          "map_off": 0,
+          "struct_size": 20,
+          "warp_off": 4,
+          "x_off": 8,
+          "y_off": 12
         },
         "memorial_box": 17,
         "mons_per_box": 30,

@@ -26,12 +26,14 @@ FILE (bytes of a pinned artifact) and OPEN (null + a reason in `open`). Nothing 
 from __future__ import annotations
 
 import argparse
+import copy
 import difflib
 import functools
 import hashlib
 import json
 import os
 import re
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -633,6 +635,67 @@ HGSS_TRAINER = {
     },
 }
 
+HGE_TRAINER = {
+    **HGSS_TRAINER,
+    "evidence": f"{HGE_SRC} (PlayerProfile unchanged: no hook touches it); FILE: owner hge save OOO sha1 13d56589 "
+                "(general+0x60 array, +0x64 profile): name OOO, TID 630 / SID 62679, money 3000, version 7",
+    "id_evidence": "FILE (TID 630 / SID 62679 on the owner hge save OOO, via codec.parse_save(img,'hge').player())",
+    "version_evidence": "FILE (7 = VERSION_HEARTGOLD on the owner hge save OOO)",
+    "identity": {"general_off_of_profile": 0x64,
+                 "general_off_evidence": "FILE (hge save OOO: profile at general+0x64, same as the HG save)",
+                 "id_general_off": 0x74, "id_is": "u32: TID in the low half, SID in the high half"},
+}
+PT_TRAINER = {
+    "evidence": f"{PRET_PT} include/save_player.h:9-16 (PlayerSave: options u16 + 2 pad, then TrainerInfo @+4), "
+                "include/trainer_info.h:9-21 (name[8] u16, id u32 @0x10, money u32 @0x14, gender/language/badgeMask/"
+                "appearance/gameCode u8 @0x18..0x1C); src/save_player.c:27-31; FILE: owner Pt save pt_TTT_44361 "
+                "(array at general+0x64, profile +0x68): TTT, TID 44361 / SID 13120, money 3500, gameCode 12",
+    "array_id": 1, "profile_off_in_array": 4, "name_off": 0, "name_chars": 8, "name_terminator": 0xFFFF,
+    "id_off": 0x10, "id_evidence": "FILE (TID 44361 / SID 13120 on the owner Pt save)",
+    "money_off": 0x14, "gender_off": 0x18, "language_off": 0x19,
+    "badge_mask_off": 0x1A, "badge_mask_evidence": "SOURCE (TrainerInfo.badgeMask, ONE u8 of 8 Sinnoh badges; "
+                                                   "no johto/kanto pair, so reads.badges has no Pt shape)",
+    "appearance_off": 0x1B, "version_off": 0x1C,
+    "version_evidence": "FILE (gameCode 12 = VERSION_PLATINUM on the owner Pt save; "
+                        f"{PRET_PT} include/constants/versions.h:17)",
+    "version_values": {"platinum": 12},
+    "identity": {"general_off_of_profile": 0x68,
+                 "general_off_evidence": "FILE (Pt save: PlayerSave array at general+0x64, TrainerInfo +4)",
+                 "id_general_off": 0x78, "id_is": "u32: TID in the low half, SID in the high half"},
+}
+# Location {mapId, warpId, x, y|z, direction}: 5 x s32 = 20 bytes, first member of the local-field array.
+LOCATION_SIZE = 20
+LOCATION_OFFS = {"map_off": 0, "warp_off": 4, "x_off": 8, "y_off": 12, "dir_off": 16}
+HGSS_LOCATION = {
+    "array_id": 5, **LOCATION_OFFS, "struct_size": LOCATION_SIZE,
+    "evidence": f"SOURCE {PRET_HG} include/field_types_def.h:10-16 (Location: 5 x int), src/save_local_field_data.c:13-27 "
+                "(LocalFieldData.currentPosition is the first member), include/constants/save_arrays.h:13 "
+                "(SAVE_LOCAL_FIELD_DATA = 5)",
+    "file_cross_check": {"general_off_of_array": 0x1234,
+                         "evidence": "FILE: owner HG save: Location (60,-1,695,397,1) at general+0x1234; the five-Location "
+                                     "block repeats at +0x14.. and +0x50 (tools/gen4_routes.py docstring)"},
+}
+HGE_LOCATION = {
+    **HGSS_LOCATION,
+    "evidence": f"SOURCE {HGE_SRC} include/pokemon.h:569-575 (Location: mapId, warpId, x, z, direction; 20 bytes), array id "
+                "as vanilla (save arrays are not renumbered)",
+    "file_cross_check": {"general_off_of_array": 0x1424,
+                         "evidence": "FILE: owner hge save OOO: Location (60,-1,685,396,1) at general+0x1424 (HG is "
+                                     "+0x1234: hge's earlier arrays are larger); runtime reads the array header, this is "
+                                     "a cross-check only"},
+}
+PT_LOCATION = {
+    "array_id": 11, **LOCATION_OFFS, "struct_size": LOCATION_SIZE, "y_field": "z",
+    "evidence": f"SOURCE {PRET_PT} include/location.h:18-24 (Location: mapHeaderID, warpId, x, z, faceDirection), "
+                "include/field_overworld_state.h:13-14 (FieldOverworldState.player is the first member), "
+                "src/field_overworld_state.c:42-45, include/constants/savedata/save_table.h:23 "
+                "(SAVE_TABLE_ENTRY_FIELD_OVERWORLD_STATE = 11)",
+    "file_cross_check": {"general_off_of_array": 0x1280,
+                         "evidence": "FILE: owner Pt save pt_TTT_44361: Location (411,-1,116,886,1) at general+0x1280 with "
+                                     "entrance/previous at +0x14/+0x28 and exit at +0x50, matching the struct order "
+                                     "player, entrance, previous, special, exit"},
+}
+
 PKM_BASE = {"box_size": 0x88, "party_size": 0xEC, "exp_bits": 32, "ability_msb": None, "party_hp_width": 2}
 BATTLE_BASE = {"ctx_off": 0x30, "mons_off": 0x2D40, "mon_size": 0xC0, "selected_off": 0x219C, "hp_off": 0x4C,
                "hp_width": 4, "hp_signed": True, "ability_off": 0x27, "ability_width": 1}
@@ -680,28 +743,32 @@ PROBE_WRONG_WRITE = (
 )
 
 
-def probe_field_blocks(build: str) -> dict:
-    """profile.probe_field (+ evidence) for hgss, hge (only the header-verified fields) and the shared system facts."""
+def probe_field_blocks(build: str, hge_checks: dict | None = None) -> dict:
+    """profile.probe_field (+ evidence) for hgss, hge (vanilla offsets, hge-checked) and the shared system facts."""
     fields = {**{k: v[0] for k, v in PROBE_FIELD.items()}, **{k: v[0] for k, v in PROBE_FIELD_EXTRA.items()}}
     evidence = {k: {"class": v[1], "cite": v[2]} for k, v in {**PROBE_FIELD, **PROBE_FIELD_EXTRA}.items()}
     if build == "hge":
+        if hge_checks is None:
+            raise Fail("hge probe_field needs the FILE identity checks (hge_field_checks)")
         keep = {"save": f"{HGE_SRC} include/pokemon.h:592-596 (FieldSystem.savedata @0xc)",
                 "task": f"{HGE_SRC} include/pokemon.h:592-597 (FieldSystem.taskman @0x10)"}
+        proj = (f"vanilla offset projected onto hge: {HGE_SRC} include/pokemon.h:592-619 declares FieldSystem with the same "
+                "offsets at 0x8/0xC/0x10/0x14/0x20/0x3C/0x40/0xE4 and size 0x128 (nothing before followMon moved); FILE: "
+                "FieldSystem_New allocates 0x128 and is byte-identical to vanilla except two declared windows, and the "
+                "launch/overlay-manager/field-main/save-driver code is byte-identical (profile.probe_field_hge_checks); vanilla: ")
         for k in list(fields):
             if k in keep:
                 evidence[k] = {"class": "SOURCE", "cite": keep[k] + "; same offset as pokeheartgold " + evidence[k]["cite"].split(";")[0]}
             else:
-                fields[k] = None
-                evidence[k] = {"class": "OPEN", "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon "
-                                                         "(include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) "
-                                                         "but not source-verified for hge; G1 measures it"}
+                evidence[k] = {"class": "SOURCE_PROJECTION", "cite": proj + evidence[k]["cite"]}
     return {
         "probe_field": fields, "probe_field_evidence": evidence, "probe_field_caveats": PROBE_FIELD_CAVEATS,
         "probe_wrong_write_offset": PROBE_WRONG_WRITE[0], "probe_wrong_write_offset_evidence": PROBE_WRONG_WRITE[1],
+        **({"probe_field_hge_checks": hge_checks} if build == "hge" else {}),
     }
 
 
-def hgss_profile(xm: XMap, build: str = "hgss") -> dict:
+def hgss_profile(xm: XMap, build: str = "hgss", hge_checks: dict | None = None) -> dict:
     return {
         "save_ptr": {"symbol": "sSaveDataPtr", "address": xm.lookup("sSaveDataPtr").address, "width": 4,
                      "evidence": "xMAP; the archived 0x02111880 chain is a different global (rejected by provenance)"},
@@ -724,10 +791,11 @@ def hgss_profile(xm: XMap, build: str = "hgss") -> dict:
                "evidence": f"SOURCE {PRET_HG} include/pokemon_storage_system.h:12-28; PC block at SaveData+0xF710 FILE-weak"},
         "box_modified_flag_off": 0x12004,
         "trainer": HGSS_TRAINER,
+        "location": copy.deepcopy(HGSS_LOCATION),
         "pkm": dict(PKM_BASE),
         "battle": dict(BATTLE_BASE),
         "boxes": 18, "mons_per_box": 30, "memorial_box": 17,
-        **probe_field_blocks(build),
+        **probe_field_blocks(build, hge_checks),
     }
 
 
@@ -830,6 +898,310 @@ def phase_table(sites: dict[str, dict], build: str) -> dict:
 
 
 # --------------------------------------------------------------------------------------------
+# G1 phase cases (probe row n): a bounded site subset, a pre-frame activation predicate, normal-input routes
+# --------------------------------------------------------------------------------------------
+# A case is NOT the production armed_set (that is chosen at G2). The probe registers `sites` through the phase registry and an
+# independent always-on observer on `producer_site` (an unrouted raw register of the same address), then compares frames.
+# Handles: sites + 1 observer <= PROBE_HANDLE_MAX. The probe (lua/tests/probe_gen4_hooks.lua, `e.id==case.producer_site`)
+# only emits registry events for armed sites, so producer_site must be one of `sites`.
+PROBE_HANDLE_MAX = 4
+_P = "pokeheartgold@ad7a3afa"
+BS, FIGHT, RUN, EXIT_LEG, RESET_LEG, BOOT = (
+    "gen4_routes:battle_settled", "fight_until_enemy_faints", "run_from_wild", "exit_battle_to_overworld",
+    "soft_reset_in_fight_menu", "boot_continue_to_overworld")
+PC_LEGS = ("gen4_pc:reach_pc_terminal", "pc_open_storage", "pc_deposit_first_party_mon", "pc_withdraw_box_mon", "pc_exit_app")
+_PC_BLOCK = ("BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon "
+             "and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; "
+             "no route tooling reaches a PC terminal")
+ROUTE_LEGS = {
+    BS: "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild "
+        "encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
+    FIGHT: "NEW button script: FIGHT, first move, A-mash through the text until the wild mon faints and the battle ends",
+    RUN: "NEW button script: FIGHT menu -> RUN, A (retry on a failed escape)",
+    EXIT_LEG: "NEW button script: A/B until the probe's idle_field overworld check holds again",
+    RESET_LEG: f"NEW button script: hold Start+Select+L+R in the FIGHT menu ({_P} src/main.c:101-104)",
+    BOOT: "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
+    **dict.fromkeys(PC_LEGS, _PC_BLOCK),
+}
+_LAUNCHED_APP_SRC = (
+    f"{_P} src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), "
+    "src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, "
+    "include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4)")
+
+
+def _entry(kind: str, caller: str, cite: str, covered_by: list[str], why: str | None = None) -> dict:
+    row = {"kind": kind, "caller": caller, "cite": cite, "covered_by": covered_by}
+    if why:
+        row["why_open"] = why
+    return row
+
+
+_BTL = f"{_P} src/battle/battle_022378C0.c"
+_SCRIPT = "files/battledata/script/subscript"
+_NOROUTE = "no normal-input route in the inventory reaches this"
+_OUTCOME_ASM = "asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118"
+BATTLE_SITE_CALLERS = {
+    "battle_start_ov12": [
+        _entry("direct", "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; "
+                         "the only caller)", f"{_P} asm/overlay_12_022378C0.s:4282; {_BTL}:75-77", [BS]),
+    ],
+    "battle_faint_cmd": [
+        _entry("dispatch", "RunBattleScript -> sBattleScriptCommandTable[cmd] (the table entry is the only reference to "
+                           "BtlCmd_TryFaintMon; it runs on EVERY UpdateHp, zero HP or not)",
+               f"{_P} asm/overlay_12_battle_command.s:354; src/battle/battle_command.c:86-96", [FIGHT]),
+        _entry("script", "subscript_0002_UpdateHp via BattleControllerPlayer_HpCalc (ordinary move damage)",
+               f"{_P} {_SCRIPT}/subscript_0002_UpdateHp.s:18; src/battle/battle_controller_player.c:2799,2802,2893", [FIGHT]),
+        _entry("script", "subscript_0002_UpdateHp via Call BATTLE_SUBSCRIPT_UPDATE_HP from 43 other battle scripts (recoil, "
+                         "poison/burn, weather, Future Sight, Pursuit, held-item and bag healing, ...)",
+               f"{_P} grep BATTLE_SUBSCRIPT_UPDATE_HP files/battledata/script (43 files)", [], _NOROUTE),
+        _entry("script", "subscript_0159_HealingWish", f"{_P} {_SCRIPT}/subscript_0159_HealingWish.s:10", [], _NOROUTE),
+        _entry("script", "subscript_0261_LunarDance", f"{_P} {_SCRIPT}/subscript_0261_LunarDance.s:10", [], _NOROUTE),
+    ],
+    "battle_outcome_copy": [
+        _entry("direct", "Battle_Run state BSTATE_BATTLE_MAIN after ov12_02238358 returns TRUE (the only caller)",
+               f"{_BTL}:112-116", [FIGHT, RUN]),
+        _entry("variant", "outcome WIN (1)", f"{_P} {_OUTCOME_ASM}", [FIGHT]),
+        _entry("variant", "outcome PLAYER_FLED (5)", f"{_P} {_OUTCOME_ASM}", [RUN]),
+        _entry("variant", "outcome LOSE (2) / DRAW (3) / MON_CAUGHT (4) / FOE_FLED (6)", f"{_P} {_OUTCOME_ASM}", [],
+               "needs a lost, drawn, caught or foe-fled battle; " + _NOROUTE),
+    ],
+}
+_ENC = f"{_P} src/encounter.c"
+BATTLE_ACTIVATION = [
+    _entry("launch", "Task_WildEncounter (wild grass/surf step encounter) -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp",
+           f"{_ENC}:365,68 <- sub_02050B08 <- src/field/encounter_check.c:261,315 (FieldSystem_PerformLandOrSurfEncounterCheck:214)",
+           [BS]),
+    *(_entry("launch", f"{name} -> CallTask_StartBattle -> Task_StartBattle -> Battle_LaunchApp", f"{_ENC}:{line}", [], _NOROUTE)
+      for line, name in ((132, "Task_StartEncounter (trainer/scripted/legendary battles)"), (208, "Task_020508B8"),
+                         (236, "Task_02050960"), (269, "Task_020509F0"), (419, "Task_SafariEncounter"),
+                         (496, "Task_BugContestEncounter"), (595, "Task_PalParkEncounter"), (663, "Task_TutorialBattle"))),
+    _entry("launch", "Frontier battles: Frontier_LaunchApplication(&gOverlayTemplate_Battle) uses frontierSystem->unk0, NOT "
+                     "fs->unk0->unk4, so the launched-app predicate is never true", f"{_P} src/frontier/frontier_cmd_arcade.c:138",
+           [], "outside the predicate; Battle Frontier is not a release scenario"),
+]
+BATTLE_EXIT = [
+    _entry("exit", "Battle_Exit returns TRUE -> OverlayManager_Run unloads ov12 -> ppOverlayManager_RunFrame_DeleteIfFinished sets "
+                   "unk4 = NULL (predicate falls)", f"{_P} src/overlay_manager.c:65-70; src/field_system.c:171-176,189-190", [EXIT_LEG]),
+    _entry("reset", "DoSoftReset (no return) while the battle app is up",
+           f"{_P} src/main.c:101-104,205-214", [RESET_LEG]),
+    _entry("exit", "loss/whiteout: Task_WildEncounter jumps to Task_Blackout after the manager is gone",
+           f"{_ENC}:373-375", [], _NOROUTE + " (needs a lost battle)"),
+]
+PC_SITE_CALLERS = {
+    "pc_place_first_in_box": [
+        _entry("direct", "ov14_021E62C8 (PC app; also calls the delete site)", f"{_P} asm/overlay_14.s:1268", PC_LEGS[2:3]),
+        _entry("direct", "ov14_021E6318 (PC app)", f"{_P} asm/overlay_14.s:1319", PC_LEGS[2:3]),
+        _entry("direct", "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
+               f"{_P} src/battle/battle_command.c:7025", [], "other phase predicate; needs a full-party catch"),
+        _entry("direct", "PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest "
+                         "overlay_bug_contest.c:227; field task, no app predicate)", f"{_P} src/pokemon_storage_system.c:58",
+               [], "other phase predicate (field task)"),
+        _entry("direct", "ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844)",
+               f"{_P} asm/overlay_70.s:18479,18601,20198", [], "other overlay predicate (14 != 70)"),
+    ],
+    "pc_delete_by_index_pair": [
+        _entry("direct", "ov14_021E6100 (PC app)", f"{_P} asm/overlay_14.s:1046", PC_LEGS[3:4]),
+        _entry("direct", "ov14_021E62C8 (PC app; also calls the first-empty site)", f"{_P} asm/overlay_14.s:1272", PC_LEGS[2:3]),
+        _entry("direct", "ov70_022409C0 / ov70_022418A4 (OVY_70 app)", f"{_P} asm/overlay_70.s:18318,20186", [],
+               "other overlay predicate (14 != 70)"),
+        _entry("direct", "ov112_021EE628 (Pokewalker connect app)", f"{_P} asm/overlay_112.s:17489", [],
+               "other overlay predicate (14 != 112)"),
+    ],
+}
+PC_ACTIVATION = [
+    _entry("launch", "ScrCmd_158 (PC terminal script) -> PCBox_LaunchApp -> FieldSystem_LaunchApplication",
+           f"{_P} src/scrcmd_c.c:1987-1991; src/launch_application.c:406-408", list(PC_LEGS[:2])),
+]
+PC_EXIT = [_entry("exit", "PCBox_Exit returns TRUE -> manager deleted, unk4 = NULL", f"{_P} src/overlay_manager.c:65-70; "
+                  "src/field_system.c:171-176,189-190", PC_LEGS[4:5])]
+PHASE_EXCLUDED = {
+    "battle": {
+        "battle_controller_try_faint": f"turn-end replacement/loss sweep (static TryFaintMon, 6 callers at {_P} "
+                                       "src/battle/battle_controller_player.c:828,1181,1575,3201,3365,3877); BtlCmd_TryFaintMon already "
+                                       "covers script-driven HP events and the sweep seam is a C1-8 question, not needed to qualify the registry",
+        "encounter_result": f"not on the wild-grass path: Task_WildEncounter ({_ENC}:349-399) reads setup->winFlag inline; "
+                            f"Encounter_GetResult has 4 callers ({_ENC}:145,215,243,277: Task_StartEncounter and three "
+                            "scripted-battle tasks) none reachable by the wild-grass route, and it runs after the manager is gone",
+        "blackout": "needs a lost battle (no normal route) and runs under the field task after the manager is gone",
+        "party_add_mon": f"fires before the battle (enemy party build, {_P} src/field/encounter_check.c:1355, OVY_2) and for "
+                         "catches/gifts/eggs/trades; a catch needs Poke Balls (bag not measured on the owner saves) and no "
+                         "battle-app predicate covers the pre-battle call",
+    },
+    "pc": {
+        "pc_place_first_any_box": "callers are script/bug-contest acquisitions (scrcmd_12.c:68, overlay_bug_contest.c:227), not the PC UI",
+        "pc_place_by_index_pair": "UI wrappers ov14_021E611C/ov14_021E61BC; cap 2 (the deposit/withdraw pair covers the PC app)",
+        "pc_swap_by_index_pair": "UI wrapper ov14_021E637C (box-to-box move); cap 2",
+    },
+}
+
+
+def template_check(xm: XMap, images: Images, prefix: str, want: int) -> dict:
+    """FILE: the OverlayManagerTemplate in the declared ROM carries the ovy_id the predicate compares against."""
+    names = sorted(n for n in xm.syms if re.fullmatch(re.escape(prefix) + r"(\$\d+)?", n))
+    if len(names) != 1:
+        raise Fail(f"expected exactly one xMAP symbol {prefix!r} (optionally $N), got {names}")
+    s = xm.lookup(names[0])
+    init, exec_, exit_, ovy = struct.unpack("<4I", images.read(s.image, s.address, 16))
+    if ovy != want:
+        raise Fail(f"{names[0]} ovy_id {ovy} != predicate value {want}")
+    return {"symbol": names[0], "address": s.address, "image": s.image, "ovy_id_off": 12, "ovy_id": ovy,
+            "init": init, "exec": exec_, "exit": exit_,
+            "evidence": f"FILE: OverlayManagerTemplate {{init, exec, exit, ovy_id}} read from the declared ROM at the xMAP symbol "
+                        f"(OVY_{want})"}
+
+
+def _matrix(case_sites: list[str], table: dict, route: list[str], activation: list[dict], exits: list[dict]) -> dict:
+    def mark(row: dict) -> dict:
+        hit = [leg for leg in row["covered_by"] if leg in route]
+        out = {k: v for k, v in row.items() if k != "why_open"}
+        out["exercised_by_route"] = bool(hit)
+        out["exercised_by"] = hit
+        if not hit:
+            out["why_open"] = row.get("why_open") or "covered only by a leg this case's route does not include: " + \
+                              ", ".join(row["covered_by"])
+        return out
+    return {"sites": [{"site": sid, "callers": [mark(r) for r in table[sid]]} for sid in case_sites],
+            "activation": [mark(r) for r in activation], "exit": [mark(r) for r in exits],
+            "note": "exercised_by_route is a DESIGN claim (the route should reach the caller); each PHYSICAL receipt belongs to row n"}
+
+
+def _open_from(matrix: dict) -> list[str]:
+    rows = [(f"{s['site']}: {r['caller']}", r) for s in matrix["sites"] for r in s["callers"]]
+    rows += [(f"activation: {r['caller']}", r) for r in matrix["activation"]] + [(f"exit: {r['caller']}", r) for r in matrix["exit"]]
+    return [f"{label} - {r['why_open']}" for label, r in rows if not r["exercised_by_route"]]
+
+
+def _case(name: str, phase: str, sites: list[str], producer: str, why: dict, predicate: dict, pred_notes: dict, check: dict,
+          route: list[str], table: dict, activation: list[dict], exits: list[dict], status: str) -> dict:
+    matrix = _matrix(sites, table, route, activation, exits)
+    return {
+        "name": name, "phase": phase, "status": status, "sites": sites, "producer_site": producer,
+        "site_rationale": why, "predicate": predicate, **pred_notes, "predicate_file_check": check,
+        "route": route, "route_status": {leg: ROUTE_LEGS[leg] for leg in route},
+        "caller_matrix": matrix, "open": _open_from(matrix),
+    }
+
+
+def build_phase_cases(xm: XMap, images: Images) -> dict:
+    """phase_cases (runnable shape), phase_cases_blocked (no fixture) and the excluded candidates with reasons."""
+    fsp = xm.lookup("sFieldSysPtr")
+    pred_battle = {"symbol": "sFieldSysPtr", "deref": [0x00, 0x04], "offset": 0x0C, "value": 12}
+    pred_pc = {**pred_battle, "value": 14}
+    battle_notes = {
+        "source": _LAUNCHED_APP_SRC + "; src/launch_application.c:178-182 (gOverlayTemplate_Battle = {Battle_Init, Battle_Main, "
+                  "Battle_Exit, OVY_12}), src/encounter.c:61-70 (Task_StartBattle is the only Battle_LaunchApp caller)",
+        "predicate_chain": "fs = u32[sFieldSysPtr]; sub0 = u32[fs+0]; man = u32[sub0+4]; true when u32[man+0xC] == 12 (any null stops: false)",
+        "precedes_first_event": [
+            f"{_P} src/encounter.c:68 Task_StartBattle state 0 calls Battle_LaunchApp, which sets fs->unk0->unk4 = OverlayManager_New "
+            "(src/field_system.c:132): the chain is true from that instruction on",
+            f"{_P} src/overlay_manager.c:45-58: the first OverlayManager_Run call loads OVY_12 and runs Battle_Init (returns TRUE, "
+            "static ARM9), so no OVY_12 site runs in that main-loop iteration",
+            f"{_P} src/overlay_manager.c:59-64 + src/launch_application.c:167-172: Battle_Run (OVY_12) first runs one iteration later "
+            f"(BSTATE_INIT), battle_start_ov12 two iterations later ({_BTL}:48-51,75-77); every iteration ends in OS_WaitIrq "
+            "(src/main.c:122), so >= 2 frame boundaries separate the predicate from the first start event, and the pre-frame "
+            "check arms before it. Faint events follow the battle intro scripts; outcome is at the end",
+            "disarm: the manager is deleted after Battle_Exit (src/overlay_manager.c:65-70, src/field_system.c:171-176), which is "
+            f"after battle_outcome_copy ({_BTL}:112-116 runs before BSTATE_END_INIT)"],
+    }
+    check_b = template_check(xm, images, "gOverlayTemplate_Battle", 12)
+    check_p = template_check(xm, images, "sOverlayTemplate_PCBox", 14)
+    sec = fsp.section
+    why = {
+        "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness",
+        "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
+        "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: "
+                               "the strictest disarm-timing witness",
+    }
+    three = ["battle_start_ov12", "battle_faint_cmd", "battle_outcome_copy"]
+    two = ["battle_start_ov12", "battle_faint_cmd"]
+
+    def battle(name, ids, producer, route, extra=None):
+        c = _case(name, "battle", ids, producer, {k: why[k] for k in ids}, pred_battle, battle_notes, check_b, route,
+                  BATTLE_SITE_CALLERS, BATTLE_ACTIVATION, BATTLE_EXIT, "ROUTE_LEGS_PARTLY_NEW")
+        c.update(extra or {})
+        return c
+
+    fight = [BS, FIGHT, EXIT_LEG]
+    cases = [
+        battle("battle", three, "battle_faint_cmd", fight),
+        battle("battle_arm", ["battle_start_ov12", "battle_outcome_copy"], "battle_start_ov12", [BS, RUN, EXIT_LEG]),
+        battle("battle_disarm", ["battle_faint_cmd", "battle_outcome_copy"], "battle_outcome_copy", fight),
+        battle("reset", two, "battle_start_ov12", [BS, RESET_LEG, BOOT], {
+            "reset_note": f"DoSoftReset ({_P} src/main.c:205-214) restarts the program; sFieldSysPtr is {sec} (xMAP) so the "
+                          "start-up zero-fill clears it; the stale-RAM window between the reset and that clear (the chain can still "
+                          "read the dead heap) is the PHYSICAL question this case measures (live_after_close must be 0)"}),
+    ]
+    pc = _case("pc", "pc", ["pc_place_first_in_box", "pc_delete_by_index_pair"], "pc_place_first_in_box",
+               {"pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG "
+                                         "(the probe's static_pc), replaced into ov129 on hge",
+                "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write"},
+               pred_pc, {
+                   "source": _LAUNCHED_APP_SRC + "; src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, "
+                             "PCBox_Exit, OVY_14}), src/scrcmd_c.c:1987-1991 (the only PCBox_LaunchApp caller)",
+                   "predicate_chain": "as battle, true when u32[man+0xC] == 14",
+                   "precedes_first_event": [
+                       f"{_P} src/scrcmd_c.c:1991: PCBox_LaunchApp sets unk4; the first deposit/withdraw is a menu action in PCBox_Main "
+                       "(ov14), many frames after the launch, so the arm precedes it with a wide margin",
+                       "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"]},
+               check_p, list(PC_LEGS), PC_SITE_CALLERS, PC_ACTIVATION, PC_EXIT, "BLOCKED_NO_FIXTURE")
+    pc["blocked_reason"] = _PC_BLOCK
+    return {"phase_cases": cases, "phase_cases_blocked": [pc], "phase_cases_excluded": copy.deepcopy(PHASE_EXCLUDED)}
+
+
+def validate_phase_cases(title: dict) -> list[str]:
+    """Pure check of a title's phase cases against its own symbols/sites/phases (mutation target of the tests)."""
+    errs = []
+    known, phases = set(title["symbols"]), title["phases"]
+    pf = title["profile"].get("probe_field") or {}
+    for case in [*title.get("phase_cases", []), *title.get("phase_cases_blocked", [])]:
+        where = f"phase_case:{case.get('name')}"
+        ph = phases.get(case.get("phase"))
+        if ph is None:
+            errs.append(f"{where}: unknown phase {case.get('phase')!r}")
+            continue
+        ids = case.get("sites") or []
+        if not ids or len(set(ids)) != len(ids):
+            errs.append(f"{where}: sites must be a non-empty list without duplicates")
+        errs += [f"{where}: site {sid} is not a {case['phase']} candidate_site" for sid in ids if sid not in ph["candidate_sites"]]
+        errs += [f"{where}: site {sid} is not in this title's site table" for sid in ids if sid not in title["sites"]]
+        if len(ids) > ph["cap"]:
+            errs.append(f"{where}: {len(ids)} sites exceed the {case['phase']} cap {ph['cap']}")
+        if len(ids) + 1 > PROBE_HANDLE_MAX:
+            errs.append(f"{where}: {len(ids)} sites + the oracle observer exceed {PROBE_HANDLE_MAX} handles")
+        if case.get("producer_site") not in ids:
+            errs.append(f"{where}: producer_site {case.get('producer_site')!r} must be one of sites "
+                        "(the probe compares the always-on observer with the registry events of that site)")
+        pred = case.get("predicate") or {}
+        if pred.get("symbol") not in known:
+            errs.append(f"{where}: predicate.symbol {pred.get('symbol')!r} is not a symbol of this title's xMAP")
+        if not isinstance(pred.get("deref"), list) or not all(isinstance(o, int) for o in pred["deref"]):
+            errs.append(f"{where}: predicate.deref must be a list of integer offsets")
+        if not isinstance(pred.get("offset"), int):
+            errs.append(f"{where}: predicate.offset must be an integer")
+        if ("value" in pred) == ("nonzero" in pred):
+            errs.append(f"{where}: predicate needs exactly one of value / nonzero")
+        if pf and pred.get("deref") != [pf.get("sub"), pf.get("launched_app")]:
+            errs.append(f"{where}: predicate.deref {pred.get('deref')} != probe_field [sub, launched_app] {[pf.get('sub'), pf.get('launched_app')]}")
+        if pred.get("value") != (case.get("predicate_file_check") or {}).get("ovy_id"):
+            errs.append(f"{where}: predicate.value {pred.get('value')} != the ROM template ovy_id")
+        if not case.get("source") or not case.get("precedes_first_event"):
+            errs.append(f"{where}: source and precedes_first_event citations are required")
+        route = case.get("route") or []
+        if not route or not all(isinstance(leg, str) and leg in case.get("route_status", {}) for leg in route):
+            errs.append(f"{where}: route must be a non-empty list of named legs, each with a route_status")
+        matrix = case.get("caller_matrix") or {}
+        if [s["site"] for s in matrix.get("sites", [])] != ids:
+            errs.append(f"{where}: caller_matrix.sites must list exactly the case sites in order")
+        rows = [r for s in matrix.get("sites", []) for r in s["callers"]] + matrix.get("activation", []) + matrix.get("exit", [])
+        gaps = [r for r in rows if not r.get("exercised_by_route")]
+        if len(case.get("open", [])) != len(gaps) or any(not r.get("why_open") for r in gaps):
+            errs.append(f"{where}: every caller the route does not exercise must carry why_open and appear once in open")
+        if any(r.get("exercised_by_route") and not set(r["exercised_by"]) <= set(route) for r in rows):
+            errs.append(f"{where}: a caller claims coverage by a leg that is not in the route")
+    return errs
+
+
+# --------------------------------------------------------------------------------------------
 # Pack builders
 # --------------------------------------------------------------------------------------------
 def lock_provenance(inputs: Inputs) -> dict:
@@ -855,6 +1227,7 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str)
                           "entry_size": 8, "id_off": 0, "active_off": 4},
         "profile": hgss_profile(xm),
         "phases": phase_table(sites, "hgss"),
+        **build_phase_cases(xm, images),
         "open": hgss_open(),
     }
 
@@ -870,7 +1243,19 @@ SCHEMA_NOTES = {
     "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
     "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
-    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. "
+                        "probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
+    "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 "
+                "(struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a "
+                "cross-check, the runtime reads the array header)",
+    "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's "
+                   "candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe "
+                   "compares an independent always-on observer of the same address with the registry events), predicate "
+                   "{symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and "
+                   "caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). "
+                   "phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
+    "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that "
+                          "tests == true stays off until it implements the located bit",
 }
 
 
@@ -886,7 +1271,7 @@ def build_hgss(inputs: Inputs) -> dict:
         titles[title] = title_block(xms[title], imgs[title], roms[title], lock["artifacts"][title]["admission"], title)
     errs = validate_hg_ss(titles["heartgold"], titles["soulsilver"])
     for t in titles_order():
-        errs += validate_sites(titles[t]["sites"], imgs[t], t)
+        errs += validate_sites(titles[t]["sites"], imgs[t], t) + validate_phase_cases(titles[t])
     if errs:
         raise Fail("; ".join(errs))
     return {
@@ -942,6 +1327,77 @@ def hge_mode(name: str, ld: dict, redirect: dict | None) -> tuple[str, str]:
     if redirect is not None and redirect.get("kind") == "ldr_bx_trampoline":
         return ("thumb" if redirect["thumb"] else "arm"), "vanilla-entry trampoline literal bit 0"
     raise Fail(f"cannot determine Thumb/ARM for hge replacement {name} (not in rom_gen.ld, no trampoline literal)")
+
+
+# Vanilla functions the hge FieldSystem/launcher/battle/PC/save-driver chain runs; each must be byte-identical in the hge image.
+HGE_IDENTICAL_FUNCS = (
+    "FieldSystem_LaunchApplication", "FieldSystem_Main", "Field_AppExec", "ppOverlayManager_RunFrame_DeleteIfFinished",
+    "FieldSystem_RunTaskFrame", "OverlayManager_New", "OverlayManager_Run", "OverlayManager_Delete",
+    "Battle_LaunchApp", "Battle_Main", "Battle_Init", "Battle_Exit", "Battle_Run", "Task_StartBattle", "PCBox_LaunchApp",
+    "sub_02050B08", "Task_WildEncounter", "ov01_021F68DC", "ov01_021F6A9C", "ov01_021F6B10",
+)
+# FieldSystem_New is the one hooked function: hge doubles the FIELD3 heap (one shifter byte) and hooks StoreFieldSysPtr.
+HGE_FSNEW_WINDOWS = ((0x0203DFF4, 0x0203DFF5), (0x0203E028, 0x0203E030))
+FS_SIZE = 0x128
+
+
+def hge_field_checks(xm: XMap, hg: Images, hge: Images) -> dict:
+    """FILE facts that make the vanilla FieldSystem layout applicable to hge (the fork declares only part of the struct)."""
+    funcs = []
+    for name in HGE_IDENTICAL_FUNCS:
+        s = xm.lookup(name)
+        if hg.read(s.image, s.address, s.size) != hge.read(s.image, s.address, s.size):
+            raise Fail(f"hge changed {name} ({s.image} {s.address:#x}); the vanilla FieldSystem projection is no longer valid")
+        funcs.append({"symbol": name, "image": s.image, "address": s.address, "size": s.size})
+    fn = xm.lookup("FieldSystem_New")
+    a, b = hg.read("arm9", fn.address, fn.size), hge.read("arm9", fn.address, fn.size)
+    diff = [fn.address + i for i in range(fn.size) if a[i] != b[i]]
+    if not diff or any(not any(lo <= d < hi for lo, hi in HGE_FSNEW_WINDOWS) for d in diff):
+        raise Fail(f"hge FieldSystem_New differs outside the declared windows: {[hex(d) for d in diff]}")
+    halfwords = struct.unpack_from("<HHH", hge.read("arm9", fn.address + 0x26, 6))
+    if halfwords[0] != 0x214A or halfwords[2] != 0x0089:  # movs r1,#0x4a ; adds r0,r5,#0 ; lsls r1,r1,#2
+        raise Fail("hge FieldSystem_New allocation literal moved (expected movs r1,#0x4a; lsls r1,r1,#2)")
+    alloc = (halfwords[0] & 0xFF) << 2
+    if alloc != FS_SIZE:
+        raise Fail(f"hge FieldSystem_New allocates {alloc:#x}, not the declared {FS_SIZE:#x}")
+    return {
+        "evidence": "FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol)",
+        "functions_byte_identical": funcs,
+        "field_system_new": {
+            "symbol": "FieldSystem_New", "address": fn.address, "size": fn.size, "alloc_size": alloc,
+            "alloc_evidence": f"movs r1,#0x4a; lsls r1,r1,#2 at FieldSystem_New+0x26 (hge); fork header size {FS_SIZE:#x} "
+                              f"({HGE_SRC} include/pokemon.h:619)",
+            "differs_in": [[lo, hi] for lo, hi in HGE_FSNEW_WINDOWS],
+            "differs_explained": "0x0203DFF4: Heap_Create size shifter (lsls r2,r1,#9 -> #0xa: field heap 3 doubled, no layout "
+                                 "change); 0x0203E028+8: StoreFieldSysPtr hook (hooks:293) stores the extra gFieldSysPtr then "
+                                 "re-executes the replaced vanilla instructions; the vanilla stores around it are unchanged",
+            "actual_diff_addresses": diff,
+        },
+    }
+
+
+# hidden-ability flag: MON_DATA_RESERVED_113 = vanilla MON_DATA_UNUSED_113 = PokemonDataBlockB.unused1 (a 2-bit field at
+# byte 0x19 bits 6-7); hge's DUMMY_P2_1_HIDDEN_ABILITY_MASK 0x01 is bit 0 OF THAT FIELD = byte 0x19 bit 6 (mask 0x40).
+HGE_HA_GET = (0x0206EA50, "707e0006840f")  # ldrb r0,[r6,#0x19]; lsls r0,r0,#0x18; lsrs r4,r0,#0x1e (GetBoxMonDataInternal)
+HGE_HA_SET = (0x0206F220, "697ec02014b0814320788007000e08436876")  # ldrb r1,[r5,#0x19]; movs r0,#0xc0; ...; strb r0,[r5,#0x19]
+
+
+def hge_hidden_ability(hg: Images, hge: Images) -> dict:
+    for label, (addr, want) in (("get", HGE_HA_GET), ("set", HGE_HA_SET)):
+        n = len(want) // 2
+        got = hge.read("arm9", addr, n)
+        if got.hex() != want or hg.read("arm9", addr, n) != got:
+            raise Fail(f"hge MON_DATA_UNUSED_113 {label} code at {addr:#x} is not the vanilla 2-bit field accessor ({got.hex()})")
+    return {
+        "block": "B", "byte_off": 0x19, "field_bits": [6, 7], "bit": 6, "mask": 0x40,
+        "evidence": f"SOURCE {HGE_SRC} include/pokemon.h:21-23,57-58 (DUMMY_P2_1_HIDDEN_ABILITY_MASK 0x01 of MON_DATA_RESERVED_113, "
+                    f"a 2-bit field), include/pokemon.h:265-266 (HGSS_shinyLeaves:6 then unk_19_6:2 at block B +0x19); "
+                    f"{PRET_HG} src/pokemon.c:728-730,1190-1192 (UNUSED_113 = blockB->unused1); FILE: GetBoxMonDataInternal "
+                    "0x0206EA50 = ldrb [r,#0x19]; lsls #0x18; lsrs #0x1e (bits 6-7) and SetBoxMonDataInternal 0x0206F220 "
+                    "clears 0xC0 / inserts (v&3)<<6, byte-identical in the HG and hge ROMs",
+        "note": "the research notes say 'block B +0x19 bit 0'; that is bit 0 of the 2-bit field, i.e. byte bit 6 (0x40). "
+                "Bit 0 of the byte is HGSS_shinyLeaves (Leaf Crown), NOT the hidden-ability flag",
+    }
 
 
 def build_hge(inputs: Inputs) -> dict:
@@ -1035,20 +1491,27 @@ def build_hge(inputs: Inputs) -> dict:
     if errs:
         raise Fail("; ".join(errs))
 
-    profile = hgss_profile(xm, "hge")
+    field_checks = hge_field_checks(xm, hg_img, hge_img)
+    profile = hgss_profile(xm, "hge", field_checks)
     profile["save"] = save_geometry(
         0x2F, f"SOURCE {HGE_SRC} include/constants/save.h:16-24 (SAVE_PAGE_MAX 0x2F; OFFSET_saveSlotSpecs 0x2F2B4), include/save.h:264-284",
         "OPEN: not read from a live hge SaveData (G2); allocation is hooked (SaveData_New)")
     if profile["save"]["slot_specs_off"] != 0x2F2B4:
         raise Fail("derived hge slot_specs_off disagrees with the source constant OFFSET_saveSlotSpecs 0x2F2B4")
     profile["system"]["evidence"] += f"; {HGE_SRC} include/system.h:8-48 declares the identical struct"
-    profile["party_off"] = None
+    profile["party_off"] = {
+        "value": 0x90, "base": "general_block", "count_off": 4, "max_off": 0, "mons_off": 8, "array_id": 2,
+        "evidence": {"heartgold_hge": "FILE (owner hge save OOO sha1 13d56589, C:/slink/g4/saves/hge_a_OOO_630.SaveRAM: max=6 @+0x90, "
+                                      "count=1 @+0x94, Cyndaquil species 155 via codec.parse_save(img,'hge').party())",
+                     "rejected_candidate": "general+0xCAB4 also passed the empty-save header scan, but on the populated save it "
+                                           "holds (7, 0): not a party header (max != 6)"}}
     profile["box_modified_flag_off"] = None
     profile["pc"] = {"array_id": 41, "slot": "pc", "box_base": 0, "box_stride": 0x1000, "mon_stride": 0x88,
                      "cur_box_off": None, "box_modified_flag_off": None,
                      "evidence": f"SOURCE {HGE_SRC} include/constants/save.h:26 (NUM_PC_BOXES 30); PC block at bank+0x10000 size 0x1E4FC FILE"}
-    profile["trainer"] = None
-    profile["pkm"] = {**PKM_BASE, "exp_bits": 21,
+    profile["trainer"] = copy.deepcopy(HGE_TRAINER)
+    profile["location"] = copy.deepcopy(HGE_LOCATION)
+    profile["pkm"] = {**PKM_BASE, "exp_bits": 21, "hidden_ability": hge_hidden_ability(hg_img, hge_img),
                       "ability_msb": {"word_block": "A", "word_off": 8, "bit": 31, "low_byte_block": "A",
                                       "low_byte_off": 0xD,
                                       "evidence": f"SOURCE {HGE_SRC} include/pokemon.h:226-232 (exp:21, unused:10, abilityMSB:1)"}}
@@ -1056,12 +1519,9 @@ def build_hge(inputs: Inputs) -> dict:
     profile["boxes"], profile["mons_per_box"], profile["memorial_box"] = 30, 30, 29
 
     open_ = {
-        "party_off": "two plausible party headers on the empty hge save (+0x90, +0xCAB4); a populated-mon decode is a G2 cell. "
-                     "Source projection favours +0x90, not unique FILE evidence",
         "box_modified_flag_off": "G2 measures it (mutation/save/reload). SOURCE projection is PCStorage+0x1E004 "
                                  "(0x1000*30+4, include/pokemon_storage_system.h:50-59); not a PHYSICAL receipt",
         "pc.cur_box_off": "source projection 0x1E000 only; G2",
-        "trainer": "hge PlayerProfile layout not verified against the hge source/save; reuse of the vanilla offsets is unproven",
         "hge_internal_overlay_loads": (
             "hge's own loads of ov129 (from load_arm9_expansion, entering vanilla HandleLoadOverlay+8) and of the linked "
             "extensions 130/131 (a goto loop inside the replacement HandleLoadOverlay, src/overlay.c:102-215) never re-enter the "
@@ -1070,14 +1530,36 @@ def build_hge(inputs: Inputs) -> dict:
             "(over the 4-hook budget with anything else), so residency stays table-polled. PHYSICAL coverage is a C1-1 cell"),
         "fresh_build_association": "cached exports are the pinned file hashes, not proof they came from a fresh build of this ROM "
                                    "(lock pending hge_fresh_build_export_association)",
-        "probe_field": "hge declares only FieldSystem.savedata/taskman (include/pokemon.h:592-597); sub/live/launched_app/field_app/"
-                       "paused/save_driver/save_state are null until measured (G1) or sourced",
+        "probe_field": "hge declares only FieldSystem.savedata/taskman (include/pokemon.h:592-597); the other offsets are the vanilla "
+                       "ones (class SOURCE_PROJECTION: fork layout identical where declared, FieldSystem_New and the launch/"
+                       "overlay-manager/save-driver code byte-identical, profile.probe_field_hge_checks); a G1 PHYSICAL cell",
+        "pkm.hidden_ability_decode": "pack carries the field location (byte 0x19 bit 6, mask 0x40); lua/gen4/pk4.lua:180 reads bit 0 "
+                                     "of that byte (the HGSS Leaf Crown bit), so reads.lua must keep hidden_ability off until "
+                                     "pk4.lua is corrected",
         "pc_swap_redirect": "see sites.pc_swap_by_index_pair.replaces.redirect_evidence",
         "hge_save_geometry_live": "SaveData geometry is source-derived; live read is G2",
         **{k: v for k, v in hgss_open().items() if k in ("phase_first_event_coverage", "battle_offsets_live_read")},
         "battle_hge_effects": "hge faint is replaced in ov130; offsets are shared with vanilla but the active-faint mechanism "
                               "and copy-back are C1-8 cells (battle_pointer.md Open)",
     }
+    title = {
+        "rom": {k: hge_rom[k] for k in ("sha1", "md5", "header_code")},
+        "admission": "RECORDED_NOT_ADMITTED",
+        "symbols": symbols, "hge_replacements": replacements, "sites": sites,
+        "overlays": hge_img.overlay_table(),
+        "overlay_table": {"symbol": "sOverlayRegions", "address": ovr.address, "regions": 3, "per_region": 8,
+                          "entry_size": 8, "id_off": 0, "active_off": 4,
+                          "evidence": "never patched by hge (rom.ld:552 / platform.md); per_region = MAX_ACTIVE_OVERLAYS 8"},
+        "profile": profile, "phases": phase_table(sites, "hge"), **build_phase_cases(xm, hge_img), "open": open_,
+    }
+    title["phase_cases_hge_note"] = (
+        "same predicate and site ids as HG: Battle_LaunchApp/Battle_Run/PCBox_LaunchApp and the OverlayManager code are byte-identical "
+        "in the hge image (profile.probe_field_hge_checks) and the templates carry the same ovy_id; battle_faint_cmd and the pc_* "
+        "sites are the hge REPLACEMENT addresses (ov130 / ov129). Whether hge keeps the vanilla battle scripts and the PC UI callers "
+        "is a G1 PHYSICAL cell")
+    errs = validate_phase_cases(title)
+    if errs:
+        raise Fail("; ".join(errs))
     return {
         "schema": SCHEMA, "pack": "gen4_hge", "generator": GENERATOR, "artifact_status": "RECORDED_NOT_ADMITTED",
         "provenance": {
@@ -1091,16 +1573,7 @@ def build_hge(inputs: Inputs) -> dict:
                       "Replacement addresses come from offsets.ini, cross-checked against nm_all.txt, rom_gen.ld and the vanilla entry redirect."],
         },
         "schema_notes": SCHEMA_NOTES,
-        "titles": {"heartgold_hge": {
-            "rom": {k: hge_rom[k] for k in ("sha1", "md5", "header_code")},
-            "admission": "RECORDED_NOT_ADMITTED",
-            "symbols": symbols, "hge_replacements": replacements, "sites": sites,
-            "overlays": hge_img.overlay_table(),
-            "overlay_table": {"symbol": "sOverlayRegions", "address": ovr.address, "regions": 3, "per_region": 8,
-                              "entry_size": 8, "id_off": 0, "active_off": 4,
-                              "evidence": "never patched by hge (rom.ld:552 / platform.md); per_region = MAX_ACTIVE_OVERLAYS 8"},
-            "profile": profile, "phases": phase_table(sites, "hge"), "open": open_,
-        }},
+        "titles": {"heartgold_hge": title},
     }
 
 
@@ -1110,6 +1583,7 @@ def pt_profile() -> dict:
     body = page_max * 0x1000
     counters = body_off + body  # globalCounter
     page_info = (counters + 4 + 2 * 4 + 2 + 3) & ~3  # blockCounters[2] u32, blockOffsets[2] u8, align 4
+    block_info = page_info + 38 * 0x10  # SavePageInfo pageInfo[SAVE_TABLE_ENTRY_MAX]; SaveBlockInfo is 4-aligned (u32 members)
     return {
         "save_ptr": {"symbol": "sSaveDataPtr", "width": 4},
         "fieldsys_ptr": {"symbol": "sFieldSystem", "width": 4, "save_data_off": 0x0C, "process_manager_off": 0,
@@ -1128,9 +1602,26 @@ def pt_profile() -> dict:
                               "platinum_bind.md says 38, which is SAVE_TABLE_ENTRY_MAX",
             "footer": {"fields": {"save_counter": 0, "block_counter": 4, "size": 8, "signature": 0xC, "block_id": 0x10,
                                   "checksum": 0x12},
-                       "signature": 0x20060623,
-                       "evidence": f"SOURCE {PRET_PT} include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID)"},
+                       "signature": 0x20060623, "size": 0x14, "block_count": 2, "blocks": {"normal": 0, "boxes": 1},
+                       "addr": "SaveData + body_off + blockInfo[b].offset + blockInfo[b].size - size",
+                       "valid_when": "signature == 0x20060623 and footer.size == blockInfo[b].size and footer.block_id == b",
+                       "evidence": f"SOURCE {PRET_PT} include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID), "
+                                   "src/savedata.c:313-325,327-350,361-373 (SaveBlockFooter_Ptr / _Validate / _Set: the footer sits in "
+                                   "the RAM body at the end of each block); FILE: owner Pt save pt_TTT_44361 general block ends with a "
+                                   "0x14-byte footer (counter 1, blockCounter 1, size 0xCF2C = the block length, signature, blockID 0); "
+                                   "RAM address is SOURCE only (no Platinum emulator work, D3)"},
+            "block_info": {"table_off": block_info, "entry_count": 2, "entry_size": 0xC,
+                           "entry_fields": {"block_id": 0, "sector_start": 1, "sectors_in_use": 2, "offset": 4, "size": 8},
+                           "evidence": f"SOURCE {PRET_PT} include/savedata.h:17-23,59-60 (SaveBlockInfo; SaveData order: pageInfo "
+                                       "then blockInfo), src/savedata.c:852-870 (offset = running sum of block sizes, size = entries "
+                                       "+ footer); the 0x20284 start follows from the same struct layout as table_off"},
         },
+        "party_off": {"value": 0x98, "base": "general_block", "count_off": 4, "max_off": 0, "mons_off": 8, "array_id": 2,
+                      "evidence": {"platinum": f"FILE (owner Pt save pt_TTT_44361: max=6 @+0x98, count=1 @+0x9C, Turtwig species 387 "
+                                               f"at +0xA0 via codec.parse_save(img,'pt')); SOURCE {PRET_PT} include/party.h:11-15 "
+                                               "(Party: capacity, currentCount, pokemon[6])"}},
+        "trainer": copy.deepcopy(PT_TRAINER),
+        "location": copy.deepcopy(PT_LOCATION),
         "pc": {"array_id": 37, "box_base": 4, "box_stride": 0xFF0, "mon_stride": 0x88, "cur_box_off": 0,
                "boxes": 18, "mons_per_box": 30, "modified_flag_off": None,
                "evidence": f"SOURCE {PRET_PT} include/pc_boxes.h:18-24 (u32 currentBoxID, then boxMons[18][30], no pad)"},
@@ -1159,6 +1650,9 @@ def pt_open() -> dict:
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
         "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
+        "save.footer.runtime": "RAM footer address (block_info + footer.addr) is SOURCE only; lua/gen4/reads.lua still uses a structural "
+                               "page-table check for Platinum until it consumes save.footer / save.block_info",
+        "trainer.badges": "TrainerInfo has one badgeMask byte (8 Sinnoh badges): trainer.badge_mask_off, no johto/kanto pair",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
     }
 
