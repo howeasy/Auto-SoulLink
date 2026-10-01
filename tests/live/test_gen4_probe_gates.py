@@ -78,6 +78,7 @@ def row_o(path: Path | None, title: str, sha1: str, source_head: str) -> tuple[s
     status, payload = rows["o"]
     assert payload.get("source_head") == source_head, "row o belongs to a different source cut"
     assert payload.get("producer") == "C1-8", "row o must identify its producer"
+    assert payload.get("setup", "NATIVE") != "SYNTH", "row o must use non-SYNTH setup"
     if status == "PASS":
         assert payload.get("oracle") and payload.get("negative_control"), "row o PASS lacks independent oracle/red control"
     return status, payload
@@ -143,7 +144,13 @@ def examples():
               "causes": [{"frame": 1, "region": 0, "id": 129, "kind": "load", "source": "pinned internal entry"}]},
         "d": {"hits": 10, "timing": "before", "host_hits": 0, "wrong_hits": 0},
         "e": {"before": 10, "kept": 10, "removed": 0, "reloaded": 0},
-        "f": {"fps": [200, 100, 87, 73, 64, 58], "restored": 200, "restored_four": 64, "realtime": 60, "phase_max": 3},
+        "f": {"fps": [208.6, 97.3, 79.7, 66.1, 57.9, 52.9], "sustained": {
+            name: {"requested_rate": 100, "frames": 3000, "registered_hooks": hooks,
+                   "timing_kind": "wall_frame_interval", "clock_source": "MODEL high-resolution wall clock",
+                   "frame_times": [1 / 60] * 3000,
+                   "load_counts": dict.fromkeys(("pointer_chain", "battle_mons_hp", "party_diff", "json_encode"), 3000),
+                   "ending_registered": 0, "on_demand": name == "one", "removed_after_fire": name == "one"}
+            for name, hooks in (("zero", 0), ("one", 1))}},
         "g": {"domains": {"Main RAM": 4194304, "Shared WRAM": 32768, "ARM7 WRAM": 65536,
                           "SRAM": 524288, "Instruction TCM": 32768, "Data TCM": 16384, "ARM9 System Bus": 0},
               "registers": {f"ARM9 r{i}": 0 for i in range(16)}, "bogus_refused": True},
@@ -170,7 +177,7 @@ def examples():
 
 NEGATIVES = {
     "a": ("negative_hits", 1), "b": ("active_fault", False), "c": ("quiet_changes", 1),
-    "d": ("host_hits", 1), "e": ("reloaded", 1), "f": ("restored", 40),
+    "d": ("host_hits", 1), "e": ("reloaded", 1), "f": ("sustained", {"zero": {"requested_rate": 300, "frames": 3000}}),
     "g": ("bogus_refused", False), "h": ("signature_rejected", False),
     "i": ("box_without_dirty", 2), "j": ("patched_hash", "1" * 32),
     "k": ("unpinned", "pinned"), "l": ("no_buttons_overworld", True),
@@ -262,6 +269,142 @@ def test_register_name_guard_refuses_before_read_and_masks_signed(api):
         api.read_register(names, r.globals().reader, "ARM9 bogus")
     assert r.globals().CALLS == 0
     assert api.read_register(names, r.globals().reader, "ARM9 r15") == 0xFFFFFFFF
+
+
+@pytest.mark.parametrize("fault", ["one_slow_frame", "load_missing", "retained_hook", "not_on_demand", "short_sample", "wrong_rate"])
+def test_f_owner_sustained_deadline_and_load_red_revert(api, fault):
+    r = api._runtime
+    original = examples()["f"]
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
+    bad = copy.deepcopy(original)
+    sample = bad["sustained"]["one"]
+    if fault == "one_slow_frame":
+        sample["frame_times"][-1] = 0.020  # Average/p99 still appear fine; max must catch it.
+    elif fault == "load_missing":
+        sample["load_counts"]["json_encode"] = 2999
+    elif fault == "retained_hook":
+        sample["ending_registered"] = 1
+    elif fault == "not_on_demand":
+        sample["on_demand"] = False
+    elif fault == "short_sample":
+        sample["frames"] = 2999
+    else:
+        sample["requested_rate"] = 300
+    assert api.evaluate("f", to_lua(r, bad))[0] == "FAIL"
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
+
+
+def test_f_average_and_hook_curve_cannot_qualify(api):
+    r = api._runtime
+    old = {"fps": [208.6, 97.3, 79.7, 66.1, 57.9, 52.9], "phase_max": 3, "realtime": 60}
+    assert api.evaluate("f", to_lua(r, old))[0] == "OPEN"
+    # The curve is independent characterization: a differently shaped curve
+    # must not invalidate otherwise complete sustained timing/load evidence.
+    current = examples()["f"]
+    current["fps"] = [200] * 6
+    assert api.evaluate("f", to_lua(r, current)) == "PASS"
+
+
+def phase_examples():
+    return [{"name": name, "phase": "battle" if name == "reset" else name,
+             "sites": ["producer"], "producer_site": "producer", "predicate": {"symbol": "sFieldSysPtr"},
+             "source": "source:1", "route": [{"buttons": ["A"], "frames": 3}], "open": []}
+            for name in ("battle", "pc", "reset")]
+
+
+def test_phase_blocked_pc_open_active_wrong_fail_revert(api):
+    cases = phase_examples()
+    assert phase_case_plan(cases, []) == (cases, [])
+    runnable, reasons = phase_case_plan([cases[0], cases[2]], [{"name": "pc", "blocked_reason": "native box slot absent"}])
+    assert not runnable and reasons == ["pc: native box slot absent"]
+    result, rows = finish_rows(api, examples(), {"n": ("OPEN", {"reason": reasons[0]})}, ("PASS", {}))
+    assert result == "OPEN" and rows["n"][0] == "OPEN"
+    malformed = copy.deepcopy(cases)
+    malformed[0]["producer_site"] = "unselected"
+    with pytest.raises(AssertionError, match="producer observer"):
+        phase_case_plan(malformed, [])
+    assert phase_case_plan(cases, []) == (cases, [])
+    assert phase_case_plan([], [])[1] == ["battle: required phase case absent", "pc: required phase case absent", "reset: required phase case absent"]
+
+
+def recipe_example():
+    return {"steps": [{"press": ["A"], "hold_frames": 2, "then_wait_frames": 1}],
+            "until": {"symbol": "sFieldSysPtr", "deref": [0, 4], "offset": 12, "value": 12},
+            "max_frames": 6, "route_status": "recipe_source", "evidence": "SOURCE", "source": ["source:1"], "open": None}
+
+
+def test_named_pack_recipe_missing_open_and_present_wrong_revert(api):
+    recipe = recipe_example()
+    resolved, reasons = resolve_pack_route(["fight"], {"fight": recipe})
+    assert not reasons and resolved[0]["name"] == "fight"
+    assert resolve_pack_route(["fight"], {}) == ([], ["button recipe absent for named route leg fight"])
+    open_leg = dict(recipe, route_status="open", evidence="OPEN", steps=[], until=None, open="fixture absent")
+    assert resolve_pack_route(["fight"], {"fight": open_leg}) == ([], ["fight: fixture absent"])
+    wrong = copy.deepcopy(recipe)
+    wrong["steps"][0]["press"] = ["Touch"]
+    with pytest.raises(AssertionError, match="unsupported button"):
+        resolve_pack_route(["fight"], {"fight": wrong})
+    assert resolve_pack_route(["fight"], {"fight": recipe}) == (resolved, [])
+    cases = phase_examples()
+    for case in cases:
+        case["route"] = ["fight"]
+    runnable, reasons = phase_case_plan(cases, [], {"fight": recipe})
+    assert not reasons and runnable[0]["route"] == resolved
+    # Execute the actual bounded Lua interpreter, not a Python approximation.
+    r = api._runtime
+    r.execute('FRAMES=0; INPUTS={}; step=function(b) FRAMES=FRAMES+1; INPUTS[FRAMES]=b.A==true end')
+    ready = r.eval("function() return FRAMES>=5 end")
+    assert api.play_recipe(to_lua(r, resolved[0]), r.globals().step, ready) == 5
+    assert list(r.globals().INPUTS.values()) == [True, True, False, True, True]
+    with pytest.raises(Exception, match="until predicate not reached"):
+        api.play_recipe(to_lua(r, resolved[0]), r.globals().step, r.eval("function() return false end"))
+
+
+def test_recipe_predicate_chain_null_is_not_success(api):
+    r = api._runtime
+    title = to_lua(r, {"symbols": {"sFieldSysPtr": {"address": 100}}})
+    r.execute('WORDS={[100]=200,[200]=300,[304]=400,[412]=12}; read=function(a) return WORDS[a] or 0 end')
+    predicate = recipe_example()["until"]
+    assert api.predicate(title, r.globals().read, to_lua(r, predicate))
+    r.globals().WORDS[304] = 0
+    assert not api.predicate(title, r.globals().read, to_lua(r, predicate))
+    r.globals().WORDS[304] = 400
+    assert api.predicate(title, r.globals().read, to_lua(r, predicate))
+    reset = to_lua(r, {"symbol": "sFieldSysPtr", "deref": [], "offset": 0, "zero": True})
+    assert not api.predicate(title, r.globals().read, reset)
+    r.globals().WORDS[100] = 0
+    assert api.predicate(title, r.globals().read, reset)
+    # A null root must not satisfy a zero test on an unreachable nested field.
+    assert not api.predicate(title, r.globals().read, to_lua(r, {**predicate, "value": None, "zero": True}))
+
+
+def test_synth_sidecar_bound_hash_disclosure_and_wrong_revert(tmp_path):
+    save = tmp_path / "copy.SaveRAM"
+    save.write_bytes(b"model save")
+    assert save_setup(save) == {"setup": "NATIVE"}
+    sidecar = Path(str(save) + ".synth.json")
+    meta = {"src_sha1": "a" * 40, "out_sha1": digest(save, "sha1"), "new_pid": 7}
+    sidecar.write_text(json.dumps(meta))
+    disclosed = save_setup(save)
+    assert disclosed["setup"] == "SYNTH" and disclosed["sidecar_sha256"] == digest(sidecar)
+    wrong = dict(meta, out_sha1="0" * 40)
+    sidecar.write_text(json.dumps(wrong))
+    with pytest.raises(AssertionError, match="output hash mismatch"):
+        save_setup(save)
+    sidecar.write_text(json.dumps(meta))
+    assert save_setup(save) == disclosed
+
+
+def test_row_o_rejects_synth_setup(tmp_path):
+    path = tmp_path / "o.txt"
+    good = receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red", setup="NATIVE")
+    path.write_text(good)
+    assert row_o(path, "heartgold", "2" * 40, "cut")[0] == "PASS"
+    path.write_text(good.replace('"NATIVE"', '"SYNTH"'))
+    with pytest.raises(AssertionError, match="non-SYNTH"):
+        row_o(path, "heartgold", "2" * 40, "cut")
+    path.write_text(good)
+    assert row_o(path, "heartgold", "2" * 40, "cut")[0] == "PASS"
 
 
 def test_probe_fake_io_terminal_receipt_without_console(api):
@@ -382,6 +525,23 @@ def fixture_module():
     return module
 
 
+def save_setup(save):
+    """Disclose permitted row-i synthesis; wrong present output binding is FAIL."""
+    sidecar = Path(str(save) + ".synth.json")
+    if not sidecar.exists():
+        return {"setup": "NATIVE"}
+    raw = sidecar.read_bytes()
+    meta = json.loads(raw)
+    assert isinstance(meta, dict), "SYNTH sidecar must be an object"
+    for key in ("src_sha1", "out_sha1"):
+        assert isinstance(meta.get(key), str) and re.fullmatch(r"[0-9a-fA-F]{40}", meta[key]), f"SYNTH invalid {key}"
+    assert meta["out_sha1"].lower() == digest(save, "sha1"), "SYNTH sidecar output hash mismatch"
+    pid = meta.get("new_pid")
+    assert isinstance(pid, int) and not isinstance(pid, bool) and 0 <= pid <= 0xFFFFFFFF, "SYNTH invalid new_pid"
+    return {"setup": "SYNTH", "sidecar_sha256": hashlib.sha256(raw).hexdigest(),
+            "src_sha1": meta["src_sha1"].lower(), "out_sha1": meta["out_sha1"].lower(), "new_pid": pid}
+
+
 def scenario_input(title):
     path = os.environ.get("SLINK_GEN4_PROBE_SCENARIO")
     if not path:
@@ -397,6 +557,100 @@ def emulator_pids():
                             capture_output=True, text=True, timeout=15, check=True)
     values = json.loads(result.stdout) if result.stdout.strip() else []
     return values if isinstance(values, list) else [values]
+
+
+def resolve_pack_route(route, recipes):
+    """Convert pinned route_legs to bounded normal-button instructions for Lua."""
+    assert isinstance(route, list) and isinstance(recipes, dict), "route/route_legs shape"
+    resolved, reasons = [], []
+    buttons = {"A", "B", "X", "Y", "Start", "Select", "Up", "Down", "Left", "Right", "L", "R"}
+    for leg in route:
+        if isinstance(leg, dict):  # Existing explicit frame/button scenario compatibility.
+            frames, press = leg.get("frames"), leg.get("buttons", [])
+            assert isinstance(frames, int) and not isinstance(frames, bool) and 0 < frames <= 12000, "invalid frame bound"
+            assert isinstance(press, list) and all(isinstance(b, str) and b in buttons for b in press), "unsupported button input"
+            resolved.append(copy.deepcopy(leg))
+            continue
+        assert isinstance(leg, str) and leg, "malformed route leg"
+        recipe = recipes.get(leg)
+        if recipe is None:
+            reasons.append(f"button recipe absent for named route leg {leg}")
+            continue
+        assert isinstance(recipe, dict), f"{leg}: recipe must be an object"
+        status = recipe.get("route_status")
+        assert status in {"recipe_source", "open"}, f"{leg}: invalid route_status"
+        assert recipe.get("evidence") in {"SOURCE", "FILE", "OPEN"}, f"{leg}: invalid recipe evidence"
+        if status == "open":
+            assert recipe.get("steps") == [] and recipe.get("until") is None, f"{leg}: malformed open recipe"
+            assert isinstance(recipe.get("open"), str) and recipe["open"], f"{leg}: open recipe lacks reason"
+            reasons.append(f"{leg}: {recipe['open']}")
+            continue
+        assert isinstance(recipe.get("source"), list) and recipe["source"], f"{leg}: source citation required"
+        maximum, steps, predicate = recipe.get("max_frames"), recipe.get("steps"), recipe.get("until")
+        assert isinstance(maximum, int) and not isinstance(maximum, bool) and 0 < maximum <= 12000, f"{leg}: invalid max_frames"
+        assert isinstance(steps, list) and isinstance(predicate, dict), f"{leg}: steps/until required"
+        assert isinstance(predicate.get("symbol"), str) and isinstance(predicate.get("deref", []), list), f"{leg}: invalid predicate"
+        assert all(isinstance(x, int) and not isinstance(x, bool) and x >= 0 for x in predicate.get("deref", [])), f"{leg}: invalid dereference offsets"
+        assert isinstance(predicate.get("offset"), int) and predicate["offset"] >= 0, f"{leg}: invalid target offset"
+        tests = int("value" in predicate) + int(predicate.get("nonzero") is True) + int(predicate.get("zero") is True)
+        assert tests == 1, f"{leg}: predicate needs exactly one comparison"
+        if "value" in predicate:
+            assert isinstance(predicate["value"], int) and not isinstance(predicate["value"], bool), f"{leg}: invalid predicate value"
+        span = 0
+        for step in steps:
+            assert isinstance(step, dict), f"{leg}: malformed step"
+            press = step.get("press")
+            assert isinstance(press, list) and all(isinstance(b, str) and b in buttons for b in press), f"{leg}: unsupported button input"
+            for key in ("hold_frames", "then_wait_frames"):
+                value = step.get(key)
+                assert isinstance(value, int) and not isinstance(value, bool) and value >= 0, f"{leg}: invalid {key}"
+                span += value
+        assert span <= maximum, f"{leg}: steps exceed max_frames"
+        resolved.append({"name": leg, "steps": copy.deepcopy(steps), "until": copy.deepcopy(predicate),
+                         "max_frames": maximum, "source": copy.deepcopy(recipe["source"])})
+    return ([] if reasons else resolved), reasons
+
+
+def phase_case_plan(cases, blocked, recipes=None):
+    """Validate present descriptors; missing fixtures/recipes/caller coverage stay OPEN.
+
+    Pack route strings are leg references, not button recipes. Never send them to
+    Lua's dictionary-based route player or treat them as observed execution.
+    """
+    assert isinstance(cases, list) and isinstance(blocked, list), "phase case inventories must be arrays"
+    names, families, reasons = set(), set(), []
+    for case in [*cases, *blocked]:
+        assert isinstance(case, dict), "phase descriptor must be an object"
+        name = case.get("name")
+        assert isinstance(name, str) and re.fullmatch(r"[\w.-]+", name), "invalid phase case name"
+        assert name not in names, f"duplicate active/blocked phase case {name}"
+        names.add(name)
+        families.add("reset" if name == "reset" else case.get("phase", name))
+    for case in blocked:
+        why = case.get("blocked_reason")
+        assert isinstance(why, str) and why.strip(), f"blocked phase {case['name']} lacks a named reason"
+        reasons.append(f"{case['name']}: {why}")
+    for family in sorted({"battle", "pc", "reset"} - families):
+        reasons.append(f"{family}: required phase case absent")
+    resolved_cases = []
+    for case in cases:
+        name, sites = case["name"], case.get("sites")
+        assert isinstance(sites, list) and 1 <= len(sites) <= 3, f"{name}: production sites must fit cap 3"
+        assert all(isinstance(site, str) for site in sites) and len(set(sites)) == len(sites), f"{name}: duplicate/invalid site"
+        assert case.get("producer_site") in sites, f"{name}: producer observer must match a selected site"
+        assert isinstance(case.get("predicate"), dict) and isinstance(case.get("source"), str) and case["source"], f"{name}: predicate/source required"
+        uncovered = case.get("open", [])
+        assert isinstance(uncovered, list) and all(isinstance(why, str) for why in uncovered), f"{name}: invalid open-caller list"
+        reasons.extend(f"{name}: {why}" for why in uncovered)
+        route = case.get("route")
+        if route is None or route == []:
+            reasons.append(f"{name}: normal-button route absent")
+            continue
+        assert isinstance(route, list), f"{name}: route must be an array"
+        resolved, route_reasons = resolve_pack_route(route, recipes or {})
+        reasons.extend(f"{name}: {why}" for why in route_reasons)
+        resolved_cases.append({**case, "route": resolved})
+    return ([] if reasons else resolved_cases), reasons
 
 
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
@@ -640,6 +894,17 @@ def test_gen4_hook_probe(api, title):
     cfg["census_image_bytes"] = census_file_pins(source, artifact, title, cfg.get("internal_loads", ()))
     if "phase_cases" not in cfg and artifact.get("phase_cases"):
         cfg["phase_cases"] = artifact["phase_cases"]
+    # Blockers are authoritative pack input, not an opt-out supplied by a scenario.
+    cfg["phase_cases_blocked"] = artifact.get("phase_cases_blocked", [])
+    assert cfg["phase_max"] == max(artifact["phases"][name]["cap"] for name in ("battle", "pc")) <= 3, "wrong production hook cap"
+    recipes = artifact.get("route_legs", {})
+    cfg["route_open_reasons"] = {}
+    for key in ("route", "persistence_route"):
+        cfg[key], why = resolve_pack_route(cfg.get(key, artifact.get(key, [])), recipes)
+        cfg["route_open_reasons"][key] = why
+    cfg.update(save_setup(save))
+    if cfg["setup"] == "SYNTH":
+        assert cfg["new_pid"] in {mon["pid"] for mon in decoded.party()}, "SYNTH sidecar new_pid absent from decoded party"
     if os.environ.get("SLINK_GEN4_PROBE_SKIP_PERF_REASON"):
         cfg["skip_perf_reason"] = os.environ["SLINK_GEN4_PROBE_SKIP_PERF_REASON"]
     root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", "C:/slink/g4/probe-gates"))
@@ -672,15 +937,14 @@ def test_gen4_hook_probe(api, title):
             errors.pop("i", None)
         else:
             errors["i"] = ("OPEN", {"reason": reason})
-        if cfg.get("phase_cases"):
-            assert {case["name"] for case in cfg["phase_cases"]} >= {"battle", "pc", "reset"}, "phase cases must cover battle, static PC and reset"
+        if cfg.get("phase_cases") or cfg.get("phase_cases_blocked"):
+            runnable, reasons = phase_case_plan(cfg.get("phase_cases", []), cfg["phase_cases_blocked"], recipes)
             measured = []
-            open_cases = [f"{case['name']}: {case['open']}" for case in cfg["phase_cases"] if case.get("open")]
-            if open_cases:
-                errors["n"] = ("OPEN", {"reason": "n: uncovered phase callers/predicates: " + "; ".join(open_cases)})
-            for index, case in enumerate(cfg["phase_cases"]):
-                if open_cases:
-                    break
+            if reasons:
+                errors["n"] = ("OPEN", {"reason": "n: " + "; ".join(reasons),
+                                        "phase_cases": [case["name"] for case in cfg.get("phase_cases", [])],
+                                        "phase_cases_blocked": cfg["phase_cases_blocked"]})
+            for index, case in enumerate(runnable):
                 rows, _ = launch_probe(module, title, source, save, profile, base, f"phase-{index}", batch / f"phase-{index}",
                                        {**cfg, "phase_case": case, "route": case["route"]})
                 p = rows["n"][1].get("observation", {}).get("physical")
@@ -707,6 +971,8 @@ def test_gen4_hook_probe(api, title):
             payload = {**payload, "schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
                        "source_head": source_head, "level": "PHYSICAL", "run_id": batch.name,
                        "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "requested_rate": 300}
+            if row != "o":
+                payload.update(save_setup(save))
             text.append(f"PROBE {row} {status} {json.dumps(payload, sort_keys=True)}")
         text.append(f"RESULT: {result}")
         (batch / "combined.txt").write_text("\n".join(text) + "\n", encoding="utf-8")

@@ -44,6 +44,41 @@ function M.host_write_control(read_byte,write_byte,address)
     check(ok,"host write control failed: "..tostring(why))
     check(read_byte(address)==original,"host write restore readback")
 end
+function M.predicate(title,read,p)
+    local sym=need(title.symbols[p.symbol],"predicate symbol:"..tostring(p.symbol))
+    local base=read(sym.address)
+    -- The pinned reset leg explicitly tests the root pointer variable itself.
+    if p.zero and #(p.deref or {})==0 and p.offset==0 then return base==0 end
+    for _,offset in ipairs(p.deref or {}) do
+        if base==0 then return false end
+        base=read(base+offset)
+    end
+    if base==0 then return false end -- A null chain is not a valid target field.
+    local value=read(base+p.offset)
+    if p.nonzero then return value~=0 end
+    if p.zero then return value==0 end
+    return value==p.value
+end
+function M.play_recipe(leg,step,until_matches)
+    local used=0
+    local function advance(buttons)
+        if used>=leg.max_frames then return false end
+        step(buttons); used=used+1
+        return until_matches(leg["until"])
+    end
+    if until_matches(leg["until"]) then return 0 end
+    while used<leg.max_frames do
+        local before=used
+        for _,s in ipairs(leg.steps) do
+            local buttons={}; for _,button in ipairs(s.press) do buttons[button]=true end
+            for _=1,s.hold_frames do if advance(buttons) then return used end end
+            for _=1,s.then_wait_frames do if advance({}) then return used end end
+        end
+        if used==before and advance({}) then return used end -- wait-only recipe
+    end
+    check(until_matches(leg["until"]),"route until predicate not reached: "..leg.name)
+    return used
+end
 function M.valid_handle(h)
     return type(h)=="string" and h~="" and h:gsub("[%-%{%}]", ""):match("^0+$")==nil
 end
@@ -242,16 +277,31 @@ validators.e=function(x)
     check(x.removed==0 and need(x.reloaded,"e:private savestate reload")==0,"hook survived removal/reload")
 end
 validators.f=function(x)
-    local fps=need(x.fps,"f:0..5 hook samples")
-    for i=1,6 do check(type(fps[i])=="number" and fps[i]>0,"invalid benchmark sample") end
-    for i=2,5 do check(fps[i]<fps[i-1],"overhead curve not decreasing") end
-    check(fps[2]/fps[1]>=0.35 and fps[2]/fps[1]<=0.7,"first registered hook cost differs from research curve")
-    check(fps[5]>=60 and fps[6]<fps[5],"four/five-hook performance control")
-    check(need(x.restored_four,"f:fifth-hook removal sample")>=fps[5]*0.9,"fifth hook removal did not restore four-hook throughput")
-    check(x.restored>=fps[1]*0.9,"unregister did not restore baseline throughput")
-    check(need(x.realtime,"f:explicit 100% performance qualification")>=59 and x.realtime<=62,
-        "real-time frame delivery")
-    check(x.phase_max<=4 and x.phase_max>=1,"phase maximum missing")
+    -- Owner superseded the cap-three ruling: averages and unthrottled curves
+    -- characterize cost but cannot qualify sustained full-client 1x delivery.
+    local sustained=need(x.sustained,"f:gen4-PERF sustained full-client timing records (0 hooks and 1 on-demand)")
+    for _,name in ipairs({"zero","one"}) do
+        local sample=need(sustained[name],"f:sustained "..name.."-hook load sample")
+        check(sample.requested_rate==100 and sample.frames>=3000,"sustained measurement needs >=3000 frames at 1x")
+        check(sample.registered_hooks==(name=="zero" and 0 or 1),"incorrect sustained hook count")
+        check(sample.timing_kind=="wall_frame_interval" and type(sample.clock_source)=="string" and sample.clock_source~="",
+            "sustained measurement requires a declared wall-clock frame-interval source")
+        local times=need(sample.frame_times,"f:raw per-frame timings")
+        check(#times==sample.frames,"incomplete sustained timing sequence")
+        local sorted={}
+        for i,t in ipairs(times) do check(type(t)=="number" and t>0 and t<math.huge,"invalid frame time"); sorted[i]=t end
+        table.sort(sorted)
+        local p50=sorted[math.ceil(#sorted*0.5)]
+        local p99=sorted[math.ceil(#sorted*0.99)]
+        local maximum=sorted[#sorted]
+        check(p50<=1/60 and p99<=1/60 and maximum<=1/60,"sustained frame deadline exceeds 1/60 second")
+        local load=need(sample.load_counts,"f:full-client workload counts")
+        for _,work in ipairs({"pointer_chain","battle_mons_hp","party_diff","json_encode"}) do
+            check(type(load[work])=="number" and load[work]>=sample.frames,"missing per-frame client load: "..work)
+        end
+        check(sample.ending_registered==0,"hook retained in steady state after measurement")
+        if name=="one" then check(sample.on_demand==true and sample.removed_after_fire==true,"one-hook sample must prove on-demand removal") end
+    end
 end
 validators.g=function(x)
     for name,size in pairs({["Main RAM"]=4194304,["Shared WRAM"]=32768,["ARM7 WRAM"]=65536,
@@ -397,7 +447,12 @@ local function run()
         if phase_monitor then phase_monitor.after() end
         if census_enabled then snapshot() end
         local observed=phase
-        if phase_valid and not phase_valid(phase) then observed="unverified" end
+        if phase=="route-unverified" and phase_valid then
+            for _,label in ipairs({"battle","save","menu","overworld"}) do
+                if phase_valid(label) then observed=label; break end
+            end
+        end
+        if phase~="route-unverified" and phase_valid and not phase_valid(phase) then observed="unverified" end
         local pc=u32(emu.getregister("ARM9 r15")); local h=histogram[observed] or {}; histogram[observed]=h
         local key=string.format("%08x",pc); h[key]=(h[key] or 0)+1
     end
@@ -452,6 +507,10 @@ local function run()
     end
     local function play_route(route)
         for _,leg in ipairs(route or {}) do
+            if leg.steps then
+                phase="route-unverified"
+                M.play_recipe(leg,step,function(p) return M.predicate(title,read,p) end)
+            else
             local buttons={}; for _,button in ipairs(leg.buttons or {}) do
                 check(({A=true,B=true,X=true,Y=true,Start=true,Select=true,Up=true,Down=true,Left=true,Right=true,L=true,R=true})[button],"non-button route input")
                 buttons[button]=true
@@ -460,6 +519,7 @@ local function run()
             if leg.phase then phase=leg.phase end -- verified each frame against pack field/overlay predicates
             check(type(leg.frames)=="number" and leg.frames%1==0 and leg.frames>0 and leg.frames<=12000,"route frame bound")
             for _=1,leg.frames do step(buttons) end
+            end
         end
     end
     local ok,fatal=pcall(function()
@@ -684,19 +744,19 @@ local function run()
             end
             remove(handles[5]); handles[5]=nil
             local start=os.clock(); idle(cfg.sample_frames,true); local restored_four=cfg.sample_frames/(os.clock()-start)
+            check(cfg.phase_max>=1 and cfg.phase_max<=3,"production hook cap exceeds D6")
+            for i=4,cfg.phase_max+1,-1 do remove(handles[i]); handles[i]=nil end
+            start=os.clock(); idle(cfg.sample_frames,true); local restored_production=cfg.sample_frames/(os.clock()-start)
             for _,h in ipairs(handles) do remove(h) end
             start=os.clock(); idle(cfg.sample_frames,true); local restored=cfg.sample_frames/(os.clock()-start)
-            local realtime
-            if cfg.qualify_performance then
-                emu.limitframerate(true); client.speedmode(100)
-                local handles={}; for i=1,cfg.phase_max do handles[i]=register(site(candidates[i]),function() end,"g4f.rt."..i) end
-                -- os.time is wall time; use >=1200 frames to bound integer-second error.
-                local wall=os.time(); idle(math.max(3600,cfg.sample_frames),true); local elapsed=os.time()-wall
-                realtime=math.max(3600,cfg.sample_frames)/elapsed
-                for _,h in ipairs(handles) do remove(h) end
-                emu.limitframerate(false); client.speedmode(cfg.requested_rate)
-            end
-            return {fps=fps,restored=restored,restored_four=restored_four,realtime=realtime,phase_max=cfg.phase_max,
+            -- gen4-PERF will produce actual per-frame full-client samples. Neither
+            -- a config-supplied array nor the withdrawn average-only 3-hook test
+            -- is PHYSICAL sustained evidence.
+            return {fps=fps,restored=restored,restored_four=restored_four,restored_production=restored_production,
+                legacy_cap_fps=fps[cfg.phase_max+1],legacy_above_cap_hooks=cfg.phase_max+1,legacy_above_cap_fps=fps[cfg.phase_max+2],
+                criterion="OWNER: sustained full-client 1x at 0 hooks and 1 on-demand; curve is characterization only",
+                curve_evidence="CHARACTERIZATION",production_steady_hooks=0,production_on_demand_max=1,
+                phase_max=cfg.phase_max,
                 requested_rate=cfg.requested_rate,process_inventory=inventory}
         end)
         guarded("n",function() return {model=M.phase_controls(dofile(root.."/lua/hook_registry.lua"))} end)
@@ -755,12 +815,7 @@ local function run()
             local composite=M.composite(dofile(root.."/lua/hook_registry.lua"),binding)
             local armed=false
             active=function()
-                local base=read(symbol(predicate.symbol))
-                for _,offset in ipairs(predicate.deref or {}) do if base==0 then return false end; base=read(base+offset) end
-                if base==0 then return false end
-                local value=read(base+predicate.offset)
-                if predicate.nonzero then return value~=0 end
-                return value==predicate.value
+                return M.predicate(title,read,predicate)
             end
             local pending_at_close=0
             phase_monitor={before=function()
@@ -829,6 +884,9 @@ local function run()
         local payload={schema="gen4-probe-row-v1",run_id=cfg.run_id,title=cfg.title,rom_sha1=cfg.rom_sha1,
             level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
             script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
+        payload.setup=cfg.setup or "NATIVE"; payload.sidecar_sha256=cfg.sidecar_sha256
+        payload.setup_src_sha1=cfg.src_sha1; payload.setup_out_sha1=cfg.out_sha1
+        payload.setup_new_pid=cfg.new_pid
         payload.advanced_frames=advanced; payload.elapsed_clock_seconds=os.clock()-started
         payload.achieved_fps=advanced/math.max(0.001,payload.elapsed_clock_seconds)
         lines[#lines+1]="PROBE "..row.." "..status.." "..assert(json.encode(payload))
