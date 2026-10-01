@@ -1021,6 +1021,67 @@
           "party_hp_width": 2,
           "party_size": 236
         },
+        "probe_field": {
+          "field_app": 0,
+          "launched_app": 4,
+          "live": 108,
+          "paused": 8,
+          "save": 12,
+          "save_driver": 216,
+          "save_driver_data_off": 16,
+          "save_state": 1,
+          "sub": 0,
+          "task": 16
+        },
+        "probe_field_caveats": [
+          "fs+0xD8 is NULL until the save driver exists; guard before reading data",
+          "src/application/view_photo.c:149-155 also uses fieldSystem->unk_D8 as a different SysTask while the photo viewer runs: read the state byte only when no application is launched (launched_app == 0)",
+          "state byte meaning: 0 init, 1 idle (accepts a request), 2 requested, 3-7 fade/run/finish (checkpoint.md section 3)"
+        ],
+        "probe_field_evidence": {
+          "field_app": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)",
+            "class": "SOURCE"
+          },
+          "launched_app": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)",
+            "class": "SOURCE"
+          },
+          "live": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:137 (unk6C, BOOL); asm/overlay_01_021E5900.s:292 (str r0,[r4,#0x6c] = TRUE, read at :356); src/field_system.c:95,199-201",
+            "class": "ASM"
+          },
+          "paused": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:82 (FieldSystemUnkSub0.isPaused, BOOL, sub-relative); src/field_system.c:96,145,199-201,284-289",
+            "class": "SOURCE"
+          },
+          "save": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:116 (saveData); asm/overlay_01_021E6880.s:375 (ldr r0,[r4,#0xc]; bl SaveArray_Party_Get); src/overlay_124.c:26",
+            "class": "ASM"
+          },
+          "save_driver": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:168 (unk_D8 = SysTask*; struct order and the 0xE4 followMon comment corroborate); asm/overlay_01_021F6830.s:91 (add r4,#0xd8; str r0,[r4] after ov01_021F68DC creates the task)",
+            "class": "ASM"
+          },
+          "save_driver_data_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/sys_task.h:10-18 (SysTask: queue 0, prev 4, next 8, priority 0xC, data 0x10); src/sys_task.c:160-162 (SysTask_GetData returns task->data)",
+            "class": "SOURCE"
+          },
+          "save_state": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :363-377 (ov01_021F6A9C accepts a request only when ldrb [data,#1]==1), :431-436 (ov01_021F6B10 returns [data,#1]); offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]",
+            "class": "ASM"
+          },
+          "sub": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:113 (FieldSystem.unk0 = FieldSystemUnkSub0*); src/field_system.c:89-96",
+            "class": "SOURCE"
+          },
+          "task": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:117 (taskman); src/task.c:70-72 (FieldSystem_TaskIsRunning = taskman != NULL)",
+            "class": "SOURCE"
+          }
+        },
+        "probe_wrong_write_offset": 110,
+        "probe_wrong_write_offset_evidence": "SOURCE (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54): gSystem+0x6E is compiler padding between softResetDisabled (u8 @0x6C) and unk70 (BOOL @0x70) (include/system.h:50-58). No C writer exists: src/system.c, src/main.c, src/intro_movie.c, src/title_screen.c write only named fields, nothing takes &gSystem or clears the struct. A windowed scan of all 520 `ldr rN,=gSystem` sites in asm/*.s found no access (read or write) at any gSystem offset >= 0x60 except simulatedInputs @0x5C. The scan is heuristic, not an exhaustive dataflow proof; the .bss byte is zero from boot. hg-engine adds no gSystem write (src/save.c:759 is commented out).",
         "save": {
           "array_addr": "SaveData + dynamic_region_off + u32[SaveData + array_headers_off + id*array_header_size + 8]",
           "array_header_count": 42,
@@ -1081,7 +1142,8 @@
           "width": 4
         },
         "system": {
-          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57; MEASURED +1 per frame (platform.md)",
+          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)",
+          "frame_counter_off": 48,
           "symbol": "gSystem",
           "vblank_counter_off": 44
         },
@@ -2958,6 +3020,67 @@
           "party_hp_width": 2,
           "party_size": 236
         },
+        "probe_field": {
+          "field_app": 0,
+          "launched_app": 4,
+          "live": 108,
+          "paused": 8,
+          "save": 12,
+          "save_driver": 216,
+          "save_driver_data_off": 16,
+          "save_state": 1,
+          "sub": 0,
+          "task": 16
+        },
+        "probe_field_caveats": [
+          "fs+0xD8 is NULL until the save driver exists; guard before reading data",
+          "src/application/view_photo.c:149-155 also uses fieldSystem->unk_D8 as a different SysTask while the photo viewer runs: read the state byte only when no application is launched (launched_app == 0)",
+          "state byte meaning: 0 init, 1 idle (accepts a request), 2 requested, 3-7 fade/run/finish (checkpoint.md section 3)"
+        ],
+        "probe_field_evidence": {
+          "field_app": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)",
+            "class": "SOURCE"
+          },
+          "launched_app": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)",
+            "class": "SOURCE"
+          },
+          "live": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:137 (unk6C, BOOL); asm/overlay_01_021E5900.s:292 (str r0,[r4,#0x6c] = TRUE, read at :356); src/field_system.c:95,199-201",
+            "class": "ASM"
+          },
+          "paused": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:82 (FieldSystemUnkSub0.isPaused, BOOL, sub-relative); src/field_system.c:96,145,199-201,284-289",
+            "class": "SOURCE"
+          },
+          "save": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:116 (saveData); asm/overlay_01_021E6880.s:375 (ldr r0,[r4,#0xc]; bl SaveArray_Party_Get); src/overlay_124.c:26",
+            "class": "ASM"
+          },
+          "save_driver": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:168 (unk_D8 = SysTask*; struct order and the 0xE4 followMon comment corroborate); asm/overlay_01_021F6830.s:91 (add r4,#0xd8; str r0,[r4] after ov01_021F68DC creates the task)",
+            "class": "ASM"
+          },
+          "save_driver_data_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/sys_task.h:10-18 (SysTask: queue 0, prev 4, next 8, priority 0xC, data 0x10); src/sys_task.c:160-162 (SysTask_GetData returns task->data)",
+            "class": "SOURCE"
+          },
+          "save_state": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :363-377 (ov01_021F6A9C accepts a request only when ldrb [data,#1]==1), :431-436 (ov01_021F6B10 returns [data,#1]); offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]",
+            "class": "ASM"
+          },
+          "sub": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:113 (FieldSystem.unk0 = FieldSystemUnkSub0*); src/field_system.c:89-96",
+            "class": "SOURCE"
+          },
+          "task": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:117 (taskman); src/task.c:70-72 (FieldSystem_TaskIsRunning = taskman != NULL)",
+            "class": "SOURCE"
+          }
+        },
+        "probe_wrong_write_offset": 110,
+        "probe_wrong_write_offset_evidence": "SOURCE (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54): gSystem+0x6E is compiler padding between softResetDisabled (u8 @0x6C) and unk70 (BOOL @0x70) (include/system.h:50-58). No C writer exists: src/system.c, src/main.c, src/intro_movie.c, src/title_screen.c write only named fields, nothing takes &gSystem or clears the struct. A windowed scan of all 520 `ldr rN,=gSystem` sites in asm/*.s found no access (read or write) at any gSystem offset >= 0x60 except simulatedInputs @0x5C. The scan is heuristic, not an exhaustive dataflow proof; the .bss byte is zero from boot. hg-engine adds no gSystem write (src/save.c:759 is commented out).",
         "save": {
           "array_addr": "SaveData + dynamic_region_off + u32[SaveData + array_headers_off + id*array_header_size + 8]",
           "array_header_count": 42,
@@ -3018,7 +3141,8 @@
           "width": 4
         },
         "system": {
-          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57; MEASURED +1 per frame (platform.md)",
+          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)",
+          "frame_counter_off": 48,
           "symbol": "gSystem",
           "vblank_counter_off": 44
         },

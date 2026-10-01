@@ -638,15 +638,80 @@ BATTLE_BASE = {"ctx_off": 0x30, "mons_off": 0x2D40, "mon_size": 0xC0, "selected_
                "hp_width": 4, "hp_signed": True, "ability_off": 0x27, "ability_width": 1}
 
 
-def hgss_profile(xm: XMap) -> dict:
+_FS = f"{PRET_HG} include/field_system.h"
+_ASM_SAVE = "asm/overlay_01_021F6830.s"
+# probe_field: FieldSystem / FieldSystemUnkSub0 / save-driver SysTask offsets for the G1 probe and the checkpoint.
+# Each value is (offset, evidence class, citation). SOURCE = header/C only; ASM = also corroborated by an asm access.
+PROBE_FIELD = {
+    "sub": (0x00, "SOURCE", f"{_FS}:113 (FieldSystem.unk0 = FieldSystemUnkSub0*); src/field_system.c:89-96"),
+    "save": (0x0C, "ASM", f"{_FS}:116 (saveData); asm/overlay_01_021E6880.s:375 (ldr r0,[r4,#0xc]; bl SaveArray_Party_Get); "
+                          "src/overlay_124.c:26"),
+    "task": (0x10, "SOURCE", f"{_FS}:117 (taskman); src/task.c:70-72 (FieldSystem_TaskIsRunning = taskman != NULL)"),
+    "live": (0x6C, "ASM", f"{_FS}:137 (unk6C, BOOL); asm/overlay_01_021E5900.s:292 (str r0,[r4,#0x6c] = TRUE, read at :356); "
+                          "src/field_system.c:95,199-201"),
+    "launched_app": (0x04, "SOURCE", f"{_FS}:80 (FieldSystemUnkSub0.unk4 = launched app OverlayManager*, sub-relative); "
+                                     "src/field_system.c:117-133 (LaunchApplication, sub_0203DFA4)"),
+    "field_app": (0x00, "SOURCE", f"{_FS}:79-80 (FieldSystemUnkSub0.unk0 = field app OverlayManager*, sub-relative); "
+                                  "src/field_system.c:97 (non-NULL for the whole field session, sub_0203DF7C)"),
+    "paused": (0x08, "SOURCE", f"{_FS}:82 (FieldSystemUnkSub0.isPaused, BOOL, sub-relative); src/field_system.c:96,145,199-201,284-289"),
+    "save_driver": (0xD8, "ASM", f"{_FS}:168 (unk_D8 = SysTask*; struct order and the 0xE4 followMon comment corroborate); "
+                                 f"{_ASM_SAVE}:91 (add r4,#0xd8; str r0,[r4] after ov01_021F68DC creates the task)"),
+    "save_state": (0x01, "ASM", f"{PRET_HG} {_ASM_SAVE}:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :363-377 (ov01_021F6A9C accepts a "
+                                f"request only when ldrb [data,#1]==1), :431-436 (ov01_021F6B10 returns [data,#1]); "
+                                "offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]"),
+}
+PROBE_FIELD_EXTRA = {
+    "save_driver_data_off": (0x10, "SOURCE", f"{PRET_HG} include/sys_task.h:10-18 (SysTask: queue 0, prev 4, next 8, priority 0xC, "
+                                             "data 0x10); src/sys_task.c:160-162 (SysTask_GetData returns task->data)"),
+}
+PROBE_FIELD_CAVEATS = [
+    "fs+0xD8 is NULL until the save driver exists; guard before reading data",
+    "src/application/view_photo.c:149-155 also uses fieldSystem->unk_D8 as a different SysTask while the photo viewer runs: "
+    "read the state byte only when no application is launched (launched_app == 0)",
+    "state byte meaning: 0 init, 1 idle (accepts a request), 2 requested, 3-7 fade/run/finish (checkpoint.md section 3)",
+]
+PROBE_WRONG_WRITE = (
+    0x6E,
+    f"SOURCE ({PRET_HG}): gSystem+0x6E is compiler padding between softResetDisabled (u8 @0x6C) and unk70 (BOOL @0x70) "
+    "(include/system.h:50-58). No C writer exists: src/system.c, src/main.c, src/intro_movie.c, src/title_screen.c write only "
+    "named fields, nothing takes &gSystem or clears the struct. A windowed scan of all 520 `ldr rN,=gSystem` sites in asm/*.s found "
+    "no access (read or write) at any gSystem offset >= 0x60 except simulatedInputs @0x5C. The scan is heuristic, not an "
+    "exhaustive dataflow proof; the .bss byte is zero from boot. hg-engine adds no gSystem write (src/save.c:759 is commented out).",
+)
+
+
+def probe_field_blocks(build: str) -> dict:
+    """profile.probe_field (+ evidence) for hgss, hge (only the header-verified fields) and the shared system facts."""
+    fields = {**{k: v[0] for k, v in PROBE_FIELD.items()}, **{k: v[0] for k, v in PROBE_FIELD_EXTRA.items()}}
+    evidence = {k: {"class": v[1], "cite": v[2]} for k, v in {**PROBE_FIELD, **PROBE_FIELD_EXTRA}.items()}
+    if build == "hge":
+        keep = {"save": f"{HGE_SRC} include/pokemon.h:592-596 (FieldSystem.savedata @0xc)",
+                "task": f"{HGE_SRC} include/pokemon.h:592-597 (FieldSystem.taskman @0x10)"}
+        for k in list(fields):
+            if k in keep:
+                evidence[k] = {"class": "SOURCE", "cite": keep[k] + "; same offset as pokeheartgold " + evidence[k]["cite"].split(";")[0]}
+            else:
+                fields[k] = None
+                evidence[k] = {"class": "OPEN", "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon "
+                                                         "(include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) "
+                                                         "but not source-verified for hge; G1 measures it"}
+    return {
+        "probe_field": fields, "probe_field_evidence": evidence, "probe_field_caveats": PROBE_FIELD_CAVEATS,
+        "probe_wrong_write_offset": PROBE_WRONG_WRITE[0], "probe_wrong_write_offset_evidence": PROBE_WRONG_WRITE[1],
+    }
+
+
+def hgss_profile(xm: XMap, build: str = "hgss") -> dict:
     return {
         "save_ptr": {"symbol": "sSaveDataPtr", "address": xm.lookup("sSaveDataPtr").address, "width": 4,
                      "evidence": "xMAP; the archived 0x02111880 chain is a different global (rejected by provenance)"},
         "fieldsys_ptr": {"symbol": "sFieldSysPtr", "address": xm.lookup("sFieldSysPtr").address, "width": 4,
                          "save_data_off": 0x0C,
                          "evidence": f"xMAP; {PRET_HG} include/field_system.h (saveData at +0x0C; probe row h agreement)"},
-        "system": {"symbol": "gSystem", "vblank_counter_off": 0x2C,
-                   "evidence": f"{PRET_HG} include/system.h:21-57; MEASURED +1 per frame (platform.md)"},
+        "system": {"symbol": "gSystem", "vblank_counter_off": 0x2C, "frame_counter_off": 0x30,
+                   "evidence": f"{PRET_HG} include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 "
+                               "increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, "
+                               "src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)"},
         "save": save_geometry(35, f"SOURCE {PRET_HG} include/save.h:65-85, include/constants/save_arrays.h:50-51",
                               "OPEN: PHYSICAL read at G1 row h / G2 (FILE-measured only: dynamic_region at SaveData+0x10)"),
         "party_off": {"value": 0x90, "base": "general_block", "count_off": 4, "max_off": 0, "mons_off": 8,
@@ -662,6 +727,7 @@ def hgss_profile(xm: XMap) -> dict:
         "pkm": dict(PKM_BASE),
         "battle": dict(BATTLE_BASE),
         "boxes": 18, "mons_per_box": 30, "memorial_box": 17,
+        **probe_field_blocks(build),
     }
 
 
@@ -969,12 +1035,13 @@ def build_hge(inputs: Inputs) -> dict:
     if errs:
         raise Fail("; ".join(errs))
 
-    profile = hgss_profile(xm)
+    profile = hgss_profile(xm, "hge")
     profile["save"] = save_geometry(
         0x2F, f"SOURCE {HGE_SRC} include/constants/save.h:16-24 (SAVE_PAGE_MAX 0x2F; OFFSET_saveSlotSpecs 0x2F2B4), include/save.h:264-284",
         "OPEN: not read from a live hge SaveData (G2); allocation is hooked (SaveData_New)")
     if profile["save"]["slot_specs_off"] != 0x2F2B4:
         raise Fail("derived hge slot_specs_off disagrees with the source constant OFFSET_saveSlotSpecs 0x2F2B4")
+    profile["system"]["evidence"] += f"; {HGE_SRC} include/system.h:8-48 declares the identical struct"
     profile["party_off"] = None
     profile["box_modified_flag_off"] = None
     profile["pc"] = {"array_id": 41, "slot": "pc", "box_base": 0, "box_stride": 0x1000, "mon_stride": 0x88,
@@ -1003,6 +1070,8 @@ def build_hge(inputs: Inputs) -> dict:
             "(over the 4-hook budget with anything else), so residency stays table-polled. PHYSICAL coverage is a C1-1 cell"),
         "fresh_build_association": "cached exports are the pinned file hashes, not proof they came from a fresh build of this ROM "
                                    "(lock pending hge_fresh_build_export_association)",
+        "probe_field": "hge declares only FieldSystem.savedata/taskman (include/pokemon.h:592-597); sub/live/launched_app/field_app/"
+                       "paused/save_driver/save_state are null until measured (G1) or sourced",
         "pc_swap_redirect": "see sites.pc_swap_by_index_pair.replaces.redirect_evidence",
         "hge_save_geometry_live": "SaveData geometry is source-derived; live read is G2",
         **{k: v for k, v in hgss_open().items() if k in ("phase_first_event_coverage", "battle_offsets_live_read")},
@@ -1072,6 +1141,8 @@ def pt_profile() -> dict:
                 "ball_off_block_d": 0x1B, "block_d_0x1E": "unused in Platinum (HGSS ball/mood)"},
         "boxes": 18, "mons_per_box": 30, "memorial_box": None,
         "battle": None,
+        "probe_field": None, "probe_wrong_write_offset": None,
+        "system": {"symbol": "gSystem", "vblank_counter_off": None},
         "idle": {"taskman_clause": "NOT valid (+0x10 is a transient FieldTask*)",
                  "app_clause": "FieldSystem_IsRunningApplication = processManager(+0x00)->parent/child"},
     }
@@ -1079,6 +1150,9 @@ def pt_profile() -> dict:
 
 def pt_open() -> dict:
     return {
+        "probe_field": "bind-only: Platinum FieldSystem probe offsets (processManager parent/child, save driver) are not established",
+        "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
+        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)",
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
         "battle": "Platinum battle context offsets are not established; do not derive from HGSS",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",

@@ -54,9 +54,12 @@
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
+        "probe_field": "bind-only: Platinum FieldSystem probe offsets (processManager parent/child, save driver) are not established",
+        "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
-        "sites": "bind-only pack pins no execute sites; symbols and the overlay table only"
+        "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
+        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)"
       },
       "overlay_table": {
         "active_off": 4,
@@ -727,6 +730,8 @@
           "party_hp_width": 2,
           "party_size": 236
         },
+        "probe_field": null,
+        "probe_wrong_write_offset": null,
         "save": {
           "array_addr": "SaveData + body_off + u32[SaveData + table_off + id*entry_size + field_off]",
           "array_ids": {
@@ -772,6 +777,10 @@
           "address": 35391380,
           "symbol": "sSaveDataPtr",
           "width": 4
+        },
+        "system": {
+          "symbol": "gSystem",
+          "vblank_counter_off": null
         }
       },
       "rom": {

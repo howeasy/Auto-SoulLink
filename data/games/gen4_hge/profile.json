@@ -150,6 +150,7 @@
         "pc.cur_box_off": "source projection 0x1E000 only; G2",
         "pc_swap_redirect": "see sites.pc_swap_by_index_pair.replaces.redirect_evidence",
         "phase_first_event_coverage": "PHYSICAL first/last-event coverage per phase belongs to C1-1/C1-8",
+        "probe_field": "hge declares only FieldSystem.savedata/taskman (include/pokemon.h:592-597); sub/live/launched_app/field_app/paused/save_driver/save_state are null until measured (G1) or sourced",
         "trainer": "hge PlayerProfile layout not verified against the hge source/save; reuse of the vanilla offsets is unproven"
       },
       "overlay_table": {
@@ -1170,6 +1171,67 @@
           "party_hp_width": 2,
           "party_size": 236
         },
+        "probe_field": {
+          "field_app": null,
+          "launched_app": null,
+          "live": null,
+          "paused": null,
+          "save": 12,
+          "save_driver": null,
+          "save_driver_data_off": null,
+          "save_state": null,
+          "sub": null,
+          "task": 16
+        },
+        "probe_field_caveats": [
+          "fs+0xD8 is NULL until the save driver exists; guard before reading data",
+          "src/application/view_photo.c:149-155 also uses fieldSystem->unk_D8 as a different SysTask while the photo viewer runs: read the state byte only when no application is launched (launched_app == 0)",
+          "state byte meaning: 0 init, 1 idle (accepts a request), 2 requested, 3-7 fade/run/finish (checkpoint.md section 3)"
+        ],
+        "probe_field_evidence": {
+          "field_app": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "launched_app": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "live": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "paused": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "save": {
+            "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:592-596 (FieldSystem.savedata @0xc); same offset as pokeheartgold pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:116 (saveData)",
+            "class": "SOURCE"
+          },
+          "save_driver": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "save_driver_data_off": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "save_state": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "sub": {
+            "cite": "hg-engine's FieldSystem header declares only savedata/taskman/followMon (include/pokemon.h:592-615); the vanilla offset is expected (code unhooked) but not source-verified for hge; G1 measures it",
+            "class": "OPEN"
+          },
+          "task": {
+            "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:592-597 (FieldSystem.taskman @0x10); same offset as pokeheartgold pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h:117 (taskman)",
+            "class": "SOURCE"
+          }
+        },
+        "probe_wrong_write_offset": 110,
+        "probe_wrong_write_offset_evidence": "SOURCE (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54): gSystem+0x6E is compiler padding between softResetDisabled (u8 @0x6C) and unk70 (BOOL @0x70) (include/system.h:50-58). No C writer exists: src/system.c, src/main.c, src/intro_movie.c, src/title_screen.c write only named fields, nothing takes &gSystem or clears the struct. A windowed scan of all 520 `ldr rN,=gSystem` sites in asm/*.s found no access (read or write) at any gSystem offset >= 0x60 except simulatedInputs @0x5C. The scan is heuristic, not an exhaustive dataflow proof; the .bss byte is zero from boot. hg-engine adds no gSystem write (src/save.c:759 is commented out).",
         "save": {
           "array_addr": "SaveData + dynamic_region_off + u32[SaveData + array_headers_off + id*array_header_size + 8]",
           "array_header_count": 42,
@@ -1230,7 +1292,8 @@
           "width": 4
         },
         "system": {
-          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57; MEASURED +1 per frame (platform.md)",
+          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md); hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/system.h:8-48 declares the identical struct",
+          "frame_counter_off": 48,
           "symbol": "gSystem",
           "vblank_counter_off": 44
         },

@@ -327,3 +327,37 @@ def test_xmap_static_end_and_overlay_starts_match_rom():
             g.check_xmap_vs_rom(xm, images, "heartgold")
     finally:
         xm.overlay_start["ov12"] -= 0x20  # the parse is cached across tests
+
+
+# ---- probe_field / system offsets for the C1-1 probe -------------------------------------------
+PROBE_KEYS = {"sub", "save", "task", "live", "launched_app", "field_app", "paused", "save_driver", "save_state"}
+
+
+def test_hgss_probe_field_values_types_and_evidence():
+    for title in ("heartgold", "soulsilver"):
+        prof = _pack("hgss")["titles"][title]["profile"]
+        pf = prof["probe_field"]
+        assert set(pf) >= PROBE_KEYS and all(isinstance(pf[k], int) and not isinstance(pf[k], bool) for k in PROBE_KEYS)
+        assert pf == {**pf, "sub": 0x00, "save": 0x0C, "task": 0x10, "live": 0x6C, "launched_app": 0x04, "field_app": 0x00,
+                      "paused": 0x08, "save_driver": 0xD8, "save_state": 0x01, "save_driver_data_off": 0x10}
+        ev = prof["probe_field_evidence"]
+        for key in pf:
+            assert ev[key]["class"] in ("SOURCE", "ASM") and "pokeheartgold@" in ev[key]["cite"], key
+        for key in ("save", "live", "save_driver", "save_state"):  # asm-corroborated
+            assert ev[key]["class"] == "ASM" and "asm/overlay_01_" in ev[key]["cite"], key
+        assert prof["system"]["vblank_counter_off"] == 0x2C
+        off = prof["probe_wrong_write_offset"]
+        assert isinstance(off, int) and 0x6D <= off <= 0x6F  # compiler padding after softResetDisabled @0x6C
+        assert "padding" in prof["probe_wrong_write_offset_evidence"]
+
+
+def test_hge_and_pt_probe_fields_are_null_with_open_reasons():
+    hge = _pack("hge")["titles"]["heartgold_hge"]
+    pf = hge["profile"]["probe_field"]
+    assert pf["save"] == 0x0C and pf["task"] == 0x10 and hge["profile"]["system"]["vblank_counter_off"] == 0x2C
+    for key in PROBE_KEYS - {"save", "task"}:
+        assert pf[key] is None and hge["profile"]["probe_field_evidence"][key]["class"] == "OPEN", key
+    assert "probe_field" in hge["open"]
+    pt = _pack("pt")["titles"]["platinum"]
+    assert pt["profile"]["probe_field"] is None and "probe_field" in pt["open"]
+    assert pt["profile"]["probe_wrong_write_offset"] is None
