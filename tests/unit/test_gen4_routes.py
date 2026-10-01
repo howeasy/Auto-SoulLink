@@ -3,6 +3,7 @@ real ROM/pret/save cases skip by name when an input is absent and fail when pres
 (tests/TESTING.md)."""
 
 import json
+import re
 import struct
 from pathlib import Path
 
@@ -386,3 +387,643 @@ def test_real_pokegear_errand_data_matches_the_decomp():
     # zone_event 057_T20 warp -> player house 1F; 060_T20R0201 door warp and Mom (gsmama)
     assert (e.house_id, e.door_out, e.door_in, e.npc) == (63, (695, 396), (3, 10), (6, 7))
     assert e.house.map_at(3, 10) == 63 and e.house.attr(3, 10) is not None
+
+
+# --- the Cherrygrove PC stop (G1 row i / the `pc` phase) -------------------------------------------
+def _pc_stop():
+    """An outdoor strip with a door at (4,3) and an interior with the PC at (4,1); the stand tile is
+    south of the PC, the counter tiles beside it are collisions."""
+    outer = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 3)})
+    house = _world(
+        ["#######", "#.....#", "#.....#", "#.....#", "#######"], blocked={(4, 1), (1, 3)}, header=8
+    )
+    return outer, gr.Errand(8, 7, house, (4, 3), (1, 3), (4, 1))
+
+
+def test_pc_leg_ends_on_the_tile_south_of_the_pc_facing_it():
+    _, err = _pc_stop()
+    r = gr.plan_pc(err, {"map": 8, "x": 1, "y": 3, "dir": 0})
+    end = gr.replay(err.house, r)[-1]
+    assert end == (4, 2) and r["pc"] == {"x": 4, "y": 1, "stand": [4, 2], "face": "Up"}
+    assert r["kind"] == "pc" and r["phase"] == "deposit"
+    _check_never_blocked(err.house, r)
+    # already standing there: an empty walk, not a refusal
+    assert gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 3})["steps"] == []
+
+
+def test_pc_leg_refuses_a_wrong_map_and_an_unreachable_stand_tile():
+    _, err = _pc_stop()
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 7, "x": 1, "y": 3, "dir": 0})
+    assert e.value.reason == "map_mismatch"
+    err.house.blocked.add((4, 2))  # a counter/NPC on the stand tile: the PC cannot be faced
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 8, "x": 1, "y": 3, "dir": 0})
+    assert e.value.reason == "pc_data"
+
+
+def test_the_walk_to_the_door_avoids_grass_when_a_detour_exists():
+    # row 1 is 6 grass tiles; the clean detour along row 3 is a few tiles longer: grass is priced
+    rows = [
+        "###########",
+        "#.gggggg..#",
+        "#.#######.#",
+        "#.........#",
+        "###########",
+    ]
+    outer = _world(rows, blocked={(9, 1)})
+    house = _world(["###", "#.#", "###"], header=8)
+    err = gr.Errand(8, 7, house, (9, 1), (1, 1), (1, 1))
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    body = {**r, "steps": r["steps"][:-1]}
+    assert r["approach_grass"] == [] and not any(outer.is_grass(*t) for t in gr.replay(outer, body))
+    assert gr.replay(outer, body)[-1] == (9, 2) and r["steps"][-1]["warp"]
+
+
+def test_unavoidable_grass_and_coord_events_are_reported_to_the_walker():
+    # the only way to the door crosses 2 grass tiles and a coord event: the Lua polls the battle chain
+    # on the grass tiles (route.approach_grass) and, with route.run_from_wild, escapes the fight
+    outer = _world(
+        ["########", "#.gg...#", "########"],
+        blocked={(6, 1)},
+        soft={(4, 1)},
+        scripts={(4, 1): ("T21_001",)},
+    )
+    house = _world(["###", "#.#", "###"], header=8)
+    err = gr.Errand(8, 7, house, (6, 1), (1, 1), (1, 1))
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    assert r["approach_grass"] == [[2, 1], [3, 1]]
+    assert r["soft_events"] == [{"x": 4, "y": 1, "scriptIds": ["T21_001"]}]
+    assert r["steps"][-1]["warp"] and r["steps"][-1]["to"]["map"] == 8
+
+
+# --- pack-derived legs, RAM layout and the SYNTH setup --------------------------------------------
+@pytest.mark.parametrize("game", ["HG", "hge"])
+def test_pack_legs_resolve_the_battle_escape_and_the_native_save(game):
+    legs = gr.pack_legs(game, gr.PC_LEGS + gr.SAVE_LEGS)
+    run = legs["run_from_wild"]
+    assert run["until"]["address"] == 0x021D4158 and run["until"]["symbol"] == "sFieldSysPtr"
+    assert run["steps"][0]["press"] == ["X"]  # the first key press only wakes the battle cursor
+    assert legs["start_menu_cursor_to_save"]["until"]["value"] == 5  # SAVE is cell 5
+    assert [s["press"] for s in legs["start_menu_cursor_to_save"]["steps"]] == [["Down"], ["Left"]]
+    assert legs["save_confirm_until_saved"]["until"]["value"] == 15  # TouchSaveApp CLOSE
+
+
+def test_an_open_pack_leg_is_refused_by_name():
+    with pytest.raises(gr.RouteError) as e:
+        gr.pack_legs("HG", ["pc_open_storage"])
+    assert e.value.reason == "leg_open" and "pc_open_storage" in str(e.value)
+
+
+def test_pack_ram_comes_from_the_pack_and_hge_has_no_modified_word():
+    hg, hge = gr.pack_ram("HG"), gr.pack_ram("hge")
+    assert (hg["pc"]["cur_box_off"], hg["pc"]["mod_off"], hg["pc"]["boxes"]) == (
+        0x12000,
+        0x12004,
+        18,
+    )
+    assert (hge["pc"]["cur_box_off"], hge["pc"]["mod_off"], hge["pc"]["boxes"]) == (None, None, 30)
+    assert hg["hdr_off"] == 143380 and hge["hdr_off"] == 192532  # hge's SaveData is larger
+    assert (hg["id_party"], hg["id_pc"], hg["party"]["size"], hg["pc"]["mon_stride"]) == (
+        2,
+        41,
+        236,
+        136,
+    )
+    assert hg["field"]["save_state"] == 1 and hg["fieldsys"] == 0x021D4158
+
+
+def _synth_save(tmp_path, *, sidecar=True, sha=None):
+    save = tmp_path / "party2.SaveRAM"
+    save.write_bytes(b"synthetic save bytes")
+    if sidecar:
+        row = {
+            "schema": gr.SYNTH_SCHEMA,
+            "kind": "party2",
+            "out_sha1": sha or gr.sha1_of(save),
+            "new_pid": 0xCAFEBABE,
+            "otid": 0x12345678,
+        }
+        Path(str(save) + ".synth.json").write_text(json.dumps(row), encoding="utf-8")
+    return save
+
+
+def test_the_pc_run_refuses_a_save_without_its_synth_sidecar(tmp_path):
+    save = _synth_save(tmp_path, sidecar=False)
+    with pytest.raises(gr.RouteError) as e:
+        gr.synth_setup(save)
+    assert e.value.reason == "setup_missing" and "gen4_synth_save.py party2" in str(e.value)
+    # the refusal comes before the lane is touched or the emulator is looked for
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(save=save, target="pc", lane="never_created_pc_lane")
+    assert e.value.reason == "setup_missing"
+    assert not gr.lane_dir("never_created_pc_lane").exists()
+
+
+def test_the_synth_sidecar_must_describe_this_save(tmp_path):
+    save = _synth_save(tmp_path, sha="0" * 40)
+    with pytest.raises(gr.RouteError) as e:
+        gr.synth_setup(save)
+    assert e.value.reason == "setup_mismatch"
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(target="nowhere")
+    assert e.value.reason == "unknown_target"
+
+
+def test_the_receipt_is_labelled_synth_with_the_sidecar_hash(tmp_path):
+    import hashlib
+
+    save = _synth_save(tmp_path)
+    synth = gr.synth_setup(save)
+    sidecar = Path(str(save) + ".synth.json")
+    assert synth["setup"] == "SYNTH" and synth["new_pid"] == 0xCAFEBABE
+    assert synth["sidecar_sha256"] == hashlib.sha256(sidecar.read_bytes()).hexdigest()
+    legs = [
+        {
+            "leg": 1,
+            "kind": "pc",
+            "phase": "deposit",
+            "status": "PC_DEPOSIT",
+            "detail": "x",
+            "log": "y",
+        }
+    ]
+    rec = gr.build_receipt("HG", save, synth, legs, {"status": "PC_DEPOSIT", "detail": "x"})
+    assert (rec["setup"], rec["sidecar_sha256"], rec["final_status"]) == (
+        "SYNTH",
+        synth["sidecar_sha256"],
+        "PC_DEPOSIT",
+    )
+    assert "log" not in rec["legs"][0]  # only the status line travels
+
+
+def test_resync_detail_carries_done_and_old_logs_still_parse():
+    new = gr.RESYNC_RE.search("map=69 x=8 y=19 dir=0 done=1 state=C:/a.State")
+    assert (new[1], new[5], new[6]) == ("69", "1", "C:/a.State")
+    mid = gr.RESYNC_RE.search("map=33 x=1 y=2 dir=2 done=0 state=C:/b.State")
+    assert mid[5] == "0"  # interrupted mid-walk: the same phase is re-planned
+    old = gr.RESYNC_RE.search("map=60 x=1 y=2 dir=1 state=C:/c.State")
+    assert old[5] is None and old[6] == "C:/c.State"
+
+
+def test_the_lua_leg_reads_only_keys_the_planner_and_pack_provide():
+    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
+    ram = gr.pack_ram("HG")
+
+    for k in set(re.findall(r"\bRAM\.(\w+)", src)):
+        assert k in ram, f"Lua reads RAM.{k}, which pack_ram does not provide"
+    for k in set(re.findall(r"\bF\.(\w+)", src)):
+        assert k in ram["field"], f"Lua reads F.{k}, absent from probe_field"
+    assert set(
+        re.findall(
+            r'"(open_start_menu|start_menu_\w+|save_confirm_until_saved|close_start_menu)"', src
+        )
+    ) == set(gr.SAVE_LEGS)
+    for k in ("run_from_wild", "persistence", "ram", "synth", "pc"):
+        assert f"route.{k}" in src
+
+
+def test_the_pc_behaviour_and_facing_requirement_match_the_decomp():
+    for p, what in ((PRET, "pokeheartgold source"),):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    mb = (PRET / "include/constants/metatile_behavior.h").read_text(encoding="utf-8")
+    body = mb[mb.index("enum TILE_BEHAVIOR {") :]
+    names = re.findall(r"TILE_BEHAVIOR_\w+", body.split("};")[0])
+    assert names.index("TILE_BEHAVIOR_131") == gr.PC_BEHAVIOR == 0x83  # enum position = value
+    c = (PRET / "src/metatile_behavior.c").read_text(encoding="utf-8")
+    assert re.search(r"BOOL sub_0205B7E0\(u8 tile\) \{\s*return tile == TILE_BEHAVIOR_131;", c)
+    asm = (PRET / "asm/overlay_01_021E6880.s").read_text(encoding="utf-8")
+    # GetInteractedMetatileScript: PC script only when the player faces north (r6 == 0)
+    pc = asm[asm.index("bl sub_0205B7E0") :][:400]
+    assert "cmp r6, #0" in pc and "std_pokecenter_pc" in pc
+    std = (PRET / "include/constants/std_script.h").read_text(encoding="utf-8")
+    assert re.search(r"#define std_pokecenter_pc\s+2010", std)
+
+
+def test_real_cherrygrove_pc_data_matches_the_decomp():
+    for p, what in ((ROM, "HG ROM"), (PRET, "pokeheartgold source")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    e = gr.load_errand(ROM, PRET, "cherrygrove_pc", gr.CHERRYGROVE_ID)
+    # zone_event 064_T21 warp -> MAP_CHERRYGROVE_POKECENTER_1F; 066_T21PC0101 door warp; the PC tile
+    assert (e.house_id, e.door_out, e.door_in, e.npc) == (69, (564, 391), (8, 19), (11, 12))
+    assert e.house.map_at(8, 19) == 69  # the interior loads as its own map
+    assert e.house.attr(8, 19) is not None and e.house.attr(11, 12) & 0x8000  # PC tile is solid
+    stand = (e.npc[0], e.npc[1] + 1)
+    assert e.house.walkable(*stand)
+    # the interior bg event at (4,8) is not the PC (it decodes to behaviour 0x85)
+    assert (e.house.attr(4, 8) & 0xFF) == 0x85 and (4, 8) in e.house.blocked
+
+
+def test_real_pc_stop_plan_from_the_hg_save(real):
+    world, pos = real
+    plan = gr.plan_pc_stop(ROM, PRET, world, pos)
+    enter, dep = plan["enter"], plan["deposit"]
+    # outdoors: never crosses a blocked tile, ends in front of the door and takes the warp into map 69
+    body = {**enter, "steps": enter["steps"][:-1]}
+    _check_never_blocked(world, body)
+    assert gr.replay(world, body)[-1] == (564, 392)
+    assert enter["steps"][-1]["warp"] and enter["steps"][-1]["to"]["map"] == 69
+    maps = {s["to"]["map"] for s in enter["steps"][:-1]}
+    assert maps == {33, 67}  # Route 29 and Cherrygrove (the New Bark start tile is map 60)
+    # encounters: the corridor has grass no path avoids; every tile is named for the battle poll
+    assert 0 < len(enter["approach_grass"]) <= 40
+    assert all(world.is_grass(*t) for t in map(tuple, enter["approach_grass"]))
+    ids = {sid for e in enter["soft_events"] for sid in e["scriptIds"]}
+    assert ids == {
+        "_EV_scr_seq_T20_002 + 1",
+        "_EV_scr_seq_R29_001 + 1",
+        "_EV_scr_seq_T21_003 + 1",
+        "_EV_scr_seq_T21_001 + 1",
+    }
+    # indoors: ends on the tile south of the PC, facing it
+    pc = gr.load_errand(ROM, PRET, "cherrygrove_pc", gr.CHERRYGROVE_ID)
+    _check_never_blocked(pc.house, dep)
+    assert gr.replay(pc.house, dep)[-1] == (11, 13) and dep["pc"]["face"] == "Up"
+    assert (pc.house.attr(11, 12) & 0xFF) == gr.PC_BEHAVIOR  # the tile north of it is the PC
+    json.dumps(plan)
+
+
+def test_real_pc_stop_plan_wrong_map_is_refused(real):
+    world, pos = real
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc_stop(ROM, PRET, world, {**pos, "map": 33})
+    assert e.value.reason == "map_mismatch"
+
+
+# --- the Lua PC leg against a fake DS (lupa): Lua plumbing, NOT game truth --------------------------
+# The fake encodes the control flow documented in lua/tests/gen4_route_play.lua (PC script menus, the
+# OVY_14 state machine, the start-menu SAVE panel). It proves the leg's loops, RAM readers and
+# verifications run end to end and fail by name; whether the real game behaves like the fake is the
+# live run's job (card gen4-C1-10 phase 2).
+class _Exit(Exception):
+    pass
+
+
+class FakeDS:
+    BASE = 0x02000000
+    FS, SUB0, LOC, DRV, DATA, P3, P4 = (
+        0x02300000,
+        0x02301000,
+        0x02302000,
+        0x02303000,
+        0x02303100,
+        0x02303200,
+        0x02303300,
+    )
+    MAN, APPD, SAVE = 0x02304000, 0x02305000, 0x02310000
+    PARTY_OFF, PC_OFF = 0x90, 0x10000
+
+    def __init__(self, ram_layout, stand, new_pid, *, wake_first=False, party=2):
+        self.ram = bytearray(0x400000)
+        self.R = ram_layout
+        self.stand, self.new_pid, self.wake_first = stand, new_pid, wake_first
+        self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
+        self.x, self.y, self.dir = stand[0], stand[1], 1
+        self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
+        w = self.w32
+        w(0x021D4158, self.FS)
+        w(0x021D2228, self.SAVE)
+        w(self.FS, self.SUB0)
+        w(self.FS + 0x6C, 1)
+        w(self.FS + 0x20, self.LOC)
+        w(self.FS + 216, self.DRV)
+        w(self.DRV + 16, self.DATA)
+        w(self.DATA + 4, self.P3)
+        w(self.P3 + 16, self.P4)
+        self.ram[self.DATA - self.BASE + 1] = 1  # save driver idle
+        R = ram_layout
+        for aid, off in ((R["id_party"], self.PARTY_OFF), (R["id_pc"], self.PC_OFF)):
+            h = self.SAVE + R["hdr_off"] + aid * R["hdr_size"]
+            w(h, aid)
+            w(h + R["hdr_offset_field"], off)
+        self.party = self.SAVE + R["dyn_off"] + self.PARTY_OFF
+        self.pc = self.SAVE + R["dyn_off"] + self.PC_OFF
+        w(self.party, 6)
+        w(self.party + R["party"]["count_off"], party)
+        for i, pid in enumerate((0x1111, new_pid)[:party]):
+            w(self.party + R["party"]["mons_off"] + i * R["party"]["size"], pid)
+        self.sync()
+
+    # --- memory
+    def w32(self, a, v):
+        struct.pack_into("<I", self.ram, a - self.BASE, v & 0xFFFFFFFF)
+
+    def r(self, a, n):
+        o = a - self.BASE
+        return int.from_bytes(self.ram[o : o + n], "little") if 0 <= o < len(self.ram) - 4 else 0
+
+    def sync(self):
+        struct.pack_into("<5i", self.ram, self.LOC - self.BASE, 8, -1, self.x, self.y, self.dir)
+
+    def task(self, v):
+        self.w32(self.FS + 16, v)
+
+    def app_state(self, s):
+        self.st, self.t = s, 0
+        self.w32(self.APPD + 0x30, s)
+
+    # --- the game
+    def step(self, held):
+        if self.exited:
+            raise _Exit
+        self.frame += 1
+        new = {b for b in held if b not in self.prev}
+        self.prev, self.t = set(held), self.t + 1
+        getattr(self, "_" + self.mode)(held, new)
+        self.sync()
+
+    def _field(self, held, new):
+        if "Up" in held and self.dir != 0:
+            self.dir = 0
+        if "A" in new and (self.x, self.y) == tuple(self.stand) and self.dir == 0:
+            self.mode, self.sub, self.t = "script", "msg1", 0
+            self.task(1)
+        if "X" in new:
+            self.mode, self.t, self.cell, self.panel = "startmenu", 0, 0, 0
+            self.task(1)
+            self.panel_sync()
+
+    def _script(self, held, new):
+        order = ["msg1", "menu_pc", "msg2", "menu_sub"]
+        if self.t < 8:
+            return
+        if "A" in new and self.sub in order[:3]:
+            self.sub, self.t = order[order.index(self.sub) + 1], 0
+        elif "A" in new and self.sub == "menu_sub":  # DEPOSIT POKEMON -> the PC application
+            self.mode, self.t = "launching", 0
+        elif "B" in new and self.sub == "menu_sub":
+            self.sub, self.t = "menu_pc2", 0
+        elif "B" in new and self.sub == "menu_pc2":
+            self.mode = "field"
+            self.task(0)
+
+    def _launching(self, held, new):
+        if self.t >= 20:
+            self.w32(self.SUB0 + 4, self.MAN)
+            self.w32(self.MAN + 0x0C, 14)
+            self.w32(self.MAN + 0x1C, self.APPD)
+            self.ram[self.APPD - self.BASE + 0x21] = 0xFF
+            self.mode, self.cursor, self.toolbar = "app", 0, False
+            self.app_state(0xB)
+
+    def _app(self, held, new):
+        st, t = self.st, self.t
+        if st == 0xB and t >= 30:
+            self.app_state(0x5B)
+        elif st == 0x5B and t >= 10:
+            if "Right" in new:
+                if self.wake_first and not self.woke:
+                    self.woke = True  # the first d-pad press only wakes the cursor
+                else:
+                    self.cursor = min(self.cursor + 1, 1)
+            if "A" in new:
+                if self.toolbar:
+                    self.app_state(0x5C)
+                elif self.cursor < self.r(self.party + self.R["party"]["count_off"], 4):
+                    self.toolbar = True
+                    self.ram[self.APPD - self.BASE + 0x21] = 0x1E + self.cursor
+                    self.app_state(0x6F)
+            elif "B" in new:
+                if self.toolbar:
+                    self.toolbar = False
+                    self.app_state(0x70)
+                else:
+                    self.app_state(0x94)
+        elif st in (0x6F, 0x70) and t >= 20:
+            self.app_state(0x5B)
+        elif st == 0x94 and t >= 10:
+            self.app_state(7)
+        elif st == 7 and "B" in new:
+            self.app_state(0xB3)
+        elif st == 0xB3 and t >= 30:
+            self.w32(self.SUB0 + 4, 0)
+            self.mode, self.sub, self.t = "script", "menu_sub", 0
+        elif st == 0x5C and t >= 40:
+            self.app_state(0x61)
+        elif st == 0x61 and t >= 10 and "A" in new:
+            self.app_state(0x66)
+        elif st == 0x66 and t >= 60:
+            self.commit()
+            self.app_state(0x6B)
+        elif st == 0x6B and t >= 40:
+            self.toolbar = False
+            self.app_state(0x5B)
+
+    def commit(self):
+        R = self.R
+        slot = self.cursor
+        pid = self.r(self.party + R["party"]["mons_off"] + slot * R["party"]["size"], 4)
+        self.w32(self.pc + 0 * R["pc"]["box_stride"] + 0 * R["pc"]["mon_stride"], pid)
+        self.w32(self.party + R["party"]["mons_off"] + slot * R["party"]["size"], 0)
+        self.w32(self.party + R["party"]["count_off"], 1)
+        if R["pc"]["mod_off"] is not None:
+            self.w32(self.pc + R["pc"]["mod_off"], self.r(self.pc + R["pc"]["mod_off"], 4) | 1)
+
+    def panel_sync(self):
+        self.w32(self.P4 + 20, self.cell)
+        self.w32(self.P4 + 12, self.panel)
+
+    def _startmenu(self, held, new):
+        if self.t < 10:
+            return
+        if self.panel == 0:
+            if "Down" in new:
+                self.cell = 2
+            if "Left" in new and self.cell == 2:
+                self.cell = 5
+            if "A" in new and self.cell == 5:
+                self.panel = 4
+            if "B" in new:
+                self.mode = "field"
+                self.task(0)
+        elif self.panel == 4 and "A" in new:
+            self.panel, self.t = 15, 0
+            mod = self.R["pc"]["mod_off"]
+            if mod is not None:
+                self.w32(self.pc + mod, 0)  # Save_ResetPCBoxModifiedFlags
+        elif self.panel == 15 and self.t >= 30:
+            self.panel = 0
+        self.panel_sync()
+
+
+def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE):
+    lupa = pytest.importorskip("lupa")
+    _, err = _pc_stop()
+    stand = (4, 2)
+    route = gr.plan_pc(err, {"map": 8, "x": stand[0], "y": stand[1], "dir": 1})
+    route.update(
+        run_from_wild=gr.pack_legs("HG", gr.PC_LEGS)["run_from_wild"],
+        persistence=gr.pack_legs("HG", gr.SAVE_LEGS),
+        ram=gr.pack_ram("HG"),
+        synth={"new_pid": pid, "otid": 0x12345678},
+    )
+    rpath, out = tmp_path / "route.json", tmp_path / "out.log"
+    rpath.write_text(json.dumps(route), encoding="utf-8")
+    env = {
+        "G4_REPO": str(gr.REPO).replace("\\", "/"),
+        "G4_ROUTE": str(rpath).replace("\\", "/"),
+        "G4_OUT": str(out).replace("\\", "/"),
+        "G4_LANE": str(tmp_path).replace("\\", "/"),
+        "G4_TAG": "t",
+        "G4_LOAD_STATE": "",
+    }
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party)
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    held: dict = {}
+
+    def frameadvance():
+        h = set(held)
+        held.clear()
+        ds.step(h)
+
+    def joypad_set(t):
+        held.clear()
+        held.update({k: True for k, v in t.items() if v})
+
+    def read(n):
+        return lambda a, _d=None: ds.r(a, n)
+
+    def noop(*_a):
+        return None
+
+    def exit_():
+        ds.exited = True
+
+    g = lua.globals()
+    g.emu = lua.table(frameadvance=frameadvance, framecount=lambda: ds.frame, limitframerate=noop)
+    g.joypad = lua.table(set=joypad_set)
+    g.memory = lua.table(read_u32_le=read(4), read_u16_le=read(2), read_u8=read(1))
+    g.savestate = lua.table(save=noop, load=noop)
+    g.client = lua.table(screenshot=noop, exit=exit_)
+    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
+    try:
+        lua.execute(src)
+    except Exception as exc:  # the script ends in finish(): the fake raises once client.exit ran
+        assert ds.exited, f"the Lua leg crashed instead of finishing: {exc}"
+    last = [ln for ln in out.read_text(encoding="utf-8").splitlines() if "RESULT" in ln][-1]
+    return last, ds, out.read_text(encoding="utf-8")
+
+
+def test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch)
+    assert (
+        "RESULT PC_DEPOSIT party=2->1 box=0/0 pid=0xcafebabe modified=0x1->0 save_driver=idle"
+        in last
+    ), log
+    assert ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1
+    assert (
+        "slot 1" not in log and "select try 1 sel 0x1f" in log
+    )  # the cursor selected slot 1 first try
+
+
+def test_the_lua_pc_leg_retries_a_cursor_that_only_woke_up(tmp_path, monkeypatch):
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, wake_first=True)
+    # first Right is swallowed: slot 0 is selected, cancelled with B, then Right+A picks slot 1
+    assert "select try 1 sel 0x1e" in log and "select try 2 sel 0x1f" in log
+    assert "RESULT PC_DEPOSIT" in last, log
+
+
+def test_the_lua_pc_leg_refuses_a_save_that_is_not_the_synth_setup(tmp_path, monkeypatch):
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, party=1)
+    assert "RESULT FAIL setup_not_party2" in last
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, pid=0xCAFEBABE)  # control: the setup passes
+    assert "RESULT PC_DEPOSIT" in last
+
+
+# --- run_lane phase sequencing (fake emulator process, real map data) -----------------------------
+_SYNTH = {
+    "setup": "SYNTH",
+    "sidecar": "party2.SaveRAM.synth.json",
+    "sidecar_sha256": "ab" * 32,
+    "new_pid": 0xABCD1234,
+    "otid": 0x00010002,
+    "out_sha1": "x",
+}
+
+
+def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
+    """Replace the EmuHawk process and the fixtures it needs: `script(leg, route)` returns the leg's
+    log text. Returns the recorded (route, load_state) of every launched leg."""
+    calls = []
+
+    class FakeProc:
+        def __init__(self, cmd, cwd=None, env=None):
+            route = json.loads(Path(env["G4_ROUTE"]).read_text(encoding="utf-8"))
+            calls.append({"route": route, "load_state": env["G4_LOAD_STATE"]})
+            Path(env["G4_OUT"]).write_text(script(len(calls), route), encoding="utf-8")
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    for name, fake in {
+        "lane_dir": lambda lane: tmp_path / lane,
+        "write_nds_run_config": lambda *a, **k: None,
+        "kill_our_emuhawk": lambda *a, **k: None,
+        "stage_rom": lambda rom, ld: Path(ld) / "rom.nds",
+        "stage_save": lambda save, ld, *a, **k: Path(ld) / "x.SaveRAM",
+        "sha1_of": lambda p: "0" * 40,
+        "synth_setup": lambda save: _SYNTH,
+        "save_position": lambda save, game="HG": pos,
+        "verify_saved": lambda *a: {"party": 1, "box": 0, "slot": 0},
+    }.items():
+        monkeypatch.setattr(gr, name, fake)
+    monkeypatch.setattr(gr.subprocess, "Popen", FakeProc)
+    return calls
+
+
+def test_run_lane_replans_an_interrupted_enter_leg_then_deposits(real, tmp_path, monkeypatch):
+    _, pos = real
+
+    def script(leg, route):
+        if leg == 1:  # a coord-event cutscene mid-walk (done=0): the same phase must be re-planned
+            assert (
+                route["kind"] == "errand" and route["phase"] == "enter" and route["run_from_wild"]
+            )
+            return "[f1] RESULT RESYNC map=33 x=640 y=398 dir=2 done=0 state=C:/s1.State\n"
+        if leg == 2:  # re-planned from the logged tile, resumed from the state, reaches the door
+            assert route["start"]["x"] == 640 and route["phase"] == "enter"
+            return "[f2] RESULT RESYNC map=69 x=8 y=19 dir=0 done=1 state=C:/s2.State\n"
+        assert route["kind"] == "pc" and route["start"]["map"] == 69
+        assert route["synth"]["new_pid"] == _SYNTH["new_pid"] and route["persistence"]
+        assert route["ram"]["id_pc"] == 41
+        return "[f3] RESULT PC_DEPOSIT party=2->1 box=0/0\n"
+
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, script)
+    save = tmp_path / "party2.SaveRAM"
+    res = gr.run_lane(ROM, save, PRET, target="pc", lane="L", tag="t")
+    assert res["status"] == "PC_DEPOSIT"
+    assert [c["load_state"] for c in calls] == ["", "C:/s1.State", "C:/s2.State"]
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["setup"] == "SYNTH" and rec["sidecar_sha256"] == _SYNTH["sidecar_sha256"]
+    assert [leg["status"] for leg in rec["legs"]] == ["RESYNC", "RESYNC", "PC_DEPOSIT"]
+
+
+def test_run_lane_stops_a_cutscene_that_puts_the_player_back(real, tmp_path, monkeypatch):
+    _, pos = real
+    here = f"map={pos['map']} x={pos['x']} y={pos['y']} dir=1 done=0 state=C:/s.State"
+    _fake_emuhawk(monkeypatch, tmp_path, pos, lambda leg, route: f"[f1] RESULT RESYNC {here}\n")
+    res = gr.run_lane(ROM, tmp_path / "party2.SaveRAM", PRET, target="pc", lane="L", tag="t")
+    assert res["status"] == "RESYNC_LOOP"  # the same script again: no endless re-planning
+
+
+def test_run_lane_reports_a_saved_file_that_lacks_the_clone(real, tmp_path, monkeypatch):
+    _, pos = real
+    calls = _fake_emuhawk(
+        monkeypatch, tmp_path, pos, lambda leg, route: "[f1] RESULT PC_DEPOSIT x\n"
+    )
+
+    def refuse(*a):
+        raise gr.RouteError("saved_mismatch", "saved file: party 2 mons")
+
+    monkeypatch.setattr(gr, "verify_saved", refuse)
+    res = gr.run_lane(ROM, tmp_path / "party2.SaveRAM", PRET, target="pc", lane="L", tag="t")
+    assert (
+        res["status"] == "SAVE_MISMATCH" and "saved_mismatch" in res["detail"] and len(calls) == 1
+    )

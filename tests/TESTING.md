@@ -573,10 +573,71 @@ Anything else is exit 1 with `RESULT FAIL <why>` in the log, plus a `fail.png`.
   `route.soft_events` with its scriptIds and the harness names the nearby ones when a leg
   resyncs. A script that does not clear with A ends the run after 4 legs.
 
+### The Cherrygrove PC stop (G1 row i and the `pc` phase)
+
+`--target pc` walks to the Cherrygrove Pokemon Center PC and deposits a party mon into a box by
+**normal button input only**, then saves natively. The owner's saves hold one party mon and Gen 4
+refuses to deposit the last one, so a **disclosed SYNTH setup** supplies the second mon
+(`docs/gen4/reviews/DECISIONS_2026-10-01.md`, "box-mon setup"); everything after it runs natively.
+
+```bash
+python tools/gen4_synth_save.py party2 --profile hgss --src <battery> --out C:/slink/g4/saves/hg_party2.SaveRAM
+python tools/gen4_routes.py plan --target pc --out pc_plan.json        # offline: both walks, no emulator
+python tools/gen4_routes.py run --target pc --save C:/slink/g4/saves/hg_party2.SaveRAM --lane route_pc
+python tools/gen4_routes.py run --game hge --errand pokegear --target pc --save <hge party2 copy> --lane route_pc_hge
+```
+
+`run --target pc` refuses (named `setup_missing` / `setup_mismatch`, before the lane is touched) a
+save without its `<save>.synth.json` sidecar describing that exact file. Every receipt
+(`<lane>/<tag>_receipt.json`) carries `setup: SYNTH`, the sidecar's sha256 and each leg's status.
+
+**Legs** (each leg re-plans from the position the previous one logged, like a cutscene resync):
+
+| Leg | What it does |
+|---|---|
+| `enter` (kind `errand`) | New Bark -> Route 29 -> Cherrygrove -> the tile in front of the Pokemon Center door -> the door step (map 69). Grass is priced (`GRASS_COST`), not forbidden: 32 grass tiles on Route 29 are unavoidable and listed in `approach_grass`. A wild encounter is escaped with the pack's `run_from_wild` recipe and the step re-issued. A coord-event cutscene ends the leg `RESYNC done=0` and the same phase is re-planned from where it stopped (`RESYNC_LOOP` when the same script puts the player back) |
+| `deposit` (kind `pc`) | Interior: from the arrival tile to (11,13), the tile south of the PC at (11,12) (the only behaviour-0x83 tile); turn north; A through the PC script; OVY_14 deposit of party slot 1; leave the PC; native SAVE through the pack's `persistence_route` legs; verify |
+
+The PC is a **metatile** script, not a bg event: `GetInteractedMetatileScript` runs
+`std_pokecenter_pc` when the tile in front has behaviour `TILE_BEHAVIOR_131` (0x83) **and the player
+faces north** (`asm/overlay_01_021E6880.s:1466-1700`, `src/metatile_behavior.c:91-93`). A unit test
+re-reads those lines from the pret clone.
+
+**Button path** (every step source-derived; pokeheartgold@ad7a3afa; offsets and state numbers in the
+header of `lua/tests/gen4_route_play.lua`): A -> "booted up the PC" (A) -> "Which PC?" cursor on the
+first item (A) -> "Storage System accessed" (A) -> sub-menu cursor on DEPOSIT POKeMON (A) ->
+`ScrCmd_158 0` -> `PCBox_LaunchApp` (OVY_14, mode 0, `scr_seq_0003.s` `_0B01`/`_0B17`/`_0BA2`). In
+the app (state int at `man->data+0x30`): state 0x5B party list, cursor on slot 0 -> Right -> A selects
+slot 1 (`data+0x21 == 0x1F`) -> A on the toolbar's first button (STORE, state 0xA9) -> state 0x61 box
+chooser on the active box -> A commits (state 0x6B, `ov14_021E6318`) -> back to 0x5B -> B ("Continue
+Box operations?", YesNo) -> B (= No) exits -> B, B closes the script menus.
+
+**Verified by RAM, per step:** the launched-app manager's overlay id is 14; the selected cell is
+slot 1; the party count drops 2 -> 1 with slot 0's PID unchanged; the clone's PID appears in exactly
+one box slot and the box count rises by one; `PCStorage.boxModifiedFlag` (HG: pack
+`profile.pc.box_modified_flag_off`) has that box's bit set, then is **0 after the native SAVE**; the
+save driver returns to idle (`probe_field.save_state == 1`, no task, no launched app). After the run
+Python decodes the lane's battery file with the codec: one party mon, the clone boxed
+(`SAVE_MISMATCH` otherwise).
+
+**PASS:** `run --target pc` exits 0 only on `RESULT PC_DEPOSIT party=2->1 box=B/S pid=... modified=0x1->0
+save_driver=idle`. Anything else is exit 1 with the named `RESULT FAIL <why>` and a `fail.png`.
+
+**OPEN (not a guess, not yet run live):** the cursor start cell and the key-mode first press (the
+leg retries Right+A up to 3 times and checks `data+0x21`); the toolbar button order (button 0 = STORE
+is read from the key-mode jump table); the B-B exit through the YesNo prompt; hge's PC UI (the
+paths above are vanilla OVY_14; hge records no `boxModifiedFlag` offset, so its modified-flag check
+is skipped and the box census plus the codec decode carry the evidence); the pack's
+`pc_*` route legs stay OPEN until the live run confirms this recipe.
+
+**Headless (no emulator):** `tests/unit/test_gen4_routes.py` plans the whole stop, pins the PC
+behaviour and facing rule to the decomp, and runs the real Lua leg against a **fake DS** (lupa): that
+proves the leg's loops, RAM readers and refusals, not the game's behaviour.
+
 ### Headless
 
 ```bash
-python -m pytest tests/unit/test_gen4_routes.py -v     # 28 tests, no emulator
+python -m pytest tests/unit/test_gen4_routes.py -v     # 51 tests, no emulator
 ```
 
 The real-data cases skip by name when the ROM/pret/save is absent and fail when an input

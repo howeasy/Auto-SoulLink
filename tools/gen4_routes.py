@@ -54,6 +54,7 @@ Exit codes: 0 ok, 1 FAIL (present but wrong / refused), 2 SKIP (an input is abse
 from __future__ import annotations
 
 import argparse
+import hashlib
 import heapq
 import json
 import os
@@ -69,7 +70,7 @@ from typing import NamedTuple
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from server.adapters.gen4_codec import parse_save  # noqa: E402
+from server.adapters.gen4_codec import mon_key, parse_save  # noqa: E402
 from tools.gen4_fixtures import (  # noqa: E402
     BIZHAWK_CONFIG,
     FixtureError,
@@ -362,8 +363,14 @@ SOFT_COST = 60  # extra step cost on a coord-event tile (crossable, but it may f
 SEARCH_LIMIT = 600_000  # settled nodes; over it is a named refusal, not "no grass"
 
 
-def _search(world: World, start: tuple[int, int], goal_ok, limit: int = 600_000):
-    """Dijkstra (unit steps, SOFT_COST extra on a coord-event tile): cheapest path to a goal."""
+GRASS_COST = 12  # extra step cost on encounter grass for walks that must NOT fight (the PC route)
+
+
+def _search(
+    world: World, start: tuple[int, int], goal_ok, limit: int = 600_000, grass_cost: int = 0
+):
+    """Dijkstra (unit steps, SOFT_COST extra on a coord-event tile, `grass_cost` extra on
+    encounter grass): cheapest path to a goal."""
     best = {start: 0}
     prev = {start: None}
     heap = [(0, start)]
@@ -385,6 +392,8 @@ def _search(world: World, start: tuple[int, int], goal_ok, limit: int = 600_000)
             nxt = (cur[0] + dx, cur[1] + dy)
             if world.walkable(*nxt):
                 c = cost + 1 + (SOFT_COST if nxt in world.soft else 0)
+                if grass_cost and world.is_grass(*nxt):
+                    c += grass_cost
                 if c < best.get(nxt, 1 << 60):
                     best[nxt] = c
                     prev[nxt] = cur
@@ -482,8 +491,22 @@ def plan_route(world: World, start: dict, wild_lookup=None, game: str = "HG") ->
 # `GoToIfSet FLAG_GOT_POKEGEAR`; the Pokegear is given by Mom in the player's house,
 # scr_seq_0845_T20R0201.s:116-124). The errand is enter -> talk -> exit, one leg each; every leg
 # re-plans from the position the previous one logged, like a cutscene resync.
-ERRANDS = {"pokegear": ("MAP_NEW_BARK_PLAYER_HOUSE_1F", "obj_T20R0201_gsmama")}
+ERRANDS = {
+    "pokegear": ("MAP_NEW_BARK_PLAYER_HOUSE_1F", "obj_T20R0201_gsmama"),
+    # the Cherrygrove Pokemon Center PC (G1 row i / the `pc` phase): the "NPC" is the PC TILE, the
+    # one tile of behaviour 0x83 in the interior's land data (see load_errand / plan_pc)
+    "cherrygrove_pc": ("MAP_CHERRYGROVE_POKECENTER_1F", ("tile", 0x83)),
+}
 ERRAND_PHASES = ("enter", "talk", "exit")
+CHERRYGROVE_ID = 67  # MAP_CHERRYGROVE (include/constants/maps.h:71)
+# The PC is a METATILE script, not a bg event: GetInteractedMetatileScript
+# (asm/overlay_01_021E6880.s:1466-1700) returns std_pokecenter_pc (2010,
+# include/constants/std_script.h:23) when the tile in FRONT of the player has behaviour
+# TILE_BEHAVIOR_131 == 0x83 (sub_0205B7E0, src/metatile_behavior.c:91-93; enum position 131,
+# include/constants/metatile_behavior.h) AND the player faces north (the `cmp r6, #0` at
+# 0x021E7458: PlayerAvatar_GetFacingDirection == 0). The interior's bg event at (4,8) is a decoy.
+PC_FACE = "Up"
+PC_BEHAVIOR = 0x83
 
 
 @dataclass
@@ -493,7 +516,7 @@ class Errand:
     house: World  # the interior (local coordinates)
     door_out: tuple[int, int]  # the outdoor warp tile into the house
     door_in: tuple[int, int]  # the interior warp tile back out
-    npc: tuple[int, int]
+    npc: tuple[int, int]  # the NPC tile (pokegear) or the PC tile (cherrygrove_pc)
 
 
 def _bank_json(pret: Path, bank: int) -> list[dict]:
@@ -503,18 +526,22 @@ def _bank_json(pret: Path, bank: int) -> list[dict]:
     ]
 
 
+def _map_ids(pret: Path) -> dict[str, int]:
+    return {
+        n: int(v)
+        for n, v in re.findall(
+            r"#define (MAP_\w+)\s+(\d+)",
+            _need(Path(pret) / "include/constants/maps.h", "maps.h").read_text(encoding="utf-8"),
+        )
+    }
+
+
 def load_errand(rom_path, pret, name: str, outer_id: int) -> Errand:
     if name not in ERRANDS:
         raise RouteError("unknown_errand", f"{name!r} is not one of {sorted(ERRANDS)}")
-    house_const, npc_id = ERRANDS[name]
+    house_const, npc_spec = ERRANDS[name]
     pret = Path(pret)
-    ids = {
-        n: int(v)
-        for n, v in re.findall(
-            r"#define (MAP_\w+)\s+(\d+)\b",
-            _need(pret / "include/constants/maps.h", "maps.h").read_text(encoding="utf-8"),
-        )
-    }
+    ids = _map_ids(pret)
     house_id = ids[house_const]
     banks = _parse_header_banks(pret)
     house = load_world(rom_path, pret, _matrix_members(pret)[house_id], house_id)
@@ -529,7 +556,15 @@ def load_errand(rom_path, pret, name: str, outer_id: int) -> Errand:
     door_in = [
         (w["x"], w["z"]) for d in inner for w in d.get("warps", []) if w["header"] in outer_names
     ]
-    npc = [(o["x"], o["z"]) for d in inner for o in d.get("objects", []) if o["id"] == npc_id]
+    if isinstance(npc_spec, tuple):  # ("tile", behaviour): the unique tile of that behaviour
+        npc = [
+            (x, z)
+            for z in range(CELL)
+            for x in range(CELL)
+            if (house.attr(x, z) or 0) & 0xFF == npc_spec[1]
+        ]
+    else:
+        npc = [(o["x"], o["z"]) for d in inner for o in d.get("objects", []) if o["id"] == npc_spec]
     if len(door_out) != 1 or len(door_in) != 1 or len(npc) != 1:
         raise RouteError(
             "errand_data",
@@ -550,28 +585,48 @@ def _runs(world: World, path: list[tuple[int, int]]) -> list[dict]:
     return steps
 
 
-def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str = "HG") -> dict:
-    """One errand leg from `start`: enter (outdoors -> door), talk (house -> beside Mom, facing
-    her), exit (house -> door). The tile in front of a door/NPC is the goal; the door step is
-    flagged `warp` and the NPC turn is `talk.face`."""
-    if phase not in ERRAND_PHASES:
-        raise RouteError("unknown_phase", phase)
-    if phase == "enter":
-        w, target, dest = world, errand.door_out, errand.house_id
-    else:
-        w, target, dest = errand.house, errand.npc if phase == "talk" else errand.door_in, None
+def _walk_extras(world: World, path: list[tuple[int, int]]) -> dict:
+    """What a long walk can run into, for the Lua harness: grass tiles (a wild encounter can fire
+    on each) and coord-event tiles (a cutscene may fire) -- same fields as plan_route."""
+    return {
+        "approach_grass": [list(t) for t in path if world.is_grass(*t)],
+        "soft_events": [
+            {"x": t[0], "y": t[1], "scriptIds": list(world.coord_scripts.get(t, ()))}
+            for t in path
+            if t in world.soft
+        ],
+    }
+
+
+def _check_start(w: World, start: dict) -> tuple[int, int]:
     sx, sy = start["x"], start["y"]
     actual = w.map_at(sx, sy)
     if actual != start["map"]:
         raise RouteError(
             "map_mismatch", f"start map {start['map']} but ({sx},{sy}) is in map {actual}"
         )
+    return sx, sy
+
+
+def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str = "HG") -> dict:
+    """One errand leg from `start`: enter (outdoors -> door), talk (house -> beside Mom, facing
+    her), exit (house -> door). The tile in front of a door/NPC is the goal; the door step is
+    flagged `warp` and the NPC turn is `talk.face`. Encounter grass is priced (GRASS_COST), not
+    forbidden: the Route 29 corridor to Cherrygrove has 32 grass tiles no path avoids."""
+    if phase not in ERRAND_PHASES:
+        raise RouteError("unknown_phase", phase)
+    if phase == "enter":
+        w, target, dest = world, errand.door_out, errand.house_id
+    else:
+        w, target, dest = errand.house, errand.npc if phase == "talk" else errand.door_in, None
+    sx, sy = _check_start(w, start)
     free = replace(w, blocked=w.blocked - {(sx, sy)})
     path = _search(
         free,
         (sx, sy),
         lambda t: abs(t[0] - target[0]) + abs(t[1] - target[1]) == 1,
         SEARCH_LIMIT,
+        GRASS_COST,
     )
     if not path:
         raise RouteError("no_path", f"{phase}: no walkable tile beside {target} from ({sx},{sy})")
@@ -585,6 +640,7 @@ def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str
         "start": {**_loc(w, (sx, sy)), "dir": start.get("dir")},
         "steps": steps,
         "tiles": len(path) - 1,
+        **_walk_extras(w, path),
     }
     if phase == "talk":
         route["talk"] = {"face": _dir_of(last, target)}
@@ -599,6 +655,45 @@ def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str
             }
         )
     return route
+
+
+def plan_pc(errand: Errand, start: dict, game: str = "HG") -> dict:
+    """The interior leg of the PC stop: from `start` (the arrival tile the previous leg logged)
+    to the tile SOUTH of the PC, which is where the player must stand to face it north (PC_FACE;
+    see PC_BEHAVIOR). The leg ends facing the PC; the Lua then runs the deposit."""
+    w = errand.house
+    sx, sy = _check_start(w, start)
+    stand = (errand.npc[0], errand.npc[1] + 1)
+    if not (w.walkable(*stand) or stand == (sx, sy)):
+        raise RouteError("pc_data", f"the tile south of the PC {errand.npc} is not walkable")
+    free = replace(w, blocked=w.blocked - {(sx, sy)})
+    path = _search(free, (sx, sy), lambda t: t == stand, SEARCH_LIMIT, GRASS_COST)
+    if not path:
+        raise RouteError("no_path", f"pc: no walkable path from ({sx},{sy}) to {stand}")
+    return {
+        "version": 1,
+        "game": game,
+        "kind": "pc",
+        "phase": "deposit",
+        "start": {**_loc(w, (sx, sy)), "dir": start.get("dir")},
+        "steps": _runs(w, path),
+        "tiles": len(path) - 1,
+        "pc": {"x": errand.npc[0], "y": errand.npc[1], "stand": list(stand), "face": PC_FACE},
+        "approach_grass": [],
+        "soft_events": [],
+    }
+
+
+def plan_pc_stop(rom, pret, world: World, start: dict, game: str = "HG") -> dict:
+    """The whole PC stop planned offline: the outdoor walk to the Pokemon Center door, and the
+    interior walk to the PC tile assuming the player arrives ON the interior warp tile facing up
+    (the live run re-plans the second leg from the arrival tile the first one logs)."""
+    pc = load_errand(rom, pret, "cherrygrove_pc", CHERRYGROVE_ID)
+    arrive = {"map": pc.house_id, "x": pc.door_in[0], "y": pc.door_in[1], "dir": 0}
+    return {
+        "enter": plan_errand(world, pc, "enter", start, game),
+        "deposit": plan_pc(pc, arrive, game),
+    }
 
 
 def _loc(world: World, t: tuple[int, int]) -> dict:
@@ -641,6 +736,146 @@ def replay(world: World, route: dict) -> list[tuple[int, int]]:
     return tiles
 
 
+# --- pack-derived inputs for the PC stop ----------------------------------------------------------
+# The Lua harness reads no constant the pack already records: the button-recipe legs (battle escape,
+# native SAVE) and the RAM layout (SaveArray headers, PCStorage, Party) travel in the route JSON.
+PC_LEGS = ("run_from_wild",)
+SAVE_LEGS = (
+    "open_start_menu",
+    "start_menu_cursor_to_save",
+    "start_menu_select_save",
+    "save_confirm_until_saved",
+    "close_start_menu",
+)
+
+
+def _pack_title(game: str) -> dict:
+    if game not in GAMES:
+        raise RouteError("unknown_game", f"{game!r} is not one of {sorted(GAMES)}")
+    path, title, _ = GAMES[game]
+    return json.loads(_need(path, f"{game} pack").read_text(encoding="utf-8"))["titles"][title]
+
+
+def pack_legs(game: str, names) -> dict:
+    """titles.<t>.route_legs[name] with `until.symbol` resolved to its address. An OPEN leg is
+    refused by name: a recipe the pack cannot back is never replayed."""
+    t = _pack_title(game)
+    out = {}
+    for n in names:
+        leg = t["route_legs"].get(n)
+        if leg is None or leg.get("route_status") != "recipe_source":
+            raise RouteError("leg_open", f"{game} pack leg {n!r}: {(leg or {}).get('open')}")
+        u = leg["until"]
+        out[n] = {
+            "steps": leg["steps"],
+            "max_frames": leg["max_frames"],
+            "until": {**u, "address": t["symbols"][u["symbol"]]["address"]},
+        }
+    return out
+
+
+def pack_ram(game: str) -> dict:
+    """The RAM layout the PC leg reads (all from the pack): SaveArray header geometry, the party
+    and PCStorage arrays, the probe_field offsets. hge records no box-modified offset (null)."""
+    t = _pack_title(game)
+    pr = t["profile"]
+    sv, pc, po = pr["save"], pr["pc"], pr["party_off"]
+    return {
+        "fieldsys": t["symbols"]["sFieldSysPtr"]["address"],
+        "save_ptr": pr["save_ptr"]["address"],
+        "hdr_off": sv["array_headers_off"],
+        "hdr_size": sv["array_header_size"],
+        "hdr_offset_field": sv["array_header_fields"]["offset"],
+        "dyn_off": sv["dynamic_region_off"],
+        "id_party": sv["array_ids"]["party"],
+        "id_pc": sv["array_ids"]["pcstorage"],
+        "party": {
+            "count_off": po["count_off"],
+            "mons_off": po["mons_off"],
+            "size": pr["pkm"]["party_size"],
+        },
+        "pc": {
+            "boxes": pr["boxes"],
+            "per_box": pr["mons_per_box"],
+            "box_base": pc["box_base"],
+            "box_stride": pc["box_stride"],
+            "mon_stride": pc["mon_stride"],
+            "cur_box_off": pc["cur_box_off"],
+            "mod_off": pc["box_modified_flag_off"],
+        },
+        "field": pr["probe_field"],
+    }
+
+
+SYNTH_SCHEMA = "gen4-synth-v1"
+
+
+def synth_setup(save) -> dict:
+    """The disclosed SYNTH setup behind a party-2 save (tools/gen4_synth_save.py): its sidecar
+    `<save>.synth.json` must exist and describe THIS file. Every receipt carries `setup: SYNTH` and
+    the sidecar hash; a one-mon save cannot deposit (Gen 4 refuses the last party mon), so a
+    missing sidecar is a named refusal, not a run that fails later in the UI."""
+    sidecar = Path(str(save) + ".synth.json")
+    if not sidecar.is_file():
+        raise RouteError(
+            "setup_missing",
+            f"no {sidecar.name}: run tools/gen4_synth_save.py party2 --src <battery> --out {save}",
+        )
+    raw = sidecar.read_bytes()
+    row = json.loads(raw)
+    if row.get("schema") != SYNTH_SCHEMA or row.get("kind") != "party2":
+        raise RouteError(
+            "setup_mismatch", f"{sidecar.name}: schema/kind {row.get('schema')}/{row.get('kind')}"
+        )
+    if row.get("out_sha1") != sha1_of(Path(save)):
+        raise RouteError("setup_mismatch", f"{sidecar.name} does not describe {Path(save).name}")
+    return {
+        "setup": "SYNTH",
+        "sidecar": sidecar.name,
+        "sidecar_sha256": hashlib.sha256(raw).hexdigest(),
+        "new_pid": row["new_pid"],
+        "otid": row["otid"],
+        "out_sha1": row["out_sha1"],
+    }
+
+
+def verify_saved(path, game: str, synth: dict) -> dict:
+    """The battery file the run left (BizHawk flushes it on exit), decoded by the codec: the party
+    is back to one mon and the SYNTH clone sits in a box (key PID:OTID). Anything else is named."""
+    save = parse_save(Path(path).read_bytes(), GAMES[game][2])
+    party = save.party()
+    key = mon_key(synth["new_pid"], synth["otid"])
+    boxed = [
+        (i, slot)
+        for i, box in enumerate(save.boxes())
+        for slot, mon in box["mons"].items()
+        if mon["key"] == key
+    ]
+    if len(party) != 1 or len(boxed) != 1:
+        raise RouteError(
+            "saved_mismatch", f"saved file: party {len(party)} mons, clone {key} boxed at {boxed}"
+        )
+    return {"party": len(party), "clone_key": key, "box": boxed[0][0], "slot": boxed[0][1]}
+
+
+def build_receipt(game, save, synth: dict, legs: list[dict], final: dict) -> dict:
+    """The run's receipt: SYNTH label + sidecar hash first, then each leg's status line."""
+    return {
+        "setup": synth["setup"],
+        "sidecar": synth["sidecar"],
+        "sidecar_sha256": synth["sidecar_sha256"],
+        "save": str(save),
+        "save_sha1": synth["out_sha1"],
+        "game": game,
+        "legs": [
+            {k: v for k, v in leg.items() if k in ("leg", "kind", "phase", "status", "detail")}
+            for leg in legs
+        ],
+        "final_status": final["status"],
+        "final_detail": final["detail"],
+    }
+
+
 # --- live run (one EmuHawk per leg, own lane, bounded) ----------------------------------------
 EMUHAWK = Path("E:/Howard/Bizhawk/EmuHawk.exe")
 LUA = REPO / "lua" / "tests" / "gen4_route_play.lua"
@@ -656,6 +891,9 @@ def parse_result(log: str) -> dict:
     return res
 
 
+RESYNC_RE = re.compile(r"map=(-?\d+) x=(-?\d+) y=(-?\d+) dir=(-?\d+)(?: done=([01]))? state=(.+)$")
+
+
 def run_lane(
     rom=DEFAULT_ROM,
     save=DEFAULT_SAVE,
@@ -663,6 +901,7 @@ def run_lane(
     *,
     game="HG",
     errand=None,
+    target="grass",
     lane="route",
     tag="route",
     initial_time="2010-01-01T12:00:00",
@@ -673,7 +912,13 @@ def run_lane(
     """Plan + drive the route live. Leg 1 boots the staged save copy; a RESYNC (a coord-event
     cutscene advanced with A) saves a state, the next leg re-plans from the logged position and
     resumes from that state. `errand` ("pokegear") prepends the enter/talk/exit legs of a house
-    visit (see ERRANDS). Returns the last leg's parsed result."""
+    visit (see ERRANDS). `target` is "grass" (walk to a wild battle) or "pc" (walk to the
+    Cherrygrove Pokemon Center PC, deposit party slot 1 from a SYNTH party-2 save, native SAVE).
+    A leg that ends in a RESYNC with `done=0` was interrupted mid-walk: the same phase is
+    re-planned from where it stopped. Returns the last leg's parsed result."""
+    if target not in ("grass", "pc"):
+        raise RouteError("unknown_target", f"{target!r} is not grass or pc")
+    synth = synth_setup(save) if target == "pc" else None  # refuse before touching the lane
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
@@ -683,18 +928,39 @@ def run_lane(
         lane_saveram_dir=ld / "SaveRAM",
     )
     rom_staged = stage_rom(rom, ld)
-    stage_save(save, ld, sha1_of(rom_staged), rom_basename=rom_staged.name)
+    saved_path = stage_save(save, ld, sha1_of(rom_staged), rom_basename=rom_staged.name)
     world = load_world(rom, pret)
     start = save_position(save, game)
     err = load_errand(rom, pret, errand, start["map"]) if errand else None
-    phases = list(ERRAND_PHASES) if err else []
-    max_legs += len(phases)
+    pc = load_errand(rom, pret, "cherrygrove_pc", CHERRYGROVE_ID) if target == "pc" else None
+    queue = [("pokegear", p) for p in ERRAND_PHASES] if err else []
+    if pc:
+        queue += [("cherrygrove_pc", "enter"), ("cherrygrove_pc", "deposit")]
+    max_legs += len(queue) + (4 if pc else 0)  # a cutscene resync re-plans the same phase
+    pc_extra = (
+        {
+            "run_from_wild": pack_legs(game, PC_LEGS)["run_from_wild"],
+            "persistence": pack_legs(game, SAVE_LEGS),
+            "ram": pack_ram(game),
+            "synth": {"new_pid": synth["new_pid"], "otid": synth["otid"]},
+        }
+        if pc
+        else {}
+    )
     load_state = ""
     result: dict = {}
+    history: list[dict] = []
     for leg in range(1, max_legs + 1):
         leg_start = start
-        if phases:
-            route = plan_errand(world, err, phases.pop(0), start, game)
+        if queue:
+            who, phase = queue[0]
+            e = err if who == "pokegear" else pc
+            if phase == "deposit":
+                route = plan_pc(e, start, game)
+            else:
+                route = plan_errand(world, e, phase, start, game)
+            if who == "cherrygrove_pc":
+                route.update(pc_extra)
         else:
             route = plan_route(world, start, wild_land_day(Path(pret)), game)
         rpath = ld / f"{tag}_leg{leg}.json"
@@ -729,14 +995,29 @@ def run_lane(
             kill_our_emuhawk(ld)
         result = parse_result(log.read_text(encoding="utf-8") if log.exists() else "")
         result.update(leg=leg, wall=round(time.time() - t0, 1), route=route, log=str(log))
+        history.append({**result, "kind": route.get("kind"), "phase": route.get("phase")})
+        if pc and result["status"] == "PC_DEPOSIT":
+            # cold reload: the lane's battery file, decoded by the independent PYDEC oracle
+            try:
+                result["saved"] = verify_saved(saved_path, game, synth)
+            except RouteError as exc:
+                result.update(status="SAVE_MISMATCH", detail=str(exc))
+        if pc:
+            result["receipt"] = build_receipt(game, save, synth, history, result)
+            (ld / f"{tag}_receipt.json").write_text(
+                json.dumps(result["receipt"], indent=1), encoding="utf-8"
+            )
         if result["status"] != "RESYNC":
             return result
-        m = re.search(r"map=(-?\d+) x=(-?\d+) y=(-?\d+) dir=(-?\d+) state=(.+)$", result["detail"])
+        m = RESYNC_RE.search(result["detail"])
         if not m:
             return result
         start = {"map": int(m[1]), "x": int(m[2]), "y": int(m[3]), "dir": int(m[4])}
-        load_state = m[5].strip()
-        if route.get("kind") != "errand" and (start["map"], start["x"], start["y"]) == (
+        done = m[5] != "0"  # logs without the field predate it: they only ever stopped a phase
+        load_state = m[6].strip()
+        if done and queue:
+            queue.pop(0)
+        elif not done and (start["map"], start["x"], start["y"]) == (
             leg_start["map"],
             leg_start["x"],
             leg_start["y"],
@@ -758,6 +1039,12 @@ def _defaults(a) -> None:
         a.tag = a.tag or a.lane
 
 
+def _summary(route: dict) -> str:
+    if "enter" in route:
+        return f"PC stop: {route['enter']['tiles']} tiles to the door, {route['deposit']['tiles']} inside"
+    return f"{route['tiles']} tiles, {len(route['steps'])} segments, grass {route['grass']['tile']}"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -769,9 +1056,17 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--rom")
         q.add_argument("--pret")
     p.add_argument("--out")
+    p.add_argument("--target", choices=["grass", "pc"], default="grass")
     r.add_argument("--lane")
     r.add_argument("--tag", help="state/log name prefix (default: the lane name)")
-    r.add_argument("--errand", choices=sorted(ERRANDS), help="house visit before the route")
+    r.add_argument("--errand", choices=["pokegear"], help="house visit before the route")
+    r.add_argument(
+        "--target",
+        choices=["grass", "pc"],
+        default="grass",
+        help="grass: walk to a wild battle; pc: Cherrygrove PC deposit + native SAVE (needs a "
+        "SYNTH party-2 --save, see tools/gen4_synth_save.py)",
+    )
     r.add_argument("--timeout", type=int, default=900)
     r.add_argument("--pace-max", type=int)
     a = ap.parse_args(argv)
@@ -784,6 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
                 a.pret,
                 game=a.game,
                 errand=a.errand,
+                target=a.target,
                 lane=a.lane,
                 tag=a.tag,
                 timeout=a.timeout,
@@ -797,11 +1093,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("\n".join(res["lines"]))
         print(f"leg {res['leg']} wall {res['wall']}s status {res['status']} {res['detail']}")
-        return 0 if res["status"] == "BATTLE" else 1
+        return 0 if res["status"] == ("PC_DEPOSIT" if a.target == "pc" else "BATTLE") else 1
     try:
         start = save_position(a.save, a.game)
         world = load_world(a.rom, a.pret)
-        route = plan_route(world, start, wild_land_day(Path(a.pret)), a.game)
+        if a.target == "pc":
+            route = plan_pc_stop(a.rom, a.pret, world, start, a.game)
+        else:
+            route = plan_route(world, start, wild_land_day(Path(a.pret)), a.game)
     except RomAbsent as exc:
         print(f"SKIP: {exc}", file=sys.stderr)
         return 2
@@ -812,9 +1111,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(text, encoding="utf-8")
-        print(
-            f"wrote {a.out}: {route['tiles']} tiles, {len(route['steps'])} segments, grass {route['grass']['tile']}"
-        )
+        print(f"wrote {a.out}: {_summary(route)}")
     else:
         print(text)
     return 0
