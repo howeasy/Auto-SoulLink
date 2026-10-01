@@ -13,18 +13,24 @@
 - **Primary scenario for C1-8:** use controller command 11 entry (0x0224A70C), setting the game's FAINTED bit (ctx+0x213C) so that the normal faint subscript runs. Do not set the bit at TurnEnd entry, because TurnEnd never consumes it and the flag would carry into the next turn.
 - **Fallback:** the HP-only TurnEnd write remains the qualified fallback mechanism if the animation path misbehaves. Both scenarios need the independent oracle.
 
-## Coordinator ruling: row f (performance)
+## Owner ruling: performance (supersedes the coordinator's row f ruling)
 
-- **Measurement:** on HG, receipt `heartgold-0cc5b0ee2c21` with no foreign PIDs, frame rate by number of registered hooks:
+Owner, 2026-10-01: "We need at least 1x full speed FPS constantly. 58 isnt going to cut it."
+
+- **Requirement:** real play must hold 60 fps continuously at 1x with the full client running (hooks plus per-frame Lua reads, session and HUD). It is measured as sustained frame time, not as an average or an unthrottled peak. A configuration that only reaches about 66 fps unthrottled is not acceptable margin.
+- **Measured hook cost (HG, `heartgold-0cc5b0ee2c21`, unthrottled, minimal Lua):**
 
   | Hooks | 0 | 1 | 2 | 3 | 4 | 5 |
   |---|---|---|---|---|---|---|
   | fps | 208.6 | 97.3 | 79.7 | 66.1 | 57.9 | 52.9 |
 
-- **Budget is unchanged:** D6 sets the production budget at 0 always-on hooks and at most 3 hooks per armed phase. Never more than 3 are registered at once, and 3 measures 66 fps, which clears 60.
-- **The fourth hook is probe-only:** the C1-1/C1-2b phase cases use a fourth hook as an independent raw-observer oracle. Its cost does not count against the production budget.
-- **Row f's criterion becomes:** at least 60 fps at the pack's production cap (3), and an observed failure above it (4 hooks at 57.9) as the red control. This keeps D6 as written and does not reopen it.
-- **Risk:** the margin at 3 hooks is about 10% on this machine. The pack target of 2 per phase (79.7 fps) remains the design goal. A slower host will need its own measurement.
+  The first exec hook alone roughly halves capacity.
+- **Design direction (coordinator, serving the requirement):**
+  - **Zero registered hooks in steady state, in every phase.** Battle start and end, outcome, own-mon faints, catches and party/box changes are detected by polling RAM: the zero-hook battle chain, HP and result reads, and validated party/box diffs at settle.
+  - **On-demand hooks only.** The only hook is the D7 write seam (cmd-11 entry plus the FAINTED bit, PASS at `a15b7d74`). It is registered when a partner faint command is pending in battle, removed after it fires, and limited to one at a time.
+  - **Phase-site hooks become fallbacks** that need a measured, full-client 1x receipt before any is armed in production.
+- **Row f criterion:** the production configuration sustains 60 fps at 1x under full client load, both with 0 hooks and with the 1 on-demand hook. The probe's multi-hook curve stays as characterization and is not a pass condition.
+- **Open:** measure the full-client per-frame cost and whether the exec-hook cost depends on hook count or merely on having any hook registered.
 
 ## Coordinator ruling: box-mon setup for row i and the pc phase (owner 2026-10-01: "I am not playing all the way to getting balls. Sorry. Figure it out")
 
