@@ -42,3 +42,12 @@ Owner, 2026-10-01: "We need at least 1x full speed FPS constantly. 58 isnt going
 - **The behaviour under test runs natively from normal inputs:** walk to the Cherrygrove Pokémon Center PC, deposit one mon (box write plus the modified flag), then a native SAVE and a cold reload.
 - **Receipts are labelled.** Every receipt that uses this setup carries `setup: SYNTH` and the sidecar hash.
 - **Scope:** this does not apply to row o. Row o and the story-gated legs keep PLAN §7's rule against staging party data.
+
+## Coordinator notes for the client card (from poll_events, 4a645ee4)
+
+- **whiteout:** mirror Gen 3's semantics, where the event is sent when the game's blackout fires.
+  - **In battle:** the authoritative polled evidence is the battle's LOSE outcome (`bs+0x2420 == 2`, PHYSICAL at `a15b7d74`). It is latched when the battle ends, for non-exempt battle types. The "area change and full heal" confirmation becomes optional corroboration, not a requirement, so a heal point on the loss map is not a missed whiteout.
+  - **Out of battle (poison):** use the all-fainted party plus the blackout task. This stays PHYSICAL-OPEN.
+- **D11 npc_trade:** the reducer only notes a `slot_replace`. The client card wires `identity:begin_alias` plus `pending.msg`, `box_generation()` and `rescan_boxes()` (MERGE_DRIFT item 2).
+- **Before G2 sign-off, the owner needs to see** ruling 35: the server force-faints a traded-in mon that breaks an enabled clause.
+- **Capture identity:** the wild mon's OTID at capture needs a PHYSICAL receipt (PID match plus OTID equal to the foe's or the player's).
