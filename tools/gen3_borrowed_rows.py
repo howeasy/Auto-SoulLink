@@ -54,6 +54,11 @@ def own_facts(run):
             or rom[0x11FEA0:0x11FEA4].hex()!="a5fe1108"):
         raise RuntimeError("native party cancellation YES/NO task binding changed")
     party_cancel_task=int.from_bytes(rom[0x11FEA0:0x11FEA4],"little") & ~1
+    # RR's initial chooser uses the vanilla-address trampoline, but ENTER returns
+    # directly to its exact CFRU handler. Both addresses belong to this one task class.
+    if rom[0x11FB28:0x11FB30].hex()!="0049084731620b09":
+        raise RuntimeError("RR party chooser trampoline/target changed")
+    party_choose_task=int.from_bytes(rom[0x11FB2C:0x11FB30],"little") & ~1
     if rom[0xA03B0:0xA03B4].hex()!="50c70302":raise RuntimeError("selection order binding changed")
     # Exact native option1 branch and callnative builder; no injected party.
     if (rom[0x1051B55:0x1051B60].hex()!="210d8001000601061c0509"
@@ -65,7 +70,8 @@ def own_facts(run):
                 rom_sha1=facts["rom_sha1"],arrival=arrival,approach=approach,paths=paths,school_flags=flags,
                 menu_option={"menu":0,"battle":3,"opponent":1}[case],
                 begin_kind="borrowed_party_opponent_begin" if case=="opponent" else "borrowed_party_begin",
-                selected_order_address=0x0203C750,confirm_slot=6,party_cancel_task=party_cancel_task,borrow=facts["borrowed_party"])
+                selected_order_address=0x0203C750,confirm_slot=6,party_cancel_task=party_cancel_task,
+                party_choose_task=party_choose_task,borrow=facts["borrowed_party"])
 
 
 def orchestrate(run):

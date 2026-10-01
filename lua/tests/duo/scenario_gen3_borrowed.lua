@@ -23,7 +23,8 @@ return function(ctx)
     end
     local function hex(s) return (s:gsub(".",function(c) return string.format("%02X",c:byte()) end)) end
     local function cursor() return ctx.peek("gPartyMenu",1,9) end
-    local function picker() return ctx.party_menu_up() and ctx.task_live("Task_HandleChooseMonInput")
+    local function picker() return ctx.party_menu_up() and (ctx.task_live("Task_HandleChooseMonInput")
+        or ctx.task_address_live(facts.party_choose_task))
         and ctx.G.pred_ok(ctx.cp,"palette_fade_active") end
     local function party_writes(start)
         local n=0;local base=assert(ctx.party_base())

@@ -254,3 +254,26 @@ def test_actual_first_loan_press_releases_mash_override_for_new_a_edge():
         M.pred_ok=function() return true end
     '''+source[start:end]+'''\nreturn accepted''')
     assert presses==1
+
+def test_actual_picker_accepts_bound_rr_direct_handler_after_first_selection_only():
+    from lupa import LuaRuntime
+    source=(ROOT/'lua/tests/duo/scenario_gen3_borrowed.lua').read_text()
+    start=source.index('    local function picker()')
+    end=source.index('    local function party_writes(',start)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    result=lua.execute('''
+        local current=0x0811FB28
+        local facts={party_choose_task=0x090B6230}
+        local ctx={cp={},party_menu_up=function() return true end,
+          task_live=function(name) return name=='Task_HandleChooseMonInput' and current==0x0811FB28 end,
+          task_address_live=function(address) return current==address end,
+          G={pred_ok=function() return true end}}
+    '''+source[start:end]+'''
+        local original=picker()
+        current=facts.party_choose_task
+        local after_selection=picker()
+        current=0x090B6232
+        local unrelated=picker()
+        return original,after_selection,unrelated
+    ''')
+    assert result==(True,True,False)
