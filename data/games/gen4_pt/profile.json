@@ -1,0 +1,897 @@
+{
+  "artifact_status": "BIND_ONLY_NOT_ADMITTED",
+  "generator": "tools/gen_gen4_pack.py",
+  "pack": "gen4_pt",
+  "provenance": {
+    "lock": {
+      "path": "data/gen4_sources.lock.json",
+      "sha256": "9726431cb2f0f8460deaa24d51123ea36a63a4e2db1c59b7e8255aaa9265deec"
+    },
+    "notes": [
+      "Platinum names differ from HGSS; PT_SYMBOLS maps roles to names.",
+      "Bind-only: source schema feasibility, not runtime support (D3)."
+    ],
+    "roms": {
+      "platinum": {
+        "header_code": "CPUE",
+        "md5": "d66ad7a2a0068b5d46e0781ca4953ae9",
+        "sha1": "ce81046eda7d232513069519cb2085349896dec7",
+        "sha256": "ede62292aa7f7014ff27d42097e769753380531739889c29b968b67b80f80678",
+        "size_bytes": 134217728
+      }
+    },
+    "sources": {
+      "pokeplatinum_citation": "c248fb3f8cc9934ded800e489567c5c0eeee92eb",
+      "pokeplatinum_xmap": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61"
+    },
+    "xmaps": {
+      "platinum": {
+        "path": ".cache/gen4/xmap/platinumus.xMAP",
+        "sha256": "c3b3451b4815a646514bf9d456062e644d83010f996eaff17abf8d2fe667e72a",
+        "size_bytes": 12107496,
+        "source_commit": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61"
+      }
+    }
+  },
+  "schema": "gen4-profile-v1",
+  "schema_notes": {
+    "address": "integers; address_hex is the same value for humans",
+    "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL",
+    "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
+    "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
+    "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
+    "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
+    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
+  },
+  "titles": {
+    "platinum": {
+      "admission": "BIND_ONLY_NOT_ADMITTED",
+      "open": {
+        "battle": "Platinum battle context offsets are not established; do not derive from HGSS",
+        "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
+        "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
+        "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
+        "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
+        "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
+        "sites": "bind-only pack pins no execute sites; symbols and the overlay table only"
+      },
+      "overlay_table": {
+        "active_off": 4,
+        "address": 35386224,
+        "entry_size": 8,
+        "evidence": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb src/game_overlay.c:13-32 (same {id,active} shape; size 0xC0 checked)",
+        "id_off": 0,
+        "per_region": 8,
+        "regions": 3,
+        "symbol": "Unk_021BF370"
+      },
+      "overlays": {
+        "0": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "1": {
+          "bss": 32,
+          "ram": 35458432,
+          "size": 32
+        },
+        "10": {
+          "bss": 0,
+          "ram": 35780608,
+          "size": 15008
+        },
+        "100": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18368
+        },
+        "101": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 37120
+        },
+        "102": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 2080
+        },
+        "103": {
+          "bss": 0,
+          "ram": 35839200,
+          "size": 32
+        },
+        "104": {
+          "bss": 32,
+          "ram": 35839200,
+          "size": 81376
+        },
+        "105": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 18912
+        },
+        "106": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 7616
+        },
+        "107": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 34880
+        },
+        "108": {
+          "bss": 32,
+          "ram": 35920608,
+          "size": 7360
+        },
+        "109": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 20960
+        },
+        "11": {
+          "bss": 0,
+          "ram": 35780608,
+          "size": 1056
+        },
+        "110": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 5568
+        },
+        "111": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 11232
+        },
+        "112": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 4736
+        },
+        "113": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 20096
+        },
+        "114": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 15680
+        },
+        "115": {
+          "bss": 64,
+          "ram": 36045888,
+          "size": 25216
+        },
+        "116": {
+          "bss": 0,
+          "ram": 36045888,
+          "size": 31776
+        },
+        "117": {
+          "bss": 0,
+          "ram": 36045888,
+          "size": 27648
+        },
+        "118": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1088
+        },
+        "119": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 6464
+        },
+        "12": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 111904
+        },
+        "120": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1216
+        },
+        "121": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1600
+        },
+        "13": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 41472
+        },
+        "14": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 62560
+        },
+        "15": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "16": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 219776
+        },
+        "17": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 105632
+        },
+        "18": {
+          "bss": 33248,
+          "ram": 35780608,
+          "size": 178784
+        },
+        "19": {
+          "bss": 416,
+          "ram": 35458432,
+          "size": 63584
+        },
+        "2": {
+          "bss": 0,
+          "ram": 35458496,
+          "size": 32
+        },
+        "20": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18112
+        },
+        "21": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 102912
+        },
+        "22": {
+          "bss": 0,
+          "ram": 35999200,
+          "size": 28832
+        },
+        "23": {
+          "bss": 128,
+          "ram": 35905856,
+          "size": 103936
+        },
+        "24": {
+          "bss": 0,
+          "ram": 35994848,
+          "size": 256
+        },
+        "25": {
+          "bss": 0,
+          "ram": 35994848,
+          "size": 9440
+        },
+        "26": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1504
+        },
+        "27": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3840
+        },
+        "28": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 6400
+        },
+        "29": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2656
+        },
+        "3": {
+          "bss": 0,
+          "ram": 33523296,
+          "size": 32
+        },
+        "30": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1376
+        },
+        "31": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2048
+        },
+        "32": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2976
+        },
+        "33": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 6048
+        },
+        "34": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2304
+        },
+        "35": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1536
+        },
+        "36": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1536
+        },
+        "37": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1184
+        },
+        "38": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "39": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1216
+        },
+        "4": {
+          "bss": 21504,
+          "ram": 35458432,
+          "size": 300672
+        },
+        "40": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2464
+        },
+        "41": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3264
+        },
+        "42": {
+          "bss": 32,
+          "ram": 36004288,
+          "size": 1376
+        },
+        "43": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2880
+        },
+        "44": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3296
+        },
+        "45": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3168
+        },
+        "46": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 4416
+        },
+        "47": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2304
+        },
+        "48": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2496
+        },
+        "49": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1184
+        },
+        "5": {
+          "bss": 245792,
+          "ram": 35458432,
+          "size": 201632
+        },
+        "50": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2368
+        },
+        "51": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "52": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3232
+        },
+        "53": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2208
+        },
+        "54": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1632
+        },
+        "55": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "56": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 4416
+        },
+        "57": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1024
+        },
+        "58": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 9408
+        },
+        "59": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 10112
+        },
+        "6": {
+          "bss": 32,
+          "ram": 35905856,
+          "size": 47104
+        },
+        "60": {
+          "bss": 4160,
+          "ram": 35780608,
+          "size": 42528
+        },
+        "61": {
+          "bss": 2912,
+          "ram": 35827296,
+          "size": 14592
+        },
+        "62": {
+          "bss": 0,
+          "ram": 35844800,
+          "size": 108256
+        },
+        "63": {
+          "bss": 0,
+          "ram": 35827296,
+          "size": 11904
+        },
+        "64": {
+          "bss": 0,
+          "ram": 35839200,
+          "size": 18496
+        },
+        "65": {
+          "bss": 32,
+          "ram": 35839200,
+          "size": 49536
+        },
+        "66": {
+          "bss": 4160,
+          "ram": 35839200,
+          "size": 186848
+        },
+        "67": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 3488
+        },
+        "68": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 6080
+        },
+        "69": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 11584
+        },
+        "7": {
+          "bss": 32,
+          "ram": 35952992,
+          "size": 23616
+        },
+        "70": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 73920
+        },
+        "71": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 9824
+        },
+        "72": {
+          "bss": 0,
+          "ram": 35903392,
+          "size": 5568
+        },
+        "73": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 11648
+        },
+        "74": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4000
+        },
+        "75": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4288
+        },
+        "76": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 15936
+        },
+        "77": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 27776
+        },
+        "78": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7296
+        },
+        "79": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 12320
+        },
+        "8": {
+          "bss": 0,
+          "ram": 35952992,
+          "size": 20000
+        },
+        "80": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 9888
+        },
+        "81": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 10176
+        },
+        "82": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 1120
+        },
+        "83": {
+          "bss": 0,
+          "ram": 35894688,
+          "size": 20576
+        },
+        "84": {
+          "bss": 0,
+          "ram": 35894688,
+          "size": 24224
+        },
+        "85": {
+          "bss": 0,
+          "ram": 35918912,
+          "size": 5664
+        },
+        "86": {
+          "bss": 32,
+          "ram": 35893568,
+          "size": 9248
+        },
+        "87": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 3648
+        },
+        "88": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 16576
+        },
+        "89": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "9": {
+          "bss": 0,
+          "ram": 35952992,
+          "size": 41856
+        },
+        "90": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4672
+        },
+        "91": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7744
+        },
+        "92": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7488
+        },
+        "93": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 2176
+        },
+        "94": {
+          "bss": 352,
+          "ram": 35893568,
+          "size": 47488
+        },
+        "95": {
+          "bss": 160,
+          "ram": 35941408,
+          "size": 22208
+        },
+        "96": {
+          "bss": 288,
+          "ram": 35893568,
+          "size": 11424
+        },
+        "97": {
+          "bss": 6528,
+          "ram": 35827296,
+          "size": 82720
+        },
+        "98": {
+          "bss": 32,
+          "ram": 35941408,
+          "size": 12800
+        },
+        "99": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18272
+        }
+      },
+      "phases": {},
+      "profile": {
+        "battle": null,
+        "boxes": 18,
+        "dirty": {
+          "full_save_flag": {
+            "base": "SaveData",
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:50-57 (fullSaveRequired, src/savedata.c:251-254)",
+            "off": 12,
+            "width": 4
+          },
+          "modified_flag_off": null
+        },
+        "fieldsys_ptr": {
+          "address": 35391452,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/field/field_system.h:76-82 (processManager, unk_04, bgConfig, saveData)",
+          "process_manager_off": 0,
+          "save_data_off": 12,
+          "symbol": "sFieldSystem",
+          "width": 4
+        },
+        "idle": {
+          "app_clause": "FieldSystem_IsRunningApplication = processManager(+0x00)->parent/child",
+          "taskman_clause": "NOT valid (+0x10 is a transient FieldTask*)"
+        },
+        "memorial_box": null,
+        "mons_per_box": 30,
+        "pc": {
+          "array_id": 37,
+          "box_base": 4,
+          "box_stride": 4080,
+          "boxes": 18,
+          "cur_box_off": 0,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/pc_boxes.h:18-24 (u32 currentBoxID, then boxMons[18][30], no pad)",
+          "modified_flag_off": null,
+          "mon_stride": 136,
+          "mons_per_box": 30
+        },
+        "pkm": {
+          "ability_msb": null,
+          "ball_off_block_d": 27,
+          "block_d_0x1E": "unused in Platinum (HGSS ball/mood)",
+          "box_size": 136,
+          "exp_bits": 32,
+          "party_hp_width": 2,
+          "party_size": 236
+        },
+        "save": {
+          "array_addr": "SaveData + body_off + u32[SaveData + table_off + id*entry_size + field_off]",
+          "array_ids": {
+            "bag": 3,
+            "field_overworld_state": 11,
+            "field_player_state": 6,
+            "party": 2,
+            "pc_boxes": 37,
+            "player": 1,
+            "system": 0
+          },
+          "array_ids_note": "pc_boxes counted from the SaveTableEntryID enum (SAVE_TABLE_ENTRY_PC_BOXES = 37, MAX = 38); platinum_bind.md says 38, which is SAVE_TABLE_ENTRY_MAX",
+          "body_off": 20,
+          "body_size": 131072,
+          "entry_count": 38,
+          "entry_fields": {
+            "block_id": 14,
+            "checksum": 12,
+            "location": 8,
+            "page_id": 0,
+            "size": 4
+          },
+          "entry_size": 16,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-62, include/constants/savedata/save_table.h:65-66",
+          "field_off": 8,
+          "footer": {
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID)",
+            "fields": {
+              "block_counter": 4,
+              "block_id": 16,
+              "checksum": 18,
+              "save_counter": 0,
+              "signature": 12,
+              "size": 8
+            },
+            "signature": 537265699
+          },
+          "runtime_confirmation": "OPEN: no Platinum emulator work in this release (D3)",
+          "table": "pageInfo",
+          "table_off": 131108
+        },
+        "save_ptr": {
+          "address": 35391380,
+          "symbol": "sSaveDataPtr",
+          "width": 4
+        }
+      },
+      "rom": {
+        "header_code": "CPUE",
+        "md5": "d66ad7a2a0068b5d46e0781ca4953ae9",
+        "sha1": "ce81046eda7d232513069519cb2085349896dec7"
+      },
+      "sites": {},
+      "symbols": {
+        "BtlCmd_TryFaintMon": {
+          "address": 35920064,
+          "address_hex": "0x022418c0",
+          "image": "ov16",
+          "mode": "thumb",
+          "object": "src_battle_battle_script.c.o",
+          "role": "faint_cmd",
+          "section": ".text",
+          "size": 100
+        },
+        "OS_Halt": {
+          "address": 34357944,
+          "address_hex": "0x020c42b8",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "libos.a src_os_terminat",
+          "role": "idle_halt",
+          "section": ".text",
+          "size": 12
+        },
+        "OS_WaitIrq": {
+          "address": 34345652,
+          "address_hex": "0x020c12b4",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "libos.a src_os_irqhandl",
+          "role": "irq_wait",
+          "section": ".text",
+          "size": 116
+        },
+        "Overlay_LoadByID": {
+          "address": 33580432,
+          "address_hex": "0x02006590",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_load",
+          "section": ".text",
+          "size": 180
+        },
+        "Overlay_UnloadByID": {
+          "address": 33580308,
+          "address_hex": "0x02006514",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_unload",
+          "section": ".text",
+          "size": 48
+        },
+        "Party_AddPokemon": {
+          "address": 34054216,
+          "address_hex": "0x0207a048",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_party.c.o",
+          "role": "party_add_mon",
+          "section": ".text",
+          "size": 54
+        },
+        "SaveData_Ptr": {
+          "address": 33703332,
+          "address_hex": "0x020245a4",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_savedata.c.o",
+          "role": "save_data_get",
+          "section": ".text",
+          "size": 24
+        },
+        "Unk_021BF370": {
+          "address": 35386224,
+          "address_hex": "0x021bf370",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_table",
+          "section": ".bss",
+          "size": 192
+        },
+        "gSystem": {
+          "address": 35387004,
+          "address_hex": "0x021bf67c",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_system.c.o",
+          "role": "gSystem",
+          "section": ".bss",
+          "size": 116
+        },
+        "sFieldSystem": {
+          "address": 35391452,
+          "address_hex": "0x021c07dc",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_field_system.c.o",
+          "role": "field_system_ptr",
+          "section": ".bss",
+          "size": 4
+        },
+        "sSaveDataPtr": {
+          "address": 35391380,
+          "address_hex": "0x021c0794",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_savedata.c.o",
+          "role": "sSaveDataPtr",
+          "section": ".bss",
+          "size": 4
+        }
+      }
+    }
+  }
+}

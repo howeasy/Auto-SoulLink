@@ -1,0 +1,2332 @@
+{
+  "artifact_status": "RECORDED_NOT_ADMITTED",
+  "generator": "tools/gen_gen4_pack.py",
+  "pack": "gen4_hge",
+  "provenance": {
+    "hge_build": {
+      "exports": {
+        "hge_nm_all": {
+          "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+          "sha256": "66fd72b1754ad1a5a6fc0a905548495272091680120a954919b8b302dba66256",
+          "size_bytes": 40703
+        },
+        "hge_offsets": {
+          "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+          "sha256": "6ada8318384190b8ccbe597d87e2a38658a487b29e53eeec34b11856d764908c",
+          "size_bytes": 60654
+        },
+        "hge_rom_gen_ld": {
+          "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+          "sha256": "ad2a7c7494d2fc92e36cf8c73f356bf2dadbc6c7312d59588eac0235f5c42f24",
+          "size_bytes": 43062
+        }
+      },
+      "note": "cached exports are RECORDED_EXPORT_FILE_ONLY: not a fresh build association",
+      "rom_sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+      "source_commit": "fc517576498305ecb5f5e1de44681c6e3822361b"
+    },
+    "lock": {
+      "path": "data/gen4_sources.lock.json",
+      "sha256": "9726431cb2f0f8460deaa24d51123ea36a63a4e2db1c59b7e8255aaa9265deec"
+    },
+    "notes": [
+      "Vanilla addresses/images come from the HG xMAP; kept sites are asserted byte-identical in the hge image.",
+      "Replacement addresses come from offsets.ini, cross-checked against nm_all.txt, rom_gen.ld and the vanilla entry redirect."
+    ],
+    "roms": {
+      "heartgold_hge": {
+        "header_code": "IPKE",
+        "md5": "c39b3fb9bc4522a0cb8c81a02adee534",
+        "sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+        "sha256": "75472f8589e47d4b5fa94fba9d3cafe06e3637d18e965c2dbb601170a5e30b35",
+        "size_bytes": 192185312
+      },
+      "heartgold_vanilla_baseline": {
+        "header_code": "IPKE",
+        "md5": "258cea3a62ac0d6eb04b5a0fd764d788",
+        "sha1": "4fcded0e2713dc03929845de631d0932ea2b5a37",
+        "sha256": "65f02a56842b75aa92d775d56d657a56fe3fa993550b04dc20704ab82d760105",
+        "size_bytes": 134217728
+      }
+    },
+    "xmaps": {
+      "heartgold": {
+        "path": ".cache/gen4/xmap/heartgoldus.xMAP",
+        "sha256": "39397e4c16f4fe907870ab8dac450a469a8ce9ce225eb98852771ff59fe877df",
+        "size_bytes": 11646615,
+        "source_commit": "40eab3c65e0e4f46f6edd90540709aa9950ca07e"
+      }
+    }
+  },
+  "schema": "gen4-profile-v1",
+  "schema_notes": {
+    "address": "integers; address_hex is the same value for humans",
+    "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL",
+    "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
+    "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone",
+    "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
+    "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
+    "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
+    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)"
+  },
+  "titles": {
+    "heartgold_hge": {
+      "admission": "RECORDED_NOT_ADMITTED",
+      "hge_replacements": {
+        "BtlCmd_TryFaintMon": {
+          "address": 37547472,
+          "address_hex": "0x023cedd0",
+          "image": "ov130",
+          "ld_value": null,
+          "unit": "build/battle_linked.o"
+        },
+        "HandleLoadOverlay": {
+          "address": 37589748,
+          "address_hex": "0x023d92f4",
+          "image": "ov129",
+          "ld_value": 37589749,
+          "unit": "build/linked.o"
+        },
+        "PCStorage_DeleteBoxMonByIndexPair": {
+          "address": 37601196,
+          "address_hex": "0x023dbfac",
+          "image": "ov129",
+          "ld_value": 37601197,
+          "unit": "build/linked.o"
+        },
+        "PCStorage_PlaceMonInBoxByIndexPair": {
+          "address": 37601362,
+          "address_hex": "0x023dc052",
+          "image": "ov129",
+          "ld_value": 37601363,
+          "unit": "build/linked.o"
+        },
+        "PCStorage_PlaceMonInBoxFirstEmptySlot": {
+          "address": 37601472,
+          "address_hex": "0x023dc0c0",
+          "image": "ov129",
+          "ld_value": 37601473,
+          "unit": "build/linked.o"
+        },
+        "PCStorage_PlaceMonInFirstEmptySlotInAnyBox": {
+          "address": 37601608,
+          "address_hex": "0x023dc148",
+          "image": "ov129",
+          "ld_value": 37601609,
+          "unit": "build/linked.o"
+        },
+        "PCStorage_SwapMonsInBoxByIndexPair": {
+          "address": 37601288,
+          "address_hex": "0x023dc008",
+          "image": "ov129",
+          "ld_value": 37601289,
+          "unit": "build/linked.o"
+        },
+        "Save_WriteManFinish": {
+          "address": 37603712,
+          "address_hex": "0x023dc980",
+          "image": "ov129",
+          "ld_value": 37603713,
+          "unit": "build/linked.o"
+        },
+        "UnloadOverlayByID": {
+          "address": 37589600,
+          "address_hex": "0x023d9260",
+          "image": "ov129",
+          "ld_value": 37589601,
+          "unit": "build/linked.o"
+        }
+      },
+      "open": {
+        "battle_hge_effects": "hge faint is replaced in ov130; offsets are shared with vanilla but the active-faint mechanism and copy-back are C1-8 cells (battle_pointer.md Open)",
+        "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
+        "box_modified_flag_off": "G2 measures it (mutation/save/reload). SOURCE projection is PCStorage+0x1E004 (0x1000*30+4, include/pokemon_storage_system.h:50-59); not a PHYSICAL receipt",
+        "fresh_build_association": "cached exports are the pinned file hashes, not proof they came from a fresh build of this ROM (lock pending hge_fresh_build_export_association)",
+        "hge_internal_overlay_loads": "hge's own loads of ov129 (from load_arm9_expansion, entering vanilla HandleLoadOverlay+8) and of the linked extensions 130/131 (a goto loop inside the replacement HandleLoadOverlay, src/overlay.c:102-215) never re-enter the vanilla entry. All reach LoadOverlayNoInitAsync(0, id) (loadType 2): sites load_overlay_noinit_async (kept, static ARM9) and hge_load_arm9_expansion are pinned; full coverage would need all three LoadOverlay* funnels (over the 4-hook budget with anything else), so residency stays table-polled. PHYSICAL coverage is a C1-1 cell",
+        "hge_save_geometry_live": "SaveData geometry is source-derived; live read is G2",
+        "party_off": "two plausible party headers on the empty hge save (+0x90, +0xCAB4); a populated-mon decode is a G2 cell. Source projection favours +0x90, not unique FILE evidence",
+        "pc.cur_box_off": "source projection 0x1E000 only; G2",
+        "pc_swap_redirect": "see sites.pc_swap_by_index_pair.replaces.redirect_evidence",
+        "phase_first_event_coverage": "PHYSICAL first/last-event coverage per phase belongs to C1-1/C1-8",
+        "trainer": "hge PlayerProfile layout not verified against the hge source/save; reuse of the vanilla offsets is unproven"
+      },
+      "overlay_table": {
+        "active_off": 4,
+        "address": 35458544,
+        "entry_size": 8,
+        "evidence": "never patched by hge (rom.ld:552 / platform.md); per_region = MAX_ACTIVE_OVERLAYS 8",
+        "id_off": 0,
+        "per_region": 8,
+        "regions": 3,
+        "symbol": "sOverlayRegions"
+      },
+      "overlays": {
+        "0": {
+          "bss": 4992,
+          "ram": 35543296,
+          "size": 216448
+        },
+        "1": {
+          "bss": 245792,
+          "ram": 35543296,
+          "size": 148064
+        },
+        "10": {
+          "bss": 0,
+          "ram": 35765792,
+          "size": 62560
+        },
+        "100": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 7744
+        },
+        "101": {
+          "bss": 0,
+          "ram": 35551040,
+          "size": 80832
+        },
+        "102": {
+          "bss": 0,
+          "ram": 35551040,
+          "size": 20992
+        },
+        "103": {
+          "bss": 0,
+          "ram": 35572032,
+          "size": 10048
+        },
+        "104": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 2080
+        },
+        "105": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 1472
+        },
+        "106": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 11584
+        },
+        "107": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 32
+        },
+        "108": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 21600
+        },
+        "109": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 8768
+        },
+        "11": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 32
+        },
+        "110": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 5920
+        },
+        "111": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 5216
+        },
+        "112": {
+          "bss": 704,
+          "ram": 35543296,
+          "size": 106720
+        },
+        "113": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 5248
+        },
+        "114": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 1248
+        },
+        "115": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 5344
+        },
+        "116": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 1120
+        },
+        "117": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 2976
+        },
+        "118": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 672
+        },
+        "119": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 5920
+        },
+        "12": {
+          "bss": 0,
+          "ram": 35879104,
+          "size": 226176
+        },
+        "120": {
+          "bss": 0,
+          "ram": 36040736,
+          "size": 4928
+        },
+        "121": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 6304
+        },
+        "122": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 17088
+        },
+        "123": {
+          "bss": 32,
+          "ram": 36040736,
+          "size": 7136
+        },
+        "124": {
+          "bss": 0,
+          "ram": 36047904,
+          "size": 352
+        },
+        "125": {
+          "bss": 0,
+          "ram": 36047904,
+          "size": 32
+        },
+        "126": {
+          "bss": 0,
+          "ram": 36047904,
+          "size": 32
+        },
+        "127": {
+          "bss": 0,
+          "ram": 36047904,
+          "size": 32
+        },
+        "128": {
+          "bss": 0,
+          "ram": 36047904,
+          "size": 32
+        },
+        "129": {
+          "bss": 0,
+          "ram": 37584896,
+          "size": 27431
+        },
+        "13": {
+          "bss": 33248,
+          "ram": 35764736,
+          "size": 178816
+        },
+        "130": {
+          "bss": 0,
+          "ram": 37502976,
+          "size": 70868
+        },
+        "131": {
+          "bss": 0,
+          "ram": 37519360,
+          "size": 19730
+        },
+        "132": {
+          "bss": 0,
+          "ram": 35634784,
+          "size": 304
+        },
+        "133": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 2036
+        },
+        "134": {
+          "bss": 0,
+          "ram": 35634784,
+          "size": 2036
+        },
+        "135": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 4668
+        },
+        "136": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 5264
+        },
+        "137": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 2268
+        },
+        "138": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 8000
+        },
+        "139": {
+          "bss": 0,
+          "ram": 37495808,
+          "size": 2404
+        },
+        "14": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 80512
+        },
+        "140": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 1464
+        },
+        "141": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 7000
+        },
+        "142": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 37926
+        },
+        "143": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 1876
+        },
+        "144": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 956
+        },
+        "145": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 1372
+        },
+        "146": {
+          "bss": 0,
+          "ram": 35641600,
+          "size": 1708
+        },
+        "147": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 11924
+        },
+        "148": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 2444
+        },
+        "149": {
+          "bss": 0,
+          "ram": 37487616,
+          "size": 2664
+        },
+        "15": {
+          "bss": 32,
+          "ram": 35623808,
+          "size": 33024
+        },
+        "16": {
+          "bss": 0,
+          "ram": 35656864,
+          "size": 1824
+        },
+        "17": {
+          "bss": 0,
+          "ram": 35658688,
+          "size": 9248
+        },
+        "18": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 91488
+        },
+        "19": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 2176
+        },
+        "2": {
+          "bss": 0,
+          "ram": 35937152,
+          "size": 58016
+        },
+        "20": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 1056
+        },
+        "21": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 352
+        },
+        "22": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 704
+        },
+        "23": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 1216
+        },
+        "24": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 1728
+        },
+        "25": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 1632
+        },
+        "26": {
+          "bss": 0,
+          "ram": 36018368,
+          "size": 1312
+        },
+        "27": {
+          "bss": 0,
+          "ram": 36020096,
+          "size": 13728
+        },
+        "28": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 5760
+        },
+        "29": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 3584
+        },
+        "3": {
+          "bss": 32,
+          "ram": 35995168,
+          "size": 23168
+        },
+        "30": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 1984
+        },
+        "31": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 6912
+        },
+        "32": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 3520
+        },
+        "33": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 1440
+        },
+        "34": {
+          "bss": 0,
+          "ram": 36033824,
+          "size": 4672
+        },
+        "35": {
+          "bss": 0,
+          "ram": 36019584,
+          "size": 64
+        },
+        "36": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 864
+        },
+        "37": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 9440
+        },
+        "38": {
+          "bss": 4160,
+          "ram": 35764736,
+          "size": 42528
+        },
+        "39": {
+          "bss": 2912,
+          "ram": 35811424,
+          "size": 15136
+        },
+        "4": {
+          "bss": 0,
+          "ram": 35995168,
+          "size": 15712
+        },
+        "40": {
+          "bss": 0,
+          "ram": 35829472,
+          "size": 108480
+        },
+        "41": {
+          "bss": 0,
+          "ram": 35937952,
+          "size": 25088
+        },
+        "42": {
+          "bss": 0,
+          "ram": 35811424,
+          "size": 11904
+        },
+        "43": {
+          "bss": 0,
+          "ram": 35823328,
+          "size": 21248
+        },
+        "44": {
+          "bss": 32,
+          "ram": 35823328,
+          "size": 51648
+        },
+        "45": {
+          "bss": 4160,
+          "ram": 35823328,
+          "size": 186592
+        },
+        "46": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 3648
+        },
+        "47": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 6080
+        },
+        "48": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 11648
+        },
+        "49": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 74016
+        },
+        "5": {
+          "bss": 0,
+          "ram": 35764736,
+          "size": 14464
+        },
+        "50": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 448
+        },
+        "51": {
+          "bss": 0,
+          "ram": 35543744,
+          "size": 9728
+        },
+        "52": {
+          "bss": 0,
+          "ram": 35553472,
+          "size": 5664
+        },
+        "53": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 12192
+        },
+        "54": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 5920
+        },
+        "55": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 800
+        },
+        "56": {
+          "bss": 0,
+          "ram": 35544096,
+          "size": 4864
+        },
+        "57": {
+          "bss": 0,
+          "ram": 35879104,
+          "size": 18048
+        },
+        "58": {
+          "bss": 0,
+          "ram": 35879104,
+          "size": 1152
+        },
+        "59": {
+          "bss": 0,
+          "ram": 35880256,
+          "size": 20064
+        },
+        "6": {
+          "bss": 0,
+          "ram": 35764736,
+          "size": 1056
+        },
+        "60": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 24448
+        },
+        "61": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 7104
+        },
+        "62": {
+          "bss": 32,
+          "ram": 35543296,
+          "size": 4064
+        },
+        "63": {
+          "bss": 32,
+          "ram": 35765792,
+          "size": 17856
+        },
+        "64": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 7040
+        },
+        "65": {
+          "bss": 0,
+          "ram": 35765792,
+          "size": 17280
+        },
+        "66": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 32
+        },
+        "67": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 6208
+        },
+        "68": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 10240
+        },
+        "69": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 7936
+        },
+        "7": {
+          "bss": 0,
+          "ram": 35765792,
+          "size": 113312
+        },
+        "70": {
+          "bss": 352,
+          "ram": 35879104,
+          "size": 61248
+        },
+        "71": {
+          "bss": 160,
+          "ram": 35940704,
+          "size": 22240
+        },
+        "72": {
+          "bss": 288,
+          "ram": 35879104,
+          "size": 16224
+        },
+        "73": {
+          "bss": 32,
+          "ram": 35543296,
+          "size": 20544
+        },
+        "74": {
+          "bss": 6528,
+          "ram": 35811424,
+          "size": 90144
+        },
+        "75": {
+          "bss": 32,
+          "ram": 35940704,
+          "size": 12928
+        },
+        "76": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 11936
+        },
+        "77": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 32
+        },
+        "78": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 4160
+        },
+        "79": {
+          "bss": 0,
+          "ram": 35823328,
+          "size": 32
+        },
+        "8": {
+          "bss": 0,
+          "ram": 35765792,
+          "size": 41248
+        },
+        "80": {
+          "bss": 32,
+          "ram": 35823328,
+          "size": 81504
+        },
+        "81": {
+          "bss": 0,
+          "ram": 35904864,
+          "size": 23296
+        },
+        "82": {
+          "bss": 0,
+          "ram": 35904864,
+          "size": 8672
+        },
+        "83": {
+          "bss": 0,
+          "ram": 35904864,
+          "size": 43264
+        },
+        "84": {
+          "bss": 32,
+          "ram": 35904864,
+          "size": 7360
+        },
+        "85": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 20928
+        },
+        "86": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 10912
+        },
+        "87": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 11232
+        },
+        "88": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 4736
+        },
+        "89": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 20096
+        },
+        "9": {
+          "bss": 0,
+          "ram": 35765792,
+          "size": 32
+        },
+        "90": {
+          "bss": 0,
+          "ram": 36014080,
+          "size": 15680
+        },
+        "91": {
+          "bss": 64,
+          "ram": 36029760,
+          "size": 25216
+        },
+        "92": {
+          "bss": 0,
+          "ram": 36029760,
+          "size": 31776
+        },
+        "93": {
+          "bss": 0,
+          "ram": 36029760,
+          "size": 27648
+        },
+        "94": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 1056
+        },
+        "95": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 8128
+        },
+        "96": {
+          "bss": 2336,
+          "ram": 35543296,
+          "size": 230304
+        },
+        "97": {
+          "bss": 0,
+          "ram": 35775936,
+          "size": 6080
+        },
+        "98": {
+          "bss": 0,
+          "ram": 35775936,
+          "size": 3264
+        },
+        "99": {
+          "bss": 0,
+          "ram": 35543296,
+          "size": 19712
+        }
+      },
+      "phases": {
+        "always": {
+          "activation": null,
+          "candidate_sites": [],
+          "cap": 0,
+          "open": [
+            "Task_Blackout hook only if the outcome latch cannot cover every loss path (PHYSICAL)"
+          ],
+          "polled": [
+            "overlay residency (sOverlayRegions) one frame late",
+            "sFieldSysPtr chain / save driver idle",
+            "encounter-scoped outcome latch (setup winFlag kept across copy-back/blackout)"
+          ],
+          "site_count": 0
+        },
+        "battle": {
+          "activation": {
+            "arm_when_any": [
+              {
+                "id": 130,
+                "kind": "overlay_resident",
+                "note": "table observed one frame late; first battle event cannot precede residency"
+              },
+              {
+                "kind": "field_task_active",
+                "note": "fs.taskman != NULL while an encounter task runs (setup before residency)"
+              }
+            ],
+            "disarm_when_all": [
+              {
+                "id": 130,
+                "kind": "overlay_absent"
+              },
+              {
+                "kind": "events_drained",
+                "note": "drain queued events before removing the registry"
+              },
+              {
+                "kind": "encounter_copy_back_done",
+                "note": "checkpoint: no encounter task, outcome latch cleared once"
+              }
+            ],
+            "status": "SOURCE_DESIGN"
+          },
+          "armed_set": null,
+          "armed_set_note": "which candidates arm is fixed at G2 after producer coverage; G1 only needs the candidates",
+          "candidate_sites": [
+            "battle_controller_try_faint",
+            "battle_faint_cmd",
+            "battle_outcome_copy",
+            "battle_start_ov12",
+            "blackout",
+            "encounter_result",
+            "party_add_mon"
+          ],
+          "cap": 3,
+          "open": [
+            "a raw HP write is not known to run the faint command (C1-8 owns the seam)",
+            "no producer proof that these sites cover every battle write path (C1-1/C1-8 PHYSICAL)"
+          ],
+          "owner_overlay": 130,
+          "producers": [
+            {
+              "event": "faint (script)",
+              "site": "battle_faint_cmd",
+              "source": "battle_command.c:978-990"
+            },
+            {
+              "event": "faint/replace (turn-end sweep)",
+              "site": "battle_controller_try_faint",
+              "source": "battle_controller_player.c:1658-1669,3416-3619"
+            },
+            {
+              "event": "catch store to party",
+              "site": "party_add_mon",
+              "source": "battle_command.c:7003"
+            },
+            {
+              "event": "catch store to PC (party full)",
+              "site": "pc_place_first_in_box",
+              "source": "battle_command.c:7012-7027"
+            },
+            {
+              "event": "battle start wake-up",
+              "site": "battle_start_ov12",
+              "source": "battle_pointer.md"
+            },
+            {
+              "event": "outcome",
+              "site": "battle_outcome_copy",
+              "source": "asm overlay_12_022378C0.s:962-968"
+            },
+            {
+              "event": "encounter result / whiteout",
+              "sites": [
+                "encounter_result",
+                "blackout"
+              ],
+              "source": "encounter.c:102-107,369-375"
+            }
+          ],
+          "site_count": 7,
+          "target_max": 2
+        },
+        "field": {
+          "activation": null,
+          "candidate_sites": [
+            "save_write_finish"
+          ],
+          "cap": 0,
+          "open": [
+            "Save_WriteManFinish is a candidate only; save-driver polling is the target"
+          ],
+          "polled": [
+            "acquisitions/evolution by validated party/box diffs",
+            "save settled via the save driver state"
+          ],
+          "site_count": 1
+        },
+        "pc": {
+          "activation": {
+            "arm_when_any": [
+              {
+                "kind": "party_or_pc_application_resident",
+                "note": "launched app (fs.unk0->unk4 != NULL) or overlay predicate"
+              },
+              {
+                "kind": "battle_phase_active",
+                "note": "catch store reaches PC placement from ov12"
+              },
+              {
+                "kind": "field_task_active",
+                "note": "script/gift/daycare callers run under a field task"
+              }
+            ],
+            "disarm_when_all": [
+              {
+                "kind": "events_drained"
+              }
+            ],
+            "status": "SOURCE_DESIGN"
+          },
+          "armed_set": null,
+          "armed_set_note": "which candidates arm is fixed at G2 after caller coverage",
+          "candidate_sites": [
+            "pc_delete_by_index_pair",
+            "pc_place_by_index_pair",
+            "pc_place_first_any_box",
+            "pc_place_first_in_box",
+            "pc_swap_by_index_pair"
+          ],
+          "cap": 2,
+          "open": [
+            "hge replaces 25 PC functions in ov129 (resident from boot): no overlay trigger exists, caller predicates are PHYSICAL cells"
+          ],
+          "owner_overlay": 129,
+          "producers": [
+            {
+              "event": "place in first box slot",
+              "site": "pc_place_first_in_box"
+            },
+            {
+              "event": "place in any box",
+              "site": "pc_place_first_any_box"
+            },
+            {
+              "event": "place at slot",
+              "site": "pc_place_by_index_pair"
+            },
+            {
+              "event": "swap/move",
+              "site": "pc_swap_by_index_pair"
+            },
+            {
+              "event": "release",
+              "site": "pc_delete_by_index_pair"
+            }
+          ],
+          "site_count": 5,
+          "target_max": 2
+        },
+        "probe": {
+          "activation": {
+            "arm_when_any": [
+              {
+                "kind": "g1_probe"
+              }
+            ]
+          },
+          "candidate_sites": [
+            "half_rate_thumb",
+            "hge_load_arm9_expansion",
+            "idle_halt_arm",
+            "load_overlay_entry",
+            "load_overlay_noinit",
+            "load_overlay_noinit_async",
+            "load_overlay_normal",
+            "menu_only_ov74",
+            "never_executed",
+            "per_frame_arm",
+            "per_frame_thumb",
+            "unload_overlay_entry"
+          ],
+          "cap": 4,
+          "note": "G1 probe only; never armed in production. Register at most 4 at once (D6 fps curve).",
+          "site_count": 12
+        }
+      },
+      "profile": {
+        "battle": {
+          "ability_off": 122,
+          "ability_width": 2,
+          "ctx_off": 48,
+          "hp_off": 76,
+          "hp_signed": true,
+          "hp_width": 4,
+          "mon_size": 192,
+          "mons_off": 11584,
+          "selected_off": 8604
+        },
+        "box_modified_flag_off": null,
+        "boxes": 30,
+        "fieldsys_ptr": {
+          "address": 35471704,
+          "evidence": "xMAP; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/field_system.h (saveData at +0x0C; probe row h agreement)",
+          "save_data_off": 12,
+          "symbol": "sFieldSysPtr",
+          "width": 4
+        },
+        "memorial_box": 29,
+        "mons_per_box": 30,
+        "party_off": null,
+        "pc": {
+          "array_id": 41,
+          "box_base": 0,
+          "box_modified_flag_off": null,
+          "box_stride": 4096,
+          "cur_box_off": null,
+          "evidence": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/constants/save.h:26 (NUM_PC_BOXES 30); PC block at bank+0x10000 size 0x1E4FC FILE",
+          "mon_stride": 136,
+          "slot": "pc"
+        },
+        "pkm": {
+          "ability_msb": {
+            "bit": 31,
+            "evidence": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:226-232 (exp:21, unused:10, abilityMSB:1)",
+            "low_byte_block": "A",
+            "low_byte_off": 13,
+            "word_block": "A",
+            "word_off": 8
+          },
+          "box_size": 136,
+          "exp_bits": 21,
+          "party_hp_width": 2,
+          "party_size": 236
+        },
+        "save": {
+          "array_addr": "SaveData + dynamic_region_off + u32[SaveData + array_headers_off + id*array_header_size + 8]",
+          "array_header_count": 42,
+          "array_header_fields": {
+            "crc": 12,
+            "id": 0,
+            "offset": 8,
+            "size": 4,
+            "slot": 14
+          },
+          "array_header_size": 16,
+          "array_headers_off": 192532,
+          "array_ids": {
+            "bag": 3,
+            "local_field_data": 5,
+            "party": 2,
+            "pcstorage": 41,
+            "playerdata": 1,
+            "sysinfo": 0
+          },
+          "chunk_footer": {
+            "addr": "SaveData + dynamic_region_off + spec.offset + spec.size - 0x10",
+            "fields": {
+              "count": 0,
+              "crc": 14,
+              "magic": 8,
+              "size": 4,
+              "slot": 12
+            },
+            "magic": 537265699,
+            "size": 16,
+            "valid_when": "magic == 0x20060623 and footer.size == spec.size and footer.slot == slot index"
+          },
+          "dynamic_region_off": 16,
+          "dynamic_region_size": 192512,
+          "evidence": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/constants/save.h:16-24 (SAVE_PAGE_MAX 0x2F; OFFSET_saveSlotSpecs 0x2F2B4), include/save.h:264-284",
+          "runtime_confirmation": "OPEN: not read from a live hge SaveData (G2); allocation is hooked (SaveData_New)",
+          "save_counter_off": 192528,
+          "slot_spec_count": 2,
+          "slot_spec_fields": {
+            "first_page": 1,
+            "id": 0,
+            "num_pages": 2,
+            "offset": 4,
+            "size": 8
+          },
+          "slot_spec_size": 12,
+          "slot_specs_off": 193204,
+          "slots": {
+            "general": 0,
+            "pc": 1
+          }
+        },
+        "save_ptr": {
+          "address": 35463720,
+          "evidence": "xMAP; the archived 0x02111880 chain is a different global (rejected by provenance)",
+          "symbol": "sSaveDataPtr",
+          "width": 4
+        },
+        "system": {
+          "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57; MEASURED +1 per frame (platform.md)",
+          "symbol": "gSystem",
+          "vblank_counter_off": 44
+        },
+        "trainer": null
+      },
+      "rom": {
+        "header_code": "IPKE",
+        "md5": "c39b3fb9bc4522a0cb8c81a02adee534",
+        "sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1"
+      },
+      "sites": {
+        "battle_controller_try_faint": {
+          "address": 35970164,
+          "address_hex": "0x0224dc74",
+          "collides_with": [
+            "ov2",
+            "ov45"
+          ],
+          "extent": 16,
+          "fire_hex": "b082b5f8",
+          "hge_status": "KEPT",
+          "image": "ov12",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": 12,
+          "phase": "battle",
+          "register_hex": "f8b582b0051c24480091285c161c0193",
+          "role": "controller turn-end replacement/loss sweep (ov12)",
+          "section": ".text",
+          "symbol": "TryFaintMon",
+          "symbol_size": 164
+        },
+        "battle_faint_cmd": {
+          "address": 37547472,
+          "address_hex": "0x023cedd0",
+          "collides_with": [],
+          "export_unit": "build/battle_linked.o",
+          "extent": 16,
+          "fire_hex": "000cb5f8",
+          "hge_status": "REPLACED",
+          "image": "ov130",
+          "mode": "thumb",
+          "mode_evidence": "vanilla-entry trampoline literal bit 0",
+          "overlay_id": 130,
+          "phase": "battle",
+          "register_hex": "f8b50c002a4b01210600200000f068fa",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37547472,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 35906092,
+            "vanilla_entry_hex": "004b1847d1ed3c02012107f067f9281c",
+            "vanilla_image": "ov12",
+            "vanilla_register_hex": "70b50d1c061c281c012107f067f9281c"
+          },
+          "role": "faint script command (ov12)",
+          "section": ".text",
+          "symbol": "BtlCmd_TryFaintMon"
+        },
+        "battle_outcome_copy": {
+          "address": 35882044,
+          "address_hex": "0x0223843c",
+          "collides_with": [
+            "ov13",
+            "ov40",
+            "ov45",
+            "ov57",
+            "ov59",
+            "ov70",
+            "ov72",
+            "ov74",
+            "ov80"
+          ],
+          "extent": 16,
+          "fire_hex": "1c05b5f8",
+          "hge_status": "KEPT",
+          "image": "ov12",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": 12,
+          "phase": "battle",
+          "register_hex": "f8b5051ccef526ff041c281ccef52cff",
+          "role": "stores the battle outcome into BattleSetup.winFlag",
+          "section": ".text",
+          "symbol": "ov12_0223843C",
+          "symbol_size": 880
+        },
+        "battle_start_ov12": {
+          "address": 35883624,
+          "address_hex": "0x02238a68",
+          "collides_with": [
+            "ov13",
+            "ov40",
+            "ov45",
+            "ov57",
+            "ov59",
+            "ov70",
+            "ov72",
+            "ov74",
+            "ov80"
+          ],
+          "extent": 16,
+          "fire_hex": "b092b5f8",
+          "hge_status": "KEPT",
+          "image": "ov12",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": 12,
+          "phase": "battle",
+          "register_hex": "f8b592b0041c08680191e0620027261c",
+          "role": "one-per-battle wake-up (r0=BattleSystem*, r1=BattleSetup*)",
+          "section": ".text",
+          "symbol": "ov12_02238A68",
+          "symbol_size": 2900
+        },
+        "blackout": {
+          "address": 33892440,
+          "address_hex": "0x02052858",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "b086b5f8",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "battle",
+          "register_hex": "f8b586b0061cfdf7f5fe051c301cfdf7",
+          "role": "whiteout task (battle loss path)",
+          "section": ".text",
+          "symbol": "Task_Blackout",
+          "symbol_size": 292
+        },
+        "encounter_result": {
+          "address": 33883892,
+          "address_hex": "0x020506f4",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "1c04b510",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "battle",
+          "register_hex": "10b5041c2268002a02d0206940691060",
+          "role": "copies winFlag into VAR_BATTLE_RESULT",
+          "section": ".text",
+          "symbol": "Encounter_GetResult",
+          "symbol_size": 48
+        },
+        "half_rate_thumb": {
+          "address": 33558148,
+          "address_hex": "0x02000e84",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "4819b508",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "08b51948c168002919d14169002929d0",
+          "role": "G1 row a: Thumb site hit every other frame (300/600)",
+          "section": ".text",
+          "symbol": "Main_RunOverlayManager",
+          "symbol_size": 112
+        },
+        "hge_load_arm9_expansion": {
+          "address": 34669364,
+          "address_hex": "0x02110334",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "2081b504",
+          "hge_status": "SOURCE_ONLY",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "SOURCE armips/asm/syntheticoverlay.s:15-37 (.thumb, .area at 0x02110334); not in the cached exports; first halfword 04b5 = push {r2,lr}",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "04b58120022100f005f8002000200321",
+          "role": "hge-only loader that loads ov129 from Main(); enters vanilla HandleLoadOverlay+8, bypassing the entry",
+          "section": ".text",
+          "symbol": "load_arm9_expansion"
+        },
+        "idle_halt_arm": {
+          "address": 34422616,
+          "address_hex": "0x020d3f58",
+          "collides_with": [],
+          "extent": 12,
+          "fire_hex": "e3a00000",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "0000a0e3900f07ee1eff2fe1",
+          "role": "G1 row m: idle-thread halt; the frame-end PC is parked here",
+          "section": ".text",
+          "symbol": "OS_Halt",
+          "symbol_size": 12
+        },
+        "load_overlay_entry": {
+          "address": 37589748,
+          "address_hex": "0x023d92f4",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "b5f72301",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "probe",
+          "register_hex": "0123f7b504000d005b4201932a4fba7c",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37589748,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 33583096,
+            "vanilla_entry_hex": "004a1047f5923d02051c009100f052f8",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "f8b50c1c0021c943051c009100f052f8"
+          },
+          "role": "G1 row b/c: vanilla overlay load entry",
+          "section": ".text",
+          "symbol": "HandleLoadOverlay"
+        },
+        "load_overlay_noinit": {
+          "address": 33583496,
+          "address_hex": "0x02007188",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "b08bb500",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "00b58bb0031c0a1c00a8191cd1f094eb",
+          "role": "static funnel under every load type",
+          "section": ".text",
+          "symbol": "LoadOverlayNoInit",
+          "symbol_size": 54
+        },
+        "load_overlay_noinit_async": {
+          "address": 33583552,
+          "address_hex": "0x020071c0",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "b09db500",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "00b59db0031c0a1c00a8191cd1f078eb",
+          "role": "static funnel; hge extension and ov129 loads (loadType 2) reach it without the entry",
+          "section": ".text",
+          "symbol": "LoadOverlayNoInitAsync",
+          "symbol_size": 64
+        },
+        "load_overlay_normal": {
+          "address": 33583488,
+          "address_hex": "0x02007180",
+          "collides_with": [],
+          "extent": 8,
+          "fire_hex": "47184b00",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "004b1847608d0d02",
+          "role": "static funnel under every load type",
+          "section": ".text",
+          "symbol": "LoadOverlayNormal",
+          "symbol_size": 8
+        },
+        "menu_only_ov74": {
+          "address": 35817940,
+          "address_hex": "0x022289d4",
+          "collides_with": [
+            "ov7",
+            "ov10",
+            "ov13",
+            "ov39",
+            "ov42"
+          ],
+          "extent": 16,
+          "fire_hex": "1c06b570",
+          "hge_status": "KEPT",
+          "image": "ov74",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": 74,
+          "phase": "probe",
+          "register_hex": "70b5061c0d1cdef559fc041ca069401c",
+          "role": "G1 row b: menu-only overlay (ov74) site",
+          "section": ".text",
+          "symbol": "MainMenuApp_Main",
+          "symbol_size": 440
+        },
+        "never_executed": {
+          "address": 33558436,
+          "address_hex": "0x02000fa4",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "490bb510",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "10b50b49041c00200ef022fe08490120",
+          "role": "G1 row a negative control: never executes",
+          "section": ".text",
+          "symbol": "DoSoftReset",
+          "symbol_size": 52
+        },
+        "party_add_mon": {
+          "address": 34030884,
+          "address_hex": "0x02074524",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "1c04b538",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "battle",
+          "register_hex": "38b5041c0a1c61682068814201db0020",
+          "role": "catch store into party (also gifts/eggs/trades)",
+          "section": ".text",
+          "symbol": "Party_AddMon",
+          "symbol_size": 72
+        },
+        "pc_delete_by_index_pair": {
+          "address": 37601196,
+          "address_hex": "0x023dbfac",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "0005b570",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "pc",
+          "register_hex": "70b505000c004b1c0ed1f0230f495b02",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37601196,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 34028816,
+            "vanilla_entry_hex": "004b1847adbf3d02c043844202d11220",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "38b5051c00200c1cc043844202d11220"
+          },
+          "role": "PC release",
+          "section": ".text",
+          "symbol": "PCStorage_DeleteBoxMonByIndexPair"
+        },
+        "pc_place_by_index_pair": {
+          "address": 37601362,
+          "address_hex": "0x023dc052",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "000cb5f8",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "pc",
+          "register_hex": "f8b50c0006001f001800144b150000f0",
+          "replaces": {
+            "redirect": {
+              "kind": "bl_stub",
+              "target": 37601362,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 34028652,
+            "vanilla_entry_hex": "60b4044d76462e6060bc68f3ecf90149",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "f8b51f1c051c381c0c1c161cfef724fe"
+          },
+          "role": "UI placement at a slot",
+          "section": ".text",
+          "symbol": "PCStorage_PlaceMonInBoxByIndexPair"
+        },
+        "pc_place_first_any_box": {
+          "address": 37601608,
+          "address_hex": "0x023dc148",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "b5f723f0",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "pc",
+          "register_hex": "f023f7b505000191194f5b02c25dc35c",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37601608,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 34028472,
+            "vanilla_entry_hex": "004a104749c13d022c580e1c071c301c",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "f8b5051c122000032c580e1c071c301c"
+          },
+          "role": "placement into any box",
+          "section": ".text",
+          "symbol": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox"
+        },
+        "pc_place_first_in_box": {
+          "address": 37601472,
+          "address_hex": "0x023dc0c0",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "000cb5f7",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "pc",
+          "register_hex": "f7b50c0006001b4b1000009200f0bef8",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37601472,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 34028540,
+            "vanilla_entry_hex": "004b1847c1c03d020e1c0192fef75cfe",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "f0b583b00090101c0e1c0192fef75cfe"
+          },
+          "role": "party-full catch path and PC placement",
+          "section": ".text",
+          "symbol": "PCStorage_PlaceMonInBoxFirstEmptySlot"
+        },
+        "pc_swap_by_index_pair": {
+          "address": 37601288,
+          "address_hex": "0x023dc008",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "2788b5f0",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "pc",
+          "register_hex": "f0b588277a4306000c031519a5b04519",
+          "replaces": {
+            "redirect": {
+              "kind": "bl_stub",
+              "target": 37601288,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 34028736,
+            "vanilla_entry_hex": "60b4044d76462e6060bc68f39df90149",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "f0b5a3b00c1c21039c46009043188820"
+          },
+          "role": "PC move/swap",
+          "section": ".text",
+          "symbol": "PCStorage_SwapMonsInBoxByIndexPair"
+        },
+        "per_frame_arm": {
+          "address": 34410092,
+          "address_hex": "0x020d0e6c",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "e92d4070",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "70402de90050a0e10140a0e1ee0a00eb",
+          "role": "G1 row a: per-frame ARM site (600/600 hits)",
+          "section": ".text",
+          "symbol": "OS_WaitIrq",
+          "symbol_size": 116
+        },
+        "per_frame_thumb": {
+          "address": 33661068,
+          "address_hex": "0x0201a08c",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "4b09b508",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "mode_evidence": "xMAP $t/$a mapping symbol (vanilla), bytes identical in hge",
+          "overlay_id": null,
+          "phase": "probe",
+          "register_hex": "08b5094b094901205a58104358500320",
+          "role": "G1 row a: per-frame Thumb site (600/600)",
+          "section": ".text",
+          "symbol": "VBlankCB_DmaTasksFramecounter",
+          "symbol_size": 52
+        },
+        "save_write_finish": {
+          "address": 37603712,
+          "address_hex": "0x023dc980",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "2500b570",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "field",
+          "register_hex": "70b50025144b0400c550032a0ad10b68",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37603712,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 33717484,
+            "vanilla_entry_hex": "004b184781c93d02e5529b1ce552032a",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "38b51a4b041c0025e5529b1ce552032a"
+          },
+          "role": "save settled",
+          "section": ".text",
+          "symbol": "Save_WriteManFinish"
+        },
+        "unload_overlay_entry": {
+          "address": 37589600,
+          "address_hex": "0x023d9260",
+          "collides_with": [],
+          "export_unit": "build/linked.o",
+          "extent": 16,
+          "fire_hex": "2401b5f8",
+          "hge_status": "REPLACED",
+          "image": "ov129",
+          "mode": "thumb",
+          "mode_evidence": "rom_gen.ld value (bit 0 = Thumb)",
+          "overlay_id": 129,
+          "phase": "probe",
+          "register_hex": "f8b501240500002627001e4b280000f0",
+          "replaces": {
+            "redirect": {
+              "kind": "ldr_bx_trampoline",
+              "target": 37589600,
+              "thumb": true
+            },
+            "redirect_evidence": "decoded from the hge entry bytes",
+            "vanilla_address": 33582972,
+            "vanilla_entry_hex": "0049084761923d0200f0cef80022031c",
+            "vanilla_image": "arm9",
+            "vanilla_register_hex": "10b5041c00f014f800f0cef80022031c"
+          },
+          "role": "G1 row c: vanilla overlay unload entry",
+          "section": ".text",
+          "symbol": "UnloadOverlayByID"
+        }
+      },
+      "symbols": {
+        "BattleSystem_GetPartyMon": {
+          "address": 35891328,
+          "address_hex": "0x0223a880",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "battle_system.o",
+          "section": ".text",
+          "size": 84
+        },
+        "BtlCmd_PlayFaintAnimation": {
+          "address": 35906192,
+          "address_hex": "0x0223e290",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "battle_command.o",
+          "section": ".text",
+          "size": 96
+        },
+        "BtlCmd_TryFaintMon": {
+          "address": 35906092,
+          "address_hex": "0x0223e22c",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "battle_command.o",
+          "section": ".text",
+          "size": 100
+        },
+        "DoSoftReset": {
+          "address": 33558436,
+          "address_hex": "0x02000fa4",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "main.o",
+          "section": ".text",
+          "size": 52
+        },
+        "Encounter_GetResult": {
+          "address": 33883892,
+          "address_hex": "0x020506f4",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "encounter.o",
+          "section": ".text",
+          "size": 48
+        },
+        "FieldSystem_IsPlayerMovementAllowed": {
+          "address": 33808700,
+          "address_hex": "0x0203e13c",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "field_system.o",
+          "section": ".text",
+          "size": 32
+        },
+        "FieldSystem_TaskIsRunning": {
+          "address": 33883536,
+          "address_hex": "0x02050590",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "task.o",
+          "section": ".text",
+          "size": 14
+        },
+        "GetLoadedOverlaysInRegion": {
+          "address": 33583396,
+          "address_hex": "0x02007124",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 36
+        },
+        "GetMonData": {
+          "address": 34006336,
+          "address_hex": "0x0206e540",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon.o",
+          "section": ".text",
+          "size": 120
+        },
+        "GiveMon": {
+          "address": 33898972,
+          "address_hex": "0x020541dc",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "script_pokemon_util.o",
+          "section": ".text",
+          "size": 156
+        },
+        "HandleLoadOverlay": {
+          "address": 33583096,
+          "address_hex": "0x02006ff8",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 180
+        },
+        "LoadOverlayNoInit": {
+          "address": 33583496,
+          "address_hex": "0x02007188",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 54
+        },
+        "LoadOverlayNoInitAsync": {
+          "address": 33583552,
+          "address_hex": "0x020071c0",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 64
+        },
+        "LoadOverlayNormal": {
+          "address": 33583488,
+          "address_hex": "0x02007180",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 8
+        },
+        "MainMenuApp_Init": {
+          "address": 35817760,
+          "address_hex": "0x02228920",
+          "image": "ov74",
+          "mode": "thumb",
+          "object": "main_menu.o",
+          "section": ".text",
+          "size": 180
+        },
+        "MainMenuApp_Main": {
+          "address": 35817940,
+          "address_hex": "0x022289d4",
+          "image": "ov74",
+          "mode": "thumb",
+          "object": "main_menu.o",
+          "section": ".text",
+          "size": 440
+        },
+        "Main_RunOverlayManager": {
+          "address": 33558148,
+          "address_hex": "0x02000e84",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "main.o",
+          "section": ".text",
+          "size": 112
+        },
+        "OS_Halt": {
+          "address": 34422616,
+          "address_hex": "0x020d3f58",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "os_terminate_proc.o",
+          "section": ".text",
+          "size": 12
+        },
+        "OS_WaitIrq": {
+          "address": 34410092,
+          "address_hex": "0x020d0e6c",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "os_irqHandler.o",
+          "section": ".text",
+          "size": 116
+        },
+        "PCStorage_DeleteBoxMonByIndexPair": {
+          "address": 34028816,
+          "address_hex": "0x02073d10",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 60
+        },
+        "PCStorage_PlaceMonInBoxByIndexPair": {
+          "address": 34028652,
+          "address_hex": "0x02073c6c",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 82
+        },
+        "PCStorage_PlaceMonInBoxFirstEmptySlot": {
+          "address": 34028540,
+          "address_hex": "0x02073bfc",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 112
+        },
+        "PCStorage_PlaceMonInFirstEmptySlotInAnyBox": {
+          "address": 34028472,
+          "address_hex": "0x02073bb8",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 66
+        },
+        "PCStorage_SetBoxModified": {
+          "address": 34029784,
+          "address_hex": "0x020740d8",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 32
+        },
+        "PCStorage_SwapMonsInBoxByIndexPair": {
+          "address": 34028736,
+          "address_hex": "0x02073cc0",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon_storage_system.o",
+          "section": ".text",
+          "size": 80
+        },
+        "Party_AddMon": {
+          "address": 34030884,
+          "address_hex": "0x02074524",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "party.o",
+          "section": ".text",
+          "size": 72
+        },
+        "RunBattleScript": {
+          "address": 35901288,
+          "address_hex": "0x0223cf68",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "battle_command.o",
+          "section": ".text",
+          "size": 80
+        },
+        "SaveArray_Get": {
+          "address": 33714888,
+          "address_hex": "0x020272c8",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "save.o",
+          "section": ".text",
+          "size": 36
+        },
+        "SaveData_Get": {
+          "address": 33714864,
+          "address_hex": "0x020272b0",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "save.o",
+          "section": ".text",
+          "size": 24
+        },
+        "Save_WriteFileAsync": {
+          "address": 33715556,
+          "address_hex": "0x02027564",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "save.o",
+          "section": ".text",
+          "size": 64
+        },
+        "Save_WriteManFinish": {
+          "address": 33717484,
+          "address_hex": "0x02027cec",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "save.o",
+          "section": ".text",
+          "size": 128
+        },
+        "ScrCmd_GiveEgg": {
+          "address": 33870408,
+          "address_hex": "0x0204d248",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "scrcmd_party.o",
+          "section": ".text",
+          "size": 134
+        },
+        "ScrCmd_GiveMon": {
+          "address": 33869960,
+          "address_hex": "0x0204d088",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "scrcmd_party.o",
+          "section": ".text",
+          "size": 204
+        },
+        "SetMonData": {
+          "address": 34008128,
+          "address_hex": "0x0206ec40",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "pokemon.o",
+          "section": ".text",
+          "size": 142
+        },
+        "SetupAndStartTrainerBattle": {
+          "address": 33887088,
+          "address_hex": "0x02051370",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "encounter.o",
+          "section": ".text",
+          "size": 184
+        },
+        "SetupAndStartWildBattle": {
+          "address": 33886240,
+          "address_hex": "0x02051020",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "encounter.o",
+          "section": ".text",
+          "size": 110
+        },
+        "Task_Blackout": {
+          "address": 33892440,
+          "address_hex": "0x02052858",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "blackout.o",
+          "section": ".text",
+          "size": 292
+        },
+        "Task_HatchEggInParty": {
+          "address": 34148568,
+          "address_hex": "0x020910d8",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "hatch_egg_task.o",
+          "section": ".text",
+          "size": 360
+        },
+        "Task_StartEncounter": {
+          "address": 33883960,
+          "address_hex": "0x02050738",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "encounter.o",
+          "section": ".text",
+          "size": 290
+        },
+        "TryFaintMon": {
+          "address": 35970164,
+          "address_hex": "0x0224dc74",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "battle_controller_player.o",
+          "section": ".text",
+          "size": 164
+        },
+        "UnloadOverlayByID": {
+          "address": 33582972,
+          "address_hex": "0x02006f7c",
+          "hge_status": "CHANGED",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "poke_overlay.o",
+          "section": ".text",
+          "size": 48
+        },
+        "VBlankCB_DmaTasksFramecounter": {
+          "address": 33661068,
+          "address_hex": "0x0201a08c",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "system.o",
+          "section": ".text",
+          "size": 52
+        },
+        "gSystem": {
+          "address": 35459340,
+          "address_hex": "0x021d110c",
+          "image": "arm9",
+          "mode": null,
+          "object": "system.o",
+          "section": ".bss",
+          "size": 120
+        },
+        "ov12_0223843C": {
+          "address": 35882044,
+          "address_hex": "0x0223843c",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "overlay_12_022378C0.o",
+          "section": ".text",
+          "size": 880
+        },
+        "ov12_02238A68": {
+          "address": 35883624,
+          "address_hex": "0x02238a68",
+          "image": "ov12",
+          "mode": "thumb",
+          "object": "overlay_12_022378C0.o",
+          "section": ".text",
+          "size": 2900
+        },
+        "sFieldSysPtr": {
+          "address": 35471704,
+          "address_hex": "0x021d4158",
+          "image": "arm9",
+          "mode": null,
+          "object": "field_system.o",
+          "section": ".bss",
+          "size": 4
+        },
+        "sOverlayRegions": {
+          "address": 35458544,
+          "address_hex": "0x021d0df0",
+          "image": "arm9",
+          "mode": null,
+          "object": "poke_overlay.o",
+          "section": ".bss",
+          "size": 192
+        },
+        "sRTCWork": {
+          "address": 35459144,
+          "address_hex": "0x021d1048",
+          "image": "arm9",
+          "mode": null,
+          "object": "gf_rtc.o",
+          "section": ".bss",
+          "size": 88
+        },
+        "sSaveDataPtr": {
+          "address": 35463720,
+          "address_hex": "0x021d2228",
+          "image": "arm9",
+          "mode": null,
+          "object": "save.o",
+          "section": ".bss",
+          "size": 4
+        },
+        "sub_0205239C": {
+          "address": 33891228,
+          "address_hex": "0x0205239c",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "battle_setup.o",
+          "section": ".text",
+          "size": 168
+        },
+        "sub_02075A7C": {
+          "address": 34036348,
+          "address_hex": "0x02075a7c",
+          "hge_status": "KEPT",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "unk_020755E8.o",
+          "section": ".text",
+          "size": 652
+        }
+      }
+    }
+  }
+}
