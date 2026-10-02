@@ -1716,3 +1716,16 @@ def test_the_save_state_cite_runs_to_the_strb_at_line_374():
         ev = _pack(mode)["titles"][title]["profile"]["probe_field_evidence"]["save_state"]
         assert ":365-374" in ev["cite"] and ":365-374" in ev["semantics"]["evidence"], title
         assert ":365-373" not in ev["cite"] and ":365-373" not in ev["semantics"]["evidence"], title
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_every_site_symbol_resolves_for_the_probe_validator(mode):
+    """probe_gen4_hooks.lua M.validate_site needs title.symbols[site.symbol] with the site's address/image/mode
+    (REPLACED sites resolve through hge_replacements instead); a site without one fails closed live (hge census c)."""
+    for title in _pack(mode)["titles"].values():
+        for site_id, site in title["sites"].items():
+            if site.get("hge_status") == "REPLACED":
+                continue
+            sym = title["symbols"].get(site["symbol"])
+            assert sym is not None, f"{site_id}: symbol {site['symbol']} absent from title.symbols"
+            assert (sym["address"], sym["image"], sym["mode"]) == (site["address"], site["image"], site["mode"]), site_id

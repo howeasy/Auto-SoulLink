@@ -5378,6 +5378,17 @@
           "section": ".bss",
           "size": 120
         },
+        "load_arm9_expansion": {
+          "address": 34669364,
+          "address_hex": "0x02110334",
+          "evidence": "SOURCE armips/asm/syntheticoverlay.s:15-37 (.thumb, .area at 0x02110334); not in the cached exports",
+          "hge_status": "SOURCE_ONLY",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": null,
+          "section": ".text",
+          "size": null
+        },
         "ov12_0223843C": {
           "address": 35882044,
           "address_hex": "0x0223843c",

@@ -2906,6 +2906,12 @@ def build_hge(inputs: Inputs) -> dict:
         if name in symbols and symbols[name].get("address") == row["address"]:
             raise Fail(f"hge replacement {name} equals the vanilla address; not a replacement")
         row["image"] = f"ov{HGE_NM_UNITS[row['unit']]}" if row["unit"] in HGE_NM_UNITS else None
+    # hge-only source sites have no xMAP row; the probe validator resolves every site through title.symbols.
+    for _, symbol, addr, image, _, _, mode, _, evid in HGE_SOURCE_SITES:
+        if symbol in symbols:
+            raise Fail(f"hge source site symbol {symbol} collides with a vanilla symbol")
+        symbols[symbol] = {"address": addr, "address_hex": f"{addr:#010x}", "image": image, "mode": mode,
+                           "section": ".text", "size": None, "object": None, "hge_status": "SOURCE_ONLY", "evidence": evid}
     ovr = xm.lookup("sOverlayRegions")
     errs = validate_sites(sites, hge_img, "hge")
     if errs:

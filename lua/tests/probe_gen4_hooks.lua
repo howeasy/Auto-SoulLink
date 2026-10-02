@@ -211,6 +211,45 @@ function M.capture(site, addr, val, flags, pc, resident)
     check(u32(val)==word(site.fire_hex), "active owner fire pin mismatch")
     return {id=site.id,address=u32(addr),word=u32(val),pc=u32(pc),flags=u32(flags)}
 end
+function M.phase_sites_ready(sites,bytes,resident,frame,state,policy,image_pins,want_arm)
+    if want_arm==nil then want_arm=true end
+    local ready=true
+    for _,site in ipairs(sites) do
+        local active=site.image=="arm9" or resident(site.overlay_id)
+        if not active then
+            state.current[site.id]=nil; ready=false
+        else
+            local sample=state.current[site.id]
+            if not sample then
+                sample={site=site.id,image=site.image,table_active_frame=frame}
+                state.current[site.id]=sample; state.samples[#state.samples+1]=sample
+            end
+            local actual=bytes(site.address,site.extent):lower()
+            local expected=site.register_hex:lower()
+            local detail=site.id.." image="..site.image.." address="..string.format("%08x",site.address)
+                .." expected="..expected.." actual="..actual
+            if actual==expected then
+                if not sample.pin_ready_frame then
+                    sample.pin_ready_frame=frame; sample.settle_frames=frame-sample.table_active_frame
+                end
+            else
+                sample.initial_bytes=sample.initial_bytes or actual
+                local elapsed=frame-sample.table_active_frame
+                sample.waited_frames=elapsed
+                if want_arm then
+                    check(not sample.pin_ready_frame,"confirmed site changed: "..detail)
+                    check(site.image~="arm9","static pin mismatch: "..detail)
+                    for image,pin in pairs(need(image_pins[site.id],"n:other-image FILE pins: "..site.id)) do
+                        check(actual~=pin:lower(),"wrong-image match: "..image.." "..detail)
+                    end
+                    check(elapsed<policy.max_frames,"settle deadline ("..policy.max_frames.." frames): "..detail)
+                end
+                ready=false
+            end
+        end
+    end
+    return ready
+end
 function M.observe_overlay(b,site,addr,val,flags,pc,bytes,resident)
     if not resident(site.overlay_id) then b.dropped=b.dropped+1; return end
     if bytes(site.address,site.extent)~=site.register_hex then b.callback_corrupt=b.callback_corrupt+1; return end
@@ -969,6 +1008,11 @@ local function run()
             local case=need(cfg.phase_case,"n:normal-input phase case (static PC and reset cases required)")
             local predicate=need(case.predicate,"n:executable pack phase predicate")
             check(case.source and case.source~="","phase predicate source required")
+            local settle_policy=need(cfg.phase_settle,"n:measured overlay settle policy for this title")
+            check(settle_policy.max_frames==settle_policy.measured_max+settle_policy.margin
+                and settle_policy.max_frames>0,"invalid settle policy")
+            local image_pins=need(cfg.phase_image_pins,"n:other-image FILE pins")
+            local settle={current={},samples={}}
             local producer=clone(need(title.sites[case.producer_site],"n:independent producer site")); producer.id=case.producer_site
             local sites={}; for _,id in ipairs(case.sites) do local s=clone(need(title.sites[id],"n:phase site:"..id)); s.id=id; sites[#sites+1]=s end
             check(#sites>0 and #sites+1<=4,"producer observer + phase handle budget")
@@ -1000,7 +1044,11 @@ local function run()
             end
             local pending_at_close=0
             phase_monitor={before=function()
-                local enabled=active()
+                -- Poll the table even before the caller predicate turns true so
+                -- the bounded wait starts at the observed residency transition.
+                local wanted=active()
+                local ready=M.phase_sites_ready(sites,bytes,resident,emu.framecount(),settle,settle_policy,image_pins,wanted)
+                local enabled=wanted and ready
                 if enabled and not armed then composite:enter(case.name,sites); armed=true
                 elseif not enabled and armed then
                     pending_at_close=pending_at_close+composite.phases[case.name]:status().pending
@@ -1031,6 +1079,7 @@ local function run()
                     oracle_frames=oracle,seen_frames=seen,phase=case.name,predicate_source=case.source}
                 result.physical.cases={clone(result.physical)}
                 result.physical.bridge_gaps=clone(bridge_gaps)
+                result.physical.settle={policy=clone(settle_policy),samples=clone(settle.samples)}
             end}
             return result
         end)

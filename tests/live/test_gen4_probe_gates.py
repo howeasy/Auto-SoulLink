@@ -1385,6 +1385,32 @@ def internal_census_loads(title, artifact):
     return entries
 
 
+def phase_settle_policy(title, artifact):
+    # This bound is measured for this HG ROM only. Other titles need their own
+    # diagnostic; absent evidence is OPEN, never an inherited timing allowance.
+    if title != "heartgold":
+        return None
+    assert artifact["rom"]["sha1"] == "4fcded0e2713dc03929845de631d0932ea2b5a37", "settle measurement ROM changed"
+    return {"max_frames": 16, "measured_max": 11, "margin": 5, "units": "emulator frames",
+            "receipt": "C:/slink/g4/g1-settle-HG-1144-serial/settle.json",
+            "receipt_sha256": "ddf1dc69d852f30988aba4c0b8af61697ec6307e0b6d4371fe29188e9f1e5d38",
+            "state_sha256": "86efe700aed2d8e2737330c98bb2881891daeb1004382be43a1577e349ffb627",
+            "note": "serial PHYSICAL diagnostic: faint 10, start 11; add 5 frames scheduling margin; never qualifies row n alone"}
+
+
+def phase_image_pins(source, artifact, title):
+    generator = importlib.import_module("tools.gen_gen4_pack")
+    images = generator.load_images(source, raw_arm9=title == "heartgold_hge")
+    result = {}
+    for case in artifact.get("phase_cases", []):
+        for site_id in case["sites"]:
+            site = artifact["sites"][site_id]
+            if site_id not in result:
+                result[site_id] = {image: images.read(image, site["address"], site["extent"]).hex()
+                                   for image in images.collisions(site["image"], site["address"], site["extent"])}
+    return result
+
+
 def mutation_specs(codec, decoded, artifact, scenario):
     """Modify existing native records only; no new mon, flags, story or synthetic fixture."""
     p = artifact["profile"]
@@ -1562,6 +1588,8 @@ def test_gen4_hook_probe(api, title):
     cfg["save_witness"] = source_witness(codec, decoded)
     cfg["internal_loads"] = internal_census_loads(title, artifact)
     cfg["census_image_bytes"] = census_file_pins(source, artifact, title, cfg.get("internal_loads", ()))
+    cfg["phase_settle"] = phase_settle_policy(title, artifact)
+    cfg["phase_image_pins"] = phase_image_pins(source, artifact, title)
     if "phase_cases" not in cfg and artifact.get("phase_cases"):
         cfg["phase_cases"] = artifact["phase_cases"]
     # Blockers are authoritative pack input, not an opt-out supplied by a scenario.
@@ -1736,6 +1764,8 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
         assert internal_loads == internal_census_loads(title, artifact)
         return {}
     monkeypatch.setattr(module, "census_file_pins", census_pins)
+    monkeypatch.setattr(module, "phase_settle_policy", lambda *args: {})
+    monkeypatch.setattr(module, "phase_image_pins", lambda *args: {})
     monkeypatch.setattr(module, "save_setup", lambda path: {"setup": "NATIVE"})
     monkeypatch.setattr(module, "phase_case_plan", lambda *args: ([{"name": "battle", "route": []}], []))
     cut_calls = 0
@@ -1839,6 +1869,93 @@ def test_full_pin_failure_identifies_site_image_and_bytes(api):
         api.validate_site(to_lua(api._runtime, artifact), to_lua(api._runtime, site), lambda *args: wrong, lambda _: True)
     assert api.validate_site(to_lua(api._runtime, artifact), to_lua(api._runtime, site),
                              lambda *args: site["register_hex"], lambda _: True) is not None
+
+
+def test_async_active_bss_waits_for_pin_then_rechecks_red_revert(api):
+    artifact = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["heartgold"]
+    site = {**artifact["sites"]["battle_start_ov12"], "id": "battle_start_ov12"}
+    bss = "000400fc0010000422262225000a0006"  # PHYSICAL HG phase-0 / serial settle diagnostic.
+    expected = site["register_hex"]
+    state = to_lua(api._runtime, {"current": {}, "samples": []})
+    frame, active, actual = 100, True, bss
+    policy = {"max_frames": 16, "measured_max": 11, "margin": 5}
+    def ready():
+        if api.phase_sites_ready is None:  # Replay the old arm path before introducing the fix.
+            api.validate_site(to_lua(api._runtime, artifact), to_lua(api._runtime, site), lambda *args: actual, lambda _: active)
+            return True
+        return api.phase_sites_ready(to_lua(api._runtime, [site]), lambda *args: actual, lambda _: active,
+                                     frame, state, to_lua(api._runtime, policy),
+                                     to_lua(api._runtime, {site["id"]: {"ov74": "11" * site["extent"]}}))
+    assert ready() is False  # No registration while the table is active but field BSS remains.
+    frame = 110
+    assert ready() is False
+    frame, actual = 111, expected
+    assert ready() is True
+    samples = from_lua(state)["samples"]
+    assert samples[1]["table_active_frame"] == 100 and samples[1]["settle_frames"] == 11
+    actual = bss
+    with pytest.raises(Exception, match="confirmed site changed.*battle_start_ov12"):
+        ready()
+    actual = expected
+    assert ready() is True
+    active = False
+    assert ready() is False
+    active, actual, frame = True, bss, 200
+    assert ready() is False  # A new residency generation gets a fresh, bounded wait.
+    frame = 216
+    with pytest.raises(Exception, match="settle deadline.*battle_start_ov12.*actual=" + bss):
+        ready()
+    actual = expected
+    assert ready() is True  # Matching exactly at the deadline is allowed.
+    active = False
+    assert ready() is False
+    active, actual, frame = True, "11" * site["extent"], 300
+    with pytest.raises(Exception, match="wrong-image match.*ov74"):
+        ready()  # A known wrong image is never treated as loading.
+
+
+def test_settle_trace_starts_before_caller_predicate_and_static_sites_never_wait(api):
+    site = {"id": "probe", "image": "ov12", "overlay_id": 12, "address": 100, "extent": 4, "register_hex": "01020304"}
+    state = to_lua(api._runtime, {"current": {}, "samples": []})
+    policy = to_lua(api._runtime, {"max_frames": 16})
+    pins = to_lua(api._runtime, {"probe": {"ov74": "ffffffff"}})
+    def ready(frame, raw, wanted):
+        return api.phase_sites_ready(to_lua(api._runtime, [site]), lambda *args: raw, lambda _: True,
+                                     frame, state, policy, pins, wanted)
+    assert ready(100, "00000000", False) is False
+    assert ready(105, "01020304", False) is True
+    assert ready(110, "01020304", True) is True
+    assert from_lua(state)["samples"][1]["settle_frames"] == 5
+    # Once the caller ends, stale/overwritten bytes cannot keep handles armed;
+    # the monitor closes them because wanted is false, while polling continues.
+    assert ready(120, "ffffffff", False) is False
+    with pytest.raises(Exception, match="confirmed site changed"):
+        ready(120, "ffffffff", True)
+    site["image"] = "arm9"
+    state = to_lua(api._runtime, {"current": {}, "samples": []})
+    with pytest.raises(Exception, match="static pin mismatch"):
+        ready(200, "00000000", True)
+
+
+def test_settle_policy_is_measured_title_only_and_collision_pins_are_rom_bytes():
+    for title, pack in TITLE_PACK.items():
+        artifact = json.loads((REPO / "data/games" / pack / "profile.json").read_text())["titles"][title]
+        policy = phase_settle_policy(title, artifact)
+        if title != "heartgold":
+            assert policy is None
+            continue
+        assert policy["max_frames"] == policy["measured_max"] + policy["margin"] == 16
+        broken = copy.deepcopy(artifact)
+        broken["rom"]["sha1"] = "0" * 40
+        with pytest.raises(AssertionError, match="measurement ROM changed"):
+            phase_settle_policy(title, broken)
+        rom = gen4_pins.default_locations().roms[title]
+        if not rom.is_file():
+            pytest.skip("OPEN optional HG ROM for collision FILE pins")
+        pins = phase_image_pins(rom, artifact, title)
+        assert set(pins["battle_start_ov12"]) == set(artifact["sites"]["battle_start_ov12"]["collides_with"])
+        assert all(len(pin) == artifact["sites"]["battle_start_ov12"]["extent"] * 2
+                   for pin in pins["battle_start_ov12"].values())
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows destination sharing contract")
