@@ -1514,8 +1514,8 @@ def test_field_save_offsets_decode_the_owner_saves(mode):
 
 def test_field_save_evidence_is_graded_and_honest_about_hge_and_pt():
     hg, hge = _profile("hgss")["field_save"], _profile("hge")["field_save"]
-    assert [hg[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["SOURCE+FILE", "SOURCE+FILE", "FILE"]
-    assert [hge[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["DERIVED+FILE", "DERIVED+FILE", "FILE"]
+    assert [hg[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["SOURCE+FILE", "SOURCE+FILE", "SOURCE+FILE"]
+    assert [hge[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["DERIVED+FILE", "DERIVED+FILE", "DERIVED+FILE"]
     for fs in (hg, hge):
         for key in ("vars", "flags", "map_objects", "player_state"):
             assert fs[key]["evidence"] and fs[key]["evidence_class"]
@@ -1582,9 +1582,9 @@ def test_every_owner_cite_names_the_repository_exactly_once(mode, title):
 
 def test_d7_repl_flag_pin_covers_the_indexed_load_and_the_hge_trampoline_is_typed(monkeypatch):
     xm, hg, ss, hge = _d7_inputs()
-    assert [o for o, _ in g.D7_REPL_PIN] == [0x4A, 0x4C, 0x4E, 0x50]          # the literal AND the load that consumes it
+    assert [o for o, _ in g.D7_REPL_PIN][:4] == [0x4A, 0x4C, 0x4E, 0x50]      # the literal AND the load that consumes it
     for img, build in ((hg, "hgss"), (ss, "hgss"), (hge, "hge")):
-        assert g.d7_file_checks(xm, img, build, hg)["repl_flag"]["halfwords"] == ["0x214f", "0x9807", "0x0089", "0x5842"]
+        assert g.d7_file_checks(xm, img, build, hg)["repl_flag"]["halfwords"][:4] == ["0x214f", "0x9807", "0x0089", "0x5842"]
     for off in (0x4C, 0x50):                                                  # the load halfwords were not covered before
         for img, build in ((hg, "hgss"), (hge, "hge")):
             with pytest.raises(g.Fail, match="replacement-flag halfwords"):
@@ -1634,8 +1634,8 @@ def test_the_save_driver_cite_covers_both_asm_lines_and_the_state_semantics_sit_
         assert (sem["width"], sem["type"]) == (1, "u8") and set(sem["values"]) == {"0", "1", "2"}
         assert sem["values"]["0"].startswith("init") and sem["values"]["1"].startswith("idle") and "only value that accepts" in sem["values"]["1"]
         assert sem["values"]["2"].startswith("requested")
-        assert all(ref in sem["evidence"] for ref in (":124-137", ":365-373", ":431-436"))
-        assert ":365-373" in ev["save_state"]["cite"]
+        assert all(ref in sem["evidence"] for ref in (":124-137", ":365-374", ":431-436"))
+        assert ":365-374" in ev["save_state"]["cite"]
 
 
 def test_the_running_field_map_writer_is_byte_identical_in_hge():
@@ -1648,3 +1648,71 @@ def test_the_running_field_map_writer_is_byte_identical_in_hge():
     # revert: a changed byte in the writer fails the generator
     with pytest.raises(g.Fail, match="ov01_021F54AC"):
         g.hge_field_checks(xm, hg, _flip(hge, s.image, s.address + 2))
+
+
+# ---- place-pack fixes (OMP cx-3bab37d5 on 3f5f447d): F1 vecY, F3 derived key set, F4 bics/str pin, F5 :374, F6 summable offset ----
+def test_map_objects_carry_vecy_and_the_height_relation_the_game_uses():
+    for mode in ("hgss", "hge"):
+        mo = _profile(mode)["field_save"]["map_objects"]
+        assert mo["fields"]["vecY"] == 0x2C and mo["fields"]["currentY"] == 0x28 and mo["height_to_vecY_shift"] == 15
+        assert "map_object.c:639-641" in mo["height_evidence"] and ":494-496" in mo["height_evidence"]
+        assert "single point" in mo["height_evidence"]            # honest: one height in the owner saves
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_every_active_owner_object_obeys_vecy_equals_currenty_shift(mode):
+    prof, general = _profile(mode), _general(mode)
+    mo = prof["field_save"]["map_objects"]
+    F, sh = mo["fields"], mo["height_to_vecY_shift"]
+    rows = []
+    for i in range(mo["count"]):
+        o = mo["general_off"] + i * mo["stride"]
+        if struct.unpack_from("<I", general, o + F["flags"])[0] & mo["active_mask"]:
+            rows.append((struct.unpack_from("<h", general, o + F["currentY"])[0], struct.unpack_from("<i", general, o + F["vecY"])[0]))
+    assert rows and all(vec == cy << sh for cy, vec in rows)
+
+
+def test_the_hgss_map_object_offset_is_summed_from_source_and_hge_keeps_an_honest_gap():
+    hg, hge = _profile("hgss")["field_save"]["map_objects"], _profile("hge")["field_save"]["map_objects"]
+    assert 0x1234 + 0x84 + 0x344 + 0x1E4 + 0x884 + 0x2E4 == 0x2348 == hg["general_off"]
+    assert hg["evidence_class"] == "SOURCE+FILE" and "0x1234 + 0x84 (LocalFieldData 0x80 + CRC) + 0x344 (Pokedex)" in hg["evidence"]
+    assert "0x2348" in hg["evidence"] and "cannot be summed" not in hg["evidence"] + hg["file_cross_check"]
+    assert "not explained here" in hge["evidence"] or "NOT explained here" in hge["evidence"]
+    assert hge["evidence_class"] == "DERIVED+FILE" and hge["general_off"] == 0x2CC0 == 0x2348 - 0x1234 + 0x1424 + 0x788
+    assert "cannot be summed" not in hge["evidence"] + hge["file_cross_check"]
+
+
+def test_hge_probe_field_key_set_is_the_complement_of_the_declared_non_fieldsystem_keys(monkeypatch):
+    xm, hg, ss, hge = _d7_inputs()
+    assert set(g.NON_FS_PROBE_KEYS) == {"launched_app", "field_app", "paused", "save_state", "save_driver_data_off"}
+    assert set(g.NON_FS_PROBE_KEYS) <= {*g.PROBE_FIELD, *g.PROBE_FIELD_EXTRA}
+    pre = g.hge_field_checks(xm, hg, hge)["preserved_prefix"]
+    assert pre["probe_field_keys"] == sorted({*g.PROBE_FIELD, *g.PROBE_FIELD_EXTRA} - set(g.NON_FS_PROBE_KEYS))
+    assert pre["max_probe_field_offset"] == 0xD8 and "sub" in pre["probe_field_keys"] and "paused" not in pre["probe_field_keys"]
+    monkeypatch.setitem(g.PROBE_FIELD, "brand_new_key", (0x108, "SOURCE", "x"))   # a NEW FieldSystem-level key past the prefix
+    with pytest.raises(g.Fail, match="preserved"):
+        g.hge_field_checks(xm, hg, hge)
+    monkeypatch.setitem(g.PROBE_FIELD, "brand_new_key", (0x40, "SOURCE", "x"))    # inside the prefix is fine and is now covered
+    assert g.hge_field_checks(xm, hg, hge)["preserved_prefix"]["probe_field_keys"].count("brand_new_key") == 1
+
+
+def test_repl_flag_pin_covers_the_bics_and_the_store_that_clear_bit_zero():
+    xm, hg, ss, hge = _d7_inputs()
+    assert [o for o, _ in g.D7_REPL_PIN] == [0x4A, 0x4C, 0x4E, 0x50, 0x54, 0x58]
+    assert [h for _, h in g.D7_REPL_PIN][4:] == [0x4382, 0x5042]               # bics r2,r0 ; str r2,[r0,r1] (ctx->unk_13C[b] &= ~1)
+    for img, build in ((hg, "hgss"), (ss, "hgss"), (hge, "hge")):
+        assert g.d7_file_checks(xm, img, build, hg)["repl_flag"]["halfwords"] == [
+            "0x214f", "0x9807", "0x0089", "0x5842", "0x4382", "0x5042"]
+    for off in (0x54, 0x58):
+        for img, build in ((hg, "hgss"), (ss, "hgss"), (hge, "hge")):
+            with pytest.raises(g.Fail, match="replacement-flag halfwords"):
+                g.d7_file_checks(xm, _flip(img, "ov12", 0x0224D540 + off), build, hg)
+    ev = _pack("hgss")["titles"]["heartgold"]["profile"]["battle_evidence"]["d7"]["fields"]["repl_flag_off"]["cite"]
+    assert "bics r2,r0" in ev and "unk_13C[b] &= ~1" in ev
+
+
+def test_the_save_state_cite_runs_to_the_strb_at_line_374():
+    for mode, title in (("hgss", "heartgold"), ("hgss", "soulsilver"), ("hge", "heartgold_hge")):
+        ev = _pack(mode)["titles"][title]["profile"]["probe_field_evidence"]["save_state"]
+        assert ":365-374" in ev["cite"] and ":365-374" in ev["semantics"]["evidence"], title
+        assert ":365-373" not in ev["cite"] and ":365-373" not in ev["semantics"]["evidence"], title

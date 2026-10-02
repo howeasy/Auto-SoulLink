@@ -2812,19 +2812,23 @@
           },
           "repl_flag": {
             "bytes_source": "decompressed ov12",
-            "decodes_as": "movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1]  (0x4f << 2 = 0x13C; the base register is the BattleContext by SOURCE + PHYSICAL, not by these bytes)",
+            "decodes_as": "movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1] ; (movs r0,#1) ; bics r2,r0 ; (ldr r0,[sp,#0x1c]) ; str r2,[r0,r1]  (0x4f << 2 = 0x13C; a read-modify-write clearing bit 0; the base register is the BattleContext by SOURCE + PHYSICAL, not by these bytes)",
             "function_address": 35968320,
             "halfword_offsets": [
               74,
               76,
               78,
-              80
+              80,
+              84,
+              88
             ],
             "halfwords": [
               "0x214f",
               "0x9807",
               "0x0089",
-              "0x5842"
+              "0x5842",
+              "0x4382",
+              "0x5042"
             ],
             "image": "ov12",
             "lsls_at": 35968398,
@@ -2964,7 +2968,7 @@
                 "physical": "PHYSICAL: docs/gen4/research/battle_faint_seam.md sections 10, 13 (hge build cb2dc435; cmd 9 seam hit r15 0x022494E0, receipt heartgold_hge_seam_ufce_bit_p2_201513; four p2 rows PASS)"
               },
               "repl_flag_off": {
-                "cite": "FILE: profile.battle_d7_file_checks.repl_flag (ov12_0224D540 `movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1]` = a load at ctx-relative 0x13C; the base register being the BattleContext is SOURCE + PHYSICAL, ROM-identical in hge); hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1345 (`/*0x13C*/ client_status[CLIENT_MAX]`, explicit; bit0 = replacement needed)",
+                "cite": "FILE: profile.battle_d7_file_checks.repl_flag (ov12_0224D540 `movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1] ; bics r2,r0 ; str r2,[r0,r1]` = a read-modify-write at ctx-relative 0x13C clearing bit 0, i.e. `ctx->unk_13C[b] &= ~1`; the base register being the BattleContext is SOURCE + PHYSICAL, ROM-identical in hge); hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1345 (`/*0x13C*/ client_status[CLIENT_MAX]`, explicit; bit0 = replacement needed)",
                 "class": "FILE",
                 "owner": {
                   "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1345",
@@ -3259,8 +3263,8 @@
             "active_mask": 1,
             "array_id": 10,
             "count": 64,
-            "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/map_object.h:6-33 (SavedMapObject, 0x50 bytes), :119 (MAPOBJECTFLAG_ACTIVE = 1), src/save_local_field_data.c:30-32 (SavedMapObjectList: 64 subs), src/map_object.c:395-425 (active objects are written from index 0, the rest zeroed; restore has no map filter); hge's arrays 6-9 are 0x788 bytes larger than vanilla (the cause is not decoded here), so the offset cannot be summed from source",
-            "evidence_class": "FILE",
+            "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/map_object.h:6-33 (SavedMapObject, 0x50 bytes), :119 (MAPOBJECTFLAG_ACTIVE = 1), src/save_local_field_data.c:30-32 (SavedMapObjectList: 64 subs), src/map_object.c:395-425 (active objects are written from index 0, the rest zeroed; restore has no map filter); the array offset is summed from src/save.c:733-768 over arrays 5-9: LocalFieldData 0x1234 + 0x84 (LocalFieldData 0x80 + CRC) + 0x344 (Pokedex) + 0x1E4 (Daycare) + 0x884 (PalPad) + 0x2E4 (Misc) = 0x2348; for hge the vanilla sum is 0x2348 - 0x1234 + 0x1424 = 0x2538 but the measured offset is 0x2CC0: +0x788 of hge growth in arrays 6-9 that is NOT explained here",
+            "evidence_class": "DERIVED+FILE",
             "fields": {
               "currentFacing": 13,
               "currentX": 38,
@@ -3273,10 +3277,13 @@
               "initialZ": 36,
               "mapId": 16,
               "movement": 9,
-              "objId": 8
+              "objId": 8,
+              "vecY": 44
             },
-            "file_cross_check": "FILE: in both owner hge saves (OOO, JIII) entry 0 at general+0x2CC0 is the player (flags 0x2000e431, objId 0xFF, movement 1, currentX/Z = Location x,z); SavedMapObject layout assumed vanilla (only the fields above were read)",
+            "file_cross_check": "FILE: in both owner hge saves (OOO, JIII) entry 0 at general+0x2CC0 is the player (flags 0x2000e431, objId 0xFF, movement 1, currentX/Z = Location x,z); SavedMapObject layout assumed vanilla (only the fields above were read); the +0x788 is measured, not decoded",
             "general_off": 11456,
+            "height_evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/map_object.c:639-641 (currentY = (vecY >> 3) / FX32_ONE, so vecY = currentY * 8 * 0x1000 = currentY << 15), :494-496 (the restore copies vecY from the save), :520-535 (only x/z are recomputed), :600-610 and :816-828 (nothing else re-derives Y); FILE: every active object in the 4 owner saves holds currentY 2 with vecY 0x10000 (one height only, so the relation is confirmed at a single point)",
+            "height_to_vecY_shift": 15,
             "stride": 80
           },
           "player_state": {
@@ -3417,10 +3424,10 @@
             "class": "SOURCE_PROJECTION"
           },
           "save_state": {
-            "cite": "vanilla prefix preserved; hge extends FieldSystem to 0x128: hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:592-619 declares the same offsets at 0x8/0xC/0x10/0x14/0x20/0x3C/0x40/0xE4; FILE: FieldSystem_New allocates 0x128 and differs from vanilla only inside the declared windows (the heap-size shifter and the StoreFieldSysPtr hook), the launch/overlay-manager/field-main/save-driver code is byte-identical, and every FieldSystem-level probe_field offset lies below the preserved prefix 0xE4 (checked, profile.probe_field_hge_checks); vanilla: pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :365-373 (ov01_021F6A9C accepts a request only when ldrb [data,#1]==1), :431-436 (ov01_021F6B10 returns [data,#1]); offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]",
+            "cite": "vanilla prefix preserved; hge extends FieldSystem to 0x128: hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:592-619 declares the same offsets at 0x8/0xC/0x10/0x14/0x20/0x3C/0x40/0xE4; FILE: FieldSystem_New allocates 0x128 and differs from vanilla only inside the declared windows (the heap-size shifter and the StoreFieldSysPtr hook), the launch/overlay-manager/field-main/save-driver code is byte-identical, and every FieldSystem-level probe_field offset lies below the preserved prefix 0xE4 (checked, profile.probe_field_hge_checks); vanilla: pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :365-374 (ov01_021F6A9C accepts a request only when ldrb [data,#1]==1, then strb #2), :431-436 (ov01_021F6B10 returns [data,#1]); offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]",
             "class": "SOURCE_PROJECTION",
             "semantics": {
-              "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (create: strb data[1]=0), :365-373 (request accepted only if ldrb [data,#1]==1, then strb #2), :431-436 (ov01_021F6B10 returns ldrb [data,#1]); 3-7 are the fade/run/finish states (checkpoint.md section 3), not decoded here",
+              "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_01_021F6830.s:124-137 (create: strb data[1]=0), :365-374 (request accepted only if ldrb [data,#1]==1, then strb #2), :431-436 (ov01_021F6B10 returns ldrb [data,#1]); 3-7 are the fade/run/finish states (checkpoint.md section 3), not decoded here",
               "location": "SysTask.data[1], data = u32[save_driver_task + save_driver_data_off]",
               "type": "u8",
               "values": {
@@ -3602,12 +3609,19 @@
             "end": 228,
             "evidence": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/pokemon.h:612 (followMon @0xE4), size 0x128; vanilla include/field_system.h:171; the checked invariant is max(offset) < end",
             "max_probe_field_offset": 216,
+            "non_fieldsystem_keys": [
+              "launched_app",
+              "field_app",
+              "paused",
+              "save_state",
+              "save_driver_data_off"
+            ],
             "probe_field_keys": [
-              "sub",
-              "save",
-              "task",
               "live",
-              "save_driver"
+              "save",
+              "save_driver",
+              "sub",
+              "task"
             ]
           }
         },

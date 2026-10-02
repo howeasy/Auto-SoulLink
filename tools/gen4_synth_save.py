@@ -72,9 +72,19 @@ A Location-only write is NOT coherent (CONTINUE restores the saved map objects w
 the saved ``movement == 1`` object at its OLD coordinates, src/save_local_field_data.c:133-151, src/map_object.c:413-425,
 src/player_avatar.c:169-180), so the tool writes, in the newest general block only:
 
-* Location x5 (current, entrance, previous, dynamicWarp, specialSpawn) with warpId -1;
+* all five Locations of LocalFieldData (current, entrance, previous, dynamicWarp, specialSpawn; src/save_local_field_data.c:13-19)
+  with warpId -1: the game's own fresh-state Locations (src/location_backup.c:10-24) and its warp-less spawns (src/scrcmd_c.c:4101)
+  use -1 for "no warp event", and ``FieldTask`` only dereferences a warp when ``warpId != -1`` (src/field_warp_tasks.c:150), so
+  every Location the game can resume from means "stand at x,y", not "arrive through warp N";
 * the single active ``movement == 1`` SavedMapObject (the player): currentX/currentZ = x/y (Location.y is the north-south
-  tile, the object's Z), initial/current/next facing = dir; currentY (height) only with ``--height``, else carried;
+  tile, the object's Z), initial/current/next facing = dir;
+* the elevation: the restore copies savedObject->vecY into the object (src/map_object.c:494-496) and
+  ``MapObject_ConvertXZToPositionVec`` recomputes only x and z (:520-535); ``sub_0205EAF0`` only creates the object's SysTask
+  (:600-610) and ``sub_0205EFB4`` only touches flags and callbacks (:816-828), so nothing re-derives Y after the restore.  A
+  place onto a DIFFERENT map than the source Location is therefore REFUSED (``height_required``) unless ``--height H`` is
+  given; with it BOTH currentY (+0x28) and vecY (+0x2C, fx32 = H * 8 * 0x1000 = H << 15, from currentY = (vecY >> 3) / FX32_ONE,
+  :639-641; the owner saves hold currentY 2 with vecY 0x10000) are written.  A same-map place keeps the source currentY/vecY
+  (correct only where the destination tile has the same height; the sidecar says ``height_source: carried``);
 * MAPOBJECTFLAG_ACTIVE cleared on every other saved object (the follower; NPCs are rebuilt from the map's events);
 * PlayerSaveData.state = 0 (walking);
 * the requested flags / vars (flag 0, temp flags >= 0x4000, ids >= NUM_FLAGS and vars outside 0x4000..0x416F are refused).
@@ -85,7 +95,8 @@ the SavedMapObject offsets there (+0x8 facing, +0xC mapId, +0x1C.. coordinates) 
 struct (include/map_object.h:6-33) has currentFacing +0xD, mapId +0x10, currentX/Y/Z +0x26/+0x28/+0x2A, and the list is
 not at 0x12B8 (Pokedex/Daycare/PalPad/Misc sit between) but at 0x2348 (hgss) / 0x2CC0 (hge), measured on the owner saves.
 The player entry own mapId is 1 on map 60 in every owner save (the object is KEEP, src/map_object.c:158), so it is
-NOT written.  Positive anchors: exactly one active ``movement == 1`` entry whose currentX/currentZ equal the source
+NOT written.  Map bounds are NOT checked (the pack holds no map dimensions): the sidecar records ``bounds_verified: false``.
+Positive anchors: exactly one active ``movement == 1`` entry whose currentX/currentZ equal the source
 Location.  Only the sector footer CRC is re-sealed (no per-array CRC).  OFFLINE: where the avatar lands is a physical card.
 
 In every kind the verifier also proves that no byte outside the intended span (plus the two
@@ -716,7 +727,6 @@ def build_species(image: bytes, profile, species: int, sidecar: dict | None = No
 PLACE_NOTE = "SYNTH setup: player placed on a map with story flags/vars set for a native story-gated test"
 LOCATION_ARRAY_SPAN = 5 * 20            # current, entrance, previous, dynamicWarp, specialSpawn (src/save_local_field_data.c:13-19)
 DIRECTIONS = (0, 1, 2, 3)               # DIR_NORTH/SOUTH/WEST/EAST (include/constants/global_fieldmap.h:5-8)
-VAR_BASE, NUM_VARS = 0x4000, 0x170      # include/constants/vars.h:4,384
 MAX_TILE = 0x7FFF                       # SavedMapObject coordinates are s16
 
 
@@ -750,9 +760,13 @@ def _pairs(items, what: str) -> dict:
     return out
 
 
-def check_place_args(map_id, x, y, direction, flags: dict, vars_: dict, height, nflags: int) -> None:
+def check_place_args(map_id, x, y, direction, flags: dict, vars_: dict, height, fs: dict, source_map: int) -> None:
+    nflags, vbase, vcount = fs["flags"]["count"], fs["vars"]["base_id"], fs["vars"]["count"]
     if map_id not in valid_maps():
         raise Refusal("bad_map", f"map id {map_id} is not in the pack map table")
+    if map_id != source_map and height is None:
+        raise Refusal("height_required", f"map {map_id} differs from the source map {source_map}: the game restores the saved "
+                      "vecY and never re-derives it (src/map_object.c:494-496), so pass --height for the destination elevation")
     if not (0 <= x <= MAX_TILE and 0 <= y <= MAX_TILE):
         raise Refusal("bad_coord", f"x/y must be 0..{MAX_TILE}, got {x},{y}")
     if direction not in DIRECTIONS:
@@ -769,8 +783,8 @@ def check_place_args(map_id, x, y, direction, flags: dict, vars_: dict, height, 
         if value not in (0, 1):
             raise Refusal("bad_flag", f"flag {fid} value must be 0 or 1, got {value}")
     for vid, value in vars_.items():
-        if not VAR_BASE <= vid < VAR_BASE + NUM_VARS:
-            raise Refusal("bad_var", f"var {vid:#x} is outside {VAR_BASE:#x}..{VAR_BASE + NUM_VARS - 1:#x}")
+        if not vbase <= vid < vbase + vcount:
+            raise Refusal("bad_var", f"var {vid:#x} is outside {vbase:#x}..{vbase + vcount - 1:#x}")
         if not 0 <= value <= 0xFFFF:
             raise Refusal("bad_var", f"var {vid:#x} value must fit a u16, got {value}")
 
@@ -781,7 +795,6 @@ def build_place(image: bytes, profile, map_id: int, x: int, y: int, direction: i
     save = codec.parse_save(image, profile)
     p = save.profile
     fs, loc_off = _field_save(p.name)
-    check_place_args(map_id, x, y, direction, flags, vars_, height, fs["flags"]["count"])
     party = save.party()
     g = save.general
     mo, F = fs["map_objects"], fs["map_objects"]["fields"]
@@ -803,20 +816,22 @@ def build_place(image: bytes, profile, map_id: int, x: int, y: int, direction: i
     cz = struct.unpack_from("<h", g, entry(pl) + F["currentZ"])[0]
     if (cx, cz) != (here[2], here[3]):
         raise Refusal("place_layout_unverified", f"player object at ({cx},{cz}) != Location ({here[2]},{here[3]}): offsets are wrong")
+    check_place_args(map_id, x, y, direction, flags, vars_, height, fs, here[0])
     others = [i for i in active if i != pl]
     state_before = struct.unpack_from("<i", g, state_at)[0]
     o = entry(pl)
     fb = fs["flags"]["general_off"]
-    vb = fs["vars"]["general_off"]
+    vb, vbase = fs["vars"]["general_off"], fs["vars"]["base_id"]
+    vec = None if height is None else height << fs["map_objects"]["height_to_vecY_shift"]  # fx32: currentY * 8 * FX32_ONE
 
     spans = [(loc_off, loc_off + LOCATION_ARRAY_SPAN), (state_at, state_at + 4),
              (o + F["initialFacing"], o + F["currentFacing"] + 2),  # initial, current, next facing
              (o + F["currentX"], o + F["currentX"] + 2), (o + F["currentZ"], o + F["currentZ"] + 2)]
     if height is not None:
-        spans.append((o + F["currentY"], o + F["currentY"] + 2))
+        spans += [(o + F["currentY"], o + F["currentY"] + 2), (o + F["vecY"], o + F["vecY"] + 4)]
     spans += [(entry(i) + F["flags"], entry(i) + F["flags"] + 4) for i in others]
     spans += [(fb + fid // 8, fb + fid // 8 + 1) for fid in flags]
-    spans += [(vb + 2 * (vid - VAR_BASE), vb + 2 * (vid - VAR_BASE) + 2) for vid in vars_]
+    spans += [(vb + 2 * (vid - vbase), vb + 2 * (vid - vbase) + 2) for vid in vars_]
 
     def edit(data: bytearray) -> None:
         for k in range(5):
@@ -827,22 +842,30 @@ def build_place(image: bytes, profile, map_id: int, x: int, y: int, direction: i
         struct.pack_into("<h", data, o + F["currentZ"], y)
         if height is not None:
             struct.pack_into("<h", data, o + F["currentY"], height)
+            struct.pack_into("<i", data, o + F["vecY"], vec)
         for i in others:
             at = entry(i) + F["flags"]
             struct.pack_into("<I", data, at, struct.unpack_from("<I", data, at)[0] & ~mo["active_mask"])
         for fid, value in flags.items():
             data[fb + fid // 8] = (data[fb + fid // 8] & ~(1 << fid % 8) & 0xFF) | (value << fid % 8)
         for vid, value in vars_.items():
-            struct.pack_into("<H", data, vb + 2 * (vid - VAR_BASE), value)
+            struct.pack_into("<H", data, vb + 2 * (vid - vbase), value)
 
     out = _seal(image, save, edit)
     want = {"loc": (map_id, -1, x, y, direction), "pl": pl, "x": x, "z": y, "dir": direction,
-            "height": height, "flags": flags, "vars": vars_, "state_at": state_at}
+            "height": height, "vecY": vec, "flags": flags, "vars": vars_, "state_at": state_at}
     _verify_place(image, out, save, party, fs, loc_off, want, spans)
     layout = {k: {"general_off": fs[k]["general_off"], "evidence_class": fs[k]["evidence_class"]}
               for k in ("vars", "flags", "map_objects")}
     layout["player_state"] = {"general_off": state_at, "evidence_class": fs["player_state"]["evidence_class"]}
-    return out, _row("place", PLACE_NOTE, image, out, save, map=map_id, x=x, y=y, dir=direction, height=height,
+    cy = struct.unpack_from("<h", g, o + F["currentY"])[0] if height is None else height
+    return out, _row("place", PLACE_NOTE, image, out, save, map=map_id, x=x, y=y, dir=direction, height=cy, vecY=(
+                         struct.unpack_from("<i", g, o + F["vecY"])[0] if vec is None else vec),
+                     height_source="given" if height is not None else "carried",
+                     height_note="vecY is restored from the save and never re-derived (src/map_object.c:494-496, 502-512, 520-535); "
+                                 "vecY = currentY << 15 (:639-641); carried = the source elevation, valid only on the same map",
+                     bounds_verified=False,
+                     bounds_note="no map dimensions in the pack: x/y are range-checked as s16 only, not against the map size",
                      flags={str(k): v for k, v in sorted(flags.items())}, vars={f"{k:#x}": v for k, v in sorted(vars_.items())},
                      player_entry=pl, cleared_entries=others, location_before=list(here), state_before=state_before,
                      layout=layout, coherence="Location x5 + player map object + other objects inactive + player state 0")
@@ -868,13 +891,18 @@ def _verify_place(src, out, save, party, fs, loc_off, want, spans) -> None:
         raise Refusal("verify", "player object coordinates do not read back")
     if tuple(g[o + F["initialFacing"] : o + F["currentFacing"] + 2]) != (want["dir"],) * 3:
         raise Refusal("verify", "player object facing does not read back")
-    if want["height"] is not None and struct.unpack_from("<h", g, o + F["currentY"])[0] != want["height"]:
-        raise Refusal("verify", "player object height does not read back")
+    g0 = codec.parse_save(src, save.profile).general
+    if want["height"] is not None:
+        if (struct.unpack_from("<h", g, o + F["currentY"])[0], struct.unpack_from("<i", g, o + F["vecY"])[0]) != (want["height"], want["vecY"]):
+            raise Refusal("verify", "player object currentY / vecY do not read back")
+    elif g[o + F["currentY"] : o + F["currentY"] + 2] != g0[o + F["currentY"] : o + F["currentY"] + 2] or (
+            g[o + F["vecY"] : o + F["vecY"] + 4] != g0[o + F["vecY"] : o + F["vecY"] + 4]):
+        raise Refusal("verify", "the carried elevation (currentY / vecY) changed")
     for fid, value in want["flags"].items():
         if (g[fs["flags"]["general_off"] + fid // 8] >> fid % 8) & 1 != value:
             raise Refusal("verify", f"flag {fid} does not read back")
     for vid, value in want["vars"].items():
-        if struct.unpack_from("<H", g, fs["vars"]["general_off"] + 2 * (vid - VAR_BASE))[0] != value:
+        if struct.unpack_from("<H", g, fs["vars"]["general_off"] + 2 * (vid - fs["vars"]["base_id"]))[0] != value:
             raise Refusal("verify", f"var {vid:#x} does not read back")
     _only_changed(src, out, save, spans)
 

@@ -723,15 +723,21 @@ HGSS_FIELD_SAVE = {
         "array_id": 10, "general_off": 0x2348, "count": 64, "stride": 0x50, "active_mask": 1,
         "fields": {"flags": 0x00, "objId": 0x08, "movement": 0x09, "initialFacing": 0x0C, "currentFacing": 0x0D,
                    "mapId": 0x10, "initialX": 0x20, "initialY": 0x22, "initialZ": 0x24,
-                   "currentX": 0x26, "currentY": 0x28, "currentZ": 0x2A},
+                   "currentX": 0x26, "currentY": 0x28, "currentZ": 0x2A, "vecY": 0x2C},
+        "height_to_vecY_shift": 15,
+        "height_evidence": f"SOURCE {PRET_HG} src/map_object.c:639-641 (currentY = (vecY >> 3) / FX32_ONE, so vecY = currentY * 8 * "
+                           "0x1000 = currentY << 15), :494-496 (the restore copies vecY from the save), :520-535 (only x/z are "
+                           "recomputed), :600-610 and :816-828 (nothing else re-derives Y); FILE: every active object in the 4 owner "
+                           "saves holds currentY 2 with vecY 0x10000 (one height only, so the relation is confirmed at a single point)",
         "evidence": f"SOURCE {PRET_HG} include/map_object.h:6-33 (SavedMapObject, 0x50 bytes), :119 (MAPOBJECTFLAG_ACTIVE = 1), "
                     "src/save_local_field_data.c:30-32 (SavedMapObjectList: 64 subs), src/map_object.c:395-425 "
-                    "(active objects are written from index 0, the rest zeroed; restore has no map filter)",
-        "evidence_class": "FILE",
-        "file_cross_check": "FILE: the offset is measured, not summed (arrays 6-9 Pokedex/Daycare/PalPad/Misc sit between "
-                            "LocalFieldData and this list): in the owner HG and SS saves entry 0 at general+0x2348 is the "
-                            "player (flags 0x2000e431, objId 0xFF, movement 1, currentX/Y/Z = Location x,2,z) and its fields sit "
-                            "at the SavedMapObject offsets above",
+                    "(active objects are written from index 0, the rest zeroed; restore has no map filter); the array offset is "
+                    "summed from src/save.c:733-768 over arrays 5-9: LocalFieldData 0x1234 + 0x84 "
+                    "(LocalFieldData 0x80 + CRC) + 0x344 (Pokedex) + 0x1E4 (Daycare) + 0x884 (PalPad) + 0x2E4 (Misc) = 0x2348",
+        "evidence_class": "SOURCE+FILE",
+        "file_cross_check": "FILE: the summed offset equals the measured one: in the owner HG and SS saves entry 0 at general+0x2348 "
+                            "is the player (flags 0x2000e431, objId 0xFF, movement 1, currentX/Y/Z = Location x,2,z) and its fields "
+                            "sit at the SavedMapObject offsets above",
     },
     "player_state": {
         "player_off_in_local_field": 0x6C, "state_off_in_local_field": 0x70, "state_width": 4,
@@ -761,12 +767,12 @@ HGE_FIELD_SAVE = {
     },
     "map_objects": {
         **HGSS_FIELD_SAVE["map_objects"], "general_off": 0x2CC0,
-        "evidence": HGSS_FIELD_SAVE["map_objects"]["evidence"] + "; hge's arrays 6-9 are 0x788 bytes larger than vanilla "
-                    "(the cause is not decoded here), so the offset cannot be summed from source",
-        "evidence_class": "FILE",
+        "evidence": HGSS_FIELD_SAVE["map_objects"]["evidence"] + "; for hge the vanilla sum is 0x2348 - 0x1234 + 0x1424 = 0x2538 "
+                    "but the measured offset is 0x2CC0: +0x788 of hge growth in arrays 6-9 that is NOT explained here",
+        "evidence_class": "DERIVED+FILE",
         "file_cross_check": "FILE: in both owner hge saves (OOO, JIII) entry 0 at general+0x2CC0 is the player (flags 0x2000e431, "
                             "objId 0xFF, movement 1, currentX/Z = Location x,z); SavedMapObject layout assumed vanilla "
-                            "(only the fields above were read)",
+                            "(only the fields above were read); the +0x788 is measured, not decoded",
     },
     "player_state": {**HGSS_FIELD_SAVE["player_state"],
                      "evidence": HGSS_FIELD_SAVE["player_state"]["evidence"] + "; hge LocalFieldData layout assumed vanilla "
@@ -798,7 +804,7 @@ SAVE_STATE_SEMANTICS = {
     "width": 1, "type": "u8", "location": "SysTask.data[1], data = u32[save_driver_task + save_driver_data_off]",
     "values": {"0": "init (ov01_021F68DC stores 0 at creation)", "1": "idle: the only value that accepts a save request",
                "2": "requested (ov01_021F6A9C stores 2 and the request id)"},
-    "evidence": f"{PRET_HG} {_ASM_SAVE}:124-137 (create: strb data[1]=0), :365-373 (request accepted only if ldrb [data,#1]==1, then "
+    "evidence": f"{PRET_HG} {_ASM_SAVE}:124-137 (create: strb data[1]=0), :365-374 (request accepted only if ldrb [data,#1]==1, then "
                 "strb #2), :431-436 (ov01_021F6B10 returns ldrb [data,#1]); 3-7 are the fade/run/finish states "
                 "(checkpoint.md section 3), not decoded here",
 }
@@ -816,8 +822,8 @@ PROBE_FIELD = {
     "paused": (0x08, "SOURCE", f"{_FS}:82 (FieldSystemUnkSub0.isPaused, BOOL, sub-relative); src/field_system.c:96,145,199-201,284-289"),
     "save_driver": (0xD8, "ASM", f"{_FS}:168 (unk_D8 = SysTask*; struct order and the 0xE4 followMon comment corroborate); "
                                  f"{_ASM_SAVE}:91-92 (add r4,#0xd8; str r0,[r4] after ov01_021F68DC creates the task)"),
-    "save_state": (0x01, "ASM", f"{PRET_HG} {_ASM_SAVE}:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :365-373 (ov01_021F6A9C accepts a "
-                                f"request only when ldrb [data,#1]==1), :431-436 (ov01_021F6B10 returns [data,#1]); "
+    "save_state": (0x01, "ASM", f"{PRET_HG} {_ASM_SAVE}:124-137 (ov01_021F68DC: data[0]=mode, data[1]=state=0), :365-374 (ov01_021F6A9C accepts a "
+                                f"request only when ldrb [data,#1]==1, then strb #2), :431-436 (ov01_021F6B10 returns [data,#1]); "
                                 "offset is inside SysTask.data, so read data = u32[save_driver_task + save_driver_data_off]",
                    SAVE_STATE_SEMANTICS),
 }
@@ -2056,9 +2062,10 @@ D7_SEAM_PIN_HEX = "f8b582b0"      # probe ufce.pin 0xB082B5F8 little-endian: the
 D7_HGE_ENTRY = 0x022494DD         # hge ROM dispatch word for command 9 (Thumb bit set): trampoline at 0x022494DC (doc section 10)
 D7_HGE_TRAMPOLINE_HEX = "004a1047"  # hge dispatch target bytes: halfwords 0x4a00 0x4710 = `ldr r2,[pc]; bx r2`, little-endian file order
 # ov12_0224D540 (offset, halfword): +0x4A `movs r1,#0x4f`, +0x4C `ldr r0,[sp,#0x1c]`, +0x4E `lsls r1,r1,#2` (4f << 2 == 0x13C),
-# +0x50 `ldr r2,[r0,r1]`: the literal AND the indexed load that consumes it.  The base register being the BattleContext is SOURCE
-# (`ctx->unk_13C[battlerId]`, src/battle/battle_controller_player.c:3416-) + PHYSICAL (the probe reads ctx + 0x13C), not a byte fact.
-D7_REPL_PIN = ((0x4A, 0x214F), (0x4C, 0x9807), (0x4E, 0x0089), (0x50, 0x5842))
+# +0x50 `ldr r2,[r0,r1]`, then +0x54 `bics r2,r0` (r0 = #1 from +0x52) and +0x58 `str r2,[r0,r1]` (r0 reloaded at +0x56): the literal,
+# the indexed load AND the store that clears bit 0 = `ctx->unk_13C[battlerId] &= ~1` (src/battle/battle_controller_player.c:3424).
+# The base register being the BattleContext is SOURCE + PHYSICAL (the probe reads ctx + 0x13C), not a byte fact.
+D7_REPL_PIN = ((0x4A, 0x214F), (0x4C, 0x9807), (0x4E, 0x0089), (0x50, 0x5842), (0x54, 0x4382), (0x58, 0x5042))
 S_CMD_ENUM = _c("include/constants/battle.h", "596-609", "typedef enum ControllerCommand")
 S_CMD_TABLE_UFCE = _c("src/battle/battle_controller_player.c", "109", "CONTROLLER_COMMAND_UPDATE_FIELD_CONDITION_EXTRA")
 S_CMD_DISPATCH = _c("src/battle/battle_controller_player.c", "166", "sPlayerBattleCommands[ctx->command]")
@@ -2110,10 +2117,11 @@ def d7_file_checks(xm: XMap, images: Images, build: str, vanilla: Images | None 
     got = [struct.unpack("<H", images.read(D7_OV, d540.address + o, 2))[0] for o in offs]
     if got != want or (want[0] & 0xFF) << 2 != 0x13C:
         raise Fail(f"ov12_0224D540 replacement-flag halfwords {[hex(x) for x in got]} != the proven "
-                   "movs r1,#0x4f / ldr r0,[sp,#0x1c] / lsls r1,r1,#2 / ldr r2,[r0,r1]")
+                   "movs r1,#0x4f / ldr r0,[sp,#0x1c] / lsls r1,r1,#2 / ldr r2,[r0,r1] / bics r2,r0 / str r2,[r0,r1]")
     out["repl_flag"] = {"symbol": "ov12_0224D540", "function_address": d540.address, "image": D7_OV, "movs_at": d540.address + offs[0],
                         "lsls_at": d540.address + offs[2], "halfword_offsets": offs, "halfwords": [f"{x:#06x}" for x in got],
-                        "decodes_as": "movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1]  (0x4f << 2 = 0x13C; the "
+                        "decodes_as": "movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1] ; (movs r0,#1) ; bics r2,r0 ; "
+                                      "(ldr r0,[sp,#0x1c]) ; str r2,[r0,r1]  (0x4f << 2 = 0x13C; a read-modify-write clearing bit 0; the "
                                       "base register is the BattleContext by SOURCE + PHYSICAL, not by these bytes)", "value": 0x13C,
                         "bytes_source": f"decompressed {D7_OV}"}
     return out
@@ -2173,8 +2181,9 @@ def d7_evidence(build: str, title: str) -> dict:
                                                         S_PARTY_HP + " (`/* 0x08E */`, explicit)"),
                          "physical": phys, "owner": own("PartyPokemon", ref(H_PARTY_HP, S_PARTY_HP))},
         "repl_flag_off": {"class": "FILE", "cite": "; ".join([
-            "FILE: profile.battle_d7_file_checks.repl_flag (ov12_0224D540 `movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1]` = "
-            "a load at ctx-relative 0x13C; the base register being the BattleContext is SOURCE + PHYSICAL"
+            "FILE: profile.battle_d7_file_checks.repl_flag (ov12_0224D540 `movs r1,#0x4f ; ldr r0,[sp,#0x1c] ; lsls r1,r1,#2 ; ldr r2,[r0,r1] ; "
+            "bics r2,r0 ; str r2,[r0,r1]` = a read-modify-write at ctx-relative 0x13C clearing bit 0, i.e. `ctx->unk_13C[b] &= ~1`; "
+            "the base register being the BattleContext is SOURCE + PHYSICAL"
             + (", ROM-identical in hge)" if hge else ")"),
             ref(H_CTX_REPL + " (`/*0x13C*/ client_status[CLIENT_MAX]`, explicit; bit0 = replacement needed)",
                 S_CTX_REPL + " (BattleContext.unk_13C[4])")]),
@@ -2734,7 +2743,9 @@ FS_SIZE = 0x128
 # hge extends FieldSystem 0x128 but declares/preserves the vanilla prefix up to followMon @0xE4 (include/pokemon.h:612, vanilla
 # include/field_system.h:171).  The FieldSystem-level probe_field offsets are only valid on hge while they sit below it.
 HGE_FS_PREFIX_END = 0xE4
-FS_LEVEL_PROBE_KEYS = ("sub", "save", "task", "live", "save_driver")  # the rest are sub-struct / SysTask relative
+# probe_field keys that are NOT FieldSystem offsets: FieldSystemUnkSub0-relative (the struct at fs+0 via `sub`), SysTask.data-relative
+# (save_state) or SysTask-relative (save_driver_data_off).  Every other key, including any added later, is FieldSystem-level.
+NON_FS_PROBE_KEYS = ("launched_app", "field_app", "paused", "save_state", "save_driver_data_off")
 
 
 def hge_field_checks(xm: XMap, hg: Images, hge: Images) -> dict:
@@ -2756,14 +2767,18 @@ def hge_field_checks(xm: XMap, hg: Images, hge: Images) -> dict:
     alloc = (halfwords[0] & 0xFF) << 2
     if alloc != FS_SIZE:
         raise Fail(f"hge FieldSystem_New allocates {alloc:#x}, not the declared {FS_SIZE:#x}")
-    top = max(PROBE_FIELD[k][0] for k in FS_LEVEL_PROBE_KEYS)
+    fs_level = {k: v[0] for k, v in {**PROBE_FIELD, **PROBE_FIELD_EXTRA}.items() if k not in NON_FS_PROBE_KEYS}
+    if not NON_FS_PROBE_KEYS or set(NON_FS_PROBE_KEYS) - {*PROBE_FIELD, *PROBE_FIELD_EXTRA} or len(fs_level) < 4:
+        raise Fail("NON_FS_PROBE_KEYS no longer names probe_field keys (the FieldSystem-level set would be wrong)")
+    top = max(fs_level.values())
     if top >= HGE_FS_PREFIX_END:
         raise Fail(f"a FieldSystem-level probe_field offset {top:#x} reaches the part of hge FieldSystem that is not the preserved "
                    f"prefix (< {HGE_FS_PREFIX_END:#x}); the vanilla projection no longer holds")
     return {
         "evidence": f"FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol); {ARM9_BYTES_NOTE}",
         "functions_byte_identical": funcs,
-        "preserved_prefix": {"end": HGE_FS_PREFIX_END, "probe_field_keys": list(FS_LEVEL_PROBE_KEYS), "max_probe_field_offset": top,
+        "preserved_prefix": {"end": HGE_FS_PREFIX_END, "probe_field_keys": sorted(fs_level), "non_fieldsystem_keys": list(NON_FS_PROBE_KEYS),
+                             "max_probe_field_offset": top,
                              "evidence": f"{HGE_SRC} include/pokemon.h:612 (followMon @0xE4), size {FS_SIZE:#x}; vanilla "
                                          "include/field_system.h:171; the checked invariant is max(offset) < end"},
         "field_system_new": {

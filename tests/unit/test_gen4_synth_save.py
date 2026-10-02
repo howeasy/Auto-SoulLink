@@ -813,6 +813,7 @@ def _hermetic_place_image(state: int = 2, extra_player: bool = False, lone_follo
             body[o + 0xC : o + 0xF] = bytes([face]) * 3
             struct.pack_into("<H", body, o + 0x10, mp)
             struct.pack_into("<hhhhhh", body, o + 0x20, cx, 0, cz, cx, cy, cz)
+            struct.pack_into("<i", body, o + 0x2C, cy << 15)
         if extra_player:
             o = OBJ_AT["hgss"] + 0x50 * 9
             struct.pack_into("<IIBB", body, o, 0x2000E431, 0, 255, 1)
@@ -828,7 +829,7 @@ def _place(src: Path, out: Path, variant: str = "hgss", *args: str) -> int:
     return synth.main(["place", "--profile", variant, "--src", str(src), "--out", str(out), *args])
 
 
-GOOD = ("--map", "100", "--x", "700", "--y", "410", "--dir", "2")
+GOOD = ("--map", "100", "--x", "700", "--y", "410", "--dir", "2", "--height", "2")  # a map change needs an explicit height (F1)
 
 
 def _assert_place_written(a: bytes, b: bytes, variant: str, *, map_id=100, x=700, y=410, d=2, flags=None, vars_=None,
@@ -846,7 +847,12 @@ def _assert_place_written(a: bytes, b: bytes, variant: str, *, map_id=100, x=700
     assert player["cur"][0] == x and player["cur"][2] == y
     before = _read_player_object(g0, variant)
     assert player["map"] == before["map"]                                # the player mapId is not the map id: untouched
-    assert player["cur"][1] == (before["cur"][1] if height is None else height)
+    vec = struct.unpack_from("<i", g, _obj(variant, 0) + 0x2C)[0]
+    vec0 = struct.unpack_from("<i", g0, _obj(variant, 0) + 0x2C)[0]
+    if height is None:                                                   # same map, no --height: the source elevation is carried
+        assert player["cur"][1] == before["cur"][1] and vec == vec0
+    else:                                                                # restore only sets vecY from the save (map_object.c:494-496)
+        assert player["cur"][1] == height and vec == height << 15
     actives = [i for i in range(64) if struct.unpack_from("<I", g, _obj(variant, i))[0] & 1]
     assert actives == [0]                                                # only the player is active
     for i in range(1, 64):                                               # the others keep every bit but ACTIVE
@@ -864,7 +870,7 @@ def _place_spans(variant: str, a: bytes, *, flags=(), vars_=(), height=False) ->
     spans = [(LOC_AT[variant], LOC_AT[variant] + 100), (LOC_AT[variant] + STATE_OFF, LOC_AT[variant] + STATE_OFF + 4),
              (o + 0xC, o + 0xF), (o + 0x26, o + 0x28), (o + 0x2A, o + 0x2C)]
     if height:
-        spans.append((o + 0x28, o + 0x2A))
+        spans += [(o + 0x28, o + 0x2A), (o + 0x2C, o + 0x30)]           # currentY and vecY
     spans += [(_obj(variant, i), _obj(variant, i) + 4) for i in range(1, 64) if struct.unpack_from("<I", g0, _obj(variant, i))[0] & 1]
     spans += [(FLAGS_AT[variant] + f // 8, FLAGS_AT[variant] + f // 8 + 1) for f in flags]
     spans += [(VARS_AT[variant] + 2 * (v - 0x4000), VARS_AT[variant] + 2 * (v - 0x4000) + 2) for v in vars_]
@@ -891,8 +897,8 @@ def test_place_writes_location_player_object_and_flags_on_the_owner_saves(tmp_pa
     assert _place(src, out, variant, *GOOD, "--flag", "2000=1", "--flag", "0x7D1=1", "--var", "0x4040=3", "--var", "16500=65535") == synth.WRITTEN
     assert src.read_bytes() == _owner(variant)
     a, b = src.read_bytes(), out.read_bytes()
-    _assert_place_written(a, b, variant, flags={2000: 1, 2001: 1}, vars_={0x4040: 3, 16500: 65535})
-    _assert_changed_within(a, b, variant, _place_spans(variant, a, flags=(2000, 2001), vars_=(0x4040, 16500)))
+    _assert_place_written(a, b, variant, flags={2000: 1, 2001: 1}, vars_={0x4040: 3, 16500: 65535}, height=2)
+    _assert_changed_within(a, b, variant, _place_spans(variant, a, flags=(2000, 2001), vars_=(0x4040, 16500), height=True))
     other = 1 - codec.parse_save(a, variant).bank
     assert b[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE] == a[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE]
     row = json.loads((tmp_path / "place.SaveRAM.synth.json").read_text(encoding="utf-8"))
@@ -900,7 +906,9 @@ def test_place_writes_location_player_object_and_flags_on_the_owner_saves(tmp_pa
     assert row["src_sha1"] == hashlib.sha1(a).hexdigest() and row["out_sha1"] == hashlib.sha1(b).hexdigest()
     assert row["flags"] == {"2000": 1, "2001": 1} and row["vars"] == {"0x4040": 3, "0x4074": 65535}
     assert row["player_entry"] == 0 and row["layout"]["map_objects"]["general_off"] == OBJ_AT[variant]
-    assert row["layout"]["map_objects"]["evidence_class"] == "FILE"
+    assert row["layout"]["map_objects"]["evidence_class"] == {"hgss": "SOURCE+FILE", "hge": "DERIVED+FILE"}[variant]
+    assert row["bounds_verified"] is False and "no map dimensions" in row["bounds_note"]          # F7
+    assert (row["height"], row["height_source"], row["vecY"]) == (2, "given", 2 << 15)
 
 
 def test_place_clears_flags_height_and_the_follower_on_a_hermetic_save(tmp_path):
@@ -926,32 +934,42 @@ def test_place_is_deterministic_and_leaves_unrelated_flags_alone(tmp_path):
     assert g[VARS_AT["hgss"] : VARS_AT["hgss"] + 0x2E0] == g0[VARS_AT["hgss"] : VARS_AT["hgss"] + 0x2E0]
 
 
-BAD_PLACE_ARGS = [
-    {"--map": "540"}, {"--map": "-1"}, {"--x": "-1"}, {"--x": "32768"}, {"--y": "40000"}, {"--dir": "4"}, {"--dir": "-1"},
-    {"--height": "40000"}, {"--flag": ["0=1"]}, {"--flag": ["0x4000=1"]}, {"--flag": ["16384=0"]}, {"--flag": ["2912=1"]},
-    {"--flag": ["7=2"]}, {"--flag": ["7=-1"]}, {"--flag": ["abc"]}, {"--flag": ["5=1", "5=0"]},
-    {"--var": ["0x3FFF=1"]}, {"--var": ["0x4170=1"]}, {"--var": ["0x8000=1"]}, {"--var": ["0x4040=65536"]},
-    {"--var": ["0x4040=-1"]}, {"--var": ["nope"]}, {"--var": ["0x4040=1", "0x4040=2"]},
+BAD_PLACE_ARGS = [  # (override, reason code, message fragment): every case must hit ITS OWN refusal, not an earlier one
+    ({"--map": "540"}, "bad_map", "not in the pack map table"), ({"--map": "-1"}, "bad_map", "not in the pack map table"),
+    ({"--x": "-1"}, "bad_coord", "x/y must be"), ({"--x": "32768"}, "bad_coord", "x/y must be"),
+    ({"--y": "40000"}, "bad_coord", "x/y must be"), ({"--dir": "4"}, "bad_dir", "--dir must be"),
+    ({"--dir": "-1"}, "bad_dir", "--dir must be"), ({"--height": "40000"}, "bad_coord", "does not fit"),
+    ({"--flag": ["0=1"]}, "bad_flag", "no-op"), ({"--flag": ["0x4000=1"]}, "bad_flag", "temp flag"),
+    ({"--flag": ["0x4001=1"]}, "bad_flag", "temp flag"),
+    ({"--flag": ["2912=1"]}, "bad_flag", "outside 1..2911"), ({"--flag": ["3000=1"]}, "bad_flag", "outside 1..2911"),
+    ({"--flag": ["7=2"]}, "bad_flag", "must be 0 or 1"), ({"--flag": ["7=-1"]}, "bad_flag", "must be 0 or 1"),
+    ({"--flag": ["abc"]}, "bad_place_arg", "ID=VALUE"), ({"--flag": ["5=1", "5=0"]}, "bad_place_arg", "two different values"),
+    ({"--var": ["0x3FFF=1"]}, "bad_var", "outside 0x4000..0x416f"), ({"--var": ["0x4170=1"]}, "bad_var", "outside 0x4000..0x416f"),
+    ({"--var": ["0x8000=1"]}, "bad_var", "outside 0x4000..0x416f"), ({"--var": ["0x4040=65536"]}, "bad_var", "must fit a u16"),
+    ({"--var": ["0x4040=-1"]}, "bad_var", "must fit a u16"), ({"--var": ["nope"]}, "bad_place_arg", "ID=VALUE"),
+    ({"--var": ["0x4040=1", "0x4040=2"]}, "bad_place_arg", "two different values"),
 ]
 
 
-@pytest.mark.parametrize("bad", BAD_PLACE_ARGS, ids=[next(iter(b)) + ":" + str(next(iter(b.values()))) for b in BAD_PLACE_ARGS])
-def test_place_refuses_bad_arguments_and_writes_nothing(tmp_path, capsys, bad):
+@pytest.mark.parametrize("bad,code,fragment", BAD_PLACE_ARGS,
+                         ids=[next(iter(b[0])) + ":" + str(next(iter(b[0].values()))) for b in BAD_PLACE_ARGS])
+def test_place_refuses_bad_arguments_with_the_specific_reason_and_writes_nothing(tmp_path, capsys, bad, code, fragment):
     src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
     src.write_bytes(_hermetic_place_image())
     before = src.read_bytes()
-    args = {"--map": "100", "--x": "700", "--y": "410", "--dir": "2", **bad}
+    args = {"--map": "100", "--x": "700", "--y": "410", "--dir": "2", "--height": "2", **bad}
     argv = []
     for key, value in args.items():
         for item in value if isinstance(value, list) else [value]:
             argv += [key, item]
     assert _place(src, out, "hgss", *argv) == synth.REFUSED, bad
-    assert "refuse:" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert f"'{code}'" in err and fragment in err, (bad, err)
     assert src.read_bytes() == before and not out.exists() and not Path(str(out) + ".synth.json").exists()
 
 
 @pytest.mark.parametrize("variant", ["hgss", "hge"])
-def test_place_refuses_a_flag_id_above_the_flag_count_and_below_temp_on_every_profile(tmp_path, variant):
+def test_place_accepts_the_last_real_flag_and_refuses_the_next_on_every_profile(tmp_path, variant):
     src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
     src.write_bytes(_owner(variant))
     assert _place(src, out, variant, *GOOD, "--flag", "2911=1") == synth.WRITTEN        # the last real flag
@@ -1002,3 +1020,60 @@ def test_place_composes_with_party6_and_species(tmp_path):
     assert _synth("party6", src, p6) == synth.WRITTEN and _place(p6, both, "hgss", *GOOD) == synth.WRITTEN
     got = codec.parse_save(both.read_bytes(), "hgss")
     assert len(got.party()) == 6 and struct.unpack_from("<5i", got.general, LOC_AT["hgss"])[0] == 100
+
+
+# ---------------------------------------------------------------------------
+# place-pack fixes (OMP cx-3bab37d5 on 3f5f447d)
+# ---------------------------------------------------------------------------
+def test_place_across_maps_needs_an_explicit_height_and_writes_vecy_with_it(tmp_path, capsys):
+    """F1: the game restores vecY from the save and never re-derives it (map_object.c:494-496, 502-512), so a map change with
+    no known elevation is refused; with --height both currentY (+0x28) and vecY (+0x2C = height << 15) are written."""
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    cross = ("--map", "100", "--x", "700", "--y", "410", "--dir", "2")
+    assert _place(src, out, "hgss", *cross) == synth.REFUSED and "height_required" in capsys.readouterr().err
+    assert not out.exists() and not Path(str(out) + ".synth.json").exists()
+    assert _place(src, out, "hgss", *cross, "--height", "5") == synth.WRITTEN
+    g = codec.parse_save(out.read_bytes(), "hgss").general
+    o = _obj("hgss", 0)
+    assert struct.unpack_from("<h", g, o + 0x28)[0] == 5 and struct.unpack_from("<i", g, o + 0x2C)[0] == 5 << 15 == 0x28000
+    row = json.loads((tmp_path / "out.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    assert (row["height"], row["height_source"], row["vecY"]) == (5, "given", 0x28000) and "map_object.c:494-496" in row["height_note"]
+    # the same map keeps the source elevation (currentY and vecY untouched) and says so
+    same = ("--map", "60", "--x", "700", "--y", "410", "--dir", "2")
+    out2 = tmp_path / "out2.SaveRAM"
+    assert _place(src, out2, "hgss", *same) == synth.WRITTEN
+    g0, g2 = codec.parse_save(src.read_bytes(), "hgss").general, codec.parse_save(out2.read_bytes(), "hgss").general
+    assert g2[o + 0x28 : o + 0x2A] == g0[o + 0x28 : o + 0x2A] and g2[o + 0x2C : o + 0x30] == g0[o + 0x2C : o + 0x30]  # currentY, vecY
+    assert json.loads((tmp_path / "out2.SaveRAM.synth.json").read_text(encoding="utf-8"))["height_source"] == "carried"
+
+
+def test_the_height_to_vecy_relation_is_the_one_the_game_derives():
+    """vecY = currentY * 8 * FX32_ONE = currentY << 15 (map_object.c:639-641: currentY = (vecY >> 3) / FX32_ONE); an fx32 << 12
+    would put the object 8x too low.  FILE: every active owner object (currentY 2) holds vecY 0x10000."""
+    for variant in ("hgss", "hge"):
+        g = codec.parse_save(_owner(variant), variant).general
+        rows = [(struct.unpack_from("<h", g, _obj(variant, i) + 0x28)[0], struct.unpack_from("<i", g, _obj(variant, i) + 0x2C)[0])
+                for i in range(64) if struct.unpack_from("<I", g, _obj(variant, i))[0] & 1]
+        assert rows and all(vec == cy << 15 and vec != cy << 12 for cy, vec in rows)
+
+
+def test_place_reads_the_var_range_from_the_pack_not_module_constants(tmp_path, monkeypatch, capsys):
+    """F8: vars.base_id / vars.count come from field_save, so a pack with a different range changes the refusal."""
+    real = synth._field_save
+    def shrunk(name):
+        fs, loc = real(name)
+        return {**fs, "vars": {**fs["vars"], "base_id": 0x4000, "count": 0x10}}, loc
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    assert _place(src, out, "hgss", *GOOD, "--var", "0x4020=1") == synth.WRITTEN        # in the real range
+    out.unlink()
+    monkeypatch.setattr(synth, "_field_save", shrunk)
+    assert _place(src, out, "hgss", *GOOD, "--var", "0x4020=1") == synth.REFUSED and "bad_var" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_the_place_docstring_explains_the_five_locations_and_warp_id():
+    doc = synth.__doc__
+    assert "all five Locations" in doc and "warpId -1" in doc and "field_warp_tasks.c:150" in doc
+    assert "src/location_backup.c" in doc and "vecY" in doc and "map_object.c:494-496" in doc
