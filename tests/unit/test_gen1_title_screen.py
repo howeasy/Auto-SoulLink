@@ -279,3 +279,13 @@ def test_pure_line_draws_the_wordmark_and_version(text):
     expect = [".".join(g[y - 1] if y else "." * 5 for g in glyphs) for y in range(8)]
     x = (cells * 8 - (len(text) * 6 - 1)) // 2
     assert [r[x:x + len(text) * 6 - 1] for r in rows] == expect
+
+
+def test_pure_line_types_in_one_cell_at_a_time():
+    """The PureRed banner above reveals itself letter by letter; the line follows suit instead of popping in."""
+    asm = (OVERLAY / "title_band.asm").read_text()
+    body = asm[asm.index("SlinkTitleLinePure::"):asm.index("SlinkTitleLinePureClear::")]
+    assert ".reveal" in body and "call DelayFrames" in body and "PlaceString" not in body.replace("no PlaceString", "")
+    assert "ld b, SLINK_PURE_LINE_CELLS" in body and body.index("DelayFrames") < body.index("jr nz, .reveal")
+    delay = body[body.index("push hl"):body.index("dec b")]
+    assert delay.count("push") == 3 and delay.count("pop") == 3            # hl (cursor), de (source), bc (count) survive the wait

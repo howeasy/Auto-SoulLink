@@ -85,9 +85,26 @@ SlinkTitleLinePure::
 	ld hl, vChars2 tile $71
 	lb bc, BANK(SlinkTitleLineTiles), 9
 	call CopyVideoData
+	; The PureRed banner above reveals itself letter by letter, so the line types in one cell at a time too
+	; (wTileMap goes to VRAM every vblank on this screen). The row's own bytes stay plain tile ids, no PlaceString.
 	hlcoord SLINK_PURE_LINE_X, 9
 	ld de, SlinkTitleLineRow
-	jp PlaceString
+	ld b, SLINK_PURE_LINE_CELLS
+.reveal
+	ld a, [de]
+	inc de
+	ld [hli], a
+	push hl
+	push de
+	push bc
+	ld c, 2
+	call DelayFrames
+	pop bc
+	pop de
+	pop hl
+	dec b
+	jr nz, .reveal
+	ret
 
 SlinkTitleLinePureClear::
 	hlcoord SLINK_PURE_LINE_X, 9

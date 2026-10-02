@@ -70,8 +70,9 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   --version` (default `dev`) because the overlay builds from source with no other knob.
   The Pure title has too few free BG ids for the logo (12 usable: `tests/fixtures/gen1/title_refs_pure*_pure.json`), so it
   gets one text line, "SoulLink vX.Y.Z", on tile row 9 under the PureRed banner (`SlinkTitleLinePure`, drawn when the
-  banner animation ends); the player-pointing pose overwrites those ids on a button press, so `SlinkTitleLinePureClear`
-  blanks the row first.
+  banner animation ends). The banner reveals itself letter by letter, so the line types in one cell every two frames
+  rather than popping in (on the vanilla-style title the band already scrolls in with the game's own line). The
+  player-pointing pose overwrites those ids on a button press, so `SlinkTitleLinePureClear` blanks the row first.
 
 ## ABI (unchanged from the vanilla patch, B5)
 

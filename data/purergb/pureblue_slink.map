@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 15060 bytes used / 1324 free
-	ROMX: 914646 bytes used / 117546 free in 63 banks
+	ROMX: 914663 bytes used / 117529 free in 63 banks
 	SRAM: 25983 bytes used / 6785 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
 	WRAMX: 4216 bytes used / 3976 free in 2 banks
@@ -26271,19 +26271,20 @@ ROMX bank #63:
 	         $4ef6 = SlinkApexGuard.otid
 	         $4f12 = SlinkApexGuard.noMatchPop
 	         $4f14 = SlinkApexGuard.noMatch
-	SECTION: $4f16-$520b ($02f6 bytes) ["SLink title band"]
+	SECTION: $4f16-$521c ($0307 bytes) ["SLink title band"]
 	         $4f16 = SlinkTitleLogoRow0
 	         $4f20 = SlinkTitleLogoRow1
 	         $4f2a = SlinkTitleBand
 	         $4f51 = SlinkTitleVersionRow
 	         $4f5a = SlinkTitleTiles
 	         $50fa = SlinkTitleLinePure
-	         $5133 = SlinkTitleLinePureClear
-	         $513a = SlinkTitleLinePureClear.loop
-	         $513f = SlinkTitleLineRow
-	         $514c = SlinkTitleLineTiles
-	EMPTY: $520c-$7fff ($2df4 bytes)
-	TOTAL EMPTY: $2df4 bytes
+	         $5132 = SlinkTitleLinePure.reveal
+	         $5144 = SlinkTitleLinePureClear
+	         $514b = SlinkTitleLinePureClear.loop
+	         $5150 = SlinkTitleLineRow
+	         $515d = SlinkTitleLineTiles
+	EMPTY: $521d-$7fff ($2de3 bytes)
+	TOTAL EMPTY: $2de3 bytes
 
 VRAM bank #0:
 	EMPTY

@@ -1,6 +1,6 @@
 {
   "schema": "purergb-overlay-provenance-v1",
-  "generated": "2026-10-02T01:30:08Z",
+  "generated": "2026-10-02T12:49:33Z",
   "source": {
     "url": "https://github.com/Vortyne/pureRGB",
     "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
@@ -18,7 +18,7 @@
       "slink_home.asm": "755caec77c975c45ff4451256cbb95916bc8141d86d9f27b6be62d0ca4482944",
       "slink_overlay.asm": "929b24d50ae37927262de0e405f58ae9ca265365f26cade14606743dc4a00cae",
       "species_table.inc": "fdfa120e6ac32d70946585607fccff9f8b34d3822fa75ddacb795182a7670af7",
-      "title_band.asm": "d0e19777526cb040352fb066ce39e37ea70367dceb4dc6730889347176f89c5d",
+      "title_band.asm": "d30d299d6547e64e6423bb0f97893efddb30c92659b854ffcbfbf6afc8869562",
       "title_band_rows.inc": "037430fc93c5120f3b3e6654a9d7f45b786f7e10b5c459f87642e92f6e75b6c5",
       "title_logo.2bpp": "505769aa5db289ebedc2571fec8f1c959018db8847396ae2d66d83ea64e50ab2",
       "trade_prompt.asm": "26fba1961d2b4df9e38467ed5ecc8b106d67b3aaa953e91663076305680dc014",
@@ -53,57 +53,57 @@
       "filename": "pokered.gbc",
       "slink_title": "purered",
       "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-      "sha1": "0811eb5fc4fbbe9e93e0f37b10560ddc993a476d",
-      "md5": "8cf6d90ae11b3d712555ab3d7daf7628",
-      "header_crc": "8334",
-      "crc32": "B837932C",
+      "sha1": "1dfe1354df75e8a64a8b58c472aa9ad1cafa3436",
+      "md5": "e97c9e03255fa9e53a8d2d4fbbd2bf85",
+      "header_crc": "8AA7",
+      "crc32": "41C593A3",
       "title": "POKEMON RED",
       "size": 1048576,
       "ups": {
         "file": "patch/dist/SLink-PureRed.ups",
-        "size": 52944,
-        "sha256": "0541dc90cf6ccf4eda37a426b23660f83e71a30ff3f36da49dc33e638b14fb1a"
+        "size": 52962,
+        "sha256": "89be44f2d4f95ee22a822befce1e450a8e9c8def67b733d166455af7ec887a5d"
       }
     },
     "pokeblue": {
       "filename": "pokeblue.gbc",
       "slink_title": "pureblue",
       "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-      "sha1": "d0a228bc411e45d62fec05b227588dfd1223ac27",
-      "md5": "fa681506e2c0f361d6dfc27e9b41d8e3",
-      "header_crc": "BA7E",
-      "crc32": "8115B99A",
+      "sha1": "c31debc72eda71fc98831ea0b4b5b21da8ce3977",
+      "md5": "8a9ef5721ff9a36c9dd11bfc67248b6f",
+      "header_crc": "C1F1",
+      "crc32": "A241FBD3",
       "title": "POKEMON BLUE",
       "size": 1048576,
       "ups": {
         "file": "patch/dist/SLink-PureBlue.ups",
-        "size": 53143,
-        "sha256": "96f0fb885d04f1f113a5c2964c05cb55996b657e1204d867482d010e508d492c"
+        "size": 53161,
+        "sha256": "bf5d2fe87440ff709fac44f20bb235d32ea42a2d30e7a959a008379cba747ca4"
       }
     },
     "pokegreen": {
       "filename": "pokegreen.gbc",
       "slink_title": "puregreen",
       "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-      "sha1": "357d81f5625d3b64378029b9e3a3c2013476672d",
-      "md5": "e3a32e6c0e015248a073e56e90e4e628",
-      "header_crc": "BE6E",
-      "crc32": "8AB02209",
+      "sha1": "87ac3cb8e1617e9e980593a2daafce0ee181b105",
+      "md5": "1fc817425a1322a1afe12472675d3523",
+      "header_crc": "C5E1",
+      "crc32": "DD8F6228",
       "title": "POKEMON GREEN",
       "size": 1048576,
       "ups": {
         "file": "patch/dist/SLink-PureGreen.ups",
-        "size": 53050,
-        "sha256": "5a8da7093af839660339b011aa5d2d394fed5856715166dbb708ec1dbc784fae"
+        "size": 53068,
+        "sha256": "6d6bb071f342c3d2bab6fe302ba4f45051d6b7a02ab71c2d58b6031fc6cc01fb"
       }
     }
   },
   "symbols": {
-    "purered_slink.sym": "7ee9e0158619747f332e7dd4c97d8bb609d76e64c21539987e5e068ff4156412",
-    "purered_slink.map": "fe5b5fece19a5aa318a31fdad42bcd054e2d0ee7f11a2bcf734413a9763c34e5",
-    "pureblue_slink.sym": "5d0c7f97f311075c27fe554709486d30054e23b4337a930881bb581fa7659363",
-    "pureblue_slink.map": "1775797932d88f34fec46e62239482dfd3a6f12218543d1bbd7136c5f210f781",
-    "puregreen_slink.sym": "4a5f762f018a5c3f59fceb164494d6deb6dc3ae6e0569dba01b38a4f54448d93",
-    "puregreen_slink.map": "b5c402bb1367e923802981e04cfef58508ece5867f2e0aeefbc2aa5356c65c07"
+    "purered_slink.sym": "f5554706ae00ffef2cf9fe927d5adb69b495be590101a0f451c0d9db55dc3f21",
+    "purered_slink.map": "344dcb814a77a02bae29be7f31f696d506014a04456bb68ee60293e1fff2426e",
+    "pureblue_slink.sym": "d9df93b1345e90e36290c1e714fa8b11a5a2c573539d170a7a5d63d38689ebb8",
+    "pureblue_slink.map": "991b3debc5e4a22cdb734871626ba37612e05a647abc9d538a8bf771a13789ad",
+    "puregreen_slink.sym": "0a9c8e58336185f9f7efcb2d75291c4fe56f965488e36c08dfb7772b5828376a",
+    "puregreen_slink.map": "fe10f2ac324847aa8bbeb5592aed9e24d6dfec79331bfd93ea9d99ee851d3784"
   }
 }

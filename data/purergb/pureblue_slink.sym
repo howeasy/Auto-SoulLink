@@ -25860,10 +25860,11 @@
 3f:4f51 SlinkTitleVersionRow
 3f:4f5a SlinkTitleTiles
 3f:50fa SlinkTitleLinePure
-3f:5133 SlinkTitleLinePureClear
-3f:513a SlinkTitleLinePureClear.loop
-3f:513f SlinkTitleLineRow
-3f:514c SlinkTitleLineTiles
+3f:5132 SlinkTitleLinePure.reveal
+3f:5144 SlinkTitleLinePureClear
+3f:514b SlinkTitleLinePureClear.loop
+3f:5150 SlinkTitleLineRow
+3f:515d SlinkTitleLineTiles
 01:8000 vChars0
 01:8000 vNPCSprites
 01:8000 vSprites
