@@ -296,7 +296,8 @@ def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_chan
     from pathlib import Path
 
     outputs = json.loads((Path(_REPO) / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
-    zip_path = make_release.build_release(version="t", out_dir=tmp_path, skip_generators=True, with_patch=True)
+    zip_path = make_release.build_release(version="t", out_dir=tmp_path, skip_generators=True, with_patch=True,
+                                          allow_unstamped=True)
     with zipfile.ZipFile(zip_path) as zf:
         companion = {n.split("/", 1)[1]: zf.read(n) for n in zf.namelist() if "/companion/" in n}
     for row in outputs.values():
@@ -306,7 +307,51 @@ def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_chan
         "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
         "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
         "companion/SLink-PureGreen.ups", "companion/SLink-FireRed.ups", "companion/SLink-LeafGreen.ups",
-        "companion/SLink-Emerald.ups", "companion/gen3_companions.json"}
+        "companion/SLink-Emerald.ups", "companion/gen3_companions.json", "companion/companion_version.json"}
     native=json.loads(companion["companion/gen3_companions.json"])
     for row in native["titles"].values():
         assert hashlib.sha256(companion["companion/"+row["patch"]]).hexdigest()==row["ups_sha256"]
+
+
+# ---- the release carries its own version: companions must be stamped for it (owner ruling 2026-10-02) ----
+
+def _stamp_record(dist, version, files):
+    import hashlib
+    import json
+
+    import stamp_release
+    dist.mkdir(parents=True, exist_ok=True)
+    for name, body in files.items():
+        (dist / name).write_bytes(body)
+    (dist / "companion_version.json").write_text(json.dumps({
+        "schema": stamp_release.SCHEMA, "version": version, "families": {"rb": version},
+        "files": {n: hashlib.sha256(b).hexdigest() for n, b in files.items()}}), encoding="utf-8")
+
+
+def test_companions_stamped_for_the_release_pass(tmp_path):
+    _stamp_record(tmp_path, "v1.2.3", {"SLink-RR.ups": b"rr", "SLink-RB-Red.ups": b"red"})
+    assert make_release.companion_stamp_errors("1.2.3", tmp_path) == []
+    assert make_release.companion_stamp_errors("v1.2.3", tmp_path) == []
+
+
+def test_companions_stamped_for_another_version_are_refused(tmp_path):
+    _stamp_record(tmp_path, "dev", {"SLink-RR.ups": b"rr"})
+    errors = make_release.companion_stamp_errors("1.2.3", tmp_path)
+    assert errors and "stamped 'dev'" in errors[0] and "stamp_release.py --version v1.2.3" in errors[0]
+    assert make_release.companion_stamp_errors("dev", tmp_path) == []
+
+
+def test_a_companion_edited_after_stamping_or_never_covered_is_refused(tmp_path):
+    _stamp_record(tmp_path, "v1.2.3", {"SLink-RR.ups": b"rr"})
+    (tmp_path / "SLink-RR.ups").write_bytes(b"edited")
+    (tmp_path / "SLink-Crystal.ups").write_bytes(b"new")
+    errors = make_release.companion_stamp_errors("1.2.3", tmp_path)
+    assert any("SLink-RR.ups changed after it was stamped" in e for e in errors)
+    assert any("SLink-Crystal.ups is not covered" in e for e in errors)
+
+
+def test_a_missing_record_is_refused_and_build_release_exits(tmp_path, monkeypatch):
+    assert "companion_version.json is missing" in make_release.companion_stamp_errors("1.2.3", tmp_path)[0]
+    monkeypatch.setattr(make_release, "companion_stamp_errors", lambda version, dist=None: ["nope"])
+    with pytest.raises(SystemExit):
+        make_release.build_release(version="1.2.3", out_dir=tmp_path, skip_generators=True, with_patch=True)

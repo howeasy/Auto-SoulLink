@@ -33,6 +33,8 @@ status page instead.
 """
 
 import argparse
+import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -364,7 +366,8 @@ _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
                      "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
                      "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
-_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json")
+_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json",
+                         "companion_version.json")   # the stamp record companion_stamp_errors() vouches with
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
@@ -558,6 +561,38 @@ def patch_launcher(content: str, host: str | None, port: int | None, player: str
     return content
 
 
+def companion_stamp_errors(version: str, dist: Path | None = None) -> list[str]:
+    """Problems that make the bundled companions the wrong build for release `version` (owner ruling 2026-10-02: a release
+    carries its own version on the game menus). tools/stamp_release.py rebuilds every companion with the version and records
+    it, with the sha256 of each shipped file, in patch/dist/companion_version.json; this refuses to package anything that
+    record does not vouch for."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import stamp_release
+
+    dist = dist or REPO_ROOT / "patch" / "dist"
+    record = dist / "companion_version.json"
+    hint = f"run: python tools/stamp_release.py --version {version if version == 'dev' else 'v' + version.lstrip('v')}"
+    if not record.is_file():
+        return [f"{record} is missing ({hint})"]
+    doc = json.loads(record.read_text(encoding="utf-8"))
+    want = "dev" if version == "dev" else "v" + version.lstrip("v")
+    errors = []
+    if doc.get("schema") != stamp_release.SCHEMA:
+        errors.append(f"{record.name}: unknown schema {doc.get('schema')!r}")
+    if doc.get("version") != want:
+        errors.append(f"companions are stamped {doc.get('version')!r} (per family {doc.get('families')}), the release is {want!r} ({hint})")
+    files = doc.get("files") or {}
+    for name in stamp_release.SHIPPED:
+        path = dist / name
+        if not path.is_file():
+            continue
+        if name not in files:
+            errors.append(f"{name} is not covered by {record.name}")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != files[name]:
+            errors.append(f"{name} changed after it was stamped ({hint})")
+    return errors
+
+
 def build_release(
     version: str,
     out_dir: Path,
@@ -570,6 +605,7 @@ def build_release(
     launcher: tuple[str, str] | None = None,
     guide: str | None = None,
     quiet: bool = False,
+    allow_unstamped: bool = False,
 ) -> Path:
     """`launcher` is (filename, source) for a launcher placed at the package root, beside
     lua/ -- the Manager's player pack. `guide` replaces the generic PLAYER_SETUP.md.
@@ -609,6 +645,14 @@ def build_release(
     # ── Companion patch (optional) pre-flight ─────────────────────────────────
     # A --rom implies bundling the patch too (the ROM only makes sense with it).
     include_companion = with_patch or rom is not None
+    if include_companion and not allow_unstamped:
+        stamp_errors = companion_stamp_errors(version)
+        if stamp_errors:
+            print("ERROR — the companions are not stamped for this release:", file=sys.stderr)
+            for e in stamp_errors:
+                print(f"  {e}", file=sys.stderr)
+            print("  (--allow-unstamped-companions ships them as built; the game menus then show their own version)", file=sys.stderr)
+            sys.exit(1)
     if include_companion:
         ups = REPO_ROOT / _COMPANION_UPS
         if not ups.exists():
@@ -746,6 +790,8 @@ def main() -> None:
     parser.add_argument("--rom", metavar="PATH",
                         help="Bundle a pre-patched ROM under companion/ (implies --with-patch); "
                              "e.g. patch/build/slink_RR.gba")
+    parser.add_argument("--allow-unstamped-companions", action="store_true",
+                        help="Bundle companions even when patch/dist/companion_version.json does not match --version")
     args = parser.parse_args()
 
     build_release(
@@ -757,6 +803,7 @@ def main() -> None:
         skip_generators=args.skip_generators,
         with_patch=args.with_patch,
         rom=Path(args.rom) if args.rom else None,
+        allow_unstamped=args.allow_unstamped_companions,
     )
 
 
