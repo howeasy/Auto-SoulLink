@@ -2884,14 +2884,25 @@ def gen2_frame_scale(speed):
     return 20 if speed == 0 else max(1, -(-speed // 300))
 
 
-def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
+def gen2_selected_artifact(args, scenario):
+    """One explicit artifact decision for every Gen 2 scenario, including relaunches."""
+    kind = getattr(args, "gen2_artifact", None) or os.getenv("SLINK_GEN2_ARTIFACT")
+    kind = kind or ("overlay" if scenario in GEN2_TRADE_SCENARIOS else "clean")
+    if kind not in ("clean", "overlay"):
+        raise ValueError("Gen 2 artifact must be clean or overlay")
+    if scenario in GEN2_TRADE_SCENARIOS and kind != "overlay":
+        raise ValueError("Gen 2 native trade requires overlay")
+    return kind
+
+
+def gen2_preflight(*, repo=None, game="gen2_new", scenario="link", artifact_kind="clean"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
     if REPO not in sys.path:
         sys.path.insert(0, REPO)
     from tests.live.test_gen2_new_gates import qualified_identity
     from tools.gen2_fixtures import BY_NAME
-    from tools.gen2_source_data import load_context
+    from tools.gen2_source_data import load_context, load_overlay_context
 
     pairing = GAMES[game]
     if pairing.get("launch_profile") != "gen2":
@@ -2927,26 +2938,36 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
-        ctx = load_context(title, root=root)
-        rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        if artifact_kind not in ("clean", "overlay"):
+            raise ValueError("Gen 2 artifact must be clean or overlay")
+        ctx = load_context(title, root=root) if artifact_kind == "clean" else load_overlay_context(title, root=root)
         source = ctx.source_record()
-        if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
+        base_rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        if hashlib.sha1(base_rom.read_bytes()).hexdigest() != source["rom_sha1"]:
             raise RuntimeError(f"{inst}: Gen 2 {title} ROM differs from the pinned source")
+        rom = base_rom if artifact_kind == "clean" else root / f"patch/build/gen2_{title}_overlay.gbc"
+        executed_sha1 = hashlib.sha1(ctx.rom).hexdigest()
         fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
         raw = fixture.read_bytes()
-        ot_id = qualified_identity(name, raw, repo=root)
+        ot_id = qualified_identity(name, raw, repo=root, kind=artifact_kind)
         if synth is not None:
             fixture = root / "tests/fixtures/gen2" / f"{synth}.SaveRAM"
             built, _disclosure = gen2_synth_fixtures.build_named(synth, root=root)
             raw = fixture.read_bytes()
             if built != raw:
                 raise RuntimeError(f"{inst}: {synth} is not the builder's output of {name}")
-        receipt = root / "tests/fixtures/gen2/receipts" / f"{name}.qualification.json"
+        receipt = root / ("tests/fixtures/gen2/receipts/overlay" if artifact_kind == "overlay"
+                          else "tests/fixtures/gen2/receipts") / f"{name}.qualification.json"
         report = json.loads(receipt.read_text(encoding="utf-8"))
         result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                         "ot_id": ot_id, "qualification": receipt,
                         "qualification_attempt_id": report["attempt_id"],
-                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
+                         "rom": rom, "rom_sha1": executed_sha1, "title": title, "artifact_kind": artifact_kind,
+                         "source_rom_sha1": source["rom_sha1"],
+                         "binding_sha256": ctx.execution_record().get("binding_sha256") if artifact_kind == "overlay" else None}
+        if artifact_kind == "overlay":
+            binding = root / f"data/games/gen2_{title}/overlay/binding.json"
+            result[inst]["binding_sha256"] = hashlib.sha256(binding.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
         if synth is not None:
             result[inst]["synth"] = synth
         if refused:
@@ -2963,7 +2984,7 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         if name not in BY_NAME or not wrong.is_file():
             raise FileNotFoundError(f"Gen 2 reconnect missing qualified wrong-save fixture: {name}")
         raw = wrong.read_bytes()
-        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root) == result["a"]["ot_id"]:
+        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root, kind=artifact_kind) == result["a"]["ot_id"]:
             raise RuntimeError("Gen 2 reconnect wrong-save must match title and differ in OT")
         result["a"].update(wrong_fixture=wrong, wrong_sha256=hashlib.sha256(raw).hexdigest())
     return result
@@ -4540,20 +4561,22 @@ class DuoRun:
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
         with self._timed("gen2_preflight"):
-            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
+            self._gen2_artifact = gen2_selected_artifact(self.args, self.scenario)
+            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario, artifact_kind=self._gen2_artifact)
         from run_gb_gate import GENS
 
         from tests.live.test_gen2_frame_align import u1_facts
         from tests.live.test_gen2_new_gates import inspect_env
-        from tools import gen2_fixtures, gen2_source_data
+        from tools import gen2_fixtures
 
-        suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
+        suffix = "_overlay" if self._gen2_artifact == "overlay" else ""
         with self._timed("plans"):
             self._gen2_plans = {
                 inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
                                            self.gen2_speed())
                 for inst, row in self._gen2_inputs.items()}
         self._check_bizhawk_paths()
+        self._stage_gen2_roms()
         if self.scenario in GEN2_TRADE_SCENARIOS:
             with self._timed("trade_manifest"):
                 self._prepare_gen2_trade_manifest()
@@ -4572,17 +4595,17 @@ class DuoRun:
                 continue
             timer = self._timed(f"env_{inst}")
             timer.__enter__()
-            ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
+            ctx = gen2_fixtures.exec_context(row["title"], self._gen2_artifact, Path(REPO))
             # errand fixtures play on their own spec's facts (the Gold errand maps), not the title's
-            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
+            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO), kind=self._gen2_artifact)
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
-                              repo=Path(REPO))
+                              repo=Path(REPO), kind=self._gen2_artifact)
             if self.scenario == "gen2_ball_gate":
                 # the town fixture plays the errand: errand route facts + ledges, qualify facts over the same
                 # fingerprint, and the case flag the shared gate admits a town case with errand facts on
-                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True)
+                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True, kind=self._gen2_artifact)
                 qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
-                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True)
+                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True, kind=self._gen2_artifact)
                 env.update(SLINK_GEN2_ROUTE_FACTS=json.dumps(facts), SLINK_GEN2_QUALIFY=json.dumps(qualify),
                            SLINK_GEN2_ROUTE_LEDGES=json.dumps(gen2_fixtures.route_ledges(row["title"], facts,
                                                                                         Path(REPO))))
@@ -4659,6 +4682,29 @@ class DuoRun:
         if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
+    def _stage_gen2_roms(self):
+        """Materialize every overlay before launch, not only native trade's cartridges."""
+        for side, plan in self._gen2_plans.items():
+            stage = plan.get("stage")
+            if stage is None:
+                continue
+            if hashlib.sha1(stage).hexdigest() != plan["launch_sha1"]:
+                raise RuntimeError("staged Gen 2 overlay hash differs before launch")
+            target = Path(plan["rom"]).resolve()
+            if not target.is_relative_to(Path(BUILD).resolve()):
+                raise RuntimeError("Gen 2 staged ROM escapes build directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or hashlib.sha1(target.read_bytes()).hexdigest() != plan["launch_sha1"]:
+                with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".tmp", delete=False) as handle:
+                    temporary = Path(handle.name)
+                    handle.write(stage)
+                try:
+                    os.replace(temporary, target)
+                finally:
+                    if temporary.exists():
+                        temporary.unlink()
+            self._gen2_inputs[side].update(rom=target, rom_sha1=plan["launch_sha1"])
+
     def _prepare_gen2_trade_manifest(self):
         from tools.gen2_trade_lane import validate_manifest
 
@@ -4666,14 +4712,14 @@ class DuoRun:
         raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
         provenance = json.loads(raw)
         manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_" + uuid.uuid4().hex,
-                    "scenario": self.scenario, "evidence_class": "HARNESS_ONLY_OVERLAY",
+                    "scenario": self.scenario, "evidence_class": "PHYSICAL_RECEIPTED",
                     "provenance_sha256": hashlib.sha256(raw).hexdigest(), "players": {}}
         for inst, row in self._gen2_inputs.items():
             title, plan = row["title"], self._gen2_plans[inst]
             artifact = provenance["outputs"]["poke" + title]
             stage = plan.get("stage")
             if (not isinstance(stage, bytes) or hashlib.sha1(stage).hexdigest() != artifact["sha1"]
-                    or plan["launch_sha1"] != artifact["sha1"] or row["rom_sha1"] != artifact["base_sha1"]):
+                    or plan["launch_sha1"] != artifact["sha1"] or row["source_rom_sha1"] != artifact["base_sha1"]):
                 raise RuntimeError(f"{inst}: trade overlay stage/base binding differs")
             manifest["players"][inst] = {"title": title, "rom_type": title, "foundation": "gen2_gsc",
                 "artifact_kind": "overlay", "rom_sha1": artifact["sha1"], "base_sha1": artifact["base_sha1"],
@@ -4694,7 +4740,7 @@ class DuoRun:
                 finally:
                     if temporary is not None and temporary.exists():
                         temporary.unlink()
-            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["rom_sha1"],
+            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["source_rom_sha1"],
                                           rom_sha1=plan["launch_sha1"], rom=target)
         path = Path(self.data_dir) / "gen2_trade_manifest.json"
         encoded = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
@@ -4791,8 +4837,8 @@ class DuoRun:
                 transaction["reconciliation"][label] = {"path": str(snapshot), "sha256": hashlib.sha256(content).hexdigest()}
 
         def verified(facts):
-            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "HARNESS_ONLY_OVERLAY":
-                raise RuntimeError("trade oracle omitted its harness scope")
+            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "PHYSICAL_RECEIPTED":
+                raise RuntimeError("trade oracle omitted its production scope")
             self._record_gen2_facts({"a": facts["players"]["a"]["key"], "b": facts["players"]["b"]["key"],
                 "area": facts["area_id"], "titles": "/".join(facts["players"][side]["title"] for side in ("a", "b")),
                 "status": facts["status"], "scenario": self.scenario, "admission_scope": facts["admission_scope"]})
@@ -4803,6 +4849,19 @@ class DuoRun:
             on_verified=verified, **kwargs)
 
     def check_gen2_save_witness(self, results):
+        if hasattr(self, "_gen2_artifact"):
+            for side, text in results.items():
+                if side not in ("a", "b") or self._gen2_inputs[side].get("expect_admission") == "refused":
+                    continue
+                if self.scenario == "gen2_reconnect" and side == "a":
+                    text = self._gen2_initial_a
+                lines = [line.split(" ", 1)[1] for line in text.splitlines() if line.startswith("CLIENT ")]
+                if len(lines) != 1:
+                    raise RuntimeError("Gen 2 production artifact CLIENT marker missing or ambiguous")
+                client = json.loads(lines[0])
+                if (client.get("artifact_kind", "clean") != self._gen2_artifact
+                        or client.get("rom_sha1") != self._gen2_inputs[side]["rom_sha1"]):
+                    raise RuntimeError("Gen 2 receipt belongs to another executed artifact")
         if self.scenario in GEN2_TRADE_SCENARIOS:
             return importlib.import_module("gen2_trade_oracles").check_trade_witness(results,
                 expected_case=self._gen2_trade_expected_case(), overlay_provenance=self._gen2_trade_overlay_reference())
@@ -4900,7 +4959,7 @@ class DuoRun:
         seed = Path(BUILD, f"e2e_{self.artifact_name}_a_{phase}_seed.SaveRAM")
         seed.write_bytes(raw)
         directory = Path(self._saveram_dir("a") + "_" + phase)
-        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, self.gen2_speed())
+        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"] + ("_overlay" if self._gen2_artifact == "overlay" else ""), directory, seed, self.gen2_speed())
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / plan["saveram_name"]
         target.write_bytes(raw)
@@ -9984,7 +10043,7 @@ class DuoRun:
                         key = GEN2_WAVE_C[self.scenario][1]
                         reason += f" scenario={self.scenario} {key}={self._gen2_verified_facts[key]}"
                     if self.scenario in GEN2_TRADE_SCENARIOS:
-                        reason += f" scenario={self.scenario} admission_scope=HARNESS_ONLY_OVERLAY"
+                        reason += f" scenario={self.scenario} admission_scope=PHYSICAL_RECEIPTED"
                     if self.scenario in GEN2_CLAUSE_SCENARIOS:
                         extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
                         reason += f" scenario={self.scenario} " + " ".join(
@@ -10057,7 +10116,7 @@ def list_lines(game):
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
         if name in GEN2_TRADE_SCENARIOS:
-            lines[-1] += " artifact=overlay admission=HARNESS_ONLY_OVERLAY"
+            lines[-1] += " artifact=overlay admission=PHYSICAL_RECEIPTED"
     return lines
 
 
@@ -10373,6 +10432,8 @@ def main():
     ap.add_argument("--speed-percent", type=int, default=None,
                     help="Gen 2 duo emulator speed (O-36): 100-6400, or 0 = unthrottled; default 300. "
                          "Qualification gates are never run through here and stay at 100")
+    ap.add_argument("--gen2-artifact", choices=("clean", "overlay"), default=None,
+                    help="executed Gen 2 artifact for every scenario (native trade requires overlay)")
     ap.add_argument("--idle-jitter", type=int, default=0,
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")

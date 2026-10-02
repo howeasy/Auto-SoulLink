@@ -108,6 +108,9 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
     ``none``); ``conflict`` may use None when no unique final mon exists. Party
     keys are nonempty lists without duplicate identities, compared without slot
     ordering. Only an explicitly expected conflict is a successful *check*.
+    The caller binds this journal's run/scenario to the admitted overlay manifest
+    (gen2_trade_oracles._reset_commit_oracle); historical harness journals cannot
+    establish current production reconciliation.
     """
     _need(isinstance(token, str) and token.startswith("t") and token[1:].isdigit(), "invalid token")
     for value, label in ((before_keys, "before keys"), (after_keys, "after keys"),
@@ -158,7 +161,7 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
         _need(type(seq) is int and seq > previous_seq, "journal sequence repeats/reverses")
         previous_seq = seq
         identity = (row.get("run_id"), row.get("scenario"), row.get("evidence_class"))
-        _need(all(_key(item) for item in identity[:2]) and identity[2] == "HARNESS_ONLY_OVERLAY",
+        _need(all(_key(item) for item in identity[:2]) and identity[2] == "PHYSICAL_RECEIPTED",
               "missing journal provenance")
         _need(provenance is None or identity == provenance, "journal provenance changes")
         provenance = identity

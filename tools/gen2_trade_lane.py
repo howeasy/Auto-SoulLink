@@ -1,7 +1,7 @@
 """Private, hash-pinned Gen 2 trade server bootstrap; never a production admission grant.
 
 python -m tools.gen2_trade_lane --manifest ATTEMPT.json -- <server arguments>
-The override exists only in this child process and is attributed HARNESS_ONLY_OVERLAY.
+This process observes the production server and journals native trade; it grants no Lua admission override.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 SCENARIOS = frozenset({"gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout",
                        "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item",
                        "gen2_trade_evolve"})
-ATTRIBUTION = "HARNESS_ONLY_OVERLAY"
+ATTRIBUTION = "PHYSICAL_RECEIPTED"
 TITLES = {name: title for title in ("crystal", "gold", "silver") for name in (title, title.title())}
 TOP_KEYS = {"schema", "run_id", "scenario", "evidence_class", "provenance_sha256", "players"}
 PLAYER_KEYS = {"title", "rom_type", "foundation", "artifact_kind", "rom_sha1", "base_sha1", "ups_sha256", "sym_sha256"}

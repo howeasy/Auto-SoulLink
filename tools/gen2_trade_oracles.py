@@ -1,4 +1,4 @@
-"""Independent saved-byte oracles for the HARNESS_ONLY_OVERLAY trade lanes.
+"""Independent saved-byte oracles for the PHYSICAL_RECEIPTED trade lanes.
 
 Markers are singleton ``TAG {json}`` lines, except TRADE_NATIVE_CALL (ordered).
 No client PASS flag is evidence. Image markers bind full SaveRAM and CartRAM
@@ -15,7 +15,7 @@ design (the game rewrites both outside any save); it is not a trade-specific all
 
 v1 wire keys (all frames are observed emulator frames):
 * RECEIPT: schema, player, title, case, run_id, rom_sha1, fixture_sha256,
-  admission_scope=HARNESS_ONLY_OVERLAY, role, token[4], generation. Optional
+  admission_scope=PHYSICAL_RECEIPTED, role, token[4], generation. Optional
   visit_state defaults to accepted; query is early D3 only; none requires null
   token/generation and forbids OFFER, PICKUP, DONE, native calls and controls.
 * TRADE_BASELINE/TRADE_NATIVE_SAVE/TRADE_FINAL: frame, snapshot_path,
@@ -118,7 +118,7 @@ class TradeUncertain(RuntimeError):
 
     def __init__(self, scenario, reason):
         self.facts = {"scenario": scenario, "status": self.status.value,
-                      "admission_scope": "HARNESS_ONLY_OVERLAY", "reason": reason}
+                      "admission_scope": "PHYSICAL_RECEIPTED", "reason": reason}
         super().__init__(f"trade: UNCERTAIN: {reason}")
 
 
@@ -437,11 +437,12 @@ def check_trade_witness(results, *, expected_case=None, overlay_provenance=None)
     for side in SIDES:
         text = results[side]
         receipt = _one(text, "RECEIPT")
+        _need(receipt.get("admission_scope") != "HARNESS_ONLY_OVERLAY", "historical HARNESS_ONLY_OVERLAY is not production evidence")
         case = receipt.get("case")
         _need(case in CASES and (expected_case is None or case == expected_case), "wrong trade case")
         _need(receipt.get("schema") == "gen2-duo-trade-v1" and receipt.get("player") == side
               and receipt.get("title") in ("crystal", "gold", "silver")
-              and receipt.get("admission_scope") == "HARNESS_ONLY_OVERLAY", "invalid trade receipt provenance")
+              and receipt.get("admission_scope") == "PHYSICAL_RECEIPTED", "invalid trade receipt provenance")
         state = receipt.get("visit_state", "accepted")
         _need(state in ("accepted", "query", "none", "unentered"), "invalid visit state")
         _need(case not in COMMITTED or state == "accepted", "committed trade requires accepted visits")
@@ -553,7 +554,7 @@ def _admission(reference, expected, root):
     manifest = validate_manifest(manifest, root=root)
     _need(manifest.get("schema") == "gen2-trade-lane-v1"
           and manifest.get("scenario") == expected["scenario"]
-          and manifest.get("evidence_class") == "HARNESS_ONLY_OVERLAY"
+          and manifest.get("evidence_class") == "PHYSICAL_RECEIPTED"
           and isinstance(manifest.get("run_id"), str) and manifest["run_id"], "invalid admission manifest")
     published_raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
     _digest(published_raw, manifest.get("provenance_sha256"))
@@ -817,7 +818,7 @@ def _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, 
         seq = current
         _need(event.get("source") == "server_dispatch" and event.get("run_id") == manifest["run_id"]
               and event.get("scenario") == manifest["scenario"]
-              and event.get("evidence_class") == "HARNESS_ONLY_OVERLAY", "server journal provenance mismatch")
+              and event.get("evidence_class") == "PHYSICAL_RECEIPTED", "server journal provenance mismatch")
         _need(event.get("outcome", {}).get("dispatch") == "returned", "server dispatch raised")
         message = _object(event.get("message"), "dispatched message")
         if token is None:
@@ -1065,7 +1066,7 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         _negative_controls(results, case, receipts, offers, decoded, invalid_items, root)
     server = _server(transaction_evidence, data_dir, manifest, receipts, before_mons, after_mons, committed)
     facts = {"scenario": case, "status": (TradeStatus.COMMITTED if committed else TradeStatus.UNCHANGED).value,
-             "admission_scope": "HARNESS_ONLY_OVERLAY", "players": {
+             "admission_scope": "PHYSICAL_RECEIPTED", "players": {
                  side: {"title": receipts[side]["title"], "key": after_mons[side]["key"],
                         "species_id": after_mons[side]["species_id"], "stack": coverage[side]} for side in SIDES}, **server}
     if on_verified is not None:
@@ -1579,7 +1580,7 @@ def _reset_commit_oracle(results, *, data_dir, baseline_saves, transaction_evide
     server = _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, committed, reconciled=reconciliation)
     facts = {"scenario": expected_case["scenario"],
              "status": (TradeStatus.COMMITTED if committed else TradeStatus.UNCHANGED).value,
-             "admission_scope": "HARNESS_ONLY_OVERLAY", "reconciliation": reconciliation, "players": {
+             "admission_scope": "PHYSICAL_RECEIPTED", "reconciliation": reconciliation, "players": {
                  side: {"title": receipts[side]["title"], "key": after_mons[side]["key"],
                         "species_id": after_mons[side]["species_id"], "stack": coverage[side],
                         "snapshot_sha256": _one(results[side], "TRADE_FINAL")["snapshot_sha256"],

@@ -82,7 +82,7 @@ def test_gen2_refusal_preflight_binds_crystal11(monkeypatch, tmp_path, fault):
     refused_hash = hashlib.sha1(wrong.read_bytes()).hexdigest()
     if fault:
         wrong.write_bytes(b"different")
-    context = SimpleNamespace(source_dir=tmp_path, artifact="pokecrystal", lock={"outputs": {
+    context = SimpleNamespace(rom=rom.read_bytes(), source_dir=tmp_path, artifact="pokecrystal", lock={"outputs": {
         "pokecrystal": {"filename": rom.name},
         "pokecrystal11": {"filename": wrong.name, "sha1": refused_hash}}},
         source_record=lambda: {"rom_sha1": admitted_hash})
@@ -134,6 +134,7 @@ def test_gen2_reconnect_stages_immutable_seeds_and_rebinds_boot_fingerprint(monk
 
     monkeypatch.setattr(duo_module, "BUILD", str(tmp_path))
     run = object.__new__(DuoRun)
+    run._gen2_artifact = "clean"
     run.game, run.scenario, run._lane = "gen2_new", "gen2_reconnect", "cc"
     run.cfg = SCENARIOS[run.scenario]
     source = tmp_path / "source.SaveRAM"
@@ -316,7 +317,7 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     trade_fixtures["gen2_trade_evolve"] = duo_module.GEN2_TRADE_EVOLVE_FIXTURES[game]   # A boots the O-33 seed
     assert duo_list_lines(game) == [
         f"{scenario}  attempts=1  targets=a:{trade_fixtures[scenario]['a']}, b:{trade_fixtures[scenario]['b']} "
-        "artifact=overlay admission=HARNESS_ONLY_OVERLAY"
+        "artifact=overlay admission=PHYSICAL_RECEIPTED"
         for scenario in trade] + [
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
         f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "
@@ -360,7 +361,7 @@ def test_gen2_pairing_preflight_binds_each_source_and_fixture(
         if fault == f"rom_{side}":
             rom.write_bytes(b"wrong ROM")
         contexts[title] = SimpleNamespace(
-            source_dir=source_dir, artifact=title,
+            rom=rom.read_bytes(), source_dir=source_dir, artifact=title,
             lock={"outputs": {title: {"filename": rom.name}}},
             source_record=lambda pin=pin: {"rom_sha1": pin})
         raw = b"same" if fault == "same_bytes" else name.encode()
@@ -372,14 +373,15 @@ def test_gen2_pairing_preflight_binds_each_source_and_fixture(
         expected[side] = {"title": title, "name": name, "rom": rom, "rom_sha1": pin,
                           "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                           "ot_id": ot_id, "qualification": receipt,
-                          "qualification_attempt_id": f"qualified-{side}"}
+                          "qualification_attempt_id": f"qualified-{side}", "artifact_kind": "clean",
+                          "source_rom_sha1": pin, "binding_sha256": None}
 
     def load(title, *, root):
         assert root == tmp_path
         loaded.append(title)
         return contexts[title]
 
-    def identity(name, raw, *, repo):
+    def identity(name, raw, *, repo, kind="clean"):
         assert repo == tmp_path
         assert raw == (fixture_dir / f"{name}.SaveRAM").read_bytes()
         qualified.append(name)
@@ -585,6 +587,7 @@ def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_pa
         del callbacks["check_save_witness" if missing == "witness" else oracle_name]
     monkeypatch.setitem(sys.modules, "gen2_duo_oracles", SimpleNamespace(**callbacks))
     run = object.__new__(DuoRun)
+    run.args = SimpleNamespace(gen2_artifact="clean")
     run.game, run.scenario = "gen2_new", scenario
     run.gcfg = GAMES[run.game]
     if missing == "driver":

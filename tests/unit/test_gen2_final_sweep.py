@@ -21,6 +21,46 @@ def test_every_release_cell_is_listed_once():
     assert "gen2_crystal_gold/gen2_faint_active_trainer" not in ids
 
 
+def test_overlay_sweep_covers_gameplay_and_its_own_silver_write_proof():
+    rows = {cell["id"]: cell for cell in sweep.cells()}
+    assert rows["overlay/gen2_new/gen2_pc_ops"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gen2_gold_silver/gen2_soft_reset"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gen2_crystal_gold/link"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gate/write_window/silver"]["artifact_kind"] == "overlay"
+    assert "--gen2-artifact" in sweep.duo_command(rows["overlay/gen2_new/gen2_pc_ops"], "model")
+    assert len(rows) == 148
+
+
+def test_pin_populates_new_overlay_proofs_without_borrowing_clean_paths(tmp_path):
+    root, out = tmp_path / "root", tmp_path / "out"
+    base = "tests/fixtures/gen2/receipts/overlay/"
+    pins = {base + f"duo_link_cc_{side}_result.txt": "a" * 64 for side in ("a", "b", "pydec")}
+    pins[base + "silver.write_window.json"] = "b" * 64
+    pins[base + "crystal.panel_gate.json"] = "c" * 64
+    for name in pins:
+        path = out / "receipts" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("new\n")
+    rows = {sweep.PIN_FILES[0]: {"requirements": [{"id": "duo.overlay", "stage": "live-duos",
+        "axes": {"artifact_kind": "overlay", "initiator": "crystal", "partner": "crystal", "scenarios": ["link"]},
+        "proofs": []}]}, sweep.PIN_FILES[1]: {"requirements": [{"id": "u2.overlay", "axes": {
+            "artifact_kind": "overlay", "kind": "write_window", "title": "silver"}, "proofs": []},
+            {"id": "panel.overlay", "axes": {"artifact_kind": "overlay", "kind": "panel_gate", "title": "crystal"},
+             "proofs": []}]}}
+    for name, doc in rows.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc))
+    (out / "summary.json").write_text(json.dumps({"cells": [{"ok": True, "receipts": pins}]}))
+    assert sweep.pin(out, root=root) == []
+    duo = json.loads((root / sweep.PIN_FILES[0]).read_text())["requirements"][0]["proofs"][0]
+    assert duo["scenario"] == "link" and all("/overlay/" in value["path"] for value in duo["receipts"].values())
+    window = json.loads((root / sweep.PIN_FILES[1]).read_text())["requirements"][0]["proofs"][0]
+    assert window["receipts"]["receipt"]["path"] == base + "silver.write_window.json"
+    panel = json.loads((root / sweep.PIN_FILES[1]).read_text())["requirements"][1]["proofs"][0]
+    assert panel["receipts"]["receipt"]["path"] == base + "crystal.panel_gate.json"
+
+
 def test_duo_outputs_take_the_committed_receipt_names(tmp_path):
     build = tmp_path / "lane/patch/build"
     build.mkdir(parents=True)
@@ -31,6 +71,31 @@ def test_duo_outputs_take_the_committed_receipt_names(tmp_path):
     root = "tests/fixtures/gen2/receipts/duo_faint_gs_"
     assert sorted(got) == [root + "a_result.txt", root + "a_witness.SaveRAM", root + "pydec_result.txt"]
     assert got[root + "a_result.txt"] != got[root + "a_witness.SaveRAM"]   # LF-normalized text only
+
+
+def test_pin_new_overlay_reconnect_keeps_all_phases_and_seeds(tmp_path):
+    repo, out = tmp_path / "repo", tmp_path / "out"
+    stem = "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_"
+    suffixes = ["a_result.txt", "b_result.txt", "pydec_result.txt", "a_same_save_result.txt",
+                "a_wrong_save_result.txt", "a_same_save_seed.SaveRAM", "a_wrong_save_seed.SaveRAM"]
+    pins = {}
+    for suffix in suffixes:
+        path = out / "receipts" / (stem + suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"MODEL witness")
+        pins[stem + suffix] = sweep.lf_sha256(path)
+    axes = {"artifact_kind": "overlay", "initiator": "gold", "partner": "silver", "scenarios": ["gen2_reconnect"]}
+    for name, doc in zip(sweep.PIN_FILES, [{"requirements": [{"stage": "live-duos", "axes": axes, "proofs": []}]},
+                                        {"requirements": []}], strict=True):
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc))
+    (out / "summary.json").write_text(json.dumps({"cells": [{"ok": True, "receipts": pins}]}))
+    assert sweep.pin(out, root=repo) == []
+    proof = json.loads((repo / sweep.PIN_FILES[0]).read_text())["requirements"][0]["proofs"][0]
+    assert set(proof["receipts"]) == {"a", "b", "pydec", "a_same_save", "a_wrong_save"}
+    assert proof["staged_saves"]["wrong_save"]["case"] == "gold_battle_ot2"
+    assert all("/overlay/" in pin["path"] for pin in proof["staged_saves"].values())
 
 
 def test_pin_installs_pass_receipts_repins_in_place_and_adds_the_inspect_row(tmp_path):

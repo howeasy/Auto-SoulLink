@@ -334,13 +334,13 @@ def hello_ot(case):
 def marker_text(path, cart, *, case, title, key, species, level, ot_id, starter, pre=None, flip=None):
     j = json.dumps
     duo = {"player": "a", "scenario": "ball_gate", "attempt": 1, "case": case, "title": title,
-           "rom_sha1": "deadbeef" * 5,
+           "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
            "fixture_sha256": hashlib.sha256((ROOT / f"tests/fixtures/gen2/{case}.SaveRAM").read_bytes()).hexdigest()}
     witness = {"frame": 22000, "save_completed_frame": 21900, "gate_saves": 1, "client_saves": 1,
                "cartram_sha256": hashlib.sha256(cart).hexdigest(), "cartram_bytes": len(cart),
                "saveram_path": str(path), "saveram_bytes": len(cart) + 22, "flushed_matches": True}
     client = {"qualification": "PASS", "production_admitted": True, "pack": f"gen2_{title}", "title": title,
-              "rom_sha1": "deadbeef" * 5}
+              "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133"}
     lines = [f"DUO_GEN2 {j(duo)}", f"CLIENT {j(client)}",
              f"HELLO {j({'frame': 310, 'ot_id': ot_id, 'has_pokeballs': False, 'ball_count': 0})}",
              "BALL_PRE " + j(pre or {"frame": 2000, "foe": 16, "area_id": "route_29", "has_pokeballs": False,

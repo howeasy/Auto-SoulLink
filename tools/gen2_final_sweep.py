@@ -81,7 +81,12 @@ def cells():
     for game, pair in PAIRS.items():
         for scenario in e2e_duo.scenarios_for(game):
             out.append({"id": f"{game}/{scenario}", "kind": "duo", "game": game, "scenario": scenario, "pair": pair,
+                        "artifact_kind": "overlay" if scenario in e2e_duo.GEN2_TRADE_SCENARIOS else "clean",
                         "timeout": e2e_duo.SCENARIOS[scenario]["timeout"] + 600})
+            if scenario not in e2e_duo.GEN2_TRADE_SCENARIOS and (pair != "cg" or scenario == "link"):
+                out.append({"id": f"overlay/{game}/{scenario}", "kind": "duo", "game": game,
+                            "scenario": scenario, "pair": pair, "artifact_kind": "overlay",
+                            "timeout": e2e_duo.SCENARIOS[scenario]["timeout"] + 600})
     for title in TITLES:
         out.append({"id": f"gate/engine_sites/{title}", "kind": "gate", "timeout": 2 * GATE_TIMEOUT,
                     "commands": [live("test_gen2_frame_align.py", title), live("test_gen2_u1g.py", title)]})
@@ -90,15 +95,23 @@ def cells():
                         "commands": [live("test_gen2_write_windows.py", title)]})
         for kind in ("panel", "sfx", "w6", "phone", "sp_lowwater"):
             out.append({"id": f"gate/{kind}/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
+                        "artifact_kind": "overlay",
                         "commands": [live(f"test_gen2_{kind}_gate.py", title)]})
+        out.append({"id": f"overlay/gate/engine_sites/{title}", "kind": "gate", "artifact_kind": "overlay",
+                    "timeout": 2 * GATE_TIMEOUT,
+                    "commands": [live("test_gen2_frame_align.py", title), live("test_gen2_u1g.py", title)]})
+        out.append({"id": f"overlay/gate/write_window/{title}", "kind": "gate", "artifact_kind": "overlay",
+                    "timeout": GATE_TIMEOUT, "commands": [live("test_gen2_write_windows.py", title)]})
     out.append({"id": "gate/inspect_run", "kind": "gate", "timeout": 13 * 900,   # every fixture, one inspect gate each
+                "commands": [[sys.executable, "-m", "pytest", "tests/live/test_gen2_new_gates.py", "-q", "-p", "no:randomly"]]})
+    out.append({"id": "overlay/gate/inspect_run", "kind": "gate", "artifact_kind": "overlay", "timeout": 13 * 900,
                 "commands": [[sys.executable, "-m", "pytest", "tests/live/test_gen2_new_gates.py", "-q", "-p", "no:randomly"]]})
     return sorted(out, key=lambda c: -c["timeout"])   # longest first
 
 
 def duo_command(cell, lane):
     return [sys.executable, "tools/e2e_duo.py", "--game", cell["game"], "--scenario", cell["scenario"],
-            "--lane", lane, "--keep-data"]
+            "--lane", lane, "--keep-data", "--gen2-artifact", cell.get("artifact_kind", "clean")]
 
 
 def git(cwd, *args):
@@ -149,8 +162,10 @@ def lf_sha256(path):
     return hashlib.sha256(raw).hexdigest()
 
 
-def run(cmd, cwd, timeout, log):
+def run(cmd, cwd, timeout, log, *, artifact_kind=None):
     env = dict(os.environ, SLINK_LIVE="1", PYTHONUNBUFFERED="1")
+    if artifact_kind is not None:
+        env["SLINK_GEN2_ARTIFACT"] = artifact_kind
     env.pop("SLINK_GEN2_NO_ATTEST", None)   # the sweep's gate/inspect_run cell is the one that attests
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(f"$ {' '.join(cmd)}\n")
@@ -168,14 +183,15 @@ def collect_duo(cell, lane_id, lane, out):
     artifact = f"{cell['scenario']}_{lane_id}"
     stem = f"duo_{cell['scenario'].removeprefix('gen2_')}_{cell['pair']}_"
     got = {}
+    namespace = "/overlay" if cell.get("artifact_kind") == "overlay" else ""
     for src in sorted((lane / "patch/build").glob(f"e2e_{artifact}_*")):
         suffix = src.name[len(f"e2e_{artifact}_"):]
         if "attempt" in suffix or suffix.endswith(("_exit.SaveRAM", "_link_save.SaveRAM", "manifest.json")):
             continue
-        dest = out / "receipts/tests/fixtures/gen2/receipts" / (stem + suffix)
+        dest = out / ("receipts/tests/fixtures/gen2/receipts" + namespace) / (stem + suffix)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
-        got[f"tests/fixtures/gen2/receipts/{stem + suffix}"] = lf_sha256(dest)
+        got[f"tests/fixtures/gen2/receipts{namespace}/{stem + suffix}"] = lf_sha256(dest)
     return got
 
 
@@ -207,6 +223,7 @@ def pin(out, root=REPO):
         sources[target], pins[target] = rel, pins.pop(rel)
         del sources[rel]
     for rel, src in sources.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(out / "receipts" / src, root / rel)
     named = set()
     for name in PIN_FILES:
@@ -221,11 +238,63 @@ def pin(out, root=REPO):
             at = text.rindex("\n  ]")
             text = text[:at] + ",\n" + INSPECT_ROW % (ATTESTATION, pins[ATTESTATION]) + text[at:]
             named.add(ATTESTATION)
+        doc = json.loads(text)
+        changed = False
+        for row in doc.get("requirements", []):
+            axes = row.get("axes") or {}
+            artifact = axes.get("artifact_kind", "clean")
+            namespace = "tests/fixtures/gen2/receipts/" + ("overlay/" if artifact == "overlay" else "")
+            if row.get("stage") == "live-duos":
+                pair = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}.get(
+                    (axes.get("initiator"), axes.get("partner")))
+                for scenario in axes.get("scenarios", []):
+                    stem = namespace + "duo_" + scenario.removeprefix("gen2_") + "_" + str(pair) + "_"
+                    paths = {side: stem + side + "_result.txt" for side in ("a", "b", "pydec")}
+                    seeds = {}
+                    if scenario == "gen2_reconnect":
+                        paths.update({"a_" + phase: stem + "a_" + phase + "_result.txt"
+                                      for phase in ("same_save", "wrong_save")})
+                        seeds = {phase: stem + "a_" + phase + "_seed.SaveRAM"
+                                 for phase in ("same_save", "wrong_save")}
+                    if all(rel in pins for rel in [*paths.values(), *seeds.values()]):
+                        proof = {"scenario": scenario, "receipts": {side: {"path": rel, "sha256": pins[rel]}
+                                                                  for side, rel in paths.items()}}
+                        if seeds:
+                            proof["staged_saves"] = {phase: {"path": rel, "sha256": pins[rel]}
+                                                     for phase, rel in seeds.items()}
+                            proof["staged_saves"]["wrong_save"]["case"] = axes["initiator"] + "_battle_ot2"
+                            snapshot = stem + "a_witness.SaveRAM"
+                            if snapshot in pins:
+                                proof["witness_snapshots"] = {"a": {"path": snapshot, "sha256": pins[snapshot]}}
+                                named.add(snapshot)
+                        row["proofs"] = [old for old in row.get("proofs", []) if old.get("scenario") != scenario] + [proof]
+                        named.update(paths.values())
+                        named.update(seeds.values())
+                        changed = True
+            else:
+                kind, title = axes.get("kind"), axes.get("title")
+                if kind in ("engine_sites", "write_window"):
+                    owner = "gold" if artifact == "clean" and title == "silver" and kind == "write_window" else title
+                    rel = namespace + str(owner) + "." + kind + ".json"
+                elif kind == "qualification":
+                    rel = namespace + str(axes.get("fixture")) + ".qualification.json"
+                elif kind == "inspect_run":
+                    rel = namespace + "live_new_gates.inspect_run.json"
+                elif kind in ("panel_gate", "sfx_gate", "w6_gate", "phone_gate", "sp_lowwater_gate"):
+                    rel = namespace + str(title) + "." + kind + ".json"
+                else:
+                    continue
+                if rel in pins:
+                    row["proofs"] = [{"receipts": {"receipt": {"path": rel, "sha256": pins[rel]}}}]
+                    named.add(rel)
+                    changed = True
+        if changed:
+            text = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
         path.write_text(text, encoding="utf-8", newline="\n")
     return sorted(rel for rel in pins if rel not in named and rel.endswith((".txt", ".json")))
 
 
-def run_commands(commands, lane, timeout, log):
+def run_commands(commands, lane, timeout, log, *, artifact_kind=None):
     """Run a cell's commands in order and stop at the first failure. Every gate result file a command wrote
     (patch/build/*_result.txt) is kept next to the log as <log stem>.cmd<i>.<name>. U1G reuses
     gen2_frame_align_result.txt, so without this copy a failing frame_align trace is overwritten."""
@@ -236,7 +305,8 @@ def run_commands(commands, lane, timeout, log):
     codes = []
     for index, cmd in enumerate(commands, 1):
         before = stamps()
-        codes.append(run(cmd, lane, timeout, log))
+        codes.append(run(cmd, lane, timeout, log, artifact_kind=artifact_kind) if artifact_kind is not None
+                     else run(cmd, lane, timeout, log))
         for result, stamp in stamps().items():
             if before.get(result) != stamp:
                 shutil.copyfile(result, log.with_name(f"{log.stem}.cmd{index}.{result.name}"))
@@ -259,7 +329,7 @@ def run_cell(cell, lane, n, out, stagger):
         stagger()
         result["attempts"] = attempt
         commands = [duo_command(cell, f"{lane_id}{attempt}")] if cell["kind"] == "duo" else cell["commands"]
-        codes = run_commands(commands, lane, cell["timeout"], log)
+        codes = run_commands(commands, lane, cell["timeout"], log, artifact_kind=cell.get("artifact_kind", "clean"))
         result["ok"] = all(code == 0 for code in codes)
         if cell["kind"] == "duo":
             result["receipts"] = collect_duo(cell, f"{lane_id}{attempt}", lane, out)

@@ -24,6 +24,38 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import make_release  # noqa: E402
 
+
+def test_gen2_player_manifest_names_each_overlay_binding_and_its_own_proofs():
+    paths = {f"data/games/{game}/{name}" for game, names in make_release._DATA_GAME_LUA.items() for name in names}
+    paths |= {f"lua/gen2/{name}" for name in make_release._LUA_GEN2}
+    for title in ("crystal", "gold", "silver"):
+        prefix = f"data/games/gen2_{title}/"
+        assert prefix + "overlay/binding.json" in paths
+        assert prefix + f"receipts/overlay/{title}.engine_sites.json" in paths
+        assert prefix + f"receipts/overlay/{title}.write_window.json" in paths
+    assert "lua/gen2/artifact.lua" in paths
+
+
+@pytest.mark.parametrize("status", ["BUILT", "ADMITTED"])
+def test_gen2_overlay_shipping_requirement_follows_its_catalog(tmp_path, monkeypatch, status):
+    import json
+    for title in ("crystal", "gold", "silver"):
+        path = tmp_path / f"data/games/gen2_{title}/admission.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"artifacts": [{"kind": "overlay", "status": status,
+                                                  "selection": "SELECTED" if status == "ADMITTED" else "FUTURE"}]}))
+    manifest = make_release.data_game_files(tmp_path)
+    for title in ("crystal", "gold", "silver"):
+        names = manifest[f"gen2_{title}"]
+        assert ("overlay/binding.json" in names) == (status == "ADMITTED")
+        assert (f"receipts/overlay/{title}.write_window.json" in names) == (status == "ADMITTED")
+    if status == "ADMITTED":
+        # Preflight must refuse these declared but absent files, before producing a ZIP.
+        monkeypatch.setattr(make_release, "REPO_ROOT", tmp_path)
+        with pytest.raises(SystemExit):
+            make_release.build_release(version="model", out_dir=tmp_path / "out", skip_generators=True)
+        assert not (tmp_path / "out/SLink-player-model.zip").exists()
+
 # The scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
 # `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
 # slink.lua's own game_detect dispatch and its lua/games/gen{4,5}_*.lua registry, the
@@ -83,9 +115,15 @@ def _resolve_literal_path(rel: str, literal: str) -> str | None:
 def _closure(starts: list[str]) -> set[str]:
     """Every repo-relative file reachable from `starts` by dofile / require / load_json."""
     seen: set[str] = set()
+    shipping = make_release.data_game_files()
     todo = list(starts)
     while todo:
         rel = todo.pop()
+        parts = rel.split("/")
+        if len(parts) >= 4 and parts[:2] == ["data", "games"] and parts[2].startswith("gen2_"):
+            name = "/".join(parts[3:])
+            if (name == "overlay/binding.json" or name.startswith("receipts/overlay/")) and name not in shipping[parts[2]]:
+                continue  # unactivated overlay paths are literals, never clean runtime dependencies
         if rel in seen:
             continue
         seen.add(rel)
@@ -176,7 +214,7 @@ def test_every_manifest_entry_names_a_file_that_exists():
         + [f"lua/clients/{f}" for f in make_release._LUA_CLIENTS]
         + [f"lua/games/{f}" for f in make_release._LUA_GAMES]
         + [f"data/games/{gen}/{f}"
-           for gen, files in make_release._DATA_GAME_LUA.items() for f in files]
+           for gen, files in make_release.data_game_files().items() for f in files]
     )
     missing = [p for p in listed if not os.path.exists(os.path.join(_REPO, p))]
     assert not missing, f"manifest names files that do not exist: {missing}"

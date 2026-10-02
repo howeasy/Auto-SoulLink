@@ -33,6 +33,7 @@ status page instead.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -141,6 +142,7 @@ _LUA_CORE = [
 # lua/gen2/ — the Gen 2 client (Crystal, Gold and Silver; U5 cutover). run.lua is what lua/slink.lua
 # dofiles; boxes.lua is NOT part of this graph (no box executor is composed, B-10).
 _LUA_GEN2 = [
+    "artifact.lua",
     "run.lua",
     "entry.lua",
     "client.lua",
@@ -198,6 +200,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "write_checkpoint_overlay.json",
     ],
     "gen2_crystal": [
+        "overlay/binding.json",
+        "receipts/overlay/crystal.engine_sites.json",
+        "receipts/overlay/crystal.write_window.json",
+        "receipts/overlay/crystal_battle.qualification.json",
+        "receipts/overlay/crystal_town.qualification.json",
+        "receipts/overlay/crystal_synth_grass.synth.json",
+        "receipts/overlay/crystal_synth_kyle.synth.json",
+        "receipts/overlay/crystal_synth_bill.synth.json",
         # lua/gen2/entry.lua Entry.PACK_FILES.gen2_crystal (Entry.build reads these at load,
         # for every title -- the admission catalog walks Crystal/Gold/Silver together).
         "profile.json",
@@ -226,6 +236,15 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/crystal_synth_bill.synth.json",
     ],
     "gen2_gold": [
+        "overlay/binding.json",
+        "receipts/overlay/gold.engine_sites.json",
+        "receipts/overlay/gold.write_window.json",
+        "receipts/overlay/gold_battle.qualification.json",
+        "receipts/overlay/gold_town.qualification.json",
+        "receipts/overlay/gold_battle_errand.qualification.json",
+        "receipts/overlay/gold_synth_grass.synth.json",
+        "receipts/overlay/gold_synth_kyle.synth.json",
+        "receipts/overlay/gold_synth_bill.synth.json",
         # Entry.PACK_FILES.gen2_gold -- Entry.build's admission catalog loads these for
         # every title, whether or not that title is currently ADMITTED.
         "profile.json",
@@ -255,6 +274,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/gold_synth_bill.synth.json",
     ],
     "gen2_silver": [
+        "overlay/binding.json",
+        "receipts/overlay/silver.engine_sites.json",
+        "receipts/overlay/silver.write_window.json",
+        "receipts/overlay/silver_battle.qualification.json",
+        "receipts/overlay/silver_town.qualification.json",
+        "receipts/overlay/silver_synth_grass.synth.json",
+        "receipts/overlay/silver_synth_kyle.synth.json",
+        "receipts/overlay/silver_synth_bill.synth.json",
         # Entry.PACK_FILES.gen2_silver -- same as Gold.
         "profile.json",
         "admission.json",
@@ -558,6 +585,29 @@ def patch_launcher(content: str, host: str | None, port: int | None, player: str
     return content
 
 
+def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
+    """Only activated Gen 2 overlays require their execution binding and own proofs.
+
+    The declared manifest is a superset. FUTURE/BUILT overlays need no optional
+    files; ADMITTED overlays require every named file in the usual preflight.
+    A missing or malformed catalog is an error, never an inactive artifact.
+    """
+    root = REPO_ROOT if root is None else root
+    manifest = {game: list(names) for game, names in _DATA_GAME_LUA.items()}
+    for title in ("crystal", "gold", "silver"):
+        pack = f"gen2_{title}"
+        if pack not in manifest:
+            continue
+        catalog = json.loads((root / f"data/games/{pack}/admission.json").read_text(encoding="utf-8"))
+        rows = [row for row in catalog["artifacts"] if row.get("kind") == "overlay"]
+        if len(rows) != 1 or rows[0].get("status") not in ("BUILT", "ADMITTED"):
+            raise ValueError(f"{pack}: overlay catalog missing or malformed")
+        if rows[0]["status"] != "ADMITTED":
+            manifest[pack] = [name for name in manifest[pack]
+                              if name != "overlay/binding.json" and not name.startswith("receipts/overlay/")]
+    return manifest
+
+
 def build_release(
     version: str,
     out_dir: Path,
@@ -585,6 +635,7 @@ def build_release(
         run_generators()
 
     # ── Pre-flight: verify all required files exist ───────────────────────────
+    game_data = data_game_files(REPO_ROOT)
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
@@ -595,7 +646,7 @@ def build_release(
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
             REPO_ROOT / "data" / "games" / gen / f
-            for gen, files in _DATA_GAME_LUA.items()
+            for gen, files in game_data.items()
             for f in files
         ]
     )
@@ -682,7 +733,7 @@ def build_release(
             zf.write(p, prefix + f"lua/x64/{p.name}")
             say(f"  [added]   {prefix}lua/x64/{p.name}")
 
-        for gen, files in _DATA_GAME_LUA.items():
+        for gen, files in game_data.items():
             for fname in files:
                 zf.write(
                     REPO_ROOT / "data" / "games" / gen / fname,

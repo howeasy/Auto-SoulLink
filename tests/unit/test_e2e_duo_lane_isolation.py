@@ -167,7 +167,7 @@ def test_gen2_prepares_each_title_plan_and_ui_origins(monkeypatch, tmp_path, gam
         loaded.append(title)
         return SimpleNamespace(title=title)
 
-    def route(title, repo):
+    def route(title, repo, **kwargs):
         facts.append(title)
         return {"title": title}
 
@@ -177,7 +177,7 @@ def test_gen2_prepares_each_title_plan_and_ui_origins(monkeypatch, tmp_path, gam
 
     monkeypatch.setattr(duo, "gen2_preflight", preflight)
     monkeypatch.setitem(gate.GENS["gen2"], "plan", plan)
-    monkeypatch.setattr(gen2_source_data, "load_context", context)
+    monkeypatch.setattr(gen2_fixtures, "exec_context", lambda title, kind, root: context(title, root=root))
     monkeypatch.setattr(gen2_fixtures, "route_facts", route)
     monkeypatch.setattr(align, "u1_facts", u1)
     monkeypatch.setattr(inspect, "inspect_env", lambda *args, **kwargs: {

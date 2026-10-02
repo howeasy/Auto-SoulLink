@@ -31,7 +31,7 @@ def manifest(titles=("crystal", "gold")):
                          "rom_sha1": out["sha1"], "base_sha1": out["base_sha1"],
                          "ups_sha256": out["ups"]["sha256"], "sym_sha256": profile["sym_sha256"]}
     return {"schema": "gen2-trade-lane-v1", "run_id": "trade-model-1", "scenario": "gen2_trade_new",
-            "evidence_class": "HARNESS_ONLY_OVERLAY", "provenance_sha256": hashlib.sha256(provenance.read_bytes()).hexdigest(),
+            "evidence_class": "PHYSICAL_RECEIPTED", "provenance_sha256": hashlib.sha256(provenance.read_bytes()).hexdigest(),
             "players": players}
 
 
@@ -138,7 +138,7 @@ async def test_real_hello_refusal_preserves_state_and_bindings(tmp_path, mutatio
         assert snapshot(srv) == before
         if mutation != "player":
             assert not srv.is_admitted("a")
-            assert "HARNESS_ONLY_OVERLAY" in srv.admission["a"]["reason"]
+            assert "PHYSICAL_RECEIPTED" in srv.admission["a"]["reason"]
         assert (await send({"event": "capture", "player": "a", "key": "1234:30B8:10",
                             "area_id": "route_29", "species": 16, "level": 5}))["commands"] == [{"cmd": "noop"}]
         assert snapshot(srv) == before
@@ -266,7 +266,7 @@ def test_cli_calls_the_same_imported_server_with_original_argument_names(tmp_pat
     assert called[0]["run_id"] == doc["run_id"] and called[0]["gender_lock"] is True
     assert called[0]["battle_calc"] is False and called[0]["port"] == 54329
     assert server_module.SLinkServer._decide_admission is original
-    assert "HARNESS_ONLY_OVERLAY" in capsys.readouterr().out
+    assert "PHYSICAL_RECEIPTED" in capsys.readouterr().out
     assert (tmp_path / "trade_lane_events.jsonl").read_bytes() == b""
 
 
@@ -303,7 +303,7 @@ async def test_audit_records_original_dispatched_trade_messages_not_acceptance(t
         assert len(rows) == 4 and [row["seq"] for row in rows] == [1, 2, 3, 4]
         assert [row["message"] for row in rows] == messages
         assert all(row["source"] == "server_dispatch" and row["player"] == "a"
-                   and row["evidence_class"] == "HARNESS_ONLY_OVERLAY"
+                   and row["evidence_class"] == "PHYSICAL_RECEIPTED"
                    and row["run_id"] == doc["run_id"] and row["scenario"] == doc["scenario"] for row in rows)
         assert all(row["outcome"]["dispatch"] == "returned" and "accepted" not in row["outcome"] for row in rows)
         assert not srv.state.links, "ignored no-session reports are evidence of dispatch, not a completed trade"
