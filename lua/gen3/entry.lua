@@ -375,8 +375,8 @@ local function build_production(deps, c)
     -- writes policy. Attaching late left deps.native nil, so native_idle could report idle while
     -- the real mailbox was busy (Codex REV2). The session does not exist yet, so send resolves it
     -- lazily. The FULL pack profile is read here: the arena lives at profile.native, outside
-    -- titles (Codex REV on C5-1). FR's ABI2 binding additionally requires explicit
-    -- production metadata; no FR companion is currently shipped/admitted.
+    -- titles (Codex REV on C5-1). FR/LG/Emerald's ABI2 binding additionally requires explicit
+    -- production metadata (their companion rows and patch/dist/gen3_companions.json carry it).
     local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
     local fr_native = ((pack == "gen3_frlg" and (c.title == "firered" or c.title == "leafgreen"))

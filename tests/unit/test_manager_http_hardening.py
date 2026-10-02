@@ -256,7 +256,7 @@ async def test_corrupt_registry_returns_actionable_errors_without_mutation(manag
         pytest.fail("a corrupted registry must stop before spawning a run")
 
     monkeypatch.setattr(manager, "_spawn_run", unexpected_spawn)
-    for path, body in (("/api/runs/r1/delete", None), ("/api/runs/new", {"name": "New run"})):
+    for path, body in (("/api/runs/r1/delete", None), ("/api/runs/new", {"name": "New run", "game": "gen1"})):
         response = await manager_client.post(path, json=body)
         assert response.status == 503
         assert "repair registry.json" in (await response.json())["error"]

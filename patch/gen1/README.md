@@ -33,8 +33,9 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
   service picks a request up only on an overworld frame where START could open (review
   1b33bc31, `tests/unit/test_gen1_trade_save.py`).
 
-**The receptionist has not yet been driven on a running cartridge.** The panel gates pass on
-this trade-carrying build; launching the menu itself is open (requirements row T-1, `P` ◐).
+**The receptionist is driven live on Red and Blue** (`2bab8bc`), and the trade duos
+`trade_new`/`trade_decline_new` run on this build (`docs/gen1_gen2_runtime_checks.md` T-1..T-4).
+Physical coverage is one Center, not all 12 + Indigo; trade evolution and save reload stay MODEL.
 
 ## Why so little
 

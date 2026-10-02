@@ -59,7 +59,7 @@
             <div class="mk-games" role="radiogroup" aria-labelledby="game-label" @keydown="radioKeys($event)">
               <template x-for="g in form.games" :key="g.key">
                 <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1" :disabled="g.unadmitted"
-                        :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
+                        :class="draft.game === g.key ? 'active' : ''" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>
           </section>
@@ -95,8 +95,9 @@
           </section>
 
           <div class="mk-form-actions">
-            <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
+            <button class="mk-btn primary big" :disabled="!draft.name.trim() || !draft.game || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
             <span class="mk-sub" id="run-name-hint" x-show="!draft.name.trim()">Give it a name.</span>
+            <span class="mk-sub" x-show="draft.name.trim() && !draft.game">Pick the game.</span>
             <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
             <span class="mk-sub" role="alert" x-text="error" style="color:var(--c-dead)"></span>
           </div>
@@ -111,7 +112,7 @@
                 <span class="mk-rail-label" x-text="draft.name.trim() || 'Untitled run'"></span>
               </div>
               <div class="mk-preview-body">
-                <div class="mk-now-line"><b x-text="draft.game ? gameLabel(draft.game) : 'Game detected on connect'"></b><span class="num" x-text="'tcp ' + ports[0] + ' · http ' + ports[1]"></span></div>
+                <div class="mk-now-line"><b x-text="draft.game ? gameLabel(draft.game) : 'No game picked'"></b><span class="num" x-text="'tcp ' + ports[0] + ' · http ' + ports[1]"></span></div>
                 <div class="mk-sub" x-show="draft.game && gameMembers(draft.game).length > 1">Each player may run any cartridge in the family; the exact one is read from their hello.</div>
                 <div class="mk-preview-rules">
                   <template x-for="k in on()" :key="k"><span class="mk-tag on" x-text="form.options[k].label"></span></template>
@@ -292,7 +293,7 @@
       async create() {
         var name = this.draft.name.trim();
         this.tried = true;
-        if (!name || this.busy) return;
+        if (!name || !this.draft.game || this.busy) return;
         this.busy = true; this.error = ''; this.stage = 'Creating…';
         try {
           var body = Object.assign({ name: name, game: this.draft.game }, this.draft.opts);

@@ -92,7 +92,8 @@ async def test_the_form_carries_the_option_table_the_server_computed(manager_cli
     start = body.index("window.SLINK_FORM = ") + len("window.SLINK_FORM = ")
     form = json.loads(body[start:body.index(";" + chr(10), start)])   # the statement ends the line
     assert form["support"]["gen1"]["gender_lock"]["ok"] is False
-    assert form["support"][""]["battle_calc"]["ok"] is True
+    assert form["support"]["gen3_rr"]["battle_calc"]["ok"] is True
+    assert "" not in form["support"], "no detect-on-connect row (owner 2026-10-01)"
     assert "gen1" in form["gen1_games"] and "gen3_rr" not in form["gen1_games"]
 
 
@@ -155,8 +156,11 @@ async def test_new_run_records_the_game_family(manager_client, monkeypatch):
     resp = await manager_client.post("/api/runs/new", json={"name": "Duo", "game": "gen1", "species_lock": True})
     j = await resp.json()
     assert j["ok"] and j["run"]["game"] == "gen1"
-    resp = await manager_client.post("/api/runs/new", json={"name": "Duo 2", "game": "not-a-family"})
-    assert (await resp.json())["run"]["game"] == "", "an unknown family is detect-on-connect, not stored"
+    # No detect-on-connect (owner 2026-10-01): a run without a known family is refused.
+    for game in ("not-a-family", "", None):
+        resp = await manager_client.post("/api/runs/new", json={"name": "Duo 2", "game": game})
+        assert resp.status == 400 and "choose the game" in (await resp.json())["error"]
+    assert "" not in manager.GAME_LABELS
 
 
 @pytest.mark.asyncio

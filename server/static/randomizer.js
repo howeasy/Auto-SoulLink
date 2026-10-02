@@ -41,9 +41,7 @@ function randomizerFields(form) {
     rdraft: {
       jar: form.jar || '', rom_a: '', rom_b: '',
       // Start from what the run last made, so "prepare again" means the same unless
-      // changed: the companion as before (on by default where one exists — the panel and
-      // the native trade are what the companion is for), randomized as before.
-      companion: form.cartridges ? !!form.cartridges.companion : true,
+      // changed. The companion is not a draft field: it goes in wherever one exists.
       randomize: !!(form.current),
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
@@ -336,15 +334,16 @@ function randomizerFields(form) {
       finally { this.uploading = ''; }
     },
     pick(pid) { var p = this.rdraft['rom_' + pid]; return this.roms.find(function (r) { return r.path === p; }) || null; },
-    // The SLink companion exists for some titles only (rform.companion_titles): a pick
-    // outside them greys the checkbox with the reason, as the run options do.
+    // The SLink companion exists for some titles only (rform.companion_titles): it is
+    // patched into every pick that has one; a pick outside them is handed out as picked.
     companionOk() {
       var titles = this.rform.companion_titles || [];
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
           if (r.family === 'gen3_emerald') return { ok: false, why: 'No Emerald companion build is available yet. Use the standard cartridge.' };
-          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
+          if (r.family === 'gen2_gsc') return { ok: false, why: 'The Gen 2 companion is built but the launcher does not admit it yet, so the cartridge is handed out as picked.' };
+          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. The cartridge is handed out as picked: the Soul Link rules are the same, without the panel, native trade or native sounds.' };
         }
       }
       return { ok: true, why: '' };
@@ -372,13 +371,13 @@ function randomizerFields(form) {
           && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
       }
-      if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
+      if (this.rdraft.randomize && this.companionOk().ok && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
         // pure + companion + randomize is the overlay path: UPR needs an entry for the
         // overlay build of each pick ("PureRed overlay (U)"; the fork's naming).
         var entries = this.pre.jar_entries, missing = [];
         [ra, rb].forEach(function (r) { if (r && r.variant && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
-        if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, randomize with the companion off, or keep the companion without randomizing.';
+        if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, or turn Randomize off.';
       }
       return '';
     },
@@ -389,7 +388,7 @@ function randomizerFields(form) {
     },
     cartridgesBody() {
       var body = { rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b,
-                   companion: !!this.rdraft.companion && this.companionOk().ok, randomize: !!this.rdraft.randomize };
+                   companion: this.companionOk().ok, randomize: !!this.rdraft.randomize };
       if (this.rdraft.randomize) { body.jar = this.rdraft.jar; body.spec = this.rdraft.spec; }
       return body;
     },

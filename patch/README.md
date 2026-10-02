@@ -23,9 +23,20 @@ pairing remain separate; the hello uses the existing `rand` wire kind.
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
 > six patches; `/patcher` applies any of them in the browser.
 
-An **optional** native code-injection layer for Radical Red. When applied, the SLink Lua
-client detects it and uses native in-game features; without it, everything falls back to
-the existing behaviour. **Unpatched players are unaffected.**
+A native code-injection layer for Radical Red. When applied, the SLink Lua client detects
+it and uses native in-game features. The Soul Link rules themselves run in Lua on every
+cartridge, patched or not.
+
+## Patch-first (owner, 2026-10-01)
+
+Every title whose companion the launcher admits (Red/Blue, pureRGB, FireRed/LeafGreen/Emerald,
+Radical Red) gets it: the Manager patches it into every cartridge it prepares, with no opt-out
+(`server/manager.py` `COMPANION_TITLES`). Gold/Silver/Crystal join once `lua/gen2/entry.lua`
+admits the overlay; until then the Manager hands out their clean cartridge.
+**New ROM-side features are companion-only.** They get no Lua/HUD fallback, so a cartridge
+without the companion simply lacks them, the way Rival Swap answers `patch_required` on Gen 3.
+Clean cartridges are still admitted, and the existing Lua rule paths stay, because Yellow,
+Archipelago and Gen 4/5 have no companion and share those clients.
 
 ## Prerequisites — the patch is per-RR-build
 

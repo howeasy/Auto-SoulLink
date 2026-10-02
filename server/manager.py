@@ -64,9 +64,9 @@ from tools import make_release
 # FireRed/LeafGreen, Gold/Silver/Crystal, HeartGold/SoulSilver, Black/White. What
 # separates families is a different map (Radical Red from vanilla FireRed, Emerald,
 # Platinum from HGSS, B2W2 from BW) or a reshuffled world (the Archipelago builds).
-# "" is today's behaviour: the run learns its cartridges from the first hellos.
+# Every new run names its family up front, so the Manager knows which cartridge (and which
+# companion) to hand out. Runs created before 2026-10-01 may still carry "" (detected).
 GAMES = [
-    ("", "Detect when players connect", []),
     ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
     ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
@@ -144,9 +144,11 @@ def _legacy_cartridges(run: dict) -> dict | None:
                         for p, v in (rnd.get("players") or {}).items()}}
 
 
-# The titles the SLink companion exists for (a UPS in patch/dist, a target in
-# server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal", "Gold", "Silver",
+# The titles whose SLink companion the launcher ADMITS (a UPS in patch/dist, a target in
+# server/patcher.py, and an admission route). Yellow is absent on purpose: it has no free WRAM
+# for the mailbox. Crystal/Gold/Silver are built but not admitted yet: lua/gen2/entry.lua admits
+# clean rows only, so handing out their companion would make an unlaunchable run.
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
                     "FireRed", "LeafGreen", "Emerald")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
@@ -204,9 +206,9 @@ OPTION_SUPPORT = {
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
                      "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
-                     "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
+                     "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist, which the companion overlay makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
                      "gen3_frlge_rr": {"ok": True}},
 }
 
@@ -1226,6 +1228,8 @@ class RunManager:
         # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
         # because the client would refuse the run at hello.
         game = str(body.get("game", "") or "").strip().lower()  # one normalized key: check, store, message
+        if game not in GAME_MEMBERS:
+            return web.json_response({"ok": False, "error": "choose the game this run plays"}, status=400)
         if game in UNADMITTED_GAMES:
             return web.json_response({"ok": False, "error": f"{GAME_LABELS[game]}: cannot create a run"},
                                      status=400)
@@ -1250,8 +1254,7 @@ class RunManager:
             "status":     "stopped",
             "pid":        None,
             **run_options(body),
-            # The game FAMILY, when named up front; "" means detect from the first hello.
-            "game": game if game in GAME_MEMBERS else "",
+            "game": game,  # the game FAMILY
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)

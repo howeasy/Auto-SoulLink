@@ -8,8 +8,20 @@ from server.adapters import gen3_codec as c
 from tools import gen3_borrowed_rows as d
 
 
+def staged_rr_companion():
+    """The staged RR companion (gitignored build output), here or up the tree; absent skips.
+    own_facts() refuses anything but the pinned COMPANION_SHA1, so a wrong one fails."""
+    rel=h.GEN3_TITLES["radical_red"]["staged"]
+    for base in (ROOT,*ROOT.parents):
+        if (base/rel).is_file():
+            return base/rel
+    pytest.skip(f"{rel} absent (build the RR companion patch)")
+
+
 def runner(case):
+    rom=staged_rr_companion()
     r=object.__new__(h.DuoRun)
+    r._gen3_rom=lambda inst:str(rom)
     r.game="gen3_rr";r.gcfg=h.GAMES["gen3_rr"];r.scenario="borrowed_party_"+case+"_gen3"
     r.cfg=dict(d.ROWS[r.scenario]);r.attempt=1
     a,b=r._gen3_fixture_saved("a"),r._gen3_fixture_saved("b")

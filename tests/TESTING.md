@@ -155,7 +155,7 @@ Let all of Player A's party mons faint at once. Expect: B's **party** linked mon
 
 ### Trade (Radical Red / companion patch only)
 
-Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). Emerald has no companion patch either, so it cancels trade prompts the same way today; a vanilla trade duo (FR<->FR and E<->E) is planned but not yet built (`docs/gen3_emerald/REQUIREMENTS.md` ED-3). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
+Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). FireRed, LeafGreen and Emerald do have published companions (`patch/dist/gen3_companions.json`, ABI2, durable trade capability) whose native trade binds only on the `companion` artifact; on a clean cartridge they cancel trade prompts the same way. The vanilla trade duo (FR<->FR and E<->E) is tracked as `docs/gen3_emerald/REQUIREMENTS.md` ED-3. On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
 
 ---
 
@@ -447,9 +447,9 @@ memorialize}.lua`, `gatelib.lua`) is likewise retired, replaced by `duo_gen2_mai
 there is no Yellow pairing in this harness (Yellow's −1 WRAM shift is instead exercised by the
 non-duo `tests/live/test_gen1_new_gates.py`, which runs on all three cartridges individually).
 Unlike Gen 3, none of this needs a patched ROM for the rules themselves — Gen 1's enemy party is
-plaintext, so the rival swap and Explode Mode run on stock cartridges (the duo harness still
-boots the companion-patched builds by default; `trade_new`/`trade_decline_new` use the
-trade-carrying build for the SLINK TRADE receptionist).
+plaintext, so the rival swap and Explode Mode run on stock cartridges (the duo harness boots the
+clean dumps staged as `patch/build/gen1_{red,blue}.gb` by default; `trade_new`/`trade_decline_new`
+and `explode_new` override to the patched builds).
 
 **Gen 2** runs three, and the choice is deliberate rather than "what happened to work":
 
