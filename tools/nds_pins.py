@@ -623,8 +623,12 @@ def verify_output(image: NdsImage, table: CompanionPin, manifest, *, parent: Nds
 
     `parent` is the byte parent (declared same-size diff, preimages, no-touch
     comparison). `reference` is a source_built `reference_build` used only for
-    no-touch comparison when no parent is given. Cost: one chunked hash pass and
-    one chunked unchanged-byte pass per image, plus one decode per pinned
+    no-touch comparison when no parent is given; a table that declares
+    `reference_build` REQUIRES the reference bytes (a declared-but-unsupplied
+    reference is a PinError, never a silent skip). `distribution_base` is byte-checked
+    only when passed as `parent=`; otherwise only its sha1 is bound, in
+    `verify_distribution`. Cost: three hashing passes per identity (Hashes.of), one
+    chunked unchanged-byte pass for a parent diff, plus one decode per pinned
     container (memoised); no whole-image copy for mmapped inputs.
     """
     rows = _rows(manifest)
@@ -648,6 +652,8 @@ def verify_output(image: NdsImage, table: CompanionPin, manifest, *, parent: Nds
             raise PinError("parent ARM9 base mismatch")
         verify_sites_before(parent, table, _cache=cache)
         verify_only_declared_changes(parent, image, rows)
+    if table.reference_build is not None and reference is None:
+        raise PinError("declared reference_build needs actual reference bytes")
     if reference is not None:
         _verify_identity(reference, table.reference_build, "reference_build")
     for c in table.containers:
@@ -718,6 +724,7 @@ def verify_distribution(base, artifact_bytes, apply_callable, table: CompanionPi
     out = apply_callable(data, artifact_bytes)
     if not isinstance(out, (bytes, bytearray, memoryview)):
         raise PinError("apply callable must return bytes")
-    if digest(out, "sha1") != d.output_sha1 or digest(out, "sha1") != table.output.sha1:
+    out_sha1 = digest(out, "sha1")
+    if out_sha1 != d.output_sha1 or out_sha1 != table.output.sha1:
         raise PinError("distribution output hash mismatch")
     return True

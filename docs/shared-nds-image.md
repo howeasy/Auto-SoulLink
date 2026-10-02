@@ -10,6 +10,12 @@ Malformed geometry, ambiguous ownership, unauthorized edits **and** the formerly
 cases are one type: a 0-byte file, a non-ASCII gamecode, any use of a closed image
 (`apply`, `read`, `edit`, `edit_arm9`, `edit_overlay`, `decoded`), and a non-`bytes`
 `expected_before`/`after`. Missing files still raise `FileNotFoundError` (an OS error).
+The one deliberate exception is a wrong argument **type**: `NdsImage.load()` takes only an
+immutable `bytes` or a `str`/`Path` and raises `TypeError` for anything else (including a
+`bytearray`). `verify_only_declared_changes(original, patched, manifest)` takes an
+`NdsImage`, any bytes-like object (`bytes`, `bytearray`, `memoryview`: a mutable buffer is
+wrapped read-only and never copied) or a `str`/`Path` (mapped read-only, closed on return)
+for either image; any other type is an `ImageError`.
 
 ## Table parsing
 
@@ -38,11 +44,27 @@ decompressed ARM9, at 0xFCC; `compressed_static_end` (0xFC4) equals
   `image.apply(arm9_lacks_module_params=True)`. A same-length result needs no pointer
   and is never refused for this.
 
+## Size-bearing fields the editor maintains
+
+Exactly three, and only when the encoded ARM9 length changes (or, for CRC16, whenever a
+header byte below 0x15E changes): (1) the NDS header ARM9 size at **0x2C**; (2) the
+NitroSDK module-params **`compressed_static_end` = ram_base + encoded length** (inside the
+decoded ARM9, re-compressed with it); (3) the header **CRC16** at 0x15E. For overlays the
+FAT end word and the y-table compressed-size field are updated instead. MEASURED (FILE): on
+all four retail ROMs the first three words of the decoded ARM9 are the `0xE7FFDEFF`
+secure-area filler, so the verbatim 16 KiB prefix carries **no size fields**; the module
+params are the only in-ARM9 size to keep consistent (asserted by the retail test).
+
 ## Header CRC16
 
 The NTR header CRC16 at 0x15E covers `data[:0x15E]` (poly 0xA001 reflected, init
 0xFFFF) and is recomputed whenever a header byte changes (e.g. ARM9 size at 0x2C).
 FILE: the real ROM header is the oracle; `[:0x160]` or init 0 do not match it.
+The CRC is derived data: `edit()` refuses any span overlapping `[0x15E, 0x160)` (only
+`apply()`'s own recomputation writes it), and `verify_only_declared_changes` refuses an
+output whose header CRC16 disagrees with the CRC16 of `output[:0x15E]` whenever any
+declared row touches the header `[0, 0x160)`. It is not checked on header-untouched
+manifests so an input whose own CRC was never valid can still be no-op verified.
 
 ## Shrinking
 
@@ -92,6 +114,9 @@ for non-TCM blocks). Autoload data runs contiguously from `autoload_start` in li
   bss}` (the third word equals the RAM base in all four ROMs, meaning unknown). The
   width is chosen by requiring the entry sizes to sum to `autoload_list_start -
   autoload_start`; an ambiguous or non-tiling table is refused (`entry_size=` overrides).
+- Row sanity (refused, `ImageError`): a row with RAM address 0 or size 0, and a 16-byte
+  row whose third word is not equal to its RAM address (the measured Gen 5 invariant). The
+  12/16 width ambiguity refusal is unchanged; an explicit `entry_size=` is held to the same rules.
 - `arm9_compressed=None` infers from `compressed_static_end` (0 means raw, RAM base +
   stored length means compressed, anything else is refused). Pass it explicitly when
   the module params are not in the stored bytes.
@@ -118,4 +143,7 @@ read-only plus one output allocation (about 1x the ROM, 256 or 512 MiB). The nds
 counterexample test additionally serializes a second copy in memory and costs about
 **3x the ROM size** at peak on 512 MiB images: run one retail case at a time. The real
 edit-path test drives `edit_arm9` + `apply()` on Black and Black 2 in memory only and
-includes a mutation control that flips `isArm9` in a temp copy of the module.
+includes a mutation control that flips `isArm9` in a temp copy of the module. The retail
+shrink test zeroes 0x20000 bytes of Black 2 code and asserts the header 0x2C,
+`compressed_static_end`, the header CRC16 (against the real header oracle), redecode
+equality and that growth never exceeds the FF slack; it passes on real data (no named refusal).

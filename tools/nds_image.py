@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import mmap
 import os
+import re
 import struct
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -135,19 +136,25 @@ class NdsImage:
 
     @classmethod
     def load(cls, path_or_bytes):
-        obj = cls.__new__(cls)
-        obj._mapping = None
-        obj._closed = False
+        mapping = None
         if isinstance(path_or_bytes, (str, Path)):
             with open(path_or_bytes, "rb") as source:
                 if os.fstat(source.fileno()).st_size == 0:
                     raise ImageError("empty file")
-                obj._mapping = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
-            obj.data = obj._mapping
+                mapping = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
+            data = mapping
         elif isinstance(path_or_bytes, bytes):
-            obj.data = path_or_bytes
+            data = path_or_bytes
         else:
             raise TypeError("load requires an immutable bytes object or path")
+        return cls._from_data(data, mapping)
+
+    @classmethod
+    def _from_data(cls, data, mapping=None):
+        obj = cls.__new__(cls)
+        obj._mapping = mapping
+        obj._closed = False
+        obj.data = data
         obj._spans = []
         obj._logical = {}
         try:
@@ -400,15 +407,24 @@ class NdsImage:
             raise ImageError("autoload table outside decoded ARM9")
         if le == ls:
             return ()
-        fits = []
+        fits, malformed = [], None
         for width in ((entry_size,) if entry_size else (12, 16)):
             if (le - ls) % width:
                 continue
             # {ram, size, ...}; bss is the LAST word (the 16-byte Gen 5 row has an SDK word between).
             rows = [(struct.unpack_from("<II", decoded, p) + struct.unpack_from("<I", decoded, p + width - 4))
                     for p in range(ls, le, width)]
-            if sum(r[1] for r in rows) == ls - auto:
+            if sum(r[1] for r in rows) != ls - auto:
+                continue
+            if any(r[0] == 0 or r[1] == 0 for r in rows):
+                malformed = "autoload row has a zero RAM address or zero size"
+            elif width == 16 and any(struct.unpack_from("<I", decoded, p + 8)[0] != r[0]
+                                     for p, r in zip(range(ls, le, width), rows, strict=True)):
+                malformed = "16-byte autoload row breaks the Gen 5 invariant (third word == RAM address)"
+            else:
                 fits.append(rows)
+        if malformed and not fits:
+            raise ImageError(malformed)
         if len(fits) != 1:
             raise ImageError("autoload table entry size is undecidable" if fits
                              else "autoload table does not tile the data before it")
@@ -443,6 +459,9 @@ class NdsImage:
             ext = self.extent(container)
             offset = ext.offset + container_offset
         ext_at = self.extent_at(offset, len(expected_before))
+        if offset < 0x160 and offset + len(expected_before) > 0x15E:
+            # The NTR header CRC16 is derived data: only apply() may rewrite it (recomputed).
+            raise ImageError("header CRC16 [0x15E, 0x160) cannot be edited directly")
         if container is not None and ext_at.name != container:
             raise ImageError("edit outside named container")
         span = self._checked_span(offset, expected_before, after, ext_at.name, reason)
@@ -615,11 +634,35 @@ class NdsImage:
 
 
 def verify_only_declared_changes(original, patched, manifest):
-    """Verify exact changed-span hashes AND all bytes outside those spans."""
-    import re
-    owner_image = original if isinstance(original, NdsImage) else NdsImage.load(bytes(original) if not isinstance(original, bytes) else original)
-    original = original.data if isinstance(original, NdsImage) else original
-    patched = patched.data if isinstance(patched, NdsImage) else patched
+    """Verify exact changed-span hashes AND all bytes outside those spans.
+
+    original/patched: an NdsImage, a bytes-like object (bytes/bytearray/memoryview; a
+    mutable one is wrapped read-only, never copied) or a str/Path (mapped read-only).
+    Anything else is an ImageError. When any declared row touches the header
+    [0, 0x160), the patched header CRC16 must equal the CRC16 of patched[:0x15E]
+    (checked only then so an input whose own CRC was never valid can still be no-op
+    verified; every legitimate header edit goes through apply(), which recomputes it).
+    """
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        def resolve(value):
+            if isinstance(value, NdsImage):
+                return value, value.data
+            if isinstance(value, (str, Path)):
+                image = stack.enter_context(NdsImage.load(value))
+            elif isinstance(value, bytes):
+                image = NdsImage.load(value)
+            elif isinstance(value, (bytearray, memoryview)):
+                image = NdsImage._from_data(memoryview(value).toreadonly())
+            else:
+                raise ImageError("verify requires an NdsImage, bytes-like object or path")
+            return image, image.data
+        owner_image, original = resolve(original)
+        patched = resolve(patched)[1]
+        return _verify_declared(owner_image, original, patched, manifest)
+
+
+def _verify_declared(owner_image, original, patched, manifest):
     if len(original) != len(patched):
         raise ImageError("image size changed; relocation/append not supported")
     rows = []
@@ -660,6 +703,8 @@ def verify_only_declared_changes(original, patched, manifest):
                 raise ImageError("manifest span hash mismatch")
         end = row.offset + row.length
     _unchanged(original, patched, end, len(original))
+    if any(row.offset < 0x160 for row in rows) and             struct.unpack_from("<H", patched, 0x15E)[0] != _crc16(bytes(patched[:0x15E])):
+        raise ImageError("patched header CRC16 disagrees with its header bytes")
     return True
 
 

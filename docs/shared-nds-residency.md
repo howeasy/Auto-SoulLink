@@ -87,6 +87,12 @@ memory **now** and return exactly `true` if it matches. Anything else (false, ni
 error) is a refusal. The strategy cannot supply this: it knows the table, not the code bytes. Re-reading the
 4-byte fire word on every fire is fine.
 
+**Physical counterexample (Gen 4 coordinator, 2026-10-02, HeartGold overlay 12, run `C:/slink/g4/g1-settle-HG-1144-serial`).**
+The overlay table went active at frame 7325, but the async copy only landed 10-11 frames later (the site pins read ready
+at +10/+11). A strategy that trusts the flag would have armed a hook on bytes that were not there yet. The pin check at
+arm and fire is therefore load-bearing, not belt and braces. This is a Gen 4 HGSS measurement; Gen 5's loader marks an
+entry active before the load is known to have succeeded (static, FILE) and has no physical measurement yet.
+
 Helpers (all return `true` or `false, reason`; they never raise on bad input and never arm on bad input):
 
 - `may_arm(strategy, site, site_confirmed, epoch)`

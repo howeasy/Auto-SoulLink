@@ -210,11 +210,19 @@ Cost: containers are decoded once per `(image, container, compression)` within a
 verification call (memoised and held until the call returns, so memory is the sum
 of the decoded pinned containers, tens of MiB for a code-heavy title, not the
 image). Hashing and the unchanged-byte comparison are chunked passes over the
-whole image: on a 512 MiB image expect two or three full read passes per image
-(output hash, optional parent hash, declared-diff compare) and no whole-image copy
-for mmapped inputs. Decompression cost scales with the pinned containers only.
+whole image. `Hashes.of` is **three** hashing passes (sha1, md5, sha256) per
+identity and is not memoised; one `verify_output` call runs it for the output, for the
+parent (`verify_parent`) and for a supplied reference (three identities = nine passes
+on a 512 MiB image), plus one whole-image unchanged-byte compare for a declared diff,
+per-row span hashes and per-pinned-container hashes. `verify_distribution` is one sha1 of
+the base and one of the output (the output is hashed once) and one sha256 of the artifact.
+No whole-image copy is made for mmapped inputs. Decompression cost scales with the pinned containers only.
 
 ## Source kinds and title mapping
+
+For `byte_patched` the parent's ARM9 compression is assumed equal to the output's
+(`output_arm9_compressed` decodes both): a compression-flag conversion between parent and
+output is out of contract and surfaces as an expected-before mismatch, not a distinct error.
 
 `byte_patched` requires a complete parent and a `Distribution` whose input is that
 parent; its verification uses the declared same-size diff, all preimages and
@@ -248,7 +256,10 @@ A source-built table needs no byte parent or patch. Optional named parents:
 (the ROM the distributed artifact applies to; for hge the vanilla HG ROM) and
 `reference_build` (a prior build used as the no-touch reference; for hge
 cb2dc435...). `verify_output(..., reference=...)` checks the reference identity
-and compares no-touch spans against it. Resized rebuild diffs need a future
+and compares no-touch spans against it; a table that declares `reference_build` and is
+verified without `reference=` is refused (`declared reference_build needs actual
+reference bytes`). `distribution_base` is byte-checked only when passed as `parent=`;
+`verify_distribution` binds only its sha1. Resized rebuild diffs need a future
 format and are not smuggled through the same-size verifier. Any claimed site
 preimage requires actual parent bytes at output verification.
 

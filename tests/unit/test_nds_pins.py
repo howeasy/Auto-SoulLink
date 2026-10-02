@@ -659,6 +659,20 @@ def test_verify_distribution_applies_via_injected_callable():
         verify_distribution(base, artifact, toy_apply, replace(table, distribution=None))
 
 
+def test_verify_distribution_hashes_the_output_once(monkeypatch):
+    import tools.nds_pins as pins
+    base, artifact, table = toy_case()
+    calls = []
+    real = pins.digest
+    monkeypatch.setattr(pins, "digest", lambda data, *a, **kw: calls.append((len(data), a)) or real(data, *a, **kw))
+    assert verify_distribution(base, artifact, toy_apply, table)
+    assert len(calls) == 3  # base sha1, artifact sha256, ONE output sha1
+    assert sum(1 for n, a in calls if n == len(base.data) and a == ("sha1",)) >= 1
+    calls.clear()
+    pins.Hashes.of(base)
+    assert len(calls) == 3  # Hashes.of is three chunked passes per image (the documented cost)
+
+
 def test_distribution_schema():
     base, artifact, table = toy_case()
     d = table.distribution
@@ -748,6 +762,8 @@ def test_worked_example_hge_two_named_parents():
         verify_output(output, table, (), reference=NdsImage.load(synthetic(dsi=False)))
     with pytest.raises(PinError, match="no reference_build"):
         verify_output(output, replace(table, reference_build=None), (), reference=reference)
+    with pytest.raises(PinError, match="reference_build needs actual reference"):
+        verify_output(output, table, ())  # declared reference_build, no reference bytes supplied
     tampered = bytearray(reference.data)
     tampered[:12] = b"XXXXXXXXXXXX"
     with pytest.raises(PinError, match="reference_build identity"):

@@ -9,7 +9,14 @@ import pytest
 from ndspy import codeCompression as blz
 
 import tools.nds_image as nds_image
-from tools.nds_image import ImageError, NdsImage, _crc16, digest, verify_only_declared_changes
+from tools.nds_image import (
+    ChangedSpan,
+    ImageError,
+    NdsImage,
+    _crc16,
+    digest,
+    verify_only_declared_changes,
+)
 
 
 def synthetic(*, compressed=True, dsi=True, arm9_slack=512, overlay_slack=128,
@@ -312,7 +319,9 @@ def test_arm9_shrink_reload_partition_header_and_vacated_bytes():
     gap = next(e for e in new.extents if e.offset == n.end)
     assert gap.kind == "unmapped" and gap.end == old.end + old_slack
     assert new.slack("arm9") == 0
-    assert new.autoload_block("itcm") == image.autoload_block("itcm")
+    for kind in ("itcm", "dtcm"):  # data AND info (ram, size, bss, decoded offset) survive the shrink
+        assert new.autoload_block(kind) == image.autoload_block(kind)
+        assert new.autoload_block(kind).as_tuple() == image.autoload_block(kind).as_tuple()
 
 
 def test_overlay_shrink_reload_fat_y9_and_vacated_bytes():
@@ -415,6 +424,77 @@ def test_autoload_blocks_synthetic(width, compressed):
         image.autoload_blocks(arm9_compressed=compressed, entry_size=8)
 
 
+def _bad_autoload(mutate, width=16):
+    raw = bytearray(synthetic(compressed=False, autoloads=width))
+    base = NdsImage.load(bytes(raw)).extent("arm9").offset + 0x4660
+    mutate(raw, base)
+    return NdsImage.load(bytes(raw))
+
+
+@pytest.mark.parametrize("name,mutate,match", [
+    ("zero ram", lambda r, b: struct.pack_into("<I", r, b, 0), "zero RAM"),
+    ("zero size", lambda r, b: (struct.pack_into("<I", r, b + 4, 0), struct.pack_into("<I", r, b + 20, 0x60)),
+     "zero RAM address or zero size"),
+    ("third word != ram", lambda r, b: struct.pack_into("<I", r, b + 8, 1), "third word"),
+])
+def test_autoload_rows_refuse_malformed_16_byte_entries(name, mutate, match):
+    image = _bad_autoload(mutate)
+    with pytest.raises(ImageError, match=match):
+        image.autoload_blocks(arm9_compressed=False)
+    with pytest.raises(ImageError, match=match):
+        image.autoload_blocks(arm9_compressed=False, entry_size=16)  # explicit width still refuses
+    assert len(_bad_autoload(lambda r, b: None).autoload_blocks(arm9_compressed=False)) == 2  # control
+
+
+def test_autoload_12_byte_rows_refuse_zero_ram_or_size():
+    image = _bad_autoload(lambda r, b: struct.pack_into("<I", r, b, 0), width=12)
+    with pytest.raises(ImageError, match="zero RAM"):
+        image.autoload_blocks(arm9_compressed=False)
+
+
+def test_header_crc16_cannot_be_edited_directly_and_verifier_checks_it():
+    raw = synthetic()
+    image = NdsImage.load(raw)
+    for offset, n in ((0x15E, 2), (0x15C, 4), (0x15F, 1)):
+        with pytest.raises(ImageError, match="CRC16"):
+            image.edit(offset=offset, expected_before=raw[offset:offset + n], after=bytes(n), reason="crc")
+    # The module's own recomputation is fine, and the verifier accepts that output.
+    image.edit(container="header", container_offset=0x14, expected_before=b"\x00", after=b"\x01", reason="hdr")
+    output, manifest = image.apply()
+    assert {m.offset for m in manifest} == {0x14, 0x15E}
+    assert verify_only_declared_changes(raw, output, manifest)
+    # A header edit whose CRC was left stale (or wrong) is refused even though every byte is declared.
+    stale = bytearray(raw)
+    stale[0x14] = 1
+    row = ChangedSpan(0x14, 1, "header", digest(raw, "sha1", 0x14, 1), digest(bytes(stale), "sha1", 0x14, 1), "hdr")
+    with pytest.raises(ImageError, match="CRC16"):
+        verify_only_declared_changes(raw, bytes(stale), [row])
+    wrong = bytearray(output)
+    wrong[0x15E] ^= 1
+    crc = ChangedSpan(0x15E, 2, "header", digest(raw, "sha1", 0x15E, 2), digest(bytes(wrong), "sha1", 0x15E, 2), "crc")
+    with pytest.raises(ImageError, match="CRC16"):
+        verify_only_declared_changes(raw, bytes(wrong), [manifest[0], crc])
+
+
+def test_verifier_accepts_bytes_like_and_paths_and_refuses_other_types(tmp_path):
+    raw = synthetic()
+    image = NdsImage.load(raw)
+    image.edit(container="file:3", container_offset=5, expected_before=b"data", after=b"TEST", reason="e")
+    output, manifest = image.apply()
+    path = tmp_path / "orig.nds"
+    path.write_bytes(raw)
+    for original in (bytearray(raw), memoryview(raw), path, str(path)):
+        assert verify_only_declared_changes(original, bytearray(output), manifest)
+    mutable = bytearray(raw)
+    assert verify_only_declared_changes(mutable, output, manifest)
+    mutable[0] ^= 1  # still the caller's own mutable buffer, never copied or frozen by the verifier
+    for bad in (None, 5, [1, 2]):
+        with pytest.raises(ImageError, match="NdsImage, bytes-like"):
+            verify_only_declared_changes(bad, output, manifest)
+    with pytest.raises(TypeError, match="immutable bytes"):  # documented: load() is bytes/path only
+        NdsImage.load(bytearray(raw))
+
+
 RETAIL = [
     ("Black", "", "26ad0b9967aa279c4a266ee69f52b9b2332399a5", 0x6F898, 360),
     ("White", "", "bc696a0dfb448c7b3a8a206f0f8214411a039208", 0x6F8A4, 348),
@@ -423,13 +503,21 @@ RETAIL = [
 ]
 
 
+# One ROM-directory convention for every NDS retail test (test_nds_isa/test_nds_pkm45 use the same).
+ROM_DIR = Path(os.environ.get("SLINK_NDS_ROMS") or "E:/Google Drive/SLink")
+
+
+def _retail(title, suffix):
+    path = ROM_DIR / f"Pokemon - {title} Version{suffix} (USA, Europe) (NDSi Enhanced).nds"
+    if not path.is_file():
+        pytest.skip(f"NDS_RETAIL_INPUT_ABSENT: {path.name}; set SLINK_NDS_ROMS")
+    return path
+
+
 @pytest.mark.parametrize("title,suffix,sha1,encoded_size,slack", RETAIL)
 def test_retail_ndspy_counterexample_and_exact_noop(title, suffix, sha1, encoded_size, slack):
     from ndspy.rom import NintendoDSRom
-    root = Path(os.environ.get("SLINK_NDS_ROMS", "E:/Google Drive/SLink"))
-    path = root / f"Pokemon - {title} Version{suffix} (USA, Europe) (NDSi Enhanced).nds"
-    if not path.is_file():
-        pytest.skip(f"NDS_RETAIL_INPUT_ABSENT: {path.name}; set SLINK_NDS_ROMS")
+    path = _retail(title, suffix)
     with NdsImage.load(path) as image:
         assert digest(image.data, "sha1") == sha1, "NDS_RETAIL_INPUT_WRONG_HASH"
         assert image.slack("arm9") == slack
@@ -465,14 +553,6 @@ AUTOLOADS = {
 MAGIC = bytes.fromhex("2106c0dedec00621")
 
 
-def _retail(title, suffix):
-    root = Path(os.environ.get("SLINK_NDS_ROMS", "E:/Google Drive/SLink"))
-    path = root / f"Pokemon - {title} Version{suffix} (USA, Europe) (NDSi Enhanced).nds"
-    if not path.is_file():
-        pytest.skip(f"NDS_RETAIL_INPUT_ABSENT: {path.name}; set SLINK_NDS_ROMS")
-    return path
-
-
 @pytest.mark.parametrize("title,suffix,sha1,encoded_size,slack", RETAIL)
 def test_retail_module_params_header_crc_and_autoloads(title, suffix, sha1, encoded_size, slack):
     with NdsImage.load(_retail(title, suffix)) as image:
@@ -481,6 +561,9 @@ def test_retail_module_params_header_crc_and_autoloads(title, suffix, sha1, enco
         base = image.arm9_ram_base
         # The doubled magic occurs exactly once, at 0xFCC; the struct starts 0x1C before it.
         assert decoded.count(MAGIC) == 1 and decoded.find(MAGIC) == 0xFCC
+        # MEASURED: the verbatim 16 KiB prefix carries no size fields; its first 3 words are the
+        # secure-area filler, so compressed_static_end (module params) is the only size to maintain.
+        assert struct.unpack_from("<3I", decoded, 0) == (0xE7FFDEFF,) * 3
         words = struct.unpack_from("<7I", decoded, 0xFCC - 0x1C)
         assert words[5] == base + encoded_size == base + image.extent("arm9").length
         assert words[6] == 0x0503757C  # SDK version word
@@ -579,3 +662,31 @@ def test_retail_real_arm9_edit_path_is_self_consistent(monkeypatch, tmp_path, ti
     # Mutation control: flipping isArm9 in a temp copy must go red.
     assert not _arm9_prefix_consistent(_mutated_module(tmp_path), path)
 
+
+
+@pytest.mark.parametrize("title,suffix,sha1,encoded_size,slack", RETAIL[2:3])
+def test_retail_arm9_shrink_updates_every_size_field(title, suffix, sha1, encoded_size, slack):
+    """Zero >=0x20000 bytes of real code: the encoded ARM9 must shrink and ALL size metadata follow."""
+    with NdsImage.load(_retail(title, suffix)) as image:
+        assert digest(image.data, "sha1") == sha1, "NDS_RETAIL_INPUT_WRONG_HASH"
+        decoded = image.decoded("arm9", arm9_compressed=True)
+        old = image.extent("arm9")
+        offset, size = 0x20000, 0x20000  # ordinary code, clear of module params (0xFCC) and autoloads
+        image.edit_arm9(image.arm9_ram_base + offset, decoded[offset:offset + size], bytes(size),
+                        arm9_compressed=True, arm9_ram_base=image.arm9_ram_base, reason="retail shrink control")
+        output, manifest = image.apply()
+        new = NdsImage.load(output)
+        n = new.extent("arm9")
+        assert n.length < old.length  # a shrink; the stability gate also bounds any growth by the FF slack
+        assert n.length - old.length <= image.slack("arm9")
+        assert struct.unpack_from("<I", output, 0x2C)[0] == n.length  # NDS header ARM9 size
+        redecoded = new.decoded("arm9", arm9_compressed=True)
+        expected = bytearray(decoded)
+        expected[offset:offset + size] = bytes(size)
+        struct.pack_into("<I", expected, 0xFCC - 8, new.arm9_ram_base + n.length)  # compressed_static_end
+        assert redecoded == bytes(expected)
+        assert struct.unpack_from("<H", output, 0x15E)[0] == _crc16(output[:0x15E])  # real-header oracle
+        assert new.autoload_block("itcm").as_tuple() == image.autoload_block("itcm").as_tuple()
+        assert verify_only_declared_changes(image, output, manifest)
+        del new, output
+        gc.collect()
