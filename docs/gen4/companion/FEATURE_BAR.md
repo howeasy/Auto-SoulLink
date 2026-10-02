@@ -88,3 +88,31 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
 - **So the Gen 3 shape fits:** the host stages the encrypted blob that `lua/gen4/pk4.lua` `encrypt_party` already produces, and the ROM op only copies it in. Never re-implement the cipher in the patch.
 - `ScrCmd_GiveLoanMon` (`src/scrcmd_c.c:3485`) is a synchronous give-mon precedent.
 - **Open:** the box-delivery path, and whether a new ScrCmd is needed versus a std-script branch.
+
+## Trade branch point and box path, settled (OMP cx-df6d0337, pinned pret)
+
+**One nurse script.** `std_nurse_joy` = 2002 (`include/constants/std_script.h:17`) resolves via `sScriptBankMapping` (`src/fieldmap.c:33-64,194-202`, first-match, descending) to `scr_seq_0003` member 2 (`files/fielddata/script/scr_seq/scr_seq_0003.s:83-407`). That is ONE patch site for all 25 Pokémon Centers, exactly as the acquisition generator models it.
+
+**The nurse menu is message data.** It uses `NonNPCMsgVar` + `GetMenuChoice` (`msg_0040`). A named third option would mean a message-bank edit.
+- Cheapest gate: `ScrCmd_YesNo` (`src/scrcmd_c.c:947-973`; 0 = yes, 1 = no). It is native, with no message or graphics edit.
+- Correction: `ScrCmd_379` is `Field_GetTimeOfDay`, not a menu builder.
+
+**Two commit arms over one blob, both a raw copy with no crypto:**
+
+| Destination | Call | Input |
+|---|---|---|
+| Party | `Party_SafeCopyMonToSlot_ResetAprijuiceModifiers` (`src/party.c:97`) | 0xEC `Pokemon` |
+| Box | `PCStorage_PlaceMonInFirstEmptySlotInAnyBox` (`src/pokemon_storage_system.c:54-68`) | 0x88 `BoxPokemon` |
+
+- The box primitive calls `RestoreBoxMonPP`, which MUTATES the buffer, so it needs a writable 0x88 scratch it owns.
+- It sets the same per-box dirty bit the Lua client writes.
+
+**Script command for the ROM routine.** No CallNative exists. The opcode is u16 (`src/script.c:75`), and `gScriptCmdTable[486]` (`src/data/fieldmap/script_cmd_table.h:1343`) is a spare `ScrCmd_Dummy` (an empty no-op).
+- Overwriting that one pointer gives a companion `ScrCmd` with no table growth. This matters for hge, whose script NARCs come from the base ROM.
+- The HG/SS source build could simply append to the table.
+- Gate: prove opcode 486 is unused in the compiled `scr_seq` NARCs.
+
+**Open:**
+- whether `scr_seq_0003` can grow;
+- the full-party decision point of the existing NPC trade (inferred, not traced);
+- the hge overlay-1 identity.
