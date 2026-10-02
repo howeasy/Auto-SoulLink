@@ -126,7 +126,8 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "unresolve_area": ({"area_id": "str"}, {}),
     "dead_keys": ({"keys": "list"}, {}),  # INV-CLIENT-2: every accepted hello; the GB clients REPLACE their re-zero set
     "config": ({}, {"overworld_presence": "bool", "native_messages": "bool", "native_sounds": "bool",
-                    "battle_calc": "bool", "pc_trade_npc": "bool", "run_id": "str"}),
+                    "battle_calc": "bool", "pc_trade_npc": "bool", "phone_calls": "bool",
+                    "run_id": "str"}),
     "rebuild_start": ({"text": "str", "keys": "list"}, {}),
     "rebuild_done": ({}, {}),
     "replace_rival_team": ({"trainer_id": "int", "n": "int", "blobs_hex": "list"},

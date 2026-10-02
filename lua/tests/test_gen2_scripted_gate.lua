@@ -377,6 +377,16 @@ function G.context(api, getenv)
                  Play=L("lua/tests/gen2_scripted_play.lua"), Binding=L("lua/gb_hook_binding.lua"),
                  qualify=env.qualify, prompts=env.facts.observer.prompts}
     ctx.artifact = G.artifact(root, json, env)
+    local phone = getenv("SLINK_GEN2_PHONE_CALL")
+    if phone and phone ~= "" then
+        ctx.phone_call = assert(json.decode(phone), "phone call facts malformed")
+        assert(ctx.phone_call.title == env.title and ctx.phone_call.kind == env.kind
+               and ctx.phone_call.rom_sha1 == env.exec_sha1
+               and type(ctx.phone_call.ring) == "table"
+               and ctx.phone_call.ring.symbol == "RingTwice_StartCall"
+               and type(ctx.phone_call.close) == "table"
+               and ctx.phone_call.close.symbol == "Script_closetext", "phone call facts identity differs")
+    end
     ctx.ident = G.artifact_fields(ctx.artifact)   -- {} on clean; {artifact_kind, binding_sha256, base_sha1} on an overlay
     if env.qualify then
         ctx.Qualify, ctx.prompts = L("lua/tests/gen2_qualify.lua"), env.qualify.facts.prompts
@@ -528,7 +538,20 @@ function G.hooks(ctx)
             else state.ui = {kind=kind, origin=site.symbol, frame=frame, last=frame, seq=seq} end
         end)
     end
-    watch("overworld_tick", obs.overworld_tick, function(frame, seq) state.tick = {frame=frame, seq=seq} end)
+    if ctx.phone_call then
+        -- Native receive-call path (C phone.asm:424-432, G/S:431-439).
+        -- The binder validates ROM bytes, bank and measured PC; mere pending
+        -- wSpecialPhoneCallID or arbitrary text never arms this latch.
+        watch("phone_call", ctx.phone_call.ring, function() state.phone_call = true end)
+        watch("phone_close", ctx.phone_call.close, function()
+            -- Clear at the native closetext, BEFORE any following scene can
+            -- display unrelated text without an intervening OW input tick.
+            if state.phone_call then state.phone_call, state.ui = false, nil end
+        end)
+    end
+    watch("overworld_tick", obs.overworld_tick, function(frame, seq)
+        state.tick, state.phone_call = {frame=frame, seq=seq}, false
+    end)
     watch("save_completed", obs.save_completed, function() state.saves = state.saves + 1 end)
     -- Qualification: counted source sites (CONTINUE path, RTC acceptance, overwrite branch).
     state.hits = {}
@@ -615,6 +638,7 @@ function G.observer(ctx)
         end
         local battle = reads.read_battle()
         if battle then point.battle_mode = battle.mode end
+        point.phone_call = state.phone_call == true and point.battle_mode == 0
         -- OWPlayerInput ran within the window, no UI context is newer, and no battle is starting.
         point.overworld_ready = point.ui == nil and state.tick ~= nil and point.battle_mode == 0
             and frame - state.tick.frame <= G.OVERWORLD_WINDOW

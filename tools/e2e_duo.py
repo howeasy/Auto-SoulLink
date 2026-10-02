@@ -4742,6 +4742,9 @@ class DuoRun:
                 "artifact_kind": "overlay", "rom_sha1": artifact["sha1"], "base_sha1": artifact["base_sha1"],
                 "ups_sha256": artifact["ups"]["sha256"], "sym_sha256": provenance["symbols"][title + "_slink.sym"]}
         validate_manifest(manifest, root=root)
+        # gen2_trade_lane refuses a server --run-id other than the manifest's: the trade server IS this
+        # run, so server_cmd must name the same id (it used to mint its own duo-<uuid>; every trade cell failed)
+        self._server_run_id = manifest["run_id"]
         for inst, plan in self._gen2_plans.items():
             target = Path(plan["rom"]).resolve()
             if not target.is_relative_to(Path(BUILD).resolve()):

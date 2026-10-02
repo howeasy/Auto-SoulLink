@@ -73,6 +73,7 @@ def empty_status_payload() -> dict:
             "native_sounds": False,
             "battle_calc": True,
             "pc_trade_npc": True,
+            "phone_calls": True,
         },
         "recent_events": [],
         "killfeed": [],

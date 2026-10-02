@@ -151,7 +151,7 @@ def _legacy_cartridges(run: dict) -> dict | None:
 OPTION_GROUPS = [
     ("Link clauses", ["species_lock", "gender_lock", "type_lock"]),
     ("Battle", ["explode_mode", "rival_team_swap", "overworld_presence"]),
-    ("Native UI", ["native_messages", "native_sounds", "battle_calc", "pc_trade_npc"]),
+    ("Native UI", ["native_messages", "native_sounds", "phone_calls", "battle_calc", "pc_trade_npc"]),
 ]
 OPTIONS = {
     "species_lock": ("Species Clause", "Reject links where both mons are in the same evolution family."),
@@ -162,6 +162,7 @@ OPTIONS = {
     "overworld_presence": ("Overworld Presence", "See your partner walking in your overworld as a live peer ghost."),
     "native_messages": ("Native Messages", "Notifications as native in-game text boxes instead of the Lua HUD overlay."),
     "native_sounds": ("Native Sounds", "Notification sounds through the game's own audio engine (needs the companion patch or pureRGB overlay on that cartridge — inert on an unpatched one)."),
+    "phone_calls": ("Phone Calls", "Your partner rings your Pokégear when a pair links, an area dies or a mon falls (Gen 2 companion; the HUD pop-up always shows too)."),
     "battle_calc": ("Battle Calc", "The bundled in-battle damage and type-effectiveness calculator."),
     "pc_trade_npc": ("PC Trade NPC", "A Pokémon-Center trade NPC, when Overworld Presence is off."),
 }
@@ -191,6 +192,8 @@ OPTION_SUPPORT = {
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
                       "gen3_frlge_rr": {"ok": True}},
+    "phone_calls": {"all": False, "why": "Only Gen 2 has a Pokégear phone for the companion to ring.",
+                    "gen2_gsc": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
@@ -222,6 +225,7 @@ RUN_FLAGS = (
     ("native_sounds", "--native-sounds", False),
     ("battle_calc", "--no-battle-calc", True),
     ("pc_trade_npc", "--no-pc-trade-npc", True),
+    ("phone_calls", "--no-phone-calls", True),
     ("verbose", "--verbose", False),
 )
 

@@ -547,6 +547,22 @@ def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
     return py_party
 
 
+def phone_call_facts(title: str, kind: str, repo: Path = REPO) -> dict:
+    """Executed-ROM hook, not the pending wSpecialPhoneCallID (which can wait offscreen).
+
+    Script_ReceivePhoneCall: C phone.asm:424-432, G/S:431-439 enters
+    RingTwice_StartCall, calls the caller script, waits, hangs up and ends.
+    Script_closetext ends the call UI; OWPlayerInput also clears the latch.
+    """
+    ctx = gen2_fixtures.exec_context(title, kind, repo)
+    source = ctx.read_source("engine/phone/phone.asm")
+    assert "\tcallasm RingTwice_StartCall\n\tmemcall wCallerContact + PHONE_CONTACT_SCRIPT2_BANK" in source
+    assert "\twaitbutton\n\tcallasm HangUp\n\tclosetext\n\tcallasm InitCallReceiveDelay\n\tend" in source
+    return {"title": title, "kind": kind, "rom_sha1": hashlib.sha1(ctx.rom).hexdigest(),
+            "ring": gen2_fixtures._code_site(ctx, "RingTwice_StartCall"),
+            "close": gen2_fixtures._code_site(ctx, "Script_closetext")}
+
+
 def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO, kind: str | None = None) -> dict:
     """The fixture-qualification CONTINUE binding the gate arrives through (stage "boot"), bound to
     the staged bytes by the stage fingerprint."""
@@ -558,7 +574,8 @@ def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO, kind: str | No
                "facts": gen2_fixtures.qualify_facts(spec.title, repo, errand=True, kind=kind)
                if spec.name in gen2_fixtures.ERRAND_FIXTURES else gen2_fixtures.qualify_facts(spec.title, repo, kind=kind)}
     return {"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts),
-            "SLINK_GEN2_QUALIFY": json.dumps(qualify)}
+            "SLINK_GEN2_QUALIFY": json.dumps(qualify),
+            "SLINK_GEN2_PHONE_CALL": json.dumps(phone_call_facts(spec.title, kind, repo))}
 
 
 # --- the live gate ------------------------------------------------------------------------------

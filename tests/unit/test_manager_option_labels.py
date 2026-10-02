@@ -141,3 +141,12 @@ def test_gen4_and_gen5_are_not_offered_in_the_manager():
     from server.manager import new_run_form
     keys = {g["key"] for g in new_run_form()["games"]}
     assert not {k for k in keys if k.startswith(("gen4", "gen5"))}
+
+
+def test_phone_calls_is_a_gen2_checkbox_default_on():
+    """Owner 2026-10-02: its own Native UI row, offered only where a Pokégear exists, on unless switched off."""
+    from server import manager
+    assert "phone_calls" in dict(manager.OPTION_GROUPS)["Native UI"]
+    support = manager.OPTION_SUPPORT["phone_calls"]
+    assert support["all"] is False and support["gen2_gsc"]["ok"] is True
+    assert ("phone_calls", "--no-phone-calls", True) in manager.RUN_FLAGS

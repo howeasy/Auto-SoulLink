@@ -219,8 +219,29 @@ end
 -- at _SaveGameData, then SavedTheGame idles 32 frames + text + SFX + 30 frames with no UI origin and no
 -- overworld tick (C engine/menus/save.asm:241-264; U1d live run 1, the C<->G faint duo's RED run 2).
 F.TRACE_EVERY = 30
+-- All walkers share this interruption path, including the wrapped trade/synth
+-- drivers. phone_call comes ONLY from the scripted observer's bank/byte-checked
+-- RingTwice_StartCall hook; a pending special-call ID is not an active call.
+-- Keep the route's state and budgets, pulse A at ready text, release between
+-- pulses, and let the original driver reject every other unexpected UI.
+function F.phone_handler()
+    local down = false
+    return function(point)
+        if point.phone_call ~= true or point.battle_mode ~= 0 then down = false return nil end
+        local ui = point.ui
+        if ui and ui.kind ~= "text" and ui.kind ~= "prompt_button" and ui.kind ~= "wait_button" then
+            down = false
+            return nil
+        end
+        if down then down = false return {} end
+        if ui and point.input_ready == true then down = true return {A=true} end
+        return {}
+    end
+end
+
 function F.play(host, spec, driver, observe, diag)
     local last, settled = nil, false
+    local phone, route_phase = F.phone_handler(), driver.phase or "settle"
     local function locate()
         local placed, where = pcall(diag.where)
         return placed and where or "?"
@@ -228,10 +249,14 @@ function F.play(host, spec, driver, observe, diag)
     local ok, outcome = pcall(host.run, spec, function(frame)
         local point = observe()
         last = point
+        -- A new leg can start while a call is already up, before its first OW tick.
+        local answer = phone(point)
+        if answer then return answer, route_phase, point end
         settled = settled or point.overworld_ready == true or integer(point.battle_mode, 1, 255)
         if not settled then return {}, "settle", point end
         local buttons, phase = driver.step(point)
         if buttons == nil then error(phase, 0) end
+        route_phase = phase
         if diag.trace and frame % F.TRACE_EVERY == 0 then
             diag.log(F.state_line("trace", frame, phase, point, locate()))
         end

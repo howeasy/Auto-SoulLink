@@ -95,6 +95,7 @@ set per run in the run manager's **New run** form or via server CLI flags):
 | `native_sounds` | OFF | `--native-sounds` | Lua m4a `playSE` poke |
 | `battle_calc` | ON | `--no-battle-calc` | damage display hidden (kill-switch byte) |
 | `pc_trade_npc` | ON | `--no-pc-trade-npc` | no Pokémon-Center trade NPC (only effective while overworld presence is OFF) |
+| `phone_calls` | ON | `--no-phone-calls` | Gen 2 only: no Pokégear call for first link / dead zone / fallen (the HUD pop-up still shows) |
 
 Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
 `--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC

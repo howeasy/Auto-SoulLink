@@ -526,7 +526,7 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True,
+                 battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True,
                  wire_log: str = None):
         # --wire-log DIR: capture every line of every connection (card gen3-P1-C1-3).
         # None (the default) means no _WireTap is ever built and nothing changes.
@@ -547,7 +547,8 @@ class SLinkServer:
                                         native_messages=native_messages,
                                         native_sounds=native_sounds,
                                         battle_calc=battle_calc,
-                                        pc_trade_npc=pc_trade_npc)
+                                        pc_trade_npc=pc_trade_npc,
+                                        phone_calls=phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         # Game adapter — shared with state machine for consistent behavior.
@@ -2971,6 +2972,7 @@ class SLinkServer:
                 "native_sounds": s.native_sounds,
                 "battle_calc": s.battle_calc,
                 "pc_trade_npc": s.pc_trade_npc,
+                "phone_calls": s.phone_calls,
             },
             "recent_events": list(self._recent_events),
             "killfeed": sorted(
@@ -4940,7 +4942,8 @@ class SLinkServer:
             native_messages=self.state.native_messages,
             native_sounds=self.state.native_sounds,
             battle_calc=self.state.battle_calc,
-            pc_trade_npc=self.state.pc_trade_npc)
+            pc_trade_npc=self.state.pc_trade_npc,
+            phone_calls=self.state.phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -4994,7 +4997,8 @@ class SLinkServer:
                                    native_messages=self.state.native_messages,
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
-                                   pc_trade_npc=self.state.pc_trade_npc)
+                                   pc_trade_npc=self.state.pc_trade_npc,
+                                   phone_calls=self.state.phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -5567,7 +5571,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                type_lock: bool = False, explode_mode: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
-               battle_calc: bool = True, pc_trade_npc: bool = True,
+               battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True,
                manager_port: int = 0, verbose: bool = False,
                wire_log: str = None, test_only_route: list = None):
     _configure_logging(data_dir, verbose)
@@ -5594,6 +5598,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
                       pc_trade_npc=pc_trade_npc,
+                      phone_calls=phone_calls,
                       wire_log=wire_log)
 
     # TCP game server.
@@ -5678,6 +5683,8 @@ if __name__ == "__main__":
         help="Hide the bundled Battle Calc damage display (RR + patch; shown by default)")
     parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc",
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
+    parser.add_argument("--no-phone-calls", action="store_false", dest="phone_calls",
+        help="Gen 2 + companion: do not ring a Pokégear call for first link / dead zone / fallen (on by default)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     parser.add_argument("--wire-log",     default=None, metavar="DIR",
@@ -5703,6 +5710,7 @@ if __name__ == "__main__":
                      native_sounds=args.native_sounds,
                      battle_calc=args.battle_calc,
                      pc_trade_npc=args.pc_trade_npc,
+                     phone_calls=args.phone_calls,
                      manager_port=args.manager_port,
                      verbose=args.verbose,
                      wire_log=args.wire_log,

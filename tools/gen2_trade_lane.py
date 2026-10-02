@@ -318,6 +318,7 @@ def server_arguments(argv):
         parser.add_argument("--" + flag, action="store_true", dest=dest)
     parser.add_argument("--no-battle-calc", action="store_false", dest="battle_calc")
     parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc")
+    parser.add_argument("--no-phone-calls", action="store_false", dest="phone_calls")
     parser.add_argument("--manager-port", type=int, default=0)
     return vars(parser.parse_args(argv))
 

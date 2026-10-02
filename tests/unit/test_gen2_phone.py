@@ -236,6 +236,19 @@ def test_the_client_forwards_a_tagged_command_only_to_a_phone_build(caps, posted
     assert [(v, d) for a, v, d in world.written() if a == mb + REQ] == posted
 
 
+@pytest.mark.parametrize("config, rings", [(None, True), ({"phone_calls": True}, True),
+                                           ({"phone_calls": False}, False), ({"native_messages": False}, True)])
+def test_phone_calls_are_their_own_switch_default_on(config, rings):
+    """Owner 2026-10-02: phone calls are a run checkbox, default ON, separate from native_messages
+    (default off). Only an explicit phone_calls=false silences the ring."""
+    world, mb = _production(CAP_PANEL | CAP_PHONE)
+    if config is not None:
+        world.reply({"cmd": "config", **config})
+    world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
+    world.frames(5)
+    assert bool([v for a, v, d in world.written() if a == mb + REQ]) is rings
+
+
 # -- PHONE-NAMES: the staged record (docs/gen2/POST_RC_CARDS.md) --------------------------------
 
 TRADE = (REPO / "lua" / "gen2" / "trade_overlay.lua").as_posix()

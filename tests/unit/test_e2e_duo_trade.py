@@ -123,6 +123,9 @@ def test_manifest_staging_is_hash_bound_and_seed_directories_are_isolated(monkey
     assert path.parent == Path(run.data_dir)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == run._gen2_trade_manifest_sha256
     assert validate_manifest(path) == run._gen2_trade_manifest
+    # gen2_trade_lane refuses any other --run-id: every trade cell died "server run_id differs from manifest"
+    cmd = run.server_cmd()
+    assert cmd[cmd.index("--run-id") + 1] == run._gen2_trade_manifest["run_id"]
     saves = {side: Path(run._seed_instance_save(side)) for side in ("a", "b")}
     assert saves["a"].parent != saves["b"].parent and saves["a"].read_bytes() != saves["b"].read_bytes()
     for side, plan in run._gen2_plans.items():

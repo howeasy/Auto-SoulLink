@@ -514,7 +514,11 @@ function Client.new(p)
         local c_ = cmd.cmd
         if c_ == "noop" then return end
         -- P4.5c: an optional "phone" tag rides force_faint/msgbox; phone.lua drops it off a phone build
-        if phone and cmd.phone ~= nil then phone:request(cmd.phone, cmd.phone_data) end -- + PHONE-NAMES
+        -- Phone calls are their own run switch, default ON (owner 2026-10-02), not native_messages:
+        -- only an explicit phone_calls=false silences the ring; the HUD prompt below always shows.
+        if phone and cmd.phone ~= nil and not (self.config and self.config.phone_calls == false) then
+            phone:request(cmd.phone, cmd.phone_data) -- + PHONE-NAMES
+        end
         self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
         if c_ == "force_faint" or c_ == "force_explode" then
             -- W-3: force_explode rides the same queue; only the active battler at the battle hold explodes

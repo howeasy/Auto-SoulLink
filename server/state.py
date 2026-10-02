@@ -182,7 +182,7 @@ def _valid_battle_identity(session, battle_id) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -383,6 +383,9 @@ class SoulLinkState:
         self.native_sounds: bool = native_sounds
         self.battle_calc: bool = battle_calc
         self.pc_trade_npc: bool = pc_trade_npc
+        # phone_calls (default ON, owner 2026-10-02): Gen 2's companion rings a Pokégear call for
+        # first link / dead zone / fallen. Its own switch, NOT native_messages (default off).
+        self.phone_calls: bool = phone_calls
         # Talk-to-partner: each player's latest in-game progress (badge count), reported via the
         # `status` event; surfaced to the partner in the talk-to-partner box (the nuzlocke helper).
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
@@ -1748,9 +1751,9 @@ class SoulLinkState:
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc, phone_calls=phone_calls)
         if not os.path.exists(state._links_path):
             return state
         try:
@@ -1809,6 +1812,7 @@ class SoulLinkState:
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
                 state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))
+                state.phone_calls = bool(saved_rules.get("phone_calls", phone_calls))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -2250,6 +2254,7 @@ class SoulLinkState:
             "native_sounds": bool(self.native_sounds),
             "battle_calc": bool(self.battle_calc),
             "pc_trade_npc": bool(self.pc_trade_npc),
+            "phone_calls": bool(self.phone_calls),
         })
 
         self.awaiting_save[player_id] = False   # BURIAL-VISIBLE: a waiting client re-asserts it on its ticks
@@ -4661,6 +4666,7 @@ class SoulLinkState:
                 "native_sounds": self.native_sounds,
                 "battle_calc": self.battle_calc,
                 "pc_trade_npc": self.pc_trade_npc,
+                "phone_calls": self.phone_calls,
             },
             "links": [
                 {
