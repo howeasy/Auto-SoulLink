@@ -529,26 +529,6 @@ SLINK_GEN3_CLIENT = nil
 local battle_parts, hello_journal
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
---- TEST-ONLY admission of gen3_exp/<title> (X3; the E4 pre-EG4 precedent, be492ee4): the
---- profile's admitted=false and Entry.ROUTED's missing gen3_exp both stay in production until
---- the owner's XG gates. On the gen3_exp duo row ONLY, json_codec's decode is wrapped so the
---- decoded profile's titles[<title>].admitted reads true, and Entry.ROUTED gains gen3_exp; any
---- other game gets both back untouched. Self-contained (no upvalues) so a unit test runs this
---- exact body; every receipt logs the line.
-local function test_admission_codec(game, title, json, logf)
-    if game ~= "gen3_exp" or type(json) ~= "table" then return json end
-    local decode = json.decode
-    return setmetatable({ decode = function(...)
-        local doc = decode(...)
-        local row = type(doc) == "table" and type(doc.titles) == "table" and doc.titles[title]
-        if type(row) == "table" and row.admitted == false then
-            row.admitted = true
-            logf("TEST-ONLY admission of gen3_exp/" .. title .. " (pre-XG; production refuses)")
-        end
-        return doc
-    end }, { __index = json })
-end
-
 -- The production run.lua still requests ROOT/slink_gen3_trade. Ordinary duo attempts redirect
 -- only that file_store argument to their private data directory. The native candidate's own
 -- manifest path and the install-root lock probe keep their existing composition and guard.
@@ -751,13 +731,6 @@ do
         local value = original_dofile(path)
         if path == ROOT .. "/lua/gen3/trade_journal.lua" then
             value = isolated_journal_module(value, D.journal_path, native_candidate, log)
-        end
-        if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
-            value = test_admission_codec(D.game, title, value, log)
-        end
-        if path == ROOT .. "/lua/gen3/entry.lua" and D.game == "gen3_exp" then
-            value.ROUTED.gen3_exp = true
-            log("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)")
         end
         if path == ROOT .. "/lua/gen3/entry.lua" then
             if native_candidate then native_candidate.bind_entry(value) end
@@ -1915,12 +1888,25 @@ function ctx.catch(label, already_hunted, expected_ball, native_player_probe)
 end
 
 --- Keep choosing a no-damage move until the ACTIVE `key` faints (a natural engine faint).
-function ctx.lose_active(key, label)
+function ctx.lose_active(key, label, opts)
     -- The watcher's record, not a fresh read: a whiteout heals the party at the warp, so by the
     -- time the battle is gone the fainted mon can read full HP again.
-    local function fainted()
+    local waiting = false
+    local function stop_wait(reason)
+        if not waiting then return end
+        log(fmt("LOSE_WAIT_STOP frame=%d reason=%s key=%s", emu.framecount(), reason, key))
+        waiting = false
+    end
+    local function fainted(wait_reason)
         local m = ctx.find(key)
-        return ctx.hp0(key) ~= nil or (m ~= nil and m.hp == 0)
+        local seen = ctx.hp0(key) ~= nil or (m ~= nil and m.hp == 0)
+        if seen then
+            stop_wait("fainted")
+        elseif wait_reason == "timeout" then
+            -- Log before the helper's G.finish closes the receipt; never suppress its failure.
+            stop_wait(play.in_battle(cp) and "timeout" or "ended")
+        end
+        return seen
     end
     -- A foe that does not hurt us (status moves, misses) burns our no-damage PP for nothing: live
     -- RR R4 at 97672e6d spent all 30 of Leer's PP on one foe and failed "no no-damage move with
@@ -1945,7 +1931,17 @@ function ctx.lose_active(key, label)
     for turn_no = 1, 120 do
         local done, why = fainted_or_self_ko()
         if done ~= nil then return done, why end
-        local turn = SP.verify_fight_cursor(cp, "incidental_battle")
+        local turn
+        if opts and opts.stop_on_faint then
+            -- Whiteout may never return an action menu; other callers must finish the
+            -- native faint sequence before emitting their completion witness.
+            waiting = true
+            log(fmt("LOSE_WAIT_ENTER frame=%d key=%s", emu.framecount(), key))
+            turn = SP.verify_fight_cursor(cp, "incidental_battle", fainted)
+        else
+            turn = SP.verify_fight_cursor(cp, "incidental_battle")
+        end
+        stop_wait(turn and "menu" or "ended")
         if turn ~= "fight" then
             -- Re-check right after the cursor moves: "party"/nil follow a real faint just as
             -- readily as a win (the watcher's hp0 survives the whiteout heal a fresh read would

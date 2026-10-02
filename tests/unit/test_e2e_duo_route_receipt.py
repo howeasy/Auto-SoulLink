@@ -1,4 +1,4 @@
-"""The expansion duo route is admitted only by its configured row and exact server receipt."""
+"""Production routing requires both actual client identities and accepted server HELLOs."""
 
 import argparse
 import sys
@@ -8,7 +8,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import e2e_duo as duo  # noqa: E402
-
 
 EXP = "emerald_expansion_28877d73"
 
@@ -32,24 +31,42 @@ def _run(tmp_path, flags=()):
     [f"--test-only-route={EXP}"],
 ])
 def test_user_server_flags_cannot_add_a_test_only_route(tmp_path, flags):
-    with pytest.raises(ValueError, match="reserved for the configured game row"):
+    with pytest.raises(ValueError, match="test-only route flags are not supported"):
         _run(tmp_path, flags).server_cmd()
 
 
-@pytest.mark.parametrize("route_line", [
-    "TEST-ONLY route of crystal_ap -> gen3_exp enabled (production refuses it by name; production:false)",
-    f"TEST-ONLY route of {EXP} -> gen3_exp enabled (production refuses it by name)",
-    f"TEST-ONLY route of {EXP} -> gen3_frlge enabled (production refuses it by name; production:false)",
+def test_production_server_argv_contains_no_expansion_override(tmp_path):
+    assert "--test-only-route" not in _run(tmp_path).server_cmd()
+
+
+def test_production_receipt_requires_both_real_client_admissions(tmp_path, monkeypatch):
+    run = _run(tmp_path)
+    monkeypatch.setattr(run, "_result_path", lambda side: str(tmp_path / f"{side}.txt"))
+    server = "\n".join(f"2026-10-02 12:00:00,000 [INFO] [{side}] route {EXP} -> gen3_exp (production)" for side in "ab")
+    (tmp_path / "server.log").write_text(server + "\n")
+    for side in "ab":
+        (tmp_path / f"{side}.txt").write_text(f"[client] [SLink-gen3] gen3_exp/{EXP} (clean by hash) player {side} -> 127.0.0.1:1234 (rom 28877d73)\n")
+    proof = run._require_production_route_receipt(timeout=0)
+    assert len(proof) == 2
+    (tmp_path / "b.txt").write_text("TCP connected\n")
+    with pytest.raises(RuntimeError, match="production route"):
+        run._require_production_route_receipt(timeout=0)
+
+
+@pytest.mark.parametrize("change", [
+    lambda text: text.replace("[b] route", "[a] route"),
+    lambda text: text.replace("player b ->", "player a ->"),
+    lambda text: text.replace("28877d73)", "00000000)"),
+    lambda text: text.replace("clean by hash", "clean by anchors"),
+    lambda text: text.replace("-> gen3_exp (production)", "-> gen3_emerald (production)"),
+    lambda text: text + "\nTEST-ONLY admission of gen3_exp/emerald_expansion_28877d73\n",
 ])
-def test_wrong_route_or_missing_production_false_is_not_a_receipt(tmp_path, route_line):
-    (tmp_path / "server.log").write_text("2026 [WARNING] " + route_line + "\n", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="logged no TEST-ONLY route"):
-        _run(tmp_path)._require_test_only_route_receipt(timeout=0)
-
-
-def test_exact_configured_route_with_production_false_is_receipted(tmp_path):
-    line = (f"2026 [WARNING] TEST-ONLY route of {EXP} -> gen3_exp enabled "
-            "(production refuses it by name; production:false)")
-    (tmp_path / "server.log").write_text(line + "\n", encoding="utf-8")
-    assert _run(tmp_path)._require_test_only_route_receipt(timeout=0) == [line]
-    assert "production:false" in (tmp_path / "pydec.txt").read_text(encoding="utf-8")
+def test_production_route_rejects_each_identity_or_route_mutation(change):
+    text = "\n".join(
+        line for side in "ab" for line in (
+            f"2026 [INFO] [{side}] route {EXP} -> gen3_exp (production)",
+            f"[client] [SLink-gen3] gen3_exp/{EXP} (clean by hash) player {side} -> 127.0.0.1:1234 (rom 28877d73)"))
+    def accepted(body):
+        return all(duo.gen3_production_route_lines(body, body, side, "gen3_exp", EXP, "28877d73") for side in "ab")
+    assert accepted(text)
+    assert not accepted(change(text))

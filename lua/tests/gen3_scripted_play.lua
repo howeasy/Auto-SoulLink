@@ -1452,8 +1452,9 @@ end
 --- shape probe_gen3_rr_bag.lua uses. Returns false either on timeout OR because the battle
 --- itself ended before ever reaching the menu (nothing here needs the menu at that point); the
 --- caller tells those two apart with play.in_battle(cp).
-local function wait_for_action_menu(cp, budget)
+local function wait_for_action_menu(cp, budget, stop_when)
     for i = 1, (budget or 1200) do
+        if stop_when and stop_when() then joypad.set({}); return "stopped" end
         if party_menu_up() then joypad.set({}); return "party" end
         if action_menu_up() then joypad.set({}); return true end
         if not play.in_battle(cp) then joypad.set({}); return false end
@@ -1461,6 +1462,8 @@ local function wait_for_action_menu(cp, budget)
         G.advance()
     end
     joypad.set({})
+    -- The last advance can reveal the terminal fact; let its owner observe it before failure.
+    if stop_when and stop_when("timeout") then return "stopped" end
     return false
 end
 
@@ -1472,9 +1475,10 @@ end
 --- they think it is, not on the still-open "Wild X appeared!" intro text (FR run 19's bug).
 --- A battle that ends before the menu ever comes up is not a failure -- there is nothing here
 --- for either leg to press.
-verify_fight_cursor = function(cp, label)
+verify_fight_cursor = function(cp, label, stop_when)
     if not play.in_battle(cp) then return end
-    local ready = wait_for_action_menu(cp, 1200)
+    local ready = wait_for_action_menu(cp, 1200, stop_when)
+    if ready == "stopped" then return end
     if ready == "party" then
         if label == "incidental_battle" then return "party" end
         G.finish(false, label .. ": unexpected forced party menu before action selection")

@@ -2643,6 +2643,7 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         end
     end
 end }
+emu.framecount = function() return M.frame end
 G = { spent = 0, budget = 1e9, shot = function() end,
       finish = function(_, why) error("G.finish: " .. tostring(why), 0) end }
 function G.advance() emu.frameadvance() end
@@ -5486,11 +5487,12 @@ def test_emerald_admission_is_production_only():
     profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
     assert profile["titles"]["emerald"]["admitted"] is True
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
-                      entry)
+    from lupa import LuaRuntime
+    routes = dict(LuaRuntime().execute(entry).ROUTED.items())
+    assert set(routes) == {"gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"}
+    assert all(value is True for value in routes.values())
     assert "test_admission_codec" not in entry
-    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
-    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():

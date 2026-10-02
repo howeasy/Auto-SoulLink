@@ -62,10 +62,8 @@ def test_exp_zip_pack_closure_is_in_existing_release_manifest():
     assert set(fc.EXPANSION_ZIP_PACK_FILES) <= set(make_release._DATA_GAME_LUA["gen3_exp/28877d73"])
 
 
-SERVER_ROUTE = (f"TEST-ONLY route of {TITLE} -> gen3_exp enabled "
-                "(production refuses it by name; production:false)")
-CLIENT_ROUTE = ("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)\n"
-                f"TEST-ONLY admission of gen3_exp/{TITLE} (pre-XG; production refuses)\n")
+SERVER_ROUTE = "\n".join(f"2026 [INFO] [{side}] route {TITLE} -> gen3_exp (production)" for side in "ab")
+CLIENT_ROUTE = "\n".join(f"[client] [SLink-gen3] gen3_exp/{TITLE} (clean by hash) player {side} -> 127.0.0.1:1234 (rom 28877d73)" for side in "ab") + "\n"
 
 
 def output(cut=CUT, route=True, client=False):
@@ -92,7 +90,7 @@ def test_exp_receipt_accepts_bound_source_or_logged_runtime(row, tmp_path):
 
 
 @pytest.mark.parametrize("change,why", [
-    (lambda s: s.replace(SERVER_ROUTE, "route was requested"), "logged test-only"),
+    (lambda s: s.replace(SERVER_ROUTE, "route was requested"), "logged production"),
     (lambda s: s.replace("before=" + CUT, "before=" + "d" * 40), "full SHA"),
     (lambda s: s.replace("after=" + CUT, "after=" + CUT[:8]), "full SHA"),
     (lambda s: s.replace("after=" + CUT, "after=" + CUT + "0"), "full SHA"),
@@ -105,7 +103,7 @@ def test_exp_receipt_rejects_each_missing_or_changed_fact(change, why, tmp_path)
     assert not ok and why in problem
 
 
-def test_zip_boot_requires_client_seam_as_well_as_server_route(tmp_path):
+def test_zip_boot_requires_native_client_identity_as_well_as_server_route(tmp_path):
     row = "zip_boot_exp"
     text = receipt(row, output(client=False))
     assert not fc.fc_check(f"fc_{row}_{CUT[:8]}.txt", text, str(tmp_path))[1]
@@ -321,90 +319,13 @@ def extracted_pack(tmp_path):
     root = tmp_path / "extract"
     for name in fc.EXPANSION_ZIP_PACK_FILES:
         write(root / fc.EXPANSION_PACK / name, (Path(fc.REPO) / fc.EXPANSION_PACK / name).read_bytes())
-    write(root / "lua/gen3/entry.lua", "Entry.ROUTED = {gen3_frlg = true}\n")
+    write(root / "lua/gen3/entry.lua", "Entry.ROUTED = {gen3_frlg = true, gen3_exp = true}\n")
     write(root / "lua/slink.lua", "-- model launcher")
     return root
 
 
-@pytest.mark.parametrize("missing", [None, *fc.EXPANSION_ZIP_PACK_FILES])
-def test_extracted_zip_pack_closure_is_checked_before_boot(tmp_path, missing):
-    root = extracted_pack(tmp_path)
-    if missing:
-        (root / fc.EXPANSION_PACK / missing).unlink()
-    reason = fc.expansion_zip_blocker(str(root / "lua"))
-    assert (reason is None) == (missing is None)
-    if missing:
-        assert missing in reason
-
-
-@pytest.mark.parametrize("bad", ["profile", "entry"])
-def test_exp_zip_production_refusal_cannot_be_flipped(tmp_path, bad):
-    root = extracted_pack(tmp_path)
-    if bad == "entry":
-        write(root / "lua/gen3/entry.lua", "Entry.ROUTED = {gen3_exp = true}\n")
-    else:
-        path = root / fc.EXPANSION_PACK / "profile.json"
-        profile = json.loads(path.read_text())
-        profile["titles"][TITLE]["admitted"] = True
-        write(path, json.dumps(profile))
-    assert fc.expansion_zip_blocker(str(root / "lua")) is not None
-
-
-@pytest.mark.parametrize("route,blocked", [
-    ('Entry.ROUTED = {gen3_frlg = { nested = true }, gen3_exp = true}', True),
-    ('Entry.ROUTED = {label = "gen3_exp = true", gen3_frlg = true}', False),
-    ('Entry.ROUTED = {-- gen3_exp = true\n gen3_frlg = true}', False),
-    ('Entry.ROUTED = {gen3_frlg = {nested = "}"}, ["gen3_exp"] = true}', True),
-])
-def test_exp_zip_route_scanner_handles_nested_tables_strings_and_comments(tmp_path, route, blocked):
-    root = extracted_pack(tmp_path)
-    write(root / "lua/gen3/entry.lua", route)
-    assert (fc.expansion_zip_blocker(str(root / "lua")) is not None) is blocked
-
-
-def test_exp_zip_route_scanner_rejects_second_admitting_assignment(tmp_path):
-    root = extracted_pack(tmp_path)
-    write(root / "lua/gen3/entry.lua", "Entry.ROUTED = {gen3_frlg = true}\n"
-          "Entry.ROUTED = {gen3_exp = true}\n")
-    assert fc.expansion_zip_blocker(str(root / "lua")) is not None
-
-
-def test_real_duo_admission_seam_composes_with_zip_launcher_without_editing_json():
-    from lupa import LuaRuntime
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    lua.execute(r'''
-    transcript = ""
-    os = {getenv=function(k) if k == "SLINK_ZIPBOOT_ENTRY" then return "/extract/lua/slink.lua" end
-                            return "route-log" end}
-    io = {open=function() return {write=function(_, ...) for _,s in ipairs({...}) do
-                      transcript=transcript..s end end, close=function() end} end}
-    joypad = {set=function() end}; emu = {frameadvance=function() end}
-    docs = {titles={emerald_expansion_28877d73={admitted=false}, other={admitted=false}}}
-    original_json = {decode=function() return docs end}
-    dofile = function(path)
-        if path == "/extract/lua/json_codec.lua" then return original_json end
-        if path == "/extract/lua/gen3/entry.lua" then return {ROUTED={gen3_frlg=true}} end
-        if path == "/extract/lua/slink.lua" then
-            local entry = dofile("/extract/lua/gen3/entry.lua")
-            local json = dofile("/extract/lua/json_codec.lua")
-            assert(entry.ROUTED.gen3_exp)
-            assert(json.decode().titles.emerald_expansion_28877d73.admitted)
-            assert(json.decode().titles.other.admitted == false)
-            assert(original_json.decode ~= json.decode)
-            booted = true
-        end
-    end
-    ''')
-    lua.execute(fc.zip_bootstrap(fc.REPO, "exp"))
-    assert lua.globals().booted is True
-    assert "TEST-ONLY route of gen3_exp" in lua.globals().transcript
-    assert f"TEST-ONLY admission of gen3_exp/{TITLE}" in lua.globals().transcript
-    # Other titles continue to use the unchanged shipped launcher path.
-    assert fc.zip_bootstrap(fc.REPO, "emerald") == fc._BOOT_LUA
-
-
 @pytest.mark.parametrize("logged", [True, False])
-def test_exp_zip_launch_uses_flag_and_requires_actual_server_and_client_logs(tmp_path, monkeypatch, logged):
+def test_exp_zip_launch_is_unmodified_and_requires_production_logs(tmp_path, monkeypatch, logged):
     import gen3_fixtures
     root = extracted_pack(tmp_path)
     zip_path = tmp_path / "model.zip"
@@ -418,7 +339,6 @@ def test_exp_zip_launch_uses_flag_and_requires_actual_server_and_client_logs(tmp
     tmp = tmp_path / "boot"
     tmp.mkdir()
     monkeypatch.setattr(fc.tempfile, "mkdtemp", lambda **_: str(tmp))
-    monkeypatch.setattr(fc, "zip_bootstrap", lambda *_: "-- model")
     monkeypatch.setattr(gen3_fixtures.codec, "split_rtc", lambda body: (body, None))
     monkeypatch.setattr(gen3_fixtures, "write_gba_run_config",
                         lambda _base, cfg, _save: write(Path(cfg), '{"Rewind":{"Enabled":false}}'))
@@ -432,15 +352,16 @@ def test_exp_zip_launch_uses_flag_and_requires_actual_server_and_client_logs(tmp
     def launch(argv, **kwargs):
         calls.append((argv, kwargs))
         if "server.server" in argv:
-            assert argv[-2:] == ["--test-only-route", TITLE]
+            assert "--test-only-route" not in argv
             kwargs["stdout"].write((SERVER_ROUTE if logged else "") + f"\nhello rom={TITLE} \n")
             kwargs["stdout"].flush()
         else:
             env = kwargs["env"]
             entry = Path(env["SLINK_ZIPBOOT_ENTRY"])
             write(entry.parent.parent / "slink_lua.log",
-                  f"[SLink-gen3] gen3_exp/{TITLE} (clean by hash) player a TCP connected\n")
-            write(Path(env["SLINK_ZIPBOOT_ROUTE_LOG"]), CLIENT_ROUTE)
+                  f"[SLink-gen3] gen3_exp/{TITLE} (clean by hash) player a -> 127.0.0.1:1234 (rom 28877d73)\nTCP connected\n")
+            assert "SLINK_ZIPBOOT_ROUTE_LOG" not in env
+            assert (tmp / "boot.lua").read_text() == fc._BOOT_LUA
             assert Path(env["SLINK_STATE_DIR"]).parent == tmp
         return Process()
     monkeypatch.setattr(fc.subprocess, "Popen", launch)
@@ -500,3 +421,68 @@ def test_exp_pc_negative_manifest_binds_real_windows_and_positive_siblings():
             check_fired_outside_window(shadow,kind,lo,hi)
         assert proof['claim']=='raw observer window only; client reporting remains unqualified'
         assert 'pc_move'not in {r['kind']for r in row['must_not']}
+
+
+# Routing-flip falsifiers: the old seam must never qualify a production row.
+def production_output(sides=("a", "b")):
+    lines = [f"EXPANSION_CUT requested={CUT} before={CUT}"]
+    for side in sides:
+        lines += [f"2026-10-02 12:00:00,000 [INFO] [{side}] route {TITLE} -> gen3_exp (production)",
+                  f"[client] [SLink-gen3] gen3_exp/{TITLE} (clean by hash) player {side} -> 127.0.0.1:1234 (rom 28877d73)"]
+    return "\n".join([*lines, f"EXPANSION_CUT after={CUT}"]) + "\n"
+
+
+def test_production_route_rejects_legacy_test_only_proof(tmp_path):
+    row = "faint_cmd_gen3_exp_as_a"
+    legacy = (f"EXPANSION_CUT requested={CUT} before={CUT}\n"
+              f"TEST-ONLY route of {TITLE} -> gen3_exp enabled (production refuses it by name; production:false)\n"
+              f"TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)\n"
+              f"TEST-ONLY admission of gen3_exp/{TITLE} (pre-XG; production refuses)\n"
+              f"EXPANSION_CUT after={CUT}\n")
+    assert not fc.fc_check(f"fc_{row}_{CUT[:8]}.txt", receipt(row, legacy), str(tmp_path))[1]
+
+
+@pytest.mark.parametrize("row,sides", [("faint_cmd_gen3_exp_as_a", ("a", "b")),
+                                       ("zip_boot_exp", ("a",))])
+def test_production_route_accepts_actual_native_identity_and_server_acceptance(tmp_path, row, sides):
+    text = receipt(row, production_output(sides))
+    assert fc.fc_check(f"fc_{row}_{CUT[:8]}.txt", text, str(tmp_path))[1]
+
+
+
+def test_exp_qualification_plan_is_exactly_7_source_1_model_19_duo_3_zip():
+    rows = fc.build_plan_exp(CUT, "lane", "unused")
+    source = [row for row in rows if row.item == "XG3 SOURCE"]
+    model = [row for row in rows if row.item == "XG3 MODEL"]
+    duo = [row for row in rows if row.id.endswith("_exp_as_a")]
+    zipped = [row for row in rows if fc.chain_of(row.id) == "zip"]
+    assert len(rows) == 30
+    assert tuple(map(len, (source, model, duo, zipped))) == (7, 1, 19, 3)
+    assert [row.id for row in model] == ["unit_exp"]
+    assert [row.id for row in zipped] == ["exp_zip_build", "exp_zip_check", "zip_boot_exp"]
+    assert rows == source + model + duo + zipped
+
+
+def test_exp_rom_pin_is_identical_in_profile_and_both_live_receipt_consumers(tmp_path, monkeypatch):
+    profile = json.loads((Path(fc.REPO) / fc.EXPANSION_PACK / "profile.json").read_text())
+    digest = profile["source"]["rom_sha1"]
+    assert digest == profile["titles"][TITLE]["rom_sha1"] == fc.expansion_rom_pin(fc.REPO)
+    server = []
+    for side in "ab":
+        server.append(f"2026 [INFO] [{side}] route {TITLE} -> gen3_exp (production)")
+        (tmp_path / f"{side}.txt").write_text(
+            f"[client] [SLink-gen3] gen3_exp/{TITLE} (clean by hash) player {side} -> 127.0.0.1:1234 (rom {digest[:8]})\n")
+    (tmp_path / "server.log").write_text("\n".join(server) + "\n")
+    seen = []
+    original = e2e_duo.gen3_production_route_lines
+
+    def record(*args):
+        seen.append(args[-1])
+        return original(*args)
+
+    monkeypatch.setattr(e2e_duo, "gen3_production_route_lines", record)
+    run = e2e_duo.DuoRun.__new__(e2e_duo.DuoRun)
+    run.game, run.data_dir = "gen3_exp", str(tmp_path)
+    monkeypatch.setattr(run, "_result_path", lambda side: str(tmp_path / f"{side}.txt"))
+    assert len(run._require_production_route_receipt(timeout=0)) == 2
+    assert seen == [digest, digest]

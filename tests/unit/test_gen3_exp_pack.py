@@ -1,4 +1,4 @@
-"""Unadmitted expansion pack: exact build facts, bytes, and additive generation."""
+"""Admitted reference expansion pack: exact build facts and retained battle limits."""
 
 import copy
 import hashlib
@@ -38,9 +38,10 @@ def context():
     return profile.expansion_inputs(artifacts=path)
 
 
-def test_expansion_is_not_admitted_and_removed_fields_are_absent():
+def test_expansion_is_admitted_and_removed_fields_are_absent():
     p = read("profile.json")["titles"][TITLE]
-    assert p["admitted"] is False
+    assert p["admitted"] is True
+    assert read("write_checkpoint.json")[TITLE]["admitted"] is True
     assert p["rom_sha1"] == profile.EXPANSION_SHA1
     forbidden = {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR", "TRAINER_OPPONENT_ADDR", "BATTLE_INTRO_GET_MONS_DATA_ADDR",
                  "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF"}
@@ -524,24 +525,37 @@ def test_exp_battle_handoff_open_text_states_the_faint_evidence_honestly():
         assert needle in text, needle
 
 
-# ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
-def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
-    """The pack is deliberately UNADMITTED (module docstring). X3 (the E2-ENTRY precedent) registers
-    it in lua/gen3/entry.lua's Entry.PACKS so its hash names its OWN pack (never gen3_emerald's) and
-    the launcher refuses it as unrouted (test_gen3_exp_entry.py); it must stay out of Entry.ROUTED,
-    carry no header_code (no by-name admission), keep its profile unadmitted, and server/manager.py
-    must not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+# ── Reference production route remains separate from Manager provisioning ─────────────────
+def test_gen3_exp_is_routed_without_header_or_manager_provisioning():
+    """The exact reference pack routes; header-only admission and Manager offerings stay excluded."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
     Entry = lua.eval(f'dofile("{entry_path}")')
     assert "gen3_exp" in {key for key, _ in Entry.PACKS.items()}
     assert Entry.PACKS.gen3_exp.header_code is None
-    assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
-    assert read("profile.json")["titles"][TITLE]["admitted"] is False
+    assert "gen3_exp" in {key for key, _ in Entry.ROUTED.items()}
+    assert read("profile.json")["titles"][TITLE]["admitted"] is True
 
     from server.manager import GAMES, UNADMITTED_GAMES
     assert "gen3_exp" not in {key for key, _, _ in GAMES}
     assert "gen3_exp" not in UNADMITTED_GAMES
+
+
+@pytest.mark.parametrize("generator,filename", [(profile, "profile.json"), (checkpoint, "write_checkpoint.json")])
+def test_in_memory_generator_admission_revert_stales_the_own_pack(generator, filename, context):
+    import inspect
+
+    source = inspect.getsource(generator.build_expansion)
+    reverted = source.replace('"admitted": True', '"admitted": False', 1)
+    assert reverted != source
+    namespace = dict(vars(generator))
+    exec(compile(reverted, str(generator.__file__), "exec"), namespace)
+    old = namespace["build_expansion"](context)
+    committed = read(filename)
+    assert old != committed
+    row = old["titles"][TITLE] if filename == "profile.json" else old[TITLE]
+    assert row["admitted"] is False
+    assert generator.build_expansion(context) == committed  # Restore the original callable, without file edits.
 
 
 # ── F3/F4: a ROM-value oracle independent of the generator's own decode path ────────────────

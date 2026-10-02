@@ -570,7 +570,7 @@ def build_plan_exp(cut, lane, master):
                     "docs/gen3_exp/negatives_manifest.json"], lane, 120, emulator=False))
     rows.append(Row("unit_exp", "XG3 MODEL", [PY, "-m", "pytest", *EXPANSION_UNIT_FILES,
                     "-q", "-p", "no:randomly", "-rs"], lane, 1800, emulator=False))
-    rows += [_duo(s, "gen3_exp", "XG3 TEST-ONLY duo", lane) for s in names]
+    rows += [_duo(s, "gen3_exp", "XG3 production duo", lane) for s in names]
     rows += zip_rows(cut, lane, "exp")
     for row in rows:
         row.cwd = lane  # even the boot helper must execute the frozen lane's runner
@@ -1154,134 +1154,6 @@ ZIP_BOOT = {
 }
 
 
-def _lua_tokens(source):
-    """Small Lua lexer for ROUTED inspection; strings/comments cannot become code."""
-    tokens, i = [], 0
-    while i < len(source):
-        if source[i:i + 2] == "--":
-            long = re.match(r"\[(=*)\[", source[i + 2:])
-            if long:
-                end = "]" + long[1] + "]"
-                pos = source.find(end, i + 2 + len(long[0]))
-                i = len(source) if pos < 0 else pos + len(end)
-            else:
-                pos = source.find("\n", i + 2)
-                i = len(source) if pos < 0 else pos + 1
-            continue
-        c = source[i]
-        if c in "\"'":
-            quote, start = c, i + 1
-            i += 1
-            while i < len(source):
-                if source[i] == "\\":
-                    i += 2
-                elif source[i] == quote:
-                    tokens.append(("string", source[start:i]))
-                    i += 1
-                    break
-                else:
-                    i += 1
-            else:
-                return []
-            continue
-        long = re.match(r"\[(=*)\[", source[i:]) if c == "[" else None
-        if long:
-            end = "]" + long[1] + "]"
-            start = i + len(long[0])
-            pos = source.find(end, start)
-            if pos < 0:
-                return []
-            tokens.append(("string", source[start:pos]))
-            i = pos + len(end)
-            continue
-        if c.isspace():
-            i += 1
-            continue
-        word = re.match(r"[A-Za-z_][A-Za-z_0-9]*", source[i:])
-        if word:
-            tokens.append(("name", word[0]))
-            i += len(word[0])
-        else:
-            tokens.append(("punct", c))
-            i += 1
-    return tokens
-
-
-def _expansion_route_admitted(source):
-    tokens = _lua_tokens(source)
-    values = [value for _kind, value in tokens]
-    found = False
-    for i in range(len(tokens) - 4):
-        if values[i:i + 5] != ["Entry", ".", "ROUTED", "=", "{"]:
-            continue
-        found = True
-        depth = 1
-        j = i + 5
-        while j < len(tokens) and depth:
-            key = (values[j] == "gen3_exp" and tokens[j][0] == "name"
-                   and j + 2 < len(tokens) and values[j + 1:j + 3] == ["=", "true"])
-            bracket_key = (values[j:j + 5] == ["[", "gen3_exp", "]", "=", "true"]
-                           and j + 1 < len(tokens) and tokens[j + 1][0] == "string")
-            if depth == 1 and (key or bracket_key):
-                return True, True
-            if tokens[j] == ("punct", "{"):
-                depth += 1
-            elif tokens[j] == ("punct", "}"):
-                depth -= 1
-            j += 1
-        if depth:
-            return False, False
-    return found, False
-
-
-def expansion_zip_blocker(lua_dir):
-    """Validate extracted build identity and pack closure; do not flip shipped admission."""
-    root = os.path.dirname(lua_dir)
-    for name in EXPANSION_ZIP_PACK_FILES:
-        if not os.path.isfile(os.path.join(root, EXPANSION_PACK, name)):
-            return f"expansion ZIP closure missing {name}"
-    try:
-        profile = json.loads(_read(os.path.join(root, EXPANSION_PACK, "profile.json")))
-        if profile["titles"][EXPANSION_TITLE]["admitted"] is not False:
-            return "expansion ZIP profile must remain unadmitted for this test-only plan"
-        expansion_rom_pin(root)
-    except (ValueError, KeyError, TypeError, LaneError):
-        return "expansion ZIP profile identity is malformed"
-    entry = _read(os.path.join(lua_dir, "gen3", "entry.lua"))
-    routed, admitted = _expansion_route_admitted(entry)
-    if not routed or admitted:
-        return "expansion ZIP must retain the production refusal in Entry.ROUTED"
-    return None
-
-
-def zip_bootstrap(lane, title):
-    if title != "exp":
-        return _BOOT_LUA
-    # Reuse the frozen lane's exact duo seam, rather than inventing another admission policy.
-    source = _read(os.path.join(lane, "lua", "tests", "duo", "duo_gen3_main.lua"))
-    codec = re.search(r"(?ms)^local function test_admission_codec\([^\n]+\).*?^end$", source)
-    if not codec:
-        raise LaneError("frozen lane has no expansion test_admission_codec seam")
-    return codec[0] + r'''
-local function test_log(s)
-    local f = assert(io.open(os.getenv("SLINK_ZIPBOOT_ROUTE_LOG"), "a"))
-    f:write(s, "\n"); f:close()
-end
-local original_dofile = dofile
-dofile = function(path)
-    local value = original_dofile(path)
-    local normalized = tostring(path):gsub("\\", "/")
-    if normalized:match("/lua/json_codec%.lua$") then
-        value = test_admission_codec("gen3_exp", "emerald_expansion_28877d73", value, test_log)
-    elseif normalized:match("/lua/gen3/entry%.lua$") then
-        value.ROUTED.gen3_exp = true
-        test_log("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)")
-    end
-    return value
-end
-''' + _BOOT_LUA
-
-
 def emerald_admission_blocker(lua_dir):
     """(kind, reason) once something blocks Emerald's admission in the EXTRACTED zip's own
     lua/gen3/entry.lua, checked against the artifact actually being booted (not the lane's own
@@ -1327,11 +1199,6 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
     if not entry:
         print("RESULT: FAIL the zip has no lua/slink.lua")
         return 1
-    if title == "exp":
-        blocked = expansion_zip_blocker(os.path.dirname(entry))
-        if blocked:
-            print(f"RESULT: FAIL ZIP-DEFECT: {blocked}")
-            return 1
     if title == "emerald":
         blocked = emerald_admission_blocker(os.path.dirname(entry))
         if blocked:
@@ -1364,11 +1231,9 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             return 1
     shutil.copyfile(os.path.join(lane, rom_rel), os.path.join(tmp, rom_name))
     with open(os.path.join(tmp, "boot.lua"), "w", encoding="utf-8") as f:
-        f.write(zip_bootstrap(lane, title))
+        f.write(_BOOT_LUA)
     tcp, http = _free_port(), _free_port()
     server_log = os.path.join(tmp, "server.log")
-    route_log = os.path.join(tmp, "test_route.log")
-    server_routes = ["--test-only-route", EXPANSION_TITLE] if title == "exp" else []
     print(f"zip={zip_path}\nextract={tmp}\\extract entry={entry}\nfixture={fixture}\n"
           f"server: python -m server.server --port {tcp} --http-port {http} (cwd={lane})")
     procs = []
@@ -1376,12 +1241,11 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
         with open(server_log, "w", encoding="utf-8") as log:
             procs.append(subprocess.Popen(
                 [PY, "-m", "server.server", "--host", "127.0.0.1", "--port", str(tcp),
-                 "--http-port", str(http), "--data-dir", os.path.join(tmp, "data"), *server_routes],
+                 "--http-port", str(http), "--data-dir", os.path.join(tmp, "data")],
                 cwd=lane, stdout=log, stderr=subprocess.STDOUT))
         time.sleep(3)
         env = dict(os.environ, SLINK_HOST="127.0.0.1", SLINK_PORT=str(tcp), SLINK_PLAYER="a",
-                   SLINK_ZIPBOOT_ENTRY=entry.replace("\\", "/"),
-                   SLINK_ZIPBOOT_ROUTE_LOG=route_log.replace("\\", "/"))
+                   SLINK_ZIPBOOT_ENTRY=entry.replace("\\", "/"))
         if title == "exp":
             env["SLINK_STATE_DIR"] = os.path.join(tmp, "state")
         cmd = [run_gate.EMUHAWK, "--config=config.ini", "--lua=boot.lua", rom_name]
@@ -1396,14 +1260,12 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             ok = bool(client_re.search(ltxt)) and "TCP connected" in ltxt and \
                 hello in _read(server_log)
             if title == "exp":
-                ok = ok and expansion_route_logged(_read(server_log), _read(route_log))
+                ok = ok and expansion_route_logged(_read(server_log), ltxt, sides=("a",))
     finally:
         for p in reversed(procs):
             if p.poll() is None:
                 kill_tree(p.pid)
     print(f"--- {lua_log} ---\n{_read(lua_log)}\n--- server log ---\n{_read(server_log)}")
-    if title == "exp":
-        print(f"--- test-only client route ---\n{_read(route_log)}")
     print(f"RESULT: PASS the extracted zip booted {title} on the new client" if ok else
           f"RESULT: FAIL no client/server boot evidence within {timeout}s")
     return 0 if ok else 1
@@ -1421,15 +1283,15 @@ def is_expansion_row(row_id):
     return row_id.endswith(("_exp_as_a", "_exp")) or row_id.startswith("exp_zip_")
 
 
-def expansion_route_logged(server_text, client_text=None):
-    expected = (f"TEST-ONLY route of {EXPANSION_TITLE} -> gen3_exp enabled "
-                "(production refuses it by name; production:false)")
-    if expected not in server_text:
-        return False
-    if client_text is None:
-        return True  # duo's own oracle validates its client seam; it logs the server route
-    return ("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)" in client_text
-            and f"TEST-ONLY admission of gen3_exp/{EXPANSION_TITLE}" in client_text)
+def expansion_route_logged(server_text, client_text=None, *, sides=("a", "b")):
+    """Require native client identities and accepted production routes for each player."""
+    from e2e_duo import gen3_production_route_lines
+
+    client_text = server_text if client_text is None else client_text
+    rom_hash = expansion_rom_pin(REPO)
+    return all(gen3_production_route_lines(server_text, client_text, side,
+                                           "gen3_exp", EXPANSION_TITLE, rom_hash)
+               for side in sides)
 
 
 def expansion_attempt_problem(row_id, cut, text):
@@ -1439,8 +1301,8 @@ def expansion_attempt_problem(row_id, cut, text):
     if before != [(cut, cut)] or after != [cut]:
         return "lane identity is not the exact requested full SHA"
     if (row_id.endswith("_exp_as_a") or row_id == "zip_boot_exp") and not \
-            expansion_route_logged(text, text if row_id == "zip_boot_exp" else None):
-        return "missing logged test-only server route or client admission"
+            expansion_route_logged(text, sides=("a",) if row_id == "zip_boot_exp" else ("a", "b")):
+        return "missing logged production server route or client admission"
     return None
 
 
@@ -2271,7 +2133,7 @@ def run_pass(args):
         if args.title == "exp":
             print("# provision: link the locked, clean expansion source; copy the offline probe.o "
                   "(SLINK_EXPANSION_PROBE_OBJECT) plus compile.json when present; verify object hash vs facts")
-            print("# TEST-ONLY expansion qualification; production routing remains refused")
+            print("# Expansion production qualification; unmodified launcher admission required")
         if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
         for k, r in enumerate(rows, 1):

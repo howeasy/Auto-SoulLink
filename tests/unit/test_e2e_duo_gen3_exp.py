@@ -1,5 +1,4 @@
-"""X3: the gen3_exp duo row (the expansion reference build, E<->E) in tools/e2e_duo.py and the
-duo driver's TEST-ONLY admission seam (lua/tests/duo/duo_gen3_main.lua test_admission_codec)."""
+"""Expansion duo production routing and ordinary driver composition."""
 from __future__ import annotations
 
 import argparse
@@ -35,43 +34,24 @@ def _run(**over):
     return run
 
 
-def test_only_this_row_asks_the_server_for_a_test_only_route():
-    """Ruling 39's server half is a PROCESS flag on the expansion row and nowhere else, so no
-    other lane -- and no Manager-spawned run -- can inherit the seam from this machine's
-    shared environment."""
-    assert duo.GAMES["gen3_exp"]["server_rom_routes"] == ["--test-only-route", EXP]
-    assert [g for g, row in duo.GAMES.items() if row.get("server_rom_routes")] == ["gen3_exp"]
+def test_expansion_and_other_games_launch_without_test_route_flags():
+    assert not any(row.get("server_rom_routes") for row in duo.GAMES.values())
+    assert "--test-only-route" not in _run().server_cmd()
 
 
-def test_the_server_argv_carries_the_seam_flag_after_the_run_flags():
+def test_production_route_proof_is_checked_after_connected_hellos():
     run = _run()
-    cmd = run.server_cmd()
-    assert cmd[-2:] == ["--test-only-route", EXP]
-    plain = _run()
-    plain.gcfg = {}
-    assert "--test-only-route" not in plain.server_cmd()
+    events = []
+    run.wait_for = lambda *args: events.append("hellos")
+    run._require_production_route_receipt = lambda: events.append("route-proof")
+    run.wait_connected()
+    assert events == ["hellos", "route-proof"]
 
 
-def test_the_receipt_needs_the_servers_own_production_false_line(tmp_path):
-    """The seam is CHECKED, not assumed: a run whose server never logged the route it was
-    launched with did not test what it claims, so it fails instead of passing quietly. The
-    line it does find is copied into the attempt's pydec receipt."""
-    run = _run(data_dir=str(tmp_path), pydec=str(tmp_path / "pydec.txt"))
-    with pytest.raises(RuntimeError, match="logged no TEST-ONLY route"):
-        run._require_test_only_route_receipt(timeout=0)
-    logged = ("2026-09-27 12:00:00,000 [WARNING] server.adapters: TEST-ONLY route of "
-              f"{EXP} -> gen3_exp enabled (production refuses it by name; production:false)")
-    (tmp_path / "server.log").write_text("SLink TCP server listening on 127.0.0.1:1\n" + logged,
-                                         encoding="utf-8")
-    assert run._require_test_only_route_receipt(timeout=0) == [logged]
-    receipt = (tmp_path / "pydec.txt").read_text(encoding="utf-8")
-    assert "TEST_ONLY_ROUTE game=gen3_exp" in receipt and "production:false" in receipt
-
-
-def test_a_row_with_no_routes_never_reads_a_server_log(tmp_path):
+def test_other_titles_do_not_read_the_expansion_route_log(tmp_path):
     run = _run(data_dir=str(tmp_path))
-    run.gcfg = {}
-    assert run._require_test_only_route_receipt() == []
+    run.game = "gen3_emerald"
+    assert run._require_production_route_receipt(timeout=0) == []
 
 
 def test_the_active_faint_row_uses_the_expansion_perish_geometry():
@@ -131,32 +111,33 @@ def test_the_rom_is_the_staged_reference_artifact(tmp_path, monkeypatch):
         run._gen3_rom("a")
 
 
-_ADMISSION_FN = re.compile(r"local function test_admission_codec\(.*?\nend\n", re.S)
-
-
-def test_admission_seam_fires_only_on_the_gen3_exp_row():
+def test_duo_wrapper_cannot_mutate_a_refused_profile_or_route():
     from lupa import LuaRuntime
 
+    source = DRIVER.read_text(encoding="utf-8")
+    block = re.search(r"(?ms)^do\n    dofile = function\(path\).*?^end\n(?=local okrun)", source)
+    assert block, "duo dofile composition not found"
+    # Include the old helper when checking a baseline source: then the old override
+    # fails the semantic assertion rather than merely failing to resolve its helper.
+    helper = re.search(r"(?ms)^local function test_admission_codec\([^\n]+\).*?^end$", source)
     lua = LuaRuntime(unpack_returned_tuples=True)
-    body = _ADMISSION_FN.search(DRIVER.read_text(encoding="utf-8"))
-    assert body, "duo_gen3_main.lua must define test_admission_codec"
-    fn = lua.execute(body.group(0) + "\nreturn test_admission_codec")
-    codec = lua.execute(f"return dofile([[{REPO / 'lua' / 'json_codec.lua'}]])")
-    same, logged = lua.eval("rawequal"), []
-    for game in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen1_new", None):
-        assert same(fn(game, EXP, codec, logged.append), codec)
-    wrapped = fn("gen3_exp", EXP, codec, logged.append)
-    doc = wrapped.decode(json.dumps({"titles": {EXP: {"admitted": False}, "emerald": {"admitted": False}}}))
-    assert doc.titles[EXP].admitted is True and doc.titles.emerald.admitted is False
-    assert logged == [f"TEST-ONLY admission of gen3_exp/{EXP} (pre-XG; production refuses)"]
-
-
-def test_production_still_refuses_the_expansion_build():
-    profile = json.loads((REPO / "data/games/gen3_exp/28877d73/profile.json").read_text(encoding="utf-8"))
-    assert profile["titles"][EXP]["admitted"] is False
-    entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}", entry)
-    assert "test_admission_codec" not in entry
+    result = lua.execute(r'''
+        ROOT="fixture-root"; D={game="gen3_exp"}; title="emerald_expansion_28877d73"
+        log=function() end
+        local docs={titles={emerald_expansion_28877d73={admitted=false}}}
+        original_json={decode=function() return docs end}
+        entry={ROUTED={gen3_frlg=true},build=function() end}
+        original_dofile=function(path)
+            if path:match("entry%.lua$") then return entry end
+            return original_json
+        end
+    ''' + (helper[0] if helper else "") + "\n" + block[0] + r'''
+        local loaded=dofile(ROOT.."/lua/gen3/entry.lua")
+        local codec=dofile(ROOT.."/lua/json_codec.lua")
+        return loaded.ROUTED.gen3_exp, codec.decode().titles.emerald_expansion_28877d73.admitted,
+               rawequal(codec,original_json)
+    ''')
+    assert result == (None, False, True)
 
 
 _SAVE_CONTRACT_FN = re.compile(r"local function save_contract_holds\(.*?\nend\n", re.S)

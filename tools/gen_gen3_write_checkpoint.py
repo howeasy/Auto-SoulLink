@@ -1525,7 +1525,7 @@ def build_expansion(context):
     sound["se_ids"] = {str(wire): const[name] for wire, name in ((16, "SE_FAINT"), (17, "SE_FLEE"), (22, "SE_BOO"),
                                                                  (25, "SE_SUCCESS"), (26, "SE_FAILURE"), (95, "SE_SHINY"))}
     return {EXPANSION_TITLE: {
-        "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
+        "version": VERSION, "title": EXPANSION_TITLE, "admitted": True, "source": context["source"],
         "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
         "tasks": tasks,
         "cpu": json.loads(json.dumps(EXP_CPU)),

@@ -1633,16 +1633,16 @@ def build_expansion(context):
         "structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane")
     put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
     return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
-            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
+            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": True, "variant": EXPANSION_TITLE,
             "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
-            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending"]}}}
+            "unavailable": dropped, "open": []}}}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if a committed profile differs from a fresh generation")
-    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this unadmitted expansion build")
+    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this admitted reference expansion build")
     ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
     try:
