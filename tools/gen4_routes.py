@@ -961,9 +961,71 @@ def verify_saved(path, game: str, synth: dict) -> dict:
     }
 
 
+# --- receipts bound at CONSUMPTION (same rule as gates.perf_f in tests/live/test_gen4_probe_gates.py) ----
+# A receipt is only evidence for the source it ran from: it carries the git HEAD, the sha256 of the Lua
+# script that ran and of every Python/Lua module the run read; verify_receipt() refuses (STALE, never PASS)
+# a receipt whose HEAD or any hash no longer matches the tree it is consumed against.
+BOUND_MODULES = (
+    "tools/gen4_routes.py",
+    "tools/gen4_fixtures.py",
+    "lua/json_codec.lua",
+    "lua/gen4/reads.lua",
+    "lua/gen4/pk4.lua",
+    "server/adapters/gen4_codec.py",
+    "data/games/gen4_hgss/profile.json",
+    "data/games/gen4_hge/profile.json",
+)
+PASS_STATUSES = ("PC_DEPOSIT", "HATCH_OK", "PASS")
+
+
+def _sha256(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def git_head() -> str:
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+
+
+def receipt_binding(script=None, extra_modules=()) -> dict:
+    """source_head + script_sha256 + module_sha256 for a receipt produced now, from this tree."""
+    script = Path(script or LUA)
+    mods = {m: _sha256(REPO / m) for m in (*BOUND_MODULES, *extra_modules)}
+    return {
+        "source_head": git_head(),
+        "script": script.resolve().relative_to(REPO).as_posix(),
+        "script_sha256": _sha256(script),
+        "module_sha256": mods,
+    }
+
+
+def verify_receipt(path, *, head: str | None = None) -> tuple[str, str]:
+    """Consume a receipt/verdict JSON: (verdict, reason). STALE when it is unbound or any of its
+    source_head / script_sha256 / module_sha256 differs from the tree now; otherwise the receipt's own
+    status decides (PASS only for a passing status, FAIL for any other). Never PASS when stale."""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    for key in ("source_head", "script", "script_sha256", "module_sha256"):
+        if not doc.get(key):
+            return "STALE", f"unbound receipt: {key} absent"
+    head = head or git_head()
+    if doc["source_head"] != head:
+        return "STALE", f"source_head {doc['source_head'][:8]} != HEAD {head[:8]}"
+    script = REPO / doc["script"]
+    if not script.is_file() or _sha256(script) != doc["script_sha256"]:
+        return "STALE", f"script {doc['script']} changed since the run"
+    for rel, digest in doc["module_sha256"].items():
+        mod = REPO / rel
+        if not mod.is_file() or _sha256(mod) != digest:
+            return "STALE", f"module {rel} changed since the run"
+    status = doc.get("final_status") or doc.get("verdict")
+    if status in PASS_STATUSES:
+        return "PASS", "bound to the current tree"
+    return ("OPEN" if status == "OPEN" else "FAIL"), f"receipt status {status}"
+
+
 def build_receipt(game, save, synth: dict, legs: list[dict], final: dict) -> dict:
     """The run's receipt: SYNTH label + sidecar hash first, then each leg's status line."""
     return {
+        **receipt_binding(),
         "setup": synth["setup"],
         "sidecar": synth["sidecar"],
         "sidecar_sha256": synth["sidecar_sha256"],

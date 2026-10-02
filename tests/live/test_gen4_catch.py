@@ -275,6 +275,98 @@ def test_judge_requires_every_independent_witness():
     assert judge({**base, "fatal": "x"}, mon)[0] == "FAIL"
 
 
+def _mutant_judge(needle: str):
+    """judge() with the ONE top-level `if` whose test contains `needle` removed (an AST mutation)."""
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(judge)))
+    fn = tree.body[0]
+    keep = [n for n in fn.body if not (isinstance(n, ast.If) and needle in ast.unparse(n.test))]
+    assert len(keep) == len(fn.body) - 1, f"clause {needle!r} not found exactly once"
+    fn.body = keep
+    ns: dict = {}
+    exec(compile(tree, "<mutant judge>", "exec"), ns)  # noqa: S102 - test-only mutation
+    return ns["judge"]
+
+
+_FOE = {"pid": 0xABCD, "species": 16}
+_GOOD_OBS = {
+    "foe": _FOE,
+    "outcome_value": 4,
+    "party_before": 1,
+    "party_after": 2,
+    "pids_before": [1],
+    "pids_after": [1, 0xABCD],
+    "save": [{"leg": "x"}],
+    "throw_count": 2,
+}
+_GOOD_MON = [{"pid": 1, "species": 155}, {"pid": 0xABCD, "species": 16}]
+
+
+@pytest.mark.parametrize(
+    ("clause", "needle", "obs", "mons", "verdict"),
+    [
+        ("party 1->2", "party_before", {"party_after": 1}, _GOOD_MON, "FAIL"),
+        ("PID delta", "new !=", {"pids_after": [1, 7]}, _GOOD_MON, "FAIL"),
+        ("save legs", "obs.get('save')", {"save": None}, _GOOD_MON, "OPEN"),
+        (
+            "battery party size",
+            "len(battery_party)",
+            {},
+            [*_GOOD_MON, {"pid": 5, "species": 1}],
+            "FAIL",
+        ),
+        ("battery party size (one mon)", "len(battery_party)", {}, _GOOD_MON[:1], "FAIL"),
+        (
+            "battery pid/species",
+            "mon['pid']",
+            {},
+            [_GOOD_MON[0], {"pid": 9, "species": 16}],
+            "FAIL",
+        ),
+        (
+            "battery species only",
+            "mon['pid']",
+            {},
+            [_GOOD_MON[0], {"pid": 0xABCD, "species": 17}],
+            "FAIL",
+        ),
+    ],
+)
+def test_judge_wrong_capture_branch_is_load_bearing(clause, needle, obs, mons, verdict):
+    """Each wrong-capture clause refuses its case, and the judge WITHOUT that clause lets the same wrong
+    capture through as PASS: the test goes red when the clause is removed."""
+    wrong = {**_GOOD_OBS, **obs}
+    assert judge(_GOOD_OBS, _GOOD_MON)[0] == "PASS"
+    assert judge(wrong, mons)[0] == verdict, clause
+    try:
+        slipped = _mutant_judge(needle)(wrong, mons)[0] == "PASS"
+    except (
+        IndexError
+    ):  # the clause also guards the slot-1 read: without it the judge crashes, not passes
+        slipped = clause.endswith("(one mon)")
+    assert slipped, f"{clause}: removing the clause no longer matters"
+
+
+def test_verdict_receipt_is_bound_at_consumption(tmp_path):
+    """verdict.json carries HEAD + the probe script hash; a moved HEAD or an edited probe is STALE."""
+    from tools import gen4_routes as routes
+
+    binding = routes.receipt_binding(SCRIPT, extra_modules=("tests/live/test_gen4_catch.py",))
+    assert binding["script"] == "lua/tests/probe_gen4_catch.lua"
+    assert binding["script_sha256"] == digest(SCRIPT)
+    path = tmp_path / "verdict.json"
+    path.write_text(json.dumps({**binding, "verdict": "PASS"}), encoding="utf-8")
+    assert routes.verify_receipt(path, head=binding["source_head"])[0] == "PASS"
+    assert routes.verify_receipt(path, head="0" * 40)[0] == "STALE"
+    path.write_text(
+        json.dumps({**binding, "script_sha256": "0" * 64, "verdict": "PASS"}), encoding="utf-8"
+    )
+    assert routes.verify_receipt(path, head=binding["source_head"])[0] == "STALE"
+
+
 def test_synth_bag_sidecar_checked(tmp_path):
     with pytest.raises(pytest.skip.Exception):
         check_synth_bag(tmp_path / "x.SaveRAM")
@@ -352,9 +444,14 @@ def test_live_wild_capture():
         off = parsed.profile.party_off + 8 + 1 * c.PARTY_MON_SIZE
         plain = c.decrypt_party(parsed.general[off : off + c.PARTY_MON_SIZE])
         summary["hidden_ability"] = (plain[c.HEADER_SIZE + c.BLOCK_SIZE + 0x19] >> 6) & 1
+    from tools import gen4_routes as routes
+
+    # bound at consumption: HEAD + the probe script + every module the verdict depended on
+    binding = routes.receipt_binding(SCRIPT, extra_modules=("tests/live/test_gen4_catch.py",))
     (lane / "verdict.json").write_text(
         json.dumps(
             {
+                **binding,
                 "verdict": verdict,
                 "reason": why,
                 "game": GAME,

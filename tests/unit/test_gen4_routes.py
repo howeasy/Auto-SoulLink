@@ -979,6 +979,7 @@ def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
         "synth_setup": lambda save, kind="party2": _SYNTH,
         "save_position": lambda save, game="HG": pos,
         "verify_saved": lambda *a: {"party": 1, "box": 0, "slot": 0},
+        "git_head": lambda: "f" * 40,  # git itself runs through the faked Popen
     }.items():
         monkeypatch.setattr(gr, name, fake)
     monkeypatch.setattr(gr.subprocess, "Popen", FakeProc)
@@ -1189,3 +1190,62 @@ def test_plan_hatch_paces_between_two_plain_tiles_and_skips_grass_coord_and_warp
     with pytest.raises(gr.RouteError) as e:
         gr.plan_hatch(boxed_in, {"map": 7, "x": 1, "y": 1, "dir": 1})
     assert e.value.reason == "no_pace_tile"
+
+
+# --- receipts bound at consumption (verify_receipt) ------------------------------------------------
+def _bound_receipt(tmp_path, **over):
+    doc = {
+        "source_head": "a" * 40,
+        "script": "lua/tests/gen4_route_play.lua",
+        "script_sha256": gr._sha256(gr.LUA),
+        "module_sha256": {"tools/gen4_routes.py": gr._sha256(gr.REPO / "tools/gen4_routes.py")},
+        "final_status": "PC_DEPOSIT",
+        **over,
+    }
+    path = tmp_path / "receipt.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def test_verify_receipt_passes_only_a_receipt_bound_to_this_tree(tmp_path):
+    head = "a" * 40
+    assert gr.verify_receipt(_bound_receipt(tmp_path), head=head)[0] == "PASS"
+    assert (
+        gr.verify_receipt(_bound_receipt(tmp_path, final_status="HATCH_OK"), head=head)[0] == "PASS"
+    )
+    assert (
+        gr.verify_receipt(_bound_receipt(tmp_path, final_status="RESYNC_LOOP"), head=head)[0]
+        == "FAIL"
+    )
+    assert gr.verify_receipt(_bound_receipt(tmp_path, final_status="OPEN"), head=head)[0] == "OPEN"
+
+
+@pytest.mark.parametrize("fault", ["head", "script", "module", "unbound_head", "unbound_modules"])
+def test_verify_receipt_is_stale_never_pass(tmp_path, fault):
+    over = {
+        "head": {"source_head": "b" * 40},
+        "script": {"script_sha256": "0" * 64},
+        "module": {"module_sha256": {"tools/gen4_routes.py": "0" * 64}},
+        "unbound_head": {"source_head": ""},
+        "unbound_modules": {"module_sha256": {}},
+    }[fault]
+    verdict, why = gr.verify_receipt(_bound_receipt(tmp_path, **over), head="a" * 40)
+    assert verdict == "STALE", why
+    # a passing status does not rescue a stale receipt; the same receipt, unfaulted, passes
+    assert gr.verify_receipt(_bound_receipt(tmp_path), head="a" * 40)[0] == "PASS"
+
+
+def test_a_missing_bound_file_is_stale(tmp_path):
+    path = _bound_receipt(tmp_path, script="lua/tests/no_such_script.lua")
+    assert gr.verify_receipt(path, head="a" * 40)[0] == "STALE"
+
+
+def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: "c" * 40)
+    b = gr.receipt_binding()
+    assert b["source_head"] == "c" * 40 and b["script"] == "lua/tests/gen4_route_play.lua"
+    assert b["script_sha256"] == gr._sha256(gr.LUA)
+    assert set(gr.BOUND_MODULES) <= set(b["module_sha256"])
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], {"status": "PC_DEPOSIT", "detail": "d"})
+    assert {k: rec[k] for k in b} == b
