@@ -77,6 +77,7 @@ def bind_cut(payload, expected_cut, *, title=None, rom_sha1=None):
 def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None, expected_cut=None) -> dict:
     """No stale neighbour, duplicate row, wrong artifact, MODEL-as-PHYSICAL or tail accepted."""
     lines = text.splitlines()
+    automatic_cut = expected_cut is None
     expected_cut = expected_cut or committed_cut(title)
     assert lines and lines[-1] in {"RESULT: PASS", "RESULT: FAIL", "RESULT: OPEN"}, "missing terminal RESULT"
     assert sum(line.startswith("RESULT:") for line in lines) == 1, "multiple RESULT lines"
@@ -87,7 +88,8 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
         row, status, raw = match.groups()
         assert row not in rows, f"duplicate row {row}"
         payload = json.loads(raw)
-        bind_cut(payload, expected_cut, title=title, rom_sha1=rom_sha1)
+        row_cut = committed_cut(title, script=REPO / gen4_evidence.SCRIPTS["faint"]) if automatic_cut and row == "o" and payload.get("producer") == "C1-8" else expected_cut
+        bind_cut(payload, row_cut, title=title, rom_sha1=rom_sha1)
         assert payload["title"] == title and payload["rom_sha1"].lower() == rom_sha1.lower(), "wrong artifact binding"
         assert payload["level"] == "PHYSICAL", "MODEL evidence cannot close physical rows"
         if run_id is not None:
@@ -212,7 +214,7 @@ def examples():
         "f": {"fps": [208.6, 97.3, 79.7, 66.1, 57.9, 52.9], "sustained": {
             name: {"requested_rate": 100, "frames": 3000, "registered_hooks": hooks,
                    "requested_execution_mode": "paced_production_frameadvance",
-                   "throttle_config": {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0, "AutoMinimizeSkipping": False},
+                   "throttle_config": {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0, "AutoMinimizeSkipping": False, "VSyncThrottle": False, "SuperHawkThrottle": False},
                    "timing_kind": "wall_frame_interval", "clock_source": "MODEL high-resolution wall clock",
                    "clock": {"monotonic_guaranteed": True},
                    "frame_times": [560190 / 33513982] * 3000,
@@ -232,7 +234,8 @@ def examples():
               "identity": "1234", "expected_identity": "1234", "invalid_rejected": True,
               "signature_rejected": True, "provenance_rejected": True},
         "i": {"written": 9, "target": 9, "original": 10, "no_write": 10, "box_dirty": 2,
-              "box_target": 2, "box_original": 1, "box_without_dirty": 1, "cold_reload": 9, "save_completed": True,
+              "box_target": 2, "box_original": 1, "box_without_dirty": 2, "box_cold_reload": 2,
+              "box_without_dirty_cold_reload": 2, "cold_reload": 9, "save_completed": True,
               "save_driver_cases": {name: [{"driver": 100, "data": 200, "state": state, "frame": frame}
                                           for frame, state in enumerate((1, 2, 1))]
                                     for name in ("party-write", "no-write", "box-write", "box-no-dirty")}},
@@ -258,7 +261,7 @@ NEGATIVES = {
     "a": ("negative_hits", 1), "b": ("active_fault", False), "c": ("quiet_changes", 1),
     "d": ("host_hits", 1), "e": ("reloaded", 1), "f": ("sustained", {"zero": {"requested_rate": 300, "frames": 3000}}),
     "g": ("bogus_refused", False), "h": ("signature_rejected", False),
-    "i": ("box_without_dirty", 2), "j": ("patched_hash", "1" * 32),
+    "i": ("box_cold_reload", 1), "j": ("patched_hash", "1" * 32),
     "k": ("unpinned", "pinned"), "l": ("no_buttons_overworld", True),
     "m": ("save_same_as_idle", True), "n": ("physical", {"first_expected": 1, "first_seen": 0, "cases": []}),
 }
@@ -318,6 +321,27 @@ def test_census_omitted_internal_cause_goes_red(api):
     assert not api.census_ok(to_lua(api._runtime, negative))
     assert api.evaluate("c", to_lua(api._runtime, negative))[0] == "FAIL"
     assert api.census_ok(to_lua(api._runtime, original))
+
+
+def test_owner_census_two_frames_allowed_three_red_and_revert(api):
+    value = examples()["c"]
+    value["changes"][0]["frame"] = value["causes"][0]["frame"] + 2
+    assert api.evaluate("c", to_lua(api._runtime, value)) == "PASS"
+    value["changes"][0]["frame"] += 1
+    assert api.evaluate("c", to_lua(api._runtime, value))[0] == "FAIL"
+    value["changes"][0]["frame"] -= 1
+    assert api.evaluate("c", to_lua(api._runtime, value)) == "PASS"
+
+
+def test_owner_box_persistence_flag_observational_reload_loss_red(api):
+    value = examples()["i"]
+    value.update(box_without_dirty=value["box_target"], box_cold_reload=value["box_target"],
+                 box_without_dirty_cold_reload=value["box_target"], dirty_flag_observations={"set": 0, "not_set": 0})
+    assert api.evaluate("i", to_lua(api._runtime, value)) == "PASS"
+    value["box_cold_reload"] = value["box_original"]
+    assert api.evaluate("i", to_lua(api._runtime, value))[0] == "FAIL"
+    value["box_cold_reload"] = value["box_target"]
+    assert api.evaluate("i", to_lua(api._runtime, value)) == "PASS"
 
 
 def test_cpu_distribution_control_is_not_window_length(api):
@@ -425,6 +449,7 @@ def test_a_live_field_with_no_idle_stalls_the_boot_instead_of_overworld(api):
         step=function(buttons) INPUTS=INPUTS+1; FRAME=FRAME+1 end
         frame=function() return FRAME end''')
     result = api.boot("persistence", 50, r.globals().idle, r.globals().live, r.globals().step, r.globals().frame)
+    assert result.first_field_live_frame == 1
     assert result.overworld is False
     assert result.boot_frame == 50 and r.globals().INPUTS == 50
     assert result.other_boot_buttons == 0
@@ -585,7 +610,7 @@ def test_f_owner_native_cadence_floor_red_revert(api, fault):
 
 
 @pytest.mark.parametrize("fault", [
-    "nonmonotonic", "nonmonotonic_floor", "monotonic_missing", "monotonic_floor_missing", "execution_mode", "throttle_config",
+    "nonmonotonic", "nonmonotonic_floor", "monotonic_missing", "monotonic_floor_missing", "execution_mode", "throttle_config", "throttle_vsync",
     "frames_below_3000", "overworld_attempts", "overworld_hp_reads", "overworld_phase",
     "on_demand_removal", "sequence_length", "mean_300fps_fake_throttle",
 ])
@@ -607,6 +632,8 @@ def test_f_contract_clauses_red_revert(api, fault):
         sample["requested_execution_mode"] = "script_frameadvance_capacity"
     elif fault == "throttle_config":
         sample["throttle_config"]["Unthrottled"] = True
+    elif fault == "throttle_vsync":
+        sample["throttle_config"]["VSyncThrottle"] = True
     elif fault == "frames_below_3000":
         sample["frames"] = 2999
         sample["frame_times"].pop()  # Keep length consistent: minimum window must catch this.
@@ -679,7 +706,7 @@ def test_phase_blocked_pc_open_active_wrong_fail_revert(api):
     cases = phase_examples()
     assert phase_case_plan(cases, []) == (cases, [])
     runnable, reasons = phase_case_plan([cases[0], cases[2]], [{"name": "pc", "blocked_reason": "native box slot absent"}])
-    assert not runnable and reasons == ["pc: native box slot absent"]
+    assert {case["name"] for case in runnable} == {"battle", "reset"} and reasons == ["pc: native box slot absent"]
     result, rows = finish_rows(api, examples(), {"n": ("OPEN", {"reason": reasons[0]})}, ("PASS", {}))
     assert result == "OPEN" and rows["n"][0] == "OPEN"
     malformed = copy.deepcopy(cases)
@@ -688,6 +715,13 @@ def test_phase_blocked_pc_open_active_wrong_fail_revert(api):
         phase_case_plan(malformed, [])
     assert phase_case_plan(cases, []) == (cases, [])
     assert phase_case_plan([], [])[1] == ["battle: required phase case absent", "pc: required phase case absent", "reset: required phase case absent"]
+
+
+def test_known_runtime_bridges_resolve_unknown_recipe_stays_open():
+    legs, reasons = resolve_pack_route(["gen4_routes:battle_settled", "gen4_pc:reach_pc_terminal"], {})
+    assert not reasons and [leg["bridge"] for leg in legs] == ["gen4_routes:battle_settled", "gen4_pc:reach_pc_terminal"]
+    legs, reasons = resolve_pack_route(["unknown_walk"], {})
+    assert not legs and reasons
 
 
 def recipe_example():
@@ -983,18 +1017,41 @@ CONTROL_REDS = {
     "rtc-unpinned": {"c": "unpinned core settings"},
     "no-buttons": {"l": "buttons-only CONTINUE failed"},
 }
+assert set(CONTROL_REDS) == {"patched-rom", "rtc-unpinned", "no-buttons"}
 
 
 def control_red_failures(collected: dict) -> list:
     """[(case, row, status, reason)] for every control that did not FAIL its targeted row with its own reason."""
+    assert set(CONTROL_REDS) == {"patched-rom", "rtc-unpinned", "no-buttons"}
     out = []
     for case, want in CONTROL_REDS.items():
         for row, needle in want.items():
-            status, payload = collected[case][row]
+            status, payload = collected.get(case, {}).get(row, ("OPEN", {"reason": "control row absent"}))
             reason = str(payload.get("reason", ""))
             if status != "FAIL" or needle not in reason:
                 out.append((case, row, status, reason))
     return out
+
+
+def publish_control_evidence(batch, collected, rows):
+    missed = control_red_failures(collected)
+    evidence = {"missed": missed, "cases": {case: {row: {"status": status, "reason": payload.get("reason")}
+                for row, (status, payload) in values.items()} for case, values in collected.items()}}
+    (batch / "control-reds.json").write_text(json.dumps(evidence), encoding="utf-8")
+    for case, row, status, reason in missed:
+        rows[row] = ("FAIL", {**rows.get(row, (None, {}))[1],
+                              "reason": f"control {case} did not produce its targeted red: {status}: {reason}"})
+    return missed
+
+
+def publish_combined(batch, rows, metadata):
+    statuses = [status for status, _ in rows.values()]
+    result = "FAIL" if "FAIL" in statuses else "OPEN" if "OPEN" in statuses else "PASS"
+    lines = [f"PROBE {row} {status} {json.dumps({**metadata, **payload}, sort_keys=True)}"
+             for row, (status, payload) in rows.items()]
+    lines.append(f"RESULT: {result}")
+    (batch / "combined.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return result
 
 
 def test_a_control_that_does_not_go_red_fails_the_shakedown():
@@ -1008,6 +1065,21 @@ def test_a_control_that_does_not_go_red_fails_the_shakedown():
                 broke = {c: dict(rows) for c, rows in good.items()}
                 broke[case][row] = bad
                 assert control_red_failures(broke) == [(case, row, bad[0], bad[1].get("reason", ""))], (case, row)
+
+
+def test_control_misfire_published_before_assert_never_pass(tmp_path):
+    collected = {case: {row: ("FAIL", {"reason": needle}) for row, needle in want.items()}
+                 for case, want in CONTROL_REDS.items()}
+    collected["patched-rom"]["j"] = ("PASS", {"reason": "unchanged hash"})
+    rows = {row: ("PASS", {"observation": {"retained": True}}) for row in "abcdefghijklmno"}
+    missed = publish_control_evidence(tmp_path, collected, rows)
+    result = publish_combined(tmp_path, rows, dict(MODEL_CUT, title="heartgold", rom_sha1="2" * 40, level="PHYSICAL"))
+    assert result == "FAIL" and (tmp_path / "control-reds.json").is_file()
+    text = (tmp_path / "combined.txt").read_text()
+    assert "PROBE j FAIL" in text and text.endswith("RESULT: FAIL\n")
+    assert rows["j"][1]["observation"] == {"retained": True}
+    with pytest.raises(AssertionError, match=str(tmp_path).replace("\\", r"\\")):
+        assert not missed, f"control(s) did not produce their targeted red in {tmp_path}: {missed}"
 
 
 def synth_identity_present(decoded, new_pid):
@@ -1036,6 +1108,8 @@ def resolve_pack_route(route, recipes):
     """Convert pinned route_legs to bounded normal-button instructions for Lua."""
     assert isinstance(route, list) and isinstance(recipes, dict), "route/route_legs shape"
     resolved, reasons = [], []
+    bridges = {"gen4_routes:battle_settled", "gen4_pc:reach_pc_terminal", "boot_continue_to_overworld",
+               "pc_open_storage", "pc_deposit_first_party_mon", "pc_withdraw_box_mon", "pc_exit_app"}
     buttons = {"A", "B", "X", "Y", "Start", "Select", "Up", "Down", "Left", "Right", "L", "R"}
     for leg in route:
         if isinstance(leg, dict):  # Existing explicit frame/button scenario compatibility.
@@ -1045,6 +1119,9 @@ def resolve_pack_route(route, recipes):
             resolved.append(copy.deepcopy(leg))
             continue
         assert isinstance(leg, str) and leg, "malformed route leg"
+        if leg in bridges:
+            resolved.append({"bridge": leg, "max_frames": 12000, "source": ["tools/gen4_routes.py + lua/tests/gen4_route_play.lua"]})
+            continue
         recipe = recipes.get(leg)
         if recipe is None:
             reasons.append(f"button recipe absent for named route leg {leg}")
@@ -1081,7 +1158,7 @@ def resolve_pack_route(route, recipes):
         assert span <= maximum, f"{leg}: steps exceed max_frames"
         resolved.append({"name": leg, "steps": copy.deepcopy(steps), "until": copy.deepcopy(predicate),
                          "max_frames": maximum, "source": copy.deepcopy(recipe["source"])})
-    return ([] if reasons else resolved), reasons
+    return resolved, reasons
 
 
 def phase_case_plan(cases, blocked, recipes=None):
@@ -1123,7 +1200,7 @@ def phase_case_plan(cases, blocked, recipes=None):
         resolved, route_reasons = resolve_pack_route(route, recipes or {})
         reasons.extend(f"{name}: {why}" for why in route_reasons)
         resolved_cases.append({**case, "route": resolved})
-    return ([] if reasons else resolved_cases), reasons
+    return resolved_cases, reasons
 
 
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
@@ -1155,6 +1232,12 @@ def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
                run_id=lane.parent.name + "/" + lane.name, state_path=str(lane / "reload.State").replace("\\", "/"))
     request, response = lane / "perf-ready.txt", lane / "perf-processes.json"
     cfg["perf_request"], cfg["perf_response"] = str(request), str(response)
+    cfg["bridge_request"], cfg["bridge_response"], cfg["bridge_lane"] = (lane / "bridge-request.json").as_posix(), (lane / "bridge-response.json").as_posix(), lane.as_posix()
+    from tools import gen4_routes as routes
+    game = {"heartgold": "HG", "soulsilver": "SS", "heartgold_hge": "hge"}[title]
+    synth = routes.synth_setup(save) if save_setup(save)["setup"] == "SYNTH" else None
+    planner = routes.BridgePlanner(source, game, synth)
+    bridge_seen = None
     cfg["jit"] = settings["CoreSyncSettings"][CORE]["EnableJIT"]
     cfg["use_real_time"] = settings["CoreSyncSettings"][CORE]["UseRealTime"]
     if case == "patched-rom":
@@ -1172,6 +1255,23 @@ def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
     deadline = time.monotonic() + int(os.environ.get("SLINK_GEN4_PROBE_TIMEOUT", "600"))
     try:
         while proc.poll() is None and time.monotonic() < deadline:
+            bridge_request = Path(cfg["bridge_request"])
+            if bridge_request.is_file():
+                try:
+                    pending = json.loads(bridge_request.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    pending = None  # The producer may still be finishing this one transaction.
+                if pending and pending["id"] != bridge_seen:
+                    bridge_seen = pending["id"]
+                    try:
+                        answer = {"id": bridge_seen, "route": planner.plan(pending)}
+                    except (routes.RomAbsent, FileNotFoundError) as exc:
+                        answer = {"id": bridge_seen, "open": str(exc)}
+                    except routes.RouteError as exc:
+                        answer = {"id": bridge_seen, "error": str(exc)}
+                    temp = Path(cfg["bridge_response"]).with_suffix(".tmp")
+                    temp.write_text(json.dumps(answer), encoding="utf-8")
+                    temp.replace(cfg["bridge_response"])
             if request.is_file() and not response.is_file():
                 inventory = {"foreign_pids": [pid for pid in emulator_pids() if pid != proc.pid],
                              "checked_at_utc": datetime.datetime.now(datetime.UTC).isoformat()}
@@ -1269,12 +1369,9 @@ def mutation_specs(codec, decoded, artifact, scenario):
                   "write": True, "changes": changes(raw, after)}
     specs = {"party-write": party_spec, "no-write": dict(party_spec, operation="no-write", write=False, changes=[]),
              "slot": index, "key": mon["key"], "original": mon["hp"], "target": target}
-    if p.get("pc", {}).get("box_modified_flag_off") is None:
-        specs["box_open"] = "i: pack box modified geometry is OPEN"
-        return specs, None
     occupied = [(box, slot, m) for box, data in enumerate(decoded.boxes()) for slot, m in data["mons"].items()]
     if not occupied:
-        specs["box_open"] = "i: played fixture needs an existing occupied PC slot for modified-bit control"
+        specs["box_open"] = "i: played fixture needs an existing occupied PC slot for persistence"
         return specs, None
     box, slot, box_mon = occupied[0]
     pc_off = decoded.profile.boxes_off + box * decoded.profile.box_stride + slot * codec.BOX_MON_SIZE
@@ -1318,7 +1415,7 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
     specs, reason = mutation_specs(codec, decoded, artifact, cfg)
     if specs is None:
         return None, reason
-    samples, written_battery, save_driver_cases = {}, None, {}
+    samples, written_battery, save_driver_cases, box_batteries, dirty_observations = {}, None, {}, {}, {}
     for case in ("party-write", "no-write", "box-write", "box-no-dirty"):
         if case not in specs:
             continue
@@ -1335,9 +1432,12 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
             return None, f"i: {case} save-driver state trace absent"
         assert save_driver_complete(trace), f"{case}: native save-driver active-to-idle transition absent"
         save_driver_cases[case] = trace
+        dirty_observations[case] = {"before": observation.get("modified_before"), "after_save": observation.get("modified"),
+                                    "requested": specs[case].get("dirty")}
         result = codec.parse_save(battery.read_bytes(), decoded.profile)
         assert codec.counter_newer(result.counter, decoded.counter) > 0, f"{case}: no newer coherent native save bank"
         if case.startswith("box"):
+            box_batteries[case] = battery
             mon = result.boxes()[specs["box"]]["mons"][specs["box_slot"]]
             assert mon["key"] == specs["box_key"], "box identity drift"
             samples[case] = mon["friendship"]
@@ -1357,10 +1457,24 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
         return None, cold["i"][1].get("reason", "i: cold RAM party readback absent")
     reloaded = codec.decode_party_mon(bytes.fromhex(runtime["runtime_hex"]), decoded.profile)
     assert reloaded["key"] == specs["key"], "cold-reload identity drift"
+    box_reloaded = {}
+    for case, battery in box_batteries.items():
+        cold_cfg = dict(cfg, save_witness=source_witness(codec, codec.parse_save(battery.read_bytes(), decoded.profile)),
+                        cold_readback=specs[case])
+        cold, _ = launch_probe(module, title, source, battery, profile, base, "cold-reload",
+                               batch / f"cold-reload-{case}", cold_cfg)
+        raw = cold["i"][1].get("observation", {}).get("runtime_hex")
+        if not raw:
+            return None, f"i: {case} cold RAM box readback absent"
+        mon = codec.decode_box_mon(bytes.fromhex(raw), decoded.profile)
+        assert mon["key"] == specs["box_key"], "cold box identity drift"
+        box_reloaded[case] = mon["friendship"]
     return {"written": samples["party-write"], "no_write": samples["no-write"], "original": specs["original"],
             "target": specs["target"], "box_dirty": samples.get("box-write"), "box_without_dirty": samples.get("box-no-dirty"),
             "box_original": specs.get("box_original"), "box_target": specs.get("box_target"), "cold_reload": reloaded["hp"],
             "box_open": specs.get("box_open"),
+            "box_cold_reload": box_reloaded.get("box-write"), "box_without_dirty_cold_reload": box_reloaded.get("box-no-dirty"),
+            "dirty_flag_observations": dirty_observations,
             "save_driver_cases": save_driver_cases,
             "save_completed": len(save_driver_cases) == 4 and all(save_driver_complete(trace) for trace in save_driver_cases.values()),
             "oracle": "save-driver active-to-idle state reads + server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
@@ -1409,6 +1523,7 @@ def test_gen4_hook_probe(api, title):
     for key in ("route", "persistence_route"):
         cfg[key], why = resolve_pack_route(cfg.get(key, artifact.get(key, [])), recipes)
         cfg["route_open_reasons"][key] = why
+    cfg["route"] += cfg["persistence_route"]  # Native SAVE also supplies row m's save-phase histogram.
     cfg.update(save_setup(save))
     if cfg["setup"] == "SYNTH":
         assert synth_identity_present(decoded, cfg["new_pid"]), "SYNTH sidecar new_pid absent from decoded party/boxes"
@@ -1423,10 +1538,13 @@ def test_gen4_hook_probe(api, title):
     try:
         collected = {}
         for case in ("baseline", "rtc-repeat", "rtc-unpinned", "no-buttons", "patched-rom"):
-            rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case, cfg)
+            try:
+                rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case, cfg)
+            except AssertionError as exc:
+                if case not in CONTROL_REDS:
+                    raise
+                rows = {row: ("OPEN", {"reason": f"control attempt lacks complete bound observation: {exc}"}) for row in ROWS}
             collected[case] = rows
-        missed = control_red_failures(collected)  # a control that does not go red proves nothing
-        assert not missed, f"control(s) did not produce their targeted red: {missed}"
         for row, (status, payload) in collected["baseline"].items():
             if payload.get("observation") is not None:
                 observations[row] = payload["observation"]
@@ -1471,7 +1589,11 @@ def test_gen4_hook_probe(api, title):
                     "baseline_fps": 1, "restored_fps": min(p["restored_fps"] / p["baseline_fps"] for p in measured),
                     "cases": measured,
                 }
-                errors.pop("n", None)
+                gaps = [gap for p in measured for gap in p.get("bridge_gaps", [])]
+                if gaps:
+                    errors["n"] = ("OPEN", {"reason": "n: " + "; ".join(gaps)})
+                elif not reasons:
+                    errors.pop("n", None)
         performance = os.environ.get("SLINK_GEN4_PERF_RECEIPT")
         if performance:
             observed_perf, perf_reason = perf_f(performance.format(title=title), title, rom_sha1, source_head)
@@ -1484,17 +1606,19 @@ def test_gen4_hook_probe(api, title):
         required_o = row_o(Path(external.format(title=title)) if external else None, title, rom_sha1, source_head)
         result, rows = finish_rows(api, observations, errors, required_o)
         committed_cut(title, profile=profile, source_head=source_head)
-        text = []
+        missed = publish_control_evidence(batch, collected, rows)
         for row, (status, payload) in rows.items():
+            if row == "o":
+                continue  # Preserve the C1-8 producer's independently bound surface.
             payload = {**payload, "schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
                        "source_head": source_head, "level": "PHYSICAL", "run_id": batch.name,
                        "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "requested_rate": 300}
             payload.update(module_sha256=cut["module_sha256"], surface_sha256=cut["surface_sha256"], receipt_kind=cut["receipt_kind"])
             if row != "o":
                 payload.update(save_setup(save))
-            text.append(f"PROBE {row} {status} {json.dumps(payload, sort_keys=True)}")
-        text.append(f"RESULT: {result}")
-        (batch / "combined.txt").write_text("\n".join(text) + "\n", encoding="utf-8")
+            rows[row] = (status, payload)
+        result = publish_combined(batch, rows, {})
+        assert not missed, f"control(s) did not produce their targeted red in {batch}: {missed}"
         assert result != "FAIL", f"G1 FAIL; preserved receipt {batch / 'combined.txt'}"
         if result == "OPEN":
             missing = "; ".join(f"{row}: {payload.get('reason')}" for row, (status, payload) in rows.items() if status == "OPEN")

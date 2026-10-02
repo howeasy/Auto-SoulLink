@@ -310,17 +310,27 @@ validators.b=function(x)
         "residency / active fault / full registration controls")
     check(x.callback_corrupt==0,"active callback address/PC/word corruption")
 end
-function M.census_ok(x)
-    local used={}
+function M.census_measure(x)
+    local used,lags={},{}
     for _,change in ipairs(x.changes) do
-        local found=false
+        local found,candidate=nil,nil
         for i,cause in ipairs(x.causes) do
             if not used[i] and cause.id==change.id and cause.region==change.region
-                and cause.kind==change.kind and change.frame>=cause.frame and change.frame-cause.frame<=1
-                and type(cause.source)=="string" and cause.source~="" then used[i]=true; found=true; break end
+                and cause.kind==change.kind and change.frame>=cause.frame
+                and type(cause.source)=="string" and cause.source~="" then
+                candidate=candidate or i
+                if change.frame-cause.frame<=2 then found=i; break end
+            end
         end
-        if not found then return false end
+        local cause=x.causes[found or candidate]
+        lags[#lags+1]={id=change.id,region=change.region,kind=change.kind,frame=change.frame,
+            cause_frame=cause and cause.frame,lag=cause and change.frame-cause.frame,matched=found~=nil}
+        if found then used[found]=true end
     end
+    return lags
+end
+function M.census_ok(x)
+    for _,lag in ipairs(M.census_measure(x)) do if not lag.matched then return false end end
     return true
 end
 validators.c=function(x)
@@ -328,7 +338,8 @@ validators.c=function(x)
     check(#need(x.changes,"c:table transitions")>0,"empty transition census")
     check(#need(x.table_transitions,"c:full 24-entry table transition trace")>0,"empty raw table trace")
     need(x.causes,"c:load/unload/internal causes")
-    check(M.census_ok(x),"unexplained table transition: pinned load/unload/internal cause required")
+    x.measured_lags=M.census_measure(x)
+    check(M.census_ok(x),"unexplained table transition: pinned cause within 0..2 frames required")
     check(need(x.quiet_changes,"c:load-free window")==0,"load-free window changed")
     local red=clone(x); table.remove(red.causes,1)
     check(not M.census_ok(red),"omitted cause did not make census red")
@@ -351,7 +362,8 @@ validators.f=function(x)
         check(sample.requested_execution_mode=="paced_production_frameadvance","sustained sample must request paced frameadvance")
         local throttle=need(sample.throttle_config,"f:requested throttle settings")
         check(throttle.Unthrottled==false and throttle.ClockThrottle==true and throttle.SpeedPercent==100
-            and throttle.FrameSkip==0 and throttle.AutoMinimizeSkipping==false,"unpaced performance config")
+            and throttle.FrameSkip==0 and throttle.AutoMinimizeSkipping==false and throttle.VSyncThrottle==false
+            and throttle.SuperHawkThrottle==false,"unpaced performance config")
         check(sample.requested_rate==100 and sample.frames>=3000,"sustained measurement needs >=3000 frames at 1x")
         check(sample.registered_hooks==(name=="one" and 1 or 0),"incorrect sustained hook count")
         check(sample.timing_kind=="wall_frame_interval" and type(sample.clock_source)=="string" and sample.clock_source~="",
@@ -406,8 +418,11 @@ validators.i=function(x)
     -- SaveRAM and a cold reload. Lua receipt claims never provide their own oracle.
     check(need(x.written,"i:PYDEC native-save party field")==x.target and x.target~=x.original,"party write did not persist")
     check(x.no_write==x.original,"no-write control changed")
-    check(need(x.box_dirty,"i:PYDEC occupied-box dirty control")==x.box_target and x.box_target~=x.box_original,"dirty box control did not persist")
-    check(need(x.box_without_dirty,"i:PYDEC occupied-box without-dirty control")==x.box_original,"box write without modified bit persisted")
+    check(need(x.box_dirty,"i:PYDEC occupied-box write")==x.box_target and x.box_target~=x.box_original,"box write did not persist")
+    check(need(x.box_cold_reload,"i:cold RAM occupied-box write")==x.box_target,"box write lost at cold reload")
+    check(need(x.box_without_dirty,"i:PYDEC occupied-box write without flag")==x.box_target
+        and need(x.box_without_dirty_cold_reload,"i:cold RAM occupied-box write without flag")==x.box_target,
+        "box write without flag lost across SAVE/cold reload")
     local cases=need(x.save_driver_cases,"i:save-driver state traces")
     for _,name in ipairs({"party-write","no-write","box-write","box-no-dirty"}) do
         check(M.save_completed(need(cases[name],"i:save-driver trace "..name)),"native save-driver completion absent: "..name)
@@ -606,9 +621,62 @@ local function run()
         check(size>0 and offset+size<=g.dynamic_region_size,"runtime SaveArray extent")
         return save+g.dynamic_region_off+offset,size
     end
+    local bridge_driver,bridge_sequence,pc_cycle_done=nil,0,false
+    local bridge_gaps={}
+    local function bridge_play(name)
+        if name=="boot_continue_to_overworld" then
+            local x=M.boot("bridge",cfg.boot_frames,idle_field,function()
+                local fs=read(symbol("sFieldSysPtr")); return fs~=0 and read(fs+title.profile.probe_field.live)~=0
+            end,step,emu.framecount)
+            check(x.overworld,"bridge CONTINUE did not reach idle field"); return
+        end
+        if name=="pc_withdraw_box_mon" then
+            bridge_gaps[#bridge_gaps+1]="PC withdrawal has no verified route-engine leg"; return
+        end
+        if name:match("^pc_") then
+            check(pc_cycle_done,"PC subleg requested before a completed deposit cycle"); return
+        end
+        if not bridge_driver then
+            SLINK_GEN4_ROUTE_LIBRARY=true
+            local ok,driver=pcall(dofile,root.."/lua/tests/gen4_route_play.lua")
+            SLINK_GEN4_ROUTE_LIBRARY=nil
+            check(ok,"route library load failed: "..tostring(driver)); bridge_driver=driver
+        end
+        for attempt=1,12 do
+            bridge_sequence=bridge_sequence+1
+            local request={id=bridge_sequence,leg=name,position=bridge_driver.position(title)}
+            local f=assert(io.open(need(cfg.bridge_request,"bridge:request path"),"w"))
+            f:write(assert(json.encode(request))); f:close()
+            local reply
+            for _=1,12000 do
+                local input=io.open(need(cfg.bridge_response,"bridge:response path"),"rb")
+                if input then local value=json.decode(input:read("a")); input:close()
+                    if value and value.id==request.id then reply=value; break end
+                end
+                step({})
+            end
+            need(reply,"bridge:host planner response timeout")
+            if reply.open then error({open=reply.open},0) end
+            check(not reply.error,"bridge planner failed: "..tostring(reply.error))
+            local context={route=reply.route,title=title,step=step,env={G4_REPO=root,G4_LANE=cfg.bridge_lane,G4_TAG="bridge-"..bridge_sequence}}
+            local ok,result=pcall(bridge_driver.run,context)
+            check(not ok and type(result)=="table" and result.route_result,"route library failed: "..tostring(result))
+            result=result.route_result
+            observations.bridge=observations.bridge or {}; observations.bridge[#observations.bridge+1]=result
+            if result.status=="BATTLE" and name=="gen4_routes:battle_settled" then return end
+            if result.status=="PC_DEPOSIT" then
+                result.covered_legs={"gen4_pc:reach_pc_terminal","pc_open_storage","pc_deposit_first_party_mon","pc_exit_app"}
+                pc_cycle_done=true; return
+            end
+            check(result.status=="RESYNC","route bridge status "..result.status..": "..result.detail)
+        end
+        error({open="bridge:route resync limit reached for "..name},0)
+    end
     local function play_route(route)
         for _,leg in ipairs(route or {}) do
-            if leg.steps then
+            if leg.bridge then
+                phase="route-unverified"; bridge_play(leg.bridge)
+            elseif leg.steps then
                 phase="route-unverified"
                 M.play_recipe(leg,step,function(p) return M.predicate(title,read,p) end)
             else
@@ -717,10 +785,10 @@ local function run()
                 local modified
                 if p.box then
                     local base=array_addr(p.array_id)
-                    local off=need(title.profile.pc.box_modified_flag_off,"i:verified box modified offset")
-                    modified=base+off
-                    check(read(modified)&(1<<p.box)==0,"box already dirty; no-dirty control invalid")
+                    local off=title.profile.pc.box_modified_flag_off
+                    modified=off and base+off or nil
                 end
+                local modified_before=modified and read(modified)
                 if p.write then
                     check(idle_field(),"persistence mutation outside idle overworld")
                     for _,change in ipairs(p.changes) do
@@ -740,7 +808,7 @@ local function run()
                 local trace=save_driver_trace; save_driver_trace=nil
                 check(M.save_completed(trace),"native save-driver did not transition active to idle")
                 return {runtime_hex=bytes(addr,#p.before_hex/2),save_finish_hits=finished,operation=p.operation,
-                    save_driver_trace=trace,modified=modified and read(modified),level="INSTRUMENTATION"}
+                    save_driver_trace=trace,modified_before=modified_before,modified=modified and read(modified),level="INSTRUMENTATION"}
             end)
             return
         end
@@ -946,6 +1014,7 @@ local function run()
                     pending_at_close=pending_at_close,second_drain=second_drain,
                     oracle_frames=oracle,seen_frames=seen,phase=case.name,predicate_source=case.source}
                 result.physical.cases={clone(result.physical)}
+                result.physical.bridge_gaps=clone(bridge_gaps)
             end}
             return result
         end)

@@ -23,7 +23,7 @@ SCRIPTS = {
 PACKS = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
 COMMON = ("tools/gen4_evidence.py", "lua/json_codec.lua", "lua/hook_registry.lua")
 PYTHON = {
-    "probe": ("tests/live/test_gen4_probe_gates.py", "tools/gen4_fixtures.py", "tools/gen4_pins.py", "server/adapters/gen4_codec.py"),
+    "probe": ("tests/live/test_gen4_probe_gates.py", "lua/tests/gen4_route_play.lua", "tools/gen4_routes.py", "tools/gen4_fixtures.py", "tools/gen4_pins.py", "server/adapters/gen4_codec.py"),
     "faint": ("tests/live/test_gen4_battle_faint.py", "tools/gen4_fixtures.py", "tools/gen4_pins.py"),
     "route": ("tools/gen4_routes.py", "tools/gen4_fixtures.py", "tools/gen4_pins.py", "server/adapters/gen4_codec.py"),
     "catch": ("tests/live/test_gen4_catch.py", "tools/gen4_routes.py", "tools/gen4_fixtures.py", "tools/gen4_pins.py", "server/adapters/gen4_codec.py"),

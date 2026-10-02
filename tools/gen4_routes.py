@@ -872,6 +872,41 @@ def pack_profile_slice(game: str) -> dict:
     return {k: pr[k] for k in ("save", "save_ptr", "party_off", "pkm")}
 
 
+BRIDGE_LEGS = {"gen4_routes:battle_settled", "gen4_pc:reach_pc_terminal", "boot_continue_to_overworld"}
+
+
+class BridgePlanner:
+    """The probe requests routes from its CURRENT RAM position, using the existing C1-9 planner.
+
+    A PC bridge executes the proven enter/deposit/SAVE/exit cycle. Withdrawal is
+    still outside that engine's capabilities and must remain explicitly OPEN.
+    No state load or game-data mutation occurs at a bridge boundary.
+    """
+    def __init__(self, rom, game, synth=None, pret=DEFAULT_PRET):
+        self.rom, self.game, self.pret, self.synth = rom, game, pret, synth
+        self.world = None
+        self.pc = None
+
+    def plan(self, request):
+        name, position = request["leg"], request["position"]
+        if name not in BRIDGE_LEGS or name == "boot_continue_to_overworld":
+            raise RouteError("unsupported_bridge", name)
+        if self.world is None:
+            self.world = load_world(self.rom, self.pret)
+        if name == "gen4_routes:battle_settled":
+            return plan_route(self.world, position, wild_land_day(Path(self.pret)), self.game)
+        if self.synth is None:
+            raise RomAbsent("OPEN PC bridge requires a disclosed SYNTH party2 input")
+        if self.pc is None:
+            self.pc = load_errand(self.rom, self.pret, "cherrygrove_pc", CHERRYGROVE_ID)
+        extra = {"run_from_wild": pack_legs(self.game, PC_LEGS)["run_from_wild"],
+                 "persistence": pack_legs(self.game, SAVE_LEGS), "ram": pack_ram(self.game),
+                 "synth": self.synth, "profile": pack_profile_slice(self.game)}
+        if position["map"] == self.pc.house_id:
+            return {**plan_pc(self.pc, position, self.game), **extra}
+        return {**plan_errand(self.world, self.pc, "enter", position, self.game), **extra}
+
+
 SYNTH_SCHEMA = "gen4-synth-v1"
 
 

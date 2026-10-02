@@ -15,11 +15,32 @@
 -- SAVE; "reload" = a fresh boot from the saved battery, confirmed by RAM.
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
 -- same phase), done=1 = the phase finished (the next phase starts from the state).
+local Driver={}
+function Driver.position(title)
+  local fs=memory.read_u32_le(title.symbols.sFieldSysPtr.address,"ARM9 System Bus")
+  assert(fs~=0,"bridge FieldSystem absent")
+  local loc=memory.read_u32_le(fs+0x20,"ARM9 System Bus")
+  local spec=title.profile.location
+  local result={}
+  for _,key in ipairs({"map","warp","x","y","dir"}) do
+    local v=memory.read_u32_le(loc+spec[key.."_off"],"ARM9 System Bus")
+    result[key]=v>=0x80000000 and v-0x100000000 or v
+  end
+  return result
+end
+function Driver.run(bridge)
+local native_emu,native_joypad=emu,joypad
+local emu=bridge and setmetatable({frameadvance=function()
+  local buttons=bridge.buttons or {}; bridge.buttons={}; bridge.step(buttons)
+end},{__index=native_emu}) or native_emu
+local joypad=bridge and {set=function(buttons) bridge.buttons=buttons; native_joypad.set(buttons) end} or native_joypad
+local function getenv(key) return bridge and (bridge.env or {})[key] or os.getenv(key) end
 local BUS = "ARM9 System Bus"
 local FS, SAVEPTR = 0x021D4158, 0x021D2228
+if bridge then FS=assert(bridge.title.symbols.sFieldSysPtr.address); SAVEPTR=assert(bridge.title.symbols.sSaveDataPtr.address) end
 local OVY_BATTLE = 12
-local REPO, OUT, LANE = os.getenv("G4_REPO"), os.getenv("G4_OUT"), os.getenv("G4_LANE")
-local TAG = os.getenv("G4_TAG") or "route"
+local REPO, OUT, LANE = getenv("G4_REPO"), getenv("G4_OUT"), getenv("G4_LANE")
+local TAG = getenv("G4_TAG") or "route"
 local lines = {}
 local function say(...)
   local t = {}
@@ -27,6 +48,7 @@ local function say(...)
   lines[#lines + 1] = string.format("[f%d] %s", emu.framecount(), table.concat(t, " "))
 end
 local function flush()
+  if bridge then bridge.lines=lines; return end
   local f = io.open(OUT, "w")
   if f then f:write(table.concat(lines, "\n"), "\n"); f:close() end
 end
@@ -36,6 +58,7 @@ local function finish(status, ...)
   if status == "FAIL" and shot then shot("fail") end
   say("RESULT", status, ...)
   flush()
+  if bridge then error({route_result={status=status,detail=table.concat({...}," "),lines=lines}},0) end
   local ok, err = pcall(function() client.exit() end)
   if not ok then
     say("client.exit failed:", tostring(err))
@@ -53,8 +76,11 @@ local function inram(p) return p >= 0x02000000 and p < 0x02400000 end
 pcall(function() emu.limitframerate(false) end)
 
 local J = dofile(REPO .. "/lua/json_codec.lua")
-local fh = assert(io.open(os.getenv("G4_ROUTE"), "rb"))
-local route, jerr = J.decode(fh:read("*a"), {bytes = 8 * 1024 * 1024}); fh:close()
+local route,jerr
+if bridge then route=bridge.route else
+  local fh = assert(io.open(getenv("G4_ROUTE"), "rb"))
+  route,jerr=J.decode(fh:read("*a"), {bytes = 8 * 1024 * 1024}); fh:close()
+end
 if not route then finish("FAIL", "route_json", jerr) end
 
 -- ----- RAM probes --------------------------------------------------------------------------
@@ -140,7 +166,7 @@ local function boot_to_overworld(maxf)
 end
 
 local boot_frame
-local lst = os.getenv("G4_LOAD_STATE")
+local lst = getenv("G4_LOAD_STATE")
 if lst and lst ~= "" then
   savestate.load(lst)
   for _ = 1, 120 do emu.frameadvance() end
@@ -243,7 +269,7 @@ end
 
 -- a wild encounter arrives as a field task too: wait for the battle chain, never call it a script
 local TASK_POLL = 900
-local SETTLE_FRAMES = tonumber(os.getenv("G4_SETTLE") or "") or 900
+local SETTLE_FRAMES = tonumber(getenv("G4_SETTLE") or "") or 900
 local SPECIES = {[16] = "PIDGEY", [19] = "RATTATA", [161] = "SENTRET"}
 local function species_name(id) return SPECIES[id] or ("#" .. tostring(id)) end
 local function poll_battle(frames)
@@ -825,7 +851,7 @@ if not wait_stable(20) then finish("FAIL", "grass_not_stable", pos_s(loc())) end
 local l = loc()
 if l.x ~= A[1] or l.y ~= A[2] then finish("FAIL", "not_on_pace_tile", pos_s(l)) end
 say("pacing", pos_s(l), "between", A[1] .. "," .. A[2], "and", B[1] .. "," .. B[2])
-local pace_max = tonumber(os.getenv("G4_PACE_MAX") or "") or pace.max_steps
+local pace_max = tonumber(getenv("G4_PACE_MAX") or "") or pace.max_steps
 local grass_f0 = emu.framecount()
 local found
 local n = 0
@@ -863,3 +889,6 @@ if not found then
   finish("FAIL", "no_encounter", string.format("%d pace steps, frames %d", n, emu.framecount() - grass_f0))
 end
 report_battle(found, "pace", string.format("paceSteps=%d framesInGrass=%d", n, emu.framecount() - grass_f0))
+end
+if SLINK_GEN4_ROUTE_LIBRARY then return Driver end
+return Driver.run(nil)

@@ -856,7 +856,7 @@ class FakeDS:
         self.panel_sync()
 
 
-def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE):
+def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE, library=False):
     lupa = pytest.importorskip("lupa")
     _, err = _pc_stop()
     stand = (4, 2)
@@ -908,6 +908,28 @@ def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFE
     g.savestate = lua.table(save=noop, load=noop)
     g.client = lua.table(screenshot=noop, exit=exit_)
     src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
+    if library:
+        def table(value):
+            if isinstance(value, dict):
+                return lua.table_from({k: table(v) for k, v in value.items()})
+            if isinstance(value, list):
+                return lua.table_from([table(v) for v in value])
+            return value
+        g.SLINK_GEN4_ROUTE_LIBRARY = True
+        driver = lua.execute(src)
+        pumped = []
+        def pump(buttons):
+            pressed = {k for k, v in buttons.items() if v}
+            pumped.append(pressed)
+            held.clear()
+            ds.step(pressed)
+        context = table({"route": route, "title": gr._pack_title("HG"), "env": env})
+        context.step = pump
+        ok, result = lua.eval("function(f,c) local ok,r=pcall(f,c); return ok,r end")(driver.run, context)
+        assert not ok and result["route_result"] is not None
+        result = result["route_result"]
+        assert not ds.exited and len(pumped) == ds.frame
+        return "RESULT " + result.status + " " + result.detail, ds, "\n".join(result.lines.values())
     try:
         lua.execute(src)
     except Exception as exc:  # the script ends in finish(): the fake raises once client.exit ran
@@ -926,6 +948,27 @@ def test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, 
     assert (
         "slot 1" not in log and "select try 1 sel 0x1f" in log
     )  # the cursor selected slot 1 first try
+
+
+def test_route_library_reuses_pc_engine_and_pumps_every_frame_without_exit(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, library=True)
+    assert "RESULT PC_DEPOSIT" in last, log
+    assert not ds.exited and ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1
+
+
+def test_bridge_uses_observed_position_unknown_leg_fails_and_pc_needs_fixture(monkeypatch):
+    w = _world(ROWS)
+    monkeypatch.setattr(gr, "load_world", lambda *a: w)
+    monkeypatch.setattr(gr, "wild_land_day", lambda *a: {})
+    planner = gr.BridgePlanner("rom", "HG")
+    request = {"leg": "gen4_routes:battle_settled", "position": _start(1, 1)}
+    route = planner.plan(request)
+    assert route["start"]["x"] == 1 and route["grass"]
+    with pytest.raises(gr.RouteError, match="unsupported_bridge"):
+        planner.plan(dict(request, leg="guessed_recipe"))
+    with pytest.raises(gr.RomAbsent, match="disclosed SYNTH"):
+        planner.plan(dict(request, leg="gen4_pc:reach_pc_terminal"))
+    assert planner.plan(request) == route
 
 
 def test_the_lua_pc_leg_retries_a_cursor_that_only_woke_up(tmp_path, monkeypatch):
