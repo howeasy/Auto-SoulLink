@@ -47,17 +47,23 @@ local function sorted_keys(t)
     return keys
 end
 
+-- FLOORS (F11): a vanilla admission with fewer anchors than this is refused, so a pack edit that
+-- drops anchors cannot quietly weaken the hge-vs-vanilla discrimination. Today's HG/SS packs carry
+-- 19 arm9 site anchors + 3 admission_anchors (0x02000CD0 hook site and two more); raising the numbers
+-- is a conscious edit here, lowering them is a security decision.
+Entry.MIN_SITE_ANCHORS, Entry.MIN_ADMISSION_ANCHORS = 19, 3
+
 -- Pinned byte runs a vanilla ROM must show in ARM9 RAM: {name, address, hex}, in a fixed order.
 local function anchors_of(title)
     local out = {}
     for _, name in ipairs(sorted_keys(title.sites or {})) do
         local s = title.sites[name]
         if s.image == "arm9" and s.register_hex and s.address then
-            out[#out + 1] = { name = name, address = s.address, hex = s.register_hex }
+            out[#out + 1] = { name = name, address = s.address, hex = s.register_hex, site = true }
         end
     end
     for i, a in ipairs(title.admission_anchors or {}) do
-        out[#out + 1] = { name = "admission_anchors[" .. i .. "]", address = a.address, hex = a.hex }
+        out[#out + 1] = { name = "admission_anchors[" .. i .. "]", address = a.address, hex = a.hex, admission = true }
     end
     return out
 end
@@ -96,6 +102,15 @@ end
 -- First anchor that does not read back as pinned, or nil.
 local function anchor_failure(row, read_ram)
     if #row.anchors == 0 then return "pack ships no ARM9 anchors (pack gap)" end
+    local sites, adm = 0, 0
+    for _, a in ipairs(row.anchors) do
+        if a.site then sites = sites + 1 end
+        if a.admission then adm = adm + 1 end
+    end
+    if sites < Entry.MIN_SITE_ANCHORS or adm < Entry.MIN_ADMISSION_ANCHORS then
+        return string.format("pack ships too few ARM9 anchors (%d site + %d admission, need at least %d + %d)",
+            sites, adm, Entry.MIN_SITE_ANCHORS, Entry.MIN_ADMISSION_ANCHORS)
+    end
     for _, a in ipairs(row.anchors) do
         local n = #a.hex // 2
         local ok, bytes = pcall(read_ram, a.address, n)

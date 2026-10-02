@@ -134,7 +134,8 @@ def test_failed_close_latches_counts_handles_blocks_rearm_and_keeps_the_last_eve
 def test_fourth_production_hook_is_refused_and_observer_allowance_is_explicit():
     w = World({"four": FOUR}, cap=3)
     ok, why = w.sig.arm(w.sig, "four")
-    assert ok is None and "budget 3 exceeded" in why and w.status()["owned"] == 0 and w.st.count() == 0 and w.sig.failure
+    assert ok is None and "budget 3 exceeded" in why and w.status()["owned"] == 0 and w.st.count() == 0
+    assert w.sig.failure is None and w.status()["refused"] == 1  # F3: refused and counted, not latched
     w4 = World({"four": FOUR}, cap=3, observer_allowance=1)
     assert w4.sig.arm(w4.sig, "four") is True and w4.status()["owned"] == 4 and w4.status()["budget"] == 4
     with pytest.raises(LuaError, match="cap 0..3"):
@@ -265,3 +266,66 @@ def test_close_after_events_returns_them_once_and_releases_everything():
     w.fire("battle_faint_cmd")
     assert w.sig.close(w.sig) is True and w.st.count() == 0 and w.status()["owned"] == 0
     assert w.ids() == ["battle_faint_cmd"] and w.ids() == []
+
+
+def test_poll_budget_overrun_is_a_counted_refusal_and_never_locks_out_the_on_demand_hook():
+    """F3: two predicates want hooks at cap 1; the loser is refused every poll, nothing latches, request() still works."""
+    w = World({"a": ["battle_start_ov12"], "b": ["pc_place_first_in_box"], "seam": ["battle_faint_cmd"]})
+    w.flags["a"], w.flags["b"], w.flags["seam"] = True, True, False
+    for _ in range(3):
+        w.sig.poll(w.sig)
+    s = w.status()
+    assert set(s["armed"]) == {"a"} and s["refused"] == 3 and "busy" in s["last_refusal"]
+    assert w.sig.failure is None and len(s["faults"]) == 0                      # never latched
+    w.flags["a"] = False
+    w.sig.poll(w.sig)                                                       # "a" disarmed; "b" arms next poll
+    w.flags["b"] = False
+    w.sig.poll(w.sig)
+    assert w.status()["owned"] == 0
+    assert w.sig.request(w.sig, "seam") is True                             # the D7 seam can still arm
+    w.fire("battle_faint_cmd")
+    assert w.ids() == ["battle_faint_cmd"] and w.status()["owned"] == 0
+
+
+def test_throwing_predicate_disarms_an_armed_phase_fail_closed():
+    """F4: the hook must not stay armed (and costing fps) behind a predicate that throws."""
+    w = World({"a": ["battle_start_ov12"]})
+    w.flags["a"] = True
+    w.sig.poll(w.sig)
+    assert w.status()["owned"] == 1
+    w.fire("battle_start_ov12")
+    w.cfg_ps["phases"]["a"]["active"] = w.lua.eval("function() error('pred') end")
+    w.sig.poll(w.sig)
+    s = w.status()
+    assert s["owned"] == 0 and w.st.count() == 0 and len(s["armed"]) == 0 and "pred" in w.sig.failure
+    assert w.ids() == ["battle_start_ov12"]                                 # the queued event was still drained
+
+
+def _mutant(w, old, new):
+    src = (ROOT / "lua/nds/phase_signals.lua").read_text(encoding="utf-8")
+    assert src.count(old) == 1, old
+    return w.lua.eval("function(s) return assert(load(s, '=ps'))() end")(src.replace(old, new)).new(w.cfg_ps)
+
+
+def test_control_revert_f4_leaves_the_hook_armed():
+    w = World({"a": ["battle_start_ov12"]})
+    w.flags["a"] = True
+    mutant = _mutant(w, 'latch(name,"predicate",result); want[name]=false end', 'latch(name,"predicate",result) end')
+    mutant.poll(mutant)
+    assert mutant.status(mutant)["owned"] == 1
+    w.cfg_ps["phases"]["a"]["active"] = w.lua.eval("function() error('pred') end")
+    mutant.poll(mutant)
+    assert mutant.status(mutant)["owned"] == 1                              # reverted: still armed behind a throwing predicate
+
+
+def test_control_revert_f3_latches_a_poll_overrun():
+    w = World({"a": ["battle_start_ov12"], "b": ["pc_place_first_in_box"]})
+    w.flags["a"], w.flags["b"] = True, True
+    mutant = _mutant(
+        w,
+        'refused=refused+1\n            last_refusal=phase..": busy: hook budget "..budget.." exceeded: "'
+        '..count_owned().." owned + "..#sites\n            return nil,last_refusal',
+        'latch(phase,"budget","hook budget exceeded")\n            return nil,faults[phase].message')
+    mutant.poll(mutant)
+    assert mutant.failure is not None                                       # reverted: permanent fault, request() dead too
+    assert mutant.request(mutant, "a")[0] is None

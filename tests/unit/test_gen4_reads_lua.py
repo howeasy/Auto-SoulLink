@@ -652,3 +652,91 @@ def test_control_without_the_alignment_guard_a_misaligned_pointer_is_followed(lu
     ram = battle_ram()
     ram.u32_cell(MAN + 0x1C, BS + 2)
     assert not (isinstance(r := read_battle(lua, reads, ram), tuple) and r[1] == "bad_ptr:bs")     # reverted module dereferences the garbage pointer
+
+
+# -- review fixes: double-read (F1), tail_plausible refusal (F2), box_mon ------------------------------
+MON0 = SD + 0x10 + 0x90 + 8  # first party record in the HG model RAM
+
+
+def torn_adapter(ram: Ram, lua, addr: int, flip_on: int = 2):
+    """A mem whose u32 at `addr` (a record's PID word) changes row on its `flip_on`-th read: a torn read."""
+    seen = {"n": 0}
+    plain = ram.adapter(lua)
+
+    def u32(a):
+        v = plain["u32"](a)
+        if a == addr:
+            seen["n"] += 1
+            if seen["n"] >= flip_on:
+                v = (v & ~0x3E000) | ((((v >> 13) & 31) ^ 1) << 13)
+        return v
+    return lua.table_from({"u8": plain["u8"], "u16": plain["u16"], "u32": u32}), seen
+
+
+def test_party_double_read_refuses_a_record_that_changes_between_the_two_reads(lua_reads):
+    lua, reads, ram, planted, prof, lprof = hg_world(lua_reads)
+    assert len(py(reads.party(ram.adapter(lua), lprof))) == len(planted.party())  # stable memory: fine
+    mem, seen = torn_adapter(ram, lua, MON0)
+    refused(reads.party(mem, lprof), "party_mon0:torn")
+    assert seen["n"] >= 2                                       # it really read the record twice
+
+
+def test_record_primitive_double_reads_and_names_the_tear(lua_reads):
+    lua, reads, ram, planted, prof, lprof = hg_world(lua_reads)
+    a = reads.record(ram.adapter(lua), MON0, 0xEC)
+    assert bytes(py(a)) == bytes(ram.mem[MON0 - RAM_LO : MON0 - RAM_LO + 0xEC])
+    mem, _ = torn_adapter(ram, lua, MON0)
+    refused(reads.record(mem, MON0, 0xEC), "torn")
+    refused(reads.record(ram.adapter(lua), RAM_HI - 3, 0xEC), "out_of_ram")
+
+
+def tail_garbled_ram(lua_reads):
+    """A record whose PID names another shuffle row: the order-invariant checksum still passes (decrypt ok) but the
+    PID-keyed party tail decrypts to nonsense -> tail_plausible == false."""
+    lua, reads, ram, planted, prof, lprof = hg_world(lua_reads)
+    pid = struct.unpack_from("<I", ram.mem, MON0 - RAM_LO)[0]
+    struct.pack_into("<I", ram.mem, MON0 - RAM_LO, (pid & ~0x3E000) | ((((pid >> 13) & 31) ^ 1) << 13))
+    return lua, reads, ram, lprof
+
+
+def test_party_refuses_a_record_flagged_tail_implausible(lua_reads):
+    lua, reads, ram, lprof = tail_garbled_ram(lua_reads)
+    refused(reads.party(ram.adapter(lua), lprof), "party_mon0:implausible")
+
+
+def test_box_mon_double_reads_decodes_and_refuses_implausible(lua_reads):
+    lua, reads, ram, planted, prof, lprof = hg_world(lua_reads)
+    mem = ram.adapter(lua)
+    want = codec.decode_box_mon(bytes(ram.mem[MON0 - RAM_LO : MON0 - RAM_LO + 0x88]), codec.PROFILES["hgss"])
+    got = py(reads.box_mon(mem, lprof, MON0))
+    assert got["key"] == want["key"] and got["species"] == want["species"]
+    torn, _ = torn_adapter(ram, lua, MON0)
+    refused(reads.box_mon(torn, lprof, MON0), "box_mon:torn")
+    seen = set()
+    pid0 = struct.unpack_from("<I", ram.mem, MON0 - RAM_LO)[0]
+    for row in range(24):
+        struct.pack_into("<I", ram.mem, MON0 - RAM_LO, (pid0 & ~0x3E000) | (row << 13))
+        res = reads.box_mon(ram.adapter(lua), lprof, MON0)
+        seen.add("ok" if is_ok(res) else res[1])
+    assert "box_mon:implausible" in seen and "ok" in seen         # some torn rows are caught here, not all (F1)
+    refused(reads.box_mon(mem, lprof, RAM_HI - 3), "box_mon:out_of_ram")
+
+
+def _reads_mutant(old: str, new: str):
+    src = READS.read_text(encoding="utf-8")
+    assert src.count(old) == 1, old
+    return make_lua(src.replace(old, new))
+
+
+def test_control_revert_double_read_and_tail_refusal_go_red():
+    lua, reads = _reads_mutant('if a[i] ~= b[i] then return nil, "torn" end', "")
+    ram, _, prof = build_ram("hg")
+    lprof = to_lua(lua, prof)
+    mem, _ = torn_adapter(ram, lua, MON0)
+    assert is_ok(reads.party(mem, lprof))                         # reverted: a torn read parses (first read was clean)
+    lua, reads = _reads_mutant('if mon.tail_plausible == false then return nil, "party_mon" .. i .. ":implausible" end', "")
+    ram, _, prof = build_ram("hg")
+    lprof = to_lua(lua, prof)
+    pid = struct.unpack_from("<I", ram.mem, MON0 - RAM_LO)[0]
+    struct.pack_into("<I", ram.mem, MON0 - RAM_LO, (pid & ~0x3E000) | ((((pid >> 13) & 31) ^ 1) << 13))
+    assert is_ok(reads.party(ram.adapter(lua), lprof))           # reverted: the garbled-tail record is accepted

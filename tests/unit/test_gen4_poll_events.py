@@ -407,27 +407,80 @@ def lose_battle(rig):
     rig.run(snap([OWN], idle=False), 3)
 
 
-def test_whiteout_after_loss_map_change_and_heal_exactly_once(rig):
+def test_whiteout_is_the_lose_outcome_latched_at_battle_end_exactly_once(rig):
+    """F8: no area change or heal is required (a heal point on the loss map is not a missed whiteout)."""
     lose_battle(rig)
-    rig.run(snap([{**OWN, "hp": 0}], idle=False), 3)                        # copy-back of the zero, blackout task running
-    assert rig.of("whiteout") == []
-    pc = snap([OWN], area="A30PC", loc="Pokemon Center")                    # healed + warped, idle again
+    assert rig.of("whiteout") == [{}]                                       # at battle end, before any warp / heal
+    rig.run(snap([{**OWN, "hp": 0}], idle=False), 3)                        # copy-back of the zero
+    rig.run(snap([{**OWN, "hp": 0}]), 5)                                    # idle on the SAME map, still fainted
+    pc = snap([OWN], area="A30PC", loc="Pokemon Center")                    # healed + warped later: corroboration only
     rig.run(pc, 4)
-    assert rig.of("whiteout") == [{}] and rig.of("faint") and rig.of("area_enter")
+    assert rig.of("faint") and rig.of("area_enter")
     rig.run(pc, 10)
-    assert len(rig.of("whiteout")) == 1
+    rig.run(snap([OWN], area="A30PC", loc="Pokemon Center", idle=False), 2000)
+    assert len(rig.of("whiteout")) == 1                                     # the poison path never double-reports it
 
 
-def test_a_warp_without_the_heal_is_not_a_whiteout(rig):
+def test_a_lose_with_a_healed_party_on_the_same_map_still_whites_out(rig):
     lose_battle(rig)
+    rig.run(snap([OWN]), 5)                                                 # healed in place, no warp: still the loss
+    assert rig.of("whiteout") == [{}]
+
+
+@pytest.mark.parametrize("outcome", ["win", "caught", "draw", "player_fled", "foe_fled"])
+def test_no_other_outcome_is_a_whiteout(rig, outcome):
+    fight(rig, [OWN], final={"outcome": OUTCOMES[outcome]})
+    settled(rig)
+    settled(rig, area="A30PC", loc="Pokemon Center")
+    assert rig.of("whiteout") == []
+
+
+@pytest.mark.parametrize("btype", [EXEMPT, TRAINER | EXEMPT])
+def test_a_lose_in_an_exempt_battle_type_is_not_a_whiteout(rig, btype):
+    for _ in range(4):
+        rig.step(snap([OWN], idle=False, battle=wild(own_hp=0, btype=btype, outcome=OUTCOMES["lose"])))
+    rig.run(snap([OWN], idle=False), 3)
+    assert rig.of("whiteout") == []
+
+
+def test_a_trainer_battle_loss_whites_out(rig):
+    for _ in range(4):
+        rig.step(snap([OWN], idle=False, battle=wild(own_hp=0, btype=TRAINER, outcome=OUTCOMES["lose"])))
+    rig.run(snap([OWN], idle=False), 3)
+    assert rig.of("whiteout") == [{}]
+
+
+def test_whiteout_reads_the_outcome_and_masks_from_the_pack_battle_enums():
+    """cfg.battle_enums is the pack's profile.battle_enums block; explicit cfg keys are not needed."""
+    import json
+
+    be = json.loads((ROOT / "data/games/gen4_hgss/profile.json").read_text(encoding="utf-8"))
+    be = be["titles"]["heartgold"]["profile"]["battle_enums"]
+    r = Rig(src=None, outcomes=None, trainer_mask=None, no_catch_mask=None, battle_enums=be)
+    settled(r)
+    lose, exempt = be["outcomes"]["lose"], be["exempt_mask"]
+    for _ in range(4):
+        r.step(snap([OWN], idle=False, battle=wild(own_hp=0, btype=0, outcome=lose)))
+    r.run(snap([OWN], idle=False), 3)
+    assert r.of("whiteout") == [{}]
+    r2 = Rig(src=None, outcomes=None, trainer_mask=None, no_catch_mask=None, battle_enums=be)
+    settled(r2)
+    for _ in range(4):
+        r2.step(snap([OWN], idle=False, battle=wild(own_hp=0, btype=exempt & -exempt, outcome=lose)))  # lowest exempt bit
+    r2.run(snap([OWN], idle=False), 3)
+    assert r2.of("whiteout") == []
+
+
+def test_a_warp_without_the_heal_is_not_a_whiteout_for_poison(rig):
+    rig.run(snap([OWN]), 3)
+    rig.run(snap([{**OWN, "hp": 0}], idle=False), 3)
     rig.run(snap([{**OWN, "hp": 0}], area="A30PC", loc="Pokemon Center"), 5)   # warped but not healed
     assert rig.of("whiteout") == []
 
 
-def test_loss_without_the_blackout_warp_or_the_heal_is_not_a_whiteout(rig):
-    lose_battle(rig)
+def test_poison_loss_without_the_blackout_warp_is_unconfirmed(rig):
+    rig.run(snap([OWN]), 3)
     rig.run(snap([{**OWN, "hp": 0}]), 5)                                     # idle, same map, not healed
-    assert rig.of("whiteout") == []
     rig.run(snap([OWN]), 5)                                                  # healed in place: still no warp
     assert rig.of("whiteout") == []
     rig.run(snap([OWN], idle=False), 1900)
@@ -495,3 +548,178 @@ def test_control_without_the_foe_identity_every_new_mon_of_the_species_is_the_ca
     fight(r, [OWN])
     settled(r, [OWN, mon(0x77777777, 1, species=16, level=2, hp=13, max_hp=13)])
     assert "gift" not in r.of("capture")[0]      # reverted: species equality made it "the capture"
+
+
+# -- review fixes (F2 F7 F9 F10 + expect hygiene) -------------------------------------------
+def with_decoded(m, **flags):
+    return {**m, "decoded": {"is_egg": False, **flags}}
+
+
+def test_an_implausible_party_record_is_never_a_capture_or_a_gift(rig):
+    """F2: decoded.tail_plausible / box_plausible == false -> a note, no event, key not learned."""
+    for flags in ({"tail_plausible": False}, {"box_plausible": False}):
+        r = Rig()
+        settled(r)
+        torn = with_decoded(mon(0x66666666, 1, species=16, level=2, hp=13, max_hp=13), **flags)
+        fight(r, [OWN])
+        settled(r, [OWN, torn])
+        assert r.of("capture") == [] and f"implausible:{torn['key']}" in r.notes, flags
+        assert not r.pe.known(r.pe, torn["key"])
+        r2 = Rig()
+        settled(r2)
+        settled(r2, [OWN, torn])                                              # no encounter: it would be a gift
+        assert r2.of("capture") == [] and f"implausible:{torn['key']}" in r2.notes
+    ok = with_decoded(mon(0x66666666, 1, species=16, level=2, hp=13, max_hp=13), tail_plausible=True, box_plausible=True)
+    r3 = Rig()
+    settled(r3)
+    settled(r3, [OWN, ok])
+    assert len(r3.of("capture")) == 1                                         # plausible records still arrive
+
+
+def test_an_implausible_box_entry_is_never_a_capture(rig):
+    r = Rig()
+    party = [OWN] + [mon(0x20000000 + i, i) for i in range(1, 6)]
+    settled(r, party)
+    fight(r, party, final={"outcome": OUTCOMES["caught"]})
+    bx = boxes(2, **{key(FOE_PID): 1})
+    bx["mons"][key(FOE_PID)]["implausible"] = True
+    settled(r, party, bx)
+    assert r.of("capture") == [] and f"implausible:{key(FOE_PID)}" in r.notes
+
+
+def test_the_first_settled_view_keeps_the_pending_latch_so_the_no_catch_survives():
+    """F7: a wild battle that ended just before the first settled snapshot still reports its no_catch."""
+    r = Rig()                                                                 # no baseline learned yet
+    r.run(snap([OWN], idle=False), 2)                                         # the area is known, the party never settled
+    fight(r, [OWN], final={"outcome": OUTCOMES["win"]})
+    assert r.of("no_catch") == []
+    settled(r)
+    assert r.of("no_catch") == [{"area_id": "A29", "species_id": 16, "level": 2}]
+    assert r.pe.st.pending is None                                            # consumed exactly once
+
+
+def test_the_first_settled_view_never_reports_the_mon_it_baselines_as_a_capture():
+    r = Rig()
+    new = mon(FOE_PID, 1, species=16, level=2, hp=13, max_hp=13)
+    fight(r, [OWN], final={"outcome": OUTCOMES["caught"]})
+    settled(r, [OWN, new])
+    assert r.of("capture") == [] and r.of("no_catch") == [] and r.pe.known(r.pe, new["key"])
+
+
+def pc_session(r, party, frames=3):
+    r.run(snap(party, idle=False, pc_active=True), frames)
+
+
+def test_a_release_landing_after_the_pc_closed_is_still_a_release():
+    """F9: an idle step with no set diff after the PC exit must not spend pc_seen."""
+    r = Rig()
+    gone = mon(0x31313131, 1)
+    settled(r, [OWN, gone])
+    pc_session(r, [OWN, gone])
+    settled(r, [OWN, gone])                                                   # PC closed, the box write not landed yet
+    assert r.events == []
+    settled(r, [OWN])                                                         # ...now it has
+    assert r.of("release") == [{"key": gone["key"]}] and not any(n.startswith("vanished") for n in r.notes)
+
+
+def test_the_pc_window_expires_so_a_much_later_vanish_is_not_a_release():
+    r = Rig()
+    gone = mon(0x31313131, 1)
+    settled(r, [OWN, gone])
+    pc_session(r, [OWN, gone])
+    settled(r, [OWN, gone])
+    r.run(snap([OWN, gone]), 2000)
+    settled(r, [OWN])
+    assert r.of("release") == [] and f"vanished:{gone['key']}" in r.notes
+
+
+def test_consumed_and_expired_expectations_are_freed():
+    r = Rig()
+    boxed = mon(0x31313131, 1)
+    egg = mon(0x55555555, 2, species=175, level=1, hp=0, max_hp=0, egg=True)
+    settled(r, [OWN, boxed, egg])
+    r.pe.expect(r.pe, "party_to_box", egg["key"])                             # an egg's move is never reported...
+    settled(r, [OWN, boxed], boxes(2, **{egg["key"]: 1}))
+    assert dict(py(r.pe.st.expect) or {}) == {}                               # ...but the diff consumed the entry
+    r.pe.expect(r.pe, "release", "DEADBEEF:00000001")                         # an expectation no diff ever matches
+    assert len(py(r.pe.st.expect)) == 1
+    r.run(snap([OWN, boxed], boxes(2, **{egg["key"]: 1}), idle=False), 1000)
+    settled(r, [OWN], boxes(2, **{egg["key"]: 1, boxed["key"]: 1}))           # any settled step after the window
+    assert dict(py(r.pe.st.expect) or {}) == {}
+
+
+def test_a_party_record_without_a_key_is_skipped_with_a_note_and_never_settles():
+    """F10: no throw; the keyed records keep working; the frame cannot settle (a skip must not read as a release)."""
+    r = Rig()
+    gone = mon(0x31313131, 1)
+    settled(r, [OWN, gone])
+    pc_session(r, [OWN, gone])
+    bad = {"slot": 1, "species": 16, "level": 2, "hp": 1, "max_hp": 2}       # key == nil
+    r.run(snap([OWN, bad]), 4)
+    assert r.events == [] and any(n.startswith("nil_key:party") for n in r.notes)
+    r.run(snap([OWN, {**bad, "key": 123}]), 4)                                # not a string either
+    assert r.events == []
+    settled(r, [OWN, gone])                                                   # clean again: nothing was released
+
+
+def test_a_battler_without_a_key_is_skipped_with_a_note():
+    r = Rig()
+    settled(r)
+    nokey = {"b": 1, "pid": FOE_PID, "otid": 0, "species": 16, "level": 2, "hp": 13, "max_hp": 13}
+    r.step(snap([OWN], idle=False, battle=battle(battler(0, 0x11111111, OT, 155, 20, 20, 5), nokey)))
+    assert any(n.startswith("nil_key:battler") for n in r.notes)
+
+
+def test_control_revert_f2_f7_f9_f10_each_goes_red():
+    """Each fix is load-bearing: the reverted module must misbehave exactly where the new tests look."""
+    # F2: drop the plausibility gate on fresh party records
+    r = revert("if implausible(m) then note(self, \"implausible:\" .. k) else fresh_p[#fresh_p + 1] = k end",
+               "fresh_p[#fresh_p + 1] = k")
+    settled(r)
+    torn = with_decoded(mon(0x66666666, 1, species=16, level=2, hp=13, max_hp=13), tail_plausible=False)
+    settled(r, [OWN, torn])
+    assert len(r.of("capture")) == 1
+    # F7: discard pending on the first settled view
+    r = revert("        base = { pk = pk, bk = bk }\n", "        base = { pk = pk, bk = bk }; st.pending = nil\n")
+    r.run(snap([OWN], idle=False), 2)
+    fight(r, [OWN], final={"outcome": OUTCOMES["win"]})
+    settled(r)
+    assert r.of("no_catch") == []
+    # F9: spend pc_seen on every settled step
+    r = revert("    if changed or not pc_recent then st.pc_seen = nil end\n", "    st.pc_seen = nil\n")
+    gone = mon(0x31313131, 1)
+    settled(r, [OWN, gone])
+    pc_session(r, [OWN, gone])
+    settled(r, [OWN, gone])
+    settled(r, [OWN])
+    assert r.of("release") == [] and f"vanished:{gone['key']}" in r.notes
+    # F10: let the nil key through to the table assignment
+    r = revert("        if type(m) ~= \"table\" or type(m.key) ~= \"string\" then bad = true; break end\n", "")
+    settled(r, [OWN])
+    with pytest.raises(lupa.LuaError):
+        r.step(snap([OWN, {"slot": 1, "species": 16, "level": 2, "hp": 1, "max_hp": 2}]))
+
+
+def test_control_revert_f8_and_expect_hygiene_go_red():
+    # F8: without the exempt-type gate an exempt LOSE (link / tutorial) whites out
+    r = revert("       and not (exempt_mask and bt.btype and (bt.btype & exempt_mask) ~= 0) then", "       then")
+    settled(r)
+    for _ in range(4):
+        r.step(snap([OWN], idle=False, battle=wild(own_hp=0, btype=EXEMPT, outcome=OUTCOMES["lose"])))
+    r.run(snap([OWN], idle=False), 3)
+    assert r.of("whiteout") == [{}]
+    # F8: without the one-shot latch the poison path re-reports the battle whiteout after the warp + heal
+    r = revert("local fired = st.wo_fired and st.frame - st.wo_fired <= self.cfg.whiteout_window", "local fired = false")
+    settled(r)
+    lose_battle(r)
+    r.run(snap([{**OWN, "hp": 0}]), 5)
+    r.run(snap([OWN], area="A30PC", loc="Pokemon Center"), 4)
+    assert len(r.of("whiteout")) == 2
+    # expect hygiene: the pruning pass
+    r = revert("        if until_frame < st.frame then st.expect[id] = nil end\n", "")
+    boxed = mon(0x31313131, 1)
+    settled(r, [OWN, boxed])
+    r.pe.expect(r.pe, "release", "DEADBEEF:00000001")
+    r.run(snap([OWN, boxed], idle=False), 1000)
+    settled(r, [OWN], boxes(2, **{boxed["key"]: 1}))
+    assert len(py(r.pe.st.expect)) == 1

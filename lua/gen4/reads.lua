@@ -12,7 +12,7 @@
 --
 -- Reason tokens: "pack_gap:<field>" (the pack does not carry what this read needs), "out_of_ram",
 -- "unmapped", "null_ptr", "signature", "bad_array_id", "bad_array", "party_count",
--- "party_mon<N>:<pk4 reason>", "no_pk4"; battle(): "no_app", "not_battle", "null_ptr:<hop>", "bad_ptr:<hop>",
+-- "party_mon<N>:<pk4 reason | torn | implausible>", "box_mon:<pk4 reason | torn | implausible>", "no_pk4"; battle(): "no_app", "not_battle", "null_ptr:<hop>", "bad_ptr:<hop>",
 -- "bad_battler<b>:<field>", "bad_selected" (see R.battle).
 --
 -- Pointer chain (HGSS/hge; the Platinum table-of-offsets differs only in the profile's numbers):
@@ -57,6 +57,20 @@ local function bytes(mem, addr, len)
     return out
 end
 R.bytes = bytes
+
+-- A record read TWICE with byte equality required: the torn-read defence (F1). pk4's box_plausible cannot
+-- see a wrong PID (see lua/gen4/pk4.lua), so a record that changes between two reads is refused "torn" here.
+-- A STABLE wrong PID cannot occur from the game itself: it only writes consistent records. The caller may
+-- strengthen this across frames by comparing the returned bytes (or the decoded key) on consecutive frames.
+function R.record(mem, addr, len)
+    local a, why = bytes(mem, addr, len)
+    if not a then return nil, why end
+    local b
+    b, why = bytes(mem, addr, len)
+    if not b then return nil, why end
+    for i = 1, len do if a[i] ~= b[i] then return nil, "torn" end end
+    return a
+end
 
 local function words(mem, addr, n)
     local b, why = bytes(mem, addr, n * 2)
@@ -220,16 +234,35 @@ function R.party(mem, profile, sd)
     local out = {}
     for i = 0, cur - 1 do
         local raw
-        raw, why = bytes(mem, base + po.mons_off + i * size, size)
-        if not raw then return nil, why end
+        raw, why = R.record(mem, base + po.mons_off + i * size, size)
+        if not raw then return nil, "party_mon" .. i .. ":" .. why end
         local mon
         mon, why = pk4.decode_party_mon(raw, pp)
         if not mon then return nil, "party_mon" .. i .. ":" .. why end
+        -- tail_plausible is keyed by the PID: a record whose tail decrypts to nonsense is a wrong/torn record
+        if mon.tail_plausible == false then return nil, "party_mon" .. i .. ":implausible" end
         local core = pk4.to_core_mon(mon)
         core.slot, core.decoded = i, mon
         out[#out + 1] = core
     end
     return out
+end
+
+-- One box record (0x88 bytes at `addr`, the box reader's job to locate) as a pk4 record, double-read.
+-- Refuses "box_mon:implausible" when the decoded head is outside the profile's ranges (weak: see pk4.lua).
+function R.box_mon(mem, profile, addr)
+    local pk4 = R.pk4
+    if not pk4 then return nil, "no_pk4" end
+    local pp, why = pk4_profile(prof(profile))
+    if not pp then return nil, why end
+    local raw
+    raw, why = R.record(mem, addr, pk4.BOX_MON_SIZE)
+    if not raw then return nil, "box_mon:" .. why end
+    local mon
+    mon, why = pk4.decode_box_mon(raw, pp)
+    if not mon then return nil, "box_mon:" .. why end
+    if mon.box_plausible == false then return nil, "box_mon:implausible" end
+    return mon
 end
 
 local function player_base(mem, p, sd, min_len)

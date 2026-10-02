@@ -184,8 +184,14 @@ function Pk4.decode_plain(plain, profile)
         nature = pid % 25,
         shiny = (sid ~ tid ~ (pid >> 16) ~ (pid & 0xFFFF)) < 8,
     }
-    -- The box checksum is order-invariant, so a wrong PID decrypts to scrambled blocks without a refusal;
-    -- this range check on the decoded head is the guard (the party tail has its own, tail_plausible).
+    -- box_plausible is a SANITY range check on the decoded head, NOT a wrong-PID guard. The box checksum is
+    -- order-invariant, so a torn/wrong PID decrypts (a different shuffle row) to scrambled blocks without a
+    -- refusal, and a scrambled head can still land inside these ranges (F1: on the owner's real records 9/23
+    -- wrong shuffle rows pass on hgss and 11/23 on hge; tests/unit/test_gen4_pk4_lua.py pins the exhaustion).
+    -- The defence against a torn read is the double-read in lua/gen4/reads.lua (R.record: read twice, require
+    -- byte equality). A STABLE wrong PID cannot come from the game itself: it only ever writes consistent
+    -- records (PID, checksum and blocks together), so a record that reads the same twice is the game's own.
+    -- The party tail has its own, much stronger flag (tail_plausible; keyed by the PID) and reads.lua refuses on it.
     local ok = mon.species >= 1 and mon.species <= (profile.max_species or math.huge)
         and mon.held_item <= (profile.max_item or math.huge) and mon.exp <= MAX_EXP and mon.met_level <= 100
     for _, mv in ipairs(mon.moves) do ok = ok and mv <= (profile.max_move or math.huge) end

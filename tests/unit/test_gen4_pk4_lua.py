@@ -313,3 +313,70 @@ def test_profile_bounds_equal_the_committed_names_tables(pk4, profile):
     assert p.max_item == len(names["items"]) - 1 and p.max_move == len(names["moves"]) - 1
     if profile == "hge":
         assert len(names["species"]) == 1476 and p.max_species == len(names["species"]) - 1
+
+
+# -- F1: what box_plausible / tail_plausible each catch when bytes 0..3 (the PID) are torn -------------
+def tear_pid(raw: bytes, row: int) -> bytes:
+    """Rewrite the PID so its shuffle row is `row` (what a read torn across a PID write could show)."""
+    pid = struct.unpack_from("<I", raw, 0)[0]
+    bad = bytearray(raw)
+    struct.pack_into("<I", bad, 0, (pid & ~0x3E000) | (row << 13))
+    return bytes(bad)
+
+
+def torn_table(mod, raw: bytes, profile: str):
+    """-> (true_row, [rows that pass box_plausible], [rows that pass tail_plausible]) over all 24 shuffle rows."""
+    true_row = ((struct.unpack_from("<I", raw, 0)[0] >> 13) & 31) % 24
+    box, tail = [], []
+    for row in range(24):
+        d = mod.decode_party_mon(tear_pid(raw, row), mod.PROFILES[profile])
+        assert d is not None, "a torn PID must not be a checksum refusal (the sum is order-invariant)"
+        d = py(d)
+        if d["box_plausible"]:
+            box.append(row)
+        if d["tail_plausible"]:
+            tail.append(row)
+    return true_row, box, tail
+
+
+@pytest.mark.parametrize("true_row", range(24))
+@pytest.mark.parametrize("profile", ["hgss", "hge"])
+def test_torn_pid_exhaustion_box_plausible_is_not_a_wrong_pid_guard_but_tail_plausible_is(pk4, profile, true_row):
+    _, mod = pk4
+    pid = (0xABCD_0001 & ~0x3E000) | (true_row << 13)
+    raw = enc(build_plain(pid, party=True))
+    tr, box, tail = torn_table(mod, raw, profile)
+    assert tr == true_row and true_row in box and true_row in tail      # the real record passes both
+    wrong_box = [r for r in box if r != true_row]
+    assert wrong_box, "box_plausible catching EVERY wrong row would make this finding (F1) stale: re-read pk4.lua"
+    assert tail == [true_row]                                           # the PID-keyed tail rejects every wrong row
+
+
+def test_torn_pid_golden_rows_for_the_synthetic_record(pk4):
+    """Pins WHICH rows slip through box_plausible (a regression in either flag changes this set)."""
+    _, mod = pk4
+    for true_row, passing in ((3, [0, 1, 3, 5, 15, 21]), (17, [8, 9, 10, 11, 17, 23])):
+        raw = enc(build_plain((0xABCD_0001 & ~0x3E000) | (true_row << 13), party=True))
+        for profile in ("hgss", "hge"):
+            assert torn_table(mod, raw, profile)[1:] == (passing, [true_row]), (profile, true_row)
+
+
+@pytest.mark.parametrize("which", ["hg", "ss"])
+def test_torn_pid_exhaustion_on_the_real_party_records(pk4, which):
+    """Owner's records (skipped when the save is absent): tail_plausible catches every wrong row, box_plausible does not."""
+    _, mod = pk4
+    save, profile = load_save(which)
+    party = [raw for kind, raw in raw_records(save) if kind == "party"]
+    assert party, "no party record to tear (the test would prove nothing)"
+    slipped = 0
+    for raw in party:
+        _, box, tail = torn_table(mod, raw, profile)
+        true_row = ((struct.unpack_from("<I", raw, 0)[0] >> 13) & 31) % 24
+        assert tail == [true_row], (which, tail, true_row)
+        slipped += len(box) - 1
+    assert slipped > 0
+
+
+def test_pk4_documents_that_box_plausible_is_not_the_torn_read_guard():
+    src = MODULE.read_text(encoding="utf-8")
+    assert "NOT a wrong-PID guard" in src and "double-read" in src and "STABLE wrong PID" in src

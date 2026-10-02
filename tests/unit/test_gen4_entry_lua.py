@@ -170,7 +170,7 @@ def test_single_anchor_byte_flip_refuses(env):
 def test_pack_admission_anchors_are_enforced(env):
     # the pack gap (no 0x02000CD0 bytes yet): when a pack carries `admission_anchors` they are checked
     doc = json.loads(json.dumps(DOC["hgss"]))
-    doc["titles"]["heartgold"]["admission_anchors"] = [{"address": 0x02000CD0, "hex": "deadbeef"}]
+    doc["titles"]["heartgold"]["admission_anchors"][0] = {"address": 0x02000CD0, "hex": "deadbeef"}  # keeps the floor of 3
     packs = env.lua.table_from({"gen4_hgss": env.json.decode(json.dumps(doc)),
                                 "gen4_hge": env.json.decode(json.dumps(DOC["hge"])),
                                 "gen4_pt": env.json.decode(json.dumps(DOC["pt"]))})
@@ -179,6 +179,42 @@ def test_pack_admission_anchors_are_enforced(env):
     assert row is None and "admission_anchors[1]" in why
     image[0x02000CD0] = bytes.fromhex("deadbeef")
     assert env.admit(HG["rom"]["sha1"], "IPKE", image, packs=packs)["title"] == "heartgold"
+
+
+def _packs(env, doc_hgss):
+    return env.lua.table_from({"gen4_hgss": env.json.decode(json.dumps(doc_hgss)),
+                               "gen4_hge": env.json.decode(json.dumps(DOC["hge"])),
+                               "gen4_pt": env.json.decode(json.dumps(DOC["pt"]))})
+
+
+def _shrunk(drop_site=False, drop_anchor=False):
+    doc = json.loads(json.dumps(DOC["hgss"]))
+    t = doc["titles"]["heartgold"]
+    if drop_site:
+        gone = next(k for k, v in sorted(t["sites"].items()) if v["image"] == "arm9" and v.get("register_hex"))
+        del t["sites"][gone]
+    if drop_anchor:
+        t["admission_anchors"].pop()
+    return doc
+
+
+def test_floor_on_the_real_pack_is_exactly_what_it_ships(env):
+    """F11 sanity: the floors equal today's counts, so the real pack passes (see test_hg_admitted_*) and any loss refuses."""
+    n = sum(1 for s in HG["sites"].values() if s["image"] == "arm9" and s.get("register_hex"))
+    assert (n, len(HG["admission_anchors"])) == (env.entry.MIN_SITE_ANCHORS, env.entry.MIN_ADMISSION_ANCHORS)
+
+
+@pytest.mark.parametrize("kw", [{"drop_site": True}, {"drop_anchor": True}, {"drop_site": True, "drop_anchor": True}])
+def test_a_shrunken_anchor_set_is_refused_even_though_every_remaining_anchor_matches(env, kw):
+    """F11: the image still matches every anchor the pack still names; the pack lost some, so admission refuses."""
+    row, why = env.admit(HG["rom"]["sha1"], "IPKE", arm9_vanilla(), packs=_packs(env, _shrunk(**kw)))
+    assert row is None and "too few ARM9 anchors" in why
+    # the control: the unshrunk pack admits the same image
+    assert env.admit(HG["rom"]["sha1"], "IPKE", arm9_vanilla(), packs=_packs(env, DOC["hgss"]))["title"] == "heartgold"
+
+
+def test_hge_is_not_subject_to_the_anchor_floor(env):
+    assert env.admit(HGE["rom"]["sha1"], "IPKE")["pack"] == "gen4_hge"
 
 
 def test_duplicate_digest_is_a_hard_error(env):
@@ -268,3 +304,13 @@ def test_revert_bind_only_guard_goes_red():
     mutant = Env(_mutate("if row.bind_only then", "if false then"))
     row = mutant.admit(PT["rom"]["sha1"], "CPUE", arm9_vanilla())
     assert row is not None and row["pack"] == "gen4_pt"  # mutant admits Platinum; the real one refuses (D3)
+
+
+def test_revert_anchor_floor_goes_red():
+    """F11 revert: with the floor check removed the shrunken pack admits (asserts the patch applied via ENTRY)."""
+    src = _mutate("if sites < Entry.MIN_SITE_ANCHORS or adm < Entry.MIN_ADMISSION_ANCHORS then",
+                  "if false then")
+    assert src != ENTRY.read_text(encoding="utf-8")
+    mutant = Env(src)
+    row = mutant.admit(HG["rom"]["sha1"], "IPKE", arm9_vanilla(), packs=_packs(mutant, _shrunk(drop_anchor=True)))
+    assert row is not None and row["title"] == "heartgold"

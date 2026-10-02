@@ -21,10 +21,13 @@
 -- Callbacks only run during emulation, never inside poll/drain/close, so no hit can land
 -- between a registry's drain and its close.
 --
+-- Budget overrun is NOT a fault (F3): arm() refuses it ("busy: ...", counted in status().refused /
+-- last_refusal) and nothing latches, so a poll()-driven overrun can never lock out the D7 on-demand hook.
+--
 -- Faults (any of: failed construction, failed close, a registry's capture/queue failure, a
--- throwing predicate, budget overrun) are LATCHED: `failure` holds the first fault, status().faults
+-- throwing predicate) are LATCHED: `failure` holds the first fault, status().faults
 -- every one by phase, and no phase is armed again until recover() proves the cleanup faults
--- clear (capture/queue/budget faults need a new session). Unremoved handles are kept
+-- clear (capture/queue faults need a new session). Unremoved handles are kept
 -- counted (status().owned/retained) and their registry is retained until closed.
 local PS = {}
 local function integer(v,low,high) return type(v)=="number" and v==math.floor(v) and v>=low and v<=high end
@@ -65,6 +68,7 @@ function PS.new(cfg)
     local faults={}      -- phase -> {kind=,message=}; first one is `failure`
     local fault_order={}
     local registered_closed=0
+    local refused,last_refusal=0,nil        -- budget refusals: counted, never latched (F3)
     local reported_handler={}
 
     local function count_owned() local n=0; for _ in pairs(owned) do n=n+1 end; return n end
@@ -119,8 +123,9 @@ function PS.new(cfg)
         local sites=def.sites
         if #sites==0 then return true end                    -- zero-site phase: no registry
         if count_owned()+#sites>budget then
-            latch(phase,"budget","hook budget "..budget.." exceeded: "..count_owned().." owned + "..#sites)
-            return nil,faults[phase].message
+            refused=refused+1
+            last_refusal=phase..": busy: hook budget "..budget.." exceeded: "..count_owned().." owned + "..#sites
+            return nil,last_refusal
         end
         local ok,reg,err,failed=pcall(Registry.new,{owner=cfg.owner.."."..phase,sites=sites,max_pending=cfg.max_pending,
             validate=function(site) return binding:validate(site) end,register=wrap_register(phase),unregister=unregister,
@@ -165,7 +170,8 @@ function PS.new(cfg)
             local active=cfg.phases[name].active
             if active then
                 local ok,result=pcall(active)
-                if ok then want[name]=not not result else latch(name,"predicate",result) end
+                -- a throwing predicate fails CLOSED (F4): latch it and disarm the phase, never leave its hook costing fps
+                if ok then want[name]=not not result else latch(name,"predicate",result); want[name]=false end
             end
         end
         for _,name in ipairs(names) do if want[name]==false then self:disarm(name) end end
@@ -227,7 +233,8 @@ function PS.new(cfg)
         end
         for name,fault in pairs(faults) do fault_out[name]=fault.message end
         return {armed=armed,owned=count_owned(),budget=budget,retained=retained_out,faults=fault_out,failure=self.failure,
-                handler_error=self.handler_error,pending=pending,held=#held,registered=registered}
+                handler_error=self.handler_error,pending=pending,held=#held,registered=registered,
+                refused=refused,last_refusal=last_refusal}
     end
     return self
 end

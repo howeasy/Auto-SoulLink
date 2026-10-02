@@ -20,6 +20,7 @@
 --   field_app_null      fs->unk0->unk0 != NULL (the field app is alive)
 --   app_launched        fs->unk0->unk4 == NULL (no bag/party/battle app)
 --   save_driver_null    [fs+0xD8] and its data pointer non-null (read only AFTER app_launched: view_photo reuses it)
+--   save_driver_range   either pointer's struct extent is not inside main RAM (checked before it is dereferenced)
 --   save_busy           save driver state byte == 1 (idle)
 --   encounter_active    opts.encounter_active() is false; a throwing predicate is "encounter_unknown"
 -- Any unreadable cell is "<clause>_unreadable"; a missing pack field is "pack_gap:<field>".
@@ -102,11 +103,15 @@ function S.new(title, mem, opts)
         if not launched then return false, "app_launched_unreadable" end
         if launched ~= 0 then return false, "app_launched" end
 
+        -- both pointers are range-checked BEFORE they are dereferenced (F5), not left to the reader's own guard
         local drv = rd(fs + c.driver, 4)
         if not drv then return false, "save_driver_unreadable" end
-        local data = drv ~= 0 and rd(drv + c.driver_data, 4)
-        if data == nil then return false, "save_driver_unreadable" end
-        if not data or data == 0 then return false, "save_driver_null" end
+        if drv == 0 then return false, "save_driver_null" end
+        if not R.in_ram(drv, c.driver_data + 4) then return false, "save_driver_range" end
+        local data = rd(drv + c.driver_data, 4)
+        if not data then return false, "save_driver_unreadable" end
+        if data == 0 then return false, "save_driver_null" end
+        if not R.in_ram(data, c.state + 1) then return false, "save_driver_range" end
         local state = rd(data + c.state, 1)
         if not state then return false, "save_busy_unreadable" end
         if state ~= 1 then return false, "save_busy" end

@@ -136,6 +136,10 @@ FLIPS = [
     ("save_busy", lambda r: r.u(DATA + PF["save_state"], 0, 1)),  # init is not idle either
     ("save_driver_null", lambda r: r.u(FS + PF["save_driver"], 0)),
     ("save_driver_null", lambda r: r.u(DRV + PF["save_driver_data_off"], 0)),
+    ("save_driver_range", lambda r: r.u(FS + PF["save_driver"], 0x01000000)),  # F5: below main RAM
+    ("save_driver_range", lambda r: r.u(FS + PF["save_driver"], 0x023FFFFC)),  # struct extent runs past the end
+    ("save_driver_range", lambda r: r.u(DRV + PF["save_driver_data_off"], 0x01000000)),
+    ("save_driver_range", lambda r: r.u(DRV + PF["save_driver_data_off"], 0x023FFFFF)),  # state byte offset leaves RAM
     ("save_data_mismatch", lambda r: r.u(SD_PTR, SD + 0x100)),
     ("save_data_mismatch", lambda r: (r.u(SD_PTR, 0), r.u(FS + PF["save"], 0))),  # both null != agree
     ("fieldsys_null", lambda r: r.u(FS_PTR, 0)),
@@ -235,3 +239,19 @@ def test_revert_task_guard_goes_red():
     poll(s, ram)
     ram.u(FS + PF["task"], 0x02260000)
     assert poll(s, ram) is True  # mutant ignores a running field task: the real one refuses
+
+
+def test_revert_driver_range_guard_goes_red():
+    """F5: without the explicit range check the refusal is the reader's generic one, not the named range clause."""
+    src = _mutate('if not R.in_ram(drv, c.driver_data + 4) then return false, "save_driver_range" end', "")
+    ram = Ram().idle()
+    s = make(ram, src=src)
+    poll(s, ram)
+    ram.u(FS + PF["save_driver"], 0x01000000)
+    assert poll(s, ram) == (False, "save_driver_unreadable")  # mutant: the real module names save_driver_range
+    src = _mutate('if not R.in_ram(data, c.state + 1) then return false, "save_driver_range" end', "")
+    ram = Ram().idle()
+    s = make(ram, src=src)
+    poll(s, ram)
+    ram.u(DRV + PF["save_driver_data_off"], 0x023FFFFF)
+    assert poll(s, ram) == (False, "save_busy_unreadable")

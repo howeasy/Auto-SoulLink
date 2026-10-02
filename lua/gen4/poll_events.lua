@@ -34,6 +34,18 @@
 --     re-reported or revived by the stale copy.
 --   * the encounter-scoped latch (`pending`: foe identities PID:OTID, outcome, btype, area) is
 --     built from the battle chain, outlives it (copy-back, blackout) and is consumed exactly once.
+--     It survives the FIRST settled view too (F7): a battle that ended just before the baseline is
+--     learned still gets its no_catch (the baseline already holds anything it caught).
+--   * whiteout (D-2026-10-01, Gen 3 semantics): the LOSE outcome latched when a NON-exempt battle ends
+--     emits it at once; no area change or heal is required. The out-of-battle path (poison) stays
+--     all-fainted-party + area change + heal within `whiteout_window` (PHYSICAL-OPEN).
+--   * records without a string `key` (party / battle) are skipped with a note; a party that had one is
+--     not settled that frame (a skipped record must never read as a release).
+--   * records flagged implausible (decoded.tail_plausible / box_plausible == false, or `implausible`)
+--     are never an acquisition: a note, no capture / gift (F2).
+--
+-- cfg.battle_enums (the pack's profile.battle_enums block) supplies outcomes / trainer_mask / no_catch_mask;
+-- explicit cfg.outcomes / trainer_mask / no_catch_mask win.
 local PE = {}
 PE.__index = PE
 
@@ -44,10 +56,17 @@ local DEFAULTS = {
     area_frames = 2,       -- consecutive frames naming a new area before area_enter
     whiteout_window = 1800, -- frames a loss may wait for its blackout warp + heal
     suppress_frames = 900,  -- how long an expected self-inflicted change stays masked
+    pc_frames = 1800,       -- how long after the PC closes a release diff may still land (F9)
 }
 
 local function egg(m)
     return m.is_egg == true or m.is_egg == 1 or (m.decoded ~= nil and m.decoded.is_egg == true)
+end
+
+-- A record the codec flagged as a wrong/torn decode must never become an acquisition (F2).
+local function implausible(m)
+    local d = m.decoded
+    return m.implausible == true or (d ~= nil and (d.tail_plausible == false or d.box_plausible == false))
 end
 
 local function stats_default(m)
@@ -64,7 +83,12 @@ function PE.new(cfg)
     cfg = cfg or {}
     local self = setmetatable({ cfg = {}, notes = {} }, PE)
     for k, v in pairs(DEFAULTS) do self.cfg[k] = cfg[k] ~= nil and cfg[k] or v end
-    for _, k in ipairs({ "trainer_mask", "no_catch_mask", "outcomes", "gift_area", "stats_of" }) do self.cfg[k] = cfg[k] end
+    local be = cfg.battle_enums or {}
+    self.cfg.trainer_mask, self.cfg.outcomes = be.trainer_mask, be.outcomes
+    self.cfg.no_catch_mask = be.no_catch_mask or be.exempt_mask
+    for _, k in ipairs({ "trainer_mask", "no_catch_mask", "outcomes", "gift_area", "stats_of" }) do
+        if cfg[k] ~= nil then self.cfg[k] = cfg[k] end
+    end
     self.cfg.resolved = cfg.resolved or {}     -- shared with the session (session.resolved_areas)
     self:reset()
     return self
@@ -136,13 +160,16 @@ local function step_area(self, s, ev)
 end
 
 -- ── battle lifecycle ─────────────────────────────────────────────────────────────────────
-local function end_battle(self)
+local function end_battle(self, ev)
     local st, bt = self.st, self.st.bt
     st.bt, st.gone = nil, 0
     st.pending = { area_id = bt.area_id, outcome = bt.outcome, btype = bt.btype, foes = bt.foes, order = bt.order }
-    local o = self.cfg.outcomes
-    if o and o.lose ~= nil and bt.outcome == o.lose then
-        st.wo = st.wo or { area_id = bt.area_id, since = st.frame }
+    local o, exempt_mask = self.cfg.outcomes, self.cfg.no_catch_mask
+    -- whiteout = the LOSE outcome of a non-exempt battle, latched at battle end (area change / heal not required)
+    if o and o.lose ~= nil and bt.outcome == o.lose
+       and not (exempt_mask and bt.btype and (bt.btype & exempt_mask) ~= 0) then
+        st.wo, st.wo_fired = nil, st.frame
+        emit(ev, "whiteout", {})
     end
 end
 
@@ -151,12 +178,12 @@ local function step_battle(self, s, ev)
     if not b then
         if st.bt then
             st.gone = st.gone + 1
-            if st.gone >= self.cfg.end_frames then end_battle(self) end
+            if st.gone >= self.cfg.end_frames then end_battle(self, ev) end
         end
         return
     end
     st.gone = 0
-    if st.bt and st.bt.fp ~= b.fingerprint then end_battle(self) end   -- epoch change with no gap
+    if st.bt and st.bt.fp ~= b.fingerprint then end_battle(self, ev) end   -- epoch change with no gap
     if not st.bt then
         if st.pending then note(self, "pending_superseded"); st.pending = nil end
         st.bt = { fp = b.fingerprint, area_id = st.area_id or "", outcome = 0, foes = {}, order = {} }
@@ -192,7 +219,9 @@ local function step_party_hp(self, s, ev)
     end
     if any and all_zero then
         st.allzero = (st.allzero or 0) + 1
-        if st.allzero >= self.cfg.faint_frames and not st.wo then   -- a loss with no battle (poison)
+        -- a loss with no battle (poison); not again for the all-fainted party a battle whiteout already reported
+        local fired = st.wo_fired and st.frame - st.wo_fired <= self.cfg.whiteout_window
+        if st.allzero >= self.cfg.faint_frames and not st.wo and not fired then
             st.wo = { area_id = st.area_id or "", since = st.frame }
         end
     else
@@ -252,12 +281,12 @@ local function settled(self, s, ev)
         slot_of[m.key] = m.slot
     end
     local base = st.base
-    if not base then                                         -- first settled view: learn, report nothing
+    if not base then                                         -- first settled view: learn it; no set diff is reported
         for k in pairs(pk) do if not st.eggs[k] then st.known[k] = true end end
         for k in pairs(bk) do if not st.eggs[k] then st.known[k] = true end end
-        st.base = { pk = pk, bk = bk }
-        st.pending, st.pc_seen = nil, nil
-        return
+        base = { pk = pk, bk = bk }
+        -- F7: st.pending is KEPT: a battle that ended just before this baseline still owes its no_catch (the
+        -- baseline already holds whatever it caught, so no capture can be double-reported)
     end
     local area_id = st.area_id or ""
     local pend = st.pending
@@ -281,22 +310,34 @@ local function settled(self, s, ev)
 
     -- key-preserving moves
     for k, m in pairs(pk) do
-        if base.pk[k] == nil and base.bk[k] ~= nil and st.known[k] and not st.eggs[k]
-           and not expected(self, "box_to_party", k) then
-            emit(ev, "box_to_party", { key = k, area_id = area_id, nickname = m.nickname })
+        if base.pk[k] == nil and base.bk[k] ~= nil then
+            local own = expected(self, "box_to_party", k)      -- consumed by the diff itself, reported or not
+            if st.known[k] and not st.eggs[k] and not own then
+                emit(ev, "box_to_party", { key = k, area_id = area_id, nickname = m.nickname })
+            end
         end
     end
     for k, m in pairs(base.pk) do
-        if pk[k] == nil and bk[k] ~= nil and st.known[k] and not st.eggs[k]
-           and not expected(self, "party_to_box", k) then
-            emit(ev, "party_to_box", { key = k, stats = stats_of(m) })
+        if pk[k] == nil and bk[k] ~= nil then
+            local own = expected(self, "party_to_box", k)
+            if st.known[k] and not st.eggs[k] and not own then
+                emit(ev, "party_to_box", { key = k, stats = stats_of(m) })
+            end
         end
     end
 
     -- keys out of nowhere / keys into nowhere
     local fresh_p, fresh_b, lost = {}, {}, {}
-    for k in pairs(pk) do if hatch_or_new(k) then fresh_p[#fresh_p + 1] = k end end
-    for k in pairs(bk) do if hatch_or_new(k) then fresh_b[#fresh_b + 1] = k end end
+    for k, m in pairs(pk) do
+        if hatch_or_new(k) then
+            if implausible(m) then note(self, "implausible:" .. k) else fresh_p[#fresh_p + 1] = k end
+        end
+    end
+    for k, e in pairs(bk) do
+        if hatch_or_new(k) then
+            if implausible(e) then note(self, "implausible:" .. k) else fresh_b[#fresh_b + 1] = k end
+        end
+    end
     for k in pairs(base.pk) do if pk[k] == nil and bk[k] == nil then lost[#lost + 1] = k end end
     for k in pairs(base.bk) do if pk[k] == nil and bk[k] == nil then lost[#lost + 1] = k end end
     table.sort(fresh_p); table.sort(fresh_b); table.sort(lost)
@@ -348,12 +389,14 @@ local function settled(self, s, ev)
     for _, k in ipairs(fresh_p) do if not replaced[k] then take(k, false) end end
     for _, k in ipairs(fresh_b) do take(k, true) end
 
-    -- releases: only with the PC application observed, only keys that were ours
+    -- releases: only with the PC application observed (recently: F9), only keys that were ours
+    local pc_recent = st.pc_seen and st.frame - st.pc_seen <= cfg.pc_frames
     for _, k in ipairs(lost) do
         if not replaced[k] then
-            if st.pc_seen and st.known[k] then
+            local own = expected(self, "release", k)
+            if pc_recent and st.known[k] then
                 st.known[k], st.alive[k] = nil, nil
-                if not expected(self, "release", k) then emit(ev, "release", { key = k }) end
+                if not own then emit(ev, "release", { key = k }) end
             else
                 note(self, "vanished:" .. k)
             end
@@ -379,7 +422,8 @@ local function settled(self, s, ev)
         st.pending = nil
     end
 
-    -- whiteout: the loss, then the blackout map change, then the heal
+    -- whiteout WITHOUT a battle (poison): the all-fainted party, then the blackout map change, then the heal.
+    -- (A battle loss is reported at battle end, see end_battle.)
     local wo = st.wo
     if wo then
         local healed = true
@@ -389,18 +433,58 @@ local function settled(self, s, ev)
             emit(ev, "whiteout", {})
         end
     end
-    st.pc_seen = nil
+    -- F9: pc_seen outlives the settled steps that see no set diff (the box write can land a few frames after
+    -- the PC closes); only a diff, or `pc_frames` of quiet, spends it
+    local changed = false
+    for k in pairs(pk) do if base.pk[k] == nil then changed = true end end
+    for k in pairs(bk) do if base.bk[k] == nil then changed = true end end
+    for k in pairs(base.pk) do if pk[k] == nil then changed = true end end
+    for k in pairs(base.bk) do if bk[k] == nil then changed = true end end
+    if changed or not pc_recent then st.pc_seen = nil end
+    for id, until_frame in pairs(st.expect) do               -- unconsumed expectations expire (never leak)
+        if until_frame < st.frame then st.expect[id] = nil end
+    end
     st.base = { pk = pk, bk = bk }
 end
 
 -- ── the frame ────────────────────────────────────────────────────────────────────────────
+-- F10: a record without a string key cannot be tracked (and would throw on `t[nil] = v`): skip it with a note.
+-- Returns the list unchanged when every record is keyed, else a filtered copy and true.
+local function keyed(self, list, what)
+    local bad
+    for i, m in ipairs(list) do
+        if type(m) ~= "table" or type(m.key) ~= "string" then bad = true; break end
+    end
+    if not bad then return list end
+    local out = {}
+    for i, m in ipairs(list) do
+        if type(m) == "table" and type(m.key) == "string" then out[#out + 1] = m
+        else note(self, "nil_key:" .. what .. i) end
+    end
+    return out, true
+end
+
 function PE:step(s)
     local st, cfg = self.st, self.cfg
     self.notes = {}
+    local plist, bmons, dropped, bad_b
+    if s.party then plist, dropped = keyed(self, s.party, "party") end
+    if s.battle then bmons, bad_b = keyed(self, s.battle.mons or {}, "battler") end
+    if dropped or bad_b then                                  -- copy-on-write: the common frame allocates nothing
+        local sh = {}
+        for k, v in pairs(s) do sh[k] = v end
+        s = sh
+        if dropped then s.party = plist end
+        if bad_b then
+            local bt = {}
+            for k, v in pairs(s.battle) do bt[k] = v end
+            bt.mons, s.battle = bmons, bt
+        end
+    end
     local ev = {}
     st.frame = s.frame or (st.frame + 1)
     if s.has_pokeballs then st.has_pokeballs = true end
-    if s.pc_active then st.pc_seen = true end
+    if s.pc_active then st.pc_seen = st.frame end
     if s.party then
         st.party_keys = {}
         for _, m in ipairs(s.party) do st.party_keys[m.key] = true end
@@ -411,7 +495,7 @@ function PE:step(s)
         note(self, "whiteout_unconfirmed")
         st.wo = nil
     end
-    local ready = s.idle and s.party and s.boxes and not s.battle and not st.bt
+    local ready = s.idle and s.party and s.boxes and not s.battle and not st.bt and not dropped   -- a skipped party record must never read as a release
     if ready then
         local sig = party_sig(s.party) .. "|" .. box_sig(self, s.boxes)
         if sig == st.sig then st.agree = st.agree + 1 else st.sig, st.agree = sig, 1 end
