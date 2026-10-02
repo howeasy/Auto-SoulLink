@@ -36,7 +36,6 @@ pytestmark = [
 ]
 
 GAME = "gen1_new"
-ROMS = ("red", "blue")
 def deadline_for(scenario):
     """How long one scenario may take: every attempt it may run, plus boot and teardown.
 
@@ -108,11 +107,13 @@ def test_gen1_new_duo(scenario):
         if admission:
             pytest.fail(f"EmuHawk missing for admission gate: {play.EMUHAWK}")
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
-    for rom in ROMS:
-        if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):
-            if admission:
-                pytest.fail(f"clean {rom} ROM missing for admission gate: {play.ROMS[rom]}")
-            pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
+    # The instances boot the companion builds (checked below), never the clean dumps -- so a
+    # missing clean dump is no reason to skip. Only the admission gate reads them: its randomized
+    # companion pair is provisioned FROM the clean sources (e2e_duo.prepare_admit_randomized_new).
+    if admission:
+        for inst, rel in RUNNER_GAMES[GAME]["rom"].items():
+            if not os.path.exists(os.path.join(REPO, rel)):
+                pytest.fail(f"clean {inst} source ROM missing for admission gate: {rel}")
     problems = companion_problems(GAME)
     if problems:
         pytest.fail("; ".join(problems))
