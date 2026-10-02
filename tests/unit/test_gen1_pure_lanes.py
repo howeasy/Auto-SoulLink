@@ -558,45 +558,91 @@ def test_the_facts_escape_hatch_still_overrides_the_title(lua):
     assert play.expected["facts"]["TRAINER"]["OPP_RIVAL1"] == 221
 
 
-# ── the harness refuses a clean Red/Blue/pureRGB cartridge (owner 2026-10-02) ───────────────────
+# ── companion required: the harness refuses a Red/Blue/pureRGB cartridge without it ──────────────
 
 _ROOT_FWD = _REPO.replace(chr(92), "/")
+_BANK3F = 0x3F * 0x4000
 
 
-def _pins():
-    with open(os.path.join(_REPO, "data", "pret_rom_syms.json"), encoding="utf-8") as handle:
-        pret = json.load(handle)
-    with open(os.path.join(_REPO, "data", "purergb", "build_provenance.json"), encoding="utf-8") as handle:
-        pure = json.load(handle)["roms"]
+def _overlay_rows():
     with open(g1.PURERGB_ADMISSION_OVERLAY, encoding="utf-8") as handle:
-        overlays = list(json.load(handle))
-    return pret, pure, overlays
+        return json.load(handle)
 
 
-def _clean_cartridge(lua, sha1):
+def _rom(writer_at=None):
+    """A 1 MiB cartridge image; `writer_at` plants the companion's beacon writer there."""
+    rom = bytearray(0x100000)
+    if writer_at is not None:
+        rom[writer_at:writer_at + 5] = bytes([0x3E, 0x53, 0xEA, 0xE2, 0xDE])  # ld a,"S" / ld [$DEE2],a
+    return bytes(rom)
+
+
+def _refusal(lua, pack, title, kind, rom, sha1="", root=_ROOT_FWD):
     gate = _dofile(lua, "lua/tests/gen1_gate.lua")
-    return gate.clean_cartridge(_ROOT_FWD, _dofile(lua, "lua/json_codec.lua"), sha1)
+    adm = lua.table(pack=pack, title=title, kind=kind, rom_sha1=sha1)
+    return gate.companion_refusal(root, _dofile(lua, "lua/json_codec.lua"), adm,
+                                  lambda offset: rom[int(offset)], len(rom))
 
 
-def test_the_harness_names_every_pinned_clean_cartridge_and_nothing_else(lua):
-    pret, pure, overlays = _pins()
-    for name in ("pokered", "pokeblue"):
-        assert _clean_cartridge(lua, pret[name]["rom_sha1"]) == f"clean {name}"
-        assert _clean_cartridge(lua, pret[name]["rom_sha1"].upper()) == f"clean {name}"
-    for name, row in pure.items():
-        assert _clean_cartridge(lua, row["sha1"]) == f"clean pureRGB {name}"
-    # Yellow has no companion and stays allowed; the overlays and any other build are not clean
-    for sha1 in [pret["pokeyellow"]["rom_sha1"], *overlays, "ab" * 20, ""]:
-        assert _clean_cartridge(lua, sha1) is None, sha1
+def _pure_sha(title, kind):
+    with open(os.path.join(_REPO, "data", "purergb", "build_provenance.json"), encoding="utf-8") as handle:
+        clean = json.load(handle)["roms"]
+    if kind == "overlay":
+        return next(sha for sha, row in _overlay_rows().items() if row["title"] == title)
+    return clean[{"purered": "pokered", "pureblue": "pokeblue", "puregreen": "pokegreen"}[title]]["sha1"]
 
 
-def _start(tmp_path, sha1, title):
+@pytest.mark.parametrize("pack,title,kind,writer,sha", [
+    ("gen1_rby", "red", "clean", None, "pinned clean"),
+    ("gen1_rby", "blue", "clean", None, "pinned clean"),
+    ("gen1_rby", "red", "named", None, "ab" * 20),                  # unknown sha1, no beacon
+    ("gen1_rby", "red", "named", 0x3E * 0x4000 + 0x10, "cd" * 20),  # writer outside bank $3F
+    ("gen1_purergb", "puregreen", "clean", None, "clean"),
+    ("gen1_purergb", "purered", "clean", None, "clean"),
+    ("gen1_purergb", "pureblue", "rand", None, "ef" * 20),          # randomized CLEAN pure
+    ("gen1_purergb", "purered", "named", _BANK3F, "ab" * 20),   # pure never by name
+    ("gen1_purergb", "purered", "overlay", None, "ab" * 20),        # overlay kind, unpinned sha1
+])
+def test_a_cartridge_without_the_companion_is_refused(lua, pack, title, kind, writer, sha):
+    if pack == "gen1_purergb" and sha == "clean":
+        sha = _pure_sha(title, "clean")
+    reason = _refusal(lua, pack, title, kind, _rom(writer), sha)
+    assert reason and f"{kind} " in reason and title in reason, reason
+
+
+@pytest.mark.parametrize("pack,title,kind,writer,sha", [
+    ("gen1_rby", "red", "named", _BANK3F, "ab" * 20),           # red_patched
+    ("gen1_rby", "blue", "named", _BANK3F + 0x100, "cd" * 20),  # blue_patched, writer moved
+    ("gen1_rby", "red", "named", _BANK3F + 0x3FFB, "ef" * 20),  # last position in the bank
+    ("gen1_rby", "red", "rand", _BANK3F, "12" * 20),            # randomized, then injected
+    ("gen1_rby", "yellow", "clean", None, "34" * 20),               # Yellow has no companion
+    ("gen1_purergb", "purered", "overlay", None, "overlay"),
+    ("gen1_purergb", "puregreen", "overlay", None, "overlay"),
+    ("gen1_purergb", "pureblue", "rand_overlay", None, "56" * 20),  # overlay, then randomized
+])
+def test_a_companion_cartridge_is_allowed(lua, pack, title, kind, writer, sha):
+    if sha == "overlay":
+        sha = _pure_sha(title, "overlay").upper()
+    assert _refusal(lua, pack, title, kind, _rom(writer), sha) is None
+
+
+@pytest.mark.parametrize("pack,title,kind,missing", [
+    ("gen1_purergb", "purered", "overlay", "admission_overlay.json"),
+    ("gen1_rby", "red", "named", "panel.lua"),
+])
+def test_a_missing_admission_or_mailbox_source_raises(lua, tmp_path, pack, title, kind, missing):
+    with pytest.raises(Exception, match=missing.replace(".", r"\.")):
+        _refusal(lua, pack, title, kind, _rom(_BANK3F), "ab" * 20, root=str(tmp_path).replace(chr(92), "/"))
+
+
+def _start(tmp_path, title, rom):
     """gen1_gate.start under stubs, up to the refusal (or the first BizHawk call past it)."""
     runtime = LuaRuntime(unpack_returned_tuples=True)
     g = runtime.globals()
     g.SLINK_ROOT = _ROOT_FWD
-    g.memory = runtime.table(read_u8=lambda _addr, _domain=None: 0)
-    g.gameinfo = runtime.table(getromhash=lambda: sha1)
+    g.memory = runtime.table(read_u8=lambda addr, _domain=None: rom[int(addr)],
+                             getmemorydomainsize=lambda _domain=None: len(rom))
+    g.gameinfo = runtime.table(getromhash=lambda: "ab" * 20)
     exits = []
     g.client = runtime.table(exit=lambda: exits.append(True))
     g.console = runtime.table(log=lambda _s: None)
@@ -616,27 +662,29 @@ def _start(tmp_path, sha1, title):
     return ok, str(err), text, exits
 
 
-def test_a_clean_red_is_refused_even_when_the_launcher_names_its_family(tmp_path):
-    pret, _pure, _overlays = _pins()
-    ok, err, text, exits = _start(tmp_path, pret["pokered"]["rom_sha1"], "red")
+def test_a_red_without_the_companion_is_refused_even_when_the_launcher_names_its_family(tmp_path):
+    ok, err, text, exits = _start(tmp_path, "red", _rom())
     assert not ok and err == "slink-gate-finished" and exits == [True]
-    assert "RESULT: FAIL clean pokered refused: the SLink companion is required" in text
+    assert "RESULT: FAIL named red (no companion beacon writer in bank $3F) refused" in text
 
 
 def test_a_named_companion_build_gets_past_the_refusal(tmp_path):
-    """The twin: red_patched is named the same way (SLINK_GATE_TITLE=red) but its sha1 is pinned
-    nowhere, so the harness goes on to build the client (and, under these stubs, stops at the
-    first BizHawk call it was not given -- never at the refusal)."""
-    ok, err, text, exits = _start(tmp_path, "ab" * 20, "red")
+    """The twin: the same named Red with the beacon writer in bank $3F goes on to build the client
+    (and, under these stubs, stops at the first BizHawk call it was not given -- never at the
+    refusal)."""
+    ok, err, text, exits = _start(tmp_path, "red", _rom(_BANK3F))
     assert "refused" not in text and exits == []
     assert err != "slink-gate-finished"
 
 
-def test_the_duo_harness_refuses_before_its_header_family_fallback():
+def test_the_duo_harness_refuses_after_admission_and_before_anything_runs():
     """duo_gen1_main admits by sha1 and falls back to the header family -- the path a clean Red
-    took as kind "named". The same refusal must run first and end the instance."""
+    took as kind "named". The companion check must cover both outcomes and end the instance
+    before the facts, the client or any scenario code."""
     with open(os.path.join(_REPO, "lua", "tests", "duo", "duo_gen1_main.lua"), encoding="utf-8") as handle:
         src = handle.read()
-    refusal = src.index("gen1_gate.lua\").clean_cartridge(")
-    assert refusal < src.index("Entry.detect_title(rom_u8)") < src.index("Entry.admit(")
-    assert 'finish(false, refused .. " refused' in src[refusal:src.index("Entry.detect_title(rom_u8)")]
+    fallback = src.index('title, pack, kind = family, "gen1_rby", "named"')
+    refusal = src.index("gen1_gate.lua\").companion_refusal(")
+    facts = src.index("local FACTS = dofile(")
+    assert fallback < refusal < facts
+    assert 'finish(false, refused .. " refused' in src[refusal:facts]

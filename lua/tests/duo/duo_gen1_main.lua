@@ -80,13 +80,6 @@ local function rom_u8(a) return memory.read_u8(a, "ROM") end
 -- Banked WRAM through the flat domain (Entry.harness_bus_u8): a System Bus read at frame end
 -- can land inside pureRGB's bank-2 palette loop and read 0 for one frame (PLAN §4 row 13).
 local rd = Entry.harness_bus_u8()
--- A clean Red/Blue/pureRGB is refused before anything else (owner 2026-10-02: the companion is
--- required); the header fallback below would otherwise run it as a "named" vanilla family.
-local refused = dofile(ROOT .. "/lua/tests/gen1_gate.lua").clean_cartridge(
-    ROOT, json, gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "")
-if refused then
-    finish(false, refused .. " refused: the SLink companion is required")
-end
 local family, header = Entry.detect_title(rom_u8)
 local admitted = Entry.admit({
     root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
@@ -102,6 +95,16 @@ elseif family then
     title, pack, kind = family, "gen1_rby", "named"
 else
     finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")")
+end
+-- Companion required (owner 2026-10-02): whether admitted by sha1 or named by the header family
+-- above, a Red/Blue/pureRGB cartridge runs only with the companion in it (gen1_gate.lua
+-- companion_refusal: the bank-$3F beacon writer, or an overlay admission row).
+local refused = dofile(ROOT .. "/lua/tests/gen1_gate.lua").companion_refusal(ROOT, json, {
+    pack = pack, title = title, kind = kind,
+    rom_sha1 = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
+}, rom_u8, memory.getmemorydomainsize("ROM"))
+if refused then
+    finish(false, refused .. " refused: the SLink companion is required")
 end
 -- The lane's driver-facts table (P3b-e): every route/battle module reads its game facts from it,
 -- and a module's `new(expected)` falls back to the VANILLA table when `expected.facts` is nil --

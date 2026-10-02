@@ -672,9 +672,10 @@ without rewriting them. Those sections record what was true when they were writt
 - **Duo rows.** `gen1_pure_overlay` is gone. `gen1_pure` and `gen1_pure_green` boot the overlay
   builds and run all 20 scenarios, including `trade_new`, `trade_decline_new` and `explode_new`.
   A missing overlay fails the run instead of skipping it. (`c3f6018f`, `59cca559`)
-- **Harness refusal.** `lua/tests/gen1_gate.lua` and `lua/tests/duo/duo_gen1_main.lua` refuse
-  a running sha1 equal to a clean pin (`build_provenance.json` roms), even when the title is
-  named. (`99119674`)
+- **Harness refusal.** `lua/tests/gen1_gate.lua` and `lua/tests/duo/duo_gen1_main.lua` fail
+  closed: a pure cartridge runs only when admitted through an `admission_overlay.json` row
+  (kind `overlay` or `rand_overlay`), whatever its sha1, and even when the title is named.
+  (`99119674`, made fail-closed in the follow-up commit)
 - **Fixtures.** `tools/gen1_fixtures.py` builds pure fixtures on `*_overlay_cold` and reads
   `gen1 pure<x> overlay.SaveRAM`. The committed pure fixtures still qualify against the overlay
   ROMs, because the overlay leaves base stats and the save layout unchanged. (`ac836b8e`)
