@@ -500,6 +500,43 @@ def test_rtc_slice_pack_absent_open_wrong_fail_revert(api):
     assert from_lua(api.rtc_slice(to_lua(r, title))) == good
 
 
+def test_rtc_sampling_aligns_boot_977_979_without_relaxing_bytes_or_frames(api):
+    """Captured hge failure: boot completion varies, the RTC observation frame must not."""
+    r = api._runtime
+    title = to_lua(r, {"profile": {"rtc": {"symbol": "rtc", "date_off": 0, "date_size": 4,
+                      "time_off": 4, "time_size": 4, "source": "MODEL RTC slice"}},
+                      "symbols": {"rtc": {"address": 100, "size": 8}}})
+    def sample(start, value="pinned", stride=1):
+        state = {"frame": start, "reads": []}
+        def step(buttons):
+            assert len(buttons) == 0
+            state["frame"] += stride
+        def read(address, size):
+            state["reads"].append(state["frame"])
+            return value
+        if api.sample_rtc is None:  # Old producer: reads immediately after the boot predicate.
+            result = {"first": read(100, 4) + read(104, 4), "frame_first": state["frame"]}
+        else:
+            result = from_lua(api.sample_rtc(title, 1200, step, lambda: state["frame"], read))
+        return result, state
+    first, a = sample(977)
+    second, b = sample(979)
+    assert first["frame_first"] == second["frame_first"] == 1200
+    assert a["reads"] == b["reads"] == [1200, 1200]
+    observation = {**first, "second": second["first"], "frame_second": second["frame_first"], "unpinned": "wallclock"}
+    assert api.evaluate("k", to_lua(r, observation)) == "PASS"
+    wrong = {**observation, "second": "different RTC bytes"}
+    assert api.evaluate("k", to_lua(r, wrong))[0] == "FAIL"
+    wrong = {**observation, "frame_second": 1201}
+    assert api.evaluate("k", to_lua(r, wrong))[0] == "FAIL"
+    assert api.evaluate("k", to_lua(r, observation)) == "PASS"
+    with pytest.raises(Exception, match="RTC sample frame advance"):
+        sample(1199, stride=2)
+    ok, why = r.eval("function(fn, ...) return pcall(fn, ...) end")(
+        api.sample_rtc, title, 1200, lambda _: None, lambda: 1201, lambda *args: "unused")
+    assert not ok and "already passed" in why["open"]
+
+
 @pytest.mark.parametrize("phase", ["battle", "pc", "reset"])
 def test_phase_zero_expected_cannot_hide_in_sum_red_revert(api, phase):
     original = examples()["n"]
@@ -821,7 +858,9 @@ def test_row_o_requires_synth_disclosure(tmp_path):
     assert row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)[0] == "PASS"
 
 
-def test_probe_fake_io_terminal_receipt_without_console(api):
+@pytest.mark.parametrize("start_frame", [None, 977, 979, 1025, 1035])
+@pytest.mark.parametrize("revert_rtc", [False, True])
+def test_probe_fake_io_terminal_receipt_without_console(api, start_frame, revert_rtc):
     """Execute the actual entry point against absent field prerequisites, not just its oracle."""
     r = api._runtime
     json_api = r.execute((REPO / "lua/json_codec.lua").read_text(encoding="utf-8"))
@@ -832,10 +871,17 @@ def test_probe_fake_io_terminal_receipt_without_console(api):
     pack = {"schema": "gen4-profile-v1", "titles": {"heartgold": {"rom": {"sha1": cfg["rom_sha1"], "md5": cfg["rom_md5"]},
             "symbols": {"sRTCWork": {"address": 100}, "sFieldSysPtr": {"address": 200}, "sSaveDataPtr": {"address": 300}},
             "sites": {}, "profile": {}, "overlays": {}, "overlay_table": {}}}}
+    if start_frame is not None:
+        cfg["rtc_sample_frame"] = 1200
+        title = pack["titles"]["heartgold"]
+        title["symbols"]["sRTCWork"]["size"] = 8
+        title["profile"]["rtc"] = {"symbol": "sRTCWork", "date_off": 0, "date_size": 4,
+                                    "time_off": 4, "time_size": 4, "source": "MODEL packed RTC"}
+    r.globals().START_FRAME = start_frame or 0
     r.globals().FAKE_CFG, r.globals().FAKE_PACK = json.dumps(cfg), json.dumps(pack)
     r.globals().FAKE_JSON = json_api
     r.execute('''
-        SLINK_GEN4_PROBE_TEST=false; SLINK_ROOT="fake-root"; WRITES={}; FRAME=0
+        SLINK_GEN4_PROBE_TEST=false; SLINK_ROOT="fake-root"; WRITES={}; FRAME=START_FRAME
         os.getenv=function(key) if key=="SLINK_GEN4_PROBE_CONFIG" then return "cfg.json" end
             if key=="SLINK_GEN4_PROBE_OUT" then return "receipt.txt" end end
         dofile=function(path) if path:match("json_codec.lua$") then return FAKE_JSON end; error(path) end
@@ -846,18 +892,28 @@ def test_probe_fake_io_terminal_receipt_without_console(api):
         end
         memory={getmemorydomainlist=function() return {} end,read_u32_le=function() return 1 end,
             read_bytes_as_array=function(_,n) local t={}; for i=1,n do t[i]=0 end; return t end}
-        emu={getregisters=function() return {} end,getregister=function() error("bogus") end,
+        emu={getregisters=function() return {} end,getregister=function(name) if name=="ARM9 r15" then return 0 end; error("bogus") end,
+            frameadvance=function() FRAME=FRAME+1 end,
             framecount=function() return FRAME end,limitframerate=function() end}
         client={exit=function() EXITED=true end,speedmode=function() end}
         gameinfo={getromhash=function() return string.rep("1",32) end}
         event={}; joypad={set=function() end}
         console={log=function() error("console traffic forbidden") end}
     ''')
-    r.execute(SCRIPT.read_text(encoding="utf-8"))
+    source = SCRIPT.read_text(encoding="utf-8")
+    if revert_rtc:
+        call = "return M.sample_rtc(title,cfg.rtc_sample_frame,step,emu.framecount,bytes)"
+        assert source.count(call) == 1
+        source = source.replace(call, "local rtc=M.rtc_slice(title); return {first=bytes(rtc.date_address,rtc.date_size)"
+                                "..bytes(rtc.time_address,rtc.time_size),frame_first=emu.framecount()}")
+    r.execute(source)
     assert list(r.globals().WRITES.values()) == ["receipt.txt"]
     assert r.globals().EXITED
     rows = parse_receipt(r.globals().TERMINAL, title="heartgold", rom_sha1="2" * 40, run_id="fake", expected_cut=MODEL_CUT)
     assert set(rows) == set(ROWS) and rows["l"][0] == "OPEN"
+    if start_frame is not None:
+        assert rows["k"][1]["observation"]["frame_first"] == (start_frame if revert_rtc else 1200)
+        assert rows["k"][1]["observation"]["first"] == "00" * 8
 
 
 @pytest.mark.parametrize("guard", ["residency", "full_pin", "last_drain", "close_fault"])
@@ -1577,6 +1633,10 @@ def test_gen4_hook_probe(api, title):
     cfg = {"title": title, "rom_sha1": rom_sha1, "rom_md5": rom_md5, "jit": False, "use_real_time": False,
            "requested_rate": 300, "initial_time": "2010-01-01T12:00:00", "sample_frames": 600,
            "boot_frames": 6000, "phase_max": max(artifact["phases"][name]["cap"] for name in ("battle", "pc")),
+           # aa45 PHYSICAL combined receipts: HG g1cprobeHG-1201 1035/1035;
+           # SS g1cprobeSS-1227 1025/1025; hge g1cprobeHGE-1215 977/979.
+           # Fixed frame = measured maximum 1035 + 165 frames of boot margin.
+           "rtc_sample_frame": 1200,
            "qualify_performance": os.environ.get("SLINK_GEN4_PROBE_QUALIFY") == "1",
            **supplied}
     assert cfg["requested_rate"] == 300, "development route must request 300%"
@@ -1780,6 +1840,7 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     def launch(*args):
         case = args[6]
         assert args[-1]["internal_loads"] == internal_census_loads(title, artifact)
+        assert args[-1]["rtc_sample_frame"] == 1200
         if failure == "baseline" and case == "baseline":
             raise AssertionError("terminal receipt absent")
         if failure == "phase-launch" and case.startswith("phase-"):

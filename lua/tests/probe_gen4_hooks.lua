@@ -84,6 +84,21 @@ function M.rtc_slice(title)
     end
     return result
 end
+function M.sample_rtc(title,target,step,frame,bytes)
+    local rtc=M.rtc_slice(title)
+    target=need(target,"k:fixed RTC sample frame config")
+    check(type(target)=="number" and target%1==0 and target>0 and target<=12000,"invalid RTC sample frame")
+    local now=frame()
+    check(type(now)=="number" and now%1==0 and now>=0,"invalid emulator frame count")
+    if now>target then error({open="k:fixed RTC sample frame "..target.." already passed at "..now},0) end
+    -- Boot completion is a predicate, not a fixed time (hge observed 977 vs 979).
+    -- Advance only empty inputs, then report the REAL counter; never relabel a sample.
+    for _=1,target-now do step({}) end
+    local sampled=frame()
+    check(sampled==target,"RTC sample frame advance did not reach the fixed frame")
+    return {first=bytes(rtc.date_address,rtc.date_size)..bytes(rtc.time_address,rtc.time_size),
+        frame_first=sampled,sample_frame=target}
+end
 function M.save_driver_witness(title,read,read_byte,frame)
     local p=need(title.profile.probe_field,"save:pack probe_field")
     local fs=read(need(title.symbols.sFieldSysPtr,"save:FieldSystem symbol").address)
@@ -816,8 +831,7 @@ local function run()
             boot_ok=x.overworld; return x
         end)
         guarded("k",function()
-            local rtc=M.rtc_slice(title)
-            return {first=bytes(rtc.date_address,rtc.date_size)..bytes(rtc.time_address,rtc.time_size),frame_first=emu.framecount()}
+            return M.sample_rtc(title,cfg.rtc_sample_frame,step,emu.framecount,bytes)
         end)
         if cfg.mode=="cold-reload" then
             check(boot_ok and idle_field(),"cold readback not at idle overworld")
