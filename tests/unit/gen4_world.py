@@ -44,7 +44,8 @@ TRAINER_OTID = 0x30391A5C
 D7_MODEL = {  # MODEL: used only when a test strips the pack's battle.d7 (no_pack_d7) or overrides it
     "heartgold": {"seam": {"cmd": 11, "overlay_id": 12, "addr": 0x0224A70C, "pin_hex": "f8b582b0"},
                   "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C},
-    "heartgold_hge": {"seam": {"cmd": 9, "overlay_id": 12, "table": 0x0226CA90},
+    "heartgold_hge": {"seam": {"cmd": 9, "overlay_id": 12, "table": 0x0226CA90,
+                               "addr": 35951836, "pin_hex": "004a1047"},
                       "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C},
 }
 PACKS = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
@@ -251,10 +252,9 @@ class World:
         self.write_boxes()
         self.set_overlay(12)
         seam = (self.d7 or self.prof["battle"].get("d7") or {}).get("seam")
-        if seam and "table" in seam:        # hge: the ROM dispatch table entry is an odd (thumb) trampoline
-            self.w(seam["table"] + 4 * seam["cmd"], 0x022494DD)
-            self.put(0x022494DC, bytes.fromhex("f8b50c00"))
-        elif seam:
+        if seam and "table" in seam:        # hge dispatch table is provenance, not a runtime pin oracle
+            self.w(seam["table"] + 4 * seam["cmd"], seam["addr"] | 1)
+        if seam:
             self.put(seam["addr"], bytes.fromhex(seam["pin_hex"]))
 
     def write_party(self):

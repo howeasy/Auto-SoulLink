@@ -33,7 +33,7 @@ class World(Env):
             if ctx==nil then return nil end
             return {id=site.id,pc=ctx.pc,frame=ctx.frame}
         end end""")(binding)
-        self.cfg_ps = self.lua.table_from({"Registry": wrapped, "binding": binding, "owner": "g4", "max_pending": 8,
+        self.cfg_ps = self.lua.table_from({"Registry": wrapped, "binding": binding, "owner": "g4", "max_pending": 8, "settle_polls": 16,
                                            "capture": capture, "phases": lua_phases, **cfg})
         self.sig = self.PS.new(self.cfg_ps)
 
@@ -84,12 +84,13 @@ def test_zero_site_phase_builds_no_registry():
 
 def test_failed_registry_new_is_handled_without_throwing_and_cleans_up():
     w = World(cap=3)
-    w.st.put(PACK["sites"]["battle_outcome_copy"]["address"] + 9, "ff")  # third pin bad: nothing registered yet
+    w.cfg_ps["phases"]["battle"]["sites"][3]["extent"] = 3  # malformed descriptor stays a hard construction fault
     ok, why = w.sig.arm(w.sig, "battle")
-    assert ok is None and "full registration pin mismatch" in why
+    assert ok is None and "full registration extent" in why
     s = w.status()
     assert s["owned"] == 0 and w.st.count() == 0 and len(s["retained"]) == 0 and "battle" in s["faults"] and s["failure"]
     w.load(*BATTLE)
+    w.cfg_ps["phases"]["battle"]["sites"][3]["extent"] = PACK["sites"]["battle_outcome_copy"]["extent"]
     assert w.sig.arm(w.sig, "battle")[0] is None  # latched: no re-arm
 
 
@@ -329,3 +330,94 @@ def test_control_revert_f3_latches_a_poll_overrun():
     mutant.poll(mutant)
     assert mutant.failure is not None                                       # reverted: permanent fault, request() dead too
     assert mutant.request(mutant, "a")[0] is None
+
+
+def test_async_active_bss_refuses_without_latch_then_arms_when_pin_lands():
+    w = World({"seam": ["battle_start_ov12"]})
+    site = PACK["sites"]["battle_start_ov12"]
+    w.st.put(site["address"], "000400fc0010000422262225000a0006")
+    for attempt in range(1, 12):
+        ok, why = w.sig.request(w.sig, "seam")
+        assert ok is None and why.startswith("loading:"), why
+        assert w.sig.failure is None and w.status()["refused"] == attempt
+        assert w.status()["owned"] == 0 and len(w.status()["retained"]) == 0
+    w.load("battle_start_ov12")
+    assert w.sig.request(w.sig, "seam") is True
+    w.fire("battle_start_ov12")
+    assert w.ids() == ["battle_start_ov12"] and w.status()["owned"] == 0
+    assert w.sig.failure is None
+
+
+def test_persistent_wrong_pin_latches_only_at_explicit_settle_bound():
+    w = World({"seam": ["battle_start_ov12"]}, settle_polls=3)
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
+    for _ in range(2):
+        assert w.sig.arm(w.sig, "seam")[1].startswith("loading:")
+        assert w.sig.failure is None
+    assert w.sig.arm(w.sig, "seam")[0] is None
+    assert "settle" in w.sig.failure and w.status()["refused"] == 3
+    w.load("battle_start_ov12")
+    assert w.sig.request(w.sig, "seam")[0] is None  # landing after the deadline cannot clear the latch
+
+
+def test_resident_full_pin_corruption_after_arm_latches_at_fire():
+    w = World({"seam": ["battle_start_ov12"]})
+    assert w.sig.request(w.sig, "seam") is True
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"] + 9, "ff")
+    w.fire("battle_start_ov12")  # unchanged callback word: full pin must catch this
+    assert w.ids() == []
+    assert "pin_mismatch" in w.sig.failure and w.status()["owned"] == 0
+
+
+def test_static_pin_failure_never_enters_retry_window_and_settle_is_explicit():
+    w = World({"pc": ["pc_place_first_in_box"]})
+    w.st.put(PACK["sites"]["pc_place_first_in_box"]["address"] + 9, "ff")
+    assert w.sig.arm(w.sig, "pc")[0] is None
+    assert "full registration pin mismatch" in w.sig.failure and w.status()["refused"] == 0
+    w.cfg_ps["settle_polls"] = None
+    with pytest.raises(LuaError, match="settle_polls"):
+        w.PS.new(w.cfg_ps)
+
+
+@pytest.mark.parametrize("guard", ["retry", "bound"])
+def test_revert_loading_refusal_or_bound_is_detected(guard):
+    w = World({"seam": ["battle_start_ov12"]}, settle_polls=3)
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
+    old, new = (("if retryable and clean then", "if false then") if guard == "retry" else
+                ("if settling[phase]>=cfg.settle_polls then", "if false then"))
+    mutant = _mutant(w, old, new)
+    for _ in range(3):
+        mutant.request(mutant, "seam")
+        if guard == "retry":
+            assert mutant.failure is not None  # old permanent latch on first loading refusal
+            break
+    if guard == "bound":
+        assert mutant.failure is None  # unbounded corrupt pin is incorrectly still retryable
+    for index in range(3):
+        w.sig.request(w.sig, "seam")
+        assert (w.sig.failure is not None) == (index == 2)
+
+
+def test_settle_streak_is_per_phase_and_clears_on_inactive_or_success():
+    w = World({"a": ["battle_start_ov12"], "b": ["battle_faint_cmd"]}, settle_polls=3)
+    for name in ("battle_start_ov12", "battle_faint_cmd"):
+        w.st.put(PACK["sites"][name]["address"], "00" * 16)
+    for name in ("a", "b", "a", "b"):
+        assert w.sig.request(w.sig, name)[1].startswith("loading:")
+    assert w.status()["settling"]["a"] == w.status()["settling"]["b"] == 2
+    w.sig.disarm(w.sig, "a")  # inactive poll calls disarm even with no live registry
+    assert w.sig.request(w.sig, "a")[1].startswith("loading:")
+    assert w.status()["settling"]["a"] == 1 and w.sig.failure is None
+    w.load("battle_faint_cmd")
+    assert w.sig.request(w.sig, "b") is True
+    assert w.status()["settling"]["b"] is None
+    w.sig.close(w.sig)
+    assert len(w.status()["settling"]) == 0
+
+
+def test_pin_reader_error_is_a_hard_fault_not_a_loading_refusal():
+    w = World({"seam": ["battle_start_ov12"]})
+    w.st.io.read_range = w.lua.eval("function() error('unreadable bus') end")
+    assert w.sig.request(w.sig, "seam")[0] is None
+    assert "pin_error" in w.sig.failure and w.status()["refused"] == 0
+    assert w.status()["owned"] == 0

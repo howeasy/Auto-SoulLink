@@ -2776,8 +2776,10 @@
             "party_hp_off": 142,
             "repl_flag_off": 316,
             "seam": {
+              "addr": 35951836,
               "cmd": 9,
               "overlay_id": 12,
+              "pin_hex": "004a1047",
               "table": 36096656
             }
           },

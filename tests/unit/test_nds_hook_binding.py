@@ -162,13 +162,14 @@ def test_static_arm9_pin_mismatch_refused_at_validation():
     assert err is None and ctx["overlay_id"] is None
 
 
-def test_overlay_site_pins_only_when_resident():
+def test_overlay_site_refuses_until_resident_and_full_pin_matches():
     env = Env()
     env.resident()  # ov12 absent: bytes are another overlay's, nothing to compare
     env.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
-    assert env.binding.validate(env.binding, env.site("battle_start_ov12"))["id"] == "battle_start_ov12"
+    with pytest.raises(LuaError, match="nds-refused:not_resident:battle_start_ov12"):
+        env.binding.validate(env.binding, env.site("battle_start_ov12"))
     env.resident(12)  # resident with the wrong bytes: refused before arming
-    with pytest.raises(LuaError, match="full registration pin mismatch"):
+    with pytest.raises(LuaError, match="nds-refused:pin_mismatch:battle_start_ov12"):
         env.binding.validate(env.binding, env.site("battle_start_ov12"))
     env.load("battle_start_ov12")
     env.binding.validate(env.binding, env.site("battle_start_ov12"))
@@ -238,3 +239,98 @@ def test_no_defaults_every_fact_is_explicit(drop):
     cfg[drop] = None
     with pytest.raises(LuaError, match="explicit"):
         env.NDS.new(env.st.io, cfg)
+
+
+def test_strategy_covers_all_regions_and_epoch_is_only_the_current_main_view():
+    env = Env()
+    strategy = env.lua.eval("""function(fn)
+        for i=1,20 do local name,value=debug.getupvalue(fn,i)
+            if name=='strategy' then return value end
+        end
+        error('private strategy missing')
+    end""")(env.binding.resident)
+    env.st.slot(9, 12, 1)  # region 1, not MAIN
+    rows = strategy.entries(env.st.io.read_u32)
+    assert len(rows) == 24 and rows[10]["region"] == 1 and rows[10]["active"] is True
+    assert strategy.resident(12) is False and strategy.resident(-1) is False
+    with pytest.raises(LuaError, match="overlay id"):
+        env.binding.resident(env.binding, -1)  # preserve the public API's malformed-ID hard fault
+    before = strategy.epoch()
+    assert strategy.epoch() == before
+    env.st.slot(7, 12, 1)
+    assert strategy.epoch() != before and strategy.resident(12) is True
+    env.st.slot(7, 0, 0)
+    assert strategy.epoch() == before  # explicitly NOT a persistent reset identity
+
+
+def test_arm_refuses_epoch_change_between_decision_and_contract_check():
+    env = Env()
+    env.load("battle_start_ov12")
+    env.resident(12)
+    original = env.st.io.read_u32
+    count = 0
+    def changing(address, domain):
+        nonlocal count
+        count += 1
+        if count == 17:  # after the first bounded MAIN fold, before may_arm's fold
+            env.st.slot(7, 33, 1)
+        return original(address, domain)
+    env.st.io.read_u32 = changing
+    with pytest.raises(LuaError, match="nds-refused:stale_epoch"):
+        env.binding.validate(env.binding, env.site("battle_start_ov12"))
+    env.st.io.read_u32 = original
+    assert env.binding.validate(env.binding, env.site("battle_start_ov12"))
+
+
+def test_accept_and_residency_precede_full_pin_read_and_each_fire_reads_once():
+    env = Env()
+    env.load("battle_start_ov12")
+    env.resident(12)
+    site = env.binding.validate(env.binding, env.site("battle_start_ov12"))
+    original, reads = env.st.io.read_range, []
+    def read(*args):
+        reads.append(args)
+        return original(*args)
+    env.st.io.read_range = read
+    env.st.put(site["address"] + 9, "ff")
+    assert env.hit(site, 0, accept=env.lua.eval("function() return false end")) == (None, None)
+    assert reads == []
+    env.resident(13)
+    assert env.hit(site, 0) == (None, None) and reads == []
+    env.resident(12)
+    assert "pin_mismatch" in env.hit(site, site["fire"])[1] and len(reads) == 1
+    env.load("battle_start_ov12")
+    assert env.hit(site, site["fire"])[1] is None and len(reads) == 2
+
+
+def _binding_mutant(env, old, new):
+    path = ROOT / "lua/nds/hook_binding.lua"
+    source = path.read_text()
+    assert source.count(old) == 1
+    module = env.lua.eval("function(s,p) return assert(load(s,'@'..p))() end")(source.replace(old, new), path.as_posix())
+    return module.new(env.st.io, env.cfg)
+
+
+@pytest.mark.parametrize("guard", ["fire", "static"])
+def test_revert_full_pin_guards_accepts_corruption(guard):
+    env = Env()
+    name = "battle_start_ov12" if guard == "fire" else "party_add_mon"
+    env.load(name)
+    env.resident(12)
+    site = env.binding.validate(env.binding, env.site(name))
+    old, new = (("local allowed,reason=RC.may_fire(strategy,site,site_confirmed)", "local allowed,reason=true,nil")
+                if guard == "fire" else
+                ('assert(site_confirmed(out),"full registration pin mismatch: "..out.id)', 'assert(true)'))
+    good = env.binding
+    env.binding = _binding_mutant(env, old, new)
+    env.st.put(site["address"] + 9, "ff")
+    if guard == "fire":
+        assert env.hit(site, site["fire"])[0] is not None  # mutant falsely accepts
+        env.binding = good
+        assert "pin_mismatch" in env.hit(site, site["fire"])[1]
+    else:
+        assert env.binding.validate(env.binding, env.site(name))
+        with pytest.raises(LuaError, match="full registration pin mismatch"):
+            good.validate(good, env.site(name))
+    env.load(name)
+    assert good.validate(good, env.site(name))

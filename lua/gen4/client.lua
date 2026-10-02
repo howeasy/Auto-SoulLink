@@ -11,8 +11,8 @@
 --            domain), unregister(handle) }
 --   p.packs / p.title_profile                          optional (tests): decoded pack / title object
 --   p.d7        test override of the pack's profile.battle.d7 (the pack wins when it has the block):
---               { seam = { cmd, overlay_id, addr+pin_hex (HG: pinned) | table (hge: read the ROM
---                 dispatch table sPlayerBattleCommands entry `cmd`) },
+--               { seam = { cmd, overlay_id, addr, pin_hex (FILE-proven on every build;
+--                 an optional dispatch-table address is provenance only) },
 --                 ctx_cmd_off, bs_party_off, party_hp_off, repl_flag_off }
 --   p.area_of(map_id, location) -> area_id, loc_name   optional (step 6): area ids come from data
 --   p.has_pokeballs() -> bool                          optional (the bag read is a pack gap)
@@ -356,17 +356,8 @@ function Client.new(p)
         local _, hwhy = hp_off()
         if hwhy then return nil, hwhy end
         local addr, pin, mode = s.addr, s.pin_hex, s.mode or "thumb"
+        if not addr or not pin then return nil, "seam: pack lacks addr/pin_hex" end
         if not binding:resident(s.overlay_id) then return nil, "seam overlay not resident" end
-        if not addr then                      -- hge: the ROM's own dispatch table names the entry
-            local entry = R.read(mem, s.table + 4 * s.cmd, 4)
-            if not entry then return nil, "dispatch table unreadable" end
-            mode, addr = (entry & 1) == 1 and "thumb" or "arm", entry & ~1
-        end
-        if not pin then
-            local b = R.bytes(mem, addr, 4)
-            if not b then return nil, "seam bytes unreadable" end
-            pin = string.format("%02x%02x%02x%02x", b[1], b[2], b[3], b[4])
-        end
         local fire = pin:sub(7, 8) .. pin:sub(5, 6) .. pin:sub(3, 4) .. pin:sub(1, 2)
         st.seam = { id = "d7_seam", phase = Client.PHASE, image = "ov" .. s.overlay_id, overlay_id = s.overlay_id,
                     address = addr, mode = mode, extent = 4, register_hex = pin, fire_hex = fire, cmd = s.cmd }
@@ -562,6 +553,9 @@ function Client.new(p)
     function drv.start()
         signals = parts.phase_signals.new({
             Registry = Registry, binding = binding, owner = "slink.gen4", max_pending = 8, capture = capture,
+            -- HG serial diagnostic g1-settle-HG-1144-serial: table leads pins by 10/11 frames.
+            -- One request per client poll: 16 = measured max 11 + 5 scheduling margin.
+            settle_polls = 16,
             phases = { [Client.PHASE] = d7_phase } })
         st.signals = signals
         return signals
@@ -593,7 +587,9 @@ function Client.new(p)
         if landed then st.d7_done[e] = nil; return "done" end
         if ending then
             st.d7_done[e] = nil
-            if st.d7 then signals:disarm(Client.PHASE); st.d7 = nil end
+            -- End the loading-refusal streak too: it may exist before any lease/hook did.
+            if signals then signals:disarm(Client.PHASE) end
+            st.d7 = nil
             log("D7: no in-battle write landed before the battle ended; handed to the checkpoint queue: " .. tostring(e.key))
             return nil
         end

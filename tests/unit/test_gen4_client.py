@@ -197,6 +197,45 @@ def test_idle_is_the_safety_checkpoint_one_clause_each(what, kw):
 
 
 # ── step 2: the D7 faint, the one-frame lease ────────────────────────────────────────────
+def test_d7_loading_refusal_retries_next_poll_without_consuming_the_lease():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle(cmd=5)
+    w.advance(3)
+    addr = w.seam_addr()
+    pin = w.r(addr, 4)
+    w.w(addr, 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(1)
+    assert w.signals.failure is None and w.signals.status(w.signals)["refused"] == 1
+    assert w.state.d7 is None and not w.hooks and w.writes == []
+    w.advance(3)
+    assert w.signals.failure is None and w.signals.status(w.signals)["refused"] == 4
+    assert w.state.d7 is None and len(w.session.battle_pending) == 1
+    w.w(addr, pin)
+    w.advance(1)
+    assert len(w.hooks) == 1 and w.state.d7.renewed is True
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert snapshot_bytes(w) == (0, 0, 1) and len(w.writes) == 3
+    assert not w.hooks and len(w.session.battle_pending) == 0
+
+
+def test_d7_loading_streak_ends_with_battle_even_before_a_lease_exists():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle(cmd=5)
+    w.advance(3)
+    w.w(w.seam_addr(), 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(2)
+    assert w.state.d7 is None and w.signals.status(w.signals)["settling"]["d7"] == 2
+    w.leave_battle()
+    w.advance(1)
+    assert w.signals.status(w.signals)["settling"]["d7"] is None
+    assert w.signals.failure is None
+
+
 def test_renew_then_fire_writes_exactly_once_both_hp_copies_and_the_faint_bit():
     w = armed_world()
     assert len(w.hooks) == 1 and w.writes == []
@@ -291,6 +330,14 @@ def test_a_pack_gap_holds_the_entry_and_arms_nothing():
     w = armed_world(d7=None, no_pack_d7=True)
     assert w.hook_registrations == 0
     assert "pack_gap:battle.d7.seam" in w.session.battle_pending[1].why
+
+
+@pytest.mark.parametrize("missing", ["addr", "pin_hex"])
+def test_d7_missing_file_pin_metadata_never_mints_expected_bytes_from_ram(missing):
+    w = armed_world("heartgold_hge", patch_title=lambda title: title["profile"]["battle"]["d7"]["seam"].pop(missing))
+    assert not w.hooks and w.writes == []
+    assert "seam: pack lacks addr/pin_hex" in w.session.battle_pending[1].why
+    assert w.state.seam is None
 
 
 def test_the_missed_seam_on_the_ending_frame_defers_loudly_and_the_checkpoint_executor_lands_it():

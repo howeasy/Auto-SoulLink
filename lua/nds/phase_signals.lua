@@ -24,10 +24,13 @@
 -- Budget overrun is NOT a fault (F3): arm() refuses it ("busy: ...", counted in status().refused /
 -- last_refusal) and nothing latches, so a poll()-driven overrun can never lock out the D7 on-demand hook.
 --
--- Faults (any of: failed construction, failed close, a registry's capture/queue failure, a
+-- Loading refusals from the binding count without latching until settle_polls consecutive
+-- attempts for that phase. Success, disarm (even before a lease exists), or close resets the
+-- streak. Other construction faults and failed cleanup still latch immediately.
+-- Faults (any of: failed construction, expired settle budget, failed close, a registry's capture/queue failure, a
 -- throwing predicate) are LATCHED: `failure` holds the first fault, status().faults
 -- every one by phase, and no phase is armed again until recover() proves the cleanup faults
--- clear (capture/queue faults need a new session). Unremoved handles are kept
+-- clear (settle/capture/queue faults need a new session). Unremoved handles are kept
 -- counted (status().owned/retained) and their registry is retained until closed.
 local PS = {}
 local function integer(v,low,high) return type(v)=="number" and v==math.floor(v) and v>=low and v<=high end
@@ -41,6 +44,7 @@ function PS.new(cfg)
         and callable(binding.unregister) and callable(binding.valid_handle),"NDS binding required")
     assert(type(cfg.owner)=="string" and cfg.owner:match("^[%w_.%-]+$"),"explicit owner namespace required")
     assert(integer(cfg.max_pending,1,1e9),"explicit positive queue bound required")
+    assert(integer(cfg.settle_polls,1,1e9),"explicit positive settle_polls required")
     assert(callable(cfg.capture),"capture callback required")
     assert(cfg.on_event==nil or callable(cfg.on_event),"on_event must be callable")
     -- Owner ruling 2026-10-01: 60 fps at 1x holds with at most 1 hook (3 hooks = 66 fps, 4 = 58),
@@ -68,7 +72,8 @@ function PS.new(cfg)
     local faults={}      -- phase -> {kind=,message=}; first one is `failure`
     local fault_order={}
     local registered_closed=0
-    local refused,last_refusal=0,nil        -- budget refusals: counted, never latched (F3)
+    local refused,last_refusal=0,nil        -- budget/loading refusals; only an expired settle streak latches
+    local settling={}                       -- consecutive loading refusals, separately per phase
     local reported_handler={}
 
     local function count_owned() local n=0; for _ in pairs(owned) do n=n+1 end; return n end
@@ -121,8 +126,9 @@ function PS.new(cfg)
         if live[phase] then return true end
         if self.failure then return nil,self.failure end
         local sites=def.sites
-        if #sites==0 then return true end                    -- zero-site phase: no registry
+        if #sites==0 then settling[phase]=nil; return true end -- zero-site phase: no registry
         if count_owned()+#sites>budget then
+            settling[phase]=nil
             refused=refused+1
             last_refusal=phase..": busy: hook budget "..budget.." exceeded: "..count_owned().." owned + "..#sites
             return nil,last_refusal
@@ -135,13 +141,28 @@ function PS.new(cfg)
             -- Constructor already unwound; a failed unwind leaves handles in `owned` + its registry.
             if failed then take(failed); registered_closed=registered_closed+failed:status().registered end
             if owned_by(phase)>0 then retained[phase]=failed end
+            local reason=type(err)=="string" and err:match("^nds%-refused:([^:]+):.+$")
+            local retryable=reason=="pin_mismatch" or reason=="not_resident" or reason=="stale_epoch"
+            local clean=owned_by(phase)==0 and (not failed or #failed:status().cleanup_errors==0)
+            if retryable and clean then
+                refused=refused+1
+                settling[phase]=(settling[phase] or 0)+1
+                last_refusal="loading: "..phase..": "..err
+                if settling[phase]>=cfg.settle_polls then
+                    latch(phase,"settle","settle limit "..cfg.settle_polls.." polls: "..err)
+                    return nil,faults[phase].message
+                end
+                return nil,last_refusal
+            end
             latch(phase,"construct",err)
             return nil,faults[phase].message
         end
         live[phase]=reg
+        settling[phase]=nil
         return true
     end
     function self:disarm(phase)
+        settling[phase]=nil
         local reg=live[phase]
         if not reg then return true end
         live[phase],oneshot[phase]=nil,nil
@@ -156,7 +177,7 @@ function PS.new(cfg)
         local def=assert(cfg.phases[phase],"unknown phase: "..tostring(phase))
         if self.failure then return nil,self.failure end
         if live[phase] then return nil,"busy: "..phase.." already armed" end
-        if count_owned()+#def.sites>budget then return nil,"busy: hook budget "..budget.." in use" end
+        if count_owned()+#def.sites>budget then settling[phase]=nil; return nil,"busy: hook budget "..budget.." in use" end
         local ok,why=self:arm(phase)
         if not ok then return nil,why end
         if live[phase] then oneshot[phase]=true end
@@ -195,6 +216,7 @@ function PS.new(cfg)
     end
     -- Close everything. False (never a throw) when any handle stayed behind: counted, latched.
     function self:close()
+        settling={}
         for _,name in ipairs(names) do
             local reg=live[name]
             if reg then live[name]=nil; remove(name,reg) end
@@ -221,7 +243,8 @@ function PS.new(cfg)
     end
     function self:status()
         local armed,retained_out,pending,registered={}, {},0,registered_closed
-        local fault_out={}
+        local fault_out,settle_out={},{}
+        for name,n in pairs(settling) do settle_out[name]=n end
         for name,reg in pairs(live) do
             armed[name]=oneshot[name] and "on_demand" or true
             local s=reg:status(); pending=pending+s.pending; registered=registered+s.registered
@@ -234,7 +257,7 @@ function PS.new(cfg)
         for name,fault in pairs(faults) do fault_out[name]=fault.message end
         return {armed=armed,owned=count_owned(),budget=budget,retained=retained_out,faults=fault_out,failure=self.failure,
                 handler_error=self.handler_error,pending=pending,held=#held,registered=registered,
-                refused=refused,last_refusal=last_refusal}
+                refused=refused,last_refusal=last_refusal,settling=settle_out}
     end
     return self
 end

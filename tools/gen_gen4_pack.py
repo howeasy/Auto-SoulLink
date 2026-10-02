@@ -2130,11 +2130,13 @@ def d7_file_checks(xm: XMap, images: Images, build: str, vanilla: Images | None 
 
 
 def d7_values(checks: dict, build: str) -> dict:
-    seam = {"cmd": checks["table"]["cmd"], "overlay_id": overlay_id(D7_OV)}
+    # FILE-proven on every build (d7_checks: the entry word and the target bytes read from the decompressed image).
+    # The client must never mint its expected pin from RAM: during an async ov12 load the range still holds the
+    # previous overlay's bytes, and a pin read from them would "confirm" them (residency contract).
+    seam = {"cmd": checks["table"]["cmd"], "overlay_id": overlay_id(D7_OV),
+            "addr": checks["table"]["entry_address"], "pin_hex": checks["pin_bytes"]["bytes"]}
     if build == "hge":
         seam["table"] = checks["table"]["address"]
-    else:
-        seam.update(addr=checks["table"]["entry_address"], pin_hex=checks["pin_bytes"]["bytes"])
     return {"seam": seam, "ctx_cmd_off": 0x08, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": checks["repl_flag"]["value"]}
 
 

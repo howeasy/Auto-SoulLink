@@ -12,12 +12,15 @@
 -- Fire-time order (PLAN 4.2), the registry capture calls context(site, accept):
 --   1. the site's OWN overlay must be active, else return nil (another overlay shares the RAM);
 --   2. accept (optional binder filter, a drop never latches);
---   3. callback address and ARM9 PC must match the site;
---   4. the callback's unsigned `val` word must equal fire_hex. A mismatch while the owning
+--   3. shared residency contract re-reads the full pin (one range read per accepted fire);
+--   4. callback address and ARM9 PC must match the site;
+--   5. the callback's unsigned `val` word must equal fire_hex. A mismatch while the owning
 --      overlay is active asserts, which the registry latches: never a silent drop.
 -- The callback's (addr,val,flags) are captured by register()'s wrapper for the duration of
--- that one callback, so context keeps the GB `context(site, accept)` signature and needs no
--- extra bus read. Calling context outside a callback asserts.
+-- that one callback, so context keeps the GB `context(site, accept)` signature.
+-- Calling context outside a callback asserts.
+local here=assert(debug.getinfo(1,"S").source:match("^@(.*[/\\])"),"NDS binding file path required")
+local RC=dofile(here.."residency_contract.lua")
 local NDS = {}
 local NULL_GUID = "00000000-0000-0000-0000-000000000000"
 local function integer(v,low,high) return type(v)=="number" and v==math.floor(v) and v>=low and v<=high end
@@ -72,12 +75,52 @@ function NDS.new(io,config)
     end
     assert(type(c.pc_offset)=="table" and integer(c.pc_offset.thumb,0,16) and integer(c.pc_offset.arm,0,16),"explicit NDS pc_offset {thumb,arm} required")
     assert(type(c.overlay_table)=="table" and type(c.overlays)=="table","explicit NDS overlay_table/overlays required")
+    local tbl=c.overlay_table
+    local strategy={}
+    function strategy.entries(read)
+        local rows={}
+        for region=0,tbl.regions-1 do
+            for slot=0,tbl.per_region-1 do
+                local p=tbl.address+(region*tbl.per_region+slot)*tbl.entry_size
+                rows[#rows+1]={id=u32(read(p+tbl.id_off,c.bus_domain)),
+                    active=u32(read(p+tbl.active_off,c.bus_domain))~=0,region=region}
+            end
+        end
+        return rows
+    end
+    function strategy.resident(id)
+        if not integer(id,0,0xFFFF) then return false end
+        return NDS.resident(io,tbl,id,c.bus_domain)
+    end
+    function strategy.epoch()
+        -- ponytail: this private token is decided and consumed inside ONE validate call,
+        -- with no frameadvance/yield in between. It is never cached across polls/boots.
+        -- A bounded 16-word MAIN fold detects a changed arming view; inactive-id changes
+        -- may over-report. It is NOT a persistent boot/save-generation identity. Every
+        -- decision still rechecks residency and the full pin through may_arm below.
+        local value=0x811C9DC5
+        for slot=0,tbl.per_region-1 do
+            local p=tbl.address+slot*tbl.entry_size
+            value=((value ~ u32(io.read_u32(p+tbl.id_off,c.bus_domain)))*0x01000193)&0xFFFFFFFF
+            value=((value ~ u32(io.read_u32(p+tbl.active_off,c.bus_domain)))*0x01000193)&0xFFFFFFFF
+        end
+        return value
+    end
+    -- Geometry validation stays at this HGSS-configured strategy boundary.
+    NDS.resident(io,tbl,0,c.bus_domain)
+    RC.assert_strategy(strategy,io.read_u32)
+    local function site_confirmed(site)
+        return pin_matches(io,site.address,site.register_hex,c.bus_domain)==true
+    end
     local self={}
     local accept_errors,accept_error=0,nil
     local hit=nil
     -- Binder filter faults are dropped hits, recorded here; never a latch.
     function self:status() return {accept_errors=accept_errors,accept_error=accept_error} end
-    function self:resident(ovy) return NDS.resident(io,c.overlay_table,ovy,c.bus_domain) end
+    function self:resident(ovy)
+        assert(integer(ovy,0,0xFFFF),"overlay id")
+        return strategy.resident(ovy)
+    end
     function self:validate(site)
         local out=copy(site)
         assert(type(out.id)=="string" and out.id~="","site id required")
@@ -100,10 +143,16 @@ function NDS.new(io,config)
             assert(type(ov)=="table" and integer(ov.ram,0,0xFFFFFFFF) and integer(ov.size,1,0xFFFFFFFF),"unknown overlay: "..out.id)
             assert(out.address>=ov.ram and out.address+out.extent<=ov.ram+ov.size,"site extent outside its overlay: "..out.id)
         end
-        -- Static sites always pin; an overlay site pins when resident (another overlay's bytes
-        -- may occupy the range otherwise) and its fire word keeps guarding every later hit.
-        if out.image=="arm9" or self:resident(out.overlay_id) then
-            assert(pin_matches(io,out.address,pin,c.bus_domain),"full registration pin mismatch: "..out.id)
+        if out.image=="arm9" then
+            assert(site_confirmed(out),"full registration pin mismatch: "..out.id)
+        else
+            local allowed,reason=RC.may_arm(strategy,out,site_confirmed,strategy.epoch())
+            if not allowed then
+                if reason=="pin_mismatch" or reason=="not_resident" or reason=="stale_epoch" then
+                    error("nds-refused:"..reason..":"..out.id,0)
+                end
+                error("NDS arm fault: "..tostring(reason)..":"..out.id,0)
+            end
         end
         return out
     end
@@ -117,6 +166,11 @@ function NDS.new(io,config)
                 return nil
             end
             if not accepted then return nil end
+        end
+        local allowed,reason=RC.may_fire(strategy,site,site_confirmed)
+        if not allowed then
+            if reason=="not_resident" then return nil end
+            error("NDS fire fault: "..tostring(reason)..":"..tostring(site.id),0)
         end
         assert(u32(hit.addr)==site.address,tostring(site.id)..": callback address differs")
         assert(u32(io.register(c.pc_register))==site.pc,tostring(site.id)..": callback PC differs")

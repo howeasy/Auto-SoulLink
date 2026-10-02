@@ -1391,7 +1391,7 @@ def test_d7_block_has_the_client_field_names_and_the_proven_values(mode, title):
     assert d7 == model  # the pack block and the client's MODEL fallback agree key for key
     assert set(d7) == {"seam", "ctx_cmd_off", "bs_party_off", "party_hp_off", "repl_flag_off"}
     seam = d7["seam"]
-    assert set(seam) == ({"cmd", "overlay_id", "table"} if mode == "hge" else {"cmd", "overlay_id", "addr", "pin_hex"})
+    assert set(seam) == ({"cmd", "overlay_id", "table", "addr", "pin_hex"} if mode == "hge" else {"cmd", "overlay_id", "addr", "pin_hex"})
     assert (seam["cmd"], seam["overlay_id"]) == ((9, 12) if mode == "hge" else (11, 12))
 
 
@@ -1729,3 +1729,13 @@ def test_every_site_symbol_resolves_for_the_probe_validator(mode):
             sym = title["symbols"].get(site["symbol"])
             assert sym is not None, f"{site_id}: symbol {site['symbol']} absent from title.symbols"
             assert (sym["address"], sym["image"], sym["mode"]) == (site["address"], site["image"], site["mode"]), site_id
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_d7_seam_carries_its_file_pin_on_every_build(mode):
+    """The client arms the D7 seam on table-active AND this pin; a pin it had to read from RAM would be minted
+    from the very bytes an in-flight async ov12 load has not replaced yet (the residency race)."""
+    for title in _pack(mode)["titles"].values():
+        seam = title["profile"]["battle"]["d7"]["seam"]
+        assert isinstance(seam.get("addr"), int) and seam["addr"] % 2 == 0, seam
+        assert isinstance(seam.get("pin_hex"), str) and len(seam["pin_hex"]) == 8, seam
