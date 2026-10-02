@@ -1,5 +1,38 @@
 # Gen 4 resume note
 
+## Checkpoint 10 (2026-10-02 18:40Z) - adoption milestone CLOSED; live re-run at FROZEN `feb6b9c4`; session WRAPPED
+
+**Cut `feb6b9c4`** = the shared NDS adoption (`8a36e6ee`, `36fd0615`, `b4e17db2`) + the hge row-k fixed-frame RTC fix (1200 = measured max 1035 + 165).
+
+**PHYSICAL results at `feb6b9c4`**, all coordinator-verified: combined read back, control-reds missed=[], row o via consume_receipt.
+
+| Cell | Verdict | Receipt (`C:/slink/g4/`) |
+|---|---|---|
+| Row o HG one / two | PASS / PASS | `g1d-hg1-1400`, `g1d-hg2-1402` |
+| Row o hge one / two | PASS / PASS (the first live run of the pack-pinned hge seam) | `g1d-hge1-1403`, `g1d-hge2-1404` |
+| HG a–n | FAIL: m (fight timeout); b/f/n OPEN; the rest PASS | `g1dprobeHG-1405/heartgold-aea65d46ec72/combined.txt` |
+| hge a–n | FAIL: b (indoor fixture, no battle); f/m/n OPEN; the rest PASS (k now PASS at 1200/1200) | `g1dprobeHGE-1417/heartgold_hge-a5da2f1e3fff/combined.txt` |
+| SS a–n | FAIL: b (indoor fixture); f/m/n/o OPEN; the rest PASS | `g1dprobeSS-1425/soulsilver-2f9d94e5ba0f/combined.txt` |
+| PERF (f) | OPEN: a foreign Gen 2 EmuHawk was running at the preflight (PIDs 30896 / 32612) | none started |
+| Final audit | 44 owned processes all exited; originals unchanged (HG e18a15c7, SS 8b6fbf17, hge a9e4a48b) | `C:/slink/g4/g1-feb6b9c4-final.json` (sha256 55ef363e) |
+
+**What the cut proved:**
+- The k fix works physically on all three titles.
+- Production residency adoption plus the pinned hge seam: all 4 faint cells PASS.
+- No settle or pin faults.
+
+**New defect from the k fix:** waiting to frame 1200 shifts the RNG. On HG the encounter (Cyndaquil Lv5 vs Rattata Lv4, normal) overran the fight leg's 3000-frame budget, so HG m FAIL. Baseline i was unobserved, but the i SAVE/cold-read cases PASS. Enemy-HP movement is UNVERIFIED (no per-turn trace). `max_frames` is a pack value, so it was not changed in this cut.
+
+**Still open:** G1 is NOT qualified or signed.
+
+**NEXT SESSION, in order:**
+1. Add per-turn enemy HP + frames-used telemetry to the fight leg; size the budget from the measurement (pack). Then re-run HG m/i.
+2. b on hge/SS: a battle route on those fixtures.
+3. n: PC withdraw leg (live Right+A trial, G2_PRODUCER_PLAN §6b) + a queued-event-at-close witness.
+4. PERF on a quiet machine.
+5. C1 live mailbox canary (4 KiB ITCM span), then C2.
+6. Owner questions: the FAILURE sound; whether C5 keeps a box arm.
+
 ## Checkpoint 9 (2026-10-02, owner: "Do the Gen 4 adoption cut now") - shared NDS adoption cut DONE (SOURCE/MODEL)
 
 - **Commits:**
