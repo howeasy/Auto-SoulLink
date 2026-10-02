@@ -196,3 +196,18 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - handle a FALSE from `PCStorage_PlaceMonInFirstEmptySlotInAnyBox` as a message, never an assert;
   - use a writable 0x88 scratch.
   - Whether C5 needs a box arm at all is a C5 design decision. Open.
+
+## Companion service tick (OMP cx-a34a43a8, coordinator-verified; pinned pret `ad7a3afa`)
+
+- **Site: one SysTask on `gSystem.mainTaskQueue`** (`SysTask_CreateOnMainQueue`, `src/sys_task_api.c:8-10`).
+  - It drains every frame in `NitroMain` right after the active app (`src/main.c:109-111`). It is app-independent, so the field, START-menu apps and battle are all covered by one site. This is not Gen 1's two-site problem.
+  - The queues are arena-allocated (`src/system.c:123-126`), so the task survives app and overlay switches.
+  - It does NOT survive a soft reset (`DoSoftReset` -> `OS_ResetSystem`, `src/main.c:203-210`). Register it on every boot.
+- **The `if (sub_02036144())` guard** (`main.c:106`) is the wireless/link frame-sync gate (`asm/unk_02035900.s`).
+  - With no comm session (`[_021D4140+8] == 0`) it branches straight out, so single-player always drains.
+  - Insurance, if a link state matters: `gSystem.vwaitTaskQueue`, which drains outside the guard at `main.c:131`.
+- **Forbidden:** the vblank queue (IRQ context, `src/system.c:20-25`) and `gSystem.vBlankIntr` (`main.c:127-128`). Never `PlaySE` there.
+- **hge:**
+  - It hooks none of `NitroMain`, `SysTaskQueue_RunTasks`, `Task_RunScripts` or the VBlank callbacks.
+  - It ships no `main.c`, `system.c` or `sys_task.c` source, so registration is a `hooks` row or rides hge's own boot path (`load_arm9_expansion`, called from Main at frame 9; profile.json:380).
+- **C2 falsifier:** a per-state tick counter inside the task must advance in field, every START-menu app, battle, SAVE, a fade, an overlay load and after a soft reset.
