@@ -144,6 +144,6 @@ Already PHYSICAL on HG, SS and hge, needing only the landing-HEAD re-run: PC dep
   - The A branch is a 12-case jump table (`asm/overlay_14.s:17313-17342`).
   - Node 7 → state 0xA9 (`:17367`). That is the deposit leg's documented first-button path, so the deposit's bare A is on **node 7 = STORE**.
   - Node 8 → state 0x97 (`:17377`), after writing 8 to `data+0x2C` (`:17374`). This is a free in-RAM witness that the branch was taken.
-  - **WITHDRAW is most likely node 8**, i.e. one Right from where the deposit presses A.
-  - **Confirm before coding:** read state 0x97's handler (table entry at `:37117`) for a box→party call.
+  - **Node 8 = WITHDRAW is UNVERIFIED** (OMP cx-11763169). State 0x97 is a trampoline (`:25770-25776`) → `ov14_021F027C` (`data+0x1E=0`, `data+0x30=9`, `:21396-21405`) → a palette fade (`ov14_021F0204`, `:21324-21348`). No box→party call was found within 4 hops, and `data+0x2C` (an op enum with values 0/1/8/0x25) is not read on that path.
+  - **Next step:** follow the post-fade successor of `ov14_021F0204` to the operation, or use one live Right+A trial with a manager-state/`data+0x2C` readback.
   - The toolbar spans nodes 6..11 plus three negative-coded nodes; their meaning is UNKNOWN.
