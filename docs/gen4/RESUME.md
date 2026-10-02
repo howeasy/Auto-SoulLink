@@ -25,7 +25,10 @@
 
 **Still open:** G1 is NOT qualified or signed.
 
+**Lane relocation (overlord, owner-approved, 2026-10-02):** the Gen 4 lane `C:/slink/g4` (46 GB) moved to **`F:/slink-work/lanes/g4`** (`SLINK_WORK_ROOT=F:/slink-work`, `PYTEST_DEBUG_TEMPROOT=F:/slink-work/tmp`). `C:/slink/g4` is now a directory JUNCTION to it (0 bytes on C:), so every hardcoded path and all receipt paths in these docs still resolve. All new Gen 4 lanes, logs and temps go on F:. Verified before delete: robocopy dry-run 0 to copy; 4808 files / 49,471,554,728 bytes equal; sha256 spot checks (final audit 55ef363e, HG save e18a15c7, hge save a9e4a48b, settle ddf1dc69) equal; write through the junction lands on F:. C: freed about 46.7 GB. Item 0 adopts the shared `tools/slink_space.py` `work_root('lanes')` (overlord).
+
 **NEXT SESSION, in order:**
+0. **Cut item 0:** replace the ~14 hardcoded `C:/slink/g4` paths (tools/gen4_fixtures.py `LANE_ROOT`, gen4_routes.py, test_gen4_{probe_gates,battle_faint,catch,perf,mailbox}.py, the packs' evidence strings, unit tests) with ONE lane root derived from `SLINK_WORK_ROOT` (`<root>/lanes/g4`). Keep the BizHawk MAX_PATH preflight. It rides the fight-budget cut, which stales receipts anyway. Then retire the junction.
 1. Add per-turn enemy HP + frames-used telemetry to the fight leg; size the budget from the measurement (pack). Then re-run HG m/i.
 2. b on hge/SS: a battle route on those fixtures.
 3. n: PC withdraw leg (live Right+A trial, G2_PRODUCER_PLAN §6b) + a queued-event-at-close witness.
