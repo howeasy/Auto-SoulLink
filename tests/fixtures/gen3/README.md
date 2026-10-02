@@ -925,3 +925,39 @@ is SYNTH setup, not acquisition evidence.
 | file | qualification | map / tile | SHA256 role |
 |---|---|---|---|
 | `exp_pc_negative_chain_synth.sav` | native CONTINUE/SAVE only; PC chain pending | OldaleTown (0.10), (6,17), layout11; counter2->3 | `3a4f110cd259af30136d0c93bc9af099b0a23ef10f5160d329542bec0a42ee3d` (native re-save; raw hash in manifest) |
+
+### Accepted native Rock Smash WAITING behaviour
+
+After a Rock Smash wild battle the field script is left WAITING (EventScript_SmashRock waitstate not resumed by Task_ReturnToFieldNoScript; identical in vanilla pret); the SLink overworld checkpoint withholds hello and writes until the player's next script (NPC/sign interaction, door or map load); also true of the qualified Emerald title; fail-closed; possible later fix = a checkpoint clause (signed predicate, separate project)
+
+Owner disposition (2026-10-02): **Driver step + document it**. The default expansion Rock carrier approaches the already-present Route111 tip NPC at (19,101) from the cleared rock tile (18,101), verifies its active object and clear hide flag, and completes its native dialogue before the unchanged settle/SAVE/PYDEC. No checkpoint/client/gate change. Idle, START/B and empty-button experiments are opt-in diagnostics only. The input probe is retained separately from the required default-row receipt.
+
+The NPC's ScriptContext_SetupScript replaces the parked Rock script: WAITING1 -> RUNNING0 -> SHUTDOWN2. It does not resume EventScript_SmashRock's pending releaseall/end. This row's PASS depends on the verified NPC interaction; without it the retained901e888d A-only run timed out while WAITING persisted for over21500 observed frames. The default Rock DEV receipt is `docs/gen3_emerald/probes/exp_rock_default_cd6b0648_dev.txt` (A/B, native SAVE witnesses and independent PYDEC PASS); it is not a frozen final-cut receipt.
+
+
+### exp_whiteout_synth{,_b}.sav: HP1/max20 whiteout setup (native CONTINUE/SAVE qualified)
+
+**Disclosed SYNTH setup; native CONTINUE/SAVE qualified only.** Each seed starts
+from the corresponding `exp_pc.sav`/`exp_pc_b.sav`. Only the lead's hpLost low14
+header lane at record+0x1E changes0->19 and cached HP at+0x56 changes20->1.
+The masked codec independently decodes HP1/max20 with a valid unchanged mon
+checksum; the secure block, maxHP20, moves33/45, all other party/boxes, and story
+flags stay unchanged. The only additional setup is CONTINUE_GAME_WARP for native
+qualification at the existing Oldale tile. The own source reads cached
+`mon->hp` (`pokemon.c:1941-1942`) and sets cached HP/hpLost together
+(`pokemon.c:2541-2555`), so changing hpLost alone is insufficient.
+
+`exp_whiteout_synth_manifest.json` keeps raw/native hashes distinct and embeds
+both live pre-SAVE HP1/max20/hpLost19 witnesses (frame596), independently agreeing
+saved records, and actual generator/qualification-script hashes. Qualification
+ran with tracked WIP changes on informational HEAD `f2551363`, not the final
+corrected code cut. A's first native run passed counter2->3 despite an output-path
+polling defect; its first trace and saved witness were recovered without replay.
+B passed counter3->4. No acquisition, whiteout, or client behavior is qualified
+by this fixture setup. The ordinary `pc` fixture remains unchanged.
+
+| file | qualification | map / tile | sha256 |
+|---|---|---|---|
+
+| `exp_whiteout_synth.sav` | native CONTINUE/SAVE only; HP1/max20/lost19 | OldaleTown (0.10), (6,17), layout11 | `647902dd0f460961156e77f091f18300d90543a9686fb37a8249ed4d3cb6aeaa` |
+| `exp_whiteout_synth_b.sav` | native CONTINUE/SAVE only; HP1/max20/lost19 | OldaleTown (0.10), (6,17), layout11 | `ea9c481f5d2ca7ee1048c6c5ec1bc204819e79d71a2a656a623798f50a6a510a` |

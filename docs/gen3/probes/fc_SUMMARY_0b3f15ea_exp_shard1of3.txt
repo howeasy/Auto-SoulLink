@@ -1,0 +1,12 @@
+# G4 final cut 0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3 -- tools/gen3_final_cut.py summary (written 2026-10-02T14:44:50Z)
+# RUN 5 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_fish_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_fish_gen3_exp_as_a_0b3f15ea.txt |
+| 2 | gift_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_gift_gen3_exp_as_a_0b3f15ea.txt |
+| 3 | egg_receive_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_egg_receive_gen3_exp_as_a_0b3f15ea.txt |
+| 4 | whiteout_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_whiteout_gen3_exp_as_a_0b3f15ea.txt |
+| 5 | link_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_link_gen3_exp_as_a_0b3f15ea.txt |
+
+OVERALL: PASS (5/5 rows)

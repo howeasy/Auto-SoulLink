@@ -1577,10 +1577,12 @@ EXP_STATIC_WILD_KINDS = {
 EXP_FULL_BOX_KIND = "pc_full_box_synth"
 EXP_BOX0_FULL_KIND = "pc_box0_full_synth"
 EXP_PC_CHAIN_KIND = "pc_negative_chain_synth"
+EXP_WHITEOUT_KIND = "whiteout_synth"
 EXP_MIRAGE_TOWER_VISIBLE_FLAG = 0x14E  # own flags.h; Route111_OnTransition selects the native layout
 EXP_ROUTE111_NO_TOWER_LAYOUT = 392    # own layouts.json LAYOUT_ROUTE111_NO_MIRAGE_TOWER
 EXP_KINDS |= EXP_ACQUISITION_KINDS | EXP_STATIC_WILD_KINDS
 EXP_KINDS[EXP_FULL_BOX_KIND] = EXP_KINDS[EXP_BOX0_FULL_KIND] = EXP_KINDS[EXP_PC_CHAIN_KIND] = EXP_KINDS["pc"]
+EXP_KINDS[EXP_WHITEOUT_KIND] = EXP_KINDS["pc"]
 # pret pokeemerald species id -> this build's (national-order) id; data.json names checked by test
 EXP_SPECIES = {283: 258, 286: 261, 288: 263, 290: 265}
 EXP_ITEM_POKE_BALL = 1     # include/constants/items.h:13 ITEM_POKE_BALL; pokeball.h:7 BALL_POKE = 1
@@ -1654,6 +1656,8 @@ def build_exp_seed(kind: str, flags: list[int], *, side: str = "a") -> bytes:
         seed = (FIXTURES_DIR / f"exp_pc{'_b' if side == 'b' else ''}.sav").read_bytes()
         if kind == EXP_PC_CHAIN_KIND:
             return build_exp_pc_negative_chain_seed(seed)
+        if kind == EXP_WHITEOUT_KIND:
+            return build_exp_whiteout_seed(seed)
         if kind in (EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND):
             from tools.gen3_static_wild_rows import build_box0_full_seed, build_full_box_seed
             return (build_box0_full_seed if kind == EXP_BOX0_FULL_KIND else build_full_box_seed)(seed)
@@ -1745,6 +1749,31 @@ def build_exp_pc_negative_chain_seed(seed: bytes) -> bytes:
                           counter=parsed["counter"])
 
 
+def build_exp_whiteout_seed(seed: bytes) -> bytes:
+    """Disclosed offline HP1 setup; preserve the lead's secure block and every other record."""
+    problems = exp_fixture_problems(seed, "pc")
+    if problems:
+        raise ValueError("whiteout source is not a PC fixture: " + "; ".join(problems))
+    title = codec.TITLE_EXPANSION
+    parsed = codec.parse_flash(seed, title=title)
+    party_off = codec._TITLE_PARTY_OFFSETS[title][1]
+    lead = codec.party_from_save(seed, title=title, layout=_record_layout(title))[0]
+    if (lead["hp"], lead["max_hp"], lead["unknown"] & 0x3FFF, lead["moves"]) != (20, 20, 0, [33, 45, 0, 0]):
+        raise ValueError("whiteout source lead is not unchanged HP20/max20 with moves33/45")
+    structs = json.loads((EXP_PACK / "facts.json").read_text(encoding="utf-8"))["structs"]
+    lost = structs["BoxPokemon"]["bitfields"]["hpLost"]
+    hp = structs["Pokemon"]["fields"]["hp"]
+    if (lost["offset"], lost["width"], lost["shift"], lost["mask"], hp["offset"], hp["size"]) != (0x1E, 2, 0, "0x3fff", 0x56, 2):
+        raise ValueError("whiteout HP geometry differs from the pinned own compiler")
+    sb1, sb2 = bytearray(parsed["sb1"]), bytearray(parsed["sb2"])
+    header = struct.unpack_from("<H", sb1, party_off + lost["offset"])[0]
+    struct.pack_into("<H", sb1, party_off + lost["offset"], (header & ~0x3FFF) | 19)
+    struct.pack_into("<H", sb1, party_off + hp["offset"], 1)
+    sb2[9] |= 1  # disclosed qualification precondition; native CONTINUE/SAVE must clear it
+    return exp_write_slot({"sb1": bytes(sb1), "sb2": bytes(sb2), "storage": parsed["storage"]},
+                          counter=parsed["counter"])
+
+
 def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
     """What a NATIVE re-save of an expansion `kind` seed must show: it qualifies, the game cleared
     the continue-game warp, the player is on the kind's tile, the party (and for "pc" box 1) is
@@ -1787,13 +1816,21 @@ def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
         return problems + seed_problems(body, own)
     layout = _record_layout(codec.TITLE_EXPANSION)
     party = codec.party_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
-    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind in ("pc", EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND, EXP_PC_CHAIN_KIND) else [(258, STARTER_LEVEL)]
+    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind in ("pc", EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND, EXP_PC_CHAIN_KIND, EXP_WHITEOUT_KIND) else [(258, STARTER_LEVEL)]
     if [(m["species"], m["level"]) for m in party] != want:
         problems.append(f"party {[(m['species'], m['level']) for m in party]} != {want}")
     boxes = codec.boxes_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
     occupied = {(b, s): m["species"] for b, row in enumerate(boxes) for s, m in enumerate(row)
                 if m["personality"] or m["ot_id"]}
-    want_box = {(0, 0): 263, (0, 1): 265} if kind == "pc" else {}
+    want_box = {(0, 0): 263, (0, 1): 265} if kind in ("pc", EXP_WHITEOUT_KIND) else {}
+    if kind == EXP_WHITEOUT_KIND:
+        seed_name = "exp_pc_b.sav" if _trainer_identity(sb2)[1] == EMERALD_OT[1] ^ 0xFFFFFFFF else "exp_pc.sav"
+        expected = codec.parse_flash(build_exp_whiteout_seed((FIXTURES_DIR / seed_name).read_bytes()), title=codec.TITLE_EXPANSION)
+        count_off, party_off = codec._TITLE_PARTY_OFFSETS[codec.TITLE_EXPANSION]
+        if sb1[count_off] != expected["sb1"][count_off] or sb1[party_off:party_off + 6 * codec.PARTY_MON_SIZE] != expected["sb1"][party_off:party_off + 6 * codec.PARTY_MON_SIZE]:
+            problems.append("whiteout party differs from the HP1/max20 two-byte recipe")
+        if parsed["storage"] != expected["storage"]:
+            problems.append("whiteout boxes differ from the original PC fixture")
     if kind == EXP_PC_CHAIN_KIND:
         want_box = {(0, 0): 263, (0, 1): 265, (0, 2): 263}
         seed_name = "exp_pc_b.sav" if _trainer_identity(sb2)[1] == EMERALD_OT[1] ^ 0xFFFFFFFF else "exp_pc.sav"

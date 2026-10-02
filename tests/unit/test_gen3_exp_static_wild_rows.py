@@ -395,3 +395,158 @@ def test_capture_settle_observer_is_read_only_bounded_and_stoppable():
     stop()
     assert lua.globals().poll() is True
     assert len(lua.globals().logs)==12
+
+
+@pytest.mark.parametrize("recovery", ['menu-close','object-dialogue','last-dialogue-step','never'])
+def test_native_rock_player_probe_uses_only_ordered_ordinary_inputs(recovery):
+    import re
+
+    from lupa import LuaRuntime
+    source=(ROOT/"lua/tests/duo/scenario_gen3_static_wild.lua").read_text()
+    match=re.search(r"(?ms)^local function rock_player_inputs\(ctx, read, f\).*?^end$",source)
+    assert match,"native-player Rock probe absent"
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().recovery=recovery
+    lua.execute("""
+        now=0;status=1;locked=0;message=0;x=18;y=102;menu=false;talk=false;dialogue_taps=0;actions={};logs={}
+        read=function()return {sGlobalScriptContextStatus={raw=status},sLockFieldControls={raw=locked},
+          field_message_box_mode={raw=message},gPaletteFade={active_word=0,active_mask='0x80'},
+          callback1={names={'CB1_Overworld'}},callback2={names={'CB2_Overworld'}},
+          tasks=menu and {{func={names={'Task_ShowStartMenu'}}}}or{}}end
+        ctx={cp={},emulator={framecount=function()return now end},
+          SP={EMH={menu_ready=function()return menu end}},rock_probe_object_present=function()return true end,
+          player_idle=function()return true end,
+          jlog=function(tag,row)logs[#logs+1]=row end,game_flag=function()return false end,
+          G={pos=function()return x,y end,
+             idle=function(n)now=now+n;actions[#actions+1]='idle:'..n end,
+             tap=function(key,hold,gap)
+               now=now+hold+gap;actions[#actions+1]=key
+               if key=='Start'then menu=true;locked=1
+               elseif key=='B'and menu then menu=false;locked=0;if recovery=='menu-close'then status=2 end
+               elseif key=='Up'then y=y-1
+               elseif key=='Right'then talk=true
+               elseif key=='A'and talk then dialogue_taps=dialogue_taps+1;if recovery=='object-dialogue'or(recovery=='last-dialogue-step'and dialogue_taps==41)then status=2;locked=0;message=0 end end
+             end}}
+        f={x=18,y=102,rock_player_probe={npc_x=19,npc_y=101,hidden_flag=0x34B,
+             script='Route111_EventScript_RockSmashTipFatMan'}}
+    """)
+    bare=re.search(r"(?ms)^local function rock_probe_bare\(raw\).*?^end$",source)
+    recover=re.search(r"(?ms)^local function rock_native_recover\(ctx, read, f\).*?^end$",source)
+    fn=lua.execute(bare.group()+"\n"+recover.group()+"\n"+match.group()+"\nreturn rock_player_inputs")
+    result=fn(lua.globals().ctx,lua.globals().read,lua.globals().f)
+    actions=[lua.globals().actions[i]for i in range(1,len(lua.globals().actions)+1)]
+    assert actions[:4]==['idle:300','Start','B','idle:60']
+    if recovery=='menu-close':
+        assert result=='menu-close' and 'Up'not in actions
+    else:
+        assert actions[4:8]==['B','A','Up','Right']
+        assert result==('context-overwritten-by-npc-script'if recovery in ('object-dialogue','last-dialogue-step')else'dialogue-not-shutdown')
+    bodies=[match.group(),recover.group()]
+    allowed={'emulator.framecount','G.pos','G.idle','G.tap','jlog','game_flag',
+             'rock_probe_object_present','player_idle','SP.EMH.menu_ready'}
+    for body in bodies:
+        assert 'memory.write_'not in body
+        assert set(re.findall(r'ctx\.([\w.]+)\(',body))<=allowed
+
+
+def test_native_rock_player_probe_refuses_inputs_on_a_locked_field():
+    import re
+
+    from lupa import LuaRuntime
+    source=(ROOT/"lua/tests/duo/scenario_gen3_static_wild.lua").read_text()
+    match=re.search(r"(?ms)^local function rock_player_inputs\(ctx, read, f\).*?^end$",source)
+    assert match,"native-player Rock probe absent"
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.execute("""
+        now=0;taps=0
+        read=function()return {sGlobalScriptContextStatus={raw=1},sLockFieldControls={raw=1},
+          field_message_box_mode={raw=0},gPaletteFade={active_word=0,active_mask='0x80'},
+          callback1={names={'CB1_Overworld'}},callback2={names={'CB2_Overworld'}}}end
+        ctx={cp={},emulator={framecount=function()return now end},jlog=function()end,
+          G={pos=function()return 18,102 end,idle=function(n)now=now+n end,
+             tap=function()taps=taps+1 end}}
+    """)
+    bare=re.search(r"(?ms)^local function rock_probe_bare\(raw\).*?^end$",source)
+    recover=re.search(r"(?ms)^local function rock_native_recover\(ctx, read, f\).*?^end$",source)
+    fn=lua.execute(bare.group()+"\n"+recover.group()+"\n"+match.group()+"\nreturn rock_player_inputs")
+    assert fn(lua.globals().ctx,lua.globals().read,lua.table_from({'x':18,'y':102}))=='no-bare-field'
+    assert lua.globals().taps==0 and lua.globals().now==600
+
+
+def test_rock_player_probe_object_is_source_bound_and_visible_in_both_seeds(pinned_inputs):
+    f=rows.facts((ARTIFACTS/"pokeemerald.gba").read_bytes(),"rock")
+    obj=f['rock_player_probe']
+    assert (obj['npc_x'],obj['npc_y'])==(f['x']+1,f['y']-1)
+    assert obj['object_count']*obj['object_stride']==0x240
+    for side in ('','_b'):
+        body=(ROOT/f'tests/fixtures/gen3/exp_static_rock_synth{side}.sav').read_bytes()
+        sb1=rows.fixture.codec.parse_flash(body,title=rows.fixture.codec.TITLE_EXPANSION)['sb1']
+        flag=obj['hidden_flag']
+        assert not sb1[f['flags_off']+flag//8]&(1<<(flag%8))
+
+
+@pytest.mark.parametrize('safe', [True, False])
+def test_default_rock_recovery_is_minimal_native_dialogue_and_unknown_fields_refuse(safe):
+    import re
+
+    from lupa import LuaRuntime
+    source=(ROOT/"lua/tests/duo/scenario_gen3_static_wild.lua").read_text()
+    body=re.search(r"(?ms)^local function rock_native_recover\(ctx, read, f\).*?^end$",source)
+    assert body, 'default native Rock recovery absent'
+    bare=re.search(r"(?ms)^local function rock_probe_bare\(raw\).*?^end$",source)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().safe=safe
+    lua.execute("""
+      now=0;state=1;x=18;y=102;actions={};talk=false
+      read=function()return {sGlobalScriptContextStatus={raw=state},sLockFieldControls={raw=safe and 0 or 1},
+        field_message_box_mode={raw=0},gPaletteFade={active_word=0,active_mask='0x80'},
+        callback1={names={'CB1_Overworld'}},callback2={names={'CB2_Overworld'}}}end
+      ctx={cp={},player_idle=function()return true end,game_flag=function()return false end,
+        rock_probe_object_present=function()return true end,emulator={framecount=function()return now end},
+        jlog=function()end,G={pos=function()return x,y end,idle=function(n)now=now+n end,
+          tap=function(key,hold,gap)actions[#actions+1]=key;now=now+hold+gap;
+            if key=='Up'then y=101 elseif key=='Right'then talk=true elseif key=='A'and talk then state=2 end
+          end}}
+      f={x=18,y=102,rock_player_probe={npc_x=19,npc_y=101,hidden_flag=0x34B}}
+    """)
+    fn=lua.execute(bare.group()+"\n"+body.group()+"\nreturn rock_native_recover")
+    outcome=fn(lua.globals().ctx,lua.globals().read,lua.globals().f)
+    actions=[lua.globals().actions[i]for i in range(1,len(lua.globals().actions)+1)]
+    if safe:
+        assert outcome=='context-overwritten-by-npc-script' and actions==['Up','Right','A']
+    else:
+        assert outcome=='no-bare-field' and actions==[]
+    assert 'SLINK_ROCK_PLAYER_PROBE' in source
+
+
+@pytest.mark.parametrize('change',['match','graphics','coords','inactive','map'])
+def test_real_rock_object_reader_refuses_mismatched_live_object(change):
+    import re
+    import struct
+
+    from lupa import LuaRuntime
+    source=(ROOT/"lua/tests/duo/scenario_gen3_static_wild.lua").read_text()
+    body=re.search(r"(?ms)^local function rock_probe_object_present\(ctx, f, obj\).*?^end$",source).group()
+    base=0x02006624
+    buffer=bytearray(16*0x24)
+    at=3*0x24
+    buffer[at]=0 if change=='inactive'else 1
+    struct.pack_into('<H',buffer,at+4,18 if change=='graphics'else 17)
+    buffer[at+9]=27 if change=='map'else 26
+    buffer[at+10]=0
+    struct.pack_into('<hh',buffer,at+16,27 if change=='coords'else 26,108)
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    def read(address,size):
+        off=address-base
+        assert 0<=off<len(buffer) and off+size<=len(buffer)
+        return int.from_bytes(buffer[off:off+size],'little',signed=size==2 and off%0x24 in (16,18))
+    memory=lua.table_from({'read_u8':lambda a,d:read(a,1),'read_u16_le':lambda a,d:read(a,2),
+                           'read_s16_le':lambda a,d:read(a,2)})
+    lua.globals().memory=memory
+    ctx=lua.table_from({'jlog':lambda *args:None})
+    facts=lua.table_from({'group':0,'num':26})
+    obj=lua.table_from({'object_count':16,'object_events':base,'object_stride':0x24,
+        'active_mask':1,'graphics_off':4,'graphics_id':17,'map_num_off':9,'map_group_off':10,
+        'coords_off':16,'map_offset':7,'npc_x':19,'npc_y':101,'script':'tip'})
+    fn=lua.execute(body+'\nreturn rock_probe_object_present')
+    assert fn(ctx,facts,obj)==(change=='match')

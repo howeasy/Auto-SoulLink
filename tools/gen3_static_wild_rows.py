@@ -208,6 +208,28 @@ def facts(rom, case):
                                (src/"src/wild_encounter.c").read_text(),re.M).group(1))
         repel_var = int(re.search(r"^#define\s+VAR_REPEL_STEP_COUNT\s+(0x[\da-fA-F]+)",
                                  (src/"include/constants/vars.h").read_text(),re.M).group(1),0)
+        tip_name="Route111_EventScript_RockSmashTipFatMan"
+        tip=next(o for o in doc["object_events"]if o["script"]==tip_name)
+        if tip["trainer_type"]!="TRAINER_TYPE_NONE" or (tip["x"],tip["y"])!=(x+1,y-1):
+            raise ValueError("native player-probe object is not the adjacent non-trainer")
+        native_scripts=(src/"data/maps/Route111/scripts.inc").read_text()
+        tip_body=native_scripts.split(tip_name+"::",1)[1].split("\n\n",1)[0]
+        if any(op in tip_body for op in ("trainerbattle","givemon","giveegg","warp")) or "MSGBOX_DEFAULT"not in tip_body:
+            raise ValueError("native player-probe object is not harmless default dialogue")
+        object_symbol=profile.expansion_symbol(context,"gObjectEvents")
+        count=int(re.search(r"^#define\s+OBJECT_EVENTS_COUNT\s+(\d+)",
+                           (src/"include/constants/global.h").read_text(),re.M).group(1))
+        object_header=(src/"include/global.fieldmap.h").read_text()
+        if "/*0x04*/ u16 graphicsId"not in object_header or "/*0x10*/ struct Coords16 currentCoords"not in object_header or object_symbol["size"]!=count*0x24:
+            raise ValueError("source-bound diagnostic ObjectEvent geometry drifted")
+        graphics=enum_values((src/"include/constants/event_objects.h").read_text(),"OBJ_EVENT_GFX_")
+        fishing["rock_player_probe"]={"npc_x":tip["x"],"npc_y":tip["y"],
+            "object_events":object_symbol["address"],"object_count":count,"object_stride":0x24,
+            "graphics_id":graphics[tip["graphics_id"]],"active_mask":1,
+            "graphics_off":4,"coords_off":0x10,"map_num_off":9,"map_group_off":10,"map_offset":7,
+            "hidden_flag":flag(tip["flag"]),"script":tip_name,
+            "script_address":profile.expansion_symbol(context,tip_name)["address"],
+            "source":"data/maps/Route111/map.json + scripts.inc:416-426; harmless native dialogue"}
         fishing["post_capture_probes"]={name:profile.expansion_symbol(context,name)["address"] for name in (
             "CB2_EndWildBattle","CB2_EndScriptedWildBattle","Task_ReturnToFieldNoScript",
             "Task_WaitForFadeAndEnableScriptCtx","ScriptContext_Enable")}

@@ -1795,7 +1795,7 @@ end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
-function ctx.catch(label, already_hunted, expected_ball)
+function ctx.catch(label, already_hunted, expected_ball, native_player_probe)
     if not already_hunted and not ctx.hunt(label) then return nil, "no wild encounter" end
     -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
     -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
@@ -1888,6 +1888,7 @@ function ctx.catch(label, already_hunted, expected_ball)
             function(doc)ctx.jlog("CAPTURE_SETTLE_WATCH",doc)end,
             function(suffix)G.shot(D.scenario.."_"..D.player.."_"..suffix)end,emu.framecount)
     end
+    if capture_raw_structs and native_player_probe then native_player_probe(capture_raw_observation) end
     local settled, settle_why = play.wait_scene_settled(cp, 1800)
     if stop_settle_watch then stop_settle_watch() end
     if not settled then return nil, "capture scene did not settle: " .. tostring(settle_why) end

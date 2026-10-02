@@ -181,11 +181,15 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
     (fx.EXP_FULL_BOX_KIND, "a", "exp_pc_full_box_synth_manifest.json", None),
     (fx.EXP_BOX0_FULL_KIND, "a", "exp_pc_box0_full_synth_manifest.json", None),
     (fx.EXP_PC_CHAIN_KIND, "a", "exp_pc_negative_chain_synth_manifest.json", None),
+    (fx.EXP_WHITEOUT_KIND, "a", "exp_whiteout_synth_manifest.json", None),
+    (fx.EXP_WHITEOUT_KIND, "b", "exp_whiteout_synth_manifest.json", None),
 ])
 def test_registered_synth_generator_replays_the_published_raw_hash(kind, side, manifest_name, case, context):
     import hashlib
 
     manifest = json.loads((FIXTURES / manifest_name).read_text())
+    if kind == fx.EXP_WHITEOUT_KIND:
+        manifest = next(row for row in manifest["fixtures"] if row["side"] == side)
     if case is None:
         expected = manifest["raw_sha256"]
     else:

@@ -386,7 +386,7 @@ SCENARIOS = {
     # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
     # PC and walks out to Route 103 with its lone starter).
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
-                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "whiteout_synth"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -3160,7 +3160,8 @@ GAMES = {
         "game": "gen3_exp",
         "play": "gen3_fixtures",
         "sides": {"a": (GEN3_EXP_TITLE, "exp_{target}"), "b": (GEN3_EXP_TITLE, "exp_{target}_b")},
-        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102",
+                      "whiteout_synth": "route_103"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,

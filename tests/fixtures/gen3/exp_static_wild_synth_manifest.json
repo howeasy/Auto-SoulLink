@@ -278,5 +278,16 @@
       "physical_scope": "method -> native encounter table slot/species -> capture publish -> save; NOT catch-rate behaviour. Master removes throw RNG and foe turn; nonzero Altering selector remains named set0 UI projection scope."
     }
   ],
-  "hash_contract": "generator_raw_sha256 binds deterministic offline SYNTH bytes; sha256 binds native-qualified output after CONTINUE/SAVE increments and rotates save slots; these images must differ."
+  "hash_contract": "generator_raw_sha256 binds deterministic offline SYNTH bytes; sha256 binds native-qualified output after CONTINUE/SAVE increments and rotates save slots; these images must differ.",
+  "accepted_native_limits": [
+    {
+      "id": "rock_waiting_context",
+      "owner_disposition": "2026-10-02: Driver step + document it; no signed change",
+      "text": "After a Rock Smash wild battle the field script is left WAITING (EventScript_SmashRock waitstate not resumed by Task_ReturnToFieldNoScript; identical in vanilla pret); the SLink overworld checkpoint withholds hello and writes until the player's next script (NPC/sign interaction, door or map load); also true of the qualified Emerald title; fail-closed; possible later fix = a checkpoint clause (signed predicate, separate project)",
+      "source_scope": "Expansion pin e8bd1cd7 and matching vanilla pret control flow; expansion live probe8dd64eaa; vanilla comparison SOURCE only",
+      "driver": "One Up step into cleared rock tile, face Right only with active harmless tip NPC verified, A through its native dialogue; abort unknown fields.",
+      "recovery_semantics": "The NPC's ScriptContext_SetupScript replaces the parked Rock script: WAITING1 -> RUNNING0 -> SHUTDOWN2. It does not resume EventScript_SmashRock's pending releaseall/end. This row's PASS depends on the verified NPC interaction; without it the retained901e888d A-only run timed out while WAITING persisted for over21500 observed frames.",
+      "default_row_receipt": "docs/gen3_emerald/probes/exp_rock_default_cd6b0648_dev.txt"
+    }
+  ]
 }

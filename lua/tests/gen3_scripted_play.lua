@@ -3402,7 +3402,7 @@ local function em_wait_release_popup(label)
 end
 
 --- Walk the box cursor (CURSOR_AREA_IN_BOX, IN_BOX_COLUMNS 6) along its row to `pos`, one
---- witnessed Right/Left at a time (InBoxInput_Normal :7028-7081). Leaving the row is refused.
+--- witnessed Right/Left at a time (InBoxInput_Normal, pin pokemon_storage_system.c:7147, wrap logic :7160-7213). Leaving the row is refused.
 local function em_box_cursor(label, pos)
     for _ = 1, 8 do
         if memory.read_u8(PC_CURSOR_AREA) ~= 0 then return pc_fail(label, "box_cursor_wrong_area") end
