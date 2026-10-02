@@ -2197,7 +2197,7 @@
       ],
       "phase_cases_blocked": [
         {
-          "blocked_reason": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "blocked_reason": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)",
           "caller_matrix": {
             "activation": [
               {
@@ -2379,11 +2379,11 @@
             "pc_exit_app"
           ],
           "route_status": {
-            "gen4_pc:reach_pc_terminal": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_deposit_first_party_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_exit_app": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_open_storage": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_withdraw_box_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal"
+            "gen4_pc:reach_pc_terminal": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_deposit_first_party_mon": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_exit_app": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_open_storage": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_withdraw_box_mon": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)"
           },
           "site_rationale": {
             "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
@@ -2990,6 +2990,7 @@
         "pc": {
           "array_id": 41,
           "box_base": 0,
+          "box_modified_flag_evidence": "PHYSICAL HG C:/slink/g4/route_pc/route_pc_leg4.log:16,25 and SS C:/slink/g4/route_pc_ss/route_pc_ss_leg7.log:16,25 (0x12004): RAM flag 0->1 at a deposit and 1->0 after a native SAVE (PCDIFF before_deposit/after_save), cleared on load; the saved battery keeps 1. An observation, not a persistence requirement (G1 row i is persistence-only, owner ruling 2026-10-02); SOURCE projection pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/pokemon_storage_system.h:12-28 (0x12004); server/adapters/gen4_codec.py",
           "box_modified_flag_off": 73732,
           "box_names_off": 73736,
           "box_stride": 4096,
@@ -3451,7 +3452,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -3503,7 +3504,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -3514,7 +3515,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -3525,7 +3526,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -3536,7 +3537,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -7322,7 +7323,7 @@
       ],
       "phase_cases_blocked": [
         {
-          "blocked_reason": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "blocked_reason": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)",
           "caller_matrix": {
             "activation": [
               {
@@ -7504,11 +7505,11 @@
             "pc_exit_app"
           ],
           "route_status": {
-            "gen4_pc:reach_pc_terminal": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_deposit_first_party_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_exit_app": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_open_storage": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
-            "pc_withdraw_box_mon": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal"
+            "gen4_pc:reach_pc_terminal": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_deposit_first_party_mon": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_exit_app": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_open_storage": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
+            "pc_withdraw_box_mon": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)"
           },
           "site_rationale": {
             "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
@@ -8103,6 +8104,7 @@
         "pc": {
           "array_id": 41,
           "box_base": 0,
+          "box_modified_flag_evidence": "PHYSICAL HG C:/slink/g4/route_pc/route_pc_leg4.log:16,25 and SS C:/slink/g4/route_pc_ss/route_pc_ss_leg7.log:16,25 (0x12004): RAM flag 0->1 at a deposit and 1->0 after a native SAVE (PCDIFF before_deposit/after_save), cleared on load; the saved battery keeps 1. An observation, not a persistence requirement (G1 row i is persistence-only, owner ruling 2026-10-02); SOURCE projection pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/pokemon_storage_system.h:12-28 (0x12004); server/adapters/gen4_codec.py",
           "box_modified_flag_off": 73732,
           "box_names_off": 73736,
           "box_stride": 4096,
@@ -8564,7 +8566,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -8616,7 +8618,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -8627,7 +8629,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -8638,7 +8640,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)",
           "route_status": "open",
           "source": [],
           "starts_from": null,
@@ -8649,7 +8651,7 @@
           "evidence": "OPEN",
           "max_frames": null,
           "note": null,
-          "open": "BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; no route tooling reaches a PC terminal",
+          "open": "OPEN: the withdraw leg is unrouted. fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1) and the PC route tooling exists (tools/gen4_routes.py), but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet (docs/gen4/G2_PRODUCER_PLAN.md 6b)",
           "route_status": "open",
           "source": [],
           "starts_from": null,

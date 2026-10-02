@@ -798,7 +798,8 @@ def hgss_profile(xm: XMap, build: str = "hgss", hge_checks: dict | None = None) 
         "pc": {"array_id": 41, "slot": "pc", "box_base": 0, "box_stride": 0x1000, "mon_stride": 0x88,
                "cur_box_off": 0x12000, "box_modified_flag_off": 0x12004,
                "box_names_off": 0x12008, "wallpapers_off": 0x122D8, "size": 0x122FC,
-               "evidence": f"SOURCE {PRET_HG} include/pokemon_storage_system.h:12-28; PC block at SaveData+0xF710 FILE-weak"},
+               "evidence": f"SOURCE {PRET_HG} include/pokemon_storage_system.h:12-28; PC block at SaveData+0xF710 FILE-weak",
+               "box_modified_flag_evidence": box_flag_evidence("hgss", f"{PRET_HG} include/pokemon_storage_system.h:12-28 (0x12004)")},
         "box_modified_flag_off": 0x12004,
         "trainer": HGSS_TRAINER,
         "location": copy.deepcopy(HGSS_LOCATION),
@@ -932,9 +933,29 @@ BS, FIGHT, RUN, EXIT_LEG, RESET_LEG, BOOT = (
     "gen4_routes:battle_settled", "fight_until_enemy_faints", "run_from_wild", "exit_battle_to_overworld",
     "soft_reset_in_fight_menu", "boot_continue_to_overworld")
 PC_LEGS = ("gen4_pc:reach_pc_terminal", "pc_open_storage", "pc_deposit_first_party_mon", "pc_withdraw_box_mon", "pc_exit_app")
-_PC_BLOCK = ("BLOCKED: no fixture - every owner save (hg_base_26310, ss_DDDD_25944, hge_a_OOO_630, pt_TTT_44361) has 1 party mon "
-             "and 0 box mons (codec.parse_save), so there is nothing to withdraw and the sole party mon cannot be deposited; "
-             "no route tooling reaches a PC terminal")
+_PC_FIXTURE = ("fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) "
+               "hold a boxed mon (party=1 boxed=1)")
+_PC_ROUTED = ("OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, "
+              "pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); "
+              + _PC_FIXTURE + "; receipts are not signable until the bound landing re-run (cx-fbd330af)")
+_PC_WITHDRAW_OPEN = ("OPEN: the withdraw leg is unrouted. " + _PC_FIXTURE + " and the PC route tooling exists (tools/gen4_routes.py), "
+                     "but the toolbar node for WITHDRAW is unverified: of the ov14_021F8A40 toolbar ring, node 7 = STORE goes to "
+                     "state 0xA9 and node 8 goes to state 0x97 then state 2, with no storage call found yet "
+                     "(docs/gen4/G2_PRODUCER_PLAN.md 6b)")
+# PHYSICAL measurement of the RAM box-modified flag (PCStorage word after cur_box): set by a deposit, cleared by the native SAVE,
+# cleared on load; the saved battery keeps 1 (f426a76b; server/adapters/gen4_codec.py). An observation, not a G1 row i requirement
+# (owner ruling 2026-10-02: row i is persistence-only).
+_BOX_FLAG_LANE = {"hgss": "HG C:/slink/g4/route_pc/route_pc_leg4.log:16,25 and SS C:/slink/g4/route_pc_ss/route_pc_ss_leg7.log:16,25 (0x12004)",
+                  "hge": "hge C:/slink/g4/route_pc_hge/route_pc_hge_leg7.log:16,25 (0x1e004)"}
+_BOX_FLAG_SEMANTICS = ("RAM flag 0->1 at a deposit and 1->0 after a native SAVE (PCDIFF before_deposit/after_save), cleared on load; "
+                       "the saved battery keeps 1. An observation, not a persistence requirement (G1 row i is persistence-only, "
+                       "owner ruling 2026-10-02)")
+
+
+def box_flag_evidence(kind: str, src: str) -> str:
+    return f"PHYSICAL {_BOX_FLAG_LANE[kind]}: {_BOX_FLAG_SEMANTICS}; SOURCE projection {src}; server/adapters/gen4_codec.py"
+
+
 ROUTE_LEGS = {
     BS: "EXISTS: tools/gen4_routes.py run + lua/tests/gen4_route_play.lua (CONTINUE with A/Start, planned walk to grass, wild "
         "encounter, settle on the FIGHT menu; C1-9 receipt route_leg2_battle_settled). The battle starts INSIDE this leg",
@@ -943,7 +964,8 @@ ROUTE_LEGS = {
     EXIT_LEG: "recipe_source (titles.<t>.route_legs): A-mash until the encounter task ends (taskman == 0); not yet executed",
     RESET_LEG: f"recipe_source (titles.<t>.route_legs): hold Start+Select+L+R ({_P} src/main.c:101-104); not yet executed",
     BOOT: "EXISTS: lua/tests/probe_gen4_hooks.lua boot loop (CONTINUE with A/Start cadence until idle_field)",
-    **dict.fromkeys(PC_LEGS, _PC_BLOCK),
+    **dict.fromkeys(PC_LEGS, _PC_ROUTED),
+    "pc_withdraw_box_mon": _PC_WITHDRAW_OPEN,
 }
 _LAUNCHED_APP_SRC = (
     f"{_P} src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), "
@@ -1166,7 +1188,7 @@ def build_phase_cases(xm: XMap, images: Images) -> dict:
                        "(ov14), many frames after the launch, so the arm precedes it with a wide margin",
                        "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"]},
                check_p, list(PC_LEGS), PC_SITE_CALLERS, PC_ACTIVATION, PC_EXIT, "BLOCKED_NO_FIXTURE")
-    pc["blocked_reason"] = _PC_BLOCK
+    pc["blocked_reason"] = _PC_WITHDRAW_OPEN
     return {"phase_cases": cases, "phase_cases_blocked": [pc], "phase_cases_excluded": copy.deepcopy(PHASE_EXCLUDED)}
 
 
@@ -1534,7 +1556,8 @@ def build_route_legs(ui: dict, build: str) -> dict:
         "boot_continue_to_overworld": _open_leg(
             "EXISTS as the boot loop in lua/tests/probe_gen4_hooks.lua (A/Start cadence until the compound idle_field predicate: taskman "
             "== 0, live != 0, no launched app); no single RAM predicate expresses it"),
-        **dict.fromkeys(PC_LEGS, _open_leg(_PC_BLOCK)),
+        **dict.fromkeys(PC_LEGS, _open_leg(_PC_ROUTED)),
+        "pc_withdraw_box_mon": _open_leg(_PC_WITHDRAW_OPEN),
     }
     if build == "hge":
         legs["fight_until_enemy_faints"]["note"] += ("; hge: the chain assumes hge's ServerInit leaves bs->ctx at +0x30 "
@@ -2636,9 +2659,11 @@ def build_hge(inputs: Inputs) -> dict:
                                       "count=1 @+0x94, Cyndaquil species 155 via codec.parse_save(img,'hge').party())",
                      "rejected_candidate": "general+0xCAB4 also passed the empty-save header scan, but on the populated save it "
                                            "holds (7, 0): not a party header (max != 6)"}}
-    profile["box_modified_flag_off"] = None
+    profile["box_modified_flag_off"] = 0x1E004
     profile["pc"] = {"array_id": 41, "slot": "pc", "box_base": 0, "box_stride": 0x1000, "mon_stride": 0x88,
-                     "cur_box_off": None, "box_modified_flag_off": None,
+                     "cur_box_off": None, "box_modified_flag_off": 0x1E004,
+                     "box_modified_flag_evidence": box_flag_evidence(
+                         "hge", f"PCStorage+0x1E004 (0x1000*30+4, {HGE_SRC} include/pokemon_storage_system.h:50-59)"),
                      "evidence": f"SOURCE {HGE_SRC} include/constants/save.h:26 (NUM_PC_BOXES 30); PC block at bank+0x10000 size 0x1E4FC FILE"}
     profile["trainer"] = copy.deepcopy(HGE_TRAINER)
     profile["location"] = copy.deepcopy(HGE_LOCATION)
@@ -2650,8 +2675,6 @@ def build_hge(inputs: Inputs) -> dict:
     profile["boxes"], profile["mons_per_box"], profile["memorial_box"] = 30, 30, 29
 
     open_ = {
-        "box_modified_flag_off": "G2 measures it (mutation/save/reload). SOURCE projection is PCStorage+0x1E004 "
-                                 "(0x1000*30+4, include/pokemon_storage_system.h:50-59); not a PHYSICAL receipt",
         "pc.cur_box_off": "source projection 0x1E000 only; G2",
         "hge_internal_overlay_loads": (
             "hge's own loads of ov129 (from load_arm9_expansion, entering vanilla HandleLoadOverlay+8) and of the linked "

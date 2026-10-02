@@ -227,8 +227,7 @@ def test_committed_hge_and_pt_open_fields_are_explicit():
     hge = _pack("hge")
     assert hge["artifact_status"] == "RECORDED_NOT_ADMITTED"
     t = hge["titles"]["heartgold_hge"]
-    assert t["profile"]["box_modified_flag_off"] is None  # needs a PHYSICAL mutation/save/reload
-    assert "box_modified_flag_off" in t["open"] and "hge_internal_overlay_loads" in t["open"]
+    assert "hge_internal_overlay_loads" in t["open"] and "box_modified_flag_off" not in t["open"]  # measured, no longer open
     # resolved by the populated owner save: the party header is FILE-confirmed, the trainer is the vanilla layout
     po = t["profile"]["party_off"]
     assert (po["value"], po["max_off"], po["count_off"], po["mons_off"], po["array_id"]) == (0x90, 0, 4, 8, 2)
@@ -477,7 +476,34 @@ def test_committed_phase_cases_validate_and_cover_the_candidates(mode):
             assert c["route"][0] in ("gen4_routes:battle_settled",) and all(leg in c["route_status"] for leg in c["route"])
         pc = t["phase_cases_blocked"][0]
         assert pc["predicate"]["value"] == pc["predicate_file_check"]["ovy_id"] == 14 and pc["status"] == "BLOCKED_NO_FIXTURE"
-        assert "1 party mon" in pc["blocked_reason"]
+        assert "withdraw leg is unrouted" in pc["blocked_reason"] and "6b" in pc["blocked_reason"]
+
+
+def test_hge_box_modified_flag_is_measured_and_cited():
+    prof = _pack("hge")["titles"]["heartgold_hge"]["profile"]
+    flag = prof["pc"]["box_modified_flag_off"]
+    assert flag == prof["box_modified_flag_off"] == 0x1E004 and isinstance(flag, int)
+    ev = prof["pc"]["box_modified_flag_evidence"]
+    assert "PHYSICAL" in ev and "route_pc_hge_leg7.log:16,25" in ev and "SOURCE projection" in ev
+    assert "cleared on load" in ev and "keeps 1" in ev and "not a persistence requirement" in ev
+    hg = _pack("hgss")["titles"]["heartgold"]["profile"]["pc"]
+    assert hg["box_modified_flag_off"] == 0x12004 and "route_pc_leg4.log:16,25" in hg["box_modified_flag_evidence"]
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge", "pt"])
+def test_no_pack_carries_the_stale_pc_fixture_blocker(mode):
+    text = PACKS[mode].read_text(encoding="utf-8")
+    assert "0 box mons" not in text and "no route tooling" not in text and "no fixture - every owner save" not in text
+    if mode != "pt":
+        for t in json.loads(text)["titles"].values():
+            leg = t["route_legs"]["pc_withdraw_box_mon"]
+            assert leg["evidence"] == "OPEN" and "unrouted" in leg["open"] and "node 8" in leg["open"]
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge", "pt"])
+def test_committed_pack_is_current_and_regeneration_is_byte_identical(mode, capsys):
+    _need("heartgold", "soulsilver", "heartgold_hge", "platinum")
+    assert g.main([mode, "--check"]) == g.EXIT_OK, capsys.readouterr().err
 
 
 def test_hg_and_ss_phase_cases_are_identical():
