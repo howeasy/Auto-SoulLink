@@ -317,11 +317,17 @@ function M.judge_p2(o)
   if (o.heal and #o.heal > 0) or (o.blackout and #o.blackout > 0) then return "FAIL", "HealParty/Task_Blackout ran (whiteout)" end
   if not M.live_ok(o) then return "OPEN", "no evidence the game kept running" end
   if not e.repl_flag_frame then return "OPEN", "replacement branch (ctx+0x13C bit0) never observed after the write" end
+  -- the flag must FOLLOW the write (run 163725 reasoning): a later, unrelated replacement is not this write's effect
+  if w.frame == nil or e.repl_flag_frame - w.frame > M.EFFECT_WINDOW then
+    return "OPEN", "replacement flag appeared " .. tostring(e.repl_flag_frame - (w.frame or 0)) .. " frames after the write (window " .. M.EFFECT_WINDOW .. ")"
+  end
   if not (o.p2 and o.p2.switched_frame) then return "OPEN", "slot 1 never sent in by normal input" end
   if e.chain_gone_frame == nil or not e.outcome_final or e.outcome_final == 0 then
     return "OPEN", "battle did not finish after the switch-in"
   end
   if e.outcome_final == 2 then return "FAIL", "battle finished as a LOSE" end
+  -- PASS is a WIN: a flee (5) or any other ending after a valid switch-in is a different, unproven path
+  if e.outcome_final ~= 1 then return "OPEN", "battle ended with result byte " .. tostring(e.outcome_final) .. ", not a WIN (1)" end
   local s = o.saved_final_slots
   if not s or s.s0 == nil or s.s1 == nil then return "OPEN", "saved party not readable at the end" end
   if s.s0 ~= 0 then return "FAIL", "copy-back: slot 0 saved at HP " .. tostring(s.s0) .. ", not 0" end

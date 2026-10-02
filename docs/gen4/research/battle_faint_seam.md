@@ -360,7 +360,7 @@ hge byte identity or oracle independence. Findings and what was done:
 | MAJOR: `battle_only` could PASS on a hung game | The control now needs game-side liveness AND the specific wrong outcome (below). |
 | MAJOR: `emu.getregister` in `on_bus_exec` may classify every hit stale | Evidence plus a visible failure mode (below). |
 | MAJOR: `hits_without_poll_sight` cannot falsify | Replaced by `poll_vs_hook`, a measurement (section 4). |
-| MINOR: "38b5 = push {r0,r2,r4,r5,lr}" | **Refuted.** The bytes are little-endian: `38 b5` is the halfword `0xB538`; PUSH is `0xB4xx`/`0xB5xx` (bit 8 = LR) and the register list is the LOW byte `0x38` = bits 3,4,5 = r3,r4,r5. Capstone agrees. The FILE test now decodes the halfword. The note's text is clarified, not changed. |
+| MINOR: "38b5 = push {r0,r2,r4,r5,lr}" | **The review's finding was wrong, and the follow-up review cx-f2913238 conceded it.** The bytes are little-endian: `38 b5` is the halfword `0xB538`; PUSH is `0xB4xx`/`0xB5xx` (bit 8 = LR) and the register list is the LOW byte `0x38` = bits 3,4,5 = r3,r4,r5. Capstone agrees. The FILE test decodes the halfword. The note's text was clarified, not changed. |
 | MINOR: `.cache/gen4/hge/...` citations point at a directory missing from the worktree | Header now says `.cache/` is gitignored, lives in the checkout that ran the build, and names the tracked pins. |
 
 **2-mon setup (SYNTH, disclosed).** `tools/gen4_synth_save.py party2` clones party slot 0 into slot 1 (new PID, same species, level and
@@ -440,3 +440,46 @@ All receipts `C:/slink/g4/faint2/<dir>/receipt.txt`; setup SYNTH (party2 saves +
   heartgold_seam_ufce_bit_201750, heartgold_hge_seam_ufce_bit_201841 (write -> LOSE 1/1/157/188 frames; heal at save HP 0 then 20).
 - Navigation: the first run of the new cut (prefix A, A, then Down/A/A) passed on HG; no navigation failure in this grant.
 - Still OPEN: doubles/TAG/multi, NPC follower, trainer battles, win/status-turn as separate rows, Future Sight/Perish/switch/run as live paths. The 2-mon setup is SYNTH, disclosed.
+
+### 13a. Corrections after follow-up review cx-f2913238 (offline, 2026-10-01)
+
+The review accepts the four p2 PHYSICAL rows above; its findings were applied to the judge and the receipt-shape checks (no live re-run needed):
+
+- **F3 (MAJOR), effect window.** `judge_p2` now requires `repl_flag_frame - write.frame <= M.EFFECT_WINDOW` (900 frames) or the row is OPEN,
+  the same reasoning as the one-mon `party_only` run 163725 (a later, unrelated replacement is not the write's effect). The four shipped rows
+  satisfy it: +155 (HG cmd 11), +1 (HG TurnEnd), +1 (hge TurnEnd), +193 (hge cmd 9). Model tests: +900 passes, +901 and +5000 are OPEN.
+- **F4, WIN required.** The p2 PASS needs `outcome_final == 1`; Flee (5), caught (4) or any other ending after a valid switch-in is OPEN (LOSE stays FAIL).
+  The column "write -> battle result" in the table above is therefore a WIN column for all four rows (result byte 1 in each receipt).
+- **F5, receipt shape.** `check_seam_first` (wrapper, run on every live receipt that wrote, and on the shipped receipts offline) requires
+  `observation.seams.<seam>.first`, `r0 == bs`, `r1 == ctx`, `r15` inside the ov12 window `[0x022378C0, +226176)` and `r15 == seam addr + 4`.
+  Note: `r15` reads EVEN (the Thumb pipeline PC, addr + 4); the Thumb state is in CPSR, so "odd" is not the right test (the dispatch-table words
+  are odd). Actual values from the four shipped rows:
+
+| Receipt | seam | seam addr | first r15 | r0 = bs | r1 = ctx |
+|---|---|---|---|---|---|
+| heartgold_seam_ufce_bit_p2_201242 | cmd 11 | 0x0224A70C | 0x0224A710 | 0x022C020C | 0x022C32D8 |
+| (same) | TurnEnd | 0x0224A958 | 0x0224A95C | 0x022C020C | 0x022C32D8 |
+| heartgold_seam_turnend_p2_201327 | TurnEnd | 0x0224A958 | 0x0224A95C | 0x022C020C | 0x022C32D8 |
+| (same) | cmd 11 | 0x0224A70C | 0x0224A710 | 0x022C020C | 0x022C32D8 |
+| heartgold_hge_seam_turnend_p2_201400 | TurnEnd | 0x0224A958 | 0x0224A95C | 0x022D0228 | 0x022D38A4 |
+| (same) | cmd 9 | 0x022494DC | 0x022494E0 | 0x022D0228 | 0x022D38A4 |
+| heartgold_hge_seam_ufce_bit_p2_201513 | cmd 9 | 0x022494DC | 0x022494E0 | 0x022D0228 | 0x022D38A4 |
+| (same) | TurnEnd | 0x0224A958 | 0x0224A95C | 0x022D0228 | 0x022D38A4 |
+
+- **F6, poll-vs-hook figures (exact hook dispatches vs. frames a boundary poll saw that command, +-1 frame), from the shipped receipts.** A
+  measurement of these battles' turns, not a proof about all paths:
+
+| Receipt | cmd 11 / cmd 9 dispatches : seen by poll | TurnEnd (12) dispatches : seen by poll |
+|---|---|---|
+| HG seam_ufce_bit_p2_201242 | cmd 11: 3 : 2 | 4 : 2 |
+| HG seam_turnend_p2_201327 | cmd 11: 2 : 1 | 3 : 2 |
+| hge seam_turnend_p2_201400 | cmd 9: 3 : 3 | 4 : 4 |
+| hge seam_ufce_bit_p2_201513 | cmd 9: 5 : 5 | 4 : 3 |
+
+  On HG the boundary poll missed 1 to 2 dispatches per run, never all of them; on hge it missed at most one. It supports "a poll can miss", it does not bound
+  how often.
+- **F8, the load-bearing pair.** What makes the p2 PASS an independent proof of the production path is two game-side facts together: (1) the game's own
+  D540 flag `u32[ctx+0x13C+4*b] & 1` set after the write (the replacement branch was taken, not a LOSE), and (2) the **PID-matched switch-in**:
+  `selectedMonIndex[0] == 1` AND the BattleMon PID equals slot 1's PID read from the save array (index alone is not accepted; the clone shares species and
+  OTID with slot 0). The remaining witnesses (no LOSE byte, no `HealParty`, WIN, final save slot 0 at 0 / slot 1 alive, same map, liveness) bound
+  them but neither pair member can be dropped without the claim weakening.

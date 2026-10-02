@@ -151,6 +151,31 @@ def p2_state(title: str) -> Path:
     return hits[-1]
 
 
+OV12_WINDOW = (0x022378C0, 0x022378C0 + 226176)  # ov12 load address and size (ndspy, both pinned ROMs)
+TURNEND_ADDR = 0x0224A958
+
+
+def check_seam_first(obs: dict, expected: dict[str, int]) -> list[str]:
+    """Receipt-shape check on the hook's FIRST raw registers (F5): for every seam that dispatched (and always for the
+    armed one) `first` exists, r0/r1 equal the chain-derived bs/ctx, and r15 is addr+4 (the Thumb pipeline PC: it reads
+    EVEN, Thumb state lives in CPSR) inside the ov12 window. Returns one line per checked seam."""
+    seams = obs.get("seams")
+    assert seams, "receipt has no observation.seams"
+    armed = obs["seam"]["armed_mode"]
+    lines = []
+    for key, st in seams.items():
+        if st.get("hits", 0) == 0 and key != armed:
+            continue
+        first = st.get("first")
+        assert first, f"seam {key}: no first-hit registers recorded"
+        assert first["r0"] == first["bs"] and first["r1"] == first["ctx"], f"seam {key}: r0/r1 != chain pointers"
+        r15 = first["r15"]
+        assert OV12_WINDOW[0] <= r15 < OV12_WINDOW[1], f"seam {key}: r15 {r15:#x} outside ov12"
+        assert r15 % 2 == 0 and r15 == expected[key] + 4, f"seam {key}: r15 {r15:#x} != {expected[key]:#x}+4"
+        lines.append(f"{key}: r15={r15:#x} addr={expected[key]:#x} r0={first['r0']:#x} r1={first['r1']:#x}")
+    return lines
+
+
 def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state: Path, source_head: str,
                  profile: Path, fault: str | None = None, max_frames: int = 5400,
                  seams: dict | None = None, synth: dict | None = None) -> dict:
@@ -210,6 +235,8 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
                                         run_id=cfg["run_id"])
         assert payload["script_sha256"] == cfg["script_sha256"], "receipt from a different script"
         assert payload["callback_errors"] == 0, f"callback faults in {lane}: {payload.get('callback_error')}"
+        if payload["observation"].get("write"):  # a run that wrote has hooks that fired: check their raw registers
+            check_seam_first(payload["observation"], {"turnend": TURNEND_ADDR, "ufce": cfg["seams"]["ufce"]["addr"]})
         assert payload.get("setup") == ("SYNTH" if synth else "NATIVE"), "receipt does not disclose the setup kind"
         if synth:
             assert payload["synth"]["sidecar_sha256"] == synth["sidecar_sha256"], "receipt carries another sidecar"
@@ -435,12 +462,13 @@ def test_live_row_o_scenario(title, scenario):
 
 @pytest.mark.live
 @live
+@pytest.mark.parametrize("scenario", ["seam_turnend", "seam_turnend_p2"])
 @pytest.mark.parametrize("fault", FAULTS)
-def test_live_instrument_controls_go_red_when_a_check_is_disabled(fault):
+def test_live_instrument_controls_go_red_when_a_check_is_disabled(fault, scenario):
     """Revert-test on the real memory: disabling ONE guard/readback check must turn the run FAIL
-    with that control named, before any game memory is written."""
-    state, rom, save, _ = _live_inputs("heartgold")
-    status, payload, lane, _ = launch("heartgold", "seam_turnend", state, rom, save, fault=fault)
+    with that control named, before any game memory is written (one-mon and the 2-mon SYNTH state)."""
+    state, rom, save, synth = _live_inputs("heartgold", p2=scenario in P2_SCENARIOS)
+    status, payload, lane, _ = launch("heartgold", scenario, state, rom, save, fault=fault, synth=synth)
     assert status == "FAIL" and FAULTS[fault] in payload["reason"], (status, payload.get("reason"))
     assert payload["observation"].get("write") is None, "a write happened despite red instrument controls"
 
@@ -459,3 +487,40 @@ def test_s2_seam_is_derived_from_the_rom_dispatch_table(title):
     else:
         assert (seam["addr"], seam["cmd"]) == (0x022494DC, 9)
         assert seam["pin"] != m.SEAMS.ufce.pin  # replaced entry bytes, not the vanilla function
+
+
+def _seam_obs(**over):
+    first = {"bs": 0x22C020C, "ctx": 0x22C32D8, "r0": 0x22C020C, "r1": 0x22C32D8, "r15": 0x224A95C}
+    obs = {"seam": {"armed_mode": "turnend"},
+           "seams": {"turnend": {"hits": 2, "first": first},
+                     "ufce": {"hits": 1, "first": {**first, "r15": 0x224A710}}}}
+    obs["seams"]["turnend"].update(over)
+    return obs
+
+
+def test_seam_first_registers_receipt_shape_goes_red_on_each_defect():
+    expected = {"turnend": TURNEND_ADDR, "ufce": 0x0224A70C}
+    assert len(check_seam_first(_seam_obs(), expected)) == 2
+    good = _seam_obs()["seams"]["turnend"]["first"]
+    for patch, why in [({"first": None}, "no first-hit"), ({"first": {**good, "r15": 0x2000000}}, "outside ov12"),
+                       ({"first": {**good, "r15": 0x224A95B}}, "outside|!="),  # odd: not the Thumb pipeline PC
+                       ({"first": {**good, "r15": 0x224A960}}, r"!= 0x224a958\+4"),
+                       ({"first": {**good, "r0": 5}}, "r0/r1")]:
+        with pytest.raises(AssertionError, match=why):
+            check_seam_first(_seam_obs(**patch), expected)
+    obs = _seam_obs()
+    del obs["seams"]
+    with pytest.raises(AssertionError, match="no observation.seams"):
+        check_seam_first(obs, expected)
+
+
+def test_seam_first_registers_of_shipped_p2_receipts_if_present():
+    """The four shipped 2-mon rows: their raw registers satisfy the shape check (skips by name when absent)."""
+    shipped = {"heartgold_seam_ufce_bit_p2_201242": 0x0224A70C, "heartgold_seam_turnend_p2_201327": 0x0224A70C,
+               "heartgold_hge_seam_turnend_p2_201400": 0x022494DC, "heartgold_hge_seam_ufce_bit_p2_201513": 0x022494DC}
+    for name, ufce in shipped.items():
+        path = LANE_ROOT / name / "receipt.txt"
+        if not path.is_file():
+            pytest.skip(f"OPEN shipped receipt absent: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8").splitlines()[0].split(" ", 3)[3])
+        check_seam_first(payload["observation"], {"turnend": TURNEND_ADDR, "ufce": ufce})

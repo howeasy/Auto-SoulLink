@@ -332,7 +332,8 @@ def test_judge_control_needs_liveness_and_the_specific_wrong_outcome_not_just_no
     assert judge(api, "battle_only", write={"verify": {"ok": False, "reasons": {}}}, **LIVE)[0] == "FAIL"
 
 
-P2_OK = {"effect": {"repl_flag_frame": 40, "outcome_final": 1, "chain_gone_frame": 900},
+P2_OK = {"write": {"frame": 36, "verify": {"ok": True, "reasons": {}}},
+         "effect": {"repl_flag_frame": 40, "outcome_final": 1, "chain_gone_frame": 900},
          "p2": {"switched_frame": 300}, "heal": {}, "blackout": {}, "saved_final_slots": {"s0": 0, "s1": 20},
          "map_before": 33, "map_after": 33, **LIVE}
 
@@ -348,6 +349,13 @@ def test_judge_p2_primary_is_the_replacement_path_and_never_a_whiteout(api):
         ({"p2": {}}, "OPEN"),  # slot 1 never sent in
         ({"effect": {**P2_OK["effect"], "outcome_final": 0}}, "OPEN"),  # battle did not finish
         ({"effect": {**P2_OK["effect"], "outcome_final": 2}}, "FAIL"),
+        # F3: the replacement flag must follow the write within the effect window (36 + 5000 is a later, unrelated event)
+        ({"effect": {**P2_OK["effect"], "repl_flag_frame": 36 + 5000}}, "OPEN"),
+        ({"effect": {**P2_OK["effect"], "repl_flag_frame": 36 + 900}}, "PASS"),
+        ({"effect": {**P2_OK["effect"], "repl_flag_frame": 36 + 901}}, "OPEN"),
+        # F4: Flee (5) after a valid switch-in is not a WIN
+        ({"effect": {**P2_OK["effect"], "outcome_final": 5}}, "OPEN"),
+        ({"effect": {**P2_OK["effect"], "outcome_final": 4}}, "OPEN"),
         ({"saved_final_slots": {"s0": 7, "s1": 20}}, "FAIL"),  # copy-back lost the zero on slot 0
         ({"saved_final_slots": {"s0": 0, "s1": 0}}, "FAIL"),  # slot 1 not alive
         ({"map_after": 63}, "FAIL"),
