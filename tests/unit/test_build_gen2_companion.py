@@ -629,13 +629,13 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
 
 # ---------------------------------------------------------------- TITLE-VERSION part A
 
-@pytest.mark.parametrize("version", ["v0.0.0-dev", "v1.2.3", "v10.20.30", "v1.2.3-rc.1"])
+@pytest.mark.parametrize("version", ["dev", "v0.0.0-dev", "v1.2.3", "v10.20.30", "v0.3.0-dev"])
 def test_version_accepts_a_release_tag_that_fits_the_row(version):
     assert bc.check_version(version) == version
 
 
-@pytest.mark.parametrize("version", [None, "", "1.2.3", "v1.2", "v1.2.3 ", "V1.2.3", "v1.2.3-RC",
-                                     "v1.2.3-toolongsuffix", 'v1.2.3"'])
+@pytest.mark.parametrize("version", [None, "", "1.2.3", "v1.2", "v1.2.3 ", "V1.2.3", "v1.2.3-RC", "DEV",
+                                     "v1.2.3-rc.1", "v1.2.3-toolongsuffix", 'v1.2.3"'])
 def test_version_rejects_anything_else(version):
     with pytest.raises(RuntimeError, match="--version"):
         bc.check_version(version)

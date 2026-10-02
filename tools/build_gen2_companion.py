@@ -52,6 +52,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" / "tools"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from build_gen2_syms import ROOT, _load_lock, _source_check, _toolchains  # noqa: E402
+import rom_identity  # noqa: E402
 from make_ups import ups_apply, ups_create  # noqa: E402
 
 LOCK_PATH = ROOT / "data" / "gen2_sources.lock.json"
@@ -81,6 +82,8 @@ PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
 PHONE_FILES = ("phone_flags.asm", "phone.asm")
 VERSION_FILE = "version.asm"
+STADIUM_BYTES = 544   # tools/stadium: the "base" table (24 bytes) + the N64PS3 table (520 bytes) at the end of the ROM
+MENU_PREFIX = "SoulLink "   # what patch/gen2/src/version.asm prints before the version (the row holds 19 characters from column 1)
 # TITLE: the SoulLink logo and the version on the real title screen. title.asm is shared; the art is per repo and is
 # copied under fixed names. The patch version is not on the title; version.asm prints it on the main menu.
 TITLE_FILE = "title.asm"
@@ -88,7 +91,7 @@ TITLE_ART = {"pokecrystal": ("title_logo_crystal.2bpp", "title_rows_crystal.inc"
              "pokegold": ("title_logo_gs.2bpp", "title_rows_gs.inc")}
 TITLE_ANCHOR = "\tcall EnableLCD\n"
 # vX.Y.Z plus an optional lowercase pre-release suffix; "SLINK " + it must fit 18 tiles
-VERSION_RE = re.compile(r"v\d+\.\d+\.\d+(?:-[a-z0-9.]+)?")
+VERSION_RE = re.compile(r"dev|v\d+\.\d+\.\d+(?:-[a-z0-9.]+)?")
 TRADE_FILES = ("trade_frame.asm", "trade_items.asm", "trade_snapshot.asm",
                "trade_commit.asm", "trade_service.asm", "trade_receptionist.asm", "trade_dispatch.asm")
 
@@ -205,8 +208,8 @@ def _title_entrance_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
 
 
 def check_version(version: str | None) -> str:
-    if not isinstance(version, str) or not VERSION_RE.fullmatch(version) or len("SLINK " + version) > 18:
-        raise RuntimeError(f"--version must be vX.Y.Z[-suffix] and fit 12 characters, got {version!r}")
+    if not isinstance(version, str) or not VERSION_RE.fullmatch(version) or len(MENU_PREFIX + version) > 19:
+        raise RuntimeError(f"--version must be dev or vX.Y.Z[-suffix] and fit 10 characters, got {version!r}")
     return version
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
@@ -675,6 +678,31 @@ def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, p
                 raise RuntimeError(f"{name}: panel START binding must link inside bank 4")
 
 
+
+def version_identity(data: bytes, sym: pathlib.Path, version: str, previous: dict | None) -> dict:
+    """The version-masked identity of one overlay build (patch/tools/rom_identity.py, owner ruling 2026-10-02): the fixed-width
+    field's slot, the canonical sha1 with that field and the global checksum zeroed, and `equivalent_sha1s` -- the exact hashes
+    of earlier published builds that are the same build up to the version, so qualification receipts bound to them stay valid
+    when a release stamp changes the exact hash. A different canonical identity (a real code change) resets the list."""
+    slot = rom_identity.slot_from_sym(sym.read_text(encoding="utf-8"), "SlinkPrintVersion.text")
+    field = data[slot["offset"]:slot["offset"] + slot["length"]]
+    if len(field) != slot["length"] or field.count(0x50) < 1 or any(field[field.index(0x50) + 1:]):
+        raise RuntimeError(f"the version field at {slot['offset']:#x} is not a terminated, zero-padded {slot['length']}-byte text")
+    # tools/stadium (the Makefile's last step) writes derived checksum data into the last 544 bytes of the 2 MiB ROM: the
+    # "base" table (Crystal) and the N64PS3 half-bank checksums, which cover the bank holding the version field. It is
+    # derived, not content, so the canonical identity masks it as well.
+    stadium = {"offset": len(data) - STADIUM_BYTES, "length": STADIUM_BYTES}
+    if data[len(data) - 520:len(data) - 514] != b"N64PS3":
+        raise RuntimeError("the Stadium checksum table is not where tools/stadium puts it (the last 520 bytes)")
+    canonical_slots = [slot, stadium]
+    canonical = rom_identity.canonical_sha1(data, canonical_slots, gb=True)
+    exact = hashlib.sha1(data).hexdigest()
+    equivalents: list[str] = []
+    if previous and previous.get("canonical_sha1") == canonical:
+        equivalents = sorted(({previous["sha1"], *previous.get("equivalent_sha1s", [])}) - {exact})
+    return {"version_slot": slot, "canonical_slots": canonical_slots, "canonical_sha1": canonical,
+            "equivalent_sha1s": equivalents}
+
 def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
           src_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
@@ -706,6 +734,8 @@ def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold
         targets_by_repo[repo].append(f"{key}.gbc")
 
     outputs: dict[str, dict] = {}
+    previous = (json.loads(PROVENANCE_PATH.read_text(encoding="utf-8")).get("outputs", {})
+                if PROVENANCE_PATH.exists() else {})   # the published build each new one is compared with (version_identity)
     files: dict[pathlib.Path, bytes] = {}
     overlay_applied: dict[str, list[str]] = {}
     commands: dict[str, list[str]] = {}
@@ -747,6 +777,8 @@ def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold
             **rom_facts(data),
             "ups": {"file": f"patch/dist/{ups_name}", "size": len(ups), "sha256": _sha256(ups)},
         }
+        if VERSION_FILE in overlay_applied[repo]:
+            outputs[key].update(version_identity(data, checkout / f"{key}.sym", version, previous.get(key)))
         print(f"[gen2-companion] {key}: sha1={outputs[key]['sha1']} "
               f"identical_to_clean={outputs[key]['identical_to_clean']} ups={len(ups)} bytes",
               file=sys.stderr)

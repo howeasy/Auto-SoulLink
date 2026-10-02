@@ -145,3 +145,29 @@ def test_stale_is_red_for_release_evidence_and_a_warning_elsewhere(monkeypatch, 
 
 def test_committed_tree_head_digest_is_reproducible():
     assert code.head_digest(ROOT) == code.head_digest(ROOT, "HEAD")
+
+
+# ---- the overlay row of a pack's admission.json is a build output: promotion and release stamps must not stale receipts ----
+
+def _admission(overlay_status, overlay_sha="a" * 40, clean_status="BUILT"):
+    return json.dumps({"schema": "x", "artifacts": [
+        {"kind": "clean", "status": clean_status, "sha1": "c" * 40},
+        {"kind": "overlay", "status": overlay_status, "sha1": overlay_sha, "grant_fingerprint": "g" * 64}]})
+
+
+def test_promoting_or_restamping_the_overlay_row_does_not_move_the_digest(repo):
+    commit(repo, "data/games/gen2_crystal/admission.json", _admission("BUILT"))
+    before = code.head_digest(repo)
+    commit(repo, "data/games/gen2_crystal/admission.json", _admission("ADMITTED"))
+    assert code.head_digest(repo) == before                                    # BUILT -> ADMITTED
+    commit(repo, "data/games/gen2_crystal/admission.json", _admission("ADMITTED", overlay_sha="b" * 40))
+    assert code.head_digest(repo) == before                                    # a release stamp: new exact overlay hash
+
+
+def test_any_other_admission_change_still_moves_the_digest(repo):
+    commit(repo, "data/games/gen2_crystal/admission.json", _admission("BUILT"))
+    before = code.head_digest(repo)
+    commit(repo, "data/games/gen2_crystal/admission.json", _admission("BUILT", clean_status="ADMITTED"))
+    assert code.head_digest(repo) != before                                    # the G1 gate / clean rows are code the client reads
+    commit(repo, "data/games/gen2_crystal/other.json", "{}")
+    assert code.head_digest(repo) != before

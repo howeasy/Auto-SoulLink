@@ -952,12 +952,13 @@ def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) ->
         pin = next((row for row in outputs.values() if row.get("slink_title") == titles[side]), {})
         want = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
                 "variant": TRADE_VARIANTS.get((titles["a"], titles["b"])), "outcome": want_status,
-                "admission_scope": "HARNESS_ONLY_OVERLAY", "rom_sha1": pin.get("sha1"),
+                "admission_scope": "HARNESS_ONLY_OVERLAY",
                 "fixture_sha256": _fixture_sha256(root, fixtures.get(side, "")),
                 "harness_exception": "O-31" if scenario in TRADE_PLANTED and side == "a" else None}
+        accepted = _accepted_overlay_shas(pin)
         if (not isinstance(receipt, dict) or any(receipt.get(key) != value for key, value in want.items())
-                or want["rom_sha1"] is None or want["fixture_sha256"] is None):
-            errors.append(f"{side} trade RECEIPT does not name {want}")
+                or not accepted or receipt.get("rom_sha1") not in accepted or want["fixture_sha256"] is None):
+            errors.append(f"{side} trade RECEIPT does not name {want} with rom_sha1 in {sorted(accepted)}")
     tokens = _pydec_tokens(legs.get("pydec", [])) or {}
     want = {"scenario": scenario, "admission_scope": "HARNESS_ONLY_OVERLAY",
             "titles": f"{titles['a']}/{titles['b']}", "status": want_status}
@@ -1240,6 +1241,15 @@ def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[s
     return errors
 
 
+def _accepted_overlay_shas(row: dict | None) -> set[str]:
+    """The exact overlay hashes a receipt may name for one published build: the published sha1 and every earlier exact hash
+    the builder proved version-equivalent (`equivalent_sha1s`: same canonical identity, patch/tools/rom_identity.py), so a
+    release stamp that only changes the version field does not strand receipts bound to the build that was qualified."""
+    if not row or not row.get("sha1"):
+        return set()
+    return {row["sha1"], *(row.get("equivalent_sha1s") or ())}
+
+
 def _overlay_gate_errors(root: Path, title: str, receipt: dict, schema: str, what: str) -> list[str]:
     """A PHYSICAL PASS of `schema` on the overlay build that is published NOW (data/gen2/overlay_provenance.json),
     from the committed fixture's bytes. A rebuilt overlay makes the receipt stale until the gate is re-run."""
@@ -1249,8 +1259,8 @@ def _overlay_gate_errors(root: Path, title: str, receipt: dict, schema: str, wha
         errors.append(f"{what} receipt is not a PHYSICAL PASS for {title}")
     provenance = root / "data/gen2/overlay_provenance.json"
     outputs = json.loads(provenance.read_text(encoding="utf-8"))["outputs"] if provenance.is_file() else {}
-    published = next((row.get("sha1") for row in outputs.values() if row.get("slink_title") == title), None)
-    if published is None or receipt.get("overlay_sha1") != published:
+    published = _accepted_overlay_shas(next((row for row in outputs.values() if row.get("slink_title") == title), None))
+    if not published or receipt.get("overlay_sha1") not in published:
         errors.append(f"{what} receipt proves another overlay build than the published one")
     fixture, want = receipt.get("fixture"), receipt.get("fixture_sha256")
     # Both present first: a missing fixture and a missing hash must not compare None == None.
