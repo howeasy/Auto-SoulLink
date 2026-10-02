@@ -370,7 +370,7 @@
       "overlay": {
         "artifact": "crystal_overlay",
         "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
-        "md5": "b31474971179ffeb015a6e80fb335b64",
+        "md5": "0477a77b6383862615dc0c45a9fb9592",
         "phone": {
           "stage": 51176,
           "stage_size": 24
@@ -380,9 +380,9 @@
           "wSlinkMailbox": 53208,
           "wTilemap": 50336
         },
-        "rom_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+        "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
         "sym": "crystal_slink.sym",
-        "sym_sha256": "4fc39cd4dcc6ccddba53122ff33093dbe3717988bc72274e45d650ca456a05ef",
+        "sym_sha256": "6e5c4213ecefb50c38d96479fea0337bf41cae51e72b24b235506dec4f4ee896",
         "trade": {
           "ram": {
             "wOTPartyCount": {

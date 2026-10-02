@@ -347,7 +347,7 @@
       "overlay": {
         "artifact": "gold_overlay",
         "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
-        "md5": "ad50cc72561e8bbfdabdc847df7ceef9",
+        "md5": "527a3dc71c8afc25f710fba36efc1d5e",
         "phone": {
           "stage": 50920,
           "stage_size": 24
@@ -357,9 +357,9 @@
           "wSlinkMailbox": 49625,
           "wTilemap": 50080
         },
-        "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+        "rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
         "sym": "gold_slink.sym",
-        "sym_sha256": "d7d80bfb45403458f17d9746b499512eecf88178e1f319a19ec531631d682ea1",
+        "sym_sha256": "40fbe6bd49bea5d1f4f0565b7b18abb6bbf97561fb833f40bd525005d84f6223",
         "trade": {
           "ram": {
             "wOTPartyCount": {
