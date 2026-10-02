@@ -252,6 +252,10 @@ def load_xmap(path: Path) -> XMap:
 # --------------------------------------------------------------------------------------------
 # ROM images, addressed by declared identity (never by address alone)
 # --------------------------------------------------------------------------------------------
+ARM9_BYTES_NOTE = ("ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the "
+                   "compressed raw rom.arm9); hge = the raw uncompressed rom.arm9")
+
+
 class Images:
     """Byte access to one ROM's ARM9 static image and overlays. Resolution is by image name."""
 
@@ -1403,20 +1407,20 @@ def ui_geometry(xm: XMap, images: Images, other: Images, other_label: str) -> di
         identity[name] = {"image": s.image, "address": s.address, "size": s.size, "sha1": hashlib.sha1(a).hexdigest()}
     return {
         "battle_main_cursor": {"symbol": "sCursorArrayMainMenu", "image": main_sym.image, "address": main_sym.address, "cells": main,
-                               "names": MAIN_NAMES, "evidence": f"FILE: ROM bytes; SOURCE {S_BI_MAIN_TBL} (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)"},
+                               "names": MAIN_NAMES, "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9]; SOURCE {S_BI_MAIN_TBL} (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)"},
         "battle_fight_cursor": {"symbol": "sCursorArrayFightMenu", "image": fight_sym.image, "address": fight_sym.address, "cells": fight,
                                 "names": {0: "CANCEL", 1: "MOVE_1", 2: "MOVE_2", 3: "MOVE_3", 4: "MOVE_4"},
-                                "evidence": f"FILE: ROM bytes; SOURCE {S_BI_FIGHT_TBL}"},
+                                "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9]; SOURCE {S_BI_FIGHT_TBL}"},
         "battle_paths": {"to_FIGHT": ["Left", "Left", "Up"], "to_RUN": ["Left", "Left", "Right"], "fight_to_MOVE_1": ["Up", "Up", "Left"],
                          "evidence": "re-derived by the generator on the ROM tables with the source cursor logic from every start cell "
                                      f"(main_menu_step / _check_key mirror {S_BI_MAIN}, {S_BI_KEY}); the cursor start cell is not assumed"},
         "start_menu": {
             "neighbour_table": {**n, "dir_order": list(DIRS), "rows": nav, "address_hex": f"{n['address']:#010x}",
-                                "evidence": f"FILE: ROM bytes at the pret asm label ({S_NAV_TBL}); lookup {S_NAV_FN}: for the pressed direction the first "
+                                "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9] at the pret asm label ({S_NAV_TBL}); lookup {S_NAV_FN}: for the pressed direction the first "
                                             "candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 "
                                             f"({S_NAV_KEYS}, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)"},
             "layout_rows": {**lay, "rows": layout, "address_hex": f"{lay['address']:#010x}", "none": 0x0D,
-                            "evidence": f"FILE: ROM bytes ({S_NAV_LAYOUT}); row 0 is the full menu: cell c shows icon c"},
+                            "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9] ({S_NAV_LAYOUT}); row 0 is the full menu: cell c shows icon c"},
             "icon_order": list(START_ICONS),
             "action_of_cell": f"display index = rank of the cell among enabled cells ({S_NAV_CELL}); fs+0xD3 = that index; A selects "
                               f"selectionToAction[index] ({S_SM_KEY}, {S_SM_LISTS})",
@@ -1426,7 +1430,7 @@ def ui_geometry(xm: XMap, images: Images, other: Images, other_label: str) -> di
         },
         "code_identity": {"compared_with": other_label, "symbols": identity,
                           "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the "
-                                      "compared ROM, so the pokeheartgold source read applies byte-for-byte"},
+                                      "compared ROM, so the pokeheartgold source read applies byte-for-byte; " + ARM9_BYTES_NOTE},
     }
 
 
@@ -1797,7 +1801,7 @@ def battle_file_checks(xm: XMap, images: Images) -> dict:
         if got != want:
             raise Fail(f"{sym} bytes {got} != the pinned accessor {want}: {field} {value:#x} is no longer ROM-proven")
         out[sym] = {"symbol": sym, "address": s.address, "image": s.image, "bytes": got, "decodes_as": decodes,
-                    "field": field, "value": value}
+                    "field": field, "value": value, "bytes_source": ARM9_BYTES_NOTE if s.image == "arm9" else f"decompressed {s.image}"}
     return out
 
 
@@ -1822,11 +1826,37 @@ def hge_battle_checks(xm: XMap, hg: Images, hge: Images) -> dict:
         "identical_in_hge": True, "literal_0x2420_present": True,
         "function_differs_at": sorted({s.address + d for d in diff}),
         "note": "the function differs from vanilla only at the listed hooked bytes, away from the store"},
-        "evidence": "FILE: vanilla xMAP symbol bytes compared in the hge image (declared image)"}
+        "evidence": f"FILE: vanilla xMAP symbol bytes compared in the hge image (declared image); {ARM9_BYTES_NOTE}"}
 
 
 def _ev(cls: str, *parts: str) -> dict:
     return {"class": cls, "cite": "; ".join(parts)}
+
+
+def battle_owners() -> dict:
+    """{field: (owning struct, citation)}: the battle fields live in different structs (BattleSystem holds a pointer to the BattleContext
+    that holds the battlers), so the offset of each is relative to ITS owner, not to one flat base. Layout: pokeheartgold battle.h."""
+    bs, ctx, mon = f"{_BH}:527 (struct BattleSystem)", f"{_BH}:279-437 (struct BattleContext)", f"{_BH}:207-266 (struct BattleMon)"
+    own = {
+        "man_data_off": ("OverlayManager", S_OVLMGR),
+        "ctx_off": ("BattleSystem", f"{bs}; BattleSystem.ctx -> BattleContext {S_BS_CTX}"),
+        "type_off": ("BattleSystem", f"{bs}; {S_BS_TYPE}"),
+        "outcome_off": ("BattleSystem", f"{bs}; {S_BS_OUTCOME}; the 0x2420 comes from the BattleSystem_GetBattleOutcomeFlags accessor literal "
+                                        "(profile.battle_file_checks, FILE-checked in the ROM), not from the source header"),
+        "outcome_mask": ("BattleSystem", f"{bs}; battleOutcomeFlag masked into BattleSetup.winFlag"),
+        "template_off": ("OverlayManagerTemplate", S_OVLMGR), "template_id": ("OverlayManagerTemplate", S_OVLMGR),
+        "mons_off": ("BattleContext", f"{ctx}; {S_CTX_MONS}"),
+        "mon_size": ("BattleMon", mon),
+        "max_battlers": ("constant", "CLIENT_MAX / BATTLER_MAX = 4 (the length of the BattleContext per-battler arrays)"),
+        "selected_off": ("BattleContext", f"{ctx}; {S_CTX_SEL}"),
+        "fainted_flag_off": ("BattleContext", f"{ctx}; {S_CTX_STATUS}"),
+        "fainted_flag_shift": ("BattleContext", f"{ctx}; {S_CTX_STATUS}"), "fainted_flag_mask": ("BattleContext", f"{ctx}; {S_CTX_STATUS}"),
+        "hp_off": ("BattleMon", f"{mon}; {S_MON['hp']}"), "hp_width": ("BattleMon", f"{mon}; {S_MON['hp']} (s32)"),
+        "hp_signed": ("BattleMon", f"{mon}; {S_MON['hp']} (s32)"),
+    }
+    for key in ("species_off", "level_off", "max_hp_off", "personality_off", "otid_off", "ability_off", "ability_width"):
+        own[key] = ("BattleMon", mon)
+    return own
 
 
 def battle_evidence(build: str, template: dict) -> dict:
@@ -1836,7 +1866,8 @@ def battle_evidence(build: str, template: dict) -> dict:
     def R(hge_ref: str, hg_ref: str) -> str:
         return f"{HGE_SRC} {hge_ref}" if hge else f"{PRET_HG} {hg_ref}"
 
-    file_acc = "FILE: profile.battle_file_checks (accessor body in the ROM" + (", byte-identical in hge)" if hge else ")")
+    file_acc = ("FILE: profile.battle_file_checks (accessor body in the ROM" + (", byte-identical in hge)" if hge else ")")
+                + f" [{ARM9_BYTES_NOTE}]")
     ovl = (f"FILE: OverlayManagerTemplate.ovy_id read from the ROM at {template['symbol']} (phase_cases[].predicate_file_check); "
            f"{PRET_HG} {S_OVLMGR}: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)")
 
@@ -1880,6 +1911,8 @@ def battle_evidence(build: str, template: dict) -> dict:
         else _ev("SOURCE", f"{PRET_HG} {S_MON['ability']} (u8 ability at 0x27)"),
         "ability_width": _ev("SOURCE", f"{HGE_SRC} {H_MON['ability']} (u16)") if hge else _ev("SOURCE", f"{PRET_HG} {S_MON['ability']} (u8)"),
     }
+    for key, (owner, cite) in battle_owners().items():
+        ev[key]["owner"] = {"struct": owner, "cite": f"{PRET_HG} {cite}"}
     if hge:
         for key in ("man_data_off", "mons_off", "mon_size", "selected_off"):
             ev[key]["note"] = ("SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps "
@@ -2025,7 +2058,7 @@ def admission_anchors(xm: XMap, images: Images) -> list[dict]:
         rows.append({
             "name": name, "address": addr, "address_hex": f"{addr:#010x}", "image": "arm9", "length": n,
             "hex": images.read("arm9", addr, n).hex(), "hge_differs": differs,
-            "evidence": f"FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain {main.address:#010x}+{main.size:#x}, main.o)"
+            "evidence": f"FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain {main.address:#010x}+{main.size:#x}, main.o); {ARM9_BYTES_NOTE}"
                         + (f"; SOURCE {HGE_SRC} armips/asm/syntheticoverlay.s:8 (hge patches Main() here)" if differs else "")})
     return rows
 
@@ -2042,7 +2075,7 @@ def hge_admission_check(hg: Images, hge: Images, anchors: list[dict], hook_targe
     others = {a["name"]: hge.read("arm9", a["address"], a["length"]).hex() == a["hex"] for a in anchors if not a["hge_differs"]}
     return {"address": row["address"], "address_hex": row["address_hex"], "length": row["length"], "vanilla_hex": row["hex"],
             "hge_hex": mine.hex(), "differs": True, "hge_hook": redirect, "other_anchors_same_in_hge": others,
-            "evidence": f"FILE: the pinned hge ROM raw arm9; SOURCE {HGE_SRC} armips/asm/syntheticoverlay.s:8-10 (bl load_arm9_expansion at "
+            "evidence": f"FILE: the pinned hge ROM raw rom.arm9 (vanilla_hex is ndspy loadArm9().sections[0], decompressed); SOURCE {HGE_SRC} armips/asm/syntheticoverlay.s:8-10 (bl load_arm9_expansion at "
                         "the Main() site) and :15 (the .area at 0x02110334)"}
 
 
@@ -2125,11 +2158,27 @@ P_RTC_STATE_DATE, P_RTC_STATE_TIME = _cp("src/rtc.c", "14", "RTCDate date;"), _c
 P_RTC_STATE_SYM = _cp("src/rtc.c", "23", "static RTCState sRTCState;")
 P_RTC_UPDATE = _cp("src/rtc.c", "35-47", "void UpdateRTC(void)")
 RTC_DATE_SIZE, RTC_TIME_SIZE = 16, 12
+_RTC_CADENCE = ("the cached copy refreshes every 11 frames when no read is in flight (the counter must exceed 10) and later when one is "
+                "(the counter does not advance while a read is in flight)")
+HG_RTC_CAVEAT = ("date/time are a CACHE of the host RTC: GF_RTC_UpdateOnFrame re-reads into the async pair (date_async/time_async) when "
+                 "getDateTimeLock is clear and ++getDateTimeSleep > 10, and the callback copies the pair over date/time and clears the lock; "
+                 f"{_RTC_CADENCE}, so a pin written only to date/time is clobbered; pin the host RTC or rewrite each frame. "
+                 "The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 (photo state), else `time`; "
+                 "the date has no frozen override.")
+PT_RTC_CAVEAT = ("date/time are a CACHE of the host RTC: UpdateRTC returns while readInProgress is set, else increments framesSinceRead "
+                 "and, when it exceeds 10, zeroes it and starts an async read into the pair tempDate/tempTime; GetTimeCallback copies that pair "
+                 f"over date/time and clears readInProgress; {_RTC_CADENCE}, so a pin written only to date/time is clobbered; pin the host RTC "
+                 "or rewrite each frame.")
 # (field, size) in declaration order, enums and BOOL are 4 bytes; offsets and the total are derived, then checked against the xMAP size.
 HG_RTC_FIELDS = (("getDateTimeSuccess", 4), ("getDateTimeLock", 4), ("getDateTimeSleep", 4), ("getDateTimeErrorCode", 4),
                  ("date", RTC_DATE_SIZE), ("time", RTC_TIME_SIZE), ("date_async", RTC_DATE_SIZE), ("time_async", RTC_TIME_SIZE),
                  ("frozenTimeState", 4), ("frozenTime", RTC_TIME_SIZE))
-PT_RTC_FIELDS = HG_RTC_FIELDS[:8]  # RTCState: valid, readInProgress, framesSinceRead, status, date, time, tempDate, tempTime
+# Platinum RTCState (pokeplatinum src/rtc.c:9-18) is a differently named twin of the first 8 fields and has NO frozen-time pair.
+PT_RTC_FIELDS = (("valid", 4), ("readInProgress", 4), ("framesSinceRead", 4), ("status", 4),
+                 ("date", RTC_DATE_SIZE), ("time", RTC_TIME_SIZE), ("tempDate", RTC_DATE_SIZE), ("tempTime", RTC_TIME_SIZE))
+# role -> field name per layout: the async pair the refresh writes, and the lock/counter that gate the refresh
+RTC_ROLES = {"hgss": {"async_date": "date_async", "async_time": "time_async", "lock": "getDateTimeLock", "counter": "getDateTimeSleep"},
+             "pt": {"async_date": "tempDate", "async_time": "tempTime", "lock": "readInProgress", "counter": "framesSinceRead"}}
 RTC_READERS = {"hgss": ("GF_RTC_CopyDate", "GF_RTC_CopyTime"), "pt": ("GetCurrentDate", "RTC_GetCurrentTime")}
 
 
@@ -2155,8 +2204,25 @@ def rtc_file_checks(xm: XMap, images: Images, build: str, base: int, date_off: i
         got = _pool_offsets(images, fn, base, size)
         if off not in got:
             raise Fail(f"{fn_name} literal pool addresses work offsets {sorted(got)}; {field} {off:#x} is not ROM-proven")
-        out[fn_name] = {"address": fn.address, "image": fn.image, "pool_offsets": sorted(got), "proves": field}
+        out[fn_name] = {"address": fn.address, "image": fn.image, "pool_offsets": sorted(got), "proves": field,
+                        "bytes_source": ARM9_BYTES_NOTE if fn.image == "arm9" else f"decompressed {fn.image}"}
     return out
+
+
+RTC_HGE_IDENTICAL = (*RTC_READERS["hgss"], "GF_RTC_GetDateTime_Callback", "GF_RTC_UpdateOnFrame")
+
+
+def rtc_hge_identity(xm: XMap, hge: Images, vanilla: Images) -> dict:
+    """FILE: the four RTC reader/refresh functions, compared byte-for-byte: decompressed HG ARM9 (vanilla) vs the raw hge rom.arm9."""
+    rows = {}
+    for fn_name in RTC_HGE_IDENTICAL:
+        fn = xm.lookup(fn_name)
+        a, b = vanilla.read(fn.image, fn.address, fn.size), hge.read(fn.image, fn.address, fn.size)
+        if a != b:
+            raise Fail(f"hge changed {fn_name}: the vanilla sRTCWork layout is no longer a projection")
+        rows[fn_name] = {"address": fn.address, "size": fn.size, "image": fn.image, "identical": True,
+                         "sha256": hashlib.sha256(a).hexdigest()}
+    return rows
 
 
 def rtc_profile(xm: XMap, images: Images, build: str, vanilla: Images | None = None) -> dict:
@@ -2164,6 +2230,7 @@ def rtc_profile(xm: XMap, images: Images, build: str, vanilla: Images | None = N
     pt = build == "pt"
     sym_name = "sRTCState" if pt else "sRTCWork"
     offs, total = _rtc_offsets(PT_RTC_FIELDS if pt else HG_RTC_FIELDS)
+    roles = RTC_ROLES["pt" if pt else "hgss"]
     row = symbol_row(xm, sym_name)
     if total != row["size"]:
         raise Fail(f"RTC work layout {total:#x} != xMAP {sym_name} size {row['size']:#x}: the date/time offsets are unproven")
@@ -2181,24 +2248,24 @@ def rtc_profile(xm: XMap, images: Images, build: str, vanilla: Images | None = N
         "symbol": sym_name, "address": row["address"], "work_size": total,
         "date_off": offs["date"], "date_size": RTC_DATE_SIZE, "time_off": offs["time"], "time_size": RTC_TIME_SIZE,
         "date_fields": {"year": 0, "month": 4, "day": 8, "week": 12}, "time_fields": {"hour": 0, "minute": 4, "second": 8},
-        "async_date_off": offs["date_async"], "async_time_off": offs["time_async"],
-        "source": source, "evidence": "SOURCE + FILE", "file_checks": checks,
-        "caveat": "date/time are a CACHE of the host RTC: the game re-reads the RTC every >10 frames into the async pair and the callback "
-                  "overwrites date/time, so a pin written only to date/time is clobbered within ~11 frames; pin the host RTC or rewrite "
-                  "each frame. " + ("" if pt else "The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 "
-                                    "(photo state), else `time`; the date has no frozen override. ") +
-                  f"Refresh loop: {P_RTC_UPDATE if pt else S_RTC_UPDATE}",
+        "async_date_off": offs[roles["async_date"]], "async_time_off": offs[roles["async_time"]],
+        # the names behind the *_off keys (HGSS date_async/time_async, Platinum tempDate/tempTime) and the refresh gate
+        "async_names": {"date": roles["async_date"], "time": roles["async_time"]},
+        "refresh_gate": {"lock_field": roles["lock"], "lock_off": offs[roles["lock"]],
+                         "counter_field": roles["counter"], "counter_off": offs[roles["counter"]], "counter_threshold": 10},
+        "source": source, "evidence": "SOURCE + FILE", "file_checks": checks, "bytes_source": ARM9_BYTES_NOTE,
+        "caveat": (PT_RTC_CAVEAT if pt else HG_RTC_CAVEAT) + f" Refresh loop: {P_RTC_UPDATE if pt else S_RTC_UPDATE}",
     }
     if not pt:
         out.update(frozen_state_off=offs["frozenTimeState"], frozen_time_off=offs["frozenTime"])
     if build == "hge":
         if vanilla is None:
             raise Fail("hge RTC check needs the vanilla image")
-        for fn_name in (*RTC_READERS["hgss"], "GF_RTC_GetDateTime_Callback", "GF_RTC_UpdateOnFrame"):
-            fn = xm.lookup(fn_name)
-            if images.read(fn.image, fn.address, fn.size) != vanilla.read(fn.image, fn.address, fn.size):
-                raise Fail(f"hge changed {fn_name}: the vanilla sRTCWork layout is no longer a projection")
-        out["hge_checks"] = {"identical_to_vanilla": [*RTC_READERS["hgss"], "GF_RTC_GetDateTime_Callback", "GF_RTC_UpdateOnFrame"],
+        ident = rtc_hge_identity(xm, images, vanilla)
+        out["hge_checks"] = {"identical_to_vanilla": list(ident), "compared": ident,
+                             "method": "FILE: the four reader/refresh functions at their xMAP addresses, compared byte-for-byte (sha256 recorded): "
+                                       "the DECOMPRESSED HG ARM9 (ndspy loadArm9().sections[0]) against the hge RAW rom.arm9; "
+                                       "all four are byte-identical",
                              "source": f"{HGE_SRC} {H_RTC_DATE}, {H_RTC_TIME} (hg-engine declares the same RTCDate/RTCTime and defines "
                                        "no work struct of its own; the symbol keeps its vanilla address and 88-byte size)"}
     return out
@@ -2293,7 +2360,7 @@ SCHEMA_NOTES = {
               "difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] "
               "& outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off "
               "+ b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] "
-              "(fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); "
+              "(fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; "
               "battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap "
               "addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= "
@@ -2303,8 +2370,12 @@ SCHEMA_NOTES = {
               "vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, "
            "date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async "
-           "pair the refresh loop writes (async_date_off/async_time_off), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is "
-           "frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools), caveat",
+           "pair the refresh loop writes (async_date_off/async_time_off; async_names gives the field names: HGSS date_async/time_async, Platinum "
+           "tempDate/tempTime), refresh_gate (lock/counter field names + offsets: getDateTimeLock/getDateTimeSleep, Platinum "
+           "readInProgress/framesSinceRead; the refresh fires when counter > counter_threshold and no read is in flight), "
+           "frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), "
+           "file_checks (ROM reader literal pools; bytes_source = which ARM9 bytes were read), hge_checks (hge only: the four functions' "
+           "byte identity, decompressed HG ARM9 vs raw hge ARM9, sha256 per function), caveat",
     "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook "
                         "per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by "
                         "the generator and a test)",
@@ -2420,7 +2491,7 @@ def hge_field_checks(xm: XMap, hg: Images, hge: Images) -> dict:
     if alloc != FS_SIZE:
         raise Fail(f"hge FieldSystem_New allocates {alloc:#x}, not the declared {FS_SIZE:#x}")
     return {
-        "evidence": "FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol)",
+        "evidence": f"FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol); {ARM9_BYTES_NOTE}",
         "functions_byte_identical": funcs,
         "field_system_new": {
             "symbol": "FieldSystem_New", "address": fn.address, "size": fn.size, "alloc_size": alloc,

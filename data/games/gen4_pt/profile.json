@@ -38,7 +38,7 @@
     "address": "integers; address_hex is the same value for humans",
     "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
     "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
-    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
     "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
@@ -56,7 +56,7 @@
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
-    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools), caveat",
+    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off; async_names gives the field names: HGSS date_async/time_async, Platinum tempDate/tempTime), refresh_gate (lock/counter field names + offsets: getDateTimeLock/getDateTimeSleep, Platinum readInProgress/framesSinceRead; the refresh fires when counter > counter_threshold and no read is in flight), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools; bytes_source = which ARM9 bytes were read), hge_checks (hge only: the four functions' byte identity, decompressed HG ARM9 vs raw hge ARM9, sha256 per function), caveat",
     "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
@@ -840,8 +840,13 @@
         "rtc": {
           "address": 35386824,
           "async_date_off": 44,
+          "async_names": {
+            "date": "tempDate",
+            "time": "tempTime"
+          },
           "async_time_off": 60,
-          "caveat": "date/time are a CACHE of the host RTC: the game re-reads the RTC every >10 frames into the async pair and the callback overwrites date/time, so a pin written only to date/time is clobbered within ~11 frames; pin the host RTC or rewrite each frame. Refresh loop: src/rtc.c:35-47",
+          "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
+          "caveat": "date/time are a CACHE of the host RTC: UpdateRTC returns while readInProgress is set, else increments framesSinceRead and, when it exceeds 10, zeroes it and starts an async read into the pair tempDate/tempTime; GetTimeCallback copies that pair over date/time and clears readInProgress; the cached copy refreshes every 11 frames when no read is in flight (the counter must exceed 10) and later when one is (the counter does not advance while a read is in flight), so a pin written only to date/time is clobbered; pin the host RTC or rewrite each frame. Refresh loop: src/rtc.c:35-47",
           "date_fields": {
             "day": 8,
             "month": 4,
@@ -854,6 +859,7 @@
           "file_checks": {
             "GetCurrentDate": {
               "address": 33634468,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
               "image": "arm9",
               "pool_offsets": [
                 0,
@@ -863,6 +869,7 @@
             },
             "RTC_GetCurrentTime": {
               "address": 33634432,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
               "image": "arm9",
               "pool_offsets": [
                 0,
@@ -870,6 +877,13 @@
               ],
               "proves": "time_off"
             }
+          },
+          "refresh_gate": {
+            "counter_field": "framesSinceRead",
+            "counter_off": 8,
+            "counter_threshold": 10,
+            "lock_field": "readInProgress",
+            "lock_off": 4
           },
           "source": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb src/rtc.c:9-18 (RTCState: 4 words, then date src/rtc.c:14, time src/rtc.c:15, tempDate, tempTime); src/rtc.c:23; RTCDate/RTCTime layouts are the NitroSDK structs (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 lib/include/nitro/rtc/ARM9/api.h:29, lib/include/nitro/rtc/ARM9/api.h:36; pokeplatinum ships no SDK header); FILE: computed size 0x48 equals the xMAP sRTCState size, the readers' literal pools address +0x10 and +0x20",
           "symbol": "sRTCState",

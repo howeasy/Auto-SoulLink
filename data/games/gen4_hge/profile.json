@@ -63,7 +63,7 @@
     "address": "integers; address_hex is the same value for humans",
     "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
     "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
-    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
     "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
@@ -81,7 +81,7 @@
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
-    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools), caveat",
+    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off; async_names gives the field names: HGSS date_async/time_async, Platinum tempDate/tempTime), refresh_gate (lock/counter field names + offsets: getDateTimeLock/getDateTimeSleep, Platinum readInProgress/framesSinceRead; the refresh fires when counter > counter_threshold and no read is in flight), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools; bytes_source = which ARM9 bytes were read), hge_checks (hge only: the four functions' byte identity, decompressed HG ARM9 vs raw hge ARM9, sha256 per function), caveat",
     "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
@@ -92,7 +92,7 @@
         "address": 33557712,
         "address_hex": "0x02000cd0",
         "differs": true,
-        "evidence": "FILE: the pinned hge ROM raw arm9; SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b armips/asm/syntheticoverlay.s:8-10 (bl load_arm9_expansion at the Main() site) and :15 (the .area at 0x02110334)",
+        "evidence": "FILE: the pinned hge ROM raw rom.arm9 (vanilla_hex is ndspy loadArm9().sections[0], decompressed); SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b armips/asm/syntheticoverlay.s:8-10 (bl load_arm9_expansion at the Main() site) and :15 (the .area at 0x02110334)",
         "hge_hex": "0ff130fb02f00af80120032102f006f8",
         "hge_hook": {
           "kind": "bl_stub",
@@ -2859,110 +2859,207 @@
         "battle_evidence": {
           "ability_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:914 (u16 ability at 0x7A, moved from 0x27)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "ability_width": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:914 (u16)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "ctx_off": {
-            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) BattleSystem_GetBattleContext = ldr r0,[r0,#0x30]; hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1587; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:1802 (BattleContext_New result stored at bs+0x30)",
-            "class": "FILE"
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9] BattleSystem_GetBattleContext = ldr r0,[r0,#0x30]; hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1587; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:1802 (BattleContext_New result stored at bs+0x30)",
+            "class": "FILE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:527 (struct BattleSystem); BattleSystem.ctx -> BattleContext include/battle/battle.h:540",
+              "struct": "BattleSystem"
+            }
           },
           "fainted_flag_mask": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:614 (BATTLE_STATUS_FAINTED = 15 << 24)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:279-437 (struct BattleContext); include/battle/battle.h:359",
+              "struct": "BattleContext"
+            }
           },
           "fainted_flag_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1365 (`/*0x213C*/ server_status_flag // battleStatus`); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:6922 (literal 0x213C)",
-            "class": "ASM"
+            "class": "ASM",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:279-437 (struct BattleContext); include/battle/battle.h:359",
+              "struct": "BattleContext"
+            }
           },
           "fainted_flag_shift": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:617 (BATTLE_STATUS_FAINTED_SHIFT 24: battler b fainting = bit 24+b)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:279-437 (struct BattleContext); include/battle/battle.h:359",
+              "struct": "BattleContext"
+            }
           },
           "hp_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:905 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon); include/battle/battle.h:248",
+              "struct": "BattleMon"
+            }
           },
           "hp_signed": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:905 (s32)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon); include/battle/battle.h:248 (s32)",
+              "struct": "BattleMon"
+            }
           },
           "hp_width": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:905 (s32: all four bytes are the value, a 2-byte write leaves a stale high half); docs/gen4/research/battle_faint.md",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon); include/battle/battle.h:248 (s32)",
+              "struct": "BattleMon"
+            }
           },
           "level_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:902 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "man_data_off": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28 (template 0x10, exec_state 0x10, proc_state 0x14, args 0x18, data 0x1C); asm/overlay_12_022378C0.s:4268 (OverlayManager_CreateAndGetData(man, 0x2490, HEAP_ID_BATTLE) allocates the BattleSystem into manager->data); docs/gen4/research/battle_pointer.md",
             "class": "ASM",
-            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical"
+            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28",
+              "struct": "OverlayManager"
+            }
           },
           "max_battlers": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:14 (CLIENT_MAX 4)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 CLIENT_MAX / BATTLER_MAX = 4 (the length of the BattleContext per-battler arrays)",
+              "struct": "constant"
+            }
           },
           "max_hp_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:906 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "mon_size": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1403 (`// 0xc0`); PHYSICAL: battler 1 read and written at +0xC0 live (profile.battle_physical)",
             "class": "SOURCE",
-            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical"
+            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "mons_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1403 (`/*0x2D40*/ battlemon[CLIENT_MAX]`, explicit); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_battle_controller.s:341 (literal 0x2DBE = 0x2D40 + BattleMon.gender 0x7E); docs/gen4/research/battle_pointer.md (asm-literal-derived; not 0x2D4C, which is moves[0])",
             "class": "ASM",
-            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical"
+            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:279-437 (struct BattleContext); include/battle/battle.h:394",
+              "struct": "BattleContext"
+            }
           },
           "otid_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:912 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "outcome_mask": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:964-968 (the outcome copy stores byte & 0x3F into BattleSetup.winFlag); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:122-130 (BATTLE_RESULT_TRY_FLEE_WAIT 0x40 and TRY_FLEE 0x80 are transient flag bits above the 0x3F result bits); hge: profile.battle_hge_checks.outcome_store (the same bytes, FILE)",
-            "class": "FILE"
+            "class": "FILE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:527 (struct BattleSystem); battleOutcomeFlag masked into BattleSetup.winFlag",
+              "struct": "BattleSystem"
+            }
           },
           "outcome_off": {
-            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) BattleSystem_GetBattleOutcomeFlags = ldrb r0,[r0,#0x2420 literal]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:605 (BattleSystem.battleOutcomeFlag, u8); asm/overlay_12_022378C0.s:857",
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9] BattleSystem_GetBattleOutcomeFlags = ldrb r0,[r0,#0x2420 literal]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:605 (BattleSystem.battleOutcomeFlag, u8); asm/overlay_12_022378C0.s:857",
             "class": "FILE",
-            "note": "ROM accessor byte-identical in hge; PHYSICAL: result byte 2 at bs+0x2420 observed on the pinned hge build"
+            "note": "ROM accessor byte-identical in hge; PHYSICAL: result byte 2 at bs+0x2420 observed on the pinned hge build",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:527 (struct BattleSystem); include/battle/battle.h:605; the 0x2420 comes from the BattleSystem_GetBattleOutcomeFlags accessor literal (profile.battle_file_checks, FILE-checked in the ROM), not from the source header",
+              "struct": "BattleSystem"
+            }
           },
           "personality_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:909 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "selected_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1392 (`/*0x219C*/ sel_mons_no`, explicit); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:2148 (literal 0x219C, ldrb)",
             "class": "ASM",
-            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical"
+            "note": "SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps the vanilla OverlayManager code; PHYSICAL: profile.battle_physical",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:279-437 (struct BattleContext); include/battle/battle.h:383",
+              "struct": "BattleContext"
+            }
           },
           "species_off": {
             "cite": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:859 / include/battle.h:860 (explicit offset comment)",
-            "class": "SOURCE"
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
           },
           "template_id": {
             "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
-            "class": "FILE"
+            "class": "FILE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28",
+              "struct": "OverlayManagerTemplate"
+            }
           },
           "template_off": {
             "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
-            "class": "FILE"
+            "class": "FILE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28",
+              "struct": "OverlayManagerTemplate"
+            }
           },
           "type_off": {
-            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) BattleSystem_GetBattleType = ldr r0,[r0,#0x2c]; hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1586",
-            "class": "FILE"
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM, byte-identical in hge) [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9] BattleSystem_GetBattleType = ldr r0,[r0,#0x2c]; hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/battle.h:1586",
+            "class": "FILE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:527 (struct BattleSystem); include/battle/battle.h:539",
+              "struct": "BattleSystem"
+            }
           }
         },
         "battle_file_checks": {
           "BattleSystem_GetBattleContext": {
             "address": 35891172,
             "bytes": "006b7047",
+            "bytes_source": "decompressed ov12",
             "decodes_as": "ldr r0,[r0,#0x30]; bx lr",
             "field": "ctx_off",
             "image": "ov12",
@@ -2972,6 +3069,7 @@
           "BattleSystem_GetBattleOutcomeFlags": {
             "address": 35896596,
             "bytes": "0149405c7047c04620240000",
+            "bytes_source": "decompressed ov12",
             "decodes_as": "ldr r1,[pc,#4]; ldrb r0,[r0,r1]; bx lr; nop; .word 0x2420",
             "field": "outcome_off",
             "image": "ov12",
@@ -2981,6 +3079,7 @@
           "BattleSystem_GetBattleType": {
             "address": 35891168,
             "bytes": "c06a7047",
+            "bytes_source": "decompressed ov12",
             "decodes_as": "ldr r0,[r0,#0x2c]; bx lr",
             "field": "type_off",
             "image": "ov12",
@@ -2994,7 +3093,7 @@
             "BattleSystem_GetBattleOutcomeFlags": true,
             "BattleSystem_GetBattleType": true
           },
-          "evidence": "FILE: vanilla xMAP symbol bytes compared in the hge image (declared image)",
+          "evidence": "FILE: vanilla xMAP symbol bytes compared in the hge image (declared image); ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
           "outcome_store": {
             "bytes": "635c3f21283219407961",
             "function_address": 35882044,
@@ -3161,7 +3260,7 @@
           }
         },
         "probe_field_hge_checks": {
-          "evidence": "FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol)",
+          "evidence": "FILE: vanilla xMAP symbol extents compared byte-for-byte in the hge image (declared image per symbol); ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
           "field_system_new": {
             "actual_diff_addresses": [
               33808372,
@@ -3318,8 +3417,13 @@
         "rtc": {
           "address": 35459144,
           "async_date_off": 44,
+          "async_names": {
+            "date": "date_async",
+            "time": "time_async"
+          },
           "async_time_off": 60,
-          "caveat": "date/time are a CACHE of the host RTC: the game re-reads the RTC every >10 frames into the async pair and the callback overwrites date/time, so a pin written only to date/time is clobbered within ~11 frames; pin the host RTC or rewrite each frame. The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 (photo state), else `time`; the date has no frozen override. Refresh loop: src/gf_rtc.c:45-50",
+          "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
+          "caveat": "date/time are a CACHE of the host RTC: GF_RTC_UpdateOnFrame re-reads into the async pair (date_async/time_async) when getDateTimeLock is clear and ++getDateTimeSleep > 10, and the callback copies the pair over date/time and clears the lock; the cached copy refreshes every 11 frames when no read is in flight (the counter must exceed 10) and later when one is (the counter does not advance while a read is in flight), so a pin written only to date/time is clobbered; pin the host RTC or rewrite each frame. The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 (photo state), else `time`; the date has no frozen override. Refresh loop: src/gf_rtc.c:45-50",
           "date_fields": {
             "day": 8,
             "month": 4,
@@ -3332,6 +3436,7 @@
           "file_checks": {
             "GF_RTC_CopyDate": {
               "address": 33638272,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
               "image": "arm9",
               "pool_offsets": [
                 0,
@@ -3341,6 +3446,7 @@
             },
             "GF_RTC_CopyTime": {
               "address": 33638220,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
               "image": "arm9",
               "pool_offsets": [
                 0,
@@ -3353,13 +3459,51 @@
           "frozen_state_off": 72,
           "frozen_time_off": 76,
           "hge_checks": {
+            "compared": {
+              "GF_RTC_CopyDate": {
+                "address": 33638272,
+                "identical": true,
+                "image": "arm9",
+                "sha256": "7361d3dfded91982ed6de0db60064640a39c583dc8bc2d16b9293aa8864bec66",
+                "size": 36
+              },
+              "GF_RTC_CopyTime": {
+                "address": 33638220,
+                "identical": true,
+                "image": "arm9",
+                "sha256": "8373520ad3c9ed7f4d62f09415b903956d41e828a8a0d18562af9bf69f145d54",
+                "size": 52
+              },
+              "GF_RTC_GetDateTime_Callback": {
+                "address": 33638036,
+                "identical": true,
+                "image": "arm9",
+                "sha256": "dc413d7b59b567b26d86f07374852ccf6da33774e6fcbc63b367ac7692c80c25",
+                "size": 56
+              },
+              "GF_RTC_UpdateOnFrame": {
+                "address": 33637996,
+                "identical": true,
+                "image": "arm9",
+                "sha256": "326cd07006e9e02c054e9840edbf43f937b69a25752d0b8924887d506d927f92",
+                "size": 40
+              }
+            },
             "identical_to_vanilla": [
               "GF_RTC_CopyDate",
               "GF_RTC_CopyTime",
               "GF_RTC_GetDateTime_Callback",
               "GF_RTC_UpdateOnFrame"
             ],
+            "method": "FILE: the four reader/refresh functions at their xMAP addresses, compared byte-for-byte (sha256 recorded): the DECOMPRESSED HG ARM9 (ndspy loadArm9().sections[0]) against the hge RAW rom.arm9; all four are byte-identical",
             "source": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/rtc.h:33, include/rtc.h:40 (hg-engine declares the same RTCDate/RTCTime and defines no work struct of its own; the symbol keeps its vanilla address and 88-byte size)"
+          },
+          "refresh_gate": {
+            "counter_field": "getDateTimeSleep",
+            "counter_off": 8,
+            "counter_threshold": 10,
+            "lock_field": "getDateTimeLock",
+            "lock_off": 4
           },
           "source": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/gf_rtc.c:7-20 (GFRtcWork: 4 words, then date src/gf_rtc.c:12, time src/gf_rtc.c:13, date_async, time_async, frozenTimeState, frozenTime), src/gf_rtc.c:22; RTCDate lib/include/nitro/rtc/ARM9/api.h:29 / RTCTime lib/include/nitro/rtc/ARM9/api.h:36; FILE: computed size 0x58 equals the xMAP sRTCWork size, the readers' literal pools address +0x10 and +0x20",
           "symbol": "sRTCWork",
@@ -5155,7 +5299,7 @@
               0
             ]
           ],
-          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:414-418",
+          "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9]; SOURCE src/battle/battle_input.c:414-418",
           "image": "ov12",
           "names": {
             "0": "CANCEL",
@@ -5180,7 +5324,7 @@
               2
             ]
           ],
-          "evidence": "FILE: ROM bytes; SOURCE src/battle/battle_input.c:281-284 (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)",
+          "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9]; SOURCE src/battle/battle_input.c:281-284 (row 0 = FIGHT x3, row 1 = BAG, RUN, POKEMON)",
           "image": "ov12",
           "names": {
             "0": "FIGHT",
@@ -5210,7 +5354,7 @@
         },
         "code_identity": {
           "compared_with": "heartgold (vanilla)",
-          "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the compared ROM, so the pokeheartgold source read applies byte-for-byte",
+          "evidence": "FILE: the full byte range of each UI function/table (xMAP size) is identical in this ROM and the compared ROM, so the pokeheartgold source read applies byte-for-byte; ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
           "symbols": {
             "BattleCursor_CheckKeyInput": {
               "address": 36087532,
@@ -5407,7 +5551,7 @@
             "address": 36032456,
             "address_hex": "0x0225cfc8",
             "cells_per_variant": 8,
-            "evidence": "FILE: ROM bytes (asm/overlay_27.s:6038-6045); row 0 is the full menu: cell c shows icon c",
+            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] (asm/overlay_27.s:6038-6045); row 0 is the full menu: cell c shows icon c",
             "image": "ov27",
             "none": 13,
             "rows": [
@@ -5495,7 +5639,7 @@
               "Left",
               "Right"
             ],
-            "evidence": "FILE: ROM bytes at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
+            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
             "groups": 4,
             "image": "ov27",
             "rows": [

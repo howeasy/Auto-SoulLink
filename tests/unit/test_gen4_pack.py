@@ -1294,3 +1294,59 @@ def test_rtc_file_checks_hold_in_the_pinned_roms_incl_hge_identity():
     row = g.symbol_row(xm, "sRTCWork")
     with pytest.raises(g.Fail, match="not ROM-proven"):
         g.rtc_file_checks(xm, hg, "hgss", row["address"], 0x10, 0x24, 88)
+
+
+# ---- card gen4-C1-2f: rtc wording (Platinum has its own caveat), the hge identity compare, battle field owners ----------
+def test_platinum_rtc_has_its_own_caveat_with_no_frozen_pair():
+    pt = _pack("pt")["titles"]["platinum"]["profile"]["rtc"]
+    hg = _pack("hgss")["titles"]["heartgold"]["profile"]["rtc"]
+    assert "frozen" not in json.dumps(pt).lower()  # Platinum's RTCState has no frozen-time pair anywhere in its rtc block
+    assert "frozen" in hg["caveat"]  # control: the HGSS caveat does describe it
+    for word in ("readInProgress", "framesSinceRead", "tempDate", "tempTime", "11 frames"):
+        assert word in pt["caveat"], word
+    assert "date_async" not in json.dumps(pt) and "getDateTime" not in json.dumps(pt)
+    assert pt["async_names"] == {"date": "tempDate", "time": "tempTime"} and hg["async_names"] == {"date": "date_async", "time": "time_async"}
+    assert (pt["async_date_off"], pt["async_time_off"]) == (hg["async_date_off"], hg["async_time_off"]) == (0x2C, 0x3C)
+    assert pt["refresh_gate"]["lock_field"] == "readInProgress" and hg["refresh_gate"]["lock_field"] == "getDateTimeLock"
+    assert pt["refresh_gate"]["counter_threshold"] == hg["refresh_gate"]["counter_threshold"] == 10
+    assert "every 11 frames when no read is in flight" in hg["caveat"]
+
+
+def test_rtc_bytes_are_labelled_decompressed_hg_vs_raw_hge():
+    for mode, title in (("hgss", "heartgold"), ("hgss", "soulsilver"), ("hge", "heartgold_hge"), ("pt", "platinum")):
+        rtc = _pack(mode)["titles"][title]["profile"]["rtc"]
+        for chk in rtc["file_checks"].values():
+            assert "loadArm9().sections[0]" in chk["bytes_source"] and "raw uncompressed rom.arm9" in chk["bytes_source"]
+        assert "DECOMPRESSED" in rtc["bytes_source"]
+    hge = _pack("hge")["titles"]["heartgold_hge"]["profile"]["rtc"]["hge_checks"]
+    assert set(hge["compared"]) == set(hge["identical_to_vanilla"]) and len(hge["compared"]) == 4
+    assert all(row["identical"] and len(row["sha256"]) == 64 for row in hge["compared"].values())
+    assert "DECOMPRESSED HG ARM9" in hge["method"] and "RAW rom.arm9" in hge["method"]
+
+
+def test_rtc_hge_identity_compare_is_real_a_mutated_byte_goes_red():
+    base = 0x02000000
+    mk = lambda n, a: g.Sym(n, a, 8, ".text", "x.o", "arm9")  # noqa: E731
+    xm = _FakeXMap(**{n: mk(n, base + 8 * i) for i, n in enumerate(g.RTC_HGE_IDENTICAL)})
+    blob = bytes(range(32))
+    hg, hge = g.Images(base, blob, {}), g.Images(base, blob, {})
+    out = g.rtc_hge_identity(xm, hge, hg)
+    assert list(out) == list(g.RTC_HGE_IDENTICAL) and all(r["identical"] for r in out.values())
+    for i in range(len(blob)):  # a flipped byte anywhere inside any of the four function bodies is caught
+        bad = bytearray(blob)
+        bad[i] ^= 0xFF
+        with pytest.raises(g.Fail, match="hge changed"):
+            g.rtc_hge_identity(xm, g.Images(base, bytes(bad), {}), hg)
+
+
+@pytest.mark.parametrize("mode,title", [("hgss", "heartgold"), ("hge", "heartgold_hge")])
+def test_battle_evidence_records_the_owning_struct_per_field(mode, title):
+    prof = _pack(mode)["titles"][title]["profile"]
+    ev, vals = prof["battle_evidence"], prof["battle"]
+    assert set(ev) == set(vals) and all(ev[k]["owner"]["struct"] and ev[k]["owner"]["cite"] for k in ev)
+    owner = {k: ev[k]["owner"]["struct"] for k in ev}
+    assert (owner["type_off"], owner["ctx_off"], owner["outcome_off"]) == ("BattleSystem",) * 3
+    assert (owner["mons_off"], owner["selected_off"], owner["fainted_flag_off"]) == ("BattleContext",) * 3
+    assert (owner["hp_off"], owner["hp_width"], owner["mon_size"]) == ("BattleMon",) * 3
+    assert "battle.h:527" in ev["type_off"]["owner"]["cite"] and "battle.h:394" in ev["mons_off"]["owner"]["cite"]
+    assert "battle.h:248" in ev["hp_off"]["owner"]["cite"] and "accessor literal" in ev["outcome_off"]["owner"]["cite"]
