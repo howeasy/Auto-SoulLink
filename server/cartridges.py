@@ -86,6 +86,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
+    if family == upr_pipeline.FAMILY_GEN3_EXP and (companion or randomize is not None):
+        raise CartridgeError(upr_pipeline.EXPANSION_REFUSAL)
     if companion and family == FAMILY_VANILLA:
         for rom in data.values():
             _vanilla_target(rom)  # Yellow must refuse before either randomizer starts.
@@ -151,9 +153,9 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         if randomize is None:
             kind = "companion" if has_companion else "clean"
         # fingerprint_any: Gen 3 cartridges use the Gen 3 fingerprint, Gen 1 the wild/fishing
-        # scanner; Gen 2 never randomizes, so there is no content_fingerprint to cross-check it
+        # scanner; Gen 2 and the Emerald Expansion never randomize, so there is no content_fingerprint to cross-check it
         # against at hello either.
-        fingerprint = "" if family == upr_pipeline.FAMILY_GEN2 else upr_pipeline.fingerprint_any(rom)
+        fingerprint = "" if family in (upr_pipeline.FAMILY_GEN2, upr_pipeline.FAMILY_GEN3_EXP) else upr_pipeline.fingerprint_any(rom)
         players[pid] = {"source": sources[pid], "source_title": infos[pid]["title"],
                         "output": str(outputs[pid]), "rom_sha1": hashlib.sha1(rom).hexdigest(),
                         "fingerprint": fingerprint, "kind": kind}

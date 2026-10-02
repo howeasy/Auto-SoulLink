@@ -526,8 +526,8 @@ def test_exp_battle_handoff_open_text_states_the_faint_evidence_honestly():
 
 
 # ── Reference production route remains separate from Manager provisioning ─────────────────
-def test_gen3_exp_is_routed_without_header_or_manager_provisioning():
-    """The exact reference pack routes; header-only admission and Manager offerings stay excluded."""
+def test_gen3_exp_is_routed_by_exact_hash_only():
+    """The exact reference pack routes; header-only admission stays excluded."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
     Entry = lua.eval(f'dofile("{entry_path}")')
@@ -536,9 +536,13 @@ def test_gen3_exp_is_routed_without_header_or_manager_provisioning():
     assert "gen3_exp" in {key for key, _ in Entry.ROUTED.items()}
     assert read("profile.json")["titles"][TITLE]["admitted"] is True
 
-    from server.manager import GAMES, UNADMITTED_GAMES
-    assert "gen3_exp" not in {key for key, _, _ in GAMES}
+
+def test_gen3_exp_is_offered_by_the_manager_as_an_admitted_game():
+    """Owner 2026-10-02: the Emerald Expansion is an RC game in the Manager (no randomizer, no companion)."""
+    from server.manager import GAMES, NON_RANDOMIZABLE_GAMES, UNADMITTED_GAMES
+    assert "gen3_exp" in {key for key, _, _ in GAMES}
     assert "gen3_exp" not in UNADMITTED_GAMES
+    assert "gen3_exp" in NON_RANDOMIZABLE_GAMES
 
 
 @pytest.mark.parametrize("generator,filename", [(profile, "profile.json"), (checkpoint, "write_checkpoint.json")])

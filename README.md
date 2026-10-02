@@ -104,6 +104,7 @@ features matter, so use the game's setup options when preparing a run.
 | **Gold, Silver, Crystal** | Two games from this family |
 | **FireRed, LeafGreen** | Two games from this family |
 | **Emerald** | Emerald on both sides |
+| **Emerald Expansion** | The prebuilt Emerald Expansion reference ROM on both sides. It is built by `tools/build_expansion.py` from the pinned pokeemerald-expansion source (it cannot be built on a Windows host, and no patch exists); no randomizer, no companion patch |
 | **Radical Red 4.1** | Radical Red on both sides |
 | **Archipelago Red/Blue** | Compatible Archipelago builds |
 

@@ -263,7 +263,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : f === 'gen3_exp' ? 'Emerald Expansion' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -285,6 +285,7 @@ function randomizerFields(form) {
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
         add('FireRed · LeafGreen', function (r) { return r.clean && r.family === 'gen3_frlg'; });
         add('Emerald', function (r) { return r.clean && r.family === 'gen3_emerald'; });
+        add('Emerald Expansion', function (r) { return r.clean && r.family === 'gen3_exp'; });
         add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
       }
       add('not usable', function (r) { return !r.clean; });
@@ -343,6 +344,7 @@ function randomizerFields(form) {
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
+          if (r.family === 'gen3_exp') return { ok: false, why: 'The Emerald Expansion has no companion patch. Use the standard cartridge.' };
           if (r.family === 'gen3_emerald') return { ok: false, why: 'No Emerald companion build is available yet. Use the standard cartridge.' };
           return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
         }
@@ -358,6 +360,7 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
+      if (this.rdraft.randomize && [ra, rb].some(function (r) { return r && r.family === 'gen3_exp'; })) return 'The Emerald Expansion has no randomizer; turn Randomize off.';
       if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {

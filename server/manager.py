@@ -75,6 +75,7 @@ GAMES = [
     ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
     ("gen3_e", "Emerald", ["emerald"]),
+    ("gen3_exp", "Emerald Expansion", ["emerald_expansion_28877d73"]),
 ]
 UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
@@ -91,7 +92,8 @@ GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_
                "gen2": "gen2_gsc", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
                 "gen2_gsc": "Gold / Silver / Crystal",
-                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
+                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald",
+                "gen3_exp": "Emerald Expansion"}
 # Owner ruling 37 (2026-09-27): a Radical Red run cannot be randomized at all. It is absent
 # from GAME_FAMILY above, which the UI honours (randomizer_games), but _game_family() then
 # answers None and `handle_cartridges` SKIPPED its "this run is X; these are Y cartridges"
@@ -101,6 +103,10 @@ FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pure
 NON_RANDOMIZABLE_GAMES = {
     "gen3_rr": ("Randomized Radical Red is not supported in this release; "
                 "the randomizer supports FireRed / LeafGreen / Emerald"),
+    # Also absent from GAME_FAMILY on purpose: the creator feeds GAME_FAMILY[game] to the
+    # randomizer form as its family, and "gen3_exp" is not one of upr_settings.FAMILIES.
+    "gen3_exp": ("The Emerald Expansion has no randomizer and no companion patch -- it is a prebuilt "
+                 "reference ROM; the randomizer supports FireRed / LeafGreen / Emerald"),
 }
 
 
@@ -180,13 +186,15 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen2_gsc": {"ok": True},
-                     "gen3_frlge_rr": {"ok": True}},
+                     "gen3_frlge_rr": {"ok": True},
+                     "gen3_exp": {"ok": False, "why": "Explode Mode is not supported on the Emerald Expansion."}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
                         "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},
-                        "gen3_frlge_rr": {"ok": True}},
+                        "gen3_frlge_rr": {"ok": True},
+                        "gen3_exp": {"ok": False, "why": "Needs the companion patch (gEnemyParty is encrypted), and the Emerald Expansion has none."}},
     "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
     "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal, FireRed/LeafGreen/Emerald).",
@@ -194,12 +202,14 @@ OPTION_SUPPORT = {
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
-                      "gen3_frlge_rr": {"ok": True}},
+                      "gen3_frlge_rr": {"ok": True},
+                      "gen3_exp": {"ok": False, "why": "Needs a companion patch with a native sound path, and the Emerald Expansion has none."}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen2_gsc": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 2 damage."},
-                    "gen3_frlge_rr": {"ok": True}},
+                    "gen3_frlge_rr": {"ok": True},
+                    "gen3_exp": {"ok": True}},
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
@@ -207,7 +217,8 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen3_frlge_rr": {"ok": True}},
+                     "gen3_frlge_rr": {"ok": True},
+                     "gen3_exp": {"ok": False, "why": "The Emerald Expansion has no companion patch, so no Pokémon-Center trade NPC to switch off."}},
 }
 
 
@@ -311,7 +322,7 @@ def new_run_form() -> dict:
             rt in ("red", "blue", "yellow", "red_ap", "blue_ap",
                    "purered", "pureblue", "puregreen") for rt in m)],
         # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
-        "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY],
+        "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY and k not in NON_RANDOMIZABLE_GAMES],
     }
 
 
@@ -1454,7 +1465,13 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
         from server import cartridges
-        from server.upr_pipeline import FAMILY_GEN2, family_of, find_upr_jar
+        from server.upr_pipeline import (
+            EXPANSION_REFUSAL,
+            FAMILY_GEN2,
+            FAMILY_GEN3_EXP,
+            family_of,
+            find_upr_jar,
+        )
         from server.upr_settings import (
             FAMILY_PURE,
             FAMILY_VANILLA,
@@ -1496,6 +1513,8 @@ class RunManager:
                     f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
                     f"{FAMILY_WORDS.get(family, family)} cartridges -- pick "
                     f"{FAMILY_WORDS.get(wanted, wanted)} dumps")}, status=400)
+        if family == FAMILY_GEN3_EXP and (randomize or companion):
+            return web.json_response({"ok": False, "error": EXPANSION_REFUSAL}, status=400)
         if randomize and family == FAMILY_GEN2:
             return web.json_response({"ok": False, "error": (
                 "Gen 2 has no randomizer support; turn Randomize off")}, status=400)

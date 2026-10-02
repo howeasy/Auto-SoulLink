@@ -45,7 +45,8 @@ def _named(info: dict) -> str:
 # ── the cart: named Radical Red, refused by name, never reported as a FireRed ────────────
 def test_only_radical_red_is_refused_as_a_game():
     """Ruling 37 removed Radical Red and nothing else."""
-    assert set(manager.NON_RANDOMIZABLE_GAMES) == {"gen3_rr"}
+    # the Emerald Expansion (gen3_exp) has no randomizer either, but that is not ruling 37
+    assert set(manager.NON_RANDOMIZABLE_GAMES) - {"gen3_exp"} == {"gen3_rr"}
     assert set(manager.new_run_form()["randomizer_games"]) <= set(manager.GAME_FAMILY)
     assert {"gen3", "gen3_e", "gen1", "gen1_purergb"} <= set(manager.new_run_form()["randomizer_games"])
 
