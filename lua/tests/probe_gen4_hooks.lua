@@ -56,17 +56,19 @@ function M.other_boot_buttons(audit)
     return n
 end
 function M.boot(mode,limit,idle,field_live,step,frame)
-    local stable,audit=0,{}
+    local stable,audit,first_live=0,{},nil
     for i=1,limit do
+        local live=field_live()
+        if live and first_live==nil then first_live=frame() end
         if idle() then stable=stable+1 else stable=0 end
-        if stable>=60 then return {overworld=true,boot_inputs=audit,other_boot_buttons=M.other_boot_buttons(audit),boot_frame=frame()} end
+        if stable>=60 then return {overworld=true,boot_inputs=audit,other_boot_buttons=M.other_boot_buttons(audit),boot_frame=frame(),first_field_live_frame=first_live} end
         local buttons={}
-        if mode~="no-buttons" and not field_live() then
+        if mode~="no-buttons" and not live then
             local p=i%40; if p<3 then buttons.A=true elseif p>=20 and p<23 then buttons.Start=true end
         end
         M.record_boot_input(audit,buttons); step(buttons)
     end
-    return {overworld=false,boot_inputs=audit,other_boot_buttons=M.other_boot_buttons(audit),boot_frame=frame()}
+    return {overworld=false,boot_inputs=audit,other_boot_buttons=M.other_boot_buttons(audit),boot_frame=frame(),first_field_live_frame=first_live}
 end
 function M.rtc_slice(title)
     local rtc=need(title.profile.rtc,"k:pack profile.rtc (symbol, date/time offsets and sizes, source)")
@@ -685,7 +687,8 @@ local function run()
         guarded("l",function()
             local x=M.boot(cfg.mode,cfg.boot_frames,idle_field,function()
                 local fs=read(symbol("sFieldSysPtr")); if fs==0 then return false end
-                return read(fs+need(title.profile.probe_field.live,"l:pack live field offset"))~=0
+                local p=need(title.profile.probe_field,"l:pack field offsets")
+                return read(fs+need(p.live,"l:pack live field offset"))~=0
             end,step,emu.framecount)
             boot_ok=x.overworld; return x
         end)

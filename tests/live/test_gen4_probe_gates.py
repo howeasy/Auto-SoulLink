@@ -416,6 +416,7 @@ def test_pc_facing_boot_stops_title_inputs_when_field_live(api):
     assert result.overworld and r.globals().IDLE_INPUTS == 0
     assert result.boot_inputs.A > 0 and result.boot_inputs.Start > 0
     assert result.boot_frame < 500
+    assert result.first_field_live_frame == 120
 
 
 def test_core_bogus_register_fact_red_revert(api):
