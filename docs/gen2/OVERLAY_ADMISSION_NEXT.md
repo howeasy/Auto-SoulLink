@@ -1,5 +1,33 @@
 # Gen 2 overlay admission — next session
 
+## RESUME HERE (2026-10-02 15:00 wrap-up) — only §5 post-sweep remains
+
+Everything before the sweep is DONE and committed: round 1 (7 qualifications, U1 + U2 for C/G/S, inspect 7/7);
+activation `cd473147` (22 shipped copies, overlay rows SELECTED/ADMITTED + G4 + binding pin; Gen 2 in
+`COMPANION_TITLES`, row-gated by `server/patcher.py` `gen2_overlay_admitted`); sweep prerequisites `b0e5276c`,
+`6fd9cb65`; six duo-fixture overlay qualifications + all 13 overlay qualification proofs registered + verifier
+G4 fix `ca9b564f`. **Freeze = `ca9b564fc092e142ebe310627402b83f729907cc`** (CODE_DIGEST dirty `[]`).
+
+**The 148-cell sweep is RUNNING detached** (started 14:51, 4 lanes `Temp/fs1..fs4`, launcher pid recorded in the
+session scratchpad `sweep.pid`; first cell PASS), output `C:/Users/howar/AppData/Local/Temp/fsw-overlay-ca9b564f`,
+log in the session scratchpad `sweep.log`. Kill only its own PIDs, never EmuHawk by name. Next session:
+1. Wait for the sweep to finish; read its summary. Every one of 148 cells must PASS. A FAIL gets diagnosed, then
+   `--only <exact-cell-id> --sha ca9b564f... --out <NEW dir>`; never edit code (that breaks the freeze).
+2. `python tools/gen2_final_sweep.py --pin C:/Users/howar/AppData/Local/Temp/fsw-overlay-ca9b564f`.
+3. Delete the ten row-less legacy files `tests/fixtures/gen2/receipts/{gold,silver}_overlay.{panel,sfx,w6,phone,sp_lowwater}_gate.json`
+   explicitly (`--pin` never deletes; ROMPatch cx-5aee7cdd finding 6).
+4. `python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json --overlay-provenance data/gen2/overlay_provenance.json --check`,
+   then `python tools/verify_gen2_release.py --release-evidence`. That must be GREEN: a pre-sweep audit classified all
+   199 errors as closed by sweep+pin, apart from the 16 already fixed in `ca9b564f`.
+5. Commit the pinned receipts (do NOT recopy `data/games/gen2_*/receipts` after the freeze).
+6. Master landing needs an explicit owner yes. Local master has moved (XG3 `d5d71870`, title-splash `6bad8297`):
+   merge master into this branch first, which touches CODE_DIGEST scope, so the owner decides whether that needs a re-sweep.
+
+Known non-Gen-2 unit failures on this branch (environment, not regressions): the real-UPR-jar tests in
+`test_manager_randomize`/`test_upr_pipeline` (jar 0012 is pinned on master, not on this branch) and Emerald's pret pin
+in `test_gen3_explode_bind`. Deferred review notes: `/patcher` is not row-gated; a rolled-back row downgrades
+silently; a LuaError outside `activation_proof`'s pcall is a traceback; the Gen 2 overlay re-pick refusal (cx-f18ac278 F6).
+
 Snapshot: 2026-10-02, branch `claude/mandatory-rom-patch-3fcfda`; initial handoff `b7d3f2b4`, refreshed through `499a2948`. This is an execution runbook, not a release verdict. The coordinator owns the sole guide/register and emulator allocation.
 - Committed: R/A/B/C and review fixes; seven overlay qualifications (`79c6ac8a`); the overlay U1 union is COMPLETE
   for all three titles (frame_align + u1g grass/kyle/bill, production registration PASS): Crystal `db2fe12c`
