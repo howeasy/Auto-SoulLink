@@ -130,7 +130,7 @@ def test_menu_stub_makes_the_original_call_then_prints_the_version_row():
     cpu.run()
     assert [c[0] for c in cpu.calls] == [ts.UPDATE_SPRITES, ts.PLACE_STRING]
     assert cpu.calls[1][1:3] == (ts.WTILEMAP + ts.MENU_ROW * 20, ts.MENU_TEXT_ADDR)
-    assert ts.MENU_SITE_BEFORE == bytes((0xCD,)) + ts.UPDATE_SPRITES.to_bytes(2, "little")
+    assert bytes((0xCD,)) + ts.UPDATE_SPRITES.to_bytes(2, "little") == ts.MENU_SITE_BEFORE
 
 
 def test_routine_calls_the_pret_addresses():
@@ -153,7 +153,7 @@ def test_routine_calls_the_pret_addresses():
 
 
 def test_menu_stub_sits_in_the_free_tail_after_the_joypad_stub(clean):
-    assert ts.MENU_STUB_ADDR == manifest.JOYPAD_STUB_ADDR + len(manifest.JOYPAD_STUB_AFTER)
+    assert manifest.JOYPAD_STUB_ADDR + len(manifest.JOYPAD_STUB_AFTER) == ts.MENU_STUB_ADDR
     end = ts.MENU_TEXT_ADDR + len(ts.menu_text("v0.3.0-dev"))
     assert end <= 0x4000 and not any(clean[ts.MENU_STUB_ADDR:0x4000])         # the tail is zero padding up to the bank edge
 
@@ -161,7 +161,7 @@ def test_menu_stub_sits_in_the_free_tail_after_the_joypad_stub(clean):
 def test_no_span_overlaps_another(clean):
     spans = manifest.MENU_PATCHES + ts.title_spans(clean, "v0.3.0-dev")
     ranges = sorted((off, off + len(new)) for off, _before, new, _why in spans)
-    assert all(a_end <= b_start for (_s, a_end), (b_start, _e) in zip(ranges, ranges[1:]))
+    assert all(a_end <= b_start for (_s, a_end), (b_start, _e) in zip(ranges, ranges[1:], strict=False))
 
 
 def test_spans_apply_to_both_clean_roms(clean):
