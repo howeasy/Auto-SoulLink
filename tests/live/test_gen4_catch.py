@@ -27,15 +27,43 @@ from tools import gen4_fixtures as g4, gen4_pins
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_catch.lua"
-LANE_ROOT = Path("C:/slink/g4/catch")
-BAG_SAVE = Path("C:/slink/g4/saves/hg_base_26310_bag.SaveRAM")
+# SLINK_GEN4_CATCH_GAME=hge runs the same probe on hg-engine (lane catch_hge, hge bag save, hge pack title). The UI code
+# is byte-identical (pack ui_geometry code_identity) but hge's Balls pocket has 26 slots, so the keys are verified live.
+GAME = os.environ.get("SLINK_GEN4_CATCH_GAME", "HG")
+TITLES = {
+    "HG": {
+        "lane": "C:/slink/g4/catch",
+        "bag": "hg_base_26310_bag",
+        "title": "heartgold",
+        "pack": "gen4_hgss",
+        "codec": "hgss",
+        "pin": "heartgold",
+        "tag": "catchhg",
+    },
+    "hge": {
+        "lane": "C:/slink/g4/catch_hge",
+        "bag": "hge_bag",
+        "title": "heartgold_hge",
+        "pack": "gen4_hge",
+        "codec": "hge",
+        "pin": "heartgold_hge",
+        "tag": "catchhg",
+    },
+}[GAME]
+LANE_ROOT = Path(TITLES["lane"])
+BAG_SAVE = Path(f"C:/slink/g4/saves/{TITLES['bag']}.SaveRAM")
 EMUHAWK = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
 INITIAL_TIME = "2010-01-01T12:00:00"
 # Menu path from the settled FIGHT menu to a thrown ball. The first three keys are the pack's recipe
 # (data/games/gen4_hgss/profile.json ui_geometry.battle_main_cursor / battle_paths: X wakes the cursor, Left, Left reaches
 # column 0, Down is row 1 = BAG). The bag screen is NOT in the pack; its keys come from live screenshots (see EXPLORED).
-WAKE_TO_BAG = [{"k": "X", "hold": 2, "wait": 20}, {"k": "Left", "hold": 2, "wait": 6},
-               {"k": "Left", "hold": 2, "wait": 6}, {"k": "Down", "hold": 2, "wait": 6}, {"k": "A", "hold": 2, "wait": 60}]
+WAKE_TO_BAG = [
+    {"k": "X", "hold": 2, "wait": 20},
+    {"k": "Left", "hold": 2, "wait": 6},
+    {"k": "Left", "hold": 2, "wait": 6},
+    {"k": "Down", "hold": 2, "wait": 6},
+    {"k": "A", "hold": 2, "wait": 60},
+]
 THROW_KEYS = os.environ.get("SLINK_GEN4_CATCH_KEYS")
 
 
@@ -57,14 +85,19 @@ def check_synth_bag(save: Path) -> dict:
     need(save, "SYNTH bag save")
     side = need(save.with_name(save.name + ".synth.json"), "SYNTH bag sidecar")
     row = json.loads(side.read_text(encoding="utf-8"))
-    assert row.get("schema") == "gen4-synth-v1" and row.get("kind") == "bag", f"{side}: not a bag sidecar"
+    assert row.get("schema") == "gen4-synth-v1" and row.get("kind") == "bag", (
+        f"{side}: not a bag sidecar"
+    )
     assert row.get("out_sha1") == g4.sha1_of(save), f"{side} does not describe {save}"
     assert row.get("after") == [4, 10] and row.get("count") == 10, "sidecar is not 10 Poke Balls"
     return {"sidecar": side.as_posix(), "sidecar_sha256": digest(side), "out_sha1": row["out_sha1"]}
 
 
 def settled_state() -> Path:
-    hits = sorted(LANE_ROOT.glob("catchhg_leg*_battle_settled.State"), key=lambda q: q.stat().st_mtime)
+    hits = sorted(
+        LANE_ROOT.glob(f"{TITLES['tag']}_leg*_battle_settled.State"),
+        key=lambda q: q.stat().st_mtime,
+    )
     if not hits:
         pytest.skip(f"OPEN settled wild battle state: none in {LANE_ROOT}")
     return hits[-1]
@@ -73,39 +106,75 @@ def settled_state() -> Path:
 def route_pack():
     from tools import gen4_routes as routes
 
-    return routes.pack_legs("HG", routes.SAVE_LEGS)
+    return routes.pack_legs(GAME, routes.SAVE_LEGS)
 
 
 def launch(mode: str, keys: list, *, tag: str, extra: dict | None = None, timeout: int = 600):
     need(EMUHAWK, "EmuHawk")
     synth = check_synth_bag(BAG_SAVE)
     state = settled_state()
-    rom_src = gen4_pins.default_locations().roms["heartgold"]
-    profile = REPO / "data/games/gen4_hgss/profile.json"
+    if GAME == "hge":
+        from tools import gen4_routes as routes
+
+        rom_src = routes.HGE_ROM
+    else:
+        rom_src = gen4_pins.default_locations().roms["heartgold"]
+    profile = REPO / f"data/games/{TITLES['pack']}/profile.json"
     lane = LANE_ROOT / f"{tag}_{time.strftime('%H%M%S')}"
     assert not lane.exists()
     lane.mkdir(parents=True)
     rom = g4.stage_rom(rom_src, lane)
     rom_sha1 = g4.sha1_of(rom)
-    assert rom_sha1 == gen4_pins.ROM_SPECS["heartgold"][0]
+    assert rom_sha1 == gen4_pins.ROM_SPECS[TITLES["pin"]][0]
     battery = g4.stage_save(BAG_SAVE, lane, rom_sha1, rom_basename=rom.name)
-    g4.write_nds_run_config(g4.BIZHAWK_CONFIG, lane / "bizhawk.ini", initial_time=INITIAL_TIME,
-                            lane_saveram_dir=lane / "SaveRAM")
+    g4.write_nds_run_config(
+        g4.BIZHAWK_CONFIG,
+        lane / "bizhawk.ini",
+        initial_time=INITIAL_TIME,
+        lane_saveram_dir=lane / "SaveRAM",
+    )
     shutil.copyfile(state, lane / "start.State")
-    prof = json.loads(profile.read_text(encoding="utf-8"))["titles"]["heartgold"]["profile"]
-    cfg = {"mode": mode, "keys": keys, "state_path": (lane / "start.State").as_posix(), "shot_dir": lane.as_posix(),
-           "pack": {"save": prof["save"], "battle": prof["battle"], "system": prof["system"]}, "requested_rate": 300,
-           "run_id": f"{lane.parent.name}/{lane.name}", "title": "heartgold", "rom_sha1": rom_sha1,
-           "setup": "SYNTH", "synth": synth, "script_sha256": digest(SCRIPT),
-           "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
-           **(extra or {})}
+    prof = json.loads(profile.read_text(encoding="utf-8"))["titles"][TITLES["title"]]["profile"]
+    cfg = {
+        "mode": mode,
+        "keys": keys,
+        "state_path": (lane / "start.State").as_posix(),
+        "shot_dir": lane.as_posix(),
+        "pack": {"save": prof["save"], "battle": prof["battle"], "system": prof["system"]},
+        "requested_rate": 300,
+        "run_id": f"{lane.parent.name}/{lane.name}",
+        "title": TITLES["title"],
+        "rom_sha1": rom_sha1,
+        "setup": "SYNTH",
+        "synth": synth,
+        "script_sha256": digest(SCRIPT),
+        "source_head": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
+        ).strip(),
+        **(extra or {}),
+    }
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
     out = lane / "receipt.txt"
-    env = dict(os.environ, SLINK_ROOT=REPO.as_posix(), SLINK_GEN4_CATCH_CONFIG=(lane / "probe.json").as_posix(),
-               SLINK_GEN4_CATCH_OUT=out.as_posix())
-    cmd = [str(EMUHAWK), f"--config={(lane / 'bizhawk.ini').as_posix()}", f"--lua={SCRIPT.as_posix()}", rom.as_posix()]
-    proc = subprocess.Popen(cmd, cwd=lane, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    env = dict(
+        os.environ,
+        SLINK_ROOT=REPO.as_posix(),
+        SLINK_GEN4_CATCH_CONFIG=(lane / "probe.json").as_posix(),
+        SLINK_GEN4_CATCH_OUT=out.as_posix(),
+    )
+    cmd = [
+        str(EMUHAWK),
+        f"--config={(lane / 'bizhawk.ini').as_posix()}",
+        f"--lua={SCRIPT.as_posix()}",
+        rom.as_posix(),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        cwd=lane,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
     deadline = time.monotonic() + timeout
     try:
         while time.monotonic() < deadline:
@@ -130,8 +199,10 @@ def launch(mode: str, keys: list, *, tag: str, extra: dict | None = None, timeou
 def decode_battery(path: Path):
     from server.adapters import gen4_codec as c
 
-    pack = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text(encoding="utf-8"))
-    return c.parse_save(path.read_bytes(), "hgss"), pack
+    pack = json.loads(
+        (REPO / f"data/games/{TITLES['pack']}/profile.json").read_text(encoding="utf-8")
+    )
+    return c.parse_save(path.read_bytes(), TITLES["codec"]), pack
 
 
 def judge(obs: dict, battery_party: list[dict]) -> tuple[str, str]:
@@ -144,25 +215,45 @@ def judge(obs: dict, battery_party: list[dict]) -> tuple[str, str]:
     if obs.get("outcome_value") != 4:
         return "OPEN", f"no caught result byte within {obs.get('throw_count')} throws"
     if obs.get("party_before") != 1 or obs.get("party_after") != 2:
-        return "FAIL", f"live party {obs.get('party_before')} -> {obs.get('party_after')}, expected 1 -> 2"
+        return (
+            "FAIL",
+            f"live party {obs.get('party_before')} -> {obs.get('party_after')}, expected 1 -> 2",
+        )
     new = [p for p in obs["pids_after"] if p not in obs["pids_before"]]
     if new != [foe["pid"]]:
         return "FAIL", f"new live party PID {new} != foe PID {foe['pid']}"
     if not obs.get("save") or obs.get("save_failed"):
         return "OPEN", f"native SAVE legs not completed ({obs.get('save_failed') or 'not run'})"
     if len(battery_party) != 2:
-        return "FAIL", f"lane battery decodes {len(battery_party)} party mons after the native SAVE, expected 2"
+        return (
+            "FAIL",
+            f"lane battery decodes {len(battery_party)} party mons after the native SAVE, expected 2",
+        )
     mon = battery_party[1]
     if mon["pid"] != foe["pid"] or mon["species"] != foe["species"]:
-        return "FAIL", f"battery mon {mon['pid']:#x}/{mon['species']} != foe {foe['pid']:#x}/{foe['species']}"
-    return "PASS", "caught (result byte 4); live party 1->2 with the foe's PID; lane battery decodes the new mon after native SAVE"
+        return (
+            "FAIL",
+            f"battery mon {mon['pid']:#x}/{mon['species']} != foe {foe['pid']:#x}/{foe['species']}",
+        )
+    return (
+        "PASS",
+        "caught (result byte 4); live party 1->2 with the foe's PID; lane battery decodes the new mon after native SAVE",
+    )
 
 
 # ---------------------------------------------------------------- offline
 def test_judge_requires_every_independent_witness():
     foe = {"pid": 0xABCD, "species": 16}
-    base = {"foe": foe, "outcome_value": 4, "party_before": 1, "party_after": 2, "pids_before": [1], "pids_after": [1, 0xABCD],
-            "save": [{"leg": "x"}], "throw_count": 2}
+    base = {
+        "foe": foe,
+        "outcome_value": 4,
+        "party_before": 1,
+        "party_after": 2,
+        "pids_before": [1],
+        "pids_after": [1, 0xABCD],
+        "save": [{"leg": "x"}],
+        "throw_count": 2,
+    }
     mon = [{"pid": 1, "species": 155}, {"pid": 0xABCD, "species": 16}]
     assert judge(base, mon)[0] == "PASS"
     assert judge({**base, "outcome_value": None}, mon)[0] == "OPEN"
@@ -181,7 +272,13 @@ def test_synth_bag_sidecar_checked(tmp_path):
     save = tmp_path / "x.SaveRAM"
     save.write_bytes(b"\1" * 8)
     side = save.with_name(save.name + ".synth.json")
-    row = {"schema": "gen4-synth-v1", "kind": "bag", "out_sha1": g4.sha1_of(save), "after": [4, 10], "count": 10}
+    row = {
+        "schema": "gen4-synth-v1",
+        "kind": "bag",
+        "out_sha1": g4.sha1_of(save),
+        "after": [4, 10],
+        "count": 10,
+    }
     side.write_text(json.dumps(row), encoding="utf-8")
     assert check_synth_bag(save)["sidecar_sha256"] == digest(side)
     side.write_text(json.dumps({**row, "kind": "party2"}), encoding="utf-8")
@@ -202,23 +299,67 @@ def test_catch_lua_loads():
     assert rt.execute(SCRIPT.read_text(encoding="utf-8")) is not None
 
 
-live = pytest.mark.skipif(os.environ.get("SLINK_LIVE") != "1", reason="OPEN physical probe: SLINK_LIVE=1")
+live = pytest.mark.skipif(
+    os.environ.get("SLINK_LIVE") != "1", reason="OPEN physical probe: SLINK_LIVE=1"
+)
 
 
 @pytest.mark.live
 @live
-def test_live_wild_capture_hg():
+def test_live_wild_capture():
     keys = json.loads(THROW_KEYS) if THROW_KEYS else None
     if not keys:
         pytest.skip("OPEN: bag navigation keys not derived yet (SLINK_GEN4_CATCH_KEYS)")
     save_legs = route_pack()
-    status, payload, lane, battery, _ = launch("catch", keys, tag="catch", extra={"save_legs": save_legs,
-                                                                                 "wake_keys": WAKE_TO_BAG[:1]})
+    status, payload, lane, battery, _ = launch(
+        "catch", keys, tag="catch", extra={"save_legs": save_legs, "wake_keys": WAKE_TO_BAG[:1]}
+    )
     obs = payload["observation"]
     parsed, _ = decode_battery(battery)
     party = parsed.party()
     verdict, why = judge(obs, party)
-    (lane / "verdict.json").write_text(json.dumps({"verdict": verdict, "reason": why}), encoding="utf-8")
+    mon = party[1] if len(party) > 1 else {}
+    summary = {
+        k: mon.get(k)
+        for k in (
+            "key",
+            "pid",
+            "species",
+            "level",
+            "ability",
+            "hidden_ability",
+            "met_level",
+            "met_location",
+            "ball",
+            "is_egg",
+        )
+    }
+    modified = parsed.pc_meta().get("modified")
+    if (
+        GAME == "hge" and len(party) > 1
+    ):  # the codec leaves hg-engine's hidden-ability bit (block B +0x19 bit 6) undecoded
+        from server.adapters import gen4_codec as c
+
+        off = parsed.profile.party_off + 8 + 1 * c.PARTY_MON_SIZE
+        plain = c.decrypt_party(parsed.general[off : off + c.PARTY_MON_SIZE])
+        summary["hidden_ability"] = (plain[c.HEADER_SIZE + c.BLOCK_SIZE + 0x19] >> 6) & 1
+    (lane / "verdict.json").write_text(
+        json.dumps(
+            {
+                "verdict": verdict,
+                "reason": why,
+                "game": GAME,
+                "setup": "SYNTH",
+                "synth": payload.get("synth"),
+                "battery_sha1": g4.sha1_of(battery),
+                "battery_party": len(party),
+                "battery_mon": summary,
+                "battery_modified": modified,
+            },
+            default=str,
+        ),
+        encoding="utf-8",
+    )
     assert verdict != "FAIL", why
     if verdict == "OPEN":
         pytest.skip(f"OPEN {why} ({lane})")
