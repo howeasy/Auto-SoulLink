@@ -737,3 +737,66 @@ def test_unused_maps_are_not_listed_as_area_places(clone):
     # the map -> area table still carries them, so the join is maps U unused_maps
     for mid, aid in area["maps"].items():
         assert aid is None or int(mid) in area["areas"][aid]["maps"] + area["areas"][aid]["unused_maps"]
+
+
+# ── hge: script DISPATCH (opcode -> handler) and Vanilla address-space guards ────────────────────
+
+
+def test_macro_opcodes_resolve_opcode_and_composite_macros():
+    inc = (
+        ".macro Plain a\n\t.short 7\n\t.short \\a\n.endm\n"
+        ".macro Other\n\t.short 9\n.endm\n"
+        ".macro Composite x\n\t.if \\x\n\tPlain \\x\n\t.else\n\tOther\n\t.endif\n.endm\n"
+        ".macro Data\n\t.word 1\n.endm\n"
+    )
+    ops = acq.macro_opcodes(inc)
+    assert ops["Plain"] == {7} and ops["Other"] == {9} and ops["Composite"] == {7, 9} and ops["Data"] == set()
+
+
+def test_dispatch_check_is_red_on_a_used_unaccounted_hooked_handler():
+    """Control (revert-tested by making check_dispatch never append the problem): a handler a site script reaches
+    that the fork hooks fails unless the inventory accounts for it."""
+    used = {"ScrCmd_GiveEgg": {"GiveEgg"}, "ScrCmd_GiveMon": {"GiveMon"}, "ScrCmd_Wait": {"Wait"}}
+    hooked = {"ScrCmd_GiveEgg": ["ScrCmd_GiveEgg"], "ScrCmd_Unused": ["x"]}
+    rows, problems = acq.check_dispatch(used, hooked, {"ScrCmd_GiveEgg": "fork row"})
+    assert problems == [] and [r["handler"] for r in rows] == ["ScrCmd_GiveEgg"]
+    hooked["ScrCmd_GiveMon"] = ["synthetic"]
+    _rows, problems = acq.check_dispatch(used, hooked, {"ScrCmd_GiveEgg": "fork row"})
+    assert len(problems) == 1 and "ScrCmd_GiveMon" in problems[0] and "synthetic" in problems[0]
+
+
+def test_hge_committed_dispatch_check():
+    disp = load_hge()["script_dispatch"]
+    assert disp["command_table_size"] == 853 and disp["commands_used"] > 200 and disp["handlers_used"] > 200
+    assert {r["handler"] for r in disp["hooked_handlers_used"]} == {"ScrCmd_CreateRoamer", "ScrCmd_GiveEgg", "ScrCmd_GiveTogepiEgg"}
+    assert all(r["accounted_by"] for r in disp["hooked_handlers_used"])
+
+
+def test_real_synthetic_hook_on_a_used_handler_fails_generation(hge_inputs):
+    """A hook on ScrCmd_GiveMon (the GiveMon command's handler, kept in the real build) must fail the dispatch check."""
+    van = acq.make_vanilla(hge_inputs["pret"], hge_inputs["xmap"], hge_inputs["van_rom"], hge_inputs["src"])
+    files = sorted({s["file"] for s in load("acquisition.json")["script_sites"]})
+    accounted = {"ScrCmd_CreateRoamer": "x", "ScrCmd_GiveEgg": "x", "ScrCmd_GiveTogepiEgg": "x"}
+    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted)
+    assert problems == []
+    fn = van.find("ScrCmd_GiveMon")[0]
+    van.hooks.append({"region": van.region[fn[3]], "name": "synthetic_hook", "addr": fn[0]})
+    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted)
+    assert len(problems) == 1 and "ScrCmd_GiveMon" in problems[0] and "synthetic_hook" in problems[0]
+
+
+def synthetic_vanilla(tmp_path: Path, xmap_lines: list[str], hooks: str, bases: dict[int, int]):
+    xmap = tmp_path / "t.xMAP"
+    xmap.write_text("\n".join(xmap_lines) + "\n", encoding="utf-8")
+    return acq.Vanilla(xmap, "Static main\n    Object src/x.o\n", bases, hooks, set())
+
+
+def test_unknown_overlay_hook_is_skipped_not_a_keyerror(tmp_path):
+    van = synthetic_vanilla(tmp_path, ["  02000000 00000010 .text   foo\t(x.o)"], "arm9 a 08000000 1\n0099 b 08000010 1\n0098 c 02000020 1\n", {})
+    assert van.skipped == 1 and [h["name"] for h in van.hooks] == ["a", "c"]
+
+
+def test_overlapping_xmap_ranges_fail_instead_of_misclassifying(tmp_path):
+    with pytest.raises(names.Mismatch, match="overlap"):
+        synthetic_vanilla(tmp_path, ["  02000000 00000020 .text   foo\t(x.o)", "  02000010 00000010 .text   bar\t(x.o)"], "", {})
+    synthetic_vanilla(tmp_path, ["  02000000 00000010 .text   foo\t(x.o)", "  02000010 00000010 .text   bar\t(x.o)"], "", {})  # adjacent is fine

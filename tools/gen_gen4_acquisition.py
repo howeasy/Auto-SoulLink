@@ -51,6 +51,9 @@ import gen4_pins  # noqa: E402
 import gen_gen4_area_map as base  # noqa: E402
 import gen_gen4_names as names  # noqa: E402  (ROM/fork locators + Absent/Mismatch, shared with the names tool)
 
+# NAME COLLISION: "GiveEgg" is both a script COMMAND (macro GiveEgg -> opcode 138 -> handler ScrCmd_GiveEgg) and a
+# vanilla C FUNCTION (script_pokemon_util.c GiveEgg, the shared implementation the Manaphy mystery gift calls).
+# COMMANDS / script_sites / `scripts` fields use the command; C_PRODUCERS and HGE_C_APIS keys use the C function.
 COMMANDS = ("GiveMon", "GiveEgg", "GiveTogepiEgg", "GiveSpikyEarPichu", "GiveLoanMon", "CreateRoamer", "WildBattle", "LoadNPCTrade", "ChooseStarter")
 SCAN_RE = re.compile(r"^\s*(" + "|".join(COMMANDS) + r")\b(.*)$")
 KIND = {
@@ -692,6 +695,8 @@ def unresolved_reason(site: dict) -> str:
 HGE_SCHEMA = "gen4-hge-acquisition-v1"
 HGE_OUT = base.REPO / "data" / "games" / "gen4_hge"
 SCRIPT_NARC, TRADE_NARC = "a/0/1/2", "a/1/1/2"
+# "GiveEgg" below is the vanilla C function (shared implementation), NOT the script command of the same name:
+# the command's handler ScrCmd_GiveEgg is the one the fork replaces (see HGE_PRODUCERS and script_dispatch).
 HGE_C_APIS = (
     "PokeParty_Add",
     "Party_AddMon",
@@ -896,6 +901,14 @@ class Vanilla:
             m = re.match(r"Object\s+\S*?(\w+)\.o$", s)
             if m and cur is not None:
                 self.region.setdefault(m[1], cur)
+        by_region: dict[str | int, list[tuple[int, int, str, str]]] = {}
+        for f in sorted(set(self.funcs)):
+            if f[3] in self.region:
+                by_region.setdefault(self.region[f[3]], []).append(f)
+        for reg, fs in by_region.items():  # containing() takes the first hit: overlapping ranges would misclassify silently
+            for a, b in zip(fs, fs[1:], strict=False):
+                if a[0] + a[1] > b[0]:
+                    raise names.Mismatch(f"xMAP functions overlap in region {reg}: {a[2]} ({a[3]}.o {a[0]:08X}+{a[1]:X}) and {b[2]} ({b[3]}.o {b[0]:08X}+{b[1]:X})")
         lines = hooks_text.splitlines()
         self.hooks, self.skipped = [], 0
         for ln, act in zip(lines, active_map(lines, defined), strict=True):
@@ -907,7 +920,11 @@ class Vanilla:
             if raw >> 24 == 2:
                 addr = raw
             elif raw >> 24 == 8:
-                addr = (0x02000000 if region == "arm9" else bases[region]) + (raw & 0xFFFFFF)
+                base_addr = 0x02000000 if region == "arm9" else bases.get(region)
+                if base_addr is None:  # overlay id unknown to the ROM's overlay table: cannot resolve, count it
+                    self.skipped += 1
+                    continue
+                addr = base_addr + (raw & 0xFFFFFF)
             else:
                 self.skipped += 1
                 continue
@@ -1015,7 +1032,99 @@ def romld_addresses(src: Path) -> dict[str, int]:
     return {n: int(a, 16) for n, a in re.findall(r"^(\w+)\s*=\s*(0x[0-9A-Fa-f]{8})\s*\|\s*1;", (src / "rom.ld").read_text(encoding="utf-8"), re.M)}
 
 
+# ---- script DISPATCH: the hashes prove the script bytecode, not the C handler each opcode runs
+
+TABLE_RE = re.compile(r"gScriptCmdTable\[\] = \{(.*?)\};", re.S)
+# Hooked ScrCmd_* handlers a site-bearing script may use that are not acquisition code (reason required). Empty on
+# purpose: the 3 hooked handlers the sites reach (CreateRoamer, GiveEgg, GiveTogepiEgg) are all inventory rows.
+HGE_DISPATCH_OK: dict[str, str] = {}
+
+
+def macro_opcodes(inc_text: str) -> dict[str, set[int]]:
+    """asm/macros/script.inc: macro -> the script opcodes it can emit. A macro whose first emitting line is
+    `.short N` IS opcode N; a composite macro (Compare, GoToIfEq, ItemVars ...) emits whatever the macros in its body emit."""
+    bodies = {}
+    for m in re.finditer(r"\.macro (\w+)[^\n]*\n(.*?)\.endm", inc_text, re.S):
+        bodies[m[1]] = [ln.strip() for ln in m[2].splitlines() if ln.strip() and not re.match(r"\.(if|ifdef|ifndef|else|endif|error|set)\b", ln.strip())]
+    memo: dict[str, set[int]] = {}
+
+    def ops(name: str, stack: tuple[str, ...] = ()) -> set[int]:
+        if name in memo:
+            return memo[name]
+        body = bodies[name]
+        first = re.match(r"\.short\s+(\d+)\s*$", body[0]) if body else None
+        out: set[int] = {int(first[1])} if first else set()
+        if not first:
+            for ln in body:
+                w = ln.split()[0]
+                if w in bodies and w != name and w not in stack:
+                    out |= ops(w, (*stack, name))
+        memo[name] = out
+        return out
+
+    return {n: ops(n) for n in bodies}
+
+
+def check_dispatch(used: dict[str, set[str]], hooked: dict[str, list[str]], accounted: dict[str, str]) -> tuple[list[dict], list[str]]:
+    """used = handler -> commands reaching it; hooked = handler -> hook names patching it. A used, hooked handler that
+    nothing accounts for is a problem."""
+    rows, problems = [], []
+    for handler in sorted(set(used) & set(hooked)):
+        why = accounted.get(handler)
+        rows.append({"handler": handler, "hooks": hooked[handler], "commands": sorted(used[handler]), "accounted_by": why})
+        if why is None:
+            problems.append(f"script dispatch: {sorted(used[handler])} reach handler {handler}, which the fork hooks ({hooked[handler]}) and nothing in the inventory accounts for it; the shared script sites may behave differently on hge")
+    return rows, problems
+
+
+def script_dispatch(pret: Path, files: list[str], van: Vanilla, accounted: dict[str, str]) -> tuple[dict, list[str]]:
+    """Decode every command used by the site-bearing script sources through script.inc (macro -> opcode) and the pret
+    command table (opcode -> handler), and check no handler the fork hooks is reached unaccounted. SOURCE level: the
+    member BYTES are proved identical by script_narc, the command names come from the same .s sources the sites do."""
+    handlers = re.findall(r"^\s*(\w+),\s*$", TABLE_RE.search(base.read(pret, "src/data/fieldmap/script_cmd_table.h"))[1], re.M)
+    ops = macro_opcodes(base.read(pret, "asm/macros/script.inc"))
+    movement = set(re.findall(r"\.macro (\w+)", base.read(pret, "asm/macros/movement.inc")))
+    used_cmds: dict[str, set[str]] = {}
+    unknown: dict[str, list[str]] = {}
+    for f in files:
+        for ln in (pret / "files/fielddata/script/scr_seq" / f).read_text(encoding="utf-8", errors="replace").splitlines():
+            t = ln.split("@", 1)[0].strip()
+            if not t or t[0] in ".#;" or t.startswith("//") or t.split()[0].endswith(":"):
+                continue
+            w = t.split()[0]
+            if w in ops:
+                used_cmds.setdefault(w, set()).add(f)
+            elif w not in movement:  # movement.inc macros are movement DATA read by a movement command, not script commands
+                unknown.setdefault(w, []).append(f)
+    problems = [f"script dispatch: mnemonic {w!r} in {fs[0]} is not a script.inc macro; cannot decode it" for w, fs in sorted(unknown.items())]
+    used: dict[str, set[str]] = {}
+    for cmd in used_cmds:
+        for op in ops[cmd]:
+            if op >= len(handlers):
+                problems.append(f"script dispatch: command {cmd} opcode {op} is outside the {len(handlers)}-entry command table")
+            else:
+                used.setdefault(handlers[op], set()).add(cmd)
+    hooked: dict[str, list[str]] = {}
+    for name in used:
+        for fn in van.find(name):
+            hooked.setdefault(name, []).extend(h["name"] for h in van.hooks_in(fn))
+    hooked = {k: sorted(set(v)) for k, v in hooked.items() if v}
+    rows, bad = check_dispatch(used, hooked, accounted)
+    doc = {
+        "method": "source level: every command mnemonic in the site-bearing scr_seq sources -> opcode (asm/macros/script.inc) -> handler (src/data/fieldmap/script_cmd_table.h gScriptCmdTable) -> hooks on that handler. The script bytes are proved by script_narc; member 3 (common scripts reached through CallStd) is the one NARC member that differs and is NOT covered here.",
+        "command_table_size": len(handlers),
+        "commands_used": len(used_cmds),
+        "handlers_used": len(used),
+        "hooked_handlers_used": rows,
+    }
+    return doc, problems + bad
+
+
 # ---- build
+
+def make_vanilla(pret: Path, xmap: Path, vanilla_rom: Path, src: Path) -> Vanilla:
+    return Vanilla(xmap, base.read(pret, "main.lsf"), overlay_bases(str(vanilla_rom)), (src / "hooks").read_text(encoding="utf-8"), fork_defines(src))
+
 
 def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: str, xmap: Path, hge_sha1: str, vanilla_sha1: str) -> str:
     vdoc = build_doc(pret)
@@ -1027,7 +1136,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     facts, fact_problems = fact_checks(pret, src)
     problems += fact_problems
 
-    van = Vanilla(xmap, base.read(pret, "main.lsf"), overlay_bases(str(vanilla_rom)), (src / "hooks").read_text(encoding="utf-8"), defined)
+    van = make_vanilla(pret, xmap, vanilla_rom, src)
     by_name: dict[str, list[dict]] = {}
     for h in van.hooks:
         by_name.setdefault(h["name"], []).append(h)
@@ -1055,6 +1164,10 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     other = [{"hook": hook, "kind": kind, "why": why, "replaces": replaces(hook, hook)} for hook, (kind, why) in sorted(HGE_REPLACED_OTHER.items())]
     # replaced vanilla functions that matter to acquisition: those the fork rewrites as a producer/primitive/mon-touching helper
     replaced = {r["replaces"]["function"] for r in calls + defs + other if r["replaces"]} & van.replaced_names()
+
+    accounted = {r["replaces"]["function"]: f"fork function {r.get('function') or r.get('api') or r['hook']} replaces it" for r in calls + defs + other if r["replaces"] and r["replaces"]["function"].startswith("ScrCmd_")} | HGE_DISPATCH_OK
+    dispatch, dispatch_problems = script_dispatch(pret, sorted({s["file"] for s in sites}), van, accounted)
+    problems += dispatch_problems
 
     # API names the fork calls -> the vanilla function behind them, and whether it is hooked
     ld = romld_addresses(src)
@@ -1134,7 +1247,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     unresolved.append({"id": "hge_runtime_receipt", "kind": "runtime", "status": "open", "why": "GiveMon, ScrCmd_GiveEgg, ScrCmd_GiveTogepiEgg, _CreateTradeMon and the PC place functions are replaced C: an hge runtime acquisition receipt is still required (this inventory is SOURCE + ROM data only)"})
     inputs = {rel: hashlib.sha256((src / rel).read_bytes()).hexdigest() for rel in sorted({"hooks", "include/config.h", "include/debug.h", *HGE_FACT_FILES} | {r["file"] for r in calls + defs})}
     doc = {
-        "_note": "GENERATED by tools/gen_gen4_acquisition.py hge from the pinned hg-engine fork, the pinned hge ROM and pret/pokeheartgold -- do not edit. Script sites, NPC trade records and runtime branches are the vanilla HGSS ones, valid because script_narc/trade_narc prove the members holding them are byte-identical in both ROMs; the C inventory is scanned from the fork (hge replaces engine code).",
+        "_note": "GENERATED by tools/gen_gen4_acquisition.py hge from the pinned hg-engine fork, the pinned hge ROM and pret/pokeheartgold -- do not edit. Script sites, NPC trade records and runtime branches are the vanilla HGSS ones, valid because script_narc/trade_narc prove the members holding them are byte-identical in both ROMs (BYTECODE only) and script_dispatch checks, at source level, that no command they use reaches a handler the fork hooks without the inventory accounting for it; member 3 (common scripts via CallStd) differs and is not covered; the C inventory is scanned from the fork (hge replaces engine code).",
         "_schema": HGE_SCHEMA,
         "rom_sha1": hge_sha1,
         "vanilla_rom_sha1": vanilla_sha1,
@@ -1149,6 +1262,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
         },
         "script_narc": script,
         "trade_narc": trade,
+        "script_dispatch": dispatch,
         "inventory": {
             "script_site_count": len(sites),
             "script_command_counts": vdoc["inventory"]["script_command_counts"],
