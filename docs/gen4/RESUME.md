@@ -66,7 +66,7 @@
 - **Next session, in order:**
   1. **hge k:** fixed-frame RTC sampling. The red-first replay is staged in `.cache/gen4-next-cut/replay_hge_rtc_frame.py`.
   2. **b/n prerequisites:** a battle route for hge/SS b; the PC withdraw leg (live Right+A trial, §6b); a queued-event-at-close witness.
-  3. **Shared NDS adoption cut:** NDS-1..5 at the latest `claude/nds-shared-stack` sha. It brings the production residency fix.
+  3. **Shared NDS adoption cut:** pin `claude/nds-shared-stack` head **`b13c897f`** (`C:/slink-wt/nds-shared`; 12 commits over master 735dea38; 563 shared tests; NDS-1..6, with NDS-6 = `tools/nds_companions.py`). It brings the production residency fix. Gen 5's resume note: `docs/gen5/RESUME.md` checkpoint 4. Host composition rows in `server/**` and depth-1 lua stay for the batched G3a window (Gen 2 digest).
   4. **C1 live canary** on the 4 KiB ITCM span (HG/SS/hge), then C2.
   5. **PERF** on a quiet machine.
   6. **Owner questions:** the FAILURE sound; whether C5 keeps a box arm.
