@@ -17,6 +17,7 @@ import pytest
 from server.adapters.gen1_rby import Gen1Adapter
 from server.server import SLinkServer
 from server.state import LinkEntry, LinkStatus, MonInfo, SoulLinkState
+from tests.unit.companion_evidence import patched
 
 OLD, NEW, OTHER = "AAAA:30B8:10", "FFFF:30B8:10", "CCDD:7B0B:10"
 
@@ -348,7 +349,9 @@ async def _session(srv):
     r, w = await asyncio.open_connection("127.0.0.1", port)
 
     async def send(msg):
-        w.write((json.dumps(msg) + "\n").encode())
+        # Every cartridge here is a PATCHED one (patch-first, owner 2026-10-02: a clean companion title is
+        # refused at the hello); an explicit artifact_kind / panel in the message still wins.
+        w.write((json.dumps(patched(msg) if msg.get("event") == "hello" else msg) + "\n").encode())
         await w.drain()
         return json.loads(await asyncio.wait_for(r.readline(), 3))
 
@@ -406,7 +409,7 @@ async def test_a_second_artifact_kind_is_refused_and_the_default_kind_pairs(tmp_
 
 @pytest.mark.asyncio
 async def test_vanilla_pairs_without_artifact_kind_are_unchanged(tmp_path):
-    """Gen 3 clients never send artifact_kind: both default to clean and pair as before."""
+    """Two patched FireRed cartridges (the patched Gen 3 hello declares the companion) pair as before."""
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
@@ -415,7 +418,7 @@ async def test_vanilla_pairs_without_artifact_kind_are_unchanged(tmp_path):
                                 "trainer_name": pid.upper(), "ot_id": str(ot), "has_pokeballs": True,
                                 "party": []})
             assert not _mixed(reply)
-        assert srv.state.artifact_kind == "clean" and not srv.state.identity_error
+        assert srv.state.artifact_kind == "companion" and not srv.state.identity_error
     finally:
         await close()
 
@@ -470,7 +473,8 @@ async def test_a_companion_patched_vanilla_cartridge_pairs_with_a_clean_one(tmp_
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        reply = await send({"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+        # a clean cartridge that still connects is Yellow (no companion exists for it)
+        reply = await send({"event": "hello", "player": "a", "rom_type": "yellow", "trainer_name": "Alice",
                             "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "clean"})
         assert not _mixed(reply) and srv.state.artifact_kind == "clean"
         reply = await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
@@ -484,7 +488,7 @@ async def test_a_companion_patched_vanilla_cartridge_pairs_with_a_clean_one(tmp_
     try:
         await send({"event": "hello", "player": "a", "rom_type": "blue", "trainer_name": "Alice",
                     "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "named"})
-        reply = await send({"event": "hello", "player": "b", "rom_type": "red", "trainer_name": "Bob",
+        reply = await send({"event": "hello", "player": "b", "rom_type": "yellow", "trainer_name": "Bob",
                             "ot_id": "7B0B", "has_pokeballs": True, "party": [], "artifact_kind": "clean"})
         assert not _mixed(reply), "order does not matter"
     finally:

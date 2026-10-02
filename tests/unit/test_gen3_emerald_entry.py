@@ -34,13 +34,17 @@ def test_the_pinned_emerald_sha1_matches_the_shipped_pack_data():
 
 
 # ── (a) route: BPEE + the pinned hash reaches gen3/run.lua, same as FR/LG/RR ────────────────
-def test_a_clean_emerald_sha1_reaches_the_new_gen3_client():
+def test_a_companion_emerald_sha1_reaches_the_new_gen3_client():
     """MUTATION-CHECK: this is the falsifier for the EG4 flip. If a future edit drops
     `gen3_emerald = true` from Entry.ROUTED (or reinstates the by-name BPEE refusal in
     lua/slink.lua), admission by hash still succeeds but is no longer routed, `lua/gen3/run.lua`
     never gets dofile'd, and this test goes red (both the positive assertion and the explicit
     ROUTED guard below)."""
-    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
+    # patch-first (owner 2026-10-02): the pinned CLEAN dump is refused by the launcher; the companion routes
+    companion = json.loads(
+        (_EMERALD_DIR / "engine_signals.json").read_text(encoding="utf-8")
+    )["titles"]["emerald"]["artifacts"]["companion"]["rom_sha1"]
+    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=companion)
     assert _NEW_GEN3_CLIENT in loaded, loaded
 
 

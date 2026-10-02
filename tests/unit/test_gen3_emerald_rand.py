@@ -251,7 +251,8 @@ async def test_emerald_rom_content_reaches_real_hello_admission(emerald_rom, tmp
         assert server.admission["a"]["state"] == "admitted"
         assert server.adapter_for("a").trainer_brief(265)["party"][0]["level"] == (42 if changed else 12)
         # Clean-equivalent payload pairs with clean; changed cartridge tables keep rand.
-        peer = hello("emerald", "clean", player="b", trainer_name="B", ot_id="7B0B")
+        # (a companion peer: it pairs as clean, and a clean Emerald would be refused outright)
+        peer = hello("emerald", "companion", player="b", trainer_name="B", ot_id="7B0B")
         response = await send(peer)
     if changed:
         assert "Mixed artifact kinds" in server.state.identity_error["b"]

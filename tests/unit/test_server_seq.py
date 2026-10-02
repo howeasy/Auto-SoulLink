@@ -24,7 +24,8 @@ import pytest_asyncio
 from server.server import SLinkServer
 
 HELLO_A = {"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
-           "ot_id": "30B8", "has_pokeballs": True}
+           "ot_id": "30B8", "has_pokeballs": True,
+           "artifact_kind": "named", "panel": True}   # a patched Red: the companion is required (2026-10-02)
 
 
 def _tick(seq: int) -> dict:

@@ -311,10 +311,15 @@ def test_the_pure_lua_sha1_matches_hashlib(entry, size):
 
 @pytest.mark.parametrize("title", ["purered", "pureblue", "puregreen"])
 def test_a_pure_sha1_selects_the_pure_pack_even_though_the_header_says_red(entry, title):
-    sha = next(s for s, r in ADMISSION.items() if r["title"] == title)
-    got, why = _admit(entry, rom_sha1=sha.upper(), header="POKEMON RED", rom_bytes=_real_rom("clean", title))
+    # Patch-first (owner 2026-10-02): the pinned CLEAN build is a catalog row but is never admitted; the
+    # companion OVERLAY is what the pure pack admits (its sha1 row, the same selection by hash).
+    clean = next(s for s, r in ADMISSION.items() if r["title"] == title)
+    got, why = _admit(entry, rom_sha1=clean.upper(), header="POKEMON RED", rom_bytes=_real_rom("clean", title))
+    assert got is None and "needs the SLink companion patch" in why and title in why, why
+    sha = next(s for s, r in ADMISSION_OVERLAY.items() if r["title"] == title)
+    got, why = _admit(entry, rom_sha1=sha.upper(), header="POKEMON RED", rom_bytes=_real_rom("overlay", title))
     assert why is None, why
-    assert got["pack"] == "gen1_purergb" and got["title"] == title and got["kind"] == "clean"
+    assert got["pack"] == "gen1_purergb" and got["title"] == title and got["kind"] == "overlay"
     assert got["rom_type"] == {"purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}[title]
     assert got["rom_sha1"] == sha and got["rehashed"] is True
 
@@ -323,8 +328,11 @@ def test_a_pure_sha1_selects_the_pure_pack_even_though_the_header_says_red(entry
 def test_a_vanilla_sha1_selects_the_vanilla_pack(entry, title):
     got, why = _admit(entry, rom_sha1=RBY_PROFILE[title]["rom_sha1"].upper(), header="POKEMON " + title.upper(),
                       rom_bytes=_real_rom("vanilla", title))
-    assert why is None, why
-    assert got["pack"] == "gen1_rby" and got["title"] == title and got["rom_type"] == title.capitalize()
+    if title == "yellow":      # Yellow has no free WRAM, so no companion: it stays admitted clean
+        assert why is None, why
+        assert got["pack"] == "gen1_rby" and got["title"] == title and got["rom_type"] == title.capitalize()
+    else:                      # patch-first: a pinned clean Red/Blue is a catalog row but never admitted
+        assert got is None and "needs the SLink companion patch" in why and title in why, why
 
 
 def test_a_red_header_with_an_unknown_sha1_is_refused_with_the_pure_reason(entry):
@@ -986,11 +994,15 @@ def _randomized(rom: bytes) -> bytes:
     return bytes(out)
 
 
-def test_a_randomized_pure_rom_is_admitted_by_anchors_as_rand(entry):
-    rom = _randomized(_real_rom("clean"))
+def test_a_randomized_clean_pure_rom_is_refused_by_anchors_and_the_randomized_overlay_is_admitted(entry):
+    # Patch-first (owner 2026-10-02): a randomized-CLEAN cartridge (kind rand) is no longer admitted; the
+    # companion is randomized and then carried (rand_overlay, test_an_overlay_rom_admits_by_sha1_...).
+    got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=_randomized(_real_rom("clean")))
+    assert got is None and "matches no admitted cartridge" in why
+    rom = _randomized(_real_rom("overlay"))
     got, why = _admit(entry, rom_sha1="0" * 40, header="POKEMON RED", rom_bytes=rom)
     assert why is None, why
-    assert (got["pack"], got["title"], got["kind"], got["rom_type"]) == ("gen1_purergb", TITLE, "rand", "PureRed")
+    assert (got["pack"], got["title"], got["kind"], got["rom_type"]) == ("gen1_purergb", TITLE, "rand_overlay", "PureRed")
     assert got["admitted_by"] == "anchors" and got["rehashed"] is True
     assert got["rom_sha1"] == hashlib.sha1(rom).hexdigest()
 

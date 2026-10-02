@@ -29,11 +29,13 @@ from shutil import copyfile
 from unittest.mock import AsyncMock
 
 from server.server import SLinkServer
+from tests.unit.companion_evidence import patched
 
 
 def _hello(player: str, rom_type: str, *, ot_id: str = "30B8", **extra) -> dict:
-    return {"event": "hello", "player": player, "rom_type": rom_type,
-            "trainer_name": player.upper(), "ot_id": ot_id, "party": [], **extra}
+    # a PATCHED cartridge for the titles that require the companion (patch-first, owner 2026-10-02)
+    return patched({"event": "hello", "player": player, "rom_type": rom_type,
+                    "trainer_name": player.upper(), "ot_id": ot_id, "party": [], **extra})
 
 
 # ── F1 ──────────────────────────────────────────────────────────────────────────────────
@@ -73,12 +75,14 @@ def test_wrong_save_hello_preserves_the_prior_rom_type_panel_and_sfx(tmp_path):
     capabilities must not leave connected_players or the adapter describing the rejected
     cartridge."""
     s = SLinkServer(data_dir=str(tmp_path))
-    s._dispatch("a", _hello("a", "Red", ot_id="30B8", panel=False, sfx=False))
+    # (a Red/Blue cartridge must show its companion mailbox to connect at all: panel=True; the ABI and the
+    # sfx bit are what the rejected hello below tries to leak)
+    s._dispatch("a", _hello("a", "Red", ot_id="30B8", panel=True, panel_abi=1, sfx=False))
     assert s.state.rom_type == "Red"
     before_conn = dict(s.connected_players["a"])
     before_adapter = s.adapter
 
-    s._dispatch("a", _hello("a", "Blue", ot_id="WRONG", panel=True, sfx=True))
+    s._dispatch("a", _hello("a", "Blue", ot_id="WRONG", panel=True, panel_abi=2, sfx=True))
     assert s.state.identity_error.get("a"), "expected an identity (wrong save) rejection"
     assert s.connected_players["a"] == before_conn, \
         "rom_type/panel/sfx leaked from a rejected hello"

@@ -32,7 +32,7 @@ async def test_emerald_randomized_declarations_require_matching_cartridge_proof(
         "rom_content": _payload(_clean(report.split("-")[0]), report.split("-")[0])}
     async with client(server) as send:
         if existing_clean:
-            await send(hello("emerald", "clean"))
+            await send(hello("emerald", "companion"))   # a clean Emerald is refused (patch-first, 2026-10-02)
             assert server.admission["a"]["state"] == "admitted"
         before = copy.deepcopy(server.state.player_identity)
         await send(hello("emerald", kind, **content))

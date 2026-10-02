@@ -325,9 +325,10 @@ def _dofile(lua, rel):
 
 
 @pytest.mark.parametrize("key", PURE)
-def test_entry_admits_each_pure_sha1_as_its_own_title(lua, key):
-    """The harness key and the pack's admitted title are the same string: sha1 -> title, and the
-    pack is the pure one — which is what makes gen1_gate hand the driver the pure facts table."""
+def test_entry_refuses_each_clean_pure_sha1_for_the_companion(lua, key):
+    """Patch-first (owner 2026-10-02): the pinned CLEAN pureRGB build is a catalog row (sha1 -> title in the
+    pure pack, what made gen1_gate hand the driver the pure facts table) that Entry.admit never admits: the
+    companion overlay is what runs."""
     entry = _dofile(lua, "lua/gen1/entry.lua")
     sha = _lock()[g1.PURERGB_KEYS[key]]["sha1"]
     try:
@@ -340,13 +341,11 @@ def test_entry_admits_each_pure_sha1_as_its_own_title(lua, key):
                                       json=_dofile(lua, "lua/json_codec.lua"), rom_sha1=sha,
                                       indatabase=False, header="POKEMON RED", rom_size=len(rom),
                                       read_rom_u8=lambda offset: rom[int(offset)]))
-    assert not isinstance(admitted, tuple), admitted
-    assert admitted["title"] == key
-    assert admitted["pack"] == "gen1_purergb"
-    assert admitted["kind"] == "clean"
+    assert isinstance(admitted, tuple) and admitted[0] is None, admitted
+    assert "needs the SLink companion patch" in admitted[1] and key in admitted[1]
 
 
-def test_entry_still_admits_the_vanilla_sha1s(lua):
+def test_entry_refuses_clean_red_and_still_admits_yellow(lua):
     entry = _dofile(lua, "lua/gen1/entry.lua")
     with open(os.path.join(_REPO, "data", "games", "gen1_rby", "profile.json"), encoding="utf-8") as handle:
         titles = json.load(handle)["titles"]
@@ -360,8 +359,20 @@ def test_entry_still_admits_the_vanilla_sha1s(lua):
                                       rom_sha1=titles["red"]["rom_sha1"], indatabase=False,
                                       header="POKEMON RED", rom_size=len(rom),
                                       read_rom_u8=lambda offset: rom[int(offset)]))
-    assert not isinstance(admitted, tuple), admitted
-    assert admitted["title"] == "red" and admitted["pack"] == "gen1_rby"
+    assert isinstance(admitted, tuple) and admitted[0] is None, admitted     # Red requires the companion
+    assert "needs the SLink companion patch" in admitted[1]
+    yellow = os.path.join(_REPO, "patch", "build", "gen1_yellow.gbc")
+    if not os.path.isfile(yellow):
+        pytest.skip(f"clean Gen 1 yellow dump absent: {yellow}")
+    with open(yellow, "rb") as handle:
+        rom = handle.read()
+    admitted = entry.admit(lua.table(root=_REPO.replace("\\", "/"),
+                                      json=_dofile(lua, "lua/json_codec.lua"),
+                                      rom_sha1=titles["yellow"]["rom_sha1"], indatabase=False,
+                                      header="POKEMON YELLOW", rom_size=len(rom),
+                                      read_rom_u8=lambda offset: rom[int(offset)]))
+    assert not isinstance(admitted, tuple), admitted                         # Yellow has no companion: clean
+    assert admitted["title"] == "yellow" and admitted["pack"] == "gen1_rby"
 
 
 # ── the scripted host: title -> facts table and symbols ─────────────────────────────────────────

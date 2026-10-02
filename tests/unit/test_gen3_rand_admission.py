@@ -121,16 +121,18 @@ async def test_supported_rand_overlay_requires_verified_content(tmp_path, title,
         assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
 
 
+# Patch-first (owner 2026-10-02): a CLEAN FR/LG/RR/Red/Blue hello is refused before this admission is asked, so
+# the cartridges that reach it declare the companion (Gen 3 "companion", Red "named" + its mailbox `panel`).
 @pytest.mark.parametrize("rom_type,kind", (
-    ("red", "clean"), ("red", "rand"), ("crystal", "clean"), ("crystal", "overlay"),
-    ("firered", "clean"), ("leafgreen", "clean"), ("firered_rr", "clean"),
+    ("red", "named"), ("red", "rand"), ("yellow", "clean"), ("crystal", "clean"), ("crystal", "overlay"),
+    ("firered", "companion"), ("leafgreen", "companion"), ("firered_rr", "companion"),
 ))
 @pytest.mark.parametrize("fields", ({}, {"rom_content": {}}, {"rom_content": {"bad": True}}))
 @pytest.mark.asyncio
 async def test_legacy_and_clean_admission_behavior_is_unchanged(tmp_path, rom_type, kind, fields):
     server = SLinkServer(data_dir=str(tmp_path))
     async with client(server) as send:
-        response = await send(hello(rom_type, kind, **copy.deepcopy(fields)))
+        response = await send(hello(rom_type, kind, panel=True, **copy.deepcopy(fields)))
     assert server.admission["a"] == {
         "state": "admitted", "reason": "no randomized-ROM contract for this run"}
     assert not any(command.get("refused") == "admission" for command in response["commands"])

@@ -27,30 +27,17 @@ if not family then
     return
 end
 
-local admitted, why = Entry.admit({
+local admitted, why = Entry.admit_routed({
     root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
     rom_sha1 = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
     indatabase = gameinfo and gameinfo.indatabase and gameinfo.indatabase() or false,
     read_rom_u8 = rom_u8, rom_size = memory.getmemorydomainsize("ROM"),
-    header = Entry.header_title(rom_u8),
+    header = Entry.header_title(rom_u8), family = family,
+    log = function(t) console.log(t) end,
 })
 if not admitted then
-    -- The vanilla companion-patch and randomized artifacts are vanilla-layout by construction
-    -- and predate the admission table (their sha1s are not pinned anywhere): a recognised
-    -- vanilla header still boots the vanilla pack exactly as before admission existed
-    -- (kind "named"). A non-pinned pureRGB build carries the same header and DOES reach this
-    -- path (its sha1 and anchors admit nothing): it is then refused by the vanilla pack's own
-    -- engine-site verification (signals.lua "engine sites differ from the ROM"), never booted
-    -- against the wrong addresses. The pinned pure builds never get here.
-    if family == "red" or family == "blue" or family == "yellow" then
-        console.log("[SLink-gen1] no admission row for this cartridge (" .. tostring(why) .. "); booting the vanilla "
-                    .. family .. " pack by header (named family)")
-        admitted = { title = family, pack = "gen1_rby", kind = "named",
-                     rom_sha1 = (gameinfo and gameinfo.getromhash and gameinfo.getromhash() or ""):lower() }
-    else
-        console.log("[SLink-gen1] refused: " .. tostring(why))
-        return
-    end
+    console.log("[SLink-gen1] refused: " .. tostring(why))
+    return
 end
 local rom_sha1 = admitted.rom_sha1
 

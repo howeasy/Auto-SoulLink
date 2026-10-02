@@ -40,10 +40,13 @@ def _sha1(pack: str, title: str, kind: str) -> str:
 
 
 _FR_CLEAN_SHA1 = _sha1("gen3_frlg", "firered", "clean")
+_FR_COMPANION_SHA1 = _sha1("gen3_frlg", "firered", "companion")
 _LG_CLEAN_SHA1 = _sha1("gen3_frlg", "leafgreen", "clean")
+_LG_COMPANION_SHA1 = _sha1("gen3_frlg", "leafgreen", "companion")
 _RR_CLEAN_SHA1 = _sha1("gen3_rr", "radical_red", "clean")
 _RR_COMPANION_SHA1 = _sha1("gen3_rr", "radical_red", "companion")
 _EMERALD_CLEAN_SHA1 = _sha1("gen3_emerald", "emerald", "clean")
+_EMERALD_COMPANION_SHA1 = _sha1("gen3_emerald", "emerald", "companion")
 
 
 def _rom_gba(header_code: str = "\0\0\0\0", size: int = 0x200) -> bytes:
@@ -130,24 +133,33 @@ def _run_launcher(system_id: str | None, rom: bytes, rom_hash: str = "0" * 40,
     return loaded
 
 
-def test_a_clean_firered_sha1_reaches_the_new_gen3_client():
-    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
+def test_a_companion_firered_sha1_reaches_the_new_gen3_client():
+    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_FR_COMPANION_SHA1)
     assert _NEW_GEN3_CLIENT in loaded, loaded
     assert _OLD_GEN3_CLIENT not in loaded, loaded
 
 
-def test_a_clean_leafgreen_sha1_reaches_the_new_gen3_client():
-    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_LG_CLEAN_SHA1)
+def test_a_companion_leafgreen_sha1_reaches_the_new_gen3_client():
+    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_LG_COMPANION_SHA1)
     assert _NEW_GEN3_CLIENT in loaded, loaded
     assert _OLD_GEN3_CLIENT not in loaded, loaded
 
 
-@pytest.mark.parametrize("rr_sha1", [_RR_COMPANION_SHA1, _RR_CLEAN_SHA1])
+@pytest.mark.parametrize("rr_sha1", [_RR_COMPANION_SHA1])
 def test_a_radical_red_sha1_reaches_the_new_gen3_client(rr_sha1):
-    """gen3_rr joined the routed set at G5 (C5-6)."""
+    """gen3_rr joined the routed set at G5 (C5-6); only its companion since 2026-10-02."""
     loaded = _run_launcher("GBA", _rom_gba(), rom_hash=rr_sha1)
     assert _NEW_GEN3_CLIENT in loaded, loaded
     assert _OLD_GEN3_CLIENT not in loaded, loaded
+
+
+@pytest.mark.parametrize("clean_sha1,header", [(_FR_CLEAN_SHA1, "BPRE"), (_LG_CLEAN_SHA1, "BPGE"),
+                                               (_RR_CLEAN_SHA1, "BPRE"), (_EMERALD_CLEAN_SHA1, "BPEE")])
+def test_a_clean_companion_title_is_refused_by_the_launcher_not_routed(clean_sha1, header):
+    """Patch-first (owner 2026-10-02): FireRed, LeafGreen, Radical Red and Emerald require the companion; the
+    pinned CLEAN dump is refused by name (the Manager or /patcher prepares the patched one) and no client loads."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge.*needs the SLink companion patch"):
+        _run_launcher("GBA", _rom_gba(header_code=header), rom_hash=clean_sha1)
 
 
 def test_an_unknown_bpre_hash_admitted_by_header_is_refused_by_name():
@@ -157,10 +169,10 @@ def test_an_unknown_bpre_hash_admitted_by_header_is_refused_by_name():
         _run_launcher("GBA", _rom_gba(header_code="BPRE"), rom_hash="f" * 40)
 
 
-def test_a_clean_emerald_sha1_reaches_the_new_gen3_client():
+def test_a_companion_emerald_sha1_reaches_the_new_gen3_client():
     """EG4: Emerald joined the routed set (barrier 1, lua/slink.lua's old by-name BPEE
     refusal, removed; barrier 2, Entry.ROUTED, gained gen3_emerald)."""
-    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_CLEAN_SHA1)
+    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_COMPANION_SHA1)
     assert _NEW_GEN3_CLIENT in loaded, loaded
     assert _OLD_GEN3_CLIENT not in loaded, loaded
 
@@ -188,11 +200,11 @@ def test_a_gb_cartridge_still_takes_the_unchanged_gen1_route():
 
 def test_an_old_bizhawk_on_a_firered_cartridge_is_refused():
     with pytest.raises(lupa.LuaError, match="too old"):
-        _run_launcher("GBA", _rom_gba(), rom_hash=_FR_CLEAN_SHA1, bizhawk="2.9.1")
+        _run_launcher("GBA", _rom_gba(), rom_hash=_FR_COMPANION_SHA1, bizhawk="2.9.1")
 
 
 def test_only_one_client_is_ever_loaded_for_a_routed_cartridge():
-    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
+    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_FR_COMPANION_SHA1)
     clients = [p for p in loaded if "client" in p or p == _NEW_GEN3_CLIENT]
     assert clients == [_NEW_GEN3_CLIENT], f"expected exactly one client, got {clients}"
 

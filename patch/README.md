@@ -78,9 +78,30 @@ verifies the `rr` row). The frozen-cut receipts under `docs/gen3/probes` are bou
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
 > six patches; `/patcher` applies any of them in the browser.
 
-An **optional** native code-injection layer for Radical Red. When applied, the SLink Lua
-client detects it and uses native in-game features; without it, everything falls back to
-the existing behaviour. **Unpatched players are unaffected.**
+A native code-injection layer for Radical Red. When applied, the SLink Lua client detects
+it and uses native in-game features. The Soul Link rules themselves run in Lua on every
+cartridge, patched or not.
+
+## Patch-first (owner, 2026-10-01; companion REQUIRED 2026-10-02)
+
+The companion is **required** for every title that has one: Red/Blue, pureRGB, Gold/Silver/Crystal,
+FireRed/LeafGreen/Emerald and Radical Red. A clean (unpatched) cartridge of those titles is refused
+by the launcher and the server, so it cannot be used whichever way it is launched (the Manager's
+always-compose / refuse-clean provisioning lands with the Gen 2 overlay branch): by the launcher (`lua/gen1/entry.lua`
+`admit_routed`, `lua/gen3/entry.lua` `admit_routed`; Gen 2's launcher and adapter refusal land with its
+overlay re-admission) and by the server at the hello (`GameRulesAdapter.companion_refusal`, overridden
+per adapter). A randomized
+cartridge is randomized and then patched; a randomized-clean one is refused like any clean one. The
+player-facing reason: this cartridge needs the SLink companion patch, so prepare it through the Manager
+or `/patcher`.
+
+**Exempt, still admitted clean:** Yellow (zero free WRAM, so no companion exists), the Archipelago
+builds (permitted by policy, but the Manager lists no Archipelago game until a client supports one),
+the Emerald Expansion (`gen3_exp`, its companion does not exist yet) and Gen 4/5 (never run against a
+real game). Those keep sharing the Lua rule paths, which is why those paths stay.
+
+**New ROM-side features are companion-only.** They get no Lua/HUD fallback, so a cartridge
+without the companion simply lacks them, the way Rival Swap answers `patch_required` on Gen 3.
 
 ## Prerequisites — the patch is per-RR-build
 

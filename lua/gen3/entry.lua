@@ -62,11 +62,13 @@ end
 Entry.PACKS = {
     gen3_frlg = {
         randomizable = true,
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
     },
@@ -74,6 +76,7 @@ Entry.PACKS = {
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
         randomizable = true,
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
@@ -291,6 +294,15 @@ function Entry.admit_routed(args)
     end
     if not Entry.ROUTED[admitted.pack] then
         return nil, "the " .. tostring(admitted.pack) .. " pack is not yet routed to the Gen 3 client"
+    end
+    -- Patch-first (owner 2026-10-02): a pack that marks `companion_required` refuses its CLEAN
+    -- artifacts (kind clean / rand; header-only "named" was refused above). gen3_exp, which has
+    -- no companion artifact, never sets it, so the Emerald Expansion keeps booting clean.
+    -- (Not `production = false` in the generated engine_signals: that also makes Entry.build refuse
+    -- the clean artifact, which every clean-world unit test builds, and is the Gen 3 lane's call.)
+    if Entry.PACKS[admitted.pack].companion_required and (admitted.kind == "clean" or admitted.kind == "rand") then
+        return nil, "this " .. tostring(admitted.title) .. " cartridge needs the SLink companion patch; "
+                    .. "prepare it through the Manager or /patcher"
     end
     return admitted
 end

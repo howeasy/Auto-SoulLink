@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.test_mixed_foundations import _hello
 
 
@@ -75,7 +76,7 @@ async def _replace(srv, replacement):
 @pytest.mark.parametrize("replacement", ["reset", "rollback"])
 async def test_contractless_run_reconnects_and_processes_events(tmp_path, rom_type, replacement):
     srv = SLinkServer(data_dir=str(tmp_path))
-    hello = _hello("a", {"rom_type": rom_type, "artifact_kind": "clean"})
+    hello = _hello("a", {"rom_type": rom_type, **companion(rom_type)})
     async with _tcp(srv) as (connect, _):
         old = await connect()
         await _send(old, hello)
@@ -101,7 +102,7 @@ async def test_run_replacement_closes_all_sockets_including_unidentified(tmp_pat
     async with _tcp(srv) as (connect, _):
         sockets = [await connect() for _ in range(4)]
         for connection, player in zip(sockets, ("a", "a", "b"), strict=False):
-            await _send(connection, _hello(player, {"rom_type": "red", "artifact_kind": "clean"}))
+            await _send(connection, _hello(player, {"rom_type": "red", **companion("red")}))
         # The fourth connection has not declared a player yet.
         await _replace(srv, replacement)
         for connection in sockets:
@@ -111,7 +112,7 @@ async def test_run_replacement_closes_all_sockets_including_unidentified(tmp_pat
 @pytest.mark.asyncio
 async def test_old_disconnect_does_not_mark_live_replacement_disconnected(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
-    hello = _hello("a", {"rom_type": "red", "artifact_kind": "clean"})
+    hello = _hello("a", {"rom_type": "red", **companion("red")})
     async with _tcp(srv) as (connect, tasks):
         old = await connect()
         await _send(old, hello)
