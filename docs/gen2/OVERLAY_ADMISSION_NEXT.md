@@ -79,7 +79,7 @@ Require all seven qualifications, all three full U1 unions, all three full U2 re
 
 ## 3. Produce D6 shipping copies, then activate
 
-No dedicated shipping-copy CLI exists at this cut. This snippet derives the 22 destinations from `Entry.RECEIPT_FILES.*.overlay`; it copies qualifications byte-for-byte, copies O-33 disclosures from beside their SaveRAM, and removes **only top-level `code_digest`** from engine/write receipts. Preserve all identity, runs, fixture/clock/poison disclosures and validation evidence. U1 merging already removes a v1 top-level stamp from its nested run (`tools/gen2_fixtures.py:370–377`). Run only before activation/freeze:
+DONE 2026-10-02: use `python tools/gen2_ship_overlay_receipts.py --write` then `--check` (22/22). The snippet below is the historical equivalent; it derives the 22 destinations from `Entry.RECEIPT_FILES.*.overlay`; it copies qualifications byte-for-byte, copies O-33 disclosures from beside their SaveRAM, and removes **only top-level `code_digest`** from engine/write receipts. Preserve all identity, runs, fixture/clock/poison disclosures and validation evidence. U1 merging already removes a v1 top-level stamp from its nested run (`tools/gen2_fixtures.py:370–377`). Run only before activation/freeze:
 ```powershell
 @'
 import json
@@ -131,7 +131,7 @@ python tools/gen2_final_sweep.py --list
 python tools/gen2_final_sweep.py --lanes $overlayLanes --sha $overlayFreeze --out $overlayOut
 ```
 Run from the persistent external shell/detached launcher. Expect 148 cells; estimate **6–10 lane-hours**, not measured elapsed time for this new cut. Other lanes share the machine: allocate CPU/emulator slots, verify `Temp/fs1..fsN` are owned/available (the tool recreates them), and never kill global EmuHawk/python process names. The runner kills only its timed-out child tree (`tools/gen2_final_sweep.py:122–152,165–179`). Default is four lanes; set N explicitly.
-One retry is permitted only for the recorded RNG classes; guard/identity failures require diagnosis. The U1 attempt-index gap in §2 must be fixed and tested before this command. Preserve failed attempts. Use `--only <exact-cell-id>` with a new output directory for diagnosed reruns at the same SHA; review/merge their summary records by cell ID before pinning, not by overwriting failed evidence.
+One retry is permitted only for the recorded RNG classes; guard/identity failures require diagnosis. U1 engine-sites cells rotate attempts 1/2/3 (886ce271). Before this command, the six extra overlay duo qualifications (crystal_battle_errand, crystal_battle_ot2, crystal_battle_ot2_errand, crystal_town_ot2, gold_battle_ot2, silver_battle_errand) must be captured PHYSICALLY, and the refused-B staging fix in tools/e2e_duo.py must land (ROMPatch cx-f001afc8). Preserve failed attempts. Use `--only <exact-cell-id>` with a new output directory for diagnosed reruns at the same SHA; review/merge their summary records by cell ID before pinning, not by overwriting failed evidence.
 Require all 148 unique cells PASS, zero unexplained skips, same frozen SHA/digest, and inspect the per-command logs. `--pin` copies only PASS cells and does NOT itself certify completeness (`tools/gen2_final_sweep.py:214–294,403–409`):
 ```powershell
 python tools/gen2_final_sweep.py --pin $overlayOut

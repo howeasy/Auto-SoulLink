@@ -342,7 +342,6 @@ function randomizerFields(form) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
           if (r.family === 'gen3_emerald') return { ok: false, why: 'No Emerald companion build is available yet. Use the standard cartridge.' };
-          if (r.family === 'gen2_gsc') return { ok: false, why: 'The Gen 2 companion is built but the launcher does not admit it yet, so the cartridge is handed out as picked.' };
           return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. The cartridge is handed out as picked: the Soul Link rules are the same, without the panel, native trade or native sounds.' };
         }
       }

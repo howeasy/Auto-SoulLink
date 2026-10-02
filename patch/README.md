@@ -29,10 +29,10 @@ cartridge, patched or not.
 
 ## Patch-first (owner, 2026-10-01)
 
-Every title whose companion the launcher admits (Red/Blue, pureRGB, FireRed/LeafGreen/Emerald,
-Radical Red) gets it: the Manager patches it into every cartridge it prepares, with no opt-out
-(`server/manager.py` `COMPANION_TITLES`). Gold/Silver/Crystal join once `lua/gen2/entry.lua`
-admits the overlay; until then the Manager hands out their clean cartridge.
+Every title whose companion the launcher admits (Red/Blue, pureRGB, Gold/Silver/Crystal,
+FireRed/LeafGreen/Emerald, Radical Red) gets it: the Manager patches it into every cartridge it
+prepares, with no opt-out (`server/cartridges.py` `COMPANION_TITLES`). A Gen 2 title is composed
+only while its overlay row is activated, so a rolled-back row hands out the clean cartridge.
 **New ROM-side features are companion-only.** They get no Lua/HUD fallback, so a cartridge
 without the companion simply lacks them, the way Rival Swap answers `patch_required` on Gen 3.
 Clean cartridges are still admitted, and the existing Lua rule paths stay, because Yellow,

@@ -75,15 +75,21 @@
       "id": "gold_overlay",
       "kind": "overlay",
       "revision": "US",
-      "selection": "FUTURE",
-      "status": "BUILT",
+      "selection": "SELECTED",
+      "status": "ADMITTED",
       "sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
       "md5": "ad50cc72561e8bbfdabdc847df7ceef9",
       "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
       "ups": {
         "file": "patch/dist/SLink-Gold.ups",
         "sha256": "a40ba8e2b3881d829aa5ed84791d7d88c263a750b4391a071c28fb4b5565ca1a"
-      }
+      },
+      "runtime_gate": {
+        "id": "G4",
+        "state": "ADMITTED",
+        "grant_fingerprint": "077a1872d3e84034fe83fbe02eb2fd661af4c29dbac2e885d21a091016a67080"
+      },
+      "binding_sha256": "3f1f94782aebc773363affe357e397836f788fe3b8226bd0aa1196a2c3052084"
     },
     {
       "id": "gold_ghost",

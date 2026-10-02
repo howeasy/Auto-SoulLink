@@ -1,0 +1,153 @@
+{
+  "schema": "fixture-qualification-v1",
+  "scope": "full",
+  "required_stages": [
+    "qualify",
+    "boot",
+    "resave",
+    "post_oracle"
+  ],
+  "attempt_id": "ovl-gold_battle-a1",
+  "fixtures": [
+    {
+      "name": "gold_battle",
+      "passed": true,
+      "artifacts": {
+        "fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\tests\\fixtures\\gen2\\gold_battle.SaveRAM",
+          "size": 32790,
+          "sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6"
+        },
+        "profile": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\data\\games\\gen2_gold\\profile.json",
+          "size": 74897,
+          "sha256": "61412f7e3653dce7f424be3d7108222c4343a46783c2b4941a5859002b2ee546"
+        },
+        "rom": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\gold_overlay.gbc",
+          "size": 2097152,
+          "sha256": "aa7fabc77031a40c6bd8cbd554503c7b0092ffcb8d1bbc22f6af62e146a4c0bf"
+        },
+        "route_facts": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\gold_route_facts.json",
+          "size": 13572,
+          "sha256": "9f6b14c3f30fe2bf9cff2343d769d9aade4fc8cae6e577a15ad2fbeebce21ac9"
+        },
+        "played_receipt": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\gold_battle.clean_qualification_ref.json",
+          "size": 394,
+          "sha256": "56a55b3e226621feedb38d78677b1ec6164b2313b5d79f47800ef5e2d5a621bb"
+        },
+        "boot:game_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\boot-f190476b05b8782b\\gold_battle.boot.witness.json",
+          "size": 1957,
+          "sha256": "5fed7c6d0969400f96aeb33c0df09e30bf84a0d4271ccdd1b4fce982f166764c"
+        },
+        "resave:fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\resave-94b6f5e9fd74f02c\\gold_battle.resaved.SaveRAM",
+          "size": 32790,
+          "sha256": "3bffd887adec7c8f2a1572665843c586c6648af34b6a895f7af609cd9768ad3f"
+        },
+        "resave:save_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\resave-94b6f5e9fd74f02c\\gold_battle.resave.witness.json",
+          "size": 2081,
+          "sha256": "0bff2d2ae41a637a78675fd538cb45b69d6fcbe1aa833905bc2b5e20aa6e0209"
+        },
+        "resave:reload_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\reload-94b6f5e9fd74f02c\\gold_battle.reload.witness.json",
+          "size": 1959,
+          "sha256": "233a7a83daa645447ab97cb99467f8c723e2e7cf85fae09804e905776124bd63"
+        }
+      },
+      "provenance": {
+        "title": "gold",
+        "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+        "scope": "candidate fixture",
+        "route_facts_sha256": "ae3a93f62269bb199872794429ccbb114c61c2af92062c6b252f2d31b7a61114"
+      },
+      "stages": [
+        {
+          "stage": "qualify",
+          "fingerprint": "78c3b228ad09c826e334681d6b5adb002744ef999954fc3c1fac688d934e65d6",
+          "status": "PASS",
+          "problems": [],
+          "notes": [
+            "Static bytes do not prove played origin, RTC or GAME qualification."
+          ],
+          "evidence": {
+            "oracle": "independent Gen2 PYDEC",
+            "player_id": "50342",
+            "ball_origin": "O-10 harness injection",
+            "natural_ball_acquisition": "false"
+          }
+        },
+        {
+          "stage": "boot",
+          "fingerprint": "f190476b05b8782bb901dc5595e1b855ae28cd5fc5f8621306d6879309b562d3",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME CONTINUE",
+            "location": "[24, 3]",
+            "position": "[53, 12]",
+            "cartram_sha256": "93c2cb847455c7ffa6097c9c1bf399db0f15ca56deb13599317ee9458cf0ad48"
+          },
+          "outputs": {
+            "boot:game_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\boot-f190476b05b8782b\\gold_battle.boot.witness.json",
+              "size": 1957,
+              "sha256": "5fed7c6d0969400f96aeb33c0df09e30bf84a0d4271ccdd1b4fce982f166764c"
+            }
+          }
+        },
+        {
+          "stage": "resave",
+          "fingerprint": "94b6f5e9fd74f02cd3fb2101e14f220bc563b44fda5c4689ed59c95a0166961c",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME re-save + reload",
+            "resave_cartram_sha256": "b2ba38b3cdc9ad1cec7c1cfbbf49a849f55e148d064ec3fd866f8196e9ce9107"
+          },
+          "outputs": {
+            "resave:fixture": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\resave-94b6f5e9fd74f02c\\gold_battle.resaved.SaveRAM",
+              "size": 32790,
+              "sha256": "3bffd887adec7c8f2a1572665843c586c6648af34b6a895f7af609cd9768ad3f"
+            },
+            "resave:save_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\resave-94b6f5e9fd74f02c\\gold_battle.resave.witness.json",
+              "size": 2081,
+              "sha256": "0bff2d2ae41a637a78675fd538cb45b69d6fcbe1aa833905bc2b5e20aa6e0209"
+            },
+            "resave:reload_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle-a1\\gold_battle\\qualify-overlay\\reload-94b6f5e9fd74f02c\\gold_battle.reload.witness.json",
+              "size": 1959,
+              "sha256": "233a7a83daa645447ab97cb99467f8c723e2e7cf85fae09804e905776124bd63"
+            }
+          }
+        },
+        {
+          "stage": "post_oracle",
+          "fingerprint": "d07bcd05b52beb3806373b23b48e8a496670de165ed530330b9817babe219a06",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "oracle": "independent re-save PYDEC + GAME raw-party witness"
+          }
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "physical_qualification": false,
+  "open_obligations": [
+    "coordinator GAME/RTC/played-origin review",
+    "recorded source/physical gate sign-off"
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "schema": "fixture-qualification-v1",
+  "scope": "full",
+  "required_stages": [
+    "qualify",
+    "boot",
+    "resave",
+    "post_oracle"
+  ],
+  "attempt_id": "ovl-gold_town-a1",
+  "fixtures": [
+    {
+      "name": "gold_town",
+      "passed": true,
+      "artifacts": {
+        "fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\tests\\fixtures\\gen2\\gold_town.SaveRAM",
+          "size": 32790,
+          "sha256": "21454a58766b40ff0580d2c7016124b41b0991bac542b5ad68bcefc922fe18ed"
+        },
+        "profile": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\data\\games\\gen2_gold\\profile.json",
+          "size": 74897,
+          "sha256": "61412f7e3653dce7f424be3d7108222c4343a46783c2b4941a5859002b2ee546"
+        },
+        "rom": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\gold_overlay.gbc",
+          "size": 2097152,
+          "sha256": "aa7fabc77031a40c6bd8cbd554503c7b0092ffcb8d1bbc22f6af62e146a4c0bf"
+        },
+        "route_facts": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\gold_route_facts.json",
+          "size": 13572,
+          "sha256": "9f6b14c3f30fe2bf9cff2343d769d9aade4fc8cae6e577a15ad2fbeebce21ac9"
+        },
+        "played_receipt": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\gold_town.clean_qualification_ref.json",
+          "size": 390,
+          "sha256": "ae68e21d59f6371bb936ac13b07c6983c059771388d06a8ecb9cb9e517a530cd"
+        },
+        "boot:game_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\boot-6b0bd48df1b70338\\gold_town.boot.witness.json",
+          "size": 1951,
+          "sha256": "52a518b96621fd76f4aa90d6db5f35aaae1885065ffedaa2c303405bda96bd05"
+        },
+        "resave:fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\resave-2ed7c5aababd46e4\\gold_town.resaved.SaveRAM",
+          "size": 32790,
+          "sha256": "b2545b916cd7889871081a0cca7cece84d9d49c5ab63fdf7d18bdcf6c9c48b2c"
+        },
+        "resave:save_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\resave-2ed7c5aababd46e4\\gold_town.resave.witness.json",
+          "size": 2075,
+          "sha256": "8da9bb291d2414bf9eca22f60b71ae972d9b64828cb00d3e1774288b2d2570b5"
+        },
+        "resave:reload_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\reload-2ed7c5aababd46e4\\gold_town.reload.witness.json",
+          "size": 1953,
+          "sha256": "53d4927032f203b3bd4185acffb99211b92ff2ee86025dc4767df1de2f35ca76"
+        }
+      },
+      "provenance": {
+        "title": "gold",
+        "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+        "scope": "candidate fixture",
+        "route_facts_sha256": "ae3a93f62269bb199872794429ccbb114c61c2af92062c6b252f2d31b7a61114"
+      },
+      "stages": [
+        {
+          "stage": "qualify",
+          "fingerprint": "22e0f193e740609837718269d7c603923f3d5bd07a686dc1342a3a22a85612d4",
+          "status": "PASS",
+          "problems": [],
+          "notes": [
+            "Static bytes do not prove played origin, RTC or GAME qualification."
+          ],
+          "evidence": {
+            "oracle": "independent Gen2 PYDEC",
+            "player_id": "50342",
+            "ball_origin": "none",
+            "natural_ball_acquisition": "false"
+          }
+        },
+        {
+          "stage": "boot",
+          "fingerprint": "6b0bd48df1b703382328a069a4244f99ad846a89052071ed1433b5e4b656c139",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME CONTINUE",
+            "location": "[24, 5]",
+            "position": "[5, 3]",
+            "cartram_sha256": "f282eba300fc5ee653bd9f10e96776e08912c18475029ee7bb821b7ae7f5a2d2"
+          },
+          "outputs": {
+            "boot:game_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\boot-6b0bd48df1b70338\\gold_town.boot.witness.json",
+              "size": 1951,
+              "sha256": "52a518b96621fd76f4aa90d6db5f35aaae1885065ffedaa2c303405bda96bd05"
+            }
+          }
+        },
+        {
+          "stage": "resave",
+          "fingerprint": "2ed7c5aababd46e4bb0fd8ede68f95246687bb7b997840bfc853f2191639c403",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME re-save + reload",
+            "resave_cartram_sha256": "6dede620d0b0caa3d7cbeaaaf17b887600028c92ac54a25431393481e3d73d8b"
+          },
+          "outputs": {
+            "resave:fixture": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\resave-2ed7c5aababd46e4\\gold_town.resaved.SaveRAM",
+              "size": 32790,
+              "sha256": "b2545b916cd7889871081a0cca7cece84d9d49c5ab63fdf7d18bdcf6c9c48b2c"
+            },
+            "resave:save_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\resave-2ed7c5aababd46e4\\gold_town.resave.witness.json",
+              "size": 2075,
+              "sha256": "8da9bb291d2414bf9eca22f60b71ae972d9b64828cb00d3e1774288b2d2570b5"
+            },
+            "resave:reload_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_town-a1\\gold_town\\qualify-overlay\\reload-2ed7c5aababd46e4\\gold_town.reload.witness.json",
+              "size": 1953,
+              "sha256": "53d4927032f203b3bd4185acffb99211b92ff2ee86025dc4767df1de2f35ca76"
+            }
+          }
+        },
+        {
+          "stage": "post_oracle",
+          "fingerprint": "174f35c66bb6757713bb9eb501e99c016b59fcb7cc635a91f2ae23f9e5c153f1",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "oracle": "independent re-save PYDEC + GAME raw-party witness"
+          }
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "physical_qualification": false,
+  "open_obligations": [
+    "coordinator GAME/RTC/played-origin review",
+    "recorded source/physical gate sign-off"
+  ]
+}

@@ -330,8 +330,13 @@ def test_existing_committed_matrices_are_valid():
         receipt_path = ROOT / "data/gen2/build_provenance.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
         # P4.1f: the overlay rows are BUILT from the SLink companion build receipt.
-        overlay = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())
-        admission.validate_matrix(matrix, lock, receipt, lock_bytes=lock_bytes, overlay=overlay)
+        overlay_bytes = (ROOT / "data/gen2/overlay_provenance.json").read_bytes()
+        overlay = json.loads(overlay_bytes)
+        # an activated overlay row is re-validated against the CURRENT G4 grant and binding pin, as --check does
+        grant = admission.grant_fingerprint(lock_bytes, receipt_path.read_bytes(), overlay_bytes, overlay)
+        binding = admission.binding_sha256(admission.binding_path(ROOT / "data/games", title).read_bytes())
+        admission.validate_matrix(matrix, lock, receipt, lock_bytes=lock_bytes, overlay=overlay,
+                                  grant_fingerprint=grant, binding_sha256=binding)
 
 
 # --- P4.4 overlay promotion (--promote-overlays): ADMITTED only behind the G4 preconditions ---------
@@ -590,13 +595,14 @@ def test_committed_tree_cannot_promote_until_the_owner_signs_g4(tmp_path, monkey
 
 # --- schema v2 (OVERLAY_ADMISSION D1/D6): activation is its own gate, not the full release-evidence -------------------
 
-def test_every_committed_matrix_is_schema_v2_and_the_unactivated_overlay_is_future_built():
+def test_every_committed_matrix_is_schema_v2_and_its_overlay_is_activated():
+    # activated 2026-10-02 (docs/gen2/OVERLAY_ADMISSION.md); a rollback must change this test on purpose
     for title in ("crystal", "gold", "silver"):
         matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())
         assert matrix["schema_version"] == 2
         row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
-        if row["status"] == "BUILT":      # not activated yet: an identity, never runtime eligible
-            assert (row["selection"], "runtime_gate" not in row, "binding_sha256" not in row) == ("FUTURE", True, True)
+        assert (row["selection"], row["status"], row["runtime_gate"]["id"], row["runtime_gate"]["state"]) == (
+            "SELECTED", "ADMITTED", "G4", "ADMITTED")
 
 
 def test_an_activated_row_is_selected_admitted_behind_its_own_g4_grant_and_binding_pin(tmp_path, built, monkeypatch):
@@ -696,6 +702,22 @@ def test_the_real_overlay_proof_check_runs_the_lua_entry_and_refuses_an_unbound_
         matrices[title] = matrix
     errors = admission.overlay_proof_errors(matrices)
     assert len(errors) == 3 and all("overlay proofs refused" in e for e in errors)
+
+
+def test_the_real_overlay_proof_check_accepts_the_shipped_round1_proofs():
+    # the positive half: Entry.activation_proof returns (true, nil), which lupa hands back as a tuple; a check that
+    # compared the whole result to True refused every passing proof (found running --promote-overlays for real)
+    if not (ROOT / "data/games/gen2_crystal/receipts/overlay").is_dir():
+        pytest.skip("overlay receipts not shipped yet (tools/gen2_ship_overlay_receipts.py --write)")
+    matrices = {}
+    for title in ("crystal", "gold", "silver"):
+        matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())
+        row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
+        raw = admission.binding_path(ROOT / "data/games", title).read_bytes()
+        row.update(selection="SELECTED", status="ADMITTED", binding_sha256=admission.binding_sha256(raw),
+                   runtime_gate={"id": "G4", "state": "ADMITTED", "grant_fingerprint": "1" * 64})
+        matrices[title] = matrix
+    assert admission.overlay_proof_errors(matrices) == []
 
 
 # --- an ADMITTED catalog is re-proven by --check and by regeneration (review M1; OVERLAY_ADMISSION D6) -------------------

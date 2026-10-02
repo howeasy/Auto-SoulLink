@@ -49,18 +49,35 @@ def _pure_md5s(title: str) -> tuple[str, str]:
     raise KeyError(f"no overlay admission row for {title}")
 
 
-def _gen2_overlay_md5(title: str) -> str:
-    """The admitted SLink overlay's md5 for one Gen 2 title, read live from its own
-    admission table (data/games/gen2_<title>/admission.json) — the overlay is rebuilt as
-    patch/gen2/src/*.asm changes, so this, unlike base_md5 below, is a value that drifts."""
+def _gen2_overlay_row(title: str) -> dict:
+    """One Gen 2 title's overlay row, read live from data/games/gen2_<title>/admission.json."""
     import json
 
     path = os.path.normpath(os.path.join(_SERVER_DIR, "..", "data", "games", f"gen2_{title}",
                                          "admission.json"))
     with open(path, encoding="utf-8") as fh:
         artifacts = json.load(fh)["artifacts"]
-    overlay = next(a for a in artifacts if a["kind"] == "overlay")
-    return overlay["md5"]
+    return next(a for a in artifacts if a["kind"] == "overlay")
+
+
+def _gen2_overlay_md5(title: str) -> str:
+    """The SLink overlay's md5 for one Gen 2 title — the overlay is rebuilt as
+    patch/gen2/src/*.asm changes, so this, unlike base_md5 below, is a value that drifts."""
+    return _gen2_overlay_row(title)["md5"]
+
+
+def gen2_overlay_admitted(title: str) -> bool:
+    """Does the launcher (lua/gen2/entry.lua) admit this title's overlay? Its row must be
+    activated (tools/gen_gen2_admission.py --promote-overlays): SELECTED/ADMITTED under G4, with the
+    grant fingerprint and binding pin the launcher also requires (lua/gen2/entry.lua Entry.admit)."""
+    def is_hex64(value):
+        return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+    row = _gen2_overlay_row(title)
+    gate = row.get("runtime_gate") or {}
+    return (row.get("selection") == "SELECTED" and row.get("status") == "ADMITTED"
+            and gate.get("id") == "G4" and gate.get("state") == "ADMITTED"
+            and is_hex64(gate.get("grant_fingerprint")) and is_hex64(row.get("binding_sha256")))
 
 # ── Targets ─────────────────────────────────────────────────────────────────
 # A REGISTRY, not a single file. There are three companion patches now and they are not

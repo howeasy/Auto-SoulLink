@@ -9,7 +9,7 @@ Codex ROMPatch cx-ddc39d87, adopted except where D6 says otherwise. Coordinator:
 
 Owner, 2026-10-02: Gen 2 NEEDS its companion. The Soul Link rules run without it, but trade (the only
 Gen 2 trade path), the SLINK panel and native sounds do not. Once admitted, it is non-optional,
-like Red/Blue: Crystal/Gold/Silver rejoin `server/manager.py` `COMPANION_TITLES`. Rule: a title whose
+like Red/Blue: Crystal/Gold/Silver rejoin `server/cartridges.py` `COMPANION_TITLES`. Rule: a title whose
 features need a patch gets it with no opt-out; a title that needs none is not given one.
 
 ## Why the clean facts do not carry over
@@ -91,7 +91,7 @@ Model tests prove it.
 | A: runtime + catalog | Sonnet A | `lua/gen2/entry.lua`, `lua/gen2/signals.lua`, `lua/gen2_write_safety.lua`, `lua/gen2/run.lua`, `lua/gen2/client.lua`, `tools/gen_gen2_admission.py`, `data/games/gen2_*/admission.json` (regenerated), `tests/unit/test_gen2_entry.py`, `tests/unit/test_gen2_admission.py`, `tests/unit/test_gen2_overlay_admission.py` (new) |
 | B: capture tooling | Sonnet B | `tools/run_gb_gate.py`, `tools/gen2_fixtures.py`, `lua/tests/test_gen2_scripted_gate.lua`, `lua/tests/gen2_{inspect_gate,frame_align,u1g_inputs,write_windows,qualify,scripted_play,panel_gate,sfx_gate,phone_gate,w6_gate,sp_lowwater_gate}.lua`, `tests/live/test_gen2_*.py`, `tests/unit/test_gen2_physical_receipts.py` |
 | C: duo + verifier (after R) | Codex ROMPatch | `tools/e2e_duo.py` (Gen 2 parts), `tools/gen2_duo_oracles.py`, `tools/gen2_trade_oracles.py`, `tools/gen2_trade_lane.py`, `lua/tests/duo/{gen2_trade,duo_gen2_main}.lua`, `tools/verify_gen2_release.py`, `tests/gen2_{live_gate,release}_requirements.json`, `tools/gen2_final_sweep.py`, `tools/make_release.py` |
-| Coordinator | Claude | this doc, `server/manager.py` `COMPANION_TITLES` (Gen 2 re-added last), emulator lane, integration |
+| Coordinator | Claude | this doc, `server/cartridges.py` `COMPANION_TITLES` (Gen 2 re-added last), emulator lane, integration |
 
 Interface order: R commits the `lua/gen2/artifact.lua` API skeleton (D3) first; A codes against it.
 Every stream starts from red tests (the falsifiers in cx-ddc39d87 RECOMMENDATION 2-6).

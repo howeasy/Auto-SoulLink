@@ -2850,3 +2850,12 @@ def test_trainer_active_faint_refuses_wild_or_unbound_evidence(tmp_path, mutatio
         b = b.replace("gen2-duo-faint-active-trainer-v1", "gen2-duo-faint-active-v1")
     text["b"] = b
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active_trainer") != []
+
+
+def test_the_captured_overlay_inspect_attestation_binds_the_overlay_identity():
+    # the real round-1 receipt records {kind, rom_sha1, binding_sha256}; comparing it to the whole execution
+    # identity (which also carries base_sha1) refused a genuine PASS (ROMPatch, pre-freeze)
+    receipt = json.loads((REPO / "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json").read_text())
+    assert gate._inspect_run_row_errors(receipt, "overlay", REPO) == []
+    receipt["artifacts"]["gold"]["binding_sha256"] = "0" * 64
+    assert any("gold: wrong executed overlay identity" in e for e in gate._inspect_run_row_errors(receipt, "overlay", REPO))

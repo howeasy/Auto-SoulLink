@@ -200,13 +200,13 @@ experimental or gated**: `data/games/gen2_crystal/admission.json` sets
 "unknown"]` (owner ruling O-25) — a live matrix entry that silently skips reads exactly like
 one that passes, and refusing it is stated, not silent.
 
-**The companion overlay (panel, native sound, native trade) is BUILT, not ADMITTED.** Gate
-**G4** is owner-signed (2026-09-26, `docs/gen2/PLAN.md:207`), but promotion (`--promote-overlays`)
-waits on the post-wiring re-sweep, so the artifact-matrix rows are still `FUTURE`/`BUILT` and the
-launcher admits clean cartridges only (`lua/gen2/entry.lua:245-258`). Promotion alone will not
-enable overlay play either: the generator writes `FUTURE`/`ADMITTED` where the entry needs
-`SELECTED`/`BUILT`, and production passes no overlay `artifact_kind` (`entry.lua:404`). Do not read
-"overlay lanes exist in `verify_gen2_release.py`" as "the overlay shipped".
+**The companion overlay (panel, native sound, native trade) is ADMITTED** (2026-10-02,
+`docs/gen2/OVERLAY_ADMISSION.md`): G4 is owner-signed (`docs/gen2/PLAN.md:207`), the overlay rows
+are `SELECTED`/`ADMITTED` with their G4 grant and binding pin, and the launcher admits them only on
+their own PHYSICAL receipts (`lua/gen2/entry.lua` `Entry.admit`, round-1 captures on the overlay
+ROMs). The Manager composes the companion for every Gen 2 pick while its row stays activated
+(`server/cartridges.py` `companion_admitted`). Release evidence is the post-freeze 148-cell sweep,
+not round 1.
 
 The three live gates run per title against `tests/fixtures/gen2/<title>_{town,battle}.SaveRAM`,
 each bound to a committed qualification receipt

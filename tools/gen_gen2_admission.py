@@ -376,10 +376,10 @@ def overlay_proof_errors(matrices: dict[str, dict]) -> list[str]:
     errors = []
     for matrix in matrices.values():
         row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
-        result = entry.activation_proof(ROOT.as_posix(), matrix["title"], lua.table_from(row, recursive=True))
-        if result is not True:
-            errors.append(f"{matrix['title']}: overlay proofs refused: "
-                          f"{result[1] if isinstance(result, tuple) else result}")
+        # activation_proof always returns two values (true,nil | nil,why), which lupa unpacks into a tuple.
+        ok, why = entry.activation_proof(ROOT.as_posix(), matrix["title"], lua.table_from(row, recursive=True))
+        if ok is not True:
+            errors.append(f"{matrix['title']}: overlay proofs refused: {why}")
     return errors
 
 

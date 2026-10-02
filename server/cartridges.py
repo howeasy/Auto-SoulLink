@@ -23,15 +23,20 @@ class CartridgeError(Exception):
 
 # Patch-first (owner 2026-10-01): the titles whose SLink companion the launcher ADMITS. Every
 # cartridge of these titles gets its companion, decided here per player, never by the browser.
-# Yellow has no free WRAM for the mailbox. Crystal/Gold/Silver are built but admitted only once
-# their overlay rows are activated (docs/gen2/OVERLAY_ADMISSION.md); until then they go clean.
+# Yellow has no free WRAM for the mailbox, so it is handed out as picked. Crystal/Gold/Silver need
+# their companion for trade; each is composed only while its overlay row is activated (fail closed).
 COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
-                    "FireRed", "LeafGreen", "Emerald")
+                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald")
 
 
 def companion_admitted(info: dict) -> bool:
-    """Does this pick's title get the companion? describe_rom's variant, e.g. 'Red'."""
-    return info.get("variant") in COMPANION_TITLES
+    """Does this pick's title get the companion? describe_rom's variant, e.g. 'Red'. A Gen 2 title
+    also needs its activated catalog row, so a rolled-back row hands out the clean cartridge rather
+    than one the launcher refuses."""
+    variant = info.get("variant")
+    if variant in ("Crystal", "Gold", "Silver"):
+        return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
+    return variant in COMPANION_TITLES
 
 
 def _vanilla_target(data: bytes) -> dict:
@@ -98,8 +103,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
-    # Per player: a pick whose title has no admitted companion (Yellow, Gen 2 for now) is handed
-    # out as picked; its partner still gets its own companion.
+    # Per player: a pick whose title has no admitted companion (Yellow) is handed out as picked;
+    # its partner still gets its own companion.
     want = {pid: bool(companion) and companion_admitted(infos[pid]) for pid in sources}
     if family == FAMILY_VANILLA:
         for pid, rom in data.items():

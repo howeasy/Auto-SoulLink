@@ -91,7 +91,8 @@ console.log(JSON.stringify({ red: red.companion, yellow: yellow.companion, why, 
     assert out["red"] is True and out["yellow"] is True and out["crystal"] is True
     # It only explains the per-pick exceptions.
     assert "handed out as picked" in out["why"]
-    assert "does not admit it yet" in out["gen2why"]
+    # Gen 2's overlay is admitted, so Crystal is no exception any more.
+    assert out["gen2why"] == ""
 
 
 def test_carts_why_blocks_an_untrusted_jar_with_the_servers_own_message(tmp_path):

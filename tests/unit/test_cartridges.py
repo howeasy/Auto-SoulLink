@@ -232,27 +232,54 @@ def test_refuses_mixed_families_before_spending(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
+def _overlay_sha1(dirname):
+    with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
+        return next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")["sha1"]
+
+
 def test_gen2_companion_follows_admission(tmp_path):
-    """Patch-first: a Gold/Silver pair gets each title's own SLink-<Title>.ups, producing exactly the
-    admitted overlay sha1, once Gen 2 is in COMPANION_TITLES (its overlay rows activated). Until then
-    the server hands out the clean cartridges even when asked for the companion: a patched Gen 2
-    cartridge the launcher does not admit would make a run nobody can launch (review cx-7847d499 A2)."""
+    """Patch-first: with its overlay row activated, every Gen 2 title gets its own SLink-<Title>.ups,
+    producing exactly the admitted overlay sha1 (Crystal checked explicitly, OVERLAY_ADMISSION_NEXT)."""
+    from server import cartridges
+
+    crystal = REPO / ".cache" / "gen2-build" / "pokecrystal" / "pokecrystal.gbc"
+    if not crystal.is_file():
+        pytest.skip(f"pinned Gen 2 build absent: {crystal}")
+    for sources, names in ((_gen2(), ("gold", "silver")), ({"a": str(crystal), "b": str(crystal)}, ("crystal", "crystal"))):
+        result = cartridges.provision(str(tmp_path / names[0]), sources, companion=True, randomize=None)
+        assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
+        for pid, dirname in zip(("a", "b"), names):
+            player = result["players"][pid]
+            assert Path(player["output"]).suffix == ".gbc"
+            assert player["kind"] == "companion" and player["rom_sha1"] == _overlay_sha1(dirname)
+
+
+def test_gen2_rolled_back_row_hands_out_the_clean_cartridge(tmp_path, monkeypatch):
+    """Fail closed (review cx-f18ac278 F1): COMPANION_TITLES alone never composes a Gen 2 overlay the
+    launcher refuses; an overlay row that is not activated means the clean cartridge, as picked."""
     from server import cartridges
 
     sources = _gen2()
+    monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: False)
     result = cartridges.provision(str(tmp_path), sources, companion=True, randomize=None)
-    assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
-    admitted = {"a": "Gold", "b": "Silver"}
-    for pid, dirname in (("a", "gold"), ("b", "silver")):
+    for pid in ("a", "b"):
         player = result["players"][pid]
-        assert Path(player["output"]).suffix == ".gbc"
-        if admitted[pid] in cartridges.COMPANION_TITLES:
-            with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
-                row = next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")
-            assert player["kind"] == "companion" and player["rom_sha1"] == row["sha1"]
-        else:
-            assert player["kind"] == "clean"
-            assert Path(player["output"]).read_bytes() == Path(sources[pid]).read_bytes()
+        assert player["kind"] == "clean"
+        assert Path(player["output"]).read_bytes() == Path(sources[pid]).read_bytes()
+
+
+def test_gen2_overlay_admitted_reads_the_activated_row(monkeypatch):
+    from server import patcher
+
+    row = {"kind": "overlay", "selection": "SELECTED", "status": "ADMITTED", "binding_sha256": "a" * 64,
+           "runtime_gate": {"id": "G4", "state": "ADMITTED", "grant_fingerprint": "b" * 64}}
+    monkeypatch.setattr(patcher, "_gen2_overlay_row", lambda title: row)
+    assert patcher.gen2_overlay_admitted("gold")
+    half_written = {**row["runtime_gate"], "grant_fingerprint": "b" * 63}
+    for key, value in (("selection", "FUTURE"), ("status", "BUILT"), ("runtime_gate", None),
+                       ("binding_sha256", None), ("runtime_gate", half_written)):
+        monkeypatch.setattr(patcher, "_gen2_overlay_row", lambda title, k=key, v=value: {**row, k: v})
+        assert not patcher.gen2_overlay_admitted("gold"), key
 
 
 def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
@@ -287,11 +314,12 @@ def test_yellow_goes_clean_and_its_red_partner_keeps_the_companion(tmp_path, mon
 
 
 def test_the_companion_decision_is_server_side_per_player():
-    """No browser input can grant a title the companion: only COMPANION_TITLES can."""
+    """No browser input can grant a title the companion: only COMPANION_TITLES (and, for Gen 2, its
+    activated catalog row) can."""
     from server.cartridges import COMPANION_TITLES, companion_admitted
 
     assert companion_admitted({"variant": "Red"}) and "Red" in COMPANION_TITLES
-    for variant in ("Yellow", "Crystal", "Gold", "Silver", "", None):
+    for variant in ("Yellow", "", None):
         assert not companion_admitted({"variant": variant}), variant
 
 

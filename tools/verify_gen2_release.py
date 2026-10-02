@@ -1936,7 +1936,9 @@ def _inspect_run_row_errors(receipt: dict, artifact_kind="clean", root=None) -> 
         for title in TITLES:
             try:
                 identity = _execution_identity(ROOT if root is None else root, title, artifact_kind)
-                if (receipt.get("artifacts") or {}).get(title) != identity:
+                # the attestation records the identity triple; base_sha1 is bound through binding_sha256
+                want = {key: identity[key] for key in ("kind", "rom_sha1", "binding_sha256")}
+                if (receipt.get("artifacts") or {}).get(title) != want:
                     errors.append(f"inspect run {title}: wrong executed overlay identity")
             except (OSError, ValueError, KeyError) as exc:
                 errors.append(f"inspect run {title}: binding unavailable: {exc}")
