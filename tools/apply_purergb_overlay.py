@@ -41,7 +41,7 @@ OVERLAY_DST = "engine/slink"
 ROMX_SECTIONS = [
     "SLink Hook", "SLink Panel", "SLink foreground trade service", "SLink Native Trade",
     "SLink trade receptionist", "SLink trade UI helpers", "SLink partner trade prompt",
-    "SLink APEX guard",
+    "SLink APEX guard", "SLink title band",
 ]
 OVERLAY_BANK = 0x3F
 MAILBOX_SECTION = "SLink Mailbox"
@@ -110,6 +110,27 @@ EDITS: list[tuple[str, str, str]] = [
      "\tld l, e\n"
      "\tld a, $FF\n"
      "\tld [hli], a ; set first byte of DVs to max\n"),
+    # Title band: SoulLink logo + patch version on the vanilla-style title only (title_band.asm). The Pure
+    # title animates rows 7-8 itself, so IsPureTitleScreenEnabled sends it to the original printer.
+    ("engine/movie/title.asm",
+     "PrintGameVersionOnTitleScreen:\n",
+     "PrintGameVersionOnTitleScreen:\n"
+     "\tcall IsPureTitleScreenEnabled\n"
+     "\tjr nz, .slinkVanillaPrint ; SLink overlay: the Pure title is left untouched\n"
+     "\tfarcall SlinkTitleBand ; SLink overlay: SoulLink logo and patch version beside the game's own line\n"
+     "\tIF DEF(_GREEN) ; the game's own line moves right to make room; \"Green Version\" is a tile longer\n"
+     "\t\thlcoord 10, 8\n"
+     "\tELSE\n"
+     "\t\thlcoord 11, 8\n"
+     "\tENDC\n"
+     "\tjr .slinkPrint\n"
+     ".slinkVanillaPrint\n"),
+    ("engine/movie/title.asm",
+     "\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n",
+     ".slinkPrint\n\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n"),
+    ("engine/movie/title2.asm",
+     "\tld h, d\n\tld l, $48\n",
+     "\tld h, d\n\tld l, $50 ; SLink overlay: scroll from tile row 10, so the title band's second row stays still\n"),
     ("main.asm",
      'INCLUDE "engine/events/silph_card_key_scripts.asm"\n',
      'INCLUDE "engine/events/silph_card_key_scripts.asm"\n\n'

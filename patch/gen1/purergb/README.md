@@ -11,7 +11,7 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
 | piece | where |
 |---|---|
 | sources (bank $3F + three ROM0 stubs + the 14-byte WRAMX mailbox) | `overlay/` (copied to `engine/slink/` in the checkout) |
-| hook edits to the pinned checkout (16, verify-then-replace) | `tools/apply_purergb_overlay.py` |
+| hook edits to the pinned checkout (19, verify-then-replace) | `tools/apply_purergb_overlay.py` |
 | build + publish (fresh copy of `.cache/purergb` → apply → `make` → UPS/sym/map/provenance) | `tools/build_purergb_overlay.py` |
 | UPS artifacts (CRC-bound to the locked pure ROM) | `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
 | symbols, map, provenance | `data/purergb/*_slink.{sym,map}`, `data/purergb/overlay_provenance.json` |
@@ -58,6 +58,17 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   text before the DV store, so the chip is not consumed. The APEX site anchors move by the
   14-byte prelude; HL is the DV pointer again at the relocated `apex_preflight`.
 
+* **Title band** (`title_band.asm`, bank $3F): a SoulLink logo in the Pokemon logo's style and the patch version
+  join the game's own "Red/Blue/Green Version" line in the 16 pixel band under the Pokemon logo (tile rows 8-9).
+  The hook is `PrintGameVersionOnTitleScreen` in `engine/movie/title.asm`: on the vanilla-style title it calls
+  `SlinkTitleBand` and prints the game's line one tile (Green: two) further right; the opt-in Pure title
+  (`BIT_NEW_TITLE_SCREEN`, only ever set after a save is loaded, because `Init` zero-fills WRAM) animates rows 7-8 itself
+  and falls through to the original printer untouched. BG tile ids $60-$79 hold the art (measured free on all three
+  clean titles: `tests/fixtures/gen1/title_vram_pure*.json`). The title's mon swap raster-scrolls from scanline $48 =
+  tile row 9, where the logo's second row sits, so `title2.asm` moves the start line to $50. The art is
+  `tools/gen_gen1_title.py`'s (shared with Red/Blue); the version line is rendered by `build_purergb_overlay.py
+  --version` (default `dev`) because the overlay builds from source with no other knob.
+
 ## ABI (unchanged from the vanilla patch, B5)
 
 Mailbox: +0..3 `SLNK`, +4 ABI 3, +5..6 frame counter, +7 SFX request (a semantic code:
@@ -71,7 +82,7 @@ stage 90, settle 20, apply 100 frames). What moved is carried by the profile `tr
 
 ## Rebuilding
 
-    python tools/build_purergb_overlay.py            # needs .cache/purergb at the locked commit
+    python tools/build_purergb_overlay.py            # needs .cache/purergb at the locked commit (--version vX.Y.Z)
     python tools/gen_gen1_profile.py --foundation purergb --kind overlay
     python tools/gen_gen1_engine_signals.py --kind overlay
     python tools/gen_gen1_write_checkpoint.py --kind overlay

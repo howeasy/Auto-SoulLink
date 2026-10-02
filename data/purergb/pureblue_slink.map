@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 15060 bytes used / 1324 free
-	ROMX: 913860 bytes used / 118332 free in 63 banks
+	ROMX: 914360 bytes used / 117832 free in 63 banks
 	SRAM: 25983 bytes used / 6785 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
 	WRAMX: 4216 bytes used / 3976 free in 2 banks
@@ -25973,7 +25973,7 @@ ROMX bank #60:
 	TOTAL EMPTY: $0c40 bytes
 
 ROMX bank #61:
-	SECTION: $4000-$4d13 ($0d14 bytes) ["newCode3"]
+	SECTION: $4000-$4d23 ($0d24 bytes) ["newCode3"]
 	         $4000 = _PrepareTitleScreen
 	         $4014 = _DisplayTitleScreen
 	         $407e = _DisplayTitleScreen.skipOGGraphics
@@ -26029,102 +26029,104 @@ ROMX bank #61:
 	         $43c1 = CopyrightTextString
 	         $43f3 = TitleMons
 	         $4403 = PrintGameVersionOnTitleScreen
-	         $440c = VersionOnTitleScreenText
-	         $4415 = PureTitlePlayerSpritePortionOAMData
-	         $441c = PureTitleScreenVersionAnimation
-	         $4453 = PureTitleScreenVersionAnimation.loopAnimateWater
-	         $4455 = PureTitleScreenVersionAnimation.innerLoopAnimateWater
-	         $445d = PureTitleScreenVersionAnimation.last5Frames
-	         $445e = PureTitleScreenVersionAnimation.continue
-	         $4492 = PureTitleScreenVersionAnimation.nextWaterFrame
-	         $44a5 = PureTitleScreenVersionAnimation.gotSet
-	         $44b3 = PureTitleDrawNextVersionLogoColumn
-	         $44bf = PureTitleDrawNextVersionLogoColumn.loopFindCurrentLogoColumn
-	         $44c5 = PureTitleDrawNextVersionLogoColumn.firstOne
-	         $44d8 = PureTitleShineGoesAcrossVersion
-	         $44f1 = PureTitleShineGoesAcrossVersion.loopShineAcross
-	         $4501 = PureTitleShineGoesAcrossVersion.noHide
-	         $450c = PureTitleShineGoesAcrossVersion.noZeroing
-	         $4515 = PureTitleShineGoesAcrossVersion.noHide2
-	         $4519 = PureTitleShineGoesAcrossVersion.doneShineAcross
-	         $4522 = PureTitleClearNonPlayerOAM
-	         $452c = PureTitleScreenLoop
-	         $453a = PureTitleScreenLoop.loopLoadTileIDAndPalette
-	         $454d = PureTitleScreenLoop.outerLoop
-	         $454f = PureTitleScreenLoop.innerLoop
-	         $455b = PureTitleScreenLoop.gotXPosition
-	         $456b = PureTitleScreenLoop.loopScroll
-	         $4590 = PureTitleScrollingParticleUpdate
-	         $4590 = PureTitleScrollingParticleUpdate.loopUpdateScroll
-	         $459a = PureTitleScrollingParticleUpdate.noResetY
-	         $45a4 = PureTitleScrollingParticleUpdate.noResetX
-	         $45ae = PureTitleScrollingParticleUpdate.skipHide
-	         $45b5 = MakeTitlePokemonBlink
-	         $45b7 = MakeTitlePokemonBlink.loopBlink
-	         $45c5 = MakeTitlePokemonBlink.gotSprite
-	         $45d8 = MakeTitlePokemonBlink.gotSprite2
-	         $45e3 = MakeTitlePokemonBlink.loadBlinkingData
-	         $45fc = IsPureTitleScreenEnabled
-	         $4602 = Version_GFX_Pure
-	         $46e2 = Version_GFX_PureEnd
-	         $46e2 = CopyFromBattleAnim0
-	         $46e5 = CopyFromBattleAnim0_2
-	         $46ea = CopyFromBattleAnim1
-	         $46ed = CopyFromBattleAnim1_2
-	         $46f2 = PureBlueVersionAnimationPumpOAM
-	         $46f2 = PureRedVersionAnimationFireOAM
-	         $4702 = PureBlueVersionAnimationPumpOAMFrame2
-	         $4702 = PureRedVersionAnimationFireOAMFrame2
-	         $4712 = StartingShineOAM
-	         $471a = ParticleXPositions
-	         $4723 = ShineSprites
-	         $4783 = PureTitlePlayerSpritePointing
-	         $4a23 = BlastoiseBlinking1
-	         $4a23 = PureTitlePlayerSpritePointingEnd
-	         $4a73 = BlastoiseBlinkingTileData1
-	         $4a83 = BlastoiseNotBlinkingTileData1
-	         $4a93 = BlastoiseBlinking2
-	         $4ae3 = BlastoiseBlinkingTileData2
-	         $4af3 = BlastoiseNotBlinkingTileData2
-	         $4b03 = BackupAudioWram
-	         $4b3a = RestoreAudioWram
-	         $4b63 = RestoreAudioWram.noRemap
-	         $4b65 = ResetPausedAudioData
-	         $4b76 = AudioWramSramAction
-	         $4b90 = PreventInvalidEncounters
-	         $4ba6 = NonCatchablePokemon
-	         $4baf = SortPCItems
-	         $4bb8 = SortBagItems
-	         $4bbf = SortItems
-	         $4bcf = SortItems.continue
-	         $4beb = SortItems.sortItemsLoop
-	         $4bf4 = SortItems.findLowestItemInList
-	         $4c18 = SortItems.sortIterationDone
-	         $4c31 = SortItems.sortingDone
-	         $4c36 = SortItems.errord
-	         $4c3c = SortItems.sorted
-	         $4c40 = SortItems.sortingInProgress
-	         $4c44 = SortItems.nothingToSort
-	         $4c48 = SortBagText
-	         $4c4c = SortPCText
-	         $4c50 = ItemSortedList
-	         $4cdb = GetPredefText
-	         $4ced = TextPredefs
-	         $4ced = CardKeySuccessText_id
-	         $4cf0 = CardKeyFailText_id
-	         $4cf3 = GymStatueTextScript_id
-	         $4cf6 = BookcaseText_id
-	         $4cf9 = PorygonPCScreenText_id
-	         $4cfc = PokemonCenterPCText_id
-	         $4cff = JustAMomentText_id
-	         $4d02 = FoundHiddenItemText_id
-	         $4d05 = CardKeyDoneText_id
-	         $4d08 = IndigoPlateauStatues_id
-	         $4d0b = TownMapText_id
-	         $4d0e = ElevatorText_id
-	         $4d11 = PokemonStuffText_id
-	EMPTY: $4d14-$7fff ($32ec bytes)
-	TOTAL EMPTY: $32ec bytes
+	         $4413 = PrintGameVersionOnTitleScreen.slinkVanillaPrint
+	         $4416 = PrintGameVersionOnTitleScreen.slinkPrint
+	         $441c = VersionOnTitleScreenText
+	         $4425 = PureTitlePlayerSpritePortionOAMData
+	         $442c = PureTitleScreenVersionAnimation
+	         $4463 = PureTitleScreenVersionAnimation.loopAnimateWater
+	         $4465 = PureTitleScreenVersionAnimation.innerLoopAnimateWater
+	         $446d = PureTitleScreenVersionAnimation.last5Frames
+	         $446e = PureTitleScreenVersionAnimation.continue
+	         $44a2 = PureTitleScreenVersionAnimation.nextWaterFrame
+	         $44b5 = PureTitleScreenVersionAnimation.gotSet
+	         $44c3 = PureTitleDrawNextVersionLogoColumn
+	         $44cf = PureTitleDrawNextVersionLogoColumn.loopFindCurrentLogoColumn
+	         $44d5 = PureTitleDrawNextVersionLogoColumn.firstOne
+	         $44e8 = PureTitleShineGoesAcrossVersion
+	         $4501 = PureTitleShineGoesAcrossVersion.loopShineAcross
+	         $4511 = PureTitleShineGoesAcrossVersion.noHide
+	         $451c = PureTitleShineGoesAcrossVersion.noZeroing
+	         $4525 = PureTitleShineGoesAcrossVersion.noHide2
+	         $4529 = PureTitleShineGoesAcrossVersion.doneShineAcross
+	         $4532 = PureTitleClearNonPlayerOAM
+	         $453c = PureTitleScreenLoop
+	         $454a = PureTitleScreenLoop.loopLoadTileIDAndPalette
+	         $455d = PureTitleScreenLoop.outerLoop
+	         $455f = PureTitleScreenLoop.innerLoop
+	         $456b = PureTitleScreenLoop.gotXPosition
+	         $457b = PureTitleScreenLoop.loopScroll
+	         $45a0 = PureTitleScrollingParticleUpdate
+	         $45a0 = PureTitleScrollingParticleUpdate.loopUpdateScroll
+	         $45aa = PureTitleScrollingParticleUpdate.noResetY
+	         $45b4 = PureTitleScrollingParticleUpdate.noResetX
+	         $45be = PureTitleScrollingParticleUpdate.skipHide
+	         $45c5 = MakeTitlePokemonBlink
+	         $45c7 = MakeTitlePokemonBlink.loopBlink
+	         $45d5 = MakeTitlePokemonBlink.gotSprite
+	         $45e8 = MakeTitlePokemonBlink.gotSprite2
+	         $45f3 = MakeTitlePokemonBlink.loadBlinkingData
+	         $460c = IsPureTitleScreenEnabled
+	         $4612 = Version_GFX_Pure
+	         $46f2 = Version_GFX_PureEnd
+	         $46f2 = CopyFromBattleAnim0
+	         $46f5 = CopyFromBattleAnim0_2
+	         $46fa = CopyFromBattleAnim1
+	         $46fd = CopyFromBattleAnim1_2
+	         $4702 = PureBlueVersionAnimationPumpOAM
+	         $4702 = PureRedVersionAnimationFireOAM
+	         $4712 = PureBlueVersionAnimationPumpOAMFrame2
+	         $4712 = PureRedVersionAnimationFireOAMFrame2
+	         $4722 = StartingShineOAM
+	         $472a = ParticleXPositions
+	         $4733 = ShineSprites
+	         $4793 = PureTitlePlayerSpritePointing
+	         $4a33 = BlastoiseBlinking1
+	         $4a33 = PureTitlePlayerSpritePointingEnd
+	         $4a83 = BlastoiseBlinkingTileData1
+	         $4a93 = BlastoiseNotBlinkingTileData1
+	         $4aa3 = BlastoiseBlinking2
+	         $4af3 = BlastoiseBlinkingTileData2
+	         $4b03 = BlastoiseNotBlinkingTileData2
+	         $4b13 = BackupAudioWram
+	         $4b4a = RestoreAudioWram
+	         $4b73 = RestoreAudioWram.noRemap
+	         $4b75 = ResetPausedAudioData
+	         $4b86 = AudioWramSramAction
+	         $4ba0 = PreventInvalidEncounters
+	         $4bb6 = NonCatchablePokemon
+	         $4bbf = SortPCItems
+	         $4bc8 = SortBagItems
+	         $4bcf = SortItems
+	         $4bdf = SortItems.continue
+	         $4bfb = SortItems.sortItemsLoop
+	         $4c04 = SortItems.findLowestItemInList
+	         $4c28 = SortItems.sortIterationDone
+	         $4c41 = SortItems.sortingDone
+	         $4c46 = SortItems.errord
+	         $4c4c = SortItems.sorted
+	         $4c50 = SortItems.sortingInProgress
+	         $4c54 = SortItems.nothingToSort
+	         $4c58 = SortBagText
+	         $4c5c = SortPCText
+	         $4c60 = ItemSortedList
+	         $4ceb = GetPredefText
+	         $4cfd = TextPredefs
+	         $4cfd = CardKeySuccessText_id
+	         $4d00 = CardKeyFailText_id
+	         $4d03 = GymStatueTextScript_id
+	         $4d06 = BookcaseText_id
+	         $4d09 = PorygonPCScreenText_id
+	         $4d0c = PokemonCenterPCText_id
+	         $4d0f = JustAMomentText_id
+	         $4d12 = FoundHiddenItemText_id
+	         $4d15 = CardKeyDoneText_id
+	         $4d18 = IndigoPlateauStatues_id
+	         $4d1b = TownMapText_id
+	         $4d1e = ElevatorText_id
+	         $4d21 = PokemonStuffText_id
+	EMPTY: $4d24-$7fff ($32dc bytes)
+	TOTAL EMPTY: $32dc bytes
 
 ROMX bank #62:
 	EMPTY
@@ -26269,8 +26271,14 @@ ROMX bank #63:
 	         $4ef6 = SlinkApexGuard.otid
 	         $4f12 = SlinkApexGuard.noMatchPop
 	         $4f14 = SlinkApexGuard.noMatch
-	EMPTY: $4f16-$7fff ($30ea bytes)
-	TOTAL EMPTY: $30ea bytes
+	SECTION: $4f16-$50f9 ($01e4 bytes) ["SLink title band"]
+	         $4f16 = SlinkTitleLogoRow0
+	         $4f20 = SlinkTitleLogoRow1
+	         $4f2a = SlinkTitleBand
+	         $4f51 = SlinkTitleVersionRow
+	         $4f5a = SlinkTitleTiles
+	EMPTY: $50fa-$7fff ($2f06 bytes)
+	TOTAL EMPTY: $2f06 bytes
 
 VRAM bank #0:
 	EMPTY

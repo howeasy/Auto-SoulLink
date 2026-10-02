@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" / "tools"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import apply_purergb_overlay as overlay  # noqa: E402
 from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit  # noqa: E402
 from build_purergb_syms import (  # noqa: E402
@@ -48,6 +49,8 @@ from build_purergb_syms import (  # noqa: E402
 )
 from make_ups import ups_apply, ups_create  # noqa: E402
 
+from patch.gen1.tools import title_screen  # noqa: E402
+
 REPO_ROOT = DATA_DIR.parent
 OVERLAY_CACHE = REPO_ROOT / ".cache" / "purergb-overlay"
 OUT_DIR = DATA_DIR / "purergb"
@@ -56,6 +59,11 @@ PROVENANCE_PATH = OUT_DIR / "overlay_provenance.json"
 PROVENANCE_SCHEMA = "purergb-overlay-provenance-v1"
 
 # lock output key -> (SLink title, UPS artifact)
+# last ink column of pureRGB's "Red Version" line within its 64 pixel field (measured on a running
+# build; the version line is centred on it, see patch/gen1/tools/title_screen.py)
+PURE_INK_LAST = 59
+PURE_INK_LAST_GREEN = 67          # "Green Version" is a tile longer: ink 68 pixels wide
+
 TITLES = {
     "pokered": ("purered", "SLink-PureRed.ups"),
     "pokeblue": ("pureblue", "SLink-PureBlue.ups"),
@@ -107,7 +115,8 @@ def make(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathlib.Pa
 
 
 def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
-          w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
+          w64devkit_bin: pathlib.Path | None = None, check: bool = False,
+          version: str = title_screen.DEFAULT_VERSION) -> int:
     lock = load_lock()
     clean = repo_dir or PURERGB_CACHE
     rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
@@ -115,6 +124,11 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
 
     checkout = fresh_copy(clean, lock)
     overlay.apply(checkout)
+    # the title band's version line: rendered here (the one build input that varies per release) and INCBINed
+    version_tiles = title_screen.version_tiles(title_screen.check_version(version), PURE_INK_LAST)
+    green_tiles = title_screen.version_tiles(version, PURE_INK_LAST_GREEN)
+    (checkout / overlay.OVERLAY_DST / "title_version.2bpp").write_bytes(version_tiles)
+    (checkout / overlay.OVERLAY_DST / "title_version_green.2bpp").write_bytes(green_tiles)
     command = make(checkout, rgbds_bin, devkit_bin, lock)
 
     outputs: dict[str, dict] = {}
@@ -152,7 +166,9 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
             "edits": len(overlay.EDITS),
             "bank": overlay.OVERLAY_BANK,
             "sources": {p.name: _sha256(p.read_bytes()) for p in sorted(overlay.OVERLAY_SRC.iterdir())
-                        if p.suffix in (".asm", ".inc")},
+                        if p.suffix in (".asm", ".inc", ".2bpp")},
+            "version": version,
+            "version_sha256": _sha256(version_tiles + green_tiles),
         },
         "toolchain": _toolchain_record(rgbds_bin, devkit_bin, lock),
         "command": command,
@@ -193,10 +209,12 @@ def main() -> int:
     ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
     ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
     ap.add_argument("--check", action="store_true", help="build and compare, publish nothing")
+    ap.add_argument("--version", default=title_screen.DEFAULT_VERSION,
+                    help="shown on the title screen: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
     try:
         return build(repo_dir=args.repo_dir, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
-                     check=args.check)
+                     check=args.check, version=args.version)
     except (RuntimeError, SystemExit) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

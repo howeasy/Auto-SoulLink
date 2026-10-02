@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -53,7 +54,7 @@ def _bitmap(tiles: bytes) -> list[str]:
 
 @pytest.mark.parametrize("version", ["dev", "v0.2.6", "v1.10.3", "v0.2.6-dev"])
 def test_version_line_draws_the_text(version):
-    rows = _bitmap(ts._version_tiles(version))
+    rows = _bitmap(ts.version_tiles(version))
     glyphs = [[format(r, "05b").replace("0", ".").replace("1", "#") for r in art.SMALL[c]] for c in version]
     # glyph rows land one pixel down, so row 0 is blank; a one pixel gap separates glyphs
     expect = [".".join(g[y - 1] if y else "." * 5 for g in glyphs) for y in range(8)]
@@ -184,7 +185,7 @@ def test_injected_rom_keeps_the_games_own_line_and_vanilla_graphics(clean):
     out = inject.inject(clean, version="v1.2.3")
     line = clean[ts.VERSION_TEXT_SITE:ts.VERSION_TEXT_SITE + ts.VERSION_TEXT_LEN]
     assert out[ts.RV_OFFSET:ts.RV_OFFSET + len(line)] == line               # Red and Blue keep their own words
-    assert _bitmap(out[ts.VTILES_OFFSET:ts.VTILES_OFFSET + ts.VER_CELLS * 16]) == _bitmap(ts._version_tiles("v1.2.3"))
+    assert _bitmap(out[ts.VTILES_OFFSET:ts.VTILES_OFFSET + ts.VER_CELLS * 16]) == _bitmap(ts.version_tiles("v1.2.3"))
     assert out[ts.SCROLL_SITE] == 0x50                                      # the swap no longer scrolls band row 9
     for lo, hi in VANILLA_RANGES:
         assert out[lo:hi] == clean[lo:hi]
@@ -196,3 +197,41 @@ def test_a_rom_whose_title_line_is_not_plain_tile_ids_is_refused_cleanly(clean):
         rom[ts.VERSION_TEXT_SITE + 2] = bad
         with pytest.raises(inject.InjectError):
             inject.inject(bytes(rom))
+
+
+# ---- pureRGB: the same band, built from source into the overlay (patch/gen1/purergb/overlay/title_band.asm) ----
+
+OVERLAY = ROOT / "patch/gen1/purergb/overlay"
+PURE_TITLES = ("purered", "pureblue", "puregreen")
+
+
+@pytest.mark.parametrize("title", PURE_TITLES)
+def test_pure_ids_are_free_on_the_measured_vanilla_style_title(title):
+    """$60-$79 hold no tile data and appear on neither BG map of the clean pureRGB title (flag off)."""
+    d = json.loads((ROOT / f"tests/fixtures/gen1/title_vram_{title}.json").read_text())
+    nonzero = {i for i, c in enumerate(d["ids_00_7f_nonzero"]) if c == "1"}
+    referenced = {i for m in ("map0", "map1") for row in d[m] for i in row}
+    band = set(range(0x60, 0x60 + art.TILE_COUNT + ts.VER_CELLS))
+    assert max(band) < 0x7A                                      # the blinking mon starts at $7A
+    assert not (band & (nonzero | referenced))
+    assert set(d["map0"][9]) == {0x7F}                           # the band's second row is blank on the vanilla title
+
+
+def test_pure_overlay_assets_are_the_generated_art():
+    assert (OVERLAY / "title_logo.2bpp").read_bytes() == art.TILES
+    inc = (OVERLAY / "title_band_rows.inc").read_text()
+    for name, row in (("SlinkTitleLogoRow0", art.ROW0), ("SlinkTitleLogoRow1", art.ROW1)):
+        ids = re.search(rf"{name}:\n\tdb ([^\n]+)", inc).group(1).split(",")
+        assert ids == [f"${0x60 + b - art.FIRST_ID:02X}" for b in row] + ["$50"]
+    assert f"DEF SLINK_TITLE_LOGO_TILES EQU {art.TILE_COUNT}" in inc
+
+
+def test_pure_hooks_leave_the_pure_title_alone_and_move_the_swap_scroll():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import apply_purergb_overlay as apply_overlay
+    edits = {(f, old): new for f, old, new in apply_overlay.EDITS}
+    head = edits[("engine/movie/title.asm", "PrintGameVersionOnTitleScreen:\n")]
+    assert "call IsPureTitleScreenEnabled" in head and "jr nz, .slinkVanillaPrint" in head
+    assert head.index("jr nz") < head.index("farcall SlinkTitleBand")             # the band is skipped on the Pure title
+    assert "ld l, $50" in edits[("engine/movie/title2.asm", "\tld h, d\n\tld l, $48\n")]
+    assert "SLink title band" in apply_overlay.ROMX_SECTIONS

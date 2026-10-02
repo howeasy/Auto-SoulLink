@@ -60,11 +60,11 @@ def check_version(version: str) -> str:
     return version
 
 
-def _version_tiles(version: str) -> bytes:
+def version_tiles(version: str, ink_last: int = STRIP_INK_LAST) -> bytes:
     """The version line as 2bpp tiles: 5x7 glyphs, centred under the strip's ink, one pixel below the band row's top."""
     width = VER_CELLS * 8
     rows = [0] * 8
-    x = (STRIP_INK_LAST - (len(version) * 6 - 1)) // 2
+    x = (ink_last - (len(version) * 6 - 1)) // 2
     for c in version:
         for y, bits in enumerate(SMALL[c]):
             rows[y + 1] |= bits << (width - 5 - x)
@@ -108,7 +108,7 @@ def title_spans(rom: bytes, version: str = DEFAULT_VERSION) -> list[tuple[int, b
     """(offset, expected original, replacement, why) -- the same shape as manifest.MENU_PATCHES.
 
     Raises ValueError for a bad version or a ROM whose title line is not tile ids PlaceString can print."""
-    code, vtiles = _code(), _version_tiles(check_version(version))
+    code, vtiles = _code(), version_tiles(check_version(version))
     line = rom[VERSION_TEXT_SITE:VERSION_TEXT_SITE + VERSION_TEXT_LEN]
     # PlaceString treats every byte below $60 as a command, so the copied line must be plain tile ids plus its terminator
     if len(line) != VERSION_TEXT_LEN or line[-1] != END or any(b < 0x60 for b in line[:-1]):
