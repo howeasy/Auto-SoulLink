@@ -17,6 +17,12 @@ validator FAILS the run instead of being skipped by it.
 tests/fixtures/gen2/receipts/*.qualification.json are inputs to the binding, not receipts: they carry
 full-chain fixture provenance (fixture-qualification-v1), not engine evidence.
 
+OVERLAY (docs/gen2/OVERLAY_ADMISSION.md D4/D5): receipts under tests/fixtures/gen2/receipts/overlay/ are captured on the
+patched cartridge. The expected artifact is resolved from the published manifest (data/gen2/overlay_provenance.json for the
+overlay sha1/base, the execution binding sidecar for its sites/checkpoint and sha256) and handed to the SAME production
+validators as their view {kind, rom_sha1, base_sha1, binding_sha256, sites, checkpoint}; the qualification reports are
+read from the overlay directory. A clean receipt is refused under an overlay view and vice versa.
+
 The Crystal write-window receipt is deliberately NOT re-validated here: it is already owned by
 tests/unit/test_gen2_write_safety.py::test_the_committed_crystal_receipt_still_qualifies_and_binds
 (line 751), which asserts its PHYSICAL runs, its authorized write kinds and both fixture bindings.
@@ -35,6 +41,7 @@ from lupa.lua54 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPTS = ROOT / "tests/fixtures/gen2/receipts"
+OVERLAY_RECEIPTS = RECEIPTS / "overlay"
 FIXTURES = ROOT / "tests/fixtures/gen2"
 
 SIGNALS = "lua/gen2/signals.lua"
@@ -88,20 +95,47 @@ def _pack(title, name):
     return ROOT / "data/games" / f"gen2_{title}" / f"{name}.json"
 
 
-def _qualification(fixture):
-    return RECEIPTS / f"{fixture}.qualification.json"
+def _qualification(fixture, artifact="clean"):
+    return _qualification_dir(artifact) / f"{fixture}.qualification.json"
 
 
-def _proven_sites(title, receipt):
+def _kind_of(path):
+    """The artifact kind a receipt file belongs to: its directory (receipts/overlay/ is the overlay namespace)."""
+    return "overlay" if Path(path).parent.name == "overlay" else "clean"
+
+
+def _qualification_dir(artifact):
+    return OVERLAY_RECEIPTS if artifact == "overlay" else RECEIPTS
+
+
+def _view(title, artifact="clean"):
+    """The executed-artifact view the production validators take: None for clean (the pack as committed), and for an
+    overlay the manifest-resolved {kind, rom_sha1, base_sha1, binding_sha256, sites, checkpoint}. Identity comes from the
+    published provenance and the sidecar's own bytes, never from the receipt under test."""
+    if artifact == "clean":
+        return None
+    from tools.run_gb_gate import artifact_identity
+    identity = artifact_identity(title, "overlay")
+    binding = json.loads((ROOT / "data/games" / f"gen2_{title}" / "overlay/binding.json").read_text(encoding="utf-8"))
+    assert binding["kind"] == "overlay" and binding["title"] == title and binding["rom_sha1"] == identity["rom_sha1"]
+    return {**identity, "sites": binding["sites"], "checkpoint": binding["checkpoint"]}
+
+
+def _with_view(args, view):
+    """The validator's trailing optional view argument (nil = the clean pack, exactly as before)."""
+    return args if view is None else [*args, _module(SIGNALS)[0].table_from(view, recursive=True)]
+
+
+def _proven_sites(title, receipt, view=None):
     lua, S = _module(SIGNALS)
-    return _unwrap(S.qualified_sites(title, _table(SIGNALS, _pack(title, "engine_signals")),
-                                     lua.table_from(receipt, recursive=True)))
+    return _unwrap(S.qualified_sites(*_with_view([title, _table(SIGNALS, _pack(title, "engine_signals")),
+                                                  lua.table_from(receipt, recursive=True)], view)))
 
 
-def _write_scope(title, receipt):
+def _write_scope(title, receipt, view=None):
     lua, M = _module(WRITE_SAFETY)
-    scope, why = _unwrap(M.qualified(_table(WRITE_SAFETY, _pack(title, "write_checkpoint")), title,
-                                     lua.table_from(receipt, recursive=True)))
+    scope, why = _unwrap(M.qualified(*_with_view([_table(WRITE_SAFETY, _pack(title, "write_checkpoint")), title,
+                                                  lua.table_from(receipt, recursive=True)], view)))
     if scope is None:
         return None, why
     return {"kinds": sorted(scope.kinds.keys()), "covered": list(scope.covered.values()),
@@ -116,7 +150,7 @@ def _engine_runs(receipt):
     return receipt["runs"] if "runs" in receipt else [receipt]
 
 
-def _bind(kind, receipt):
+def _bind(kind, receipt, view=None, artifact="clean"):
     """S.bind_fixture_qualification / M.bind_fixture_qualification: True, or nil and why."""
     lua, module = _module(SIGNALS if kind == "engine_sites" else WRITE_SAFETY)
     if kind == "engine_sites" and "runs" in receipt:
@@ -127,37 +161,39 @@ def _bind(kind, receipt):
             if disclosure.exists():
                 committed = _receipt(disclosure)
                 reports[run["fixture"]] = committed
-                reports[committed["base_fixture"]] = _receipt(_qualification(committed["base_fixture"]))
+                reports[committed["base_fixture"]] = _receipt(_qualification(committed["base_fixture"], artifact))
             else:
-                reports[run["fixture"]] = _receipt(_qualification(run["fixture"]))
+                reports[run["fixture"]] = _receipt(_qualification(run["fixture"], artifact))
     elif kind == "engine_sites":
-        reports = _table(SIGNALS, _qualification(receipt["fixture"]))
+        reports = _table(SIGNALS, _qualification(receipt["fixture"], artifact))
     else:
-        reports = {receipt["runs"][mode]["fixture"]: _receipt(_qualification(receipt["runs"][mode]["fixture"]))
+        reports = {receipt["runs"][mode]["fixture"]: _receipt(_qualification(receipt["runs"][mode]["fixture"], artifact))
                    for mode in ("town", "battle")}
-    return _unwrap(module.bind_fixture_qualification(lua.table_from(receipt, recursive=True),
-                                                     lua.table_from(reports, recursive=True)))
+    return _unwrap(module.bind_fixture_qualification(*_with_view(
+        [lua.table_from(receipt, recursive=True), lua.table_from(reports, recursive=True)], view)))
 
 
-def validate(kind, title, receipt):
+def validate(kind, title, receipt, artifact="clean"):
     """The production validation path for one receipt: (proof, None), or (None, why) when refused.
 
-    Raises when the receipt's type has no validator: an unvalidatable receipt is a failure, never a
-    silent pass.
+    `artifact` is the kind the receipt is judged AS (its directory decides it for a committed file); an overlay is judged
+    against its manifest-resolved view by the same validators. Raises when the receipt's type has no validator: an
+    unvalidatable receipt is a failure, never a silent pass.
     """
+    view = _view(title, artifact)
     if kind == "engine_sites":
-        proven, why = _proven_sites(title, receipt)
+        proven, why = _proven_sites(title, receipt, view)
         if proven is None:
             return None, why
-        bound, why = _bind(kind, receipt)
+        bound, why = _bind(kind, receipt, view, artifact)
         if bound is not True:
             return None, why
         return {"proven": sorted(proven.keys())}, None
     if kind == "write_window":
-        scope, why = _write_scope(title, receipt)
+        scope, why = _write_scope(title, receipt, view)
         if scope is None:
             return None, why
-        bound, why = _bind(kind, receipt)
+        bound, why = _bind(kind, receipt, view, artifact)
         if bound is not True:
             return None, why
         return scope, None
@@ -195,15 +231,16 @@ def bindings(kind, receipt):
             for mode in ("town", "battle")}
 
 
-def discovered():
-    """Every committed receipt of a validatable type, as pytest params. Qualification reports are the
-    binding's inputs, not receipts."""
+def discovered(root=RECEIPTS):
+    """Every committed receipt of a validatable type, as pytest params: the clean ones and, beside them, the overlay
+    namespace. Qualification reports are the binding's inputs, not receipts."""
     params = []
-    for path in sorted(RECEIPTS.glob("*.json")):
-        if (path.name.endswith(".qualification.json") or path.name in COVERED_ELSEWHERE
+    for path in [*sorted(root.glob("*.json")), *sorted((root / "overlay").glob("*.json"))]:
+        overlay = _kind_of(path) == "overlay"
+        if (path.name.endswith(".qualification.json") or (path.name in COVERED_ELSEWHERE and not overlay)
                 or path.name.endswith(GATE_SUFFIXES)):
             continue
-        params.append(pytest.param(path, id=path.name))
+        params.append(pytest.param(path, id=("overlay/" if overlay else "") + path.name))
     return params
 
 
@@ -213,9 +250,19 @@ RECEIPTS_FOUND = discovered()
 @pytest.mark.parametrize("path", RECEIPTS_FOUND)
 def test_a_committed_physical_receipt_still_validates(path):
     title, kind = _split(path.name)
+    artifact = _kind_of(path)
     receipt = _receipt(path)
-    proof, why = validate(kind, title, receipt)
+    proof, why = validate(kind, title, receipt, artifact)
     assert proof is not None, f"{path.name}: {why}"
+    # the recorded artifact identity: an overlay receipt AND every run name the manifest's overlay; clean ones name none
+    view = _view(title, artifact)
+    for part in ([receipt, *(receipt.get("runs") or {}).values()] if isinstance(receipt.get("runs"), dict)
+                 else [receipt, *(receipt.get("runs") or [])]):
+        if artifact == "overlay":
+            assert (part["artifact_kind"], part["rom_sha1"], part["binding_sha256"]) == (
+                "overlay", view["rom_sha1"], view["binding_sha256"]), part.get("fixture")
+        else:
+            assert part.get("artifact_kind", "clean") == "clean" and "binding_sha256" not in part
 
     # (a) the receipt claims PHYSICAL evidence -- and says so for every run it rests on
     if kind == "engine_sites":
@@ -240,15 +287,17 @@ def test_a_committed_physical_receipt_still_validates(path):
     # (c) title-keying: a Crystal receipt is refused as gold/silver and vice versa. A title the module
     # itself lets this receipt cover (Silver follows Gold) is skipped rather than mis-asserted.
     for other in TITLES:
-        if other == title or _owner(kind, other) == receipt["title"]:
-            continue
-        refused, why = validate(kind, other, receipt)
+        if other == title or (artifact == "clean" and _owner(kind, other) == receipt["title"]):
+            continue   # O-23 (Silver rides Gold) is clean-only: an overlay Silver is its own title
+        refused, why = validate(kind, other, receipt, artifact)
         assert refused is None and why, f"{path.name} validated as {other}"
 
     # (d) the qualification binding, restated outside Lua: the receipt ran on the committed SaveRAM
     # bytes and names the committed report's attempt
     for fixture, (sha, attempt) in bindings(kind, receipt).items():
-        report = _receipt(_qualification(fixture))
+        report = _receipt(_qualification(fixture, artifact))
+        if artifact == "overlay":   # a fresh boot/re-save/reload on the overlay: its provenance names the overlay sha1
+            assert report["fixtures"][0]["provenance"]["rom_sha1"] == view["rom_sha1"], fixture
         assert sha == hashlib.sha256((FIXTURES / f"{fixture}.SaveRAM").read_bytes()).hexdigest(), fixture
         assert report["fixtures"][0]["artifacts"]["fixture"]["sha256"] == sha, fixture
         assert attempt == report["attempt_id"], fixture
@@ -371,8 +420,62 @@ def test_a_mutated_receipt_is_refused(path, negative):
     title, kind = _split(path.name)
     receipt = copy.deepcopy(_receipt(path))
     expected = NEGATIVES[negative](receipt, title, kind)
-    proof, why = validate(kind, title, receipt)
+    proof, why = validate(kind, title, receipt, _kind_of(path))
     assert proof is None and expected in why, f"{negative}: {why}"
+
+
+def _relabelled(title):
+    """The committed clean engine-site receipt wearing the manifest overlay identity on the receipt and every run: the
+    shape an overlay receipt takes whose sites are the overlay's (sites are identical where nothing moved)."""
+    view = _view(title, "overlay")
+    receipt = copy.deepcopy(_receipt(RECEIPTS / f"{title}.engine_sites.json"))
+    for part in [receipt, *receipt.get("runs", [])]:
+        part.update(artifact_kind="overlay", rom_sha1=view["rom_sha1"], binding_sha256=view["binding_sha256"])
+    return receipt, view
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("change", ["kind_dropped", "clean_sha", "binding_changed", "base_sha"])
+def test_an_overlay_receipt_with_a_borrowed_identity_is_refused(title, change):
+    """The overlay identity is part of the proof (control: the well-formed one validates under the overlay view)."""
+    receipt, view = _relabelled(title)
+    assert _proven_sites(title, receipt, view)[0] is not None, "control: the well-formed overlay receipt is accepted"
+    for part in [receipt, *receipt.get("runs", [])]:
+        if change == "kind_dropped":
+            part.pop("artifact_kind")
+        elif change == "clean_sha":
+            part["rom_sha1"] = view["base_sha1"]
+        elif change == "base_sha":
+            part["rom_sha1"] = "0" * 40
+        else:
+            part["binding_sha256"] = "0" * 64
+    proof, why = _proven_sites(title, receipt, view)
+    assert proof is None and why, change
+
+
+def test_discovery_covers_the_overlay_namespace_and_judges_each_file_as_its_directory(tmp_path):
+    (tmp_path / "overlay").mkdir()
+    for name in ("crystal.engine_sites.json", "crystal.write_window.json", "crystal_town.qualification.json",
+                 "crystal_overlay.panel_gate.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+        (tmp_path / "overlay" / name).write_text("{}", encoding="utf-8")
+    found = {p.id for p in discovered(tmp_path)}
+    # the clean write window is owned by its sibling suite; an overlay one has none and is covered here
+    assert found == {"crystal.engine_sites.json", "overlay/crystal.engine_sites.json", "overlay/crystal.write_window.json"}
+    assert [_kind_of(p.values[0]) for p in discovered(tmp_path)] == ["clean", "overlay", "overlay"]
+
+
+def test_a_clean_receipt_is_refused_as_an_overlay_and_the_view_comes_from_the_manifest():
+    """Known-positive control for the overlay path: the committed clean receipts validate as clean and are refused as
+    overlay (their runs name no overlay identity), under the view the manifest resolves."""
+    for title in ("crystal", "gold", "silver"):
+        view = _view(title, "overlay")
+        assert view["kind"] == "overlay" and view["rom_sha1"] != view["base_sha1"] and len(view["binding_sha256"]) == 64
+        assert view["sites"] and view["checkpoint"]
+    receipt = _receipt(RECEIPTS / "crystal.engine_sites.json")
+    assert validate("engine_sites", "crystal", receipt, "clean")[0] is not None
+    refused, why = validate("engine_sites", "crystal", receipt, "overlay")
+    assert refused is None and why
 
 
 def test_neither_validator_accepts_the_other_type_receipt():

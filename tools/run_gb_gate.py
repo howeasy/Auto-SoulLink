@@ -73,18 +73,77 @@ _GEN2_OVERLAY_PROVENANCE = "data/gen2/overlay_provenance.json"
 _PATCH_TOOLS = os.path.join(REPO, "patch", "tools")   # make_ups.ups_apply
 
 
-def describe_gen2(rom_key: str):
-    """Immutable metadata only; run_gate separately verifies every actual input."""
-    cold = isinstance(rom_key, str) and rom_key.endswith("_cold")
-    overlay = isinstance(rom_key, str) and rom_key.endswith("_overlay")
-    title = rom_key[:-5] if cold else rom_key[:-8] if overlay else rom_key
-    if title not in _GEN2_IDENTITIES:
+def parse_gen2_key(rom_key: str):
+    """(title, kind, cold) of `<title>[_overlay][_cold]`: a structured identity, not suffix guessing.
+
+    kind is "clean" or "overlay". The suffix order is fixed, so `<title>_cold_overlay` is unregistered."""
+    if not isinstance(rom_key, str):
         raise ValueError(f"unregistered Gen 2 gate key: {rom_key!r}")
+    rest, cold = (rom_key[:-5], True) if rom_key.endswith("_cold") else (rom_key, False)
+    rest, kind = (rest[:-8], "overlay") if rest.endswith("_overlay") else (rest, "clean")
+    if rest not in _GEN2_IDENTITIES:
+        raise ValueError(f"unregistered Gen 2 gate key: {rom_key!r}")
+    return rest, kind, cold
+
+
+def gen2_key(title: str, kind: str = "clean", cold: bool = False) -> str:
+    """The inverse of parse_gen2_key; the one place a caller turns {title, kind} into a rom key."""
+    if kind not in ("clean", "overlay"):
+        raise ValueError(f"unknown Gen 2 artifact kind: {kind!r}")
+    return title + ("_overlay" if kind == "overlay" else "") + ("_cold" if cold else "")
+
+
+def describe_gen2(rom_key: str):
+    """Immutable metadata only; run_gate separately verifies every actual input.
+
+    `rom_sha1` is always the CLEAN base the facts/profile bind (kept for every existing consumer); `kind` says which
+    cartridge actually executes. The executed sha1 of an overlay is only known after its UPS is applied, so it
+    lives on the plan (`launch_sha1`, exported as SLINK_GEN2_EXEC_SHA1), never on this static descriptor."""
+    title, kind, cold = parse_gen2_key(rom_key)
     artifact, sha1, name = _GEN2_IDENTITIES[title]
+    overlay = kind == "overlay"
     if overlay:
         name = g1.save_name_for(_GEN2_OVERLAY_STAGE.format(title=title))
-    return MappingProxyType({"title": title, "artifact": artifact, "rom_sha1": sha1,
+    return MappingProxyType({"title": title, "artifact": artifact, "rom_sha1": sha1, "base_sha1": sha1, "kind": kind,
                              "core_mode": "CGB", "saveram_name": name, "cold": cold, "overlay": overlay})
+
+
+def overlay_image(clean_rom: bytes, artifact: str, base_sha1: str):
+    """(image, sha1) of the published overlay: the clean base + its UPS, both hash-bound by the build receipt.
+
+    The identity every overlay receipt records: computed from the staged bytes here, never read from the environment."""
+    sys.path.insert(0, _PATCH_TOOLS)
+    from make_ups import ups_apply
+    out = json.loads((Path(REPO) / _GEN2_OVERLAY_PROVENANCE).read_text(encoding="utf-8"))["outputs"][artifact]
+    ups = (Path(REPO) / out["ups"]["file"]).read_bytes()
+    if out["base_sha1"] != base_sha1 or hashlib.sha256(ups).hexdigest() != out["ups"]["sha256"]:
+        raise ValueError("Gen 2 overlay provenance disagrees with the clean base or its UPS")
+    image = ups_apply(clean_rom, ups)
+    sha1 = hashlib.sha1(image).hexdigest()
+    if sha1 != out["sha1"]:
+        raise ValueError("Gen 2 overlay image differs from its provenance sha1")
+    return image, sha1
+
+
+def binding_sha256(path) -> str:
+    """sha256 of the committed LF text of an overlay binding sidecar (lua/gen2/artifact.lua hashes the LF form too, so an
+    autocrlf checkout is not a different binding)."""
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def artifact_identity(title: str, kind: str = "clean") -> dict:
+    """{kind, rom_sha1 (EXECUTED), base_sha1 (clean), binding_sha256 (overlay sidecar or None)} from the hashed bytes."""
+    descriptor = describe_gen2(gen2_key(title, kind))
+    ctx = load_gen2_context(title, root=Path(REPO))
+    base = hashlib.sha1(ctx.rom).hexdigest()
+    if base != descriptor["base_sha1"]:
+        raise ValueError("Gen 2 clean ROM differs from the pinned base")
+    if kind == "clean":
+        return {"kind": "clean", "rom_sha1": base, "base_sha1": base, "binding_sha256": None}
+    _, sha1 = overlay_image(ctx.rom, ctx.artifact, base)
+    binding = Path(REPO) / "data/games" / f"gen2_{title}" / "overlay/binding.json"
+    return {"kind": "overlay", "rom_sha1": sha1, "base_sha1": base,
+            "binding_sha256": binding_sha256(binding) if binding.is_file() else None}
 
 
 def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
@@ -180,9 +239,10 @@ GENS = {
         # plan/config are bound below, after their definitions.
         "protected_env": frozenset({"SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1", "SLINK_GEN2_CORE_MODE",
                                     "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME",
-                                    "SLINK_GEN2_OVERLAY_SHA1"}),
+                                    "SLINK_GEN2_OVERLAY_SHA1", "SLINK_GEN2_ARTIFACT_KIND", "SLINK_GEN2_BASE_SHA1",
+                                    "SLINK_GEN2_EXEC_SHA1", "SLINK_GEN2_BINDING_SHA256"}),
         "descriptors": {key: describe_gen2(key) for title in _GEN2_IDENTITIES
-                        for key in (title, title + "_cold", title + "_overlay")},
+                        for key in (gen2_key(title, kind, cold) for kind in ("clean", "overlay") for cold in (False, True))},
         "saveram_names": {title: describe_gen2(title)["saveram_name"] for title in _GEN2_IDENTITIES},
         "patched": {},
     },
@@ -321,20 +381,15 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     if not rom.is_relative_to(Path(REPO).resolve()) or hashlib.sha1(rom.read_bytes()).hexdigest() != descriptor["rom_sha1"]:
         raise ValueError("Gen 2 actual ROM differs from the selected descriptor")
     launch_sha1, stage, extra_env = descriptor["rom_sha1"], None, {}
+    binding_file = Path(REPO) / "data/games" / f"gen2_{descriptor['title']}" / "overlay/binding.json"
     if descriptor.get("overlay"):
-        # The published overlay: clean base + UPS, both hash-bound by the build receipt.
-        sys.path.insert(0, _PATCH_TOOLS)
-        from make_ups import ups_apply
-        out = json.loads((Path(REPO) / _GEN2_OVERLAY_PROVENANCE).read_text(encoding="utf-8"))["outputs"][ctx.artifact]
-        ups = (Path(REPO) / out["ups"]["file"]).read_bytes()
-        if out["base_sha1"] != descriptor["rom_sha1"] or hashlib.sha256(ups).hexdigest() != out["ups"]["sha256"]:
-            raise ValueError("Gen 2 overlay provenance disagrees with the clean base or its UPS")
-        stage = ups_apply(rom.read_bytes(), ups)
-        launch_sha1 = hashlib.sha1(stage).hexdigest()
-        if launch_sha1 != out["sha1"]:
-            raise ValueError("Gen 2 overlay image differs from its provenance sha1")
+        stage, launch_sha1 = overlay_image(rom.read_bytes(), ctx.artifact, descriptor["rom_sha1"])
         rom = (Path(REPO) / _GEN2_OVERLAY_STAGE.format(title=descriptor["title"])).resolve()
         extra_env["SLINK_GEN2_OVERLAY_SHA1"] = launch_sha1
+        # D2: the execution binding sidecar pins the overlay's own sites/checkpoint. Exported when it exists; a gate
+        # that needs an overlay view refuses without it (never falls back to the clean facts).
+        if binding_file.is_file():
+            extra_env["SLINK_GEN2_BINDING_SHA256"] = binding_sha256(binding_file)
     database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
     rows = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
             if line.split("\t", 1)[0].lower() == launch_sha1]
@@ -349,8 +404,11 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     if not isinstance(config, dict) or not any(row.get("Type") == "Save RAM" and row.get("System") in g1._GB_PATH_SYSTEMS
         for row in (config.get("PathEntries") or {}).get("Paths", [])):
         raise ValueError("Gen 2 requires a parseable config with an explicit GB Save RAM path entry")
+    # SLINK_GEN2_ROM_SHA1 stays the clean base the route facts/profile bind; the executed identity is its own
+    # name, so a gate can never mistake one for the other (D5): EXEC is the overlay's own sha1 on an overlay.
     env = {"SLINK_GEN2_TITLE": descriptor["title"], "SLINK_GEN2_ROM_SHA1": descriptor["rom_sha1"],
-           "SLINK_GEN2_CORE_MODE": descriptor["core_mode"], "SLINK_GEN2_COLD": "1" if descriptor["cold"] else "0",
+           "SLINK_GEN2_ARTIFACT_KIND": descriptor["kind"], "SLINK_GEN2_BASE_SHA1": descriptor["base_sha1"],
+           "SLINK_GEN2_EXEC_SHA1": launch_sha1, "SLINK_GEN2_CORE_MODE": descriptor["core_mode"], "SLINK_GEN2_COLD": "1" if descriptor["cold"] else "0",
            "SLINK_GEN2_SAVERAM_DIR": str(directory), "SLINK_GEN2_SAVERAM_NAME": descriptor["saveram_name"],
            **extra_env}
     return {**descriptor, "rom": rom, "directory": directory, "fixture": fixture, "speed_percent": speed_percent,

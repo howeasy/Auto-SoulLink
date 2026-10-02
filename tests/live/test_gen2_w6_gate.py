@@ -164,8 +164,10 @@ def _legs(title: str, u1) -> dict:
         return {"SLINK_GEN2_SFX_FACTS": json.dumps(sfx.sfx_facts(title))}
 
     def u1_env(spec, qual):
-        ctx = gen2_source_data.load_context(spec.title, root=REPO)
-        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO), qual))}
+        # the leg boots the overlay: its facts resolve on the overlay symbols/bytes (D4), never the clean ones
+        ctx = gen2_fixtures.exec_context(spec.title, "overlay", REPO)
+        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(
+            ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind="overlay"), qual))}
 
     pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
     return {
@@ -203,20 +205,20 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
     for leg, (gate, inner_result, fixture_name, extra_env, check, timeout) in _legs(title, u1).items():
         spec = gen2_fixtures.BY_NAME[fixture_name]
         reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
-                  or live.receipt_missing_reason(spec.name))
+                  or live.receipt_missing_reason(spec.name, kind="overlay"))
         if reason:
             pytest.skip(reason)
         fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
         staged = fixture.read_bytes()
-        live.qualified_identity(spec.name, staged)
-        qual = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-        env = live.inspect_env(spec, staged)
+        live.qualified_identity(spec.name, staged, kind="overlay")
+        qual = json.loads(live.receipt_file(f"{spec.name}.qualification.json", "overlay").read_text(encoding="utf-8"))
+        env = live.inspect_env(spec, staged, kind="overlay")
         env.update(extra_env(spec, qual["attempt_id"]))
         env["SLINK_GEN2_QUALIFICATION_ATTEMPT"] = qual["attempt_id"]
         source = gen2_source_data.load_context(title, root=REPO).source_record()
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
-                                           "clean_view": leg == "u1", "lua_control_offset": 20,
+                                           "lua_control_offset": 20,
                                            "frozen": {rel: str(frozen_dir / rel) for rel in U1_CHAINS[chain]
                                                       if rel.endswith(".lua")} if leg == "u1" else None})
         if launched:

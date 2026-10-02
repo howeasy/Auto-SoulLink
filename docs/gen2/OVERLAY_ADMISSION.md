@@ -95,3 +95,20 @@ Model tests prove it.
 
 Interface order: R commits the `lua/gen2/artifact.lua` API skeleton (D3) first; A codes against it.
 Every stream starts from red tests (the falsifiers in cx-ddc39d87 RECOMMENDATION 2-6).
+
+## Decisions recorded during implementation
+
+- **R (df26db18):** every engine site (43), checkpoint anchor (4), header anchor (388/368/368) and ROM
+  profile coordinate is byte-identical on the overlay. The coordinator independently re-read them from the
+  overlay ROMs rebuilt from the published UPS. `view.anchors` holds the header anchors for both kinds.
+  SHA-256 is shared in `lua/admission.lua`.
+- **B identity:** `SLINK_GEN2_ROM_SHA1` stays the clean BASE, so base facts bind to clean. The executed
+  identity is `SLINK_GEN2_EXEC_SHA1`, alongside `_ARTIFACT_KIND`, `_BASE_SHA1` and `_BINDING_SHA256`, all
+  override-protected. The scripted gate asserts romhash == executed sha1. The artifact is selected with
+  `SLINK_GEN2_ARTIFACT=overlay`; the env picks the cartridge, never the identity.
+- **B qualification:** the played-route attempt scratch no longer exists, so an overlay qualification
+  stands on the committed clean full-chain report of the same fixture bytes (`clean_qualification_ref`,
+  hash recorded). The boot, re-save and reload are then run fresh on the overlay ROM. The overlay fixture
+  set is the 7 RECEIPT_FILES fixtures.
+- **B W6:** its frozen historical U1 leg keeps the clean pack sites, which are valid because those sites
+  are byte-identical on the overlay.

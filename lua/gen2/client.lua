@@ -87,6 +87,10 @@ function Client.new(p)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
 
+    -- D5: the kind is the admission decision's (lua/gen2/entry.lua); anything else would run a trade or a hello as a
+    -- kind the server never admitted.
+    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay",
+           "artifact_kind must be clean or overlay")
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
         -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id)

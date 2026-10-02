@@ -115,6 +115,12 @@ F.DIRECTIONS = W.DIRECTIONS
 -- Per title: the rgblink .sym (diagnostics) and the title whose production binder must refuse this
 -- title's receipt (Crystal keeps its original Gold refusal; Gold and Silver refuse each other).
 F.SYM = {crystal="pokecrystal", gold="pokegold", silver="pokesilver"}
+-- The symbol table of the EXECUTED cartridge (diagnostics): the clean rgblink .sym, or for an overlay its own
+-- data/gen2/<title>_slink.sym (bank 4 labels may have moved; the clean table is never read for it).
+function F.sym_file(ctx)
+    local name = (ctx.artifact and ctx.artifact.kind == "overlay") and (ctx.env.title .. "_slink") or F.SYM[ctx.env.title]
+    return ctx.root .. "/data/gen2/" .. name .. ".sym"
+end
 F.REFUSE = {crystal="gold", gold="silver", silver="gold"}
 F.NAMES = {crystal="Crystal", gold="Gold", silver="Silver"}
 F.U1_FIXTURES = {crystal_battle="crystal", gold_battle="gold", gold_battle_errand="gold", silver_battle="silver"}
@@ -434,6 +440,17 @@ local function copy(value)
     local out = {}
     for k, v in pairs(value) do out[k] = copy(v) end
     return out
+end
+
+-- The pack this gate arms and binds. A clean run uses engine_signals.json as read. An overlay run swaps in the
+-- sites of its execution binding (D2): same schema, overlay-resolved offsets and bytes; every other pack field
+-- (source lineage, specs hash, point symbols' RAM) is the shared clean lineage. No fallback to the clean sites.
+function F.exec_pack(ctx, pack)
+    local view = ctx.artifact   -- nil = a caller with no artifact context: the clean pack, as before
+    if not view or view.kind ~= "overlay" then return pack end
+    local executed = copy(pack)
+    executed.titles[ctx.env.title].sites = copy(assert(view.sites, "overlay execution view carries no sites"))
+    return executed
 end
 
 local function binding(ctx)
@@ -801,9 +818,18 @@ local function binder_options(ctx, wrapper, pack, owner, physical)
         bank_valid=function() return false end, stack_valid=function() return false end}
     local authority = {kind=physical and "PHYSICAL_RUNTIME" or "MODEL_PROBE", allow_model_registration=not physical or nil,
         capture=function() return {generation=1, operation="u1-probe"} end, valid=function() return false end}
-    return {title=ctx.env.title, profile=wrapper, pack=pack, io=io_, authority=authority, reads=ctx.reads,
+    local options = {title=ctx.env.title, profile=wrapper, pack=pack, io=io_, authority=authority, reads=ctx.reads,
             Registry=dofile(ctx.root .. "/lua/hook_registry.lua"), GB=dofile(ctx.root .. "/lua/gb_hook_binding.lua"),
             owner=owner, max_pending=8}
+    if ctx.artifact and ctx.artifact.kind == "overlay" then
+        -- The binder validates against the view's sites; carry the sites of THIS pack (a negative's mutated copy
+        -- included), so a one-byte-wrong overlay row is what refuses, not the clean pack.
+        local view = {}
+        for key, value in pairs(ctx.artifact) do view[key] = value end
+        view.sites = pack.titles[ctx.env.title].sites
+        options.view = view
+    end
+    return options
 end
 
 -- The production decoder (lua/gen2/signals.lua faint_event) on the live hook, as a MODEL instance holding only the
@@ -934,7 +960,7 @@ function F.main(api, getenv, SG)
     local json = ctx.json
     local title = ctx.env.title
     local wrapper = read_json(ctx, "data/games/gen2_" .. title .. "/profile.json")
-    local pack = read_json(ctx, "data/games/gen2_" .. title .. "/engine_signals.json")
+    local pack = F.exec_pack(ctx, read_json(ctx, "data/games/gen2_" .. title .. "/engine_signals.json"))
     local Signals = dofile(ctx.root .. "/lua/gen2/signals.lua")
 
     -- The pack-UI origins and the item submenu join the scripted gate's UI context (this gate's own
@@ -998,7 +1024,7 @@ function F.main(api, getenv, SG)
     local symbol_at
     local function where()   -- PC and the ROM words on the stack, as bank-guessed labels (diagnostics only)
         if symbol_at == nil then
-            local f = assert(io.open(ctx.root .. "/data/gen2/" .. F.SYM[title] .. ".sym", "rb"))
+            local f = assert(io.open(F.sym_file(ctx), "rb"))
             symbol_at = F.symbols(f:read("a"))
             f:close()
         end
@@ -1162,7 +1188,8 @@ function F.main(api, getenv, SG)
     end
     local a = record.align
     local receipt = {schema=Signals.RECEIPT_SCHEMA, title=title, evidence_level=evidence, result="PASS",
-        rom_sha1=pack.source.rom_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256,
+        base_sha1=ctx.ident.base_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
         fixture=case.name, attempt_id=case.attempt_id, core_mode="CGB", input_mode="normal_buttons",
         fixture_sha256=q.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
         harness_write_scopes=json.array({}), bank_check="live",

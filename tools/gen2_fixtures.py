@@ -13,6 +13,7 @@ import argparse
 import bisect
 import hashlib
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from pathlib import Path
 
 if __package__:
     from . import fixture_qualification as qualification
-    from .gen2_source_data import ROOT, load_context, rom_offset
+    from .gen2_source_data import ROOT, load_context, load_overlay_context, rom_offset
     from .gen_gen2_area_map import build_area_map, constants, rom_bytes, source_lines
     from .gen_gen2_charmap import integer, verify_table
     from .gen_gen2_items import item_ids
@@ -28,7 +29,7 @@ if __package__:
     from .gen_gen2_area_map import constants as const_values
 else:
     import fixture_qualification as qualification
-    from gen2_source_data import ROOT, load_context, rom_offset
+    from gen2_source_data import ROOT, load_context, load_overlay_context, rom_offset
     from gen_gen2_area_map import build_area_map, constants, rom_bytes, source_lines
     from gen_gen2_charmap import integer, verify_table
     from gen_gen2_items import item_ids
@@ -247,6 +248,135 @@ def _require(condition, message):
         raise ValueError(message)
 
 
+# --- capture artifact kind (docs/gen2/OVERLAY_ADMISSION.md D4/D5/D7) --------------------------------------------
+# Every capture tool records receipts on ONE artifact: the clean cartridge or the SLink overlay. SLINK_GEN2_ARTIFACT
+# only picks WHICH cartridge a live run boots (default clean); the identity a receipt records (sha1, kind, binding)
+# is always the hashed staged bytes (run_gb_gate.artifact_identity), checked by check_run_identity.
+ARTIFACT_ENV = "SLINK_GEN2_ARTIFACT"
+KINDS = ("clean", "overlay")
+RECEIPTS_REL = "tests/fixtures/gen2/receipts"
+
+
+# The fixtures whose overlay qualification the overlay proofs name (lua/gen2/entry.lua RECEIPT_FILES overlay.qualifications,
+# pinned by tests/unit/test_gen2_capture_artifact.py): Silver overlay has only silver_battle/silver_town (no gold_*).
+OVERLAY_QUALIFIED = ("crystal_battle", "crystal_town", "gold_battle", "gold_battle_errand", "gold_town",
+                     "silver_battle", "silver_town")
+
+
+def artifact_kind(environ=None) -> str:
+    kind = (os.environ if environ is None else environ).get(ARTIFACT_ENV) or "clean"
+    _require(kind in KINDS, f"{ARTIFACT_ENV} must be one of {KINDS}, not {kind!r}")
+    return kind
+
+
+def receipts_dir(kind="clean", root=ROOT) -> Path:
+    """Sweep receipts land per kind: the overlay namespace never shares a path with the clean files (D4)."""
+    _require(kind in KINDS, f"unknown Gen 2 artifact kind: {kind!r}")
+    base = Path(root) / RECEIPTS_REL
+    return base / "overlay" if kind == "overlay" else base
+
+
+def shipped_receipts_dir(title, kind="clean", root=ROOT) -> Path:
+    """data/games/gen2_<t>/receipts[/overlay]: where the digest-free shipped copies live (D4)."""
+    _require(kind in KINDS and title in ("crystal", "gold", "silver"), "unknown Gen 2 title/kind")
+    base = Path(root) / "data/games" / f"gen2_{title}" / "receipts"
+    return base / "overlay" if kind == "overlay" else base
+
+
+def exec_context(title, kind="clean", root=ROOT):
+    """The source context of the EXECUTED cartridge: the pinned clean build, or its overlay (overlay-resolved symbols
+    and ROM bytes over the unchanged clean fact lineage). Never a clean fallback for an overlay."""
+    _require(kind in KINDS, f"unknown Gen 2 artifact kind: {kind!r}")
+    return load_overlay_context(title, root=root) if kind == "overlay" else load_context(title, root=root)
+
+
+def exec_sites(title, kind="clean", root=ROOT) -> dict:
+    """The engine-site rows the executed cartridge runs: engine_signals.json (clean) or the overlay binding's own."""
+    base = Path(root) / "data/games" / f"gen2_{title}"
+    if kind == "clean":
+        return _json((base / "engine_signals.json").read_bytes())["titles"][title]["sites"]
+    _require(kind == "overlay", f"unknown Gen 2 artifact kind: {kind!r}")
+    path = base / "overlay/binding.json"
+    _require(path.is_file(), f"{title}: overlay execution binding {path.relative_to(Path(root)).as_posix()} missing")
+    binding = _json(path.read_bytes())
+    _require(binding.get("kind") == "overlay" and binding.get("title") == title and isinstance(binding.get("sites"), dict),
+             f"{title}: overlay binding malformed")
+    return binding["sites"]
+
+
+def exec_checkpoint(title, kind="clean", root=ROOT) -> dict:
+    """The write-checkpoint title row the executed cartridge runs: write_checkpoint.json (clean) or the overlay binding's."""
+    base = Path(root) / "data/games" / f"gen2_{title}"
+    if kind == "clean":
+        return _json((base / "write_checkpoint.json").read_bytes())["titles"][title]
+    _require(kind == "overlay", f"unknown Gen 2 artifact kind: {kind!r}")
+    path = base / "overlay/binding.json"
+    _require(path.is_file(), f"{title}: overlay execution binding {path.relative_to(Path(root)).as_posix()} missing")
+    binding = _json(path.read_bytes())
+    _require(binding.get("kind") == "overlay" and binding.get("title") == title
+             and isinstance(binding.get("checkpoint"), dict), f"{title}: overlay binding malformed")
+    return binding["checkpoint"]
+
+
+CLEAN_REF_SCHEMA = "gen2-clean-qualification-ref-v1"
+
+
+def _lf_sha256(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def clean_qualification_ref(spec, fixture_bytes, root=ROOT) -> dict:
+    """What an OVERLAY qualification stands on for the played origin (D4: fixture bytes are reused, never replayed).
+
+    The played-route receipts are attempt-scratch files that do not survive (the errand ones are already gone), so an
+    overlay qualification does not re-judge them: it names the committed CLEAN full-chain qualification of the very same
+    bytes (passed, scope full, this fixture, this file's sha256) and records its report hash. The fresh boot, re-save
+    and reload that follow are all on the overlay."""
+    path = Path(root) / RECEIPTS_REL / f"{spec.name}.qualification.json"
+    _require(path.is_file(), f"{spec.name}: the committed clean qualification this overlay run stands on is missing")
+    report = _json(path.read_bytes())
+    rows = report.get("fixtures")
+    _require(report.get("schema") == "fixture-qualification-v1" and report.get("scope") == "full"
+             and report.get("passed") is True and isinstance(rows, list) and len(rows) == 1
+             and rows[0].get("name") == spec.name and rows[0].get("passed") is True
+             and rows[0]["artifacts"]["fixture"]["sha256"] == hashlib.sha256(fixture_bytes).hexdigest(),
+             f"{spec.name}: the fixture bytes are not the committed clean-qualified candidate")
+    return {"schema": CLEAN_REF_SCHEMA, "fixture": spec.name, "fixture_sha256": hashlib.sha256(fixture_bytes).hexdigest(),
+            "clean_attempt_id": report["attempt_id"], "clean_report_sha256": _lf_sha256(path),
+            "clean_played_receipt_sha256": rows[0]["artifacts"]["played_receipt"]["sha256"]}
+
+
+def validate_clean_qualification_ref(ref, spec, fixture_bytes, root=ROOT):
+    """The overlay qualification's played-origin binding: the reference must still describe the committed clean report."""
+    _require(ref == clean_qualification_ref(spec, fixture_bytes, root), "clean-qualification reference mismatch")
+
+
+def check_run_identity(run, identity):
+    """One receipt run's recorded artifact against the HASHED staged identity (run_gb_gate.artifact_identity).
+
+    Clean runs carry no kind/binding fields (the committed clean receipts are unchanged); an overlay run carries
+    artifact_kind, the overlay's own rom_sha1 and the binding sidecar's sha256."""
+    kind = identity["kind"]
+    _require(run.get("rom_sha1") == identity["rom_sha1"], f"run rom_sha1 {run.get('rom_sha1')} is not the {kind} artifact")
+    if kind == "clean":
+        _require(run.get("artifact_kind", "clean") == "clean" and "binding_sha256" not in run,
+                 "a clean run carries no overlay identity")
+        return
+    _require(run.get("artifact_kind") == "overlay" and run["rom_sha1"] != identity["base_sha1"]
+             and identity["binding_sha256"] is not None and run.get("binding_sha256") == identity["binding_sha256"],
+             "an overlay run must record artifact_kind overlay and the binding sidecar sha256")
+
+
+def merge_engine_runs(committed, replacement, identity, replaced):
+    """The v2 engine-site run list: `committed`'s runs not named in `replaced`, plus `replacement`.
+
+    A union never mixes kinds or ROMs (D4): every kept and every new run must be the identity's artifact."""
+    kept = committed.get("runs") or [{key: value for key, value in committed.items() if key != "code_digest"}]
+    for run in list(kept) + list(replacement):
+        check_run_identity(run, identity)
+    return [run for run in kept if run["fixture"] not in replaced] + list(replacement)
+
+
 def cart_ram(raw):
     """The compared CartRAM of an exact-length SaveRAM; the RTC trailer is never compared."""
     _require(isinstance(raw, bytes) and len(raw) == SAVERAM_BYTES,
@@ -393,7 +523,7 @@ def _code_site(ctx, symbol, offset=0):
             "flat": flat, "hex": ctx.rom[flat:flat + 1].hex()}
 
 
-def _observer_facts(ctx, root, errand=False):
+def _observer_facts(ctx, root, errand=False, kind="clean"):
     """Source constants and code sites the played-route gate observes; RAM addresses stay in the profile."""
     ram_constants = ctx.read_source("constants/ram_constants.asm")
     objects = ctx.read_source("constants/map_object_constants.asm")
@@ -436,8 +566,9 @@ def _observer_facts(ctx, root, errand=False):
                  f"prompt anchor missing from source: {prompt}")
         if found:
             prompts[prompt] = found
+    # the executed cartridge's own site row: engine_signals.json for clean, the overlay binding's for an overlay
     signals = _json((Path(root) / f"data/games/gen2_{ctx.title}/engine_signals.json").read_bytes())
-    save = signals["titles"][ctx.title]["sites"]["save_completed"]
+    save = exec_sites(ctx.title, kind, root)["save_completed"]
     start = save["rom_offset"]
     _require(signals["source"]["rom_sha1"] == ctx.source_record()["rom_sha1"]
              and ctx.rom[start:start + len(save["expected_hex"]) // 2].hex() == save["expected_hex"]
@@ -462,10 +593,12 @@ def _observer_facts(ctx, root, errand=False):
             "got_starter_event": events["EVENT_GOT_A_POKEMON_FROM_ELM"]}
 
 
-def route_facts(title, root=ROOT, errand=False):
+def route_facts(title, root=ROOT, errand=False, kind="clean"):
     """Source/ROM-bound candidate navigation facts; no live route qualification. `errand` adds the Gold errand's
-    maps, events, prompts and naming-screen origin (spec_route_facts), leaving every other fixture's facts as-is."""
-    ctx = load_context(title, root=root)
+    maps, events, prompts and naming-screen origin (spec_route_facts), leaving every other fixture's facts as-is.
+    `kind` "overlay" resolves every code site (UI origins, observer sites) on the overlay's own symbols and bytes; the
+    lineage (`source`, `rom_sha1`) stays the clean base the facts bind. Where nothing moved the facts are identical."""
+    ctx = exec_context(title, kind, root)
     profile_path = Path(root) / "data/games" / f"gen2_{title}/profile.json"
     wrapper = _json(profile_path.read_bytes())
     _require(wrapper["source"] == ctx.source_record(), "profile provenance mismatch")
@@ -515,7 +648,7 @@ def route_facts(title, root=ROOT, errand=False):
               "balls": {"item": items["POKE_BALL"], "quantity": 10, "capacity": capacity,
                         "count_address": ctx.symbol("wNumBalls").address,
                         "data_address": ctx.symbol("wBalls").address, "bank": ctx.symbol("wBalls").bank},
-              "observer": _observer_facts(ctx, root, errand),
+              "observer": _observer_facts(ctx, root, errand, kind),
               "required_observer": ["source-bound UI context", "CGB bank-valid point", "script-idle overworld input",
                                     "live movement blocking", "native successful-save counter"],
               "open_obligations": ["live_point_observer_binding", "played_route_and_OT_separation",
@@ -525,16 +658,20 @@ def route_facts(title, root=ROOT, errand=False):
     return result
 
 
-def spec_route_facts(spec, root=ROOT):
+def spec_route_facts(spec, root=ROOT, kind="clean"):
     """The route facts one fixture spec plays and qualifies on."""
     # ponytail: the keyword only for an errand spec keeps every plain call route_facts(title, root)
-    return route_facts(spec.title, root, errand=True) if spec.name in ERRAND_FIXTURES else route_facts(spec.title, root)
+    extra = {} if kind == "clean" else {"kind": kind}   # the clean call shape is unchanged
+    if spec.name in ERRAND_FIXTURES:
+        return route_facts(spec.title, root, errand=True, **extra)
+    return route_facts(spec.title, root, **extra)
 
 
-def qualify_facts(title, root=ROOT, errand=False):
+def qualify_facts(title, root=ROOT, errand=False, kind="clean"):
     """Source-bound CONTINUE/re-save facts for the qualification gate; the route facts stay unchanged."""
-    ctx = load_context(title, root=root)
-    route = route_facts(title, root, errand=True) if errand else route_facts(title, root)
+    ctx = exec_context(title, kind, root)
+    extra = {} if kind == "clean" else {"kind": kind}   # the clean call shape is unchanged
+    route = route_facts(title, root, errand=True, **extra) if errand else route_facts(title, root, **extra)
     texts = [ctx.read_source(path) for path in PROMPT_SOURCES]
     for anchors in QUALIFY_PROMPTS.values():
         for anchor in anchors:
@@ -606,6 +743,16 @@ def _saved_field(raw, layout, symbol, size):
             start = region.primary + address - base
             return raw[start:start + size]
     raise ValueError(f"saved field outside source copy regions: {symbol}")
+
+
+def data_rom(context, profile, spec):
+    """The ROM the profile's table scan binds. A clean qualification executes the pinned build itself; an overlay
+    qualification executes the overlay (context.artifacts rom) while its data tables are the clean build's, and the scan
+    refuses any ROM that is not the profile's own."""
+    rom = context.artifacts["rom"]
+    if hashlib.sha1(rom).hexdigest() == (profile.get("source") or {}).get("rom_sha1"):
+        return rom
+    return load_context(spec.title).rom
 
 
 def inspect_candidate(raw, profile, rom, spec):
@@ -898,9 +1045,15 @@ def qualify_stage(context):
         _require(context.provenance["title"] == spec.title
                  and hashlib.sha1(rom).hexdigest() == context.provenance["rom_sha1"],
                  "ROM differs from the pinned sha1 of the selected title")
-        _require((profile.get("source") or {}).get("rom_sha1") == context.provenance["rom_sha1"],
+        # The executed cartridge is the pinned clean build, or its published overlay (D4: fixture bytes are reused, the
+        # qualification is a fresh boot/re-save/reload on the artifact that runs). The profile binds the clean base.
+        base = (profile.get("source") or {}).get("rom_sha1")
+        overlay = context.provenance["rom_sha1"] != base
+        _require(base == context.provenance["rom_sha1"]
+                 or context.provenance["rom_sha1"] == load_overlay_context(spec.title).execution_record()["rom_sha1"]
+                 and base == load_overlay_context(spec.title).execution_record()["base_sha1"],
                  "profile belongs to another ROM")
-        result = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
+        result = inspect_candidate(context.artifacts["fixture"], profile, data_rom(context, profile, spec), spec)
         facts = _json(context.artifacts["route_facts"])
         _require(_facts_sha256(facts) == context.provenance["route_facts_sha256"], "route facts differ from verified source")
         target = facts["maps"]["ElmsLab" if spec.target == "town" else "Route29"]
@@ -912,7 +1065,10 @@ def qualify_stage(context):
         if spec.target == "battle":
             _require(any(item == facts["balls"]["item"] and quantity > 0 for item, quantity in result["ball_items"]),
                      "battle fixture has no real Poke Ball in the Ball pocket")
-        validate_played_receipt(_json(context.artifacts["played_receipt"]), spec, facts, result)
+        if overlay:   # fixture bytes are reused: the played origin is the committed clean qualification of these bytes
+            validate_clean_qualification_ref(_json(context.artifacts["played_receipt"]), spec, context.artifacts["fixture"])
+        else:
+            validate_played_receipt(_json(context.artifacts["played_receipt"]), spec, facts, result)
         # O-10: fixture balls are harness-injected for tests/validation, never a ball_received witness.
         return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
             evidence={"oracle": "independent Gen2 PYDEC", "player_id": str(result["player_id"]),
@@ -928,8 +1084,9 @@ def post_oracle_stage(context):
     try:
         spec = BY_NAME[context.fixture]
         profile = _json(context.artifacts["profile"])
-        original = inspect_candidate(context.artifacts["fixture"], profile, context.artifacts["rom"], spec)
-        saved = inspect_candidate(context.artifacts["resave:fixture"], profile, context.artifacts["rom"], spec)
+        rom = data_rom(context, profile, spec)
+        original = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
+        saved = inspect_candidate(context.artifacts["resave:fixture"], profile, rom, spec)
         stages = {row["stage"]: row["fingerprint"] for row in context.previous}
         validate_game_witness(_json(context.artifacts["boot:game_witness"]), context, original, "boot", stages["boot"])
         # The native save itself (R4 S3): same-player overwrite branch, a counted successful save, and the
@@ -959,17 +1116,21 @@ def post_oracle_stage(context):
         return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
 
 
-def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, timeout):
-    """One warm-boot qualification gate run on exactly these SaveRAM bytes; returns (dir, witness path, witness)."""
+def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, timeout, kind="clean"):
+    """One warm-boot qualification gate run on exactly these SaveRAM bytes; returns (dir, witness path, witness).
+
+    kind "overlay" boots <title>_overlay: the facts are resolved on the overlay symbols/bytes and the run directory is
+    separate, so no overlay attempt shares a path with a clean one."""
     from tools import run_gb_gate
 
     spec = BY_NAME[context.fixture]
     facts_text = context.artifacts["route_facts"].decode("utf-8")
-    qfacts = qualify_facts(spec.title, root, errand=True) if spec.name in ERRAND_FIXTURES else qualify_facts(spec.title, root)
+    qfacts = (qualify_facts(spec.title, root, errand=True, kind=kind) if spec.name in ERRAND_FIXTURES
+              else qualify_facts(spec.title, root, kind=kind))
     _require(qfacts["route_facts_fingerprint"] == _json(facts_text)["fingerprint"],
              "qualification facts differ from the recorded route facts")
-    directory = (Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
-                 / f"{label}-{context.fingerprint[:16]}")
+    directory = (Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name
+                 / ("qualify-overlay" if kind == "overlay" else "qualify") / f"{label}-{context.fingerprint[:16]}")
     directory.mkdir(parents=True, exist_ok=True)
     source = directory / (spec.name + ".input.SaveRAM")
     source.write_bytes(fixture)
@@ -977,8 +1138,8 @@ def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, tim
     witness.unlink(missing_ok=True)
     case = {**vars(spec), "title_idle_frames": 0, "attempt_id": attempt_id, **QUALIFY_BUDGET}
     passed, _, text = (runner or run_gb_gate.run_gate)(
-        GATE_SCRIPT, rom_key=spec.title, target=spec.target, timeout=timeout, saveram_dir=str(directory),
-        fixture_path=str(source), speed_percent=QUALIFY_SPEED_PERCENT,
+        GATE_SCRIPT, rom_key=run_gb_gate.gen2_key(spec.title, kind), target=spec.target, timeout=timeout,
+        saveram_dir=str(directory), fixture_path=str(source), speed_percent=QUALIFY_SPEED_PERCENT,
         env_overrides={"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": facts_text,
                        "SLINK_GEN2_QUALIFY": json.dumps({"stage": stage, "stage_fingerprint": context.fingerprint,
                                                          "facts": qfacts})})
@@ -990,8 +1151,8 @@ def _boot_stage(context, **gate):
     """Warm boot the candidate SaveRAM (COLD=0), CONTINUE into the overworld; GAME must agree with PYDEC."""
     try:
         spec = BY_NAME[context.fixture]
-        inspection = inspect_candidate(context.artifacts["fixture"], _json(context.artifacts["profile"]),
-                                       context.artifacts["rom"], spec)
+        profile = _json(context.artifacts["profile"])
+        inspection = inspect_candidate(context.artifacts["fixture"], profile, data_rom(context, profile, spec), spec)
         _, path, game = _stage_gate(context, "boot", context.artifacts["fixture"], label="boot", **gate)
         validate_game_witness(game, context, inspection, "boot", context.fingerprint)
         return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
@@ -1008,11 +1169,13 @@ def _resave_stage(context, **gate):
         from tools import run_gb_gate
 
         spec = BY_NAME[context.fixture]
-        profile, rom = _json(context.artifacts["profile"]), context.artifacts["rom"]
+        profile = _json(context.artifacts["profile"])
+        rom = data_rom(context, profile, spec)
         original = inspect_candidate(context.artifacts["fixture"], profile, rom, spec)
         directory, save_path, game = _stage_gate(context, "resave", context.artifacts["fixture"], label="resave", **gate)
         validate_game_witness(game, context, original, "resave", context.fingerprint)
-        flushed = (directory / run_gb_gate.describe_gen2(spec.title)["saveram_name"]).read_bytes()
+        flushed = (directory / run_gb_gate.describe_gen2(run_gb_gate.gen2_key(spec.title, gate.get("kind", "clean")))
+                   ["saveram_name"]).read_bytes()
         after = inspect_candidate(flushed, profile, rom, spec)
         _require(game.get("resave_cartram_sha256") == after["cartram_sha256"],
                  "flushed re-save differs from the GAME-witnessed CartRAM")
@@ -1027,43 +1190,66 @@ def _resave_stage(context, **gate):
         return qualification.StageReceipt(context.stage, context.fingerprint, "FAIL", problems=(str(exc),))
 
 
-def game_callbacks(attempt_id, *, root=ROOT, runner=None, timeout=1200):
+def game_callbacks(attempt_id, *, root=ROOT, runner=None, timeout=1200, kind="clean"):
     """The Gen 2 boot/resave stages, bound to the reviewed gate through tools/run_gb_gate.run_gate."""
     _require(isinstance(attempt_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", attempt_id) is not None,
              "bounded attempt ID required")
-    gate = {"attempt_id": attempt_id, "root": root, "runner": runner, "timeout": timeout}
+    _require(kind in KINDS, f"unknown Gen 2 artifact kind: {kind!r}")
+    gate = {"attempt_id": attempt_id, "root": root, "runner": runner, "timeout": timeout, "kind": kind}
     return {"boot": lambda context: _boot_stage(context, **gate),
             "resave": lambda context: _resave_stage(context, **gate)}
 
 
-def _fixture_case(spec, fixture, receipt, facts_path, facts, root):
+def _fixture_case(spec, fixture, receipt, facts_path, facts, root, rom_path=None, rom_sha1=None):
+    """rom_path/rom_sha1 name the EXECUTED cartridge of an overlay qualification (the staged overlay image and its
+    hashed sha1); both None is the pinned clean build, exactly as before."""
     ctx = load_context(spec.title, root=root)
     return qualification.FixtureCase(spec.name,
         {"fixture": fixture, "profile": Path(root) / f"data/games/gen2_{spec.title}/profile.json",
-         "rom": ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"],
+         "rom": rom_path or ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"],
          "route_facts": facts_path, "played_receipt": receipt},
-        {"title": spec.title, "rom_sha1": ctx.source_record()["rom_sha1"], "scope": "candidate fixture",
+        {"title": spec.title, "rom_sha1": rom_sha1 or ctx.source_record()["rom_sha1"], "scope": "candidate fixture",
          "route_facts_sha256": _facts_sha256(facts)})
 
 
-def qualify(spec_or_name, candidate_path, attempt_id, *, receipt_path=None, root=ROOT, runner=None, timeout=1200):
+def qualify(spec_or_name, candidate_path, attempt_id, *, receipt_path=None, root=ROOT, runner=None, timeout=1200,
+            kind="clean"):
     """Full-chain qualification of ONE played candidate (run_play's candidate_path/receipt_path).
 
     Static PYDEC, boot/CONTINUE, native re-save + reload, independent post-oracle. Launches EmuHawk
     three times (boot, resave, reload) at 100%; the report never claims physical qualification.
+
+    kind "overlay" (D4/D7) is a fresh boot/re-save/reload on the published overlay: the report's rom artifact and
+    provenance sha1 are the staged overlay image (hashed), the route/qualify facts are overlay-resolved, and the
+    attempt lands under qualify-overlay. The played-origin role holds a clean_qualification_ref (fixture bytes are reused,
+    never replayed; the played receipts are scratch that no longer exist for the errand fixtures).
     """
+    _require(kind in KINDS, f"unknown Gen 2 artifact kind: {kind!r}")
     spec = spec_or_name if isinstance(spec_or_name, FixtureSpec) else BY_NAME[spec_or_name]
     callbacks = {"qualify": qualify_stage, "post_oracle": post_oracle_stage,
-                 **game_callbacks(attempt_id, root=root, runner=runner, timeout=timeout)}
+                 **game_callbacks(attempt_id, root=root, runner=runner, timeout=timeout, kind=kind)}
     candidate = Path(candidate_path)
     receipt = Path(receipt_path) if receipt_path else candidate.parent / (spec.name + ".played.json")
-    facts = spec_route_facts(spec, root)
-    snapshot = Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
+    facts = spec_route_facts(spec, root, kind=kind)   # overlay: code sites resolved on the overlay (identical where nothing moved)
+    snapshot = (Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name
+                / ("qualify-overlay" if kind == "overlay" else "qualify"))
     snapshot.mkdir(parents=True, exist_ok=True)
     facts_path = snapshot / (spec.title + "_route_facts.json")
     facts_path.write_text(json.dumps(facts), encoding="utf-8")
-    report = qualification.qualify_fixtures([_fixture_case(spec, candidate, receipt, facts_path, facts, root)],
-                                            callbacks, scope="full", attempt_id=attempt_id, max_fixtures=1)
+    rom_path = rom_sha1 = None
+    if kind == "overlay":
+        # the played-origin role holds the reference to the committed clean qualification of these exact bytes (receipt_path
+        # is ignored: no played receipt is re-judged on the overlay)
+        receipt = snapshot / (spec.name + ".clean_qualification_ref.json")
+        receipt.write_text(json.dumps(clean_qualification_ref(spec, candidate.read_bytes(), root), sort_keys=True),
+                           encoding="utf-8")
+        octx = load_overlay_context(spec.title, root=root)
+        rom_path = snapshot / f"{spec.title}_overlay.gbc"
+        rom_path.write_bytes(octx.rom)
+        rom_sha1 = octx.execution_record()["rom_sha1"]
+    report = qualification.qualify_fixtures(
+        [_fixture_case(spec, candidate, receipt, facts_path, facts, root, rom_path, rom_sha1)],
+        callbacks, scope="full", attempt_id=attempt_id, max_fixtures=1)
     report["physical_qualification"] = False
     report["open_obligations"] = ["coordinator GAME/RTC/played-origin review", "recorded source/physical gate sign-off"]
     return report
@@ -1109,8 +1295,23 @@ def main(argv=None):
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--qualify", type=Path, help="read-only candidate inventory")
     parser.add_argument("--scope", choices=("static", "full"), default="static")
+    parser.add_argument("--qualify-overlay", metavar="FIXTURE", choices=OVERLAY_QUALIFIED,
+                        help="fresh boot/re-save/reload qualification of one committed fixture on the OVERLAY (launches "
+                             "EmuHawk three times); a PASS report lands in tests/fixtures/gen2/receipts/overlay/")
+    parser.add_argument("--attempt", help="bounded attempt id for --qualify-overlay (new per run)")
     args = parser.parse_args(argv)
     try:
+        if args.qualify_overlay:
+            _require(args.attempt, "--attempt is required with --qualify-overlay")
+            name = args.qualify_overlay
+            result = qualify(name, Path(args.root) / "tests/fixtures/gen2" / f"{name}.SaveRAM", args.attempt,
+                             root=args.root, kind="overlay")
+            if result["passed"]:   # the overlay namespace only: no clean receipt is ever written from here
+                out = receipts_dir("overlay", args.root) / f"{name}.qualification.json"
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            print(json.dumps(result, indent=2))
+            return 0 if result["passed"] else 1
         result = qualification_report(args.qualify, root=args.root, scope=args.scope) if args.qualify else fixture_manifest(args.root)
         print(json.dumps(result, indent=2))
         return 0 if args.qualify is None or result["passed"] else 1

@@ -8,6 +8,10 @@ synthetic bytes as the stage fingerprint) and runs lua/tests/gen2_frame_align.lu
 (lua/tests/gen2_u1g_inputs.lua). On PASS this file re-checks the printed run and writes it to
 .cache/gen2-fixtures/u1g/<fixture>.run.json; once a title has all three runs they replace the synthetic runs in
 tests/fixtures/gen2/receipts/<title>.engine_sites.json (the non-synthetic runs are kept).
+
+OVERLAY (SLINK_GEN2_ARTIFACT=overlay, docs/gen2/OVERLAY_ADMISSION.md D4): the same legs boot <title>_overlay, the run files
+go to .cache/gen2-fixtures/u1g-overlay and the union lands in tests/fixtures/gen2/receipts/overlay/<title>.engine_sites.json.
+A union never mixes kinds or ROMs: merge() refuses a committed or new run that is not the staged artifact's own.
 """
 from __future__ import annotations
 
@@ -30,7 +34,6 @@ from tests.live import (  # noqa: E402
 from tests.live.test_gen2_new_gates import emuhawk  # noqa: E402,F401 - pytest fixture
 from tools import (  # noqa: E402
     gen2_fixtures,
-    gen2_source_data,
     gen2_synth_fixtures as synth,  # noqa: E402
 )
 
@@ -41,7 +44,7 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/gen2_frame_align.lua"
-RUNS = REPO / ".cache/gen2-fixtures/u1g"
+RUNS = REPO / ".cache/gen2-fixtures" / ("u1g-overlay" if live.KIND == "overlay" else "u1g")
 KINDS = ("grass", "kyle", "bill")
 CLAIMED = {"grass": ("hatch_species", "hatch_finalized", "evolution_species_published", "capture_box",
                      "capture_box_finalized"),
@@ -55,9 +58,8 @@ def u1g_facts(ctx, kind, name) -> dict:
     areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
     by_name = {row["map_name"]: row for row in areas.values()}
     species = gen2_fixtures.const_block(ctx.read_source("constants/pokemon_constants.asm"), "CATERPIE")
-    pack = json.loads((REPO / f"data/games/gen2_{ctx.title}/engine_signals.json").read_text(encoding="utf-8"))
     points = {}
-    for site in pack["titles"][ctx.title]["sites"].values():
+    for site in gen2_fixtures.exec_sites(ctx.title, live.KIND, REPO).values():
         points.update({k: v for k, v in site["point_symbols"].items() if k in ("wPartyCount", "wPartySpecies", "sBoxCount")})
     effects = {"wPartyCount": {"addr": points["wPartyCount"]["addr"]},
                "wPartySpecies": {"addr": points["wPartySpecies"]["addr"]},
@@ -87,7 +89,7 @@ def u1g_facts(ctx, kind, name) -> dict:
 
 
 def run_facts(ctx, spec, kind, name, qualification_attempt_id):
-    facts = u1.u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO), qualification_attempt_id)
+    facts = u1.u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind=live.KIND), qualification_attempt_id)
     for key in ("pc", "poison", "evolution"):
         facts.pop(key, None)
     facts["u1g"] = u1g_facts(ctx, kind, name)
@@ -96,6 +98,7 @@ def run_facts(ctx, spec, kind, name, qualification_attempt_id):
 
 def verify(text, title, kind, name, staged):
     run = live.tag_json(text, "RECEIPT")
+    gen2_fixtures.check_run_identity(run, live.identity(title))   # the HASHED staged artifact, never the env
     assert run["fixture"] == name and run["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), run["fixture"]
     assert sorted(run["proven"]) == sorted(CLAIMED[kind]) and run["evidence_level"] == "PHYSICAL"
     disclosure = json.loads((REPO / f"tests/fixtures/gen2/{name}.synth.json").read_text(encoding="utf-8"))
@@ -108,16 +111,20 @@ def verify(text, title, kind, name, staged):
     return run
 
 
-def merge(title):
-    """The title's receipt: its non-synthetic runs plus the three U1G runs, once all three exist."""
-    names = [f"{title}_synth_{kind}" for kind in KINDS]
+def merge(title, kind=None, identity=None):
+    """The title's receipt: its non-synthetic runs plus the three U1G runs, once all three exist.
+
+    Per artifact (D4): the union is read from and written to this kind's receipt, and every kept and new run must be
+    that artifact's own (gen2_fixtures.merge_engine_runs) -- a clean run never joins an overlay union or vice versa."""
+    kind = kind or live.KIND
+    identity = identity or live.identity(title, kind)
+    names = [f"{title}_synth_{k}" for k in KINDS]
     if not all((RUNS / f"{n}.run.json").exists() for n in names):
         return None
-    path = REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json"
+    path = live.receipt_file(f"{title}.engine_sites.json", kind, repo=REPO)
     committed = json.loads(path.read_text(encoding="utf-8"))
-    bare = {key: value for key, value in committed.items() if key != "code_digest"}   # a v1 receipt is one run
-    runs = [r for r in committed.get("runs", [bare]) if r["fixture"] not in synth.SYNTH_FIXTURES]
-    runs += [json.loads((RUNS / f"{n}.run.json").read_text(encoding="utf-8")) for n in names]
+    new = [json.loads((RUNS / f"{n}.run.json").read_text(encoding="utf-8")) for n in names]
+    runs = gen2_fixtures.merge_engine_runs(committed, new, identity, synth.SYNTH_FIXTURES)
     # the kept non-synthetic runs came from test_gen2_frame_align: stamped only if earned on this same code
     receipt = live.stamped({"schema": "gen2-engine-site-receipt-v2", "title": title, "runs": runs}, base=committed)
     path.write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -139,15 +146,15 @@ def test_u1g_run(emuhawk, title, kind):  # noqa: F811
     staged = fixture.read_bytes()
     built, _ = synth.build_named(name)
     assert built == staged, "the committed synthetic fixture is not the builder's output"
-    ctx = gen2_source_data.load_context(title, root=REPO)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    ctx = gen2_fixtures.exec_context(title, live.KIND, REPO)
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
     env = live.inspect_env(spec, staged)
     case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
     case.update(synth=name, attempt_id="u1g-" + name)   # the shared gate names the case by its base fixture
     env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(run_facts(ctx, spec, kind, name, qualification["attempt_id"]))
-    lane = REPO / ".cache/gen2-fixtures/u1g-run"   # run from a short-path lane: BizHawk's SaveRAM MAX_PATH limit
-    passed, path, text = run_gate(GATE, rom_key=title, target=spec.target, timeout=1800,
+    lane = REPO / ".cache/gen2-fixtures" / ("u1g-run-overlay" if live.KIND == "overlay" else "u1g-run")   # short path: BizHawk's SaveRAM MAX_PATH limit
+    passed, path, text = run_gate(GATE, rom_key=live.rom_key(title), target=spec.target, timeout=1800,
                                   saveram_dir=str(lane / name), fixture_path=str(fixture),
                                   speed_percent=300,   # the highest speed run_gb_gate exposes for Gen 2 (O-36: EMU-SPEED card)
                                   env_overrides=env)

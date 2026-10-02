@@ -369,6 +369,14 @@ function U.main(api, getenv, SG, IG)
     local json, profile, title, mode = ctx.json, ctx.profile, ctx.env.title, ctx.u2.mode
     local L = function(rel) return dofile(ctx.root .. "/" .. rel) end
     local pack = read_json(ctx, "data/games/gen2_" .. title .. "/write_checkpoint.json")
+    -- D2/D5: an overlay runs ITS checkpoint rows (view.checkpoint, from the execution binding), never the clean pack's.
+    local view = ctx.artifact
+    if view.kind == "overlay" then
+        local executed = {}
+        for key, value in pairs(pack) do executed[key] = value end
+        executed.titles = {[title]=assert(view.checkpoint, "overlay execution view carries no checkpoint")}
+        pack = executed
+    end
     local primary = pack.titles[title].primary
     local Safety, Evaluator = L("lua/gen2_write_safety.lua"), L("lua/gb_checkpoint.lua")
     local Writes, Boxes, Permit = L("lua/gen2/writes.lua"), L("lua/gen2/boxes.lua"), ctx.Permit
@@ -396,11 +404,11 @@ function U.main(api, getenv, SG, IG)
         {read_u8=api.read_u8, domains=api.domains, domain_size=api.domain_size, register=api.register},
         Evaluator, {
             capture=api.framecount, valid=function(held) return held == api.framecount() end,
-            admitted=function(t, sha) return t == title and sha == ctx.env.rom_sha1 end,
+            admitted=function(t, sha) return t == title and sha == ctx.env.exec_sha1 end,   -- the EXECUTED sha1 (D5)
             no_conflicting_owner=function() return true end,
             mapped_rom_bank=function() return api.read_u8(HROM, "System Bus") end,
             effective_wram_bank=effective_wram_bank,
-        })
+        }, nil, view.kind == "overlay" and view or nil)
 
     if mode == "hello" then
         return U.hello_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish, title=title})
@@ -684,7 +692,8 @@ function U.main(api, getenv, SG, IG)
         log("DUMP " .. json.encode(IG.dump(api, profile)))
     end
     local run = {schema=Safety.RUN_SCHEMA, mode=mode, title=title, evidence_level=evidence, result="FAIL",
-        rom_sha1=ctx.env.rom_sha1, pack_commit=pack.source.commit, fixture=ctx.case.name,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind,
+        binding_sha256=ctx.ident.binding_sha256, base_sha1=ctx.ident.base_sha1, pack_commit=pack.source.commit, fixture=ctx.case.name,
         fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
         qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
         harness_write_scopes=scopes,
@@ -958,7 +967,8 @@ function U.box_main(e)
     check("scripted " .. mode .. " route completed with normal buttons", played, not played and outcome or nil)
     check("checkpoint callback raised no error", #rec.errors == 0, rec.errors[1])
     local run = {schema=Safety.RUN_SCHEMA, mode=mode, title=e.title, evidence_level=e.evidence, result="FAIL",
-        rom_sha1=ctx.env.rom_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind,
+        binding_sha256=ctx.ident.binding_sha256, base_sha1=ctx.ident.base_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
         fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
         qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
         harness_write_scopes=json.array(wrote and {"u2-box-ops"} or {}),
@@ -1257,7 +1267,8 @@ function U.battle_faint_main(e)
     check("scripted battle_faint route completed with normal buttons", played, not played and outcome or nil)
     check("hook callbacks raised no error", #rec.errors == 0, rec.errors[1])
     local run = {schema=Safety.RUN_SCHEMA, mode="battle_faint", title=e.title, evidence_level=e.evidence, result="FAIL",
-        rom_sha1=ctx.env.rom_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind,
+        binding_sha256=ctx.ident.binding_sha256, base_sha1=ctx.ident.base_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
         fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
         qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
         harness_write_scopes=json.array(wrote and {"u2-battle-faint"} or {}),
@@ -1594,7 +1605,8 @@ function U.battle_bench_main(e)
     check("scripted battle_bench route completed with normal buttons", played, not played and outcome or nil)
     check("hook callbacks raised no error", #rec.errors == 0, rec.errors[1])
     local run = {schema=Safety.RUN_SCHEMA, mode="battle_bench", title=e.title, evidence_level=e.evidence, result="FAIL",
-        rom_sha1=ctx.env.rom_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind,
+        binding_sha256=ctx.ident.binding_sha256, base_sha1=ctx.ident.base_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
         fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
         qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
         harness_write_scopes=json.array(wrote and {"u2-battle-bench"} or {}),

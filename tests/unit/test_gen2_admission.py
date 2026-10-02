@@ -374,10 +374,24 @@ def _canonical_overlay_build(tmp_path, built, monkeypatch):
     }
     overlay_path = data / "overlay_provenance.json"
     overlay_path.write_text(json.dumps(overlay), newline="\n")
+    for title in admission.TITLE_OUTPUTS:   # D2: the generated binding sidecar of each overlay (tools/gen2_artifacts.py)
+        out = outputs[admission.TITLE_OUTPUTS[title][0][0]]
+        sidecar = out_dir / f"gen2_{title}" / "overlay" / "binding.json"
+        sidecar.parent.mkdir(parents=True)
+        sidecar.write_text(json.dumps({"schema": "gen2-overlay-binding-v1", "title": title, "kind": "overlay",
+                                       "rom_sha1": out["sha1"], "base_sha1": out["base_sha1"],
+                                       "ups_sha256": out["ups"]["sha256"]}, sort_keys=True), newline="\n")
     args = ["--provenance", str(receipt_path), "--overlay-provenance", str(overlay_path)]
     paths = {"root": repo, "lock": lock_path, "provenance": receipt_path,
              "overlay": overlay_path, "out": out_dir}
     return args, paths
+
+
+def _open_activation(monkeypatch):
+    """The two production-side checks (the G4 packet, the overlay receipts under the Lua validators) are exercised by
+    their own tests; here they are open so the catalog mechanics can be tested on a disposable tree."""
+    monkeypatch.setattr(admission, "g4_packet_errors", lambda: [])
+    monkeypatch.setattr(admission, "overlay_proof_errors", lambda matrices: [])
 
 
 def _overlay_rows(out_dir):
@@ -399,8 +413,8 @@ def test_promotion_refuses_mutated_temp_overlay_provenance_without_writes(tmp_pa
     mutated["outputs"]["pokecrystal"]["sha1"] = "0" * 40
     mutated_path = tmp_path / "mutated-overlay-provenance.json"
     mutated_path.write_text(json.dumps(mutated), newline="\n")
-    monkeypatch.setattr(admission, "promotion_blockers",
-                        lambda: pytest.fail("non-canonical promotion input was not rejected first"))
+    monkeypatch.setattr(admission, "activation_blockers",
+                        lambda *a: pytest.fail("non-canonical promotion input was not rejected first"))
 
     assert admission.main([*args[:-2], "--overlay-provenance", str(mutated_path),
                            "--promote-overlays"]) == 1
@@ -412,8 +426,8 @@ def test_promotion_is_refused_while_any_g4_precondition_is_open(tmp_path, built,
     args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
     before = {path: path.read_bytes() for path in paths["out"].rglob("*.json")}
-    monkeypatch.setattr(admission, "promotion_blockers",
-                        lambda: ["packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature"])
+    monkeypatch.setattr(admission, "g4_packet_errors",
+                        lambda: ["docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature"])
     assert admission.main([*args, "--promote-overlays"]) == 1
     assert before == {path: path.read_bytes() for path in before}
     assert set(_overlay_statuses(paths["out"]).values()) == {"BUILT"}
@@ -422,14 +436,14 @@ def test_promotion_is_refused_while_any_g4_precondition_is_open(tmp_path, built,
 def test_promotion_binds_one_grant_and_plain_regeneration_does_not_regrant(tmp_path, built, monkeypatch):
     args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    _open_activation(monkeypatch)
     assert admission.main([*args, "--promote-overlays"]) == 0
     rows = _overlay_rows(paths["out"])
     assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
-    assert len({row["grant_fingerprint"] for row in rows.values()}) == 1
+    assert len({row["runtime_gate"]["grant_fingerprint"] for row in rows.values()}) == 1
 
     # The promoted tree checks clean without the flag, and plain regeneration keeps this exact grant.
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: pytest.fail("no new grant is being made"))
+    monkeypatch.setattr(admission, "activation_blockers", lambda *a: pytest.fail("no new grant is being made"))
     assert admission.main([*args, "--check"]) == 0
     assert admission.main(args) == 0
     assert rows == _overlay_rows(paths["out"])
@@ -439,7 +453,7 @@ def test_promotion_binds_one_grant_and_plain_regeneration_does_not_regrant(tmp_p
 def test_promotion_needs_both_canonical_build_receipts(tmp_path, built, monkeypatch, omitted):
     args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    _open_activation(monkeypatch)
     index = 0 if omitted == "provenance" else 2
     incomplete = args[:index] + args[index + 2:]
     assert admission.main([*incomplete, "--promote-overlays"]) == 1
@@ -449,14 +463,14 @@ def test_promotion_needs_both_canonical_build_receipts(tmp_path, built, monkeypa
 def test_changed_overlay_identity_requires_a_new_g4_promotion(tmp_path, built, monkeypatch, capsys):
     args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    _open_activation(monkeypatch)
     assert admission.main([*args, "--promote-overlays"]) == 0
     before = {path: path.read_bytes() for path in paths["out"].rglob("*.json")}
 
     changed = json.loads(paths["overlay"].read_text())
     changed["outputs"]["pokecrystal"]["sha1"] = "0" * 40
     paths["overlay"].write_text(json.dumps(changed), newline="\n")
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: pytest.fail("stale grant was not rejected first"))
+    monkeypatch.setattr(admission, "activation_blockers", lambda *a: pytest.fail("stale grant was not rejected first"))
 
     assert admission.main(args) == 1
     assert "new G4 promotion is required" in capsys.readouterr().err
@@ -472,7 +486,7 @@ def test_a_partial_or_hand_edited_promotion_is_refused(tmp_path, built, monkeypa
     next(row for row in matrix["artifacts"] if row["kind"] == "overlay")["status"] = "ADMITTED"
     path.write_text(json.dumps(matrix, indent=2) + "\n", newline="\n")
     before = {candidate: candidate.read_bytes() for candidate in paths["out"].rglob("*.json")}
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    _open_activation(monkeypatch)
     assert admission.main([*args, "--check"]) == 1
     assert admission.main([*args, "--promote-overlays"]) == 1
     assert before == {candidate: candidate.read_bytes() for candidate in before}
@@ -483,7 +497,7 @@ def test_interrupted_atomic_publish_is_completed_by_the_same_promotion(
         tmp_path, built, monkeypatch, failed_replace):
     args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    _open_activation(monkeypatch)
     real_replace = admission.os.replace
     replace_calls = 0
 
@@ -504,12 +518,122 @@ def test_interrupted_atomic_publish_is_completed_by_the_same_promotion(
     assert admission.main([*args, "--promote-overlays"]) == 0
     rows = _overlay_rows(paths["out"])
     assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
-    assert len({row["grant_fingerprint"] for row in rows.values()}) == 1
+    assert len({row["runtime_gate"]["grant_fingerprint"] for row in rows.values()}) == 1
 
 
 def test_committed_tree_cannot_promote_until_the_owner_signs_g4():
     plan = (ROOT / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
     if "| G4 | — |" in plan:
-        blockers = admission.promotion_blockers()
-        assert "packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in blockers
-        assert not any("not ADMITTED at the published overlay" in b for b in blockers)
+        errors = admission.g4_packet_errors()
+        assert "docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in errors
+        assert not any("not ADMITTED at the published overlay" in b for b in errors)
+
+
+# --- schema v2 (OVERLAY_ADMISSION D1/D6): activation is its own gate, not the full release-evidence -------------------
+
+def test_every_committed_matrix_is_schema_v2_and_the_unactivated_overlay_is_future_built():
+    for title in ("crystal", "gold", "silver"):
+        matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())
+        assert matrix["schema_version"] == 2
+        row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
+        if row["status"] == "BUILT":      # not activated yet: an identity, never runtime eligible
+            assert (row["selection"], "runtime_gate" not in row, "binding_sha256" not in row) == ("FUTURE", True, True)
+
+
+def test_an_activated_row_is_selected_admitted_behind_its_own_g4_grant_and_binding_pin(tmp_path, built, monkeypatch):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    clean_before = {p.parent.name: json.loads(p.read_text())["artifacts"][0] for p in paths["out"].rglob("admission.json")}
+    _open_activation(monkeypatch)
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    rows = _overlay_rows(paths["out"])
+    for pack, row in rows.items():
+        sidecar = paths["out"] / pack / "overlay" / "binding.json"
+        assert (row["selection"], row["status"]) == ("SELECTED", "ADMITTED")
+        assert row["runtime_gate"] == {"id": "G4", "state": "ADMITTED",
+                                       "grant_fingerprint": row["runtime_gate"]["grant_fingerprint"]}
+        assert row["binding_sha256"] == hashlib.sha256(sidecar.read_bytes()).hexdigest()
+        assert "grant_fingerprint" not in row
+    for path in paths["out"].rglob("admission.json"):       # the clean grant is untouched and never grants the overlay
+        matrix = json.loads(path.read_text())
+        assert matrix["gate"]["id"] == "G1" and matrix["artifacts"][0] == clean_before[path.parent.name]
+
+
+def test_activation_needs_the_binding_sidecars_not_the_full_release_evidence(tmp_path, built, monkeypatch):
+    import verify_gen2_release as release
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    overlay = json.loads(paths["overlay"].read_text())
+    monkeypatch.setattr(admission, "g4_packet_errors", lambda: [])
+    monkeypatch.setattr(release, "release_evidence_errors",
+                        lambda *a, **k: pytest.fail("activation must not require the full release-evidence"))
+    assert admission.activation_blockers(paths["out"], overlay) == []
+    (paths["out"] / "gen2_gold" / "overlay" / "binding.json").unlink()
+    assert any("gold" in b and "binding sidecar missing" in b for b in admission.activation_blockers(paths["out"], overlay))
+
+
+@pytest.mark.parametrize("field,value", [("rom_sha1", "0" * 40), ("base_sha1", "0" * 40), ("ups_sha256", "0" * 64),
+                                         ("kind", "clean"), ("title", "gold")])
+def test_a_binding_sidecar_that_is_not_the_published_overlay_blocks_activation(tmp_path, built, monkeypatch, field, value):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "g4_packet_errors", lambda: [])
+    sidecar = paths["out"] / "gen2_crystal" / "overlay" / "binding.json"
+    binding = json.loads(sidecar.read_text())
+    binding[field] = value
+    sidecar.write_text(json.dumps(binding), newline="\n")
+    blockers = admission.activation_blockers(paths["out"], json.loads(paths["overlay"].read_text()))
+    assert any("crystal" in b and field in b for b in blockers), blockers
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    assert admission.main([*args, "--promote-overlays"]) == 1
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_a_missing_binding_sidecar_refuses_activation_without_writes(tmp_path, built, monkeypatch):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    _open_activation(monkeypatch)
+    (paths["out"] / "gen2_silver" / "overlay" / "binding.json").unlink()
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    assert admission.main([*args, "--promote-overlays"]) == 1
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_overlay_receipts_that_fail_the_production_validators_refuse_activation_without_writes(
+        tmp_path, built, monkeypatch, capsys):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    _open_activation(monkeypatch)
+    monkeypatch.setattr(admission, "overlay_proof_errors", lambda matrices: ["gold: overlay proofs refused: U1 stale"])
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    assert admission.main([*args, "--promote-overlays"]) == 1
+    assert "overlay proofs" in capsys.readouterr().err
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_a_changed_binding_sidecar_needs_a_new_promotion_not_a_regeneration(tmp_path, built, monkeypatch, capsys):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    _open_activation(monkeypatch)
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    sidecar = paths["out"] / "gen2_crystal" / "overlay" / "binding.json"
+    sidecar.write_text(sidecar.read_text() + " ", newline="\n")
+    assert admission.main(args) == 1
+    assert "binding pin" in capsys.readouterr().err
+    assert admission.main([*args, "--check"]) == 1
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_the_real_overlay_proof_check_runs_the_lua_entry_and_refuses_an_unbound_row():
+    # lua/gen2/entry.lua Entry.activation_proof on the committed (not activated) tree: the prospective row has no
+    # binding sidecar yet, so the production validators must refuse it instead of passing it
+    matrices = {}
+    for title in ("crystal", "gold", "silver"):
+        matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())
+        row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
+        row.update(selection="SELECTED", status="ADMITTED", binding_sha256="0" * 64,
+                   runtime_gate={"id": "G4", "state": "ADMITTED", "grant_fingerprint": "1" * 64})
+        matrices[title] = matrix
+    errors = admission.overlay_proof_errors(matrices)
+    assert len(errors) == 3 and all("overlay proofs refused" in e for e in errors)

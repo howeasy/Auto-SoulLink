@@ -67,6 +67,36 @@ GATE = "lua/tests/gen2_inspect_gate.lua"
 RECEIPTS = "tests/fixtures/gen2/receipts"
 _CODE_STAMP: dict = {}
 
+# Which artifact this session captures on (docs/gen2/OVERLAY_ADMISSION.md D4/D7): SLINK_GEN2_ARTIFACT=overlay boots the
+# SLink overlay, anything else is clean. The env only picks WHICH cartridge runs; every recorded identity comes from the
+# hashed staged bytes (run_gb_gate.artifact_identity), and overlay receipts land in the overlay namespace.
+KIND = gen2_fixtures.artifact_kind()
+_IDENTITY: dict = {}
+
+
+def receipts_rel(kind: str | None = None) -> str:
+    """The repo-relative receipts directory of `kind`; the clean path is the unchanged RECEIPTS."""
+    return RECEIPTS + "/overlay" if (kind or KIND) == "overlay" else RECEIPTS
+
+
+def receipt_file(name: str, kind: str | None = None, *, repo: Path = REPO) -> Path:
+    return repo / receipts_rel(kind) / name
+
+
+def rom_key(title: str, kind: str | None = None, *, cold: bool = False) -> str:
+    """The shared runner's key for `title` on this session's artifact: <title>[_overlay][_cold]."""
+    from run_gb_gate import gen2_key
+    return gen2_key(title, kind or KIND, cold)
+
+
+def identity(title: str, kind: str | None = None) -> dict:
+    """{kind, rom_sha1 (executed), base_sha1, binding_sha256}: HASHED from the staged build, never from the env."""
+    from run_gb_gate import artifact_identity
+    key = (title, kind or KIND)
+    if key not in _IDENTITY:
+        _IDENTITY[key] = artifact_identity(*key)
+    return dict(_IDENTITY[key])
+
 
 def code_stamp() -> dict:
     """CODE-DIGEST (5b1274c9): the production code this pytest session runs on, taken once, before the first gate
@@ -116,8 +146,8 @@ def fixture_missing_reason(name: str, *, repo: Path = REPO) -> str | None:
     return None
 
 
-def receipt_missing_reason(name: str, *, repo: Path = REPO) -> str | None:
-    path = repo / RECEIPTS / f"{name}.qualification.json"
+def receipt_missing_reason(name: str, *, repo: Path = REPO, kind: str | None = None) -> str | None:
+    path = receipt_file(f"{name}.qualification.json", kind, repo=repo)
     if not path.exists():
         return f"{path.relative_to(repo).as_posix()} not present (no qualification receipt for this fixture)"
     return None
@@ -132,13 +162,14 @@ def rom_missing_reason(title: str, *, repo: Path = REPO) -> str | None:
     return None
 
 
-def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) -> int:
+def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO, kind: str | None = None) -> int:
     """The expected OT of the STAGED bytes, from the fixture's own qualification receipt.
 
     The receipt must be a passed full-chain report whose row for `name` recorded exactly these bytes
     (artifacts.fixture.sha256) and whose independent PYDEC qualify stage recorded the player ID. A
     crystal_town file copied under the crystal_town_ot2 name fails the hash binding here."""
-    path = repo / RECEIPTS / f"{name}.qualification.json"
+    kind = kind or KIND
+    path = receipt_file(f"{name}.qualification.json", kind, repo=repo)
     report = json.loads(path.read_text(encoding="utf-8"))
     chain = fixture_qualification.FULL_CHAIN
     if (report.get("schema") != "fixture-qualification-v1" or report.get("scope") != "full"
@@ -162,11 +193,14 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
     spec = gen2_fixtures.BY_NAME.get(name)
     if spec is None or provenance["title"] != spec.title or provenance["scope"] != "candidate fixture":
         raise AssertionError(f"{name}: fixture title or scope differs from its source plan")
-    source = gen2_source_data.load_context(spec.title, root=repo).source_record()
-    if provenance["rom_sha1"] != source["rom_sha1"]:
-        raise AssertionError(f"{name}: ROM SHA-1 differs from the pinned source")
+    # A clean fixture's qualification binds the pinned build; an overlay's binds the overlay's own executed sha1
+    # (docs/gen2/OVERLAY_ADMISSION.md D4: fixture IDs unchanged, every overlay qualification a fresh boot/re-save/reload).
+    wanted = (gen2_source_data.load_context(spec.title, root=repo).source_record()["rom_sha1"] if kind == "clean"
+              else identity(spec.title, kind)["rom_sha1"])
+    if provenance["rom_sha1"] != wanted:
+        raise AssertionError(f"{name}: ROM SHA-1 differs from the {kind} artifact")
     # qualify() records the hash of the complete route-facts dict (including its fingerprint).
-    facts = gen2_fixtures.spec_route_facts(spec, repo)
+    facts = gen2_fixtures.spec_route_facts(spec, repo, kind=kind)
     if provenance["route_facts_sha256"] != gen2_fixtures._facts_sha256(facts):
         raise AssertionError(f"{name}: route facts differ from the pinned source")
     outputs = {"qualify": set(), "boot": {"boot:game_witness"},
@@ -513,15 +547,16 @@ def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
     return py_party
 
 
-def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO) -> dict:
+def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO, kind: str | None = None) -> dict:
     """The fixture-qualification CONTINUE binding the gate arrives through (stage "boot"), bound to
     the staged bytes by the stage fingerprint."""
-    facts = gen2_fixtures.spec_route_facts(spec, repo)
+    kind = kind or KIND
+    facts = gen2_fixtures.spec_route_facts(spec, repo, kind=kind)
     case = {**vars(spec), "title_idle_frames": 0, "attempt_id": "inspect-" + spec.name,
             **gen2_fixtures.QUALIFY_BUDGET}
     qualify = {"stage": "boot", "stage_fingerprint": hashlib.sha256(fixture_bytes).hexdigest(),
-               "facts": gen2_fixtures.qualify_facts(spec.title, repo, errand=True)
-               if spec.name in gen2_fixtures.ERRAND_FIXTURES else gen2_fixtures.qualify_facts(spec.title, repo)}
+               "facts": gen2_fixtures.qualify_facts(spec.title, repo, errand=True, kind=kind)
+               if spec.name in gen2_fixtures.ERRAND_FIXTURES else gen2_fixtures.qualify_facts(spec.title, repo, kind=kind)}
     return {"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts),
             "SLINK_GEN2_QUALIFY": json.dumps(qualify)}
 
@@ -542,13 +577,17 @@ def _run_inspect_gate(spec, fixture: Path, fixture_bytes: bytes, *, timeout=600)
     """Boot `spec`'s fixture warm and run the inspect gate; returns (passed, path, text)."""
     from run_gb_gate import run_gate
 
-    directory = REPO / ".cache/gen2-fixtures/inspect-gate" / spec.name
-    return run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=timeout,
+    directory = REPO / ".cache/gen2-fixtures/inspect-gate" / (f"{spec.name}-overlay" if KIND == "overlay" else spec.name)
+    return run_gate(GATE, rom_key=rom_key(spec.title), target=spec.target, timeout=timeout,
                     saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=100,
                     env_overrides=inspect_env(spec, fixture_bytes))
 
 
-@pytest.mark.parametrize("spec", FIXTURES, ids=lambda spec: spec.name)
+# On an overlay run exactly the fixtures that carry an overlay qualification (a skip would fail the attestation).
+INSPECT_FIXTURES = tuple(spec for spec in FIXTURES if KIND == "clean" or spec.name in gen2_fixtures.OVERLAY_QUALIFIED)
+
+
+@pytest.mark.parametrize("spec", INSPECT_FIXTURES, ids=lambda spec: spec.name)
 def test_inspect_gate_and_hardware_differential(spec, emuhawk):
     reason = rom_missing_reason(spec.title) or fixture_missing_reason(spec.name) or receipt_missing_reason(spec.name)
     if reason:
@@ -571,6 +610,7 @@ def test_inspect_gate_and_hardware_differential(spec, emuhawk):
 
     # R-2: independent stat recomputation from base stats sourced off the ROM, never the party's
     # own stored stat fields (CalcMonStats double-derivation, ticket 20).
+    # the stat tables are the clean build's data (the profile binds that ROM); the overlay changes no table
     ctx = gen2_source_data.load_context(spec.title, root=REPO)
     rom = Rom(ctx.rom, profile_wrapper["titles"][spec.title])
     for mon in py_party["mons"]:

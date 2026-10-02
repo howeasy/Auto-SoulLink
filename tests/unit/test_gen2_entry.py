@@ -141,7 +141,7 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
 
     paths = []
     for pack in world.entry.RECEIPT_FILES.values():
-        files = dict(pack.items())
+        files = dict(pack.clean.items())   # D4: the clean proofs; the overlay namespace is tests/unit/test_gen2_overlay_admission.py
         paths += [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
     # + gold_battle_errand.qualification.json (the Gold U1 fixture's report); card U1G: + silver_town and the nine
     # synthetic-fixture disclosures, which are committed beside their SaveRAM (tests/fixtures/gen2/<name>.synth.json)

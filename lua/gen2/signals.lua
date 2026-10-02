@@ -14,6 +14,9 @@
 -- areas (generated area_map), encounters (generated encounter_tables),
 -- statics (generated static_encounters), gifts (generated gifts.json: card U1G qualifies a givepoke caller from it;
 -- without it gift_static stays OPEN).
+-- view (new, PHYSICAL only; OVERLAY_ADMISSION D5): the selected artifact view {kind, rom_sha1, base_sha1, binding_sha256,
+-- sites}. S.qualified_sites/S.bind_fixture_qualification validate every run against its sha1/kind/binding (nil = the
+-- clean pack) and an overlay registers its OWN sites, never the clean pack's.
 -- Authority.capture returns {generation,operation}; valid checks the same held
 -- observation. Operation ids must distinguish native attempts. boundary() is
 -- mandatory on failure/cancel/reset/reload/source change. The model API does not
@@ -162,6 +165,43 @@ end
 local COUNT = 9007199254740991
 local function hex64(value) return type(value) == "string" and #value == 64 and value:match("^%x+$") ~= nil end
 
+-- docs/gen2/OVERLAY_ADMISSION.md D5: the EXECUTED artifact a receipt is checked against. view == nil is the clean pack
+-- (every pre-overlay caller); otherwise view = {kind, rom_sha1, base_sha1, binding_sha256, sites} (lua/gen2/artifact.lua).
+-- Returns the pack whose title row is the executed one (an overlay swaps in view.sites), the executed sha1, kind and
+-- binding; or nil,why.
+local function executed(title, pack, view)
+    local base = type(pack) == "table" and type(pack.source) == "table" and pack.source.rom_sha1
+    if view == nil then
+        if not base then return nil,"engine-site pack required" end
+        return pack, base, "clean", nil
+    end
+    if type(view) ~= "table" or not base or type(pack.titles) ~= "table" or type(pack.titles[title]) ~= "table"
+       or type(view.rom_sha1) ~= "string" or #view.rom_sha1 ~= 40 then
+        return nil,"artifact view required"
+    end
+    if view.kind == "clean" then
+        if view.rom_sha1 ~= base or view.binding_sha256 ~= nil then return nil,"clean view is not this pack ROM" end
+        return pack, base, "clean", nil
+    end
+    if view.kind ~= "overlay" or view.rom_sha1 == base or view.base_sha1 ~= base or not hex64(view.binding_sha256)
+       or type(view.sites) ~= "table" then
+        return nil,"overlay view is not a bound overlay of this pack"
+    end
+    local titles, row, effective = {}, {}, {}
+    for key,value in pairs(pack.titles) do titles[key] = value end
+    for key,value in pairs(pack.titles[title]) do row[key] = value end
+    row.sites, titles[title] = view.sites, row
+    for key,value in pairs(pack) do effective[key] = value end
+    effective.titles = titles
+    return effective, view.rom_sha1, "overlay", view.binding_sha256
+end
+-- A receipt (or one of its runs) belongs to the executed kind only when it says so: an overlay names its kind and
+-- binding, a clean one names neither.
+local function kind_mismatch(item, kind, binding)
+    if kind == "overlay" then return item.artifact_kind ~= "overlay" or item.binding_sha256 ~= binding end
+    return (item.artifact_kind ~= nil and item.artifact_kind ~= "clean") or item.binding_sha256 ~= nil
+end
+
 -- Pure: nil when a synthetic run's disclosure and live effect records hold, else why (card U1G, O-33). The
 -- disclosure names the run's own fixture bytes; each effect is a transition sampled in this run: before_hex read at
 -- before_frame (at or after the run's arrival, before the armed frame), after_hex read inside the aligned callback,
@@ -249,18 +289,23 @@ end
 -- run still needs its hit alignment), and a run's sites need their predecessors proven in that SAME run: a run that
 -- would lose a site to the closure is refused (no causal prerequisite from another run).
 local qualified_run
-function S.qualified_sites(title, pack, receipt)
+function S.qualified_sites(title, pack, receipt, view)
     local owner = S.PHYSICAL_TITLES[title]
     if not owner then
         return nil,"Gen 2 runtime signal qualification is OPEN for " .. tostring(title) .. ": no PHYSICAL receipt path"
     end
-    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return qualified_run(title, pack, receipt) end
+    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then
+        return qualified_run(title, pack, receipt, nil, view)
+    end
+    local effective, rom, kind, binding = executed(title, pack, view)
+    if not effective then return nil,rom end
     if receipt.title ~= owner or type(receipt.runs) ~= "table" or #receipt.runs == 0 then
         return nil,"v2 receipt belongs to another title or names no runs"
     end
+    if kind_mismatch(receipt, kind, binding) then return nil,"v2 receipt belongs to another artifact kind or binding" end
     local union, live_capture = {}, false
     for index,run in ipairs(receipt.runs) do
-        local proven, why = qualified_run(title, pack, run, true)
+        local proven, why = qualified_run(title, pack, run, true, view)
         if not proven then return nil,"run " .. index .. ": " .. tostring(why) end
         if type(run) == "table" and not synthetic(run.fixture) and type(run.frame_alignment) == "table"
            and run.frame_alignment.battle_party ~= nil then live_capture = true end
@@ -270,15 +315,20 @@ function S.qualified_sites(title, pack, receipt)
     return union
 end
 
-function qualified_run(title, pack, receipt, v2)
+function qualified_run(title, pack, receipt, v2, view)
     local owner = S.PHYSICAL_TITLES[title]
     if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA or receipt.evidence_level ~= "PHYSICAL"
        or receipt.result ~= "PASS" then
         return nil,"PHYSICAL engine-site qualification receipt required"
     end
+    local effective, rom, kind, binding = executed(title, pack, view)
+    if not effective then
+        return nil, view == nil and "qualification receipt belongs to another title, ROM or engine-site pack" or rom
+    end
+    pack = effective
     local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
     if type(data) ~= "table" or type(data.sites) ~= "table" or type(pack.source) ~= "table" or receipt.title ~= owner
-       or receipt.rom_sha1 ~= pack.source.rom_sha1 or receipt.pack_commit ~= pack.source.commit
+       or receipt.rom_sha1 ~= rom or kind_mismatch(receipt, kind, binding) or receipt.pack_commit ~= pack.source.commit
        or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
         return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
     end
@@ -391,13 +441,28 @@ local function bind_synthetic(run, reports)
                      fixture_sha256=committed.base_sha256, qualification_attempt_id=run.qualification_attempt_id},
                     reports[committed.base_fixture])
 end
-function S.bind_fixture_qualification(receipt, qualification)
-    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return bind_run(receipt, qualification) end
+-- D5: every run is bound to the SELECTED view's executed sha1, kind and binding (nil view = clean) before its report.
+local function owned(item, view)
+    if type(item) ~= "table" then return false end
+    if view == nil then return not kind_mismatch(item, "clean", nil) end
+    if type(view) ~= "table" or (view.kind ~= "clean" and view.kind ~= "overlay") or item.rom_sha1 ~= view.rom_sha1 then
+        return false
+    end
+    return not kind_mismatch(item, view.kind, view.kind == "overlay" and view.binding_sha256 or nil)
+end
+function S.bind_fixture_qualification(receipt, qualification, view)
+    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then
+        if receipt ~= nil and not owned(receipt, view) then
+            return nil,"engine-site receipt belongs to another ROM or artifact kind"
+        end
+        return bind_run(receipt, qualification)
+    end
     if type(receipt.runs) ~= "table" or #receipt.runs == 0 or type(qualification) ~= "table" then
         return nil,"v2 receipt and its qualification reports required"
     end
     for index,run in ipairs(receipt.runs) do
         local ok, why
+        if not owned(run, view) then return nil,"run " .. index .. ": belongs to another ROM or artifact kind" end
         if type(run) == "table" and synthetic(run.fixture) then
             ok, why = bind_synthetic(run, qualification)
         else
@@ -436,7 +501,8 @@ function S.new(options)
     if type(options) ~= "table" or options.runtime_qualification == nil then
         return nil,"explicit Gen 2 runtime qualification is required"
     end
-    local ok, proven, why = pcall(S.qualified_sites, options.title, options.pack, options.runtime_qualification)
+    local ok, proven, why = pcall(S.qualified_sites, options.title, options.pack, options.runtime_qualification,
+                                  options.view)
     if not ok then return nil,"malformed Gen 2 qualification input: " .. tostring(proven) end
     if not proven then return nil,why end
     local ok,result,reason,failed = pcall(build,options,proven)
@@ -466,6 +532,8 @@ function build(options, proven)
     for name in pairs(profile.titles) do assert(name == title,"profile title mismatch") end
     for name in pairs(pack.titles) do assert(name == title,"engine-site title mismatch") end
     local p, data = assert(profile.titles[title]), assert(pack.titles[title])
+    -- D5: an overlay executes its own sites (qualified_sites already proved them against the receipts)
+    if proven and options.view ~= nil and options.view.kind == "overlay" then data.sites = copy(options.view.sites) end
     same_source(profile.source,pack.source)
     assert(p.artifact == pack.source.artifact and p.rom_sha1 == pack.source.rom_sha1,
            "selected profile artifact differs")

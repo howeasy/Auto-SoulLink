@@ -2,10 +2,12 @@
 -- No emulator global. build_candidate requires explicit candidate_only=true and injected
 -- IO/policies; with deps.net it also composes the Gen 2 client (lua/gen2/client.lua) over
 -- the same MODEL graph (model_only IO, MODEL_PROBE signals, an injected checkpoint).
--- build is production: admit() passes only a SELECTED, BUILT row whose G1 gate is ADMITTED
--- (owner ruling O-22) AND whose shipped PHYSICAL receipts re-validate now (U1 engine sites,
--- U2 write windows, each bound to its committed fixture-qualification report): Crystal 1.0,
--- Gold and Silver (O-22; Silver's U2 is Gold's receipt, O-23). Crystal 1.1 stays BUILD_ONLY.
+-- build is production: admit() passes only (a) a CLEAN row (SELECTED, BUILT, matrix.gate G1 ADMITTED, owner ruling
+-- O-22) or (b) an ACTIVATED OVERLAY row (SELECTED, ADMITTED, runtime_gate G4 ADMITTED, binding_sha256 pin; OVERLAY_ADMISSION
+-- D1), AND whose own shipped PHYSICAL receipts re-validate now (U1 engine sites, U2 write windows, each bound to its
+-- committed fixture-qualification report, per RECEIPT_FILES[pack][kind]): Crystal 1.0, Gold and Silver (clean: Silver's
+-- U2 is Gold's receipt, O-23; an overlay has its own). Crystal 1.1 stays BUILD_ONLY. What executes is the admission
+-- decision's (kind + the ACTUAL rehashed sha1, D5), read through lua/gen2/artifact.lua's view; never a caller's claim.
 -- Either graph stays runtime_started=false until client:start().
 local Entry = {}
 
@@ -72,46 +74,90 @@ Entry.PACK_FILES = {
 -- The O-22 proofs a production pack ships as release data: byte copies of the committed
 -- tests/fixtures/gen2/receipts/ files (tests/unit/test_gen2_entry.py pins them equal).
 -- A pack absent here can never be admitted, whatever its admission.json says.
+-- D4 (docs/gen2/OVERLAY_ADMISSION.md): proofs are per ARTIFACT KIND. .clean is the O-22 set, unchanged; .overlay holds the
+-- proofs captured on the PATCHED cartridge itself under receipts/overlay/, never shared with clean (every overlay
+-- qualification is a fresh boot/re-save/reload on the overlay ROM). Silver's overlay has its OWN write window: the
+-- O-23 Gold-for-Silver reuse is clean-only. proofs() has no fallback from overlay to clean.
 Entry.RECEIPT_FILES = {
     gen2_crystal={
-        engine_sites="data/games/gen2_crystal/receipts/crystal.engine_sites.json",
-        write_window="data/games/gen2_crystal/receipts/crystal.write_window.json",
-        qualifications={
-            crystal_battle="data/games/gen2_crystal/receipts/crystal_battle.qualification.json",
-            crystal_town="data/games/gen2_crystal/receipts/crystal_town.qualification.json",
-            -- card U1G: the committed O-33 disclosures (the admission trust root for the synthetic runs' bytes)
-            crystal_synth_grass="data/games/gen2_crystal/receipts/crystal_synth_grass.synth.json",
-            crystal_synth_kyle="data/games/gen2_crystal/receipts/crystal_synth_kyle.synth.json",
-            crystal_synth_bill="data/games/gen2_crystal/receipts/crystal_synth_bill.synth.json",
+        clean={
+            engine_sites="data/games/gen2_crystal/receipts/crystal.engine_sites.json",
+            write_window="data/games/gen2_crystal/receipts/crystal.write_window.json",
+            qualifications={
+                crystal_battle="data/games/gen2_crystal/receipts/crystal_battle.qualification.json",
+                crystal_town="data/games/gen2_crystal/receipts/crystal_town.qualification.json",
+                -- card U1G: the committed O-33 disclosures (the admission trust root for the synthetic runs' bytes)
+                crystal_synth_grass="data/games/gen2_crystal/receipts/crystal_synth_grass.synth.json",
+                crystal_synth_kyle="data/games/gen2_crystal/receipts/crystal_synth_kyle.synth.json",
+                crystal_synth_bill="data/games/gen2_crystal/receipts/crystal_synth_bill.synth.json",
+            },
+        },
+        overlay={
+            engine_sites="data/games/gen2_crystal/receipts/overlay/crystal.engine_sites.json",
+            write_window="data/games/gen2_crystal/receipts/overlay/crystal.write_window.json",
+            qualifications={
+                crystal_battle="data/games/gen2_crystal/receipts/overlay/crystal_battle.qualification.json",
+                crystal_town="data/games/gen2_crystal/receipts/overlay/crystal_town.qualification.json",
+                crystal_synth_grass="data/games/gen2_crystal/receipts/overlay/crystal_synth_grass.synth.json",
+                crystal_synth_kyle="data/games/gen2_crystal/receipts/overlay/crystal_synth_kyle.synth.json",
+                crystal_synth_bill="data/games/gen2_crystal/receipts/overlay/crystal_synth_bill.synth.json",
+            },
         },
     },
     gen2_gold={
-        engine_sites="data/games/gen2_gold/receipts/gold.engine_sites.json",
-        write_window="data/games/gen2_gold/receipts/gold.write_window.json",
-        qualifications={
-            gold_battle="data/games/gen2_gold/receipts/gold_battle.qualification.json",
-            -- the Gold U1 engine-site receipt's fixture (card gen2-u1e-poison; S.U1_FIXTURES)
-            gold_battle_errand="data/games/gen2_gold/receipts/gold_battle_errand.qualification.json",
-            gold_town="data/games/gen2_gold/receipts/gold_town.qualification.json",
-            gold_synth_grass="data/games/gen2_gold/receipts/gold_synth_grass.synth.json",
-            gold_synth_kyle="data/games/gen2_gold/receipts/gold_synth_kyle.synth.json",
-            gold_synth_bill="data/games/gen2_gold/receipts/gold_synth_bill.synth.json",
+        clean={
+            engine_sites="data/games/gen2_gold/receipts/gold.engine_sites.json",
+            write_window="data/games/gen2_gold/receipts/gold.write_window.json",
+            qualifications={
+                gold_battle="data/games/gen2_gold/receipts/gold_battle.qualification.json",
+                -- the Gold U1 engine-site receipt's fixture (card gen2-u1e-poison; S.U1_FIXTURES)
+                gold_battle_errand="data/games/gen2_gold/receipts/gold_battle_errand.qualification.json",
+                gold_town="data/games/gen2_gold/receipts/gold_town.qualification.json",
+                gold_synth_grass="data/games/gen2_gold/receipts/gold_synth_grass.synth.json",
+                gold_synth_kyle="data/games/gen2_gold/receipts/gold_synth_kyle.synth.json",
+                gold_synth_bill="data/games/gen2_gold/receipts/gold_synth_bill.synth.json",
+            },
+        },
+        overlay={
+            engine_sites="data/games/gen2_gold/receipts/overlay/gold.engine_sites.json",
+            write_window="data/games/gen2_gold/receipts/overlay/gold.write_window.json",
+            qualifications={
+                gold_battle="data/games/gen2_gold/receipts/overlay/gold_battle.qualification.json",
+                gold_battle_errand="data/games/gen2_gold/receipts/overlay/gold_battle_errand.qualification.json",
+                gold_town="data/games/gen2_gold/receipts/overlay/gold_town.qualification.json",
+                gold_synth_grass="data/games/gen2_gold/receipts/overlay/gold_synth_grass.synth.json",
+                gold_synth_kyle="data/games/gen2_gold/receipts/overlay/gold_synth_kyle.synth.json",
+                gold_synth_bill="data/games/gen2_gold/receipts/overlay/gold_synth_bill.synth.json",
+            },
         },
     },
-    -- O-23: Silver's U2 proof is Gold's write-window receipt (gen2_write_safety M.RECEIPT_TITLE),
+    -- O-23 (clean only): Silver's U2 proof is Gold's write-window receipt (gen2_write_safety M.RECEIPT_TITLE),
     -- valid only while the checkpoint rows stay identical; its U1 proof is its own.
     gen2_silver={
-        engine_sites="data/games/gen2_silver/receipts/silver.engine_sites.json",
-        write_window="data/games/gen2_silver/receipts/gold.write_window.json",
-        qualifications={
-            silver_battle="data/games/gen2_silver/receipts/silver_battle.qualification.json",
-            gold_battle="data/games/gen2_silver/receipts/gold_battle.qualification.json",
-            gold_town="data/games/gen2_silver/receipts/gold_town.qualification.json",
-            -- card U1G: silver_town is the base of the synthetic kyle/bill runs
-            silver_town="data/games/gen2_silver/receipts/silver_town.qualification.json",
-            silver_synth_grass="data/games/gen2_silver/receipts/silver_synth_grass.synth.json",
-            silver_synth_kyle="data/games/gen2_silver/receipts/silver_synth_kyle.synth.json",
-            silver_synth_bill="data/games/gen2_silver/receipts/silver_synth_bill.synth.json",
+        clean={
+            engine_sites="data/games/gen2_silver/receipts/silver.engine_sites.json",
+            write_window="data/games/gen2_silver/receipts/gold.write_window.json",
+            qualifications={
+                silver_battle="data/games/gen2_silver/receipts/silver_battle.qualification.json",
+                gold_battle="data/games/gen2_silver/receipts/gold_battle.qualification.json",
+                gold_town="data/games/gen2_silver/receipts/gold_town.qualification.json",
+                -- card U1G: silver_town is the base of the synthetic kyle/bill runs
+                silver_town="data/games/gen2_silver/receipts/silver_town.qualification.json",
+                silver_synth_grass="data/games/gen2_silver/receipts/silver_synth_grass.synth.json",
+                silver_synth_kyle="data/games/gen2_silver/receipts/silver_synth_kyle.synth.json",
+                silver_synth_bill="data/games/gen2_silver/receipts/silver_synth_bill.synth.json",
+            },
+        },
+        overlay={
+            engine_sites="data/games/gen2_silver/receipts/overlay/silver.engine_sites.json",
+            write_window="data/games/gen2_silver/receipts/overlay/silver.write_window.json",
+            qualifications={
+                silver_battle="data/games/gen2_silver/receipts/overlay/silver_battle.qualification.json",
+                silver_town="data/games/gen2_silver/receipts/overlay/silver_town.qualification.json",
+                silver_synth_grass="data/games/gen2_silver/receipts/overlay/silver_synth_grass.synth.json",
+                silver_synth_kyle="data/games/gen2_silver/receipts/overlay/silver_synth_kyle.synth.json",
+                silver_synth_bill="data/games/gen2_silver/receipts/overlay/silver_synth_bill.synth.json",
+            },
         },
     },
 }
@@ -129,6 +175,8 @@ Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection",
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
+
+local function hex(value, width) return type(value) == "string" and #value == width and value:match("^%x+$") ~= nil end
 
 local function load_json(json, path)
     local handle = assert(io.open(path, "rb"), "cannot open " .. path)
@@ -173,7 +221,7 @@ local function load_pack(root, json, title)
         end
     end
     local matrix = data.admission
-    assert(matrix.schema_version == 1 and matrix.foundation == "gen2_gsc" and matrix.pack == def.pack
+    assert(matrix.schema_version == 2 and matrix.foundation == "gen2_gsc" and matrix.pack == def.pack
            and matrix.title == title and matrix.selected_revision == def.revision
            and matrix.source_lock_sha256 == wrapper.source.lock_sha256, "admission/source catalog mismatch")
     assert(matrix.unknown_hash_policy == "REFUSE" and matrix.gate and matrix.gate.id == "G1",
@@ -181,41 +229,68 @@ local function load_pack(root, json, title)
     return data, profile, def
 end
 
-local function source_anchors(data, title)
+-- D3: the EXECUTED artifact's facts (kind, rom_sha1, binding_sha256, sites, checkpoint, header anchors, ROM-valued
+-- profile coordinates), from lua/gen2/artifact.lua. Clean is the pack itself; an overlay is its pinned binding
+-- sidecar. A refusal here never falls back to the clean pack.
+local function view_of(root, json, data, title, row)
+    local Artifact = dofile(root .. "/lua/gen2/artifact.lua")
+    return Artifact.view(root, json, data, title, row)
+end
+
+-- The catalog row an ACTUAL rehashed sha1 names, of the kind the admission decision gave (never a caller's claim).
+local function find_view(root, json, data, title, kind, sha1)
+    local found
+    for _, row in ipairs(data.admission.artifacts) do
+        if row.kind == kind and row.sha1 == sha1 then
+            if found then return nil, "ambiguous " .. kind .. " catalog rows for " .. tostring(sha1) end
+            found = row
+        end
+    end
+    if not found then return nil, "no " .. kind .. " catalog row for the executed ROM " .. tostring(sha1) end
+    return view_of(root, json, data, title, found)
+end
+
+-- D5: every executed anchor, read from the view: its engine sites (+ preludes), its checkpoint anchors and its header
+-- anchors. (A clean view whose header anchors are not filled yet derives them from the pack's area map.)
+local function source_anchors(data, title, view)
     local anchors = {}
-    local sites = assert(data.sites.titles[title].sites, "source engine sites required")
+    local sites = assert(view.sites, "source engine sites required")
     for _, site in pairs(sites) do
         anchors[#anchors + 1] = {offset=site.rom_offset, hex=site.expected_hex}
         if site.prelude then anchors[#anchors + 1] = {offset=site.prelude.rom_offset, hex=site.prelude.expected_hex} end
     end
-    local checkpoint = assert(data.checkpoint.titles[title].primary.anchors, "source checkpoint anchors required")
+    local checkpoint = assert(view.checkpoint.primary.anchors, "source checkpoint anchors required")
     for _, anchor in pairs(checkpoint) do anchors[#anchors + 1] = {offset=anchor.rom_offset, hex=anchor.expected_hex} end
-    for _, row in pairs(data.area_map) do
-        anchors[#anchors + 1] = {offset=row.source.header_flat, hex=row.source.header_hex}
+    -- lua/gen2/artifact.lua fills header anchors for both kinds (clean from the area map).
+    for _, anchor in pairs(assert(view.anchors, "header anchors required")) do
+        anchors[#anchors + 1] = {offset=anchor.offset, hex=anchor.hex}
     end
     assert(#anchors > 0, "required source anchor inventory empty")
     return anchors
 end
 
--- The O-22 proofs of one title, re-validated from the shipped receipts: {engine, write,
--- proven, scope}, or nil,why. The validators recompute every verdict from raw records.
-local function proofs(root, json, data, title, pack)
-    local files = Entry.RECEIPT_FILES[pack]
-    if not files then return nil, "no shipped PHYSICAL receipts for " .. tostring(title) end
+-- The O-22 proofs of one title and ARTIFACT KIND (view.kind), re-validated from the shipped receipts: {engine, write,
+-- proven, scope}, or nil,why. The validators recompute every verdict from raw records and bind every run to the
+-- view's executed sha1, kind and binding. No view, or a kind with no receipt set, proves nothing (no clean fallback).
+local function proofs(root, json, data, title, pack, view)
+    if type(view) ~= "table" then return nil, "artifact view required" end
+    local group = Entry.RECEIPT_FILES[pack]
+    local files = group and group[view.kind]
+    if not files then return nil, "no shipped PHYSICAL " .. tostring(view.kind) .. " receipts for " .. tostring(title) end
     local S, M = dofile(root .. "/lua/gen2/signals.lua"), dofile(root .. "/lua/gen2_write_safety.lua")
     local function read(rel) return load_json(json, root .. "/" .. rel) end
     local engine, write, reports = read(files.engine_sites), read(files.write_window), {}
     for fixture, rel in pairs(files.qualifications) do reports[fixture] = read(rel) end
-    local proven, why = S.qualified_sites(title, data.sites, engine)
+    local proven, why = S.qualified_sites(title, data.sites, engine, view)
     if not proven then return nil, "U1 engine-site receipt: " .. tostring(why) end
     local bound
     -- a v2 receipt (card U1G) binds each run to its own report: it takes them all by fixture name
-    bound, why = S.bind_fixture_qualification(engine, engine.runs and reports or reports[engine.fixture])
+    bound, why = S.bind_fixture_qualification(engine, engine.runs and reports or reports[engine.fixture], view)
     if not bound then return nil, "U1 engine-site receipt: " .. tostring(why) end
     local scope
-    scope, why = M.qualified(data.checkpoint, title, write)
+    scope, why = M.qualified(data.checkpoint, title, write, view)
     if not scope then return nil, "U2 write-window receipt: " .. tostring(why) end
-    bound, why = M.bind_fixture_qualification(write, reports)
+    bound, why = M.bind_fixture_qualification(write, reports, view)
     if not bound then return nil, "U2 write-window receipt: " .. tostring(why) end
     return {engine=engine, write=write, proven=proven, scope=scope}
 end
@@ -242,24 +317,54 @@ function Entry.admit(args)
             hashes=function(candidate) return candidate.row.sha1 and {candidate.row.sha1} or {} end,
             eligible=function(candidate)
                 local row, matrix = candidate.row, candidate.data.admission
-                if row.selection ~= "SELECTED" then return false, "artifact selection " .. tostring(row.selection) .. " is not admitted" end
-                if row.status ~= "BUILT" or matrix.gate.state ~= "ADMITTED" then
-                    return false, "Gen 2 catalog status " .. tostring(row.status) .. "; G1 " .. tostring(matrix.gate.state)
-                                  .. "; source catalog grants no runtime admission"
+                if row.kind ~= "clean" and row.kind ~= "overlay" then
+                    return false, "Gen 2 artifact kind " .. tostring(row.kind) .. " is not admitted"
                 end
-                -- The gate row is the grant, never the proof: the receipts must still pass.
-                local proof, why = proofs(root, json, candidate.data, candidate.title, candidate.def.pack)
-                if not proof then return false, "G1 ADMITTED but the PHYSICAL proof refused: " .. why end
+                if row.selection ~= "SELECTED" then return false, "artifact selection " .. tostring(row.selection) .. " is not admitted" end
+                local grant
+                if row.kind == "clean" then
+                    -- D1: the clean grant is matrix.gate (G1); it never grants an overlay.
+                    if row.status ~= "BUILT" or matrix.gate.state ~= "ADMITTED" then
+                        return false, "Gen 2 catalog status " .. tostring(row.status) .. "; G1 " .. tostring(matrix.gate.state)
+                                      .. "; source catalog grants no runtime admission"
+                    end
+                    grant = "G1"
+                else
+                    -- D1: an activated overlay row carries its own G4 grant and its binding pin.
+                    local gate = row.runtime_gate
+                    if row.status ~= "ADMITTED" then
+                        return false, "Gen 2 catalog status " .. tostring(row.status) .. " for the overlay; source catalog grants no runtime admission"
+                    end
+                    if type(gate) ~= "table" or gate.id ~= "G4" or gate.state ~= "ADMITTED" then
+                        return false, "overlay runtime gate G4 is not ADMITTED"
+                    end
+                    if not hex(gate.grant_fingerprint, 64) then return false, "overlay G4 grant fingerprint missing or malformed" end
+                    if not hex(row.binding_sha256, 64) then return false, "overlay execution binding pin missing or malformed" end
+                    grant = "G4"
+                end
+                local view, why = view_of(root, json, candidate.data, candidate.title, row)
+                if not view then return false, row.kind .. " execution view refused: " .. tostring(why) end
+                if view.kind ~= row.kind or view.rom_sha1 ~= row.sha1 then
+                    return false, "execution view is not the catalog row's artifact"
+                end
+                -- The gate row is the grant, never the proof: this artifact's own receipts must still pass.
+                local proof
+                proof, why = proofs(root, json, candidate.data, candidate.title, candidate.def.pack, view)
+                if not proof then return false, grant .. " ADMITTED but the PHYSICAL proof refused: " .. why end
+                candidate.view = view
                 return true
             end,
-            anchors=function(candidate) return source_anchors(candidate.data, candidate.title) end,
+            anchors=function(candidate) return source_anchors(candidate.data, candidate.title, candidate.view) end,
             kind=function(candidate, mode)
-                if mode == "sha1" and candidate.row.kind == "clean" then return "clean" end
+                if mode == "sha1" and (candidate.row.kind == "clean" or candidate.row.kind == "overlay") then
+                    return candidate.row.kind
+                end
                 return nil, "unsupported Gen 2 artifact kind/mode"
             end,
             describe=function(candidate, kind)
                 return {pack=candidate.def.pack, title=candidate.title, kind=kind,
-                        foundation="gen2_gsc", rom_type=candidate.def.rom_type}
+                        foundation="gen2_gsc", rom_type=candidate.def.rom_type,
+                        binding_sha256=kind == "overlay" and candidate.row.binding_sha256 or nil}
             end,
             allow_unknown_hash=false,
         })
@@ -274,9 +379,12 @@ end
 -- graph, never admitted, with an injected checkpoint and write policy. Production (only
 -- behind Entry.admit): checkpoint, write policy, signals and the checkpoint hook are built
 -- HERE from the re-validated receipts, and the client always exists.
-local function compose(deps, title, production)
+-- decision: production only, the admission decision (kind + the ACTUAL rehashed sha1) that names what executes (D5).
+local function compose(deps, title, production, decision)
     local ok, result = pcall(function()
         if not production then assert(deps.candidate_only == true, "explicit candidate_only=true required") end
+        assert(not production or (type(decision) == "table" and decision.title == title and decision.rehashed == true),
+               "production composes only an admitted decision")
         local root = assert(deps.root, "root required")
         local io_ = assert(deps.io, "explicit IO required")
         local load = function(path) return dofile(root .. "/" .. path) end
@@ -286,8 +394,14 @@ local function compose(deps, title, production)
         local size = io_.domain_size("ROM")
         assert(size == profile.derived.rom_size, "candidate ROM size mismatch")
         local function read_rom(offset) return io_.read_u8(offset, "ROM") end
-        assert(Admission.sha1(read_rom, size) == profile.rom_sha1, "candidate ROM hash mismatch")
-        assert(Admission.anchors_match(source_anchors(data, title), {size=size, read_u8=read_rom}, "sha1"),
+        -- D5: identity is the decision's (kind + actual sha1); a candidate is the clean pack. deps.artifact_kind never
+        -- chooses what production composes.
+        local kind = production and decision.kind or "clean"
+        local executed_sha = production and decision.rom_sha1 or profile.rom_sha1
+        assert(Admission.sha1(read_rom, size) == executed_sha, "candidate ROM hash mismatch")
+        local view = assert(find_view(root, json, data, title, kind, executed_sha))
+        assert(view.kind == kind and view.rom_sha1 == executed_sha, "execution view differs from the admitted artifact")
+        assert(Admission.anchors_match(source_anchors(data, title, view), {size=size, read_u8=read_rom}, "sha1"),
                "candidate source anchor mismatch")
         local Reads, Writes, Rom = load("lua/gen2/reads.lua"), load("lua/gen2/writes.lua"), load("lua/gen2/rom.lua")
         local Permit = load("lua/write_permit.lua")
@@ -301,7 +415,7 @@ local function compose(deps, title, production)
         local checkpoint, write_policy, proof
         if production then
             assert(io_.model_only ~= true, "production requires live IO, not model_only")
-            proof = assert(proofs(root, json, data, title, def.pack))
+            proof = assert(proofs(root, json, data, title, def.pack, view))
             local hrom = assert(profile.ram.hROMBank, "hROMBank coordinate required")
             local function held() return io_.framecount() end
             local function still(token) return token == io_.framecount() end
@@ -309,7 +423,7 @@ local function compose(deps, title, production)
             -- the hROMBank shadow, SVBK (0 selects 1), a same-frame hold.
             checkpoint = load("lua/gen2_write_safety.lua").new(data.checkpoint, title, io_, load("lua/gb_checkpoint.lua"), {
                 capture=held, valid=still,
-                admitted=function(t, sha) return t == title and sha == profile.rom_sha1 end,
+                admitted=function(t, sha) return t == title and sha == executed_sha end,
                 -- ponytail: the production graph is the only writer; save/trade/serial ownership is the
                 -- pack predicates' job (wGameLogicPaused, wLinkMode, hSerialConnectionStatus, SC).
                 no_conflicting_owner=function() return true end,
@@ -318,7 +432,7 @@ local function compose(deps, title, production)
                     local svbk = io_.read_u8(0xFF70, "System Bus") % 8
                     return svbk == 0 and 1 or svbk
                 end,
-            }, proof.write)
+            }, proof.write, view)
             write_policy = {
                 -- Every permit write re-proves the held checkpoint for its receipt kind.
                 authorize=function(operation)
@@ -332,9 +446,19 @@ local function compose(deps, title, production)
         else
             write_policy = assert(deps.write_policy, "explicit candidate write policy required")
         end
-        local hold_facts = data.checkpoint.titles[title]
+        local hold_facts = view.checkpoint
         local writes = Writes.new(profile, io_, Permit, write_policy, hold_facts.battle_hold.write)
-        local rom = Rom.new(profile, io_)
+        -- ROM-valued profile coordinates are the executed artifact's (an overlay may relocate them)
+        local rom_profile = profile
+        if view.profile_rom ~= nil then
+            local merged = {}
+            for name, entry in pairs(profile.rom) do merged[name] = entry end
+            for name, entry in pairs(view.profile_rom) do merged[name] = entry end
+            rom_profile = {}
+            for name, value in pairs(profile) do rom_profile[name] = value end
+            rom_profile.rom = merged
+        end
+        local rom = Rom.new(rom_profile, io_)
         local client
         if production or deps.net ~= nil then
             local Signals, Registry, GB = load("lua/gen2/signals.lua"), load("lua/hook_registry.lua"),
@@ -345,7 +469,7 @@ local function compose(deps, title, production)
             local signals
             if production then
                 -- signals.new registers exactly the receipt's proven sites, under PHYSICAL authority.
-                options.runtime_qualification = proof.engine
+                options.runtime_qualification, options.view = proof.engine, view
                 signals = function(authority)
                     options.authority = {kind="PHYSICAL_RUNTIME", capture=authority.capture, valid=authority.valid}
                     return Signals.new(options)
@@ -394,19 +518,20 @@ local function compose(deps, title, production)
             end
             -- P4.3b native trade: only a profile whose overlay .sym carries the P4.3a trade family
             -- (gen_gen2_profile trade_block); the client still gates on the kind and the cap bit.
-            -- ponytail: production passes no artifact_kind until the overlay admission lands.
+            -- D5: production's kind is the decision's; only the MODEL candidate takes a caller's artifact_kind.
+            local client_kind = production and decision.kind or deps.artifact_kind
             local trade
             if profile.overlay and profile.overlay.trade then
                 local T = load("lua/gen2/trade_overlay.lua")
                 trade = T.new(profile, io_, Permit, T.holdable(data.items), data.charmap)
             end
             client = load("lua/gen2/client.lua").new({
-                trade=trade, artifact_kind=(not production) and deps.artifact_kind or nil,
+                trade=trade, artifact_kind=client_kind,
                 reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel, phone=phone,
                 safety={check=function(kind) return checkpoint:check(kind) end},
                 signals=signals,
                 -- production only: the held checkpoint PC the client hooks (writes + hello readiness)
-                checkpoint_pc=production and data.checkpoint.titles[title].primary.execution_before.pc or nil,
+                checkpoint_pc=production and view.checkpoint.primary.execution_before.pc or nil,
                 -- O-30: the battle hold the client hooks for in-battle deaths. Production composes it only
                 -- behind a receipt covering battle_faint; until then battle deaths wait for the checkpoint.
                 battle_hold=(not production or checkpoint:covers("battle_faint"))
@@ -418,18 +543,20 @@ local function compose(deps, title, production)
                 rival_swap=(not production or checkpoint:covers("battle_bench")),
                 contest_mask=hold_facts.contest_mask,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
-                profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
+                profile=profile, sites=view.sites, area_map=data.area_map,
                 player=assert(deps.player, "explicit player required"), rom_type=def.rom_type,
-                rom_sha1=profile.rom_sha1, log=deps.log,
+                rom_sha1=executed_sha, log=deps.log,
                 evolutions=data.evolutions.evolutions, -- force_faint's evolved-identity fallback
                 hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
                 owed_reports=load("lua/owed_reports.lua"),
             })
         end
-        assert(io_.domain_size("ROM") == size and Admission.sha1(read_rom, size) == profile.rom_sha1
+        assert(io_.domain_size("ROM") == size and Admission.sha1(read_rom, size) == executed_sha
                and io_.domain_size("ROM") == size, "candidate ROM changed during composition")
         return {pack=def.pack, title=title, profile=profile, data=data, reads=reads, writes=writes,
                 rom=rom, client=client, checkpoint=checkpoint, production_admitted=production,
+                artifact_kind=production and decision.kind or deps.artifact_kind or "clean", runtime_rom_sha1=executed_sha,
+                view=view,
                 runtime_started=false, proven_sites=proof and proof.proven, write_scope=proof and proof.scope,
                 qualification=production and "PHYSICAL_RECEIPTED" or "SOURCE_MODEL_CANDIDATE"}
     end)
@@ -466,7 +593,23 @@ function Entry.build(deps)
     if deps.title ~= nil and deps.title ~= decision.title then
         return nil, "admitted title " .. decision.title .. " differs from the requested " .. tostring(deps.title)
     end
-    return compose(deps, decision.title, true)
+    return compose(deps, decision.title, true, decision)
+end
+
+-- tools/gen_gen2_admission.py --promote-overlays (D6): does a PROSPECTIVE overlay row (binding_sha256 set) pass its own
+-- binding and receipts under the production validators? true, or nil,why. Writes nothing.
+function Entry.activation_proof(root, title, row)
+    local ok, result, why = pcall(function()
+        local json = dofile(root .. "/lua/json_codec.lua")
+        local data, _, def = load_pack(root, json, title)
+        local view, view_why = view_of(root, json, data, title, row)
+        if not view then return nil, view_why end
+        local proof, proof_why = proofs(root, json, data, title, def.pack, view)
+        if not proof then return nil, proof_why end
+        return true
+    end)
+    if not ok then return nil, tostring(result) end
+    return result, why
 end
 
 return Entry

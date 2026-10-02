@@ -147,8 +147,11 @@ function P.main(real, getenv, SG, F)
         assert(type(ov) == "table" and ov.rom_sha1 == overlay_sha1 and ov.base_sha1 == getenv("SLINK_GEN2_ROM_SHA1"),
                "profile overlay block differs from the staged overlay")
         assert(real.romhash():lower() == overlay_sha1, "running ROM is not the staged overlay")
-        local view = setmetatable({romhash=function() return ov.base_sha1 end}, {__index=api})
-        local c = SG.context(view, getenv)
+        -- The honest context: the scripted gate binds the overlay's own sha1 (SLINK_GEN2_OVERLAY_SHA1, hashed by the
+        -- launcher) against the RUNNING ROM and keeps the clean build only as the facts' base. No clean-hash alias.
+        local c = SG.context(api, getenv)
+        assert(c.artifact.kind == "overlay" and c.artifact.rom_sha1 == overlay_sha1 and c.artifact.base_sha1 == ov.base_sha1,
+               "the scripted context did not bind the staged overlay")
         assert(c.case.name == c.env.title .. "_battle", "the phone gate runs on <title>_battle")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.phone_facts = assert(c.json.decode(assert(getenv("SLINK_GEN2_PHONE_FACTS"), "SLINK_GEN2_PHONE_FACTS missing")))

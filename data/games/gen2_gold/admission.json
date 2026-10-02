@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "purpose": "P1_ARTIFACT_MATRIX_ONLY",
   "foundation": "gen2_gsc",
   "title": "gold",

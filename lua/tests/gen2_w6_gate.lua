@@ -249,11 +249,8 @@ function W.main(root, getenv)
     -- hold the exit until the watch has been read.
     local real_exit = client.exit
     client.exit = function() end
-    local real_hash = gameinfo.getromhash
-    if cfg.clean_view then   -- the U1 gate binds the CLEAN facts; the overlay moves no RAM symbol and
-        -- every hooked site's bytes are re-validated against the running ROM (lua/gb_hook_binding.lua)
-        gameinfo.getromhash = function() return cfg.base_sha1 end
-    end
+    -- The inner gates run under the honest scripted context (lua/tests/test_gen2_scripted_gate.lua G.identity): the
+    -- running overlay hash is bound as the overlay, never aliased to the clean base, so no romhash wrapper here.
     local real_dofile = dofile
     if cfg.frozen then
         local served = {}
@@ -262,7 +259,6 @@ function W.main(root, getenv)
     end
     local ok, why = pcall(dofile, root .. "/" .. cfg.gate)
     dofile = real_dofile
-    gameinfo.getromhash = real_hash
     local inner_done = ok or tostring(why):find("slink-gate-finished", 1, true) ~= nil
     local frames = emu.framecount() - armed_at
 

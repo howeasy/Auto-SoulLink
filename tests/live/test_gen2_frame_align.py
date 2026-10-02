@@ -20,6 +20,12 @@ binds the staged fixture bytes and the qualification attempt (signals.bind_fixtu
 
 Skipped without EmuHawk, the pinned build, the fixture or its qualification receipt (the release runner
 counts a skip as a failure).
+
+OVERLAY (docs/gen2/OVERLAY_ADMISSION.md D4/D7): SLINK_GEN2_ARTIFACT=overlay boots <title>_overlay on the overlay
+qualification receipt (tests/fixtures/gen2/receipts/overlay/<fixture>.qualification.json), arms the overlay execution
+binding's own sites (data/games/gen2_<t>/overlay/binding.json) and writes
+tests/fixtures/gen2/receipts/overlay/<title>.engine_sites.json; the clean files are never touched. The recorded
+identity (rom_sha1, binding_sha256) is checked against the hashed staged overlay, not the environment.
 """
 from __future__ import annotations
 
@@ -39,7 +45,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from tests.live import test_gen2_new_gates as live  # noqa: E402
 from tests.live.test_gen2_new_gates import emuhawk  # noqa: E402,F401 - pytest fixture
-from tools import gen2_fixtures, gen2_source_data, gen2_synth_fixtures  # noqa: E402
+from tools import gen2_fixtures, gen2_synth_fixtures  # noqa: E402
 
 pytestmark = [
     pytest.mark.live,
@@ -470,9 +476,12 @@ def tag_json(text: str, tag: str):
     return live.tag_json(text, tag)
 
 
-def verify(text: str, pack: dict, title: str) -> dict:
-    """Independent re-check of the gate output; returns the receipt the gate printed."""
-    sites = pack["titles"][title]["sites"]
+def verify(text: str, pack: dict, title: str, identity: dict | None = None) -> dict:
+    """Independent re-check of the gate output; returns the receipt the gate printed.
+
+    identity: run_gb_gate.artifact_identity of the staged artifact; None is the clean pack exactly as before."""
+    overlay = identity is not None and identity["kind"] == "overlay"
+    sites = gen2_fixtures.exec_sites(title, "overlay", REPO) if overlay else pack["titles"][title]["sites"]
     expect = expect_for(title)
     summary = tag_json(text, "HIT_SUMMARY")
     for name, row in summary.items():
@@ -508,8 +517,11 @@ def verify(text: str, pack: dict, title: str) -> dict:
     receipt = tag_json(text, "RECEIPT")
     assert receipt["title"] == title and receipt["fixture"] == U1_FIXTURE[title], receipt
     source = pack["source"]
-    assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
-        source["rom_sha1"], source["commit"], pack["specs_sha256"])
+    assert (receipt["pack_commit"], receipt["pack_specs_sha256"]) == (source["commit"], pack["specs_sha256"])
+    if overlay:   # the overlay's own sha1 and sidecar, equal to the HASHED staged artifact (never the clean pack's)
+        gen2_fixtures.check_run_identity(receipt, identity)
+    else:
+        assert receipt["rom_sha1"] == source["rom_sha1"] and "artifact_kind" not in receipt
     assert sorted(receipt["proven"]) == sorted(expect) and receipt["harness_write_scopes"] == []
     assert receipt["evidence_level"] == "PHYSICAL" and receipt["decoy"]["bank_rejects"] == receipt["decoy"]["raw"]
     # the gate emits effect_to_callback_frames in the receipt, not on the ALIGN line (first live PASS 2026-09-23)
@@ -571,6 +583,7 @@ def verify(text: str, pack: dict, title: str) -> dict:
 @pytest.mark.parametrize("title", TITLES)
 def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     spec = gen2_fixtures.BY_NAME[U1_FIXTURE[title]]
+    kind = live.KIND
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
     if reason:
@@ -580,10 +593,10 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)   # the staged bytes are the qualified candidate
-    ctx = gen2_source_data.load_context(spec.title, root=REPO)
+    ctx = gen2_fixtures.exec_context(spec.title, kind, REPO)   # overlay-resolved symbols/bytes on an overlay run
     env = live.inspect_env(spec, staged)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind=kind),
                                                      qualification["attempt_id"], synth_psn=title == "gold"))
     source_path, clock, psn_setup = fixture, None, None
     boot = staged
@@ -595,22 +608,25 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
         boot, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()), title=title)
     if boot != staged:
-        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}-boot.SaveRAM"
+        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}{'-overlay' if kind == 'overlay' else ''}-boot.SaveRAM"
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_bytes(boot)
-    passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
+    passed, path, text = run_gate(GATE, rom_key=live.rom_key(spec.title), target=spec.target,
                                   timeout=7200 if title in EVOLUTION_TITLES else 3600 if title in POISON_TITLES else 1200,
-                                  saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
+                                  saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof"
+                                                  / (f"{spec.name}-overlay" if kind == "overlay" else spec.name)),
                                   fixture_path=str(source_path), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
 
     pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
-    receipt = verify(text, pack, title)
+    receipt = verify(text, pack, title, live.identity(title))
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     if clock is not None:
         receipt["clock_setup"] = clock
     if psn_setup is not None:
         receipt["poison_setup"] = psn_setup
-    (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = live.receipt_file(f"{title}.engine_sites.json")   # overlay: receipts/overlay/, never a clean path
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

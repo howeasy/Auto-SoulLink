@@ -167,6 +167,37 @@ local function read_file(path)
     return text
 end
 
+-- The EXECUTED cartridge's identity (docs/gen2/OVERLAY_ADMISSION.md D5), separate from the base facts the route facts,
+-- profile and charmap bind. `base` is the clean build's sha1 (SLINK_GEN2_ROM_SHA1). A clean run executes the base; an
+-- overlay run executes the published overlay (SLINK_GEN2_OVERLAY_SHA1, hashed by the launcher from the staged image)
+-- and must carry the execution-binding sidecar pin. Neither identity ever stands in for the other: returns
+-- {kind, rom_sha1 (executed), binding_sha256} or nil, why.
+function G.identity(getenv, base)
+    local function value(name)
+        local v = getenv(name)
+        if v == nil or v == "" then return nil end
+        return v
+    end
+    local function hex(v, n) return type(v) == "string" and #v == n and v:match("^%x+$") ~= nil end
+    local kind, overlay, exec, binding = value("SLINK_GEN2_ARTIFACT_KIND"), value("SLINK_GEN2_OVERLAY_SHA1"),
+                                         value("SLINK_GEN2_EXEC_SHA1"), value("SLINK_GEN2_BINDING_SHA256")
+    kind = kind or (overlay and "overlay" or "clean")
+    if kind == "clean" then
+        if overlay or binding then return nil, "a clean run carries no overlay identity" end
+        if exec and exec:lower() ~= base then return nil, "SLINK_GEN2_EXEC_SHA1 differs from the clean base on a clean run" end
+        return {kind="clean", rom_sha1=base}
+    end
+    if kind ~= "overlay" then return nil, "unsupported SLINK_GEN2_ARTIFACT_KIND" end
+    if not hex(overlay, 40) then return nil, "an overlay run requires SLINK_GEN2_OVERLAY_SHA1" end
+    overlay = overlay:lower()
+    if overlay == base then return nil, "the overlay sha1 equals the clean base" end
+    if exec and exec:lower() ~= overlay then return nil, "SLINK_GEN2_EXEC_SHA1 differs from SLINK_GEN2_OVERLAY_SHA1" end
+    if not hex(binding, 64) then
+        return nil, "an overlay run requires the SLINK_GEN2_BINDING_SHA256 pin (data/games/gen2_<title>/overlay/binding.json)"
+    end
+    return {kind="overlay", rom_sha1=overlay, binding_sha256=binding:lower()}
+end
+
 -- Case, route facts and runner bindings. Anything missing or malformed refuses the run.
 function G.inputs(getenv, json)
     local function need(name)
@@ -183,6 +214,10 @@ function G.inputs(getenv, json)
                  dir=need("SLINK_GEN2_SAVERAM_DIR"), saveram=need("SLINK_GEN2_SAVERAM_NAME")}
     assert(({crystal=true, gold=true, silver=true})[env.title], "unsupported SLINK_GEN2_TITLE")
     assert(#env.rom_sha1 == 40 and env.rom_sha1:match("^%x+$"), "malformed SLINK_GEN2_ROM_SHA1")
+    -- rom_sha1 stays the clean base the facts bind (route facts, profile, charmap); exec_sha1 is what actually runs.
+    local identity, why = G.identity(getenv, env.rom_sha1)
+    assert(identity, why)
+    env.base_sha1, env.kind, env.exec_sha1, env.binding_sha256 = env.rom_sha1, identity.kind, identity.rom_sha1, identity.binding_sha256
     assert(need("SLINK_GEN2_CORE_MODE") == "CGB", "played fixtures require the CGB core")
     local qualify = getenv("SLINK_GEN2_QUALIFY")
     if qualify == nil or qualify == "" then
@@ -278,6 +313,35 @@ function G.profile(env, json)
     return profile
 end
 
+-- The executed-artifact view (lua/gen2/artifact.lua, D3): {kind, rom_sha1, base_sha1, binding_sha256, sites, checkpoint,
+-- anchors, profile_rom}. A clean run's view carries identity only (its sites/checkpoint are the pack's own, which every
+-- clean caller already reads). An overlay run's view comes from the generated execution binding, checked against the
+-- launcher's sidecar pin and the hashed overlay sha1; there is no fallback to the clean sites.
+function G.artifact(root, json, env)
+    if env.kind == "clean" then
+        return {kind="clean", rom_sha1=env.exec_sha1, base_sha1=env.base_sha1}
+    end
+    local function read(rel)
+        return assert(json.decode(read_file(root .. "/data/games/gen2_" .. env.title .. "/" .. rel), {items=1000000}),
+                      rel .. " malformed")
+    end
+    local data = {sites=read("engine_signals.json"), checkpoint=read("write_checkpoint.json"), profile=read("profile.json")}
+    local Artifact = dofile(root .. "/lua/gen2/artifact.lua")
+    local view, why = Artifact.view(root, json, data, env.title, {kind="overlay", sha1=env.exec_sha1,
+        base_sha1=env.base_sha1, binding_sha256=env.binding_sha256})
+    assert(view, "overlay execution view refused: " .. tostring(why))
+    assert(view.kind == "overlay" and view.rom_sha1 == env.exec_sha1 and view.base_sha1 == env.base_sha1,
+           "overlay execution view differs from the staged identity")
+    return view
+end
+
+-- The fields every overlay receipt carries on the receipt and on each run (stream A's validators): empty for clean,
+-- whose committed receipts keep their shape.
+function G.artifact_fields(view)
+    if view == nil or view.kind == "clean" then return {} end
+    return {artifact_kind="overlay", binding_sha256=view.binding_sha256, base_sha1=view.base_sha1}
+end
+
 -- CGB WRAM geometry (Pan Docs): $C000-$CFFF bank 0, $D000-$DFFF the selected bank 1-7. BizHawk's flat
 -- WRAM domain holds bank n at n*$1000, so a named bank is read without trusting the live SVBK.
 function G.wram_offset(bank, addr, n)
@@ -304,13 +368,16 @@ function G.context(api, getenv)
         for _, glyph in ipairs(glyphs) do assert(charmap.encoding[glyph] ~= nil, "charmap lacks glyph " .. glyph) end
     end
     local hash = api.romhash()
-    assert(type(hash) == "string" and hash:lower() == env.rom_sha1, "running ROM differs from the selected SHA1")
+    assert(type(hash) == "string" and hash:lower() == env.exec_sha1,
+           "running ROM differs from the selected SHA1 (" .. env.kind .. " artifact " .. env.exec_sha1 .. ")")
     assert(api.systemid() == "GBC", "running core is not in CGB mode")
     local ctx = {api=api, env=env, case=env.case, facts=env.facts, obs=env.facts.observer, profile=profile,
                  json=json, charmap=charmap, root=root, scopes={}, log=function() end,
                  Permit=L("lua/write_permit.lua"), Host=L("lua/scripted_inputs.lua"),
                  Play=L("lua/tests/gen2_scripted_play.lua"), Binding=L("lua/gb_hook_binding.lua"),
                  qualify=env.qualify, prompts=env.facts.observer.prompts}
+    ctx.artifact = G.artifact(root, json, env)
+    ctx.ident = G.artifact_fields(ctx.artifact)   -- {} on clean; {artifact_kind, binding_sha256, base_sha1} on an overlay
     if env.qualify then
         ctx.Qualify, ctx.prompts = L("lua/tests/gen2_qualify.lua"), env.qualify.facts.prompts
         local ram = profile.ram
@@ -791,7 +858,7 @@ function G.qualify(ctx)
     for i, row in ipairs(result.trace) do phases[i] = json.object({phase=row.phase, frame=row.frame}) end
     local body = assert(json.encode(json.object({
         schema=G.WITNESS_SCHEMA, case=case.name, attempt_id=case.attempt_id, stage=q.stage,
-        stage_fingerprint=q.stage_fingerprint, title=env.title, rom_sha1=facts.rom_sha1,
+        stage_fingerprint=q.stage_fingerprint, title=env.title, rom_sha1=env.exec_sha1, artifact_kind=env.kind,
         facts_fingerprint=facts.fingerprint, qualify_facts_fingerprint=q.facts.fingerprint,
         cartram_sha256=booted, resave_cartram_sha256=resaved, core_mode="CGB", hcgb=cgb,
         speed_percent=G.QUALIFY_SPEED_PERCENT, input_mode="normal_buttons", observer="independent_GAME",

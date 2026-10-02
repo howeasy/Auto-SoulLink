@@ -95,19 +95,19 @@ def summary(parts: dict) -> str:
 def test_sp_lowwater_on_the_patched_rom(emuhawk, title):  # noqa: F811
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
-              or live.receipt_missing_reason(spec.name))
+              or live.receipt_missing_reason(spec.name, kind="overlay"))
     if reason:
         pytest.skip(reason)
     from run_gb_gate import run_gate
 
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
-    live.qualified_identity(spec.name, staged)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    live.qualified_identity(spec.name, staged, kind="overlay")
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json", "overlay").read_text(encoding="utf-8"))
     facts = lowwater_facts(title)
     parts, failed = {}, []
     for mode in MODES:   # one fresh boot per mode: phone ARMED is single-slot
-        env = live.inspect_env(spec, staged)
+        env = live.inspect_env(spec, staged, kind="overlay")
         env["SLINK_GEN2_SFX_FACTS"] = json.dumps(facts)
         env["SLINK_GEN2_QUALIFICATION_ATTEMPT"] = qualification["attempt_id"]
         env["SLINK_GEN2_SP_LOWWATER"] = mode
