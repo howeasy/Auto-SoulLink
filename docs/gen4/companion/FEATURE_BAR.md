@@ -159,7 +159,10 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   - zero `Dummy` macro uses in `files/fielddata/script`;
   - zero `dummy` uses in hge's `armips/scr_seq`.
   - It is the companion slot.
-- **Gate before C5 ships:** a bytecode walker over the extracted `scr_seq` NARC (argument sizes from pret `tools/py_scripts/scrcmd.json`) must count zero opcode-1 occurrences on HG, SS and hge. This replaces the macro-grep inference.
+- **Opcode-1 gate: PASSED by composition (coordinator, 2026-10-02). No bytecode walker is needed** (OMP cx-414f5133's walker stayed red: `scrcmd.json` lacks the script-argument widths).
+  - HG/SS: C0 rebuilds the ROMs byte-identical from the pinned source, so the field-script NARC (ROM path `a/0/1/2`, `filesystem.mk:406`, 965 members) IS the assembled `scr_seq/*.s`, which has zero `Dummy` uses.
+  - hge: its `a/0/1/2` is member-for-member identical to HG except member 3, which hge rebuilds from `armips/scr_seq/scr_seq_00003_commonscript.s` (zero `dummy` uses, no raw opcode-1 halfword).
+  - Re-run this check (C0 sha1 + NARC member diff) on any new hge or pret pin.
 - **hge nurse route is a source edit.** hge rebuilds the common-script bank (`armips/scr_seq/scr_seq_00003_commonscript.s:17-26` declares `scr_seq_0003_000..006`, including the nurse entry 002). On hge the trade branch is a fork source edit, not a bytecode patch.
 
 ## Sound code mapping (OMP cx-23a2453d, coordinator-verified; pinned pret `ad7a3afa`)
