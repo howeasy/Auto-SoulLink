@@ -51,3 +51,24 @@ Coordinated with the Gen 5 session (`DECISIONS_2026-10-01.md`): `patch/src/nds/c
 - **Coordinator correction:** the heaps bump-allocate from the MAIN arena low pointer (`src/heap.c:46-80`). That arena starts AFTER the static image, so gaps between static `.bss` symbols are not heap. The real risk is unlisted, symbol-less statics occupying a "gap" (a 53 KB gap before the SDK's `os_irq` data is suspicious), plus hge's heap and BSS changes.
 - **Rule:** no mailbox address is accepted without (a) the pinned ELF section headers or the arena-Lo value, AND (b) a live write-watch over boot, field, battle, menus and SAVE on HG, SS AND hge proving zero foreign writes.
 - **Companion code:** it lives in an overlay or the hge armips build. The HG/SS ARM9 is LZ-compressed (`rom.rsf:4`), so adding ARM9 code means recompression; this goes to the shared writer card.
+
+## Where companion code lives (OMP cx-b95aa145, coordinator-reconciled)
+
+**hg-engine: a source build, and the companion goes inside it.**
+- hge patches out ARM9 decompression (`armips/asm/patchoutarm9compression.s:6-10`).
+- Its ARM9 expansion stub is only 36 B; real code goes in overlay 129 (`armips/asm/syntheticoverlay.s:8-38`).
+- New overlays are a directory drop (`overlays.mk:7,26,34`). Hooks are a flat text table (`hooks`), plus raw byte replacements (`bytereplacement`).
+- Correction: `rom.ld` is an armips symbol include, not a memory layout.
+- **Plan shape:** a `src/slink/` overlay module plus one `hooks` line, built by the fork's own make. No post-build patch.
+- **Owner question:** this means committing to the owner's hg-engine fork (or a SLink branch of it), then a new pinned hge build.
+
+**Vanilla HG/SS: no slack; patch the source and rebuild.**
+- All 129 overlays have ramSize == file size, and 43 share the load address 0x021e5900 (ROM table via ndspy), so appended overlay code is unsafe. Of the 129 overlays, 127 are compressed, and the ARM9 is LZ.
+- **Plan shape:** the Gen 2 model (`patch/gen2`: a pret source overlay). Patch the PINNED pret pokeheartgold source with a new overlay plus hooks, rebuild matching HG/SS, then diff against the pinned dumps into a distributable patch.
+- One `make` of the pinned tree also yields `main.elf`, which closes the mailbox questions: the discarded `.bss`, the real gap occupancy and the arena. Not yet run; duration unknown.
+
+**Therefore two artifacts** (the answer to open question 2, pending the owner's yes):
+- the hge companion, built in the fork;
+- an HG/SS patch from the pret source build.
+
+The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts, and the byte-preserving writer where needed.
