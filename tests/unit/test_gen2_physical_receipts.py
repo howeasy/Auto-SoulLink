@@ -286,8 +286,11 @@ def test_a_committed_physical_receipt_still_validates(path):
     for part in ([receipt, *(receipt.get("runs") or {}).values()] if isinstance(receipt.get("runs"), dict)
                  else [receipt, *(receipt.get("runs") or [])]):
         if artifact == "overlay":
-            assert (part["artifact_kind"], part["rom_sha1"], part["binding_sha256"]) == (
-                "overlay", view["rom_sha1"], view["binding_sha256"]), part.get("fixture")
+            # a v2 union carries kind + binding at the top (what production checks); each run names its ROM
+            union_top = part is receipt and receipt.get("schema") == "gen2-engine-site-receipt-v2"
+            assert (part["artifact_kind"], part["binding_sha256"]) == (
+                "overlay", view["binding_sha256"]), part.get("fixture")
+            assert union_top or part["rom_sha1"] == view["rom_sha1"], part.get("fixture")
         else:
             assert part.get("artifact_kind", "clean") == "clean" and "binding_sha256" not in part
 

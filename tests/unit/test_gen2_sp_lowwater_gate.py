@@ -231,11 +231,18 @@ def _receipt_tree(tmp_path, title="gold"):
     sha1 = next(r["sha1"] for r in json.loads(provenance)["outputs"].values() if r["slink_title"] == title)
     sym = f"data/gen2/{title}_slink.sym"
     (tmp_path / sym).write_bytes((REPO / sym).read_bytes())
+    # the verifier re-checks the receipt's binding pin against the published sidecar (stream C, cx-e10f9ad3 B2)
+    binding = f"data/games/gen2_{title}/overlay/binding.json"
+    (tmp_path / binding).parent.mkdir(parents=True)
+    (tmp_path / binding).write_bytes((REPO / binding).read_bytes())
     raw = (REPO / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").read_bytes()
     (tmp_path / "tests/fixtures/gen2").mkdir(parents=True)
     (tmp_path / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").write_bytes(raw)
+    out = next(r for r in json.loads(provenance)["outputs"].values() if r["slink_title"] == title)
+    identity = {"artifact_kind": "overlay", "rom_sha1": sha1, "base_sha1": out["base_sha1"],
+                "binding_sha256": hashlib.sha256((REPO / binding).read_bytes().replace(bytes([13, 10]), bytes([10]))).hexdigest()}
     return good_receipt({"result": "PASS", "evidence_level": "PHYSICAL", "title": title, "overlay_sha1": sha1,
-                         "fixture": f"{title}_battle", "fixture_sha256": hashlib.sha256(raw).hexdigest()})
+                         "fixture": f"{title}_battle", "fixture_sha256": hashlib.sha256(raw).hexdigest(), **identity})
 
 
 def test_the_release_row_is_green_only_on_the_whole_receipt(tmp_path):
