@@ -19,13 +19,15 @@ import re
 import shutil
 import struct
 import subprocess
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-from tools import gen4_fixtures as g4, gen4_pins
+from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
+from tools import gen4_evidence, gen4_fixtures as g4, gen4_pins
+
+pytestmark = pytest.mark.usefixtures("model_surface")
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_battle_faint.lua"
@@ -108,8 +110,7 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
     return status, payload
 
 
-class StaleReceiptError(AssertionError):
-    """Cross-receipt rule: present evidence from another source/script/profile cut is STALE, never a PASS."""
+StaleReceiptError = gen4_evidence.StaleEvidenceError
 
 
 def head() -> str:
@@ -120,25 +121,18 @@ def head() -> str:
 MODULES = ("lua/json_codec.lua",)
 
 
-def module_digests() -> dict[str, str]:
-    return {m: digest(REPO / m) for m in MODULES}
+def module_digests(title="heartgold") -> dict[str, str]:
+    return gen4_evidence.snapshot("faint", title, repo=REPO)["module_sha256"]
 
 
 def current_cut(title: str) -> dict:
     """The cut a receipt must carry to be consumed: this HEAD, this probe script file, this title's pack profile, the
     sha256 of every module the probe dofiles, and the pinned ROM sha1 for the title."""
-    profile = REPO / "data/games" / PACK[title] / "profile.json"
-    return {"source_head": head(), "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile),
-            "module_sha256": module_digests(), "rom_sha1": gen4_pins.ROM_SPECS[title][0]}
+    return {**gen4_evidence.snapshot("faint", title, repo=REPO), "rom_sha1": gen4_pins.ROM_SPECS[title][0]}
 
 
 def bind_cut(payload: dict, expected_cut: dict) -> None:
-    for key in ("script_sha256", "profile_sha256", "source_head", "module_sha256", "rom_sha1"):
-        got, want = payload.get(key), expected_cut[key]
-        if isinstance(want, str) and key == "rom_sha1":
-            got, want = (got or "").lower(), want.lower()
-        if got != want:
-            raise StaleReceiptError(f"STALE {key}: receipt differs from the current cut")
+    gen4_evidence.bind(payload, expected_cut, title=expected_cut["title"], rom_sha1=expected_cut["rom_sha1"])
 
 
 def consume_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None,
@@ -244,7 +238,7 @@ def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state:
             "scenario": scenario, "state_path": state.as_posix(), "shot_dir": lane.as_posix(),
             "requested_rate": 300, "fault": fault, "max_frames": max_frames, "move_right": True,
             "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head,
-            "modules": module_digests()}
+            "modules": module_digests(title)}
 
 
 def emuhawk_command(lane: Path, rom: Path) -> list[str]:
@@ -600,13 +594,15 @@ def _cut_receipt(cut, **over):
 
 MODEL_CUT = {"source_head": "cut", "script_sha256": "1" * 64, "profile_sha256": "2" * 64,
              "module_sha256": {"lua/json_codec.lua": "3" * 64}, "rom_sha1": "ab" * 20}
+MODEL_CUT.update(receipt_kind="faint", title="heartgold", script="model.lua",
+                 surface_sha256=gen4_evidence.surface_hash("faint", MODEL_CUT["module_sha256"]))
 
 
 def _stale_value(field):
     return {"lua/json_codec.lua": "0" * 64} if field == "module_sha256" else "0" * 7
 
 
-@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+@pytest.mark.parametrize("field", tuple(k for k in MODEL_CUT if k != "source_head"))
 def test_consume_receipt_stale_cut_red_revert(field):
     def consume(text):
         return consume_receipt(text, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)
@@ -621,28 +617,27 @@ def test_stale_outranks_every_other_verdict_and_is_never_pass(tmp_path):
     """A stale receipt is STALE even when it is also malformed in a later check, and a file's verdict is the string
     STALE (never PASS); the same file with the current cut is PASS."""
     path = tmp_path / "row_o.txt"
-    path.write_text(_cut_receipt(MODEL_CUT, source_head="old", producer="other"), encoding="utf-8")
+    path.write_text(_cut_receipt(MODEL_CUT, script_sha256="old", producer="other"), encoding="utf-8")
     verdict, why = receipt_verdict(path, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)
-    assert verdict == "STALE" and "source_head" in why
+    assert verdict == "STALE" and "script_sha256" in why
     path.write_text(_cut_receipt(MODEL_CUT), encoding="utf-8")
     assert receipt_verdict(path, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)[0] == "PASS"
 
 
 def test_current_cut_is_this_head_and_these_files(monkeypatch):
     cut = current_cut("heartgold")
-    assert cut["source_head"] == head() and cut["script_sha256"] == digest(SCRIPT)
+    assert cut["source_head"] and cut["script_sha256"] == digest(SCRIPT)
     assert cut["profile_sha256"] == digest(REPO / "data/games/gen4_hgss/profile.json")
     assert current_cut("heartgold_hge")["profile_sha256"] == digest(REPO / "data/games/gen4_hge/profile.json")
     # default binding (no injected cut): a receipt from another HEAD or another script file is STALE
     rom = cut["rom_sha1"]
     fresh = _cut_receipt(cut, rom_sha1=rom)
     assert consume_receipt(fresh, title="heartgold", rom_sha1=rom)[0] == "PASS"
-    for field in cut:
+    for field in (k for k in cut if k != "source_head"):
         with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
             consume_receipt(_cut_receipt(cut, **{field: _stale_value(field)}), title="heartgold", rom_sha1=rom)
     monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "moved\n")  # HEAD moves: the same receipt is now STALE
-    with pytest.raises(StaleReceiptError, match="STALE source_head"):
-        consume_receipt(fresh, title="heartgold", rom_sha1=rom)
+    assert consume_receipt(fresh, title="heartgold", rom_sha1=rom)[0] == "PASS"
 
 
 def test_every_probe_dofile_is_bound():
@@ -670,7 +665,13 @@ def test_module_change_makes_receipts_stale(monkeypatch):
     cut = current_cut("heartgold")
     fresh = _cut_receipt(cut, rom_sha1=cut["rom_sha1"])
     assert consume_receipt(fresh, title="heartgold", rom_sha1=cut["rom_sha1"])[0] == "PASS"
-    monkeypatch.setattr(sys.modules[__name__], "module_digests", lambda: {"lua/json_codec.lua": "e" * 64})
+    original = gen4_evidence.snapshot
+    def changed(*a, **kw):
+        result = original(*a, **kw)
+        result["module_sha256"]["lua/json_codec.lua"] = "e" * 64
+        result["surface_sha256"] = gen4_evidence.surface_hash("faint", result["module_sha256"])
+        return result
+    monkeypatch.setattr(gen4_evidence, "snapshot", changed)
     with pytest.raises(StaleReceiptError, match="STALE module_sha256"):
         consume_receipt(fresh, title="heartgold", rom_sha1=cut["rom_sha1"])
     # the receipt itself records the module hashes the run used

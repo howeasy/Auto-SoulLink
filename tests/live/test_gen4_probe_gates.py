@@ -24,6 +24,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
+from tools import gen4_evidence, gen4_pins
+
+pytestmark = pytest.mark.usefixtures("model_surface")
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_hooks.lua"
 ROWS = tuple("abcdefghijklmn")
@@ -31,6 +36,9 @@ ROW_RE = re.compile(r"^PROBE ([a-o]) (PASS|FAIL|OPEN) (\{.*\})$")
 TITLE_PACK = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
 CORE = "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS"
 MODEL_CUT = {"script_sha256": "1" * 64, "profile_sha256": "2" * 64, "source_head": "cut"}
+MODEL_CUT.update(receipt_kind="probe", script="model.lua",
+                 module_sha256={"lua/tests/probe_gen4_hooks.lua": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(), "reads": "bound"})
+MODEL_CUT["surface_sha256"] = gen4_evidence.surface_hash("probe", MODEL_CUT["module_sha256"])
 
 
 def digest(path: Path, algorithm="sha256") -> str:
@@ -47,30 +55,23 @@ def input_file(path: Path, name: str) -> Path:
     return path
 
 
-class StaleReceiptError(AssertionError):
-    """Present evidence from another source/script/profile cut cannot qualify."""
+StaleReceiptError = gen4_evidence.StaleEvidenceError
 
 
 def committed_cut(title, *, script=SCRIPT, profile=None, source_head=None):
-    profile = profile or REPO / "data/games" / TITLE_PACK[title] / "profile.json"
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
-    if source_head is not None and head != source_head:
-        raise StaleReceiptError("STALE source_head: committed cut moved")
-    cut = {"source_head": head}
-    for key, path in (("script_sha256", script), ("profile_sha256", profile)):
-        path = Path(path)
-        relative = path.relative_to(REPO).as_posix()
-        blob = subprocess.check_output(["git", "show", f"{head}:{relative}"], cwd=REPO)
-        if path.read_bytes().replace(b"\r\n", b"\n") != blob.replace(b"\r\n", b"\n"):
-            raise StaleReceiptError(f"STALE {key}: uncommitted file {relative}")
-        cut[key] = digest(path)
+    if profile is not None and Path(profile).resolve() != (REPO / "data/games" / TITLE_PACK[title] / "profile.json").resolve():
+        raise StaleReceiptError("STALE profile: not the declared title pack")
+    relative = Path(script).relative_to(REPO).as_posix()
+    kind = next((k for k, path in gen4_evidence.SCRIPTS.items() if path == relative), None)
+    if kind is None:
+        raise StaleReceiptError(f"STALE unsupported receipt script: {relative}")
+    cut = gen4_evidence.snapshot(kind, title, repo=REPO)
+    cut["rom_sha1"] = gen4_pins.ROM_SPECS[title][0]
     return cut
 
 
-def bind_cut(payload, expected_cut):
-    for key in ("script_sha256", "profile_sha256", "source_head"):
-        if payload.get(key) != expected_cut[key]:
-            raise StaleReceiptError(f"STALE {key}: receipt differs from committed cut")
+def bind_cut(payload, expected_cut, *, title=None, rom_sha1=None):
+    gen4_evidence.bind(payload, expected_cut, title=title or expected_cut["title"], rom_sha1=rom_sha1 or expected_cut["rom_sha1"])
 
 
 def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None, expected_cut=None) -> dict:
@@ -86,7 +87,7 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
         row, status, raw = match.groups()
         assert row not in rows, f"duplicate row {row}"
         payload = json.loads(raw)
-        bind_cut(payload, expected_cut)
+        bind_cut(payload, expected_cut, title=title, rom_sha1=rom_sha1)
         assert payload["title"] == title and payload["rom_sha1"].lower() == rom_sha1.lower(), "wrong artifact binding"
         assert payload["level"] == "PHYSICAL", "MODEL evidence cannot close physical rows"
         if run_id is not None:
@@ -103,11 +104,9 @@ def row_o(path: Path | None, title: str, sha1: str, source_head: str, *, expecte
     if path is None or not path.is_file():
         return "OPEN", {"reason": f"C1-8 row o receipt absent: {path or 'SLINK_GEN4_ROW_O'}"}
     expected_cut = expected_cut or committed_cut(title, script=REPO / "lua/tests/probe_gen4_battle_faint.lua", source_head=source_head)
-    assert expected_cut["source_head"] == source_head, "row o expected cut mismatch"
     rows = parse_receipt(path.read_text(encoding="utf-8"), title=title, rom_sha1=sha1, expected_cut=expected_cut)
     assert "o" in rows, "present C1-8 input contains no row o"
     status, payload = rows["o"]
-    assert payload.get("source_head") == source_head, "row o belongs to a different source cut"
     assert payload.get("producer") == "C1-8", "row o must identify its producer"
     if payload.get("setup") == "SYNTH":
         sidecar_hash = payload.get("sidecar_sha256") or payload.get("synth", {}).get("sidecar_sha256")
@@ -125,19 +124,16 @@ def perf_f(path, title, rom_sha1, source_head, *, expected_cut=None):
     if expected_cut is None:
         committed_cut(title, source_head=source_head)  # The consuming f authority must also be committed.
         expected_cut = committed_cut(title, script=REPO / "lua/tests/perf_gen4.lua", source_head=source_head)
-    assert expected_cut["source_head"] == source_head, "PERF expected cut mismatch"
     assert bundle["schema"] == "gen4-perf-bundle-v1" and bundle["producer"] == "gen4-PERF", "wrong PERF producer/schema"
     assert bundle["level"] == "PHYSICAL" and bundle["title"] == title and bundle["rom_sha1"] == rom_sha1, "wrong PERF artifact/evidence"
-    if bundle.get("source_head") != source_head:
-        raise StaleReceiptError("STALE source_head: PERF belongs to a different source cut")
     observation = bundle.get("observation")
     if observation is None:
         return None, bundle.get("reason", "gen4-PERF required samples absent")
 
     def bind(sample):
-        bind_cut(sample, expected_cut)
+        bind_cut(sample, expected_cut, title=title, rom_sha1=rom_sha1)
         assert sample["producer"] == "gen4-PERF" and sample["result"] == "PASS" and sample["level"] == "PHYSICAL", "incomplete PERF sample/floor"
-        assert sample["title"] == title and sample["rom_sha1"] == rom_sha1 and sample["source_head"] == source_head, "PERF sample/floor binding mismatch"
+        assert sample["title"] == title and sample["rom_sha1"] == rom_sha1, "PERF sample/floor binding mismatch"
         assert not sample["concurrent_load"] and sample["ending_registered"] == 0, "PERF sample/floor concurrent load/retained hook"
         assert sample["module_sha256"]["lua/tests/probe_gen4_hooks.lua"] == digest(SCRIPT), "PERF uses a different f authority"
 
@@ -635,7 +631,7 @@ def test_f_contract_clauses_red_revert(api, fault):
 
 
 @pytest.mark.parametrize("fault", [
-    "result", "producer", "level", "title", "rom_sha1", "source_head",
+    "result", "producer", "level", "title", "rom_sha1",
     "concurrent_load", "ending_registered", "module_sha256", "other_modules",
 ])
 def test_perf_f_binds_floor_red_revert(tmp_path, fault):
@@ -796,7 +792,8 @@ def test_probe_fake_io_terminal_receipt_without_console(api):
     json_api = r.execute((REPO / "lua/json_codec.lua").read_text(encoding="utf-8"))
     cfg = {"profile": "pack.json", "title": "heartgold", "mode": "rtc-repeat", "rom_sha1": "2" * 40,
            "rom_md5": "1" * 32, "run_id": "fake", "boot_frames": 1, "requested_rate": 300,
-           "code_sha256": MODEL_CUT["script_sha256"], "profile_sha256": MODEL_CUT["profile_sha256"], "source_head": "cut"}
+           "code_sha256": MODEL_CUT["script_sha256"], "profile_sha256": MODEL_CUT["profile_sha256"], "source_head": "cut",
+           "module_sha256": MODEL_CUT["module_sha256"], "surface_sha256": MODEL_CUT["surface_sha256"], "receipt_kind": MODEL_CUT["receipt_kind"]}
     pack = {"schema": "gen4-profile-v1", "titles": {"heartgold": {"rom": {"sha1": cfg["rom_sha1"], "md5": cfg["rom_md5"]},
             "symbols": {"sRTCWork": {"address": 100}, "sFieldSysPtr": {"address": 200}, "sSaveDataPtr": {"address": 300}},
             "sites": {}, "profile": {}, "overlays": {}, "overlay_table": {}}}}
@@ -868,7 +865,7 @@ def receipt(row="a", status="PASS", **overrides):
 
 
 @pytest.mark.parametrize("row", tuple("abcdefghijklmno"))
-@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+@pytest.mark.parametrize("field", ("script_sha256", "profile_sha256", "module_sha256", "surface_sha256"))
 def test_every_row_stale_cut_red_revert(row, field):
     def consume(text):
         return parse_receipt(text, title="heartgold", rom_sha1="2" * 40, expected_cut=MODEL_CUT)
@@ -879,7 +876,7 @@ def test_every_row_stale_cut_red_revert(row, field):
     assert consume(receipt(row))[row][0] == "PASS"
 
 
-@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+@pytest.mark.parametrize("field", ("script_sha256", "profile_sha256", "module_sha256", "surface_sha256"))
 def test_external_row_consumers_stale_cut_red_revert(tmp_path, field):
     path = tmp_path / "external.txt"
 
@@ -899,7 +896,7 @@ def test_external_row_consumers_stale_cut_red_revert(tmp_path, field):
         for record in (sample, sample["floor"]):
             record.update(MODEL_CUT, producer="gen4-PERF", result="PASS", level="PHYSICAL",
                           title="heartgold", rom_sha1="2" * 40, concurrent_load=False, ending_registered=0,
-                          module_sha256={"lua/tests/probe_gen4_hooks.lua": digest(SCRIPT)}, frames_requested=3000)
+                          frames_requested=3000)
     bundle = {"schema": "gen4-perf-bundle-v1", "producer": "gen4-PERF", "level": "PHYSICAL",
               "title": "heartgold", "rom_sha1": "2" * 40, "source_head": "cut", "observation": observation}
 
@@ -915,30 +912,10 @@ def test_external_row_consumers_stale_cut_red_revert(tmp_path, field):
     assert consume_f(bundle)[1] is None
 
 
-def test_committed_cut_refuses_working_file_or_head_drift(monkeypatch, tmp_path):
-    script, profile = tmp_path / "probe.lua", tmp_path / "profile.json"
-    script.write_bytes(b"return 1\r\n")
-    profile.write_bytes(b"{}\n")
-    blobs = {"probe.lua": b"return 1\n", "profile.json": b"{}\n"}
-    monkeypatch.setattr(__import__(__name__, fromlist=["REPO"]), "REPO", tmp_path)
-
-    def output(command, **kwargs):
-        if command[1:3] == ["rev-parse", "HEAD"]:
-            return "committed\n"
-        assert command[:2] == ["git", "show"]
-        assert command[2].startswith("committed:")
-        return blobs[command[2].split(":", 1)[1]]
-
-    monkeypatch.setattr(subprocess, "check_output", output)
-    cut = committed_cut("heartgold", script=script, profile=profile)
-    assert cut == {"source_head": "committed", "script_sha256": digest(script), "profile_sha256": digest(profile)}
-    script.write_bytes(b"return 2\n")
-    with pytest.raises(StaleReceiptError, match="STALE script_sha256"):
-        committed_cut("heartgold", script=script, profile=profile)
-    script.write_bytes(b"return 1\r\n")
-    with pytest.raises(StaleReceiptError, match="STALE source_head"):
-        committed_cut("heartgold", script=script, profile=profile, source_head="older")
-    assert committed_cut("heartgold", script=script, profile=profile) == cut
+def test_all_row_consumers_ignore_informational_head():
+    for row in "abcdefghijklmno":
+        assert parse_receipt(receipt(row, source_head="docs-only-moved"), title="heartgold", rom_sha1="2" * 40,
+                             expected_cut=MODEL_CUT)[row][0] == "PASS"
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "stale", "model", "wrong_rom", "tail", "false_pass"])
@@ -968,8 +945,7 @@ def test_required_row_o_absent_open_present_wrong_fail(api, tmp_path):
     assert overall == "OPEN" and len(rows) == 15
     path = tmp_path / "o.txt"
     path.write_text(receipt("o", source_head="wrong", producer="C1-8", oracle="independent", negative_control="red"))
-    with pytest.raises(StaleReceiptError, match="STALE source_head"):
-        row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)
+    assert row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)[0] == "PASS"
     path.write_text(receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red"))
     assert finish_rows(api, examples(), {}, row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT))[0] == "PASS"
 
@@ -1153,7 +1129,9 @@ def phase_case_plan(cases, blocked, recipes=None):
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
     expected_cut = committed_cut(title, profile=profile, source_head=cfg["source_head"])
     bind_cut({"script_sha256": cfg["code_sha256"], "profile_sha256": cfg["profile_sha256"],
-              "source_head": cfg["source_head"]}, expected_cut)
+              "source_head": cfg["source_head"], "module_sha256": cfg["module_sha256"],
+              "surface_sha256": cfg["surface_sha256"], "receipt_kind": cfg["receipt_kind"],
+              "title": title, "rom_sha1": cfg["rom_sha1"]}, expected_cut)
     """Fresh private directory; only this Popen's PID is ever stopped. Preserve failures."""
     assert not lane.exists(), f"refusing stale run directory {lane}"
     lane.mkdir(parents=True)
@@ -1416,6 +1394,7 @@ def test_gen4_hook_probe(api, title):
     assert cfg["requested_rate"] == 300, "development route must request 300%"
     assert cfg["sample_frames"] >= 120 and cfg["boot_frames"] > 0, "invalid sample windows"
     cfg["code_sha256"], cfg["profile_sha256"], cfg["source_head"] = cut["script_sha256"], cut["profile_sha256"], source_head
+    cfg["module_sha256"], cfg["surface_sha256"], cfg["receipt_kind"] = cut["module_sha256"], cut["surface_sha256"], cut["receipt_kind"]
     codec = codec_module()
     decoded = codec.parse_save(save.read_bytes(), "hge" if title == "heartgold_hge" else "hgss")
     cfg["save_witness"] = source_witness(codec, decoded)
@@ -1510,6 +1489,7 @@ def test_gen4_hook_probe(api, title):
             payload = {**payload, "schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
                        "source_head": source_head, "level": "PHYSICAL", "run_id": batch.name,
                        "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "requested_rate": 300}
+            payload.update(module_sha256=cut["module_sha256"], surface_sha256=cut["surface_sha256"], receipt_kind=cut["receipt_kind"])
             if row != "o":
                 payload.update(save_setup(save))
             text.append(f"PROBE {row} {status} {json.dumps(payload, sort_keys=True)}")

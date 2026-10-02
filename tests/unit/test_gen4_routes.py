@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
 from tools import gen4_routes as gr
+
+pytestmark = pytest.mark.usefixtures("model_surface")
 
 ROM, PRET, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_PRET, gr.DEFAULT_SAVE
 
@@ -482,7 +485,7 @@ def test_pack_ram_comes_from_the_pack_and_hge_has_no_modified_word():
         0x12004,
         18,
     )
-    assert (hge["pc"]["cur_box_off"], hge["pc"]["mod_off"], hge["pc"]["boxes"]) == (None, None, 30)
+    assert (hge["pc"]["cur_box_off"], hge["pc"]["mod_off"], hge["pc"]["boxes"]) == (None, 0x1E004, 30)
     assert hg["hdr_off"] == 143380 and hge["hdr_off"] == 192532  # hge's SaveData is larger
     assert (hg["id_party"], hg["id_pc"], hg["party"]["size"], hg["pc"]["mon_stride"]) == (
         2,
@@ -956,6 +959,8 @@ def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
     """Replace the EmuHawk process and the fixtures it needs: `script(leg, route)` returns the leg's
     log text. Returns the recorded (route, load_state) of every launched leg."""
     calls = []
+    witnesses = iter(({"bank": 0, "counter": 1, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}))
+    monkeypatch.setattr(gr, "save_witness", lambda *a: next(witnesses))
 
     class FakeProc:
         def __init__(self, cmd, cwd=None, env=None):
@@ -1193,6 +1198,17 @@ def test_plan_hatch_paces_between_two_plain_tiles_and_skips_grass_coord_and_warp
 
 
 # --- receipts bound at consumption (verify_receipt) ------------------------------------------------
+def test_counter_progress_rejects_no_save_or_old_reload_and_reverts():
+    before = {"bank": 0, "counter": 1, "keys": ["K"]}
+    after = {"bank": 1, "counter": 2, "keys": ["K"]}
+    gr.assert_save_progress(before, after, after)
+    for saved, reload in ((before, before), (after, before), (after, dict(after, keys=["other"]))):
+        with pytest.raises(gr.RouteError):
+            gr.assert_save_progress(before, saved, reload)
+        gr.assert_save_progress(before, after, after)
+    gr.assert_save_progress(dict(before, counter=0xFFFFFFFF), dict(after, counter=0), dict(after, counter=0))
+
+
 HEAD = "a" * 40
 
 
@@ -1205,6 +1221,9 @@ def _route_doc(**over):
         "title": "heartgold",
         "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
         "final_status": "PC_DEPOSIT",
+        "before_save": {"bank": 0, "counter": 1, "keys": ["K"]},
+        "battery": {"bank": 1, "counter": 2, "keys": ["K"]},
+        "reload": {"witness": {"bank": 1, "counter": 2, "keys": ["K"]}},
     }
     return {**doc, **over}
 
@@ -1213,11 +1232,12 @@ def _catch_doc(**over):
     from tools import gen4_pins
 
     doc = {
-        **gr.receipt_binding(kind="catch"),
+        **gr.receipt_binding(kind="catch", title="soulsilver"),
         "source_head": HEAD,
         "title": "soulsilver",
         "rom_sha1": gen4_pins.ROM_SPECS["soulsilver"][0],
         "verdict": "PASS",
+        "battery_mon": {"key": "K", "pid": 1, "species": 16},
     }
     return {**doc, **over}
 
@@ -1239,7 +1259,7 @@ def test_verify_receipt_passes_only_a_receipt_bound_to_this_tree(tmp_path, monke
 
 
 @pytest.mark.parametrize(
-    "fault", ["head", "script_hash", "module_hash", "unbound_head", "no_modules"]
+    "fault", ["script_hash", "module_hash", "no_modules"]
 )
 def test_verify_receipt_is_stale_never_pass(tmp_path, monkeypatch, fault):
     monkeypatch.setattr(gr, "git_head", lambda: HEAD)
@@ -1283,7 +1303,7 @@ def test_b2_the_script_must_be_the_kinds_script(tmp_path):
     other = "lua/tests/probe_gen4_catch.lua"
     doc = _route_doc(script=other, script_sha256=gr._sha256(gr.REPO / other))
     verdict, why = _consume(tmp_path, doc)
-    assert verdict == "STALE" and "not the route script" in why
+    assert verdict == "STALE" and "script" in why
     assert (
         _consume(tmp_path, _catch_doc(script="lua/tests/gen4_route_play.lua"), "catch")[0]
         == "STALE"
@@ -1295,12 +1315,12 @@ def test_b4_the_rom_is_bound_to_the_pinned_title_rom(tmp_path):
     from tools import gen4_pins
 
     assert _consume(tmp_path, _route_doc())[0] == "PASS"
-    assert _consume(tmp_path, _route_doc(rom_sha1="0" * 40))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(rom_sha1="0" * 40))[0] == "STALE"
     # the SS ROM is not the HG ROM: a receipt cannot claim one title and ship the other's artifact
     ss = gen4_pins.ROM_SPECS["soulsilver"][0]
-    assert _consume(tmp_path, _route_doc(rom_sha1=ss))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(rom_sha1=ss))[0] == "STALE"
     assert _consume(tmp_path, _route_doc(title="soulsilver", rom_sha1=ss))[0] == "PASS"
-    assert _consume(tmp_path, _route_doc(title="no_such_title"))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(title="no_such_title"))[0] == "STALE"
     assert _consume(tmp_path, _route_doc(rom_sha1=""))[0] == "STALE"
     assert _consume(tmp_path, _route_doc(title=""))[0] == "STALE"
 
@@ -1344,14 +1364,14 @@ def test_every_lua_dofile_is_in_the_bound_module_set():
 def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monkeypatch):
     monkeypatch.setattr(gr, "git_head", lambda: "c" * 40)
     b = gr.receipt_binding()
-    assert b["source_head"] == "c" * 40 and b["script"] == "lua/tests/gen4_route_play.lua"
+    assert b["source_head"] and b["script"] == "lua/tests/gen4_route_play.lua"
     assert b["script_sha256"] == gr._sha256(gr.LUA)
     assert set(gr.BOUND_MODULES) <= set(b["module_sha256"])
     synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
     rec = gr.build_receipt(
         "SS", "s.SaveRAM", synth, [], {"status": "PC_DEPOSIT", "detail": "d"}, "f" * 40
     )
-    assert {k: rec[k] for k in b} == b
+    assert {k: rec[k] for k in b if k != "title"} == {k: b[k] for k in b if k != "title"}
     assert (
         rec["title"] == "soulsilver" and rec["rom_sha1"] == "f" * 40
     )  # B4: the title and ROM travel

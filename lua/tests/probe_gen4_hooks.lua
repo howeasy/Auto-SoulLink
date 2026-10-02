@@ -982,6 +982,7 @@ local function run()
         local payload={schema="gen4-probe-row-v1",run_id=cfg.run_id,title=cfg.title,rom_sha1=cfg.rom_sha1,
             level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
             source_head=cfg.source_head,script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
+        payload.module_sha256=cfg.module_sha256; payload.surface_sha256=cfg.surface_sha256; payload.receipt_kind=cfg.receipt_kind
         payload.setup=cfg.setup or "NATIVE"; payload.sidecar_sha256=cfg.sidecar_sha256
         payload.setup_src_sha1=cfg.src_sha1; payload.setup_out_sha1=cfg.out_sha1
         payload.setup_new_pid=cfg.new_pid

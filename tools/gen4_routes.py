@@ -70,7 +70,8 @@ from typing import NamedTuple
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from server.adapters.gen4_codec import mon_key, parse_save  # noqa: E402
+from server.adapters.gen4_codec import counter_newer, mon_key, parse_save  # noqa: E402
+from tools import gen4_evidence, gen4_pins  # noqa: E402
 from tools.gen4_fixtures import (  # noqa: E402
     BIZHAWK_CONFIG,
     FixtureError,
@@ -961,6 +962,25 @@ def verify_saved(path, game: str, synth: dict) -> dict:
     }
 
 
+def save_witness(path, game) -> dict:
+    """Independent FILE oracle: newest coherent bank, wrap-aware counter, exact mon keys."""
+    decoded = parse_save(Path(path).read_bytes(), GAMES[game][2])
+    party = [mon["key"] for mon in decoded.party()]
+    boxes = [{"box": box, "slot": slot, "key": mon["key"]}
+             for box, data in enumerate(decoded.boxes()) for slot, mon in data["mons"].items()]
+    return {"bank": decoded.bank, "counter": decoded.counter, "party_keys": party, "box_keys": boxes,
+            "keys": sorted([*party, *(mon["key"] for mon in boxes)]), "fallback": decoded.fallback}
+
+
+def assert_save_progress(before, saved, reloaded):
+    if counter_newer(saved["counter"], before["counter"]) <= 0:
+        raise RouteError("save_counter", "native SAVE did not advance the coherent save counter")
+    if counter_newer(reloaded["counter"], saved["counter"]) < 0:
+        raise RouteError("save_counter", "cold reload regressed the coherent save counter")
+    if saved["keys"] != reloaded["keys"]:
+        raise RouteError("reload_keys", "cold reload changed persisted mon keys")
+
+
 # --- receipts bound at CONSUMPTION (same rule as gates.perf_f in tests/live/test_gen4_probe_gates.py) ----
 # A receipt is only evidence for the source it ran from: it carries the git HEAD, the sha256 of the Lua
 # script that ran and of every Python/Lua module the run read; verify_receipt() refuses (STALE, never PASS)
@@ -1010,18 +1030,14 @@ def git_head() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
 
 
-def receipt_binding(script=None, extra_modules=(), kind: str = "route") -> dict:
-    """source_head + script + script_sha256 + module_sha256 for a receipt produced now, from this tree.
-    The module set is the kind's required set (RECEIPT_KINDS) plus any extras."""
-    spec = RECEIPT_KINDS[kind]
-    script = Path(script or REPO / spec["script"])
-    mods = {m: _sha256(REPO / m) for m in (*spec["modules"], *extra_modules)}
-    return {
-        "source_head": git_head(),
-        "script": script.resolve().relative_to(REPO).as_posix(),
-        "script_sha256": _sha256(script),
-        "module_sha256": mods,
-    }
+def receipt_binding(script=None, extra_modules=(), kind: str = "route", title: str = "heartgold") -> dict:
+    """Shared evidence surface, frozen before execution; HEAD is provenance only."""
+    binding = gen4_evidence.snapshot(kind, title, repo=REPO)
+    if script is not None and Path(script).resolve() != (REPO / binding["script"]).resolve():
+        raise gen4_evidence.StaleEvidenceError("STALE script: not the requested receipt kind")
+    if set(extra_modules) - set(binding["module_sha256"]):
+        raise gen4_evidence.StaleEvidenceError("STALE undeclared extra dependencies: extend the shared kind surface")
+    return binding
 
 
 def verify_receipt(path, kind: str, *, head: str | None = None) -> tuple[str, str]:
@@ -1032,41 +1048,35 @@ def verify_receipt(path, kind: str, *, head: str | None = None) -> tuple[str, st
     decides (PASS only for that kind's passing statuses; another kind's status is FAIL)."""
     spec = RECEIPT_KINDS[kind]
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    for key in ("source_head", "script", "script_sha256", "module_sha256", "title", "rom_sha1"):
-        if not doc.get(key):
-            return "STALE", f"unbound receipt: {key} absent"
-    if doc["script"] != spec["script"]:
-        return "STALE", f"script {doc['script']} is not the {kind} script {spec['script']}"
-    missing = sorted(set(spec["modules"]) - set(doc["module_sha256"]))
-    if missing:
-        return "STALE", f"trimmed receipt: module hashes absent for {missing}"
-    head = head or git_head()
-    if doc["source_head"] != head:
-        return "STALE", f"source_head {doc['source_head'][:8]} != HEAD {head[:8]}"
-    script = REPO / doc["script"]
-    if not script.is_file() or _sha256(script) != doc["script_sha256"]:
-        return "STALE", f"script {doc['script']} changed since the run"
-    for rel, digest in doc["module_sha256"].items():
-        mod = REPO / rel
-        if not mod.is_file() or _sha256(mod) != digest:
-            return "STALE", f"module {rel} changed since the run"
-    from tools import gen4_pins
-
-    pin = gen4_pins.ROM_SPECS.get(doc["title"])
-    if pin is None or doc["rom_sha1"] != pin[0]:
-        return "FAIL", f"rom {doc['rom_sha1']} is not the pinned {doc['title']} ROM"
+    title = doc.get("title")
+    pin = gen4_pins.ROM_SPECS.get(title)
+    if pin is None:
+        return "STALE", f"unsupported title: {title}"
+    try:
+        gen4_evidence.verify(doc, kind, title, pin[0], repo=REPO)
+    except gen4_evidence.StaleEvidenceError as exc:
+        return "STALE", str(exc)
     status = doc.get(spec["status_key"])
     if status in spec["pass"]:
-        return "PASS", "bound to the current tree"
+        if kind == "route":
+            try:
+                assert_save_progress(doc["before_save"], doc["battery"], doc["reload"]["witness"])
+            except (KeyError, TypeError):
+                return "STALE", "missing independent counter/key witnesses"
+            except RouteError as exc:
+                return "FAIL", str(exc)
+        elif not isinstance(doc.get("battery_mon"), dict) or not {"pid", "species", "key"} <= doc["battery_mon"].keys():
+            return "STALE", "missing independently decoded battery_mon"
+        return "PASS", "bound to the current evidence surface"
     return ("OPEN" if status == "OPEN" else "FAIL"), f"{kind} receipt status {status}"
 
 
 def build_receipt(
-    game, save, synth: dict, legs: list[dict], final: dict, rom_sha1: str | None = None
+    game, save, synth: dict, legs: list[dict], final: dict, rom_sha1: str | None = None, *, binding=None
 ) -> dict:
     """The run's receipt: SYNTH label + sidecar hash first, then each leg's status line."""
     return {
-        **receipt_binding(),
+        **(binding or receipt_binding(title=GAMES[game][1])),
         "title": GAMES[game][1],  # the pinned-ROM key (tools/gen4_pins.py ROM_SPECS)
         "rom_sha1": rom_sha1,
         "setup": synth["setup"],
@@ -1083,12 +1093,13 @@ def build_receipt(
         "final_detail": final["detail"],
         # the battery as the run left it, decoded by the codec (verify_saved / verify_saved_hatch)
         "battery_sha1": final.get("battery_sha1"),
-        "battery": final.get("saved"),
+        "before_save": final.get("before_save"),
+        "battery": {**(final.get("saved") or {}), **(final.get("save_witness") or {})} or None,
         # the reload leg's own status line, wall time and log (the fresh boot from that battery)
         "reload": {
             k: v
             for k, v in (final.get("reload") or {}).items()
-            if k in ("leg", "status", "detail", "wall", "log")
+            if k in ("leg", "status", "detail", "wall", "log", "witness")
         }
         or None,
         # R2: RAM and the file differ -- say each, claim neither for the other
@@ -1195,6 +1206,8 @@ def run_lane(
         raise RouteError("unknown_target", f"{target!r} is not grass, pc or hatch")
     kind = {"pc": "party2", "hatch": "egg1"}.get(target)
     synth = synth_setup(save, kind) if kind else None  # refuse before touching the lane
+    binding = receipt_binding(title=GAMES[game][1])
+    before_save = save_witness(save, game) if kind else None
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
@@ -1292,15 +1305,22 @@ def run_lane(
                     saved_path, game, synth
                 )
                 result["battery_sha1"] = sha1_of(saved_path)
+                result["before_save"] = before_save
+                result["save_witness"] = save_witness(saved_path, game)
                 result["reload"] = _cold_reload(
                     rom_staged, ld, tag, leg, game, route, pc_extra, timeout, history
                 )
                 if result["reload"]["status"] != "RELOAD_OK":
                     result.update(status="RELOAD_FAIL", detail=result["reload"]["detail"])
+                else:
+                    result["reload"]["witness"] = save_witness(saved_path, game)
+                    assert_save_progress(before_save, result["save_witness"], result["reload"]["witness"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
         if kind:
-            result["receipt"] = build_receipt(game, save, synth, history, result, rom_sha1)
+            gen4_evidence.bind({**binding, "rom_sha1": rom_sha1}, receipt_binding(title=GAMES[game][1]),
+                               title=GAMES[game][1], rom_sha1=rom_sha1)
+            result["receipt"] = build_receipt(game, save, synth, history, result, rom_sha1, binding=binding)
             (ld / f"{tag}_receipt.json").write_text(
                 json.dumps(result["receipt"], indent=1), encoding="utf-8"
             )

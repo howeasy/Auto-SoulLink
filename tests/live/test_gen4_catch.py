@@ -23,7 +23,10 @@ from pathlib import Path
 
 import pytest
 
-from tools import gen4_fixtures as g4, gen4_pins
+from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
+from tools import gen4_evidence, gen4_fixtures as g4, gen4_pins
+
+pytestmark = pytest.mark.usefixtures("model_surface")
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_catch.lua"
@@ -162,6 +165,8 @@ def launch(mode: str, keys: list, *, tag: str, extra: dict | None = None, timeou
         ).strip(),
         **(extra or {}),
     }
+    from tools import gen4_routes as routes
+    cfg["evidence_binding"] = routes.receipt_binding(SCRIPT, kind="catch", title=TITLES["title"])
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
     out = lane / "receipt.txt"
     env = dict(
@@ -354,10 +359,11 @@ def _verdict_doc(**over):
     from tools import gen4_routes as routes
 
     doc = {
-        **routes.receipt_binding(SCRIPT, kind="catch"),
+        **routes.receipt_binding(SCRIPT, kind="catch", title="heartgold"),
         "title": "heartgold",
         "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
         "verdict": "PASS",
+        "battery_mon": {"key": "K", "pid": 1, "species": 16},
     }
     return {**doc, **over}
 
@@ -373,7 +379,7 @@ def test_verdict_receipt_is_bound_at_consumption(tmp_path):
     path = tmp_path / "verdict.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
     assert routes.verify_receipt(path, "catch", head=doc["source_head"])[0] == "PASS"
-    assert routes.verify_receipt(path, "catch", head="0" * 40)[0] == "STALE"
+    assert routes.verify_receipt(path, "catch", head="0" * 40)[0] == "PASS"  # Docs-only HEAD movement.
     path.write_text(json.dumps(_verdict_doc(script_sha256="0" * 64)), encoding="utf-8")
     assert routes.verify_receipt(path, "catch", head=doc["source_head"])[0] == "STALE"
 
@@ -386,6 +392,9 @@ def test_a_route_receipt_does_not_pass_as_a_catch_verdict(tmp_path):
         "title": "heartgold",
         "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
         "final_status": "PC_DEPOSIT",
+        "before_save": {"bank": 0, "counter": 1, "keys": ["K"]},
+        "battery": {"bank": 1, "counter": 2, "keys": ["K"]},
+        "reload": {"witness": {"bank": 1, "counter": 2, "keys": ["K"]}},
     }
     path = tmp_path / "r.json"
     path.write_text(json.dumps(route_doc), encoding="utf-8")
@@ -440,7 +449,7 @@ def test_live_wild_capture():
     if not keys:
         pytest.skip("OPEN: bag navigation keys not derived yet (SLINK_GEN4_CATCH_KEYS)")
     save_legs = route_pack()
-    status, payload, lane, battery, _ = launch(
+    status, payload, lane, battery, cfg = launch(
         "catch", keys, tag="catch", extra={"save_legs": save_legs, "wake_keys": WAKE_TO_BAG[:1]}
     )
     obs = payload["observation"]
@@ -475,7 +484,10 @@ def test_live_wild_capture():
     from tools import gen4_routes as routes
 
     # bound at consumption: HEAD + the probe script + every module the verdict depended on
-    binding = routes.receipt_binding(SCRIPT, kind="catch")
+    binding = cfg["evidence_binding"]
+    gen4_evidence.bind({**binding, "rom_sha1": payload["rom_sha1"]},
+                       routes.receipt_binding(SCRIPT, kind="catch", title=TITLES["title"]),
+                       title=TITLES["title"], rom_sha1=payload["rom_sha1"])
     (lane / "verdict.json").write_text(
         json.dumps(
             {
