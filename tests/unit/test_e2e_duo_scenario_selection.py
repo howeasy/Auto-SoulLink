@@ -839,7 +839,9 @@ GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "spe
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
 GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3", "shiny_bonus_gen3")
 GEN3_RR_EXPLICIT_SCENARIOS = ("trade_reset_commit_gen3", "trade_reset_success_gen3",
-                              "trade_lock_probe_gen3")
+                              "trade_lock_probe_gen3", "nature_change_gen3",
+                              "borrowed_party_menu_gen3", "borrowed_party_opponent_gen3",
+                              "borrowed_party_battle_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
