@@ -119,6 +119,21 @@ function M.predicate(title,read,p)
     if p.zero then return value==0 end
     return value==p.value
 end
+function M.internal_load_id(entry,read_register)
+    local id=entry.id
+    if entry.id_register then
+        id=read_register(entry.id_register)
+        if entry.id and id~=entry.id then return nil end
+    end
+    need(id,"c:internal loader ID argument/constant")
+    if entry.ids then
+        local allowed=false
+        check(type(entry.ids)=="table" and #entry.ids>0,"internal loader ID set")
+        for _,value in ipairs(entry.ids) do if id==value then allowed=true end end
+        if not allowed then return nil end
+    end
+    return id
+end
 function M.play_recipe(leg,step,until_matches)
     local used=0
     local function advance(buttons)
@@ -173,7 +188,10 @@ function M.validate_site(title, site, bytes, resident)
         check(site.address>=ov.ram and site.address+site.extent<=ov.ram+ov.size, "overlay extent")
     end
     if site.image=="arm9" or resident(site.overlay_id) then
-        check(bytes(site.address,site.extent):lower()==site.register_hex:lower(), "full registration pin mismatch")
+        local actual=bytes(site.address,site.extent):lower()
+        check(actual==site.register_hex:lower(), "full registration pin mismatch: "..tostring(site.id or site.symbol)
+            .." image="..site.image.." address="..string.format("%08x",site.address)
+            .." expected="..site.register_hex:lower().." actual="..actual)
     end
     return clone(site)
 end
@@ -737,12 +755,10 @@ local function run()
                 census_handles[#census_handles+1]=register(s,function(a,v,flags)
                     if not M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident) then return end
                     M.validate_site(title,s,bytes,resident)
-                    local id=entry.id
-                    if entry.id_register then
-                        id=M.read_register(emu.getregisters(),emu.getregister,entry.id_register)
-                        if entry.id and id~=entry.id then return end
-                    end
-                    need(id,"c:internal loader ID argument/constant")
+                    local id=M.internal_load_id(entry,function(name)
+                        return M.read_register(emu.getregisters(),emu.getregister,name)
+                    end)
+                    if id==nil then return end
                     causes[#causes+1]={frame=emu.framecount(),id=id,region=entry.region,kind="load",source=entry.source}
                 end,"g4c.internal."..entry.symbol,false)
             end

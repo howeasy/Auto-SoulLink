@@ -18,6 +18,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -866,7 +867,7 @@ def test_reverted_semantic_guard_is_detected(api, guard):
     source = SCRIPT.read_text(encoding="utf-8")
     replacements = {
         "residency": ('if site.image~="arm9" and not resident(site.overlay_id) then return nil end', ''),
-        "full_pin": ('check(bytes(site.address,site.extent):lower()==site.register_hex:lower(), "full registration pin mismatch")', ''),
+        "full_pin": ('check(actual==site.register_hex:lower(),', 'check(true,'),
         "last_drain": ('for _,e in ipairs(reg:drain()) do self.ready_events[#self.ready_events+1]=e end', ''),
         "close_fault": ('self.failure="phase cleanup failed: "..phase', 'self.failure=nil'),
     }
@@ -1054,6 +1055,23 @@ def publish_combined(batch, rows, metadata):
     return result
 
 
+def publish_aborted_attempt(batch, api, collected, observations, errors, external, metadata, stage, failure_row, exc):
+    """Keep partial evidence when any producer, oracle or final check aborts."""
+    detail = {"stage": stage, "type": type(exc).__name__, "reason": str(exc)}
+    partial = dict(errors)
+    partial[failure_row] = ("FAIL", {"reason": f"{stage}: {exc}", "attempt_failure": detail})
+    _, rows = finish_rows(api, observations, partial, external)
+    if failure_row == "o":
+        rows["o"] = partial["o"]
+    publish_control_evidence(batch, collected, rows)
+    # The metadata is the attempted cut, even if a final rebind detects drift.
+    # Such a receipt remains STALE to consumers; never relabel it to current bytes.
+    for row, (_, payload) in rows.items():
+        if row != "o":
+            payload.update(metadata, attempt_failure=detail)
+    publish_combined(batch, rows, {})
+
+
 def test_a_control_that_does_not_go_red_fails_the_shakedown():
     """OMP cx-8adf1fc7 S4: a control receipt whose targeted row PASSes, or FAILs for another reason, must fire."""
     good = {case: {row: ("FAIL", {"reason": '[string "main"]:11: ' + needle}) for row, needle in want.items()}
@@ -1203,6 +1221,19 @@ def phase_case_plan(cases, blocked, recipes=None):
     return resolved_cases, reasons
 
 
+def replace_with_retry(source, destination, *, attempts=20, delay=0.05):
+    """Windows can deny atomic replacement while Lua holds its short rb read."""
+    assert attempts >= 1 and delay >= 0
+    for attempt in range(attempts):
+        try:
+            source.replace(destination)
+            return
+        except PermissionError:
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(delay)
+
+
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
     expected_cut = committed_cut(title, profile=profile, source_head=cfg["source_head"])
     bind_cut({"script_sha256": cfg["code_sha256"], "profile_sha256": cfg["profile_sha256"],
@@ -1271,13 +1302,13 @@ def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
                         answer = {"id": bridge_seen, "error": str(exc)}
                     temp = Path(cfg["bridge_response"]).with_suffix(".tmp")
                     temp.write_text(json.dumps(answer), encoding="utf-8")
-                    temp.replace(cfg["bridge_response"])
+                    replace_with_retry(temp, cfg["bridge_response"])
             if request.is_file() and not response.is_file():
                 inventory = {"foreign_pids": [pid for pid in emulator_pids() if pid != proc.pid],
                              "checked_at_utc": datetime.datetime.now(datetime.UTC).isoformat()}
                 temp = response.with_suffix(".tmp")
                 temp.write_text(json.dumps(inventory), encoding="utf-8")
-                temp.replace(response)
+                replace_with_retry(temp, response)
             if out.is_file():
                 tail = out.read_text(encoding="utf-8").splitlines()[-1:]
                 if tail and tail[0] in {"RESULT: PASS", "RESULT: FAIL", "RESULT: OPEN"}:
@@ -1335,6 +1366,23 @@ def census_file_pins(source, artifact, title, internal_loads=()):
         assert int.from_bytes(bytes.fromhex(measured[:8]), "little") == int(site["fire_hex"], 16), "fire pin endian mismatch"
         result[name] = measured
     return result
+
+
+def internal_census_loads(title, artifact):
+    """hge bypasses the vanilla loader for its early expansion and async loads."""
+    if title != "heartgold_hge":
+        return []
+    sites = artifact["sites"]
+    entries = []
+    for site_id, argument, source in (
+        ("hge_load_arm9_expansion", {"id": 129}, "constant overlay 129"),
+        ("load_overlay_noinit_async", {"id_register": "ARM9 r1", "ids": [130, 131]}, "overlay ID in r1"),
+    ):
+        assert site_id in sites, f"hge census pack site absent: {site_id}"
+        entries.append({"symbol": sites[site_id]["symbol"], **argument, "region": 0,
+                        "source": f"pack:{site_id} ({source})"})
+    assert len(entries) + 2 <= 4, "census hook budget"
+    return entries
 
 
 def mutation_specs(codec, decoded, artifact, scenario):
@@ -1512,6 +1560,7 @@ def test_gen4_hook_probe(api, title):
     codec = codec_module()
     decoded = codec.parse_save(save.read_bytes(), "hge" if title == "heartgold_hge" else "hgss")
     cfg["save_witness"] = source_witness(codec, decoded)
+    cfg["internal_loads"] = internal_census_loads(title, artifact)
     cfg["census_image_bytes"] = census_file_pins(source, artifact, title, cfg.get("internal_loads", ()))
     if "phase_cases" not in cfg and artifact.get("phase_cases"):
         cfg["phase_cases"] = artifact["phase_cases"]
@@ -1534,10 +1583,18 @@ def test_gen4_hook_probe(api, title):
     batch = root / (title + "-" + uuid.uuid4().hex[:12])
     batch.mkdir(parents=True, exist_ok=False)
     before_save = digest(save)
-    observations, errors = {}, {}
+    observations, errors, collected = {}, {}, {}
+    required_o = ("OPEN", {"reason": "row o consumer not reached"})
+    stage, failure_row = "baseline", "a"
+    attempt_metadata = {"schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
+                        "source_head": source_head, "level": "PHYSICAL", "run_id": batch.name,
+                        "script_sha256": cut["script_sha256"], "profile_sha256": cut["profile_sha256"],
+                        "requested_rate": 300, "module_sha256": cut["module_sha256"],
+                        "surface_sha256": cut["surface_sha256"], "receipt_kind": cut["receipt_kind"],
+                        **save_setup(save)}
     try:
-        collected = {}
         for case in ("baseline", "rtc-repeat", "rtc-unpinned", "no-buttons", "patched-rom"):
+            stage, failure_row = case, next(iter(CONTROL_REDS.get(case, {"a": ""})))
             try:
                 rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case, cfg)
             except AssertionError as exc:
@@ -1558,6 +1615,7 @@ def test_gen4_hook_probe(api, title):
             observations["k"].update(second=repeat.get("first"), frame_second=repeat.get("frame_first"), unpinned=unpinned.get("first"))
         if "l" in observations:
             observations["l"]["no_buttons_overworld"] = collected["no-buttons"]["l"][1].get("observation", {}).get("overworld")
+        stage, failure_row = "persistence", "i"
         persistence, reason = persistence_rows(module, codec, decoded, title, source, save, profile, artifact, base, batch, cfg)
         if persistence is not None:
             observations["i"] = persistence
@@ -1565,6 +1623,7 @@ def test_gen4_hook_probe(api, title):
         else:
             errors["i"] = ("OPEN", {"reason": reason})
         if cfg.get("phase_cases") or cfg.get("phase_cases_blocked"):
+            stage, failure_row = "phase plan", "n"
             runnable, reasons = phase_case_plan(cfg.get("phase_cases", []), cfg["phase_cases_blocked"], recipes)
             measured = []
             if reasons:
@@ -1572,8 +1631,10 @@ def test_gen4_hook_probe(api, title):
                                         "phase_cases": [case["name"] for case in cfg.get("phase_cases", [])],
                                         "phase_cases_blocked": cfg["phase_cases_blocked"]})
             for index, case in enumerate(runnable):
+                stage = f"phase-{index} ({case['name']})"
                 rows, _ = launch_probe(module, title, source, save, profile, base, f"phase-{index}", batch / f"phase-{index}",
                                        {**cfg, "phase_case": case, "route": case["route"]})
+                collected[f"phase-{index}"] = rows
                 p = rows["n"][1].get("observation", {}).get("physical")
                 assert p is not None, f"phase case lacks physical measurement: {case['name']}"
                 measured.append(p)
@@ -1596,6 +1657,7 @@ def test_gen4_hook_probe(api, title):
                     errors.pop("n", None)
         performance = os.environ.get("SLINK_GEN4_PERF_RECEIPT")
         if performance:
+            stage, failure_row = "PERF consumer", "f"
             observed_perf, perf_reason = perf_f(performance.format(title=title), title, rom_sha1, source_head)
             if observed_perf is not None:
                 observations["f"] = observed_perf
@@ -1603,7 +1665,9 @@ def test_gen4_hook_probe(api, title):
             else:
                 errors["f"] = ("OPEN", {"reason": perf_reason})
         external = os.environ.get("SLINK_GEN4_ROW_O")
+        stage, failure_row = "row o consumer", "o"
         required_o = row_o(Path(external.format(title=title)) if external else None, title, rom_sha1, source_head)
+        stage, failure_row = "final evaluation / surface check", "a"
         result, rows = finish_rows(api, observations, errors, required_o)
         committed_cut(title, profile=profile, source_head=source_head)
         missed = publish_control_evidence(batch, collected, rows)
@@ -1617,6 +1681,8 @@ def test_gen4_hook_probe(api, title):
             if row != "o":
                 payload.update(save_setup(save))
             rows[row] = (status, payload)
+        stage, failure_row = "original-save check", "i"
+        assert digest(save) == before_save, "original save was modified"
         result = publish_combined(batch, rows, {})
         assert not missed, f"control(s) did not produce their targeted red in {batch}: {missed}"
         assert result != "FAIL", f"G1 FAIL; preserved receipt {batch / 'combined.txt'}"
@@ -1624,4 +1690,199 @@ def test_gen4_hook_probe(api, title):
             missing = "; ".join(f"{row}: {payload.get('reason')}" for row, (status, payload) in rows.items() if status == "OPEN")
             pytest.skip(f"OPEN G1 {title}: {missing}; receipt {batch / 'combined.txt'}")
     finally:
-        assert digest(save) == before_save, "original save was modified"
+        failure = sys.exc_info()[1]
+        try:
+            unchanged = digest(save) == before_save
+        except OSError:
+            unchanged = False
+        if not unchanged:
+            stage, failure_row = "original-save check", "i"
+            failure = AssertionError("original save was modified")
+        if failure is not None and (not (batch / "combined.txt").exists() or not unchanged):
+            publish_aborted_attempt(batch, api, collected, observations, errors, required_o,
+                                    attempt_metadata, stage, failure_row, failure)
+        assert unchanged, "original save was modified"
+
+@pytest.mark.parametrize("failure", ("baseline", "persistence", "phase-launch", "phase-observation", "row-o", "surface", "original-save"))
+@pytest.mark.parametrize("title", TITLE_PACK)
+def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path, failure, title):
+    """Replay the real orchestration boundary without launching an emulator."""
+    import sys
+    from types import SimpleNamespace
+    module = sys.modules[__name__]
+    source, save, base = (tmp_path / name for name in ("rom.nds", "played.sav", "config.ini"))
+    for path in (source, save, base):
+        path.write_bytes(b"fixture")
+    profile = tmp_path / "data/games" / TITLE_PACK[title] / "profile.json"
+    profile.parent.mkdir(parents=True)
+    artifact = {"rom": {"sha1": digest(source, "sha1"), "md5": digest(source, "md5")},
+                "phases": {"battle": {"cap": 2}, "pc": {"cap": 2}},
+                "phase_cases": [{"name": "battle"}], "route_legs": {},
+                "sites": {"hge_load_arm9_expansion": {"symbol": "load_arm9_expansion"},
+                          "load_overlay_noinit_async": {"symbol": "LoadOverlayNoInitAsync"}}}
+    profile.write_text(json.dumps({"schema": "gen4-profile-v1", "titles": {title: artifact}}))
+    monkeypatch.setattr(module, "REPO", tmp_path)
+    monkeypatch.setenv("SLINK_GEN4_" + title.upper(), str(source))
+    monkeypatch.setenv("SLINK_GEN4_" + title.upper() + "_SAVE", str(save))
+    monkeypatch.setenv("SLINK_BIZHAWK_CONFIG", str(base))
+    monkeypatch.setenv("SLINK_GEN4_PROBE_RUNS", str(tmp_path / "runs"))
+    monkeypatch.delenv("SLINK_GEN4_PERF_RECEIPT", raising=False)
+    monkeypatch.setattr(module, "fixture_module", lambda: object())
+    monkeypatch.setattr(module, "scenario_input", lambda title: {})
+    monkeypatch.setattr(module, "codec_module", lambda: SimpleNamespace(
+        parse_save=lambda *args: SimpleNamespace(profile="hgss")))
+    monkeypatch.setattr(module, "source_witness", lambda *args: {})
+    def census_pins(source, artifact, title, internal_loads):
+        assert internal_loads == internal_census_loads(title, artifact)
+        return {}
+    monkeypatch.setattr(module, "census_file_pins", census_pins)
+    monkeypatch.setattr(module, "save_setup", lambda path: {"setup": "NATIVE"})
+    monkeypatch.setattr(module, "phase_case_plan", lambda *args: ([{"name": "battle", "route": []}], []))
+    cut_calls = 0
+    def cut(*args, **kwargs):
+        nonlocal cut_calls
+        cut_calls += 1
+        if failure == "surface" and cut_calls > 1:
+            raise AssertionError("STALE changed surface")
+        return MODEL_CUT
+    monkeypatch.setattr(module, "committed_cut", cut)
+    good = examples()
+    def launch(*args):
+        case = args[6]
+        assert args[-1]["internal_loads"] == internal_census_loads(title, artifact)
+        if failure == "baseline" and case == "baseline":
+            raise AssertionError("terminal receipt absent")
+        if failure == "phase-launch" and case.startswith("phase-"):
+            raise PermissionError("bridge response replace denied")
+        rows = {row: ("PASS", {"observation": copy.deepcopy(value)}) for row, value in good.items()}
+        if case in CONTROL_REDS:
+            for row, needle in CONTROL_REDS[case].items():
+                rows[row] = ("FAIL", {"reason": needle, "observation": copy.deepcopy(good[row])})
+        if case == "patched-rom":
+            rows["j"][1]["observation"]["hash"] = "3" * 40
+        if case == "rtc-unpinned":
+            rows["k"][1]["observation"]["first"] = "wallclock"
+        if case == "no-buttons":
+            rows["l"][1]["observation"]["overworld"] = False
+        if failure == "phase-observation" and case.startswith("phase-"):
+            rows["n"] = ("FAIL", {"reason": "route until predicate not reached", "observation": {}})
+        if failure == "original-save":
+            save.write_bytes(b"modified")
+        return rows, save
+    monkeypatch.setattr(module, "launch_probe", launch)
+    def persistence(*args):
+        if failure == "persistence":
+            raise AssertionError("cold RAM identity drift")
+        return copy.deepcopy(good["i"]), None
+    monkeypatch.setattr(module, "persistence_rows", persistence)
+    def external(*args):
+        if failure == "row-o":
+            raise AssertionError("present row-o receipt is wrong")
+        return ("PASS", {"reason": "MODEL external row"})
+    monkeypatch.setattr(module, "row_o", external)
+    with pytest.raises((AssertionError, PermissionError)):
+        test_gen4_hook_probe(api, title)
+    batch, = (tmp_path / "runs").iterdir()
+    assert (batch / "control-reds.json").is_file(), failure
+    combined = (batch / "combined.txt").read_text()
+    assert combined.rstrip().endswith("RESULT: FAIL"), failure
+    rows = [ROW_RE.fullmatch(line) for line in combined.splitlines()[:-1]]
+    assert all(rows) and {m[1] for m in rows} == set("abcdefghijklmno")
+    assert any("attempt_failure" in json.loads(m[3]) for m in rows), failure
+
+def test_hge_internal_census_config_covers_pinned_loaders_red_revert():
+    artifact = json.loads((REPO / "data/games/gen4_hge/profile.json").read_text())["titles"]["heartgold_hge"]
+    entries = internal_census_loads("heartgold_hge", artifact)
+    assert len(entries) + 2 <= 4
+    assert entries == [
+        {"symbol": artifact["sites"]["hge_load_arm9_expansion"]["symbol"], "id": 129, "region": 0,
+         "source": "pack:hge_load_arm9_expansion (constant overlay 129)"},
+        {"symbol": artifact["sites"]["load_overlay_noinit_async"]["symbol"], "id_register": "ARM9 r1", "ids": [130, 131], "region": 0,
+         "source": "pack:load_overlay_noinit_async (overlay ID in r1)"},
+    ]
+    assert internal_census_loads("heartgold", artifact) == []
+    for missing in ("hge_load_arm9_expansion", "load_overlay_noinit_async"):
+        broken = copy.deepcopy(artifact)
+        del broken["sites"][missing]
+        with pytest.raises(AssertionError, match=missing):
+            internal_census_loads("heartgold_hge", broken)
+        assert internal_census_loads("heartgold_hge", artifact) == entries
+
+
+def test_internal_funnel_filters_vanilla_duplicate_and_omission_stays_red(api):
+    entry = {"id_register": "ARM9 r1", "ids": [130, 131]}
+    causes = [{"id": 42, "region": 0, "kind": "load", "frame": 10, "source": "vanilla loader"}]
+    for overlay in (42, 130, 131):
+        value = api.internal_load_id(to_lua(api._runtime, entry), lambda name, value=overlay: value)
+        if value is not None:
+            causes.append({"id": value, "region": 0, "kind": "load", "frame": 10, "source": "internal loader"})
+    assert [v["id"] for v in causes] == [42, 130, 131]
+    x = copy.deepcopy(examples()["c"])
+    x["changes"] = [{**cause, "frame": 11} for cause in causes]
+    x["causes"] = causes
+    assert api.evaluate("c", to_lua(api._runtime, x)) == "PASS"
+    broken = copy.deepcopy(x)
+    broken["causes"].pop(0)
+    assert api.evaluate("c", to_lua(api._runtime, broken))[0] == "FAIL"
+    assert api.evaluate("c", to_lua(api._runtime, x)) == "PASS"
+    duplicate = copy.deepcopy(x)
+    duplicate["causes"].append(copy.deepcopy(causes[0]))
+    outcome = api.evaluate("c", to_lua(api._runtime, duplicate))
+    assert outcome[0] == "FAIL" and "omitted cause" in outcome[1]
+
+
+def test_full_pin_failure_identifies_site_image_and_bytes(api):
+    artifact = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["heartgold"]
+    site = {**artifact["sites"]["battle_start_ov12"], "id": "battle_start_ov12"}
+    wrong = "00" * site["extent"]
+    with pytest.raises(Exception, match="full registration pin mismatch.*battle_start_ov12.*ov12.*actual=" + wrong):
+        api.validate_site(to_lua(api._runtime, artifact), to_lua(api._runtime, site), lambda *args: wrong, lambda _: True)
+    assert api.validate_site(to_lua(api._runtime, artifact), to_lua(api._runtime, site),
+                             lambda *args: site["register_hex"], lambda _: True) is not None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows destination sharing contract")
+def test_bridge_replace_retries_a_real_open_destination(tmp_path):
+    import ctypes
+    import threading
+    from ctypes import wintypes
+    source, destination = tmp_path / "response.tmp", tmp_path / "response.json"
+    source.write_text("new complete response")
+    destination.write_text("old response")
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                                  wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel.CreateFileW(str(destination), 0x80000000, 1, None, 3, 0, None)
+    assert handle != ctypes.c_void_p(-1).value
+    # Lua's rb reader permits reads but can prevent replacement until it closes.
+    timer = threading.Timer(0.15, lambda: kernel.CloseHandle(handle))
+    timer.start()
+    try:
+        replace = globals().get("replace_with_retry", lambda src, dst, **kw: src.replace(dst))
+        replace(source, destination, attempts=20, delay=0.025)
+    finally:
+        timer.join()
+    assert destination.read_text() == "new complete response"
+    assert not source.exists()
+
+
+def test_bridge_replace_bound_fails_loud_and_other_errors_do_not_retry(monkeypatch, tmp_path):
+    calls = []
+    def locked(*args):
+        calls.append(args)
+        raise PermissionError("destination remains open")
+    monkeypatch.setattr(Path, "replace", locked)
+    monkeypatch.setattr(time, "sleep", lambda delay: None)
+    with pytest.raises(PermissionError, match="destination remains open"):
+        replace_with_retry(tmp_path / "source", tmp_path / "dest", attempts=3, delay=0)
+    assert len(calls) == 3
+    def missing(*args):
+        calls.append(args)
+        raise FileNotFoundError("source absent")
+    calls.clear()
+    monkeypatch.setattr(Path, "replace", missing)
+    with pytest.raises(FileNotFoundError, match="source absent"):
+        replace_with_retry(tmp_path / "source", tmp_path / "dest", attempts=3, delay=0)
+    assert len(calls) == 1

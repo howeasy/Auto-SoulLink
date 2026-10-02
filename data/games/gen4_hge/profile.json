@@ -3929,109 +3929,67 @@
           "starts_from": "wild battle settled on the main command menu (gen4_routes:battle_settled)",
           "steps": [
             {
-              "hold_frames": 2,
+              "hold_frames": 3,
               "press": [
-                "X"
+                "A"
               ],
-              "then_wait_frames": 20
+              "then_wait_frames": 40
             },
             {
-              "hold_frames": 2,
+              "hold_frames": 3,
               "press": [
-                "Left"
+                "A"
               ],
-              "then_wait_frames": 6
+              "then_wait_frames": 50
             },
             {
-              "hold_frames": 2,
+              "hold_frames": 3,
               "press": [
-                "Left"
+                "A"
               ],
-              "then_wait_frames": 6
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "Up"
-              ],
-              "then_wait_frames": 6
+              "then_wait_frames": 30
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 45
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "Up"
-              ],
-              "then_wait_frames": 6
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "Up"
-              ],
-              "then_wait_frames": 6
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "Left"
-              ],
-              "then_wait_frames": 6
+              "then_wait_frames": 44
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 60
+              "then_wait_frames": 44
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 18
+              "then_wait_frames": 44
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 18
+              "then_wait_frames": 44
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 18
+              "then_wait_frames": 44
             },
             {
               "hold_frames": 2,
               "press": [
                 "A"
               ],
-              "then_wait_frames": 18
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "A"
-              ],
-              "then_wait_frames": 18
-            },
-            {
-              "hold_frames": 2,
-              "press": [
-                "A"
-              ],
-              "then_wait_frames": 18
+              "then_wait_frames": 44
             }
           ],
           "until": {

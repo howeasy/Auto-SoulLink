@@ -1591,8 +1591,10 @@ def build_route_legs(ui: dict, build: str) -> dict:
                    "is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell")
     legs = {
         "fight_until_enemy_faints": _leg(
-            [wake, *[_step([k], 2, 6) for k in paths["to_FIGHT"]], _step(["A"], 2, 45),
-             *[_step([k], 2, 6) for k in paths["fight_to_MOVE_1"]], _step(["A"], 2, 60), *mash, _step(["A"], 2, 18)],
+            # Row-o PHYSICAL input timing: A wakes, A opens FIGHT, A selects move 1.
+            # This fight-to-faint loop still requires its own PHYSICAL replay.
+            [_step(["A"], 3, 40), _step(["A"], 3, 50), _step(["A"], 3, 30),
+             *[_step(["A"], 2, 44) for _ in range(6)]],
             enemy_hp_zero, 3000, "SOURCE", [*battle_src, S_ENC_START],
             "wild battle settled on the main command menu (gen4_routes:battle_settled)",
             battle_note + "; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, "

@@ -607,7 +607,7 @@ def test_committed_route_legs_validate_and_cover_every_named_leg(mode, name):
     assert all(legs[n]["steps"] == [] and legs[n]["until"] is None and legs[n]["open"] for n in set(legs) - recipes)
     assert all(legs[n]["evidence"] in ("SOURCE", "FILE") for n in recipes)
     buttons = {b for n in recipes for st in legs[n]["steps"] for b in st["press"]}
-    assert buttons <= set(g.NDS_BUTTONS) and {"A", "X", "Start", "Select", "L", "R", "Up", "Down", "Left"} <= buttons
+    assert buttons <= set(g.NDS_BUTTONS) and {"A", "X", "Start", "Select", "L", "R", "Down", "Left"} <= buttons  # Up left with the row-o fight recipe
 
 
 def test_hg_ss_hge_route_legs_and_collision_pairs_agree():
