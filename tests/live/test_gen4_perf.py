@@ -9,7 +9,6 @@ PERF PASS means complete measurement, NOT 1x qualification. Row f is the authori
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 import shutil
@@ -23,7 +22,7 @@ from unittest.mock import patch
 import pytest
 
 from tests.live import test_gen4_probe_gates as gates
-from tools import gen4_fixtures, gen4_pins
+from tools import gen4_evidence, gen4_fixtures, gen4_pins
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/perf_gen4.lua"
@@ -237,21 +236,17 @@ def site_inventory(title, rom):
     }
 
 
-def committed_modules():
-    result = {}
-    for path in MODULES:
-        current = gates.input_file(REPO / path, "perf workload module").read_bytes()
-        expected = subprocess.check_output(["git", "show", f"HEAD:{path}"], cwd=REPO)
-        # Git blobs use LF; Windows working-tree checkout may use CRLF.
-        if path != "lua/tests/probe_gen4_hooks.lua":
-            assert current.replace(b"\r\n", b"\n") == expected.replace(b"\r\n", b"\n"), (
-                f"unfrozen workload module: {path}"
-            )
-        result[path] = hashlib.sha256(current).hexdigest()
-    return result
+def committed_surface(title):
+    """Freeze the perf evidence surface ONCE, before any trial runs (gen4_evidence.snapshot refuses an
+    uncommitted dependency). The row f consumer binds the full kind surface, not this workload list;
+    MODULES stays as a subset invariant (OMP cx-ea9abdbc)."""
+    surface = gen4_evidence.snapshot("perf", title, repo=REPO)
+    missing = sorted(set(MODULES) - set(surface["module_sha256"]))
+    assert not missing, f"perf workload module outside the evidence surface: {missing}"
+    return surface
 
 
-def launch_trial(title_name, source, save, state, profile, base, trial, lane, module_hashes, inventory):
+def launch_trial(title_name, source, save, state, profile, base, trial, lane, surface, inventory):
     assert not lane.exists(), "stale lane"
     lane.mkdir(parents=True)
     rom = gen4_fixtures.stage_rom(source, lane)
@@ -290,7 +285,9 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
         ).strip(),
         "script_sha256": sha(SCRIPT),
         "profile_sha256": sha(profile),
-        "module_sha256": module_hashes,
+        "module_sha256": surface["module_sha256"],
+        "surface_sha256": surface["surface_sha256"],
+        "receipt_kind": surface["receipt_kind"],
         "state_sha256": sha(copied_state),
         "config_sha256": sha(lane / "config.ini"),
         "throttle_config": {
@@ -358,9 +355,9 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
         assert data["script_sha256"] == sha(SCRIPT) and data["profile_sha256"] == sha(profile), (
             "moving measurement cut"
         )
-        assert data["module_sha256"] == module_hashes == {path: sha(REPO / path) for path in MODULES}, (
-            "workload source changed during measurement"
-        )
+        assert data["module_sha256"] == surface["module_sha256"], "workload source changed during measurement"
+        assert data["surface_sha256"] == surface["surface_sha256"], "PERF sample lost its evidence surface"
+        assert data["receipt_kind"] == "perf", "PERF sample carries the wrong receipt kind"
         data["foreign_pids"] = sorted(foreign)
         data["concurrent_load"] = bool(foreign)
         data["pid"] = proc.pid
@@ -613,7 +610,7 @@ def test_live_perf(title):
     base = gates.input_file(
         Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini")), "base config"
     )
-    modules = committed_modules()
+    surface = committed_surface(title)
     packed_title = json.loads(profile.read_text(encoding="utf-8"))["titles"][title]
     packed_title["perf_title"] = title
     sites, seam = site_inventory(packed_title, source)
@@ -668,7 +665,7 @@ def test_live_perf(title):
                     base,
                     trial,
                     root / (phase + "_" + trial["scenario"]),
-                    modules,
+                    surface,
                     inventory,
                 )
             )

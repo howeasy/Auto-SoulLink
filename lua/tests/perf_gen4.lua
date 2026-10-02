@@ -131,7 +131,7 @@ local function run()
     local out=assert(os.getenv("SLINK_GEN4_PERF_OUT"))
     local record={schema="gen4-perf-v1",level="PHYSICAL",producer="gen4-PERF",run_id=cfg.run_id,title=cfg.title,
         rom_sha1=cfg.rom_sha1,phase=cfg.phase,scenario=cfg.scenario,source_head=cfg.source_head,
-        script_sha256=cfg.script_sha256,profile_sha256=cfg.profile_sha256,module_sha256=cfg.module_sha256,
+        script_sha256=cfg.script_sha256,profile_sha256=cfg.profile_sha256,module_sha256=cfg.module_sha256,surface_sha256=cfg.surface_sha256,receipt_kind=cfg.receipt_kind,
         config_sha256=cfg.config_sha256,state_sha256=cfg.state_sha256,requested_rate=cfg.rate,
         jit_requested=cfg.jit_requested,effective_jit="UNVERIFIABLE",jit_visibility="config request only",
         callback_hits=0,callback_errors=0,hook_handles={},setup="NATIVE"}
