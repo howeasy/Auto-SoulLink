@@ -48,6 +48,7 @@
 ### Shared NDS (Gen 5, `claude/nds-shared-stack`, local only)
 - Commits: 5a7c45f5 (NDS-3), 4cd04812 (NDS-2), 0c680554, e2cb38e4 + 3c252ace (NDS-1), bfafb93b (NDS-4), 5cf43acb (NDS-5). NDS-6 composer in flight.
 - All Gen 4 requirements were sent and accepted.
+- Later commits: 4ff3e193 (abi asserts) and 9731330a (contract tightening that affects adoption: SitePin decodes the first instruction under the declared isa (`data=True` for literal sites); `continuation` is an absolute RAM address in a pinned container; autoload accessors return an AutoloadBlock).
 - **Adopt in ONE Gen 4 cut next session:** pk4.lua -> `pkm45_crypto`; hook_binding -> the residency contract. Then live receipts on HG/SS/hge.
 
 ### Other
