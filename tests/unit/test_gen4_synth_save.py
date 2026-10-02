@@ -272,14 +272,51 @@ def test_bag_puts_ten_pokeballs_in_the_first_balls_slot(tmp_path, variant):
     assert row["general_off"] == BALLS_AT[variant] and row["before"] == [0, 0] and row["after"] == [4, 10]
 
 
-def test_a_wrong_bag_offset_would_fail_the_layout_assertion(tmp_path, monkeypatch):
-    """Revert test: shift the Party array size by one word and the independent offset check trips."""
-    monkeypatch.setattr(synth, "PARTY_ARRAY_SIZE", 0x5B0)
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+@pytest.mark.parametrize("size", [0x5B0, 0x5B8])
+def test_a_whole_bag_one_word_shift_is_refused(tmp_path, monkeypatch, variant, size):
+    """Revert test: the Bag model moved by one slot either way must refuse, never write."""
+    monkeypatch.setattr(synth, "PARTY_ARRAY_SIZE", size)
     src, out = tmp_path / "src.SaveRAM", tmp_path / "bag.SaveRAM"
-    src.write_bytes(_owner("hgss"))
-    assert _synth("bag", src, out) == synth.WRITTEN
-    got = codec.parse_save(out.read_bytes(), "hgss").general
-    assert struct.unpack_from("<HH", got, BALLS_AT["hgss"]) != (4, 10)
+    src.write_bytes(_owner(variant))
+    assert _synth("bag", src, out, variant) == synth.REFUSED and not out.exists()
+
+
+def test_the_hge_owner_save_holds_no_id_above_the_vanilla_range_in_the_checked_pockets():
+    general = codec.parse_save(_owner("hge"), "hge").general
+    lay = synth.bag_layout(codec.PROFILES["hge"])
+    ids = [struct.unpack_from("<HH", general, off + 4 * i)[0]
+           for name in synth.POCKET_CLASS["hge"] for off, n in [lay["pockets"][name]] for i in range(n)]
+    assert max(ids) == 17 and all(i in (0, 17) for i in ids)     # only the Potion
+
+
+def _hge_image(slots: dict) -> bytes:
+    """The hge owner save with ``{(general offset): (id, qty)}`` written into its general block."""
+    def mutate(body):
+        for at, (iid, qty) in slots.items():
+            struct.pack_into("<HH", body, at, iid, qty)
+        return body
+    return _reseal(_owner("hge"), "hge", mutate)
+
+
+def test_hge_ids_are_classed_by_the_fork_item_data_not_accepted_for_being_new(tmp_path, capsys):
+    lay = synth.bag_layout(codec.PROFILES["hge"])
+    balls, med = lay["pockets"]["balls"][0], lay["pockets"]["medicine"][0]
+    out = tmp_path / "out.SaveRAM"
+    for name, slots in {
+        "unknown id in the Balls pocket": {balls: (1000, 1)},        # an hge-only id, not a ball
+        "hge ball in the Medicine pocket": {med + 4: (576, 1)},      # Dream Ball, hge fork class: balls
+        "hge medicine in the Balls pocket": {balls: (1231, 1)},
+    }.items():
+        src = tmp_path / "src.SaveRAM"
+        src.write_bytes(_hge_image(slots))
+        assert _synth("bag", src, out, "hge") == synth.REFUSED, name
+        assert "bag_layout_unverified" in capsys.readouterr().err and not out.exists()
+    ok = tmp_path / "ok.SaveRAM"                                       # a correctly placed hge-only ball passes
+    ok.write_bytes(_hge_image({balls: (576, 3)}))
+    assert _synth("bag", ok, out, "hge") == synth.WRITTEN
+    g = codec.parse_save(out.read_bytes(), "hge").general
+    assert [struct.unpack_from("<HH", g, balls + 4 * i) for i in range(2)] == [(576, 3), (4, 10)]
 
 
 def _bag_image(slots: dict) -> bytes:
@@ -302,11 +339,18 @@ def test_bag_never_overwrites_a_slot_and_uses_the_first_empty_one(tmp_path):
     assert _balls(out.read_bytes())[:4] == [(3, 7), (2, 1), (4, 3), (0, 0)]
 
 
-def test_bag_adds_to_an_existing_pokeball_stack_even_past_an_empty_slot(tmp_path):
+def test_bag_adds_to_an_existing_pokeball_stack(tmp_path):
     src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
-    src.write_bytes(_bag_image({0: (3, 7), 2: (4, 5)}))          # an empty slot 1 sits before the stack
+    src.write_bytes(_bag_image({0: (3, 7), 1: (4, 5)}))
     assert _synth("bag", src, out) == synth.WRITTEN
-    assert _balls(out.read_bytes())[:3] == [(3, 7), (0, 0), (4, 15)]
+    assert _balls(out.read_bytes())[:3] == [(3, 7), (4, 15), (0, 0)]
+
+
+def test_bag_refuses_a_pocket_with_a_gap_before_an_item(tmp_path):
+    """A real pocket is compacted (src/bag.c:284-292); a gap means the offset model is shifted."""
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_bag_image({0: (3, 7), 2: (4, 5)}))
+    assert _synth("bag", src, out) == synth.REFUSED and not out.exists()
 
 
 def test_bag_refuses_a_full_pocket_and_a_stack_overflow(tmp_path):

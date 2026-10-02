@@ -102,12 +102,23 @@ PARTY_ARRAY_SIZE = 0x5B4
 # an all-empty read proves nothing).  Classes = the fieldPocket column of pret
 # files/itemtool/itemdata/item_data.csv joined to include/constants/items.h by item name.
 POCKET_CLASS = {
-    "medicine": ((17, 54),),                # Potion .. Sacred Ash
-    "balls": ((1, 16), (492, 500)),         # Master..Cherish, Fast..Park
-    "berries": ((149, 212),),
-    "mail": ((137, 148),),
+    "hgss": {
+        "medicine": ((17, 54),),                # Potion .. Sacred Ash
+        "balls": ((1, 16), (492, 500)),         # Master..Cherish, Fast..Park
+        "berries": ((149, 212),),
+        "mail": ((137, 148),),
+    },
+    # hge: the same join over hg-engine data/itemdata/itemdata.c (.fieldPocket per [ITEM_*]) and
+    # include/constants/item.h; its additions (Pixie Plate-era items, Dream/Beast Ball, ...) are
+    # classed too, so no id is accepted merely for being "new".
+    "hge": {
+        "medicine": ((17, 54), (134, 134), (591, 591), (645, 645), (708, 709), (852, 852), (903, 903),
+                     (1231, 1251), (1257, 1257), (1606, 1606), (2684, 2684)),
+        "balls": ((1, 16), (492, 500), (576, 576), (851, 851)),
+        "berries": ((149, 212), (686, 686), (2651, 2683)),
+        "mail": ((137, 148),),
+    },
 }
-VANILLA_MAX_ITEM = 536  # include/constants/items.h; hg-engine ids above this are its own additions
 
 # --- egg -------------------------------------------------------------------------------
 # One entry per supported species: base stats HP/Atk/Def/Spe/SpA/SpD and gender ratio and
@@ -291,7 +302,10 @@ def _verify(src: bytes, out: bytes, profile, bank: int) -> None:
 # bag: N Poke Balls in the Balls pocket
 # ---------------------------------------------------------------------------
 def bag_layout(profile) -> dict:
-    """General-block offsets of the Bag array and the Balls pocket, or a named refusal."""
+    """General-block offsets of the Bag array and the Balls pocket, or a named refusal.
+
+    Invariant: any mode that writes the Bag must call ``check_bag_layout`` on the source first;
+    these offsets are a model, not a measurement."""
     slots = BAG_SLOTS.get(profile.name)
     if slots is None or profile.party_off is None:
         raise Refusal("bag_layout_unknown", f"no source-derived Bag layout for profile {profile.name!r}")
@@ -311,16 +325,22 @@ def check_bag_layout(general: bytes, profile, lay: dict) -> int:
     A swapped or shifted pocket model reads another pocket's items here, which are outside the
     class (a Potion is not a ball), so it refuses instead of writing at a wrong offset."""
     anchors = 0
-    for name, ranges in POCKET_CLASS.items():
+    for name, ranges in POCKET_CLASS[profile.name].items():
         off, n = lay["pockets"][name]
+        gap = None
         for i in range(n):
             iid, qty = struct.unpack_from("<HH", general, off + 4 * i)
-            if iid == 0 and qty == 0:
+            if qty == 0 and iid == 0:
+                gap = i if gap is None else gap
                 continue
-            if any(lo <= iid <= hi for lo, hi in ranges) and 1 <= qty <= BAG_SLOT_QUANTITY_MAX:
-                anchors += 1
-            elif not (profile.name == "hge" and iid > VANILLA_MAX_ITEM and 1 <= qty <= BAG_SLOT_QUANTITY_MAX):
+            # A real pocket is compacted to its front (PocketCompaction, src/bag.c:284-292, run after
+            # every take; adds use the first empty slot), so an item after an empty slot means the
+            # pocket is being read at a shifted offset.
+            if gap is not None:
+                raise Refusal("bag_layout_unverified", f"{name} slot {i} is occupied after empty slot {gap}")
+            if not (any(lo <= iid <= hi for lo, hi in ranges) and 1 <= qty <= BAG_SLOT_QUANTITY_MAX):
                 raise Refusal("bag_layout_unverified", f"{name} slot {i} holds item {iid} x{qty}: not that pocket's class")
+            anchors += 1
     if not anchors:
         raise Refusal("bag_layout_unverified", "no medicine/ball/berry/mail item to confirm the pocket offsets against")
     return anchors
