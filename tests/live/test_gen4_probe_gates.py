@@ -95,13 +95,19 @@ def perf_f(path, title, rom_sha1, source_head):
     observation = bundle.get("observation")
     if observation is None:
         return None, bundle.get("reason", "gen4-PERF required samples absent")
+
+    def bind(sample):
+        assert sample["producer"] == "gen4-PERF" and sample["result"] == "PASS" and sample["level"] == "PHYSICAL", "incomplete PERF sample/floor"
+        assert sample["title"] == title and sample["rom_sha1"] == rom_sha1 and sample["source_head"] == source_head, "PERF sample/floor binding mismatch"
+        assert not sample["concurrent_load"] and sample["ending_registered"] == 0, "PERF sample/floor concurrent load/retained hook"
+        assert sample["module_sha256"]["lua/tests/probe_gen4_hooks.lua"] == digest(SCRIPT), "PERF uses a different f authority"
+
     sources = set()
     for name in ("zero", "one", "overworld_zero"):
         sample = observation["sustained"][name]
-        assert sample["producer"] == "gen4-PERF" and sample["result"] == "PASS" and sample["level"] == "PHYSICAL", "incomplete PERF sample"
-        assert sample["title"] == title and sample["rom_sha1"] == rom_sha1 and sample["source_head"] == source_head, "PERF sample binding mismatch"
-        assert not sample["concurrent_load"] and sample["ending_registered"] == 0, "PERF concurrent load/retained hook"
-        assert sample["module_sha256"]["lua/tests/probe_gen4_hooks.lua"] == digest(SCRIPT), "PERF uses a different f authority"
+        bind(sample)
+        bind(sample["floor"])
+        assert sample["floor"]["module_sha256"] == sample["module_sha256"], "PERF floor uses different workload modules"
         sources.add(sample["clock_source"])
         sample["frames"] = sample["frames_requested"]
     assert len(sources) == 1, "mixed PERF clock sources"
@@ -170,13 +176,15 @@ def examples():
         "e": {"before": 10, "kept": 10, "removed": 0, "reloaded": 0},
         "f": {"fps": [208.6, 97.3, 79.7, 66.1, 57.9, 52.9], "sustained": {
             name: {"requested_rate": 100, "frames": 3000, "registered_hooks": hooks,
-                   "execution_mode": "paced_production_frameadvance",
+                   "requested_execution_mode": "paced_production_frameadvance",
                    "throttle_config": {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0, "AutoMinimizeSkipping": False},
                    "timing_kind": "wall_frame_interval", "clock_source": "MODEL high-resolution wall clock",
+                   "clock": {"monotonic_guaranteed": True},
                    "frame_times": [560190 / 33513982] * 3000,
                    "session_id": "MODEL session",
                    "floor": {"session_id": "MODEL session", "phase": "overworld" if name == "overworld_zero" else "battle",
                              "clock_source": "MODEL high-resolution wall clock", "requested_rate": 100,
+                             "clock": {"monotonic_guaranteed": True},
                              "registered_hooks": 0, "instrumentation_floor": True, "frame_times": [560190 / 33513982] * 3000},
                    "load_counts": {**dict.fromkeys(("pointer_chain", "party_diff", "json_encode", "battle_attempts"), 3000), "battle_mons_hp": 0 if name == "overworld_zero" else 3000},
                    "phase": "overworld" if name == "overworld_zero" else "battle",
@@ -354,6 +362,85 @@ def test_f_owner_native_cadence_floor_red_revert(api, fault):
         sample["floor"]["session_id"] = "other"
     assert api.evaluate("f", to_lua(r, bad))[0] == "FAIL"
     assert api.evaluate("f", to_lua(r, original)) == "PASS"
+
+
+@pytest.mark.parametrize("fault", [
+    "nonmonotonic", "nonmonotonic_floor", "execution_mode", "throttle_config",
+    "frames_below_3000", "overworld_attempts", "overworld_hp_reads", "overworld_phase",
+    "on_demand_removal", "sequence_length", "mean_300fps_fake_throttle",
+])
+def test_f_contract_clauses_red_revert(api, fault):
+    original = examples()["f"]
+    r = api._runtime
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
+    bad = copy.deepcopy(original)
+    sample = bad["sustained"]["one"]
+    if fault == "nonmonotonic":
+        sample["clock"]["monotonic_guaranteed"] = False
+    elif fault == "nonmonotonic_floor":
+        sample["floor"]["clock"]["monotonic_guaranteed"] = False
+    elif fault == "execution_mode":
+        sample["requested_execution_mode"] = "script_frameadvance_capacity"
+    elif fault == "throttle_config":
+        sample["throttle_config"]["Unthrottled"] = True
+    elif fault == "frames_below_3000":
+        sample["frames"] = 2999
+        sample["frame_times"].pop()  # Keep length consistent: minimum window must catch this.
+    elif fault.startswith("overworld_"):
+        sample = bad["sustained"]["overworld_zero"]
+        if fault == "overworld_attempts":
+            sample["load_counts"]["battle_attempts"] = 2999
+        elif fault == "overworld_hp_reads":
+            sample["load_counts"]["battle_mons_hp"] = 1
+        else:
+            sample["phase"] = "battle"
+            sample["floor"]["phase"] = "battle"
+    elif fault == "on_demand_removal":
+        sample["removed_after_fire"] = False
+    elif fault == "sequence_length":
+        sample["frame_times"].pop()
+    else:
+        # All requested-rate/config claims remain 1x: measured wall time must reject 300fps.
+        sample["frame_times"] = [1 / 300] * 3000
+    assert api.evaluate("f", to_lua(r, bad))[0] == "FAIL"
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
+
+
+@pytest.mark.parametrize("fault", [
+    "result", "producer", "level", "title", "rom_sha1", "source_head",
+    "concurrent_load", "ending_registered", "module_sha256", "other_modules",
+])
+def test_perf_f_binds_floor_red_revert(tmp_path, fault):
+    observation = examples()["f"]
+    binding = {"producer": "gen4-PERF", "result": "PASS", "level": "PHYSICAL",
+               "title": "heartgold", "rom_sha1": "a" * 40, "source_head": "cut",
+               "concurrent_load": False, "ending_registered": 0,
+               "module_sha256": {"lua/tests/probe_gen4_hooks.lua": digest(SCRIPT), "reads": "bound"}}
+    for sample in observation["sustained"].values():
+        sample.update(copy.deepcopy(binding), frames_requested=3000)
+        sample["floor"].update(copy.deepcopy(binding), frames_requested=3000)
+    bundle = {"schema": "gen4-perf-bundle-v1", "producer": "gen4-PERF", "level": "PHYSICAL",
+              "title": "heartgold", "rom_sha1": "a" * 40, "source_head": "cut", "observation": observation}
+    path = tmp_path / "bundle.json"
+
+    def consume(value):
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return perf_f(path, "heartgold", "a" * 40, "cut")
+
+    assert consume(bundle)[1] is None
+    bad = copy.deepcopy(bundle)
+    floor = bad["observation"]["sustained"]["one"]["floor"]
+    if fault == "module_sha256":
+        floor["module_sha256"]["lua/tests/probe_gen4_hooks.lua"] = "stale"
+    elif fault == "other_modules":
+        floor["module_sha256"]["reads"] = "different"
+    else:
+        floor[fault] = {"result": "FAIL", "producer": "other", "level": "MODEL", "title": "other",
+                        "rom_sha1": "b" * 40, "source_head": "old", "concurrent_load": True,
+                        "ending_registered": 1}[fault]
+    with pytest.raises(AssertionError):
+        consume(bad)
+    assert consume(bundle)[1] is None
 
 
 def phase_examples():

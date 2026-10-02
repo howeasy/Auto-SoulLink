@@ -1,7 +1,8 @@
 """gen4-PERF: offline harness checks and serial, opt-in private NDS measurement.
 
 Live command (ONLY after lane grant): SLINK_LIVE=1 python -m pytest this_file -m live -q -rs
-Titles default HG then hge. State/save/ROM overrides are SLINK_GEN4_<TITLE>_{STATE,SAVE,ROM}.
+Titles default HG then hge. Save and <PHASE>_STATE env inputs are required;
+SLINK_GEN4_<TITLE>_ROM defaults through gen4_pins.
 PERF PASS means complete measurement, NOT 1x qualification. Row f is the authority.
 """
 
@@ -15,7 +16,9 @@ import shutil
 import subprocess
 import time
 import uuid
+from functools import cache
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -32,20 +35,6 @@ MODULES = (
     "lua/tests/probe_gen4_hooks.lua",
     "lua/socket.lua",
 )
-STATES = {
-    "heartgold": {
-        "battle": Path("C:/slink/g4/route/route_leg2_battle_settled.State"),
-        "overworld": Path("C:/slink/g4/route/route_leg2_grass_edge.State"),
-    },
-    "heartgold_hge": {
-        "battle": Path("C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State"),
-        "overworld": Path("C:/slink/g4/route_hge/route_hge_leg5_grass_edge.State"),
-    },
-}
-SAVES = {
-    "heartgold": Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM"),
-    "heartgold_hge": Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM"),
-}
 NATIVE_NUMERATOR = 33513982
 NATIVE_DENOMINATOR = 560190  # 6 * 355 * 263; upstream MelonDS.cs DefaultFps*.
 NATIVE_PERIOD = NATIVE_DENOMINATOR / NATIVE_NUMERATOR
@@ -76,6 +65,14 @@ def native_statistics(times):
 
 def sha(path):
     return gates.digest(Path(path))
+
+
+def required_input(title, suffix, description):
+    key = f"SLINK_GEN4_{title.upper()}_{suffix}"
+    value = os.environ.get(key)
+    if not value:
+        pytest.skip(f"OPEN {description}: required env input {key} absent")
+    return gates.input_file(Path(value), description)
 
 
 def statistics_of(times):
@@ -201,10 +198,14 @@ def site_inventory(title, rom):
     for name, site in sites.items():
         site["id"] = name
     # Reuse C1-8's independent ROM command-table resolution, including hge cmd9.
-    from tests.live.test_gen4_battle_faint import rom_images, seam_overrides
+    from tests.live import test_gen4_battle_faint as faint
 
-    seam = seam_overrides(title["perf_title"], rom)["ufce"]
-    ov12, _ = rom_images(rom)
+    # C1-8's resolver also reads these images. Share one run-local cached read
+    # for resolution and full-pin extraction, then restore its original reader.
+    images = cache(faint.rom_images)
+    with patch.object(faint, "rom_images", images):
+        seam = faint.seam_overrides(title["perf_title"], rom)["ufce"]
+        ov12, _ = images(rom)
     raw = ov12.data[seam["addr"] - ov12.ramAddress : seam["addr"] - ov12.ramAddress + 16]
     assert len(raw) == 16 and int.from_bytes(raw[:4], "little") == seam["pin"], (
         "D7 dispatch pin disagreement"
@@ -250,7 +251,7 @@ def committed_modules():
     return result
 
 
-def launch_trial(title_name, source, save, state, profile, base, trial, lane, module_hashes):
+def launch_trial(title_name, source, save, state, profile, base, trial, lane, module_hashes, inventory):
     assert not lane.exists(), "stale lane"
     lane.mkdir(parents=True)
     rom = gen4_fixtures.stage_rom(source, lane)
@@ -271,10 +272,7 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
     )
     settings["CoreSyncSettings"][gates.CORE]["EnableJIT"] = trial["jit_requested"]
     (lane / "config.ini").write_text(json.dumps(settings), encoding="utf-8")
-    pack = json.loads(profile.read_text(encoding="utf-8"))
-    title = pack["titles"][title_name]
-    title["perf_title"] = title_name
-    sites, seam = site_inventory(title, source)
+    title, sites, seam = inventory
     cfg = {
         **trial,
         "schema": "gen4-perf-config-v1",
@@ -357,7 +355,7 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
         assert data["script_sha256"] == sha(SCRIPT) and data["profile_sha256"] == sha(profile), (
             "moving measurement cut"
         )
-        assert data["module_sha256"] == committed_modules(), (
+        assert data["module_sha256"] == module_hashes == {path: sha(REPO / path) for path in MODULES}, (
             "workload source changed during measurement"
         )
         data["foreign_pids"] = sorted(foreign)
@@ -442,6 +440,47 @@ def test_matrix_has_required_comparisons():
     assert any(row["scenario"].startswith("unthrottled_exec_same_address_twice") for row in matrix)
     assert len([r for r in matrix if r["rate"] == 100 and r["workload"]]) == 2
     assert not any(r.get("on_demand") for r in trial_matrix("overworld"))
+
+
+@pytest.mark.parametrize("suffix", ["SAVE", "BATTLE_STATE", "OVERWORLD_STATE"])
+def test_required_native_inputs_absent_open_present_checked(monkeypatch, tmp_path, suffix):
+    key = f"SLINK_GEN4_HEARTGOLD_{suffix}"
+    monkeypatch.delenv(key, raising=False)
+    with pytest.raises(pytest.skip.Exception, match=key):
+        required_input("heartgold", suffix, "perf input")
+    path = tmp_path / suffix
+    monkeypatch.setenv(key, str(path))
+    with pytest.raises(pytest.skip.Exception, match="absent input"):
+        required_input("heartgold", suffix, "perf input")
+    path.write_bytes(b"supplied")
+    assert required_input("heartgold", suffix, "perf input") == path
+
+
+def test_rom_images_cached_within_run_restored_and_refreshed_next_run(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from tests.live import test_gen4_battle_faint as faint
+
+    calls = []
+
+    def images(path):
+        calls.append(path)
+        raw = bytes([len(calls)]) * 16
+        return SimpleNamespace(ramAddress=0x1000, data=raw), None
+
+    def seams(title, path):
+        overlay, _ = faint.rom_images(path)
+        return {"ufce": {"addr": 0x1000, "pin": int.from_bytes(overlay.data[:4], "little"),
+                         "cmd": 11, "name": "MODEL seam"}}
+
+    monkeypatch.setattr(faint, "rom_images", images)
+    monkeypatch.setattr(faint, "seam_overrides", seams)
+    title = {"sites": {}, "perf_title": "heartgold"}
+    first, _ = site_inventory(title, tmp_path / "rom.nds")
+    assert len(calls) == 1 and faint.rom_images is images
+    second, _ = site_inventory(title, tmp_path / "rom.nds")
+    assert len(calls) == 2 and faint.rom_images is images
+    assert first["d7_seam"]["register_hex"] != second["d7_seam"]["register_hex"]
 
 
 def test_clock_rejects_coarse_and_backward(perf_api):
@@ -563,9 +602,7 @@ def test_live_perf(title):
         ),
         "perf ROM",
     )
-    save = gates.input_file(
-        Path(os.environ.get(f"SLINK_GEN4_{title.upper()}_SAVE", SAVES[title])), "perf native save"
-    )
+    save = required_input(title, "SAVE", "perf native save")
     assert gates.save_setup(save)["setup"] == "NATIVE", "PERF uses naturally played native inputs"
     profile = gates.input_file(
         REPO / "data/games" / gates.TITLE_PACK[title] / "profile.json", "perf profile"
@@ -574,6 +611,10 @@ def test_live_perf(title):
         Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini")), "base config"
     )
     modules = committed_modules()
+    packed_title = json.loads(profile.read_text(encoding="utf-8"))["titles"][title]
+    packed_title["perf_title"] = title
+    sites, seam = site_inventory(packed_title, source)
+    inventory = packed_title, sites, seam
     root = Path(os.environ.get("SLINK_GEN4_PERF_RUNS", "C:/slink/g4/perf")) / (
         title + "-" + uuid.uuid4().hex[:12]
     )
@@ -581,14 +622,7 @@ def test_live_perf(title):
     for phase in ("overworld", "battle"):
         if os.environ.get("SLINK_GEN4_PERF_PHASE") and phase != os.environ["SLINK_GEN4_PERF_PHASE"]:
             continue
-        state = gates.input_file(
-            Path(
-                os.environ.get(
-                    f"SLINK_GEN4_{title.upper()}_{phase.upper()}_STATE", STATES[title][phase]
-                )
-            ),
-            "perf state",
-        )
+        state = required_input(title, f"{phase.upper()}_STATE", "perf state")
         for trial in trial_matrix(phase):
             if os.environ.get("SLINK_GEN4_PERF_JIT_ONLY") == "1" and not trial["jit_requested"]:
                 continue
@@ -632,6 +666,7 @@ def test_live_perf(title):
                     trial,
                     root / (phase + "_" + trial["scenario"]),
                     modules,
+                    inventory,
                 )
             )
             if "clock" in (records[-1].get("reason") or "").lower():

@@ -24,7 +24,7 @@ function P.clock()
             if good and freq and freq>0 then
                 local clock=function() return tonumber(sw.GetTimestamp())/freq end
                 local valid=pcall(clock)
-                if valid then return clock,{source="System.Diagnostics.Stopwatch.GetTimestamp/Frequency",frequency=freq,kind="monotonic_wall"} end
+                if valid then return clock,{source="System.Diagnostics.Stopwatch.GetTimestamp/Frequency",frequency=freq,kind="monotonic_wall",monotonic_guaranteed=true} end
             end
         end
     end
@@ -47,7 +47,7 @@ function P.clock()
     end)
     if reflected and clock then
         local ok=pcall(clock)
-        if ok then return clock,{source="System.Diagnostics.Stopwatch via loaded-assembly reflection",kind="monotonic_wall"} end
+        if ok then return clock,{source="System.Diagnostics.Stopwatch via loaded-assembly reflection",kind="monotonic_wall",monotonic_guaranteed=true} end
     end
     local ok,s=pcall(require,"socket")
     if ok and s and s.socket and type(s.socket.gettime)=="function" then
@@ -77,30 +77,6 @@ function P.sample(clock,advance,work,frames)
         local current=clock(); out[i]=current-previous; previous=current
     end
     return out,work_times
-end
-function P.realtime(clock,work,frames,events,client_api,emu_api)
-    local times,work_times={},{}
-    local previous,begin,complete,done,fault=nil,nil,nil,false,nil
-    local start=events.onframestart(function()
-        local ok,why=pcall(function() begin=clock(); if work then work() end; complete=clock() end)
-        if not ok then fault=tostring(why); done=true end
-    end,"g4perf.wall.start")
-    local finish=events.onframeend(function()
-        if done then return end
-        local current=clock()
-        if previous then
-            times[#times+1]=current-previous; work_times[#work_times+1]=complete-begin
-            if #times>=frames then done=true end
-        end
-        previous=current
-    end,"g4perf.wall.end")
-    client_api.unpause()
-    while not done do emu_api.yield() end
-    client_api.pause()
-    local a=events.unregisterbyid(start); local b=events.unregisterbyid(finish)
-    check(a~=false and b~=false,"failed frame callback removal")
-    check(not fault,"full-load frame callback failure: "..tostring(fault))
-    return times,work_times
 end
 function P.workload(reads,pk4,safety,json,title,mem,phase)
     reads.pk4=pk4
@@ -242,7 +218,8 @@ local function run()
         local hits=record.callback_hits
         local times,work_times
         times,work_times=P.sample(clock,advance,work,cfg.frames)
-        record.execution_mode=cfg.rate==100 and "paced_production_frameadvance" or "script_frameadvance_capacity"
+        -- Request/config echo only; f independently checks measured native cadence.
+        record.requested_execution_mode=cfg.rate==100 and "paced_production_frameadvance" or "script_frameadvance_capacity"
         record.frame_times=times; record.work_times=work_times; record.stats=P.stats(times)
         record.load_counts={}; for k,v in pairs(counts) do record.load_counts[k]=v-start_counts[k] end
         record.memory_counts={}; for k,v in pairs(memory_counts) do record.memory_counts[k]=v-start_mem[k] end

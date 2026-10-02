@@ -282,14 +282,15 @@ validators.f=function(x)
     local sustained=need(x.sustained,"f:gen4-PERF sustained full-client timing records (0 hooks and 1 on-demand)")
     for _,name in ipairs({"zero","one","overworld_zero"}) do
         local sample=need(sustained[name],"f:sustained "..name.."-hook load sample")
-        check(sample.execution_mode=="paced_production_frameadvance","requested 1x is not proof of normal frame delivery")
-        local throttle=need(sample.throttle_config,"f:read-back throttle settings")
+        check(sample.requested_execution_mode=="paced_production_frameadvance","sustained sample must request paced frameadvance")
+        local throttle=need(sample.throttle_config,"f:requested throttle settings")
         check(throttle.Unthrottled==false and throttle.ClockThrottle==true and throttle.SpeedPercent==100
             and throttle.FrameSkip==0 and throttle.AutoMinimizeSkipping==false,"unpaced performance config")
         check(sample.requested_rate==100 and sample.frames>=3000,"sustained measurement needs >=3000 frames at 1x")
         check(sample.registered_hooks==(name=="one" and 1 or 0),"incorrect sustained hook count")
         check(sample.timing_kind=="wall_frame_interval" and type(sample.clock_source)=="string" and sample.clock_source~="",
             "sustained measurement requires a declared wall-clock frame-interval source")
+        check(need(sample.clock,"f:clock descriptor").monotonic_guaranteed~=false,"nonmonotonic performance clock")
         local times=need(sample.frame_times,"f:raw per-frame timings")
         check(#times==sample.frames,"incomplete sustained timing sequence")
         local sorted,total={},0
@@ -300,6 +301,7 @@ validators.f=function(x)
         local native_fps=33513982/560190 -- BizHawk MelonDS.cs DefaultFpsNumerator/Denominator
         check(math.abs((#times/total)/native_fps-1)<=0.001,"mean FPS outside native-cadence 0.1% tolerance")
         local floor=need(sample.floor,"f:same-session bare-floor sample")
+        check(need(floor.clock,"f:floor clock descriptor").monotonic_guaranteed~=false,"nonmonotonic floor clock")
         check(floor.session_id==sample.session_id and floor.phase==sample.phase and floor.clock_source==sample.clock_source,
             "floor belongs to a different session/phase/clock")
         check(floor.requested_rate==100 and floor.registered_hooks==0 and floor.instrumentation_floor==true,"floor not bare paced zero-hook")
