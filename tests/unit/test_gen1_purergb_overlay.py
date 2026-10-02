@@ -269,6 +269,21 @@ def test_the_ups_applies_to_the_pure_rom_and_reproduces_the_overlay(title):
         assert rom[site["rom_offset"]:site["rom_offset"] + n].hex().upper() == site["expected_hex"], kind
 
 
+@pytest.mark.parametrize("title", TITLES)
+def test_the_overlay_advertises_the_trade_it_links(title):
+    """The VBlank caps write (`ld a, n` / `ld [wSlinkCaps], a`) carries SLINK_CAP_TRADE (1 << 4,
+    patch/gb/slink_abi.inc): the overlay links native_trade/trade_receptionist unconditionally."""
+    rom = _overlay_rom(title)
+    over = _syms(title, "overlay")
+    caps = over["wSlinkCaps"][1]
+    hook = F.flat(*over["SlinkHook"])
+    body = rom[hook:hook + 0x43]
+    store = bytes((0xEA, caps & 0xFF, caps >> 8))
+    hits = [i for i in range(2, len(body) - 2) if body[i - 2] == 0x3E and body[i:i + 3] == store]
+    assert len(hits) == 1, hits
+    assert body[hits[0] - 1] == 0x07 | 1 << 4  # SFX | PANEL | SFX_NOTIFY | TRADE
+
+
 def test_the_clean_rom_is_untouched_by_the_overlay_build():
     build = json.loads((SYMS / "build_provenance.json").read_text(encoding="utf-8"))["roms"]
     for key, spec in LOCK["outputs"].items():
