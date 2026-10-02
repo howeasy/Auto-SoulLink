@@ -510,3 +510,87 @@ def test_the_facts_escape_hatch_still_overrides_the_title(lua):
     """`opts.facts` stays for a caller that knows better than the title (the pure probes did)."""
     play = _play(lua, "red", facts="gen1_pure_facts.lua")
     assert play.expected["facts"]["TRAINER"]["OPP_RIVAL1"] == 221
+
+
+# ── the harness refuses a clean Red/Blue/pureRGB cartridge (owner 2026-10-02) ───────────────────
+
+_ROOT_FWD = _REPO.replace(chr(92), "/")
+
+
+def _pins():
+    with open(os.path.join(_REPO, "data", "pret_rom_syms.json"), encoding="utf-8") as handle:
+        pret = json.load(handle)
+    with open(os.path.join(_REPO, "data", "purergb", "build_provenance.json"), encoding="utf-8") as handle:
+        pure = json.load(handle)["roms"]
+    with open(g1.PURERGB_ADMISSION_OVERLAY, encoding="utf-8") as handle:
+        overlays = list(json.load(handle))
+    return pret, pure, overlays
+
+
+def _clean_cartridge(lua, sha1):
+    gate = _dofile(lua, "lua/tests/gen1_gate.lua")
+    return gate.clean_cartridge(_ROOT_FWD, _dofile(lua, "lua/json_codec.lua"), sha1)
+
+
+def test_the_harness_names_every_pinned_clean_cartridge_and_nothing_else(lua):
+    pret, pure, overlays = _pins()
+    for name in ("pokered", "pokeblue"):
+        assert _clean_cartridge(lua, pret[name]["rom_sha1"]) == f"clean {name}"
+        assert _clean_cartridge(lua, pret[name]["rom_sha1"].upper()) == f"clean {name}"
+    for name, row in pure.items():
+        assert _clean_cartridge(lua, row["sha1"]) == f"clean pureRGB {name}"
+    # Yellow has no companion and stays allowed; the overlays and any other build are not clean
+    for sha1 in [pret["pokeyellow"]["rom_sha1"], *overlays, "ab" * 20, ""]:
+        assert _clean_cartridge(lua, sha1) is None, sha1
+
+
+def _start(tmp_path, sha1, title):
+    """gen1_gate.start under stubs, up to the refusal (or the first BizHawk call past it)."""
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    g = runtime.globals()
+    g.SLINK_ROOT = _ROOT_FWD
+    g.memory = runtime.table(read_u8=lambda _addr, _domain=None: 0)
+    g.gameinfo = runtime.table(getromhash=lambda: sha1)
+    exits = []
+    g.client = runtime.table(exit=lambda: exits.append(True))
+    g.console = runtime.table(log=lambda _s: None)
+    result = str(tmp_path / "result.txt").replace(chr(92), "/")
+    runtime.execute(f'''
+        local real_open, real_getenv = io.open, os.getenv
+        io.open = function(p, m)
+            if tostring(p):find("_result.txt", 1, true) then p = "{result}" end
+            return real_open(p, m)
+        end
+        os.getenv = function(k) if k == "SLINK_GATE_TITLE" then return "{title}" end return real_getenv(k) end
+    ''')
+    gate = _dofile(runtime, "lua/tests/gen1_gate.lua")
+    ok, err = runtime.eval("function(g) return pcall(g.start, 'unit_clean_refusal', {}) end")(gate)
+    path = tmp_path / "result.txt"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    return ok, str(err), text, exits
+
+
+def test_a_clean_red_is_refused_even_when_the_launcher_names_its_family(tmp_path):
+    pret, _pure, _overlays = _pins()
+    ok, err, text, exits = _start(tmp_path, pret["pokered"]["rom_sha1"], "red")
+    assert not ok and err == "slink-gate-finished" and exits == [True]
+    assert "RESULT: FAIL clean pokered refused: the SLink companion is required" in text
+
+
+def test_a_named_companion_build_gets_past_the_refusal(tmp_path):
+    """The twin: red_patched is named the same way (SLINK_GATE_TITLE=red) but its sha1 is pinned
+    nowhere, so the harness goes on to build the client (and, under these stubs, stops at the
+    first BizHawk call it was not given -- never at the refusal)."""
+    ok, err, text, exits = _start(tmp_path, "ab" * 20, "red")
+    assert "refused" not in text and exits == []
+    assert err != "slink-gate-finished"
+
+
+def test_the_duo_harness_refuses_before_its_header_family_fallback():
+    """duo_gen1_main admits by sha1 and falls back to the header family -- the path a clean Red
+    took as kind "named". The same refusal must run first and end the instance."""
+    with open(os.path.join(_REPO, "lua", "tests", "duo", "duo_gen1_main.lua"), encoding="utf-8") as handle:
+        src = handle.read()
+    refusal = src.index("gen1_gate.lua\").clean_cartridge(")
+    assert refusal < src.index("Entry.detect_title(rom_u8)") < src.index("Entry.admit(")
+    assert 'finish(false, refused .. " refused' in src[refusal:src.index("Entry.detect_title(rom_u8)")]

@@ -11,6 +11,36 @@
 --   t.check(what, ok, detail); t.finish()
 local Lib = {}
 
+-- The SLink companion is REQUIRED for Red/Blue/pureRGB (owner 2026-10-02): the launcher and the
+-- server refuse a CLEAN Red, Blue, PureRed, PureBlue or PureGreen, so no harness may produce
+-- evidence on one -- not even when the launcher NAMES the family (SLINK_GATE_TITLE), which is the
+-- path a clean Red took before. Returns a description of the pinned clean cartridge `sha1` is, or
+-- nil. Yellow (no companion) and every companion/randomized build are not in either pin table.
+-- Fails closed: a missing or malformed pin file errors rather than letting everything through.
+--   pret:    data/pret_rom_syms.json        pokered/pokeblue .rom_sha1 (pret-built clean dumps)
+--   pureRGB: data/purergb/build_provenance.json  roms[*].sha1 (the pinned clean builds)
+function Lib.clean_cartridge(root, json, sha1)
+    sha1 = tostring(sha1 or ""):lower()
+    local function load(rel)
+        local f = assert(io.open(root .. "/" .. rel, "rb"), rel .. " missing: cannot tell a clean cartridge apart")
+        local doc = json.decode(f:read("*a"))
+        f:close()
+        return doc
+    end
+    local pret = load("data/pret_rom_syms.json")
+    for _, name in ipairs({ "pokered", "pokeblue" }) do
+        local pin = assert(pret[name] and pret[name].rom_sha1, "data/pret_rom_syms.json has no " .. name .. ".rom_sha1")
+        if pin:lower() == sha1 then return "clean " .. name end
+    end
+    local roms = assert(load("data/purergb/build_provenance.json").roms, "build_provenance.json has no roms")
+    for name, row in pairs(roms) do
+        if assert(row.sha1, "build_provenance.json roms." .. name .. " has no sha1"):lower() == sha1 then
+            return "clean pureRGB " .. name
+        end
+    end
+    return nil
+end
+
 function Lib.start(gate_name, opts)
     opts = opts or {}
     local ROOT = SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -57,6 +87,13 @@ function Lib.start(gate_name, opts)
     -- foundation -- and PureGreen has no family at all -- so admission, not detect_title, is what
     -- decides which pack and which title the gate runs against.
     local json_codec = dofile(ROOT .. "/lua/json_codec.lua")
+    local refused = Lib.clean_cartridge(ROOT, json_codec, gameinfo.getromhash and gameinfo.getromhash() or "")
+    if refused then
+        t.log(fmt("RESULT: FAIL %s refused: the SLink companion is required -- boot red_patched/"
+                  .. "blue_patched or the *_overlay key", refused))
+        client.exit()
+        error("slink-gate-finished", 0)
+    end
     local function rom_u8(a) return memory.read_u8(a, "ROM") end
     local rd = Entry.harness_bus_u8()  -- banked WRAM via the flat domain, never the System Bus
     local env_title = os.getenv("SLINK_GATE_TITLE")
