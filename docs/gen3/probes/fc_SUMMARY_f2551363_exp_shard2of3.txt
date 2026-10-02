@@ -1,0 +1,13 @@
+# G4 final cut f255136395a6b4613937e4f061e1bda901cc4615 -- tools/gen3_final_cut.py summary (written 2026-10-02T13:15:04Z)
+# RUN 5 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_rock_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_rock_gen3_exp_as_a_f2551363.txt |
+| 2 | exp_static_altering1_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_altering1_gen3_exp_as_a_f2551363.txt |
+| 3 | egg_hatch_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_egg_hatch_gen3_exp_as_a_f2551363.txt |
+| 4 | choice_gift_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_choice_gift_gen3_exp_as_a_f2551363.txt |
+| 5 | boxsync_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_boxsync_gen3_exp_as_a_f2551363.txt |
+| 6 | whiteout_gen3_exp_as_a | XG3 TEST-ONLY duo | FAIL exit=1 | 1 | fc_whiteout_gen3_exp_as_a_f2551363.txt |
+
+OVERALL: FAIL (5/6 rows)

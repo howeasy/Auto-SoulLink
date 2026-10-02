@@ -1,0 +1,37 @@
+
+========== scenario: release_gen3 ==========
+[duo] release_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=b809371beb3c4ff326bb16e03beda29cfa4434f074e807cc87218dbafb455e4b profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=343d2345fe7d301aa3f1b0b9be13d9e1f8d7a665
+[duo] server up: tcp=61800 http=61801 data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:09:36,549 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:09:36,549 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_ path=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_ path=C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 14.4s
+[duo] timing results 5.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=0dd5bbd0c91cdc6688b9a1807b7a8c1c2e6871ca05d310c7edd6fc4e10ca67cb file=0dd5bbd0c91cdc6688b9a1807b7a8c1c2e6871ca05d310c7edd6fc4e10ca67cb match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=ac6215b620f06a09891bc92fee9fff09831c53a78672c0d3b86f7858976dab2f file=ac6215b620f06a09891bc92fee9fff09831c53a78672c0d3b86f7858976dab2f match=true saves=1 counter=3->4 rtc=normalized
+[duo] release: native PC removal 504F4F4D:20250925; boxed partner 504F4F4D:DFDAF6DA retired and memorial saved
+[duo] timing oracle 0.9s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] release_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_release_gen3_0f1r89k_
+
+========== summary ==========
+  release_gen3: PASS (attempt 1 of 1)
+EXIT 0

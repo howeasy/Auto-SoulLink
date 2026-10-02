@@ -2200,10 +2200,17 @@ def test_explode_receipt_cannot_omit_or_forge_the_pp_witness(ph):
 
 def test_no_driver_pokes_game_memory():
     """Scripted normal inputs only: no scenario module or the driver writes the cartridge."""
-    texts = [DRIVER.read_text(encoding="utf-8")] + [
-        f.read_text(encoding="utf-8") for f in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")]
-    for text in texts:
-        assert not re.search(r"memory\.write", text)
+    files = [DRIVER] + list((REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua"))
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        if f.name == "scenario_gen3_static_wild.lua":
+            # The ONE disclosed SYNTH write (XG3 "runtime SFC32 Rock state"): rock_rng_prep stages the
+            # 16-byte expansion RNG so the Rock Smash roll is deterministic. It must stay exactly that.
+            staged = 'memory.write_u8(f.rock_rng_address+i,tonumber(f.rock_rng_state_hex:sub(i*2+1,i*2+2),16),"System Bus")'
+            assert text.count("memory.write") == 1 and text.count(staged) == 1
+            assert text.index("local function rock_rng_prep") < text.index(staged) < text.index("return before")
+        else:
+            assert not re.search(r"memory\.write", text), f.name
         assert "zero_hp" not in text
 
 
@@ -2547,6 +2554,9 @@ BITS = { A = 1, Right = 0x10, Left = 0x20, Up = 0x40, Down = 0x80 }
 RR_MOVES = 0x9000
 profile = { rom = { BATTLE_MOVES_ADDR = S.gBattleMoves }, derived = { BATTLE_MOVE_ENTRY_SIZE = 12 } }
 M.foe_hits, M.foe_hp, M.hunts, M.rr = true, 12, 0, false
+-- the expansion's 64-byte MoveInfo table (X3): effect = u16 at +8, power = 9 bits at +10 >> 7
+EXP_MOVES = 0xA000
+EXP_EFFECT = {}
 LOGS = {}
 function start(intro)                    -- the action menu comes up `intro` frames into the battle
     M.after = { n = intro, to = ACT, fill = true }
@@ -2559,6 +2569,11 @@ memory = {
         if a == GMAIN + 0x2E then return 0 end
         if a == S.gBattleMons + 0x28 then return M.lead_hp end
         if a == S.gBattleMons + 0x58 + 0x28 then return M.foe_hp end
+        if a >= EXP_MOVES and a < EXP_MOVES + 0x4000 then
+            local off, id = (a - EXP_MOVES) % 64, (a - EXP_MOVES) // 64
+            if off == 8 then return EXP_EFFECT[id] or 0 end
+            return off == 10 and (POWER[id] or 0) << 7 or 0
+        end
         return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0
     end,
     read_u8 = function(a)
@@ -2670,13 +2685,26 @@ def battle_model():
     # X3: the vanilla gBattleMons/move-table geometry (the driver's BM table) and its power read
     geometry = re.search(r"^local BM = \{.*?effect_off = 0 \}$", text, re.M | re.S)
     assert geometry, "duo_gen3_main.lua must define the vanilla BM geometry"
+    exp_consts = []
+    for n in ("EXP_EFFECT_HIT", "EXP_SELF_KO_HITS"):
+        found = re.search(rf"^local {n} = .*$", text, re.M)
+        assert found, f"duo_gen3_main.lua must define a one-line `local {n} = ...` (battle_model extracts it)"
+        exp_consts.append(found.group(0))
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and outcome and self_damage and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               self_damage.group(0), geometry.group(0), _lua_defs(DRIVER, ["move_power"]),
+                               self_damage.group(0), *exp_consts, geometry.group(0),
+                               # swap the vanilla BM for the expansion's: same battler geometry, the
+                               # MoveInfo power/effect bitfields (offsets/shifts from facts.json)
+                               "function USE_EXP_BM(pw, ef) local b = {} for k, v in pairs(BM)"
+                               " do b[k] = v end b.effect_off = nil"
+                               " b.power = { off = pw[1], width = pw[2], shift = pw[3], mask = (1 << pw[4]) - 1 }"
+                               " b.effect = { off = ef[1], width = ef[2], shift = ef[3], mask = (1 << ef[4]) - 1 }"
+                               " BM = b end",
+                               _lua_defs(DRIVER, ["move_power"]),
                                _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
                                                   "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
                                                   "ctx.lose_active"]),
@@ -5575,3 +5603,68 @@ def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
     assert (dest.group, dest.num, dest.x, dest.y) == (5, 4, 7, 4)     # Viridian Center, unchanged
     with pytest.raises(LuaError, match="whiteout_heal_unsupported"):
         mod.whiteout_destination(cp, lua.eval("{group=0, num=10, warp=255, x=6, y=17}"))  # FR: no raw tile
+
+
+# ── X3-WHITEOUT: the expansion's damaging fallback (EXP-WHITEOUT-HARNESS) ─────────────────────
+# Live gen3_exp whiteout_gen3: "battler 0 has no no-damage move with PP (turn 43, hp 2, hunts 3)" --
+# Growl's PP spent, and the expansion BM has no effect_off, so any_move_slot always returned nil.
+# The expansion reads MoveInfo.effect (facts.json bitfield) and takes only a plain EFFECT_HIT with
+# power. Ids are the pinned source's (moves.h): Tackle 33, Double-Edge 38, Growl 45, Self-Destruct
+# 120, Explosion 153, Struggle 165; effects (battle_move_effects.h): HIT 1, STAT_CHANGE 2,
+# STRUGGLE 227, RECOIL 271.
+_EXP_FACTS = json.loads((REPO / "data/games/gen3_exp/28877d73/facts.json").read_text(encoding="utf-8"))["structs"]["MoveInfo"]["bitfields"]
+
+
+def _exp_lead(lua, moves, pp):
+    """The model, switched to the expansion title: 64-byte MoveInfo table, power/effect bitfields."""
+    lua.execute("POWER[45], POWER[38], POWER[120], POWER[153], POWER[165] = 0, 120, 200, 250, 50")
+    lua.execute("EXP_EFFECT[33], EXP_EFFECT[45], EXP_EFFECT[38], EXP_EFFECT[120], EXP_EFFECT[153],"
+                " EXP_EFFECT[165] = 1, 2, 271, 1, 1, 227")
+    lua.execute("profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE = EXP_MOVES, 64")
+    p, e = _EXP_FACTS["power"], _EXP_FACTS["effect"]
+    # the same facts.json fields the driver reads (offset/width/shift/bits), mask = (1 << bits) - 1
+    lua.execute("USE_EXP_BM({%s}, {%s})" % tuple(
+        ", ".join(str(f[k]) for k in ("offset", "width", "shift", "bits")) for f in (p, e)))
+    lua.execute(f"M.moves = {{ {', '.join(map(str, moves))} }}; M.pp = {{ {', '.join(map(str, pp))} }}")
+    lua.execute("M.foe_hp = 999")                       # the fallback alone never wins here
+    lua.globals().start(40)
+
+
+def test_exp_lose_active_falls_back_to_a_plain_hit_once_growl_pp_is_spent(battle_model):
+    """Growl (45) has 1 PP; slot 1 is Double-Edge (EFFECT_RECOIL 271, power 120, PP left) and slot 2
+    Tackle (33): turn 1 Growl, then the fallback must pick Tackle (slot 2) until the lead faints --
+    not the "no no-damage move with PP" refusal, and not the recoil move the CFRU-set guard would
+    let through (reverting any_move_slot's BM.effect branch picks slot 1; reverting move_effect's
+    BM.effect branch finds no readable effect and refuses)."""
+    lua = battle_model
+    _exp_lead(lua, [45, 38, 33, 0], [1, 5, 35, 0])
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert list(m.used.values())[:2] == [45, 33], (m.used, logs)
+    assert 38 not in set(m.used.values()), (m.used, logs)
+    assert m.lead_hp == 0 and any(line.startswith("LOSE_FALLBACK K0 turn=2 slot=2") for line in logs), logs
+
+
+@pytest.mark.parametrize("move, label", [(38, "Double-Edge (EFFECT_RECOIL)"), (120, "Self-Destruct"),
+                                         (153, "Explosion"), (165, "Struggle (EFFECT_STRUGGLE)")])
+def test_exp_lose_active_never_picks_a_self_damaging_fallback(battle_model, move, label):
+    """The only move with PP left after Growl is one that can KO or hurt the lead itself: refuse
+    it by name. Explosion/Self-Destruct are EFFECT_HIT in the expansion (moves_info.h:3268,4182),
+    so the effect id alone is not enough -- they are excluded by id."""
+    lua = battle_model
+    _exp_lead(lua, [45, move, 0, 0], [1, 5, 0, 0])
+    ok, why = lua.globals().LOSE()
+    assert ok is False and "no no-damage move with PP" in why, (label, why)
+    assert move not in set(lua.globals().M.used.values()), label
+
+
+def test_non_expansion_bm_still_refuses_an_unreadable_fallback(battle_model):
+    """The default (CFRU/pret) BM is untouched: same model without USE_EXP_BM, an effect-0 Tackle
+    with PP left is picked via the original effect_off path (the recoil refusal stays covered by
+    test_lose_active_refuses_a_self_damaging_fallback)."""
+    lua = battle_model
+    lua.execute("M.moves = { 39, 33, 0, 0 }; M.pp = { 1, 35, 0, 0 }; M.foe_hp = 999")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    assert ok is True and list(lua.globals().M.used.values())[:2] == [39, 33], why

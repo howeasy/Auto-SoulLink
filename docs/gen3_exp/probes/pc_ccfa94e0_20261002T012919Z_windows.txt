@@ -1,0 +1,6 @@
+cut=ccfa94e0021d8f9f11180866cf1c8d666bedc6dc
+full_result=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_ccfa94e0_20261002T012919Z_fullbox_result.txt
+full_shadow=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_ccfa94e0_20261002T012919Z_fullbox.shadow.log
+full_box_window=(1602, 2168) pc_deposit=0 sibling_later=true
+scope=raw observer hook windows with frame_control liveness and positive siblings; no whole-log normalized pc_move=0 or client-report claim
+RESULT: PASS

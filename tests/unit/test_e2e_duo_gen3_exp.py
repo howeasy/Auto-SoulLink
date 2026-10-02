@@ -84,7 +84,8 @@ def test_the_active_faint_row_uses_the_expansion_perish_geometry():
     cp = json.loads((REPO / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
     assert cp["battle"]["handoff"]["head"][0]["name"] == "perish_status"
     assert cp["battle"]["commit_hold"].startswith("HOLD")
-    assert "natural-play Perish KO pending" in cp["open"]["battle_handoff"]
+    assert "wild linked_faint_active_gen3 PHYSICAL PASS" in cp["open"]["battle_handoff"]
+    assert "pending" not in cp["open"]["battle_handoff"] and "gift_areas" not in cp["open"]
 
 
 def test_the_row_runs_the_core_loop_rows_on_its_own_fixtures():
@@ -97,7 +98,9 @@ def test_the_row_runs_the_core_loop_rows_on_its_own_fixtures():
     for name in CORE:
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_exp"
-        assert run._hunt_area == {"pc": "route_103", "catch": "route_102"}[run._target_for("a")], name
+        assert run._hunt_area == {
+            "pc": "route_103", "catch": "route_102", "whiteout_synth": "route_103",
+        }[run._target_for("a")], name
         for inst in ("a", "b"):
             assert run._gen3_title(inst) == EXP
             assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)
@@ -204,3 +207,82 @@ def test_the_whiteout_landing_is_the_oldale_center_respawn_not_the_outdoor_tile(
     emerald.gcfg, emerald.cfg, emerald.game = (dict(duo.GAMES["gen3_emerald"]),
                                                dict(duo.SCENARIOS["whiteout_gen3"]), "gen3_emerald")
     assert emerald._gen3_fixture_heal_tile("a") == r"map=0\.10 at=\(6,17\)"
+
+
+def test_exp_whiteout_only_uses_hp1_pair_and_other18_targets_are_unchanged():
+    expected={
+        **{f'exp_static_{c}_gen3':f'static_{c}_synth' for c in
+           ('static','static_run','grass','surf','rock','fish','altering0','altering1')},
+        'gift_gen3':'gift_synth','egg_hatch_gen3':'hatch_synth','egg_receive_gen3':'egg_receive_synth',
+        'choice_gift_gen3':'choice_gift_synth','gift_box_gen3':'gift_box_synth',
+        'faint_cmd_gen3':'pc','linked_faint_active_gen3':'pc','boxsync_gen3':'pc',
+        'link_gen3':'catch','release_gen3':'pc',
+    }
+    assert len(expected)==18
+    assert duo.scenario_target(duo.SCENARIOS['whiteout_gen3'],'gen3_exp')=='whiteout_synth'
+    assert duo.GAMES['gen3_exp']['hunt_area']['whiteout_synth']=='route_103'
+    for name,target in expected.items():
+        assert duo.scenario_target(duo.SCENARIOS[name],'gen3_exp')==target
+        run = _run()
+        run.scenario = name
+        run.cfg = duo.SCENARIOS[name]
+        for side in 'ab':
+            suffix='_b'if side=='b'else''
+            assert Path(run._gen3_fixture_path(side)).name==f'exp_{target}{suffix}.sav'
+        if target in ('pc','catch'):
+            assert run.gcfg['hunt_area'][target]==('route_103'if target=='pc'else'route_102')
+    run = _run()
+    run.scenario = 'whiteout_gen3'
+    run.cfg = duo.SCENARIOS['whiteout_gen3']
+    assert Path(run._gen3_fixture_path('a')).name=='exp_whiteout_synth.sav'
+    assert Path(run._gen3_fixture_path('b')).name=='exp_whiteout_synth_b.sav'
+
+
+@pytest.mark.parametrize("game", ["gen3_exp", "gen3_emerald"])
+def test_whiteout_native_hp_log_waits_for_actual_battle_turn_and_is_one_shot(game):
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    scenario = lua.execute((REPO / "lua/tests/duo/scenario_gen3_whiteout.lua").read_text())
+    ctx = lua.execute('''
+        local watchers, logged = {}, {}
+        local turn = false
+        local ctx = {
+            D={}, SP={whiteout_destination=function() return {} end},
+            player="a", cp={}, emerald_engine=true,
+            wait_go=function() return true end, linked=function() return "paired" end,
+            find=function() return {slot=1} end,
+            walk_to_pc=function() end, pc_deposit=function() return "paired" end,
+            observe_boxed=function() return true end, log=function() end,
+            write_lines=function() return {} end, on_write=function() end,
+            sent=function() return 0 end,
+            watch=function(fn) watchers[#watchers+1]=fn end,
+            action_menu_up=function() return turn end,
+            party=function() return {{key="native",hp=1,max_hp=20,level=5}} end,
+            jlog=function(tag, row) logged[#logged+1]={tag=tag,row=row} end,
+        }
+        emu={framecount=function() return 123 end}
+        ctx.try=function()
+            local function poll()
+                for i=#watchers,1,-1 do
+                    if watchers[i]() then table.remove(watchers,i) end
+                end
+            end
+            poll()
+            assert(#logged==0, "HP logged before native action menu")
+            turn=true
+            poll()
+            poll()
+            return false,"stop after log-only witness"
+        end
+        ctx.logged=logged
+        return ctx
+    ''')
+    ctx.D.game = game
+    ok, reason = scenario(ctx)
+    assert ok is False and "stop after log-only witness" in reason
+    assert len(ctx.logged) == (1 if game == "gen3_exp" else 0)
+    if game == "gen3_exp":
+        witness = ctx.logged[1]
+        assert witness.tag == "WHITEOUT_NATIVE_LEAD"
+        assert (witness.row.hp, witness.row.max_hp, witness.row.frame) == (1, 20, 123)

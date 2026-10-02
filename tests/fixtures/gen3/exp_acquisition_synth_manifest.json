@@ -1,0 +1,199 @@
+{
+  "evidence": "SEED-PENDING: SYNTH_SETUP + native CONTINUE/SAVE only; acquisition and R4 hatch NOT exercised; tile/facing SOURCE/MODEL",
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "fixtures": [
+    {
+      "case": "gift",
+      "side": "a",
+      "file": "tests/fixtures/gen3/exp_gift_synth.sav",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "synth_seed_sha256": "88dc292e7de2fcfe2b4a48efbe088fd66ee9edade674a5f8864d15152df3f376",
+      "sha256": "785ea537dc3437f19790c3e2647e8c39e9cd5ff1eb9e09c48b93b587fe495142",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH continue warp 14.7 (3,3); gift pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_gift_a_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_gift_synth_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "gift",
+      "side": "b",
+      "file": "tests/fixtures/gen3/exp_gift_synth_b.sav",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "synth_seed_sha256": "d0db7a9a60e3fe3fc2cfd56de44d8d8c37fac55d8c13e8c50bb5f0806dd46d1b",
+      "sha256": "489c6a1a341fd8cd813f75ba573f3605f1861951167f1cccc6708cdef26cbc92",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH continue warp 14.7 (3,3); gift pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_gift_b_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_gift_synth_b_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "hatch",
+      "side": "a",
+      "file": "tests/fixtures/gen3/exp_hatch_synth.sav",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "synth_seed_sha256": "059983904583dea48623e062fd13458689524f3067d79d2d4f93885ef98553c0",
+      "sha256": "8e70297f326859746be19723757312dd8544431beba2d33c17a1fafe2a0c75ad",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH own-lead-species egg in slot1; cycles0, level1 EXP1 from own ROM growth table; native step counter unchanged",
+        "SYNTH continue warp 14.7 (3,5); hatch pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_hatch_a_qual_exp1_eacb615b.txt",
+      "synth_seed_retention": "patch/build/exp_hatch_synth_exp1_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "hatch",
+      "side": "b",
+      "file": "tests/fixtures/gen3/exp_hatch_synth_b.sav",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "synth_seed_sha256": "6318af4431c0ce5d53563a0f4673c0149e1514c52b37f4c9ce12d57a8525009f",
+      "sha256": "7dcb2f377d4ffe26e2b0391a67831bfdd5d19af9f4e3d17c4103a39ad22ff86b",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH own-lead-species egg in slot1; cycles0, level1 EXP1 from own ROM growth table; native step counter unchanged",
+        "SYNTH continue warp 14.7 (3,5); hatch pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_hatch_b_qual_exp1_eacb615b.txt",
+      "synth_seed_retention": "patch/build/exp_hatch_synth_b_exp1_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "egg_receive",
+      "side": "a",
+      "file": "tests/fixtures/gen3/exp_egg_receive_synth.sav",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "synth_seed_sha256": "00ff243849aa3631b128c451c136343ab807b2fd35366dae9566c38ea2b0c783",
+      "sha256": "c501c5a9aec124aeff847ceb3cefba06730e7a5995fbe918fd8db6c379e03e3d",
+      "edits": [
+        "SYNTH flag 0x10a=0",
+        "SYNTH continue warp 0.12 (4,8); egg_receive pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_egg_receive_a_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_egg_receive_synth_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "egg_receive",
+      "side": "b",
+      "file": "tests/fixtures/gen3/exp_egg_receive_synth_b.sav",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "synth_seed_sha256": "6875492a51ddb0a5979c5bd8d9010ec1fa8b9f5485672660098b2edfc8013f4e",
+      "sha256": "3dc315998fdd1954ec4c26c325fb320315799b3b75aaac1c04d5031fe0325f69",
+      "edits": [
+        "SYNTH flag 0x10a=0",
+        "SYNTH continue warp 0.12 (4,8); egg_receive pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_egg_receive_b_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_egg_receive_synth_b_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "choice_gift",
+      "side": "a",
+      "file": "tests/fixtures/gen3/exp_choice_gift_synth.sav",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "synth_seed_sha256": "b13da440bc64fe44defce70691eca2b2948e991ab0d792d0e9d787b8521e35be",
+      "sha256": "4abcef42a97d5d1e096453690c16274180d0eb29d9e4424db12a01bac65e8a9b",
+      "edits": [
+        "SYNTH flag 0x10b=0",
+        "SYNTH var 0x40c4=2",
+        "SYNTH var 0x40c5=1",
+        "SYNTH continue warp 11.1 (13,8); choice_gift pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_choice_gift_a_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_choice_gift_synth_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "choice_gift",
+      "side": "b",
+      "file": "tests/fixtures/gen3/exp_choice_gift_synth_b.sav",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "synth_seed_sha256": "9591fdc6302987188ca59fcf0ae6393dc850cd5e701a67f714f4f5c8889cd49d",
+      "sha256": "fba8d7e6a7c1a3dfac0ad84310c781f352be6dc4535968de3042f85222640168",
+      "edits": [
+        "SYNTH flag 0x10b=0",
+        "SYNTH var 0x40c4=2",
+        "SYNTH var 0x40c5=2",
+        "SYNTH continue warp 11.1 (13,8); choice_gift pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_choice_gift_b_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_choice_gift_synth_b_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "gift_box",
+      "side": "a",
+      "file": "tests/fixtures/gen3/exp_gift_box_synth.sav",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "synth_seed_sha256": "226edcc9d0fba0f74be7963986d61d31e61a2facf57d466b38ba065016e616e3",
+      "sha256": "c3284d4e8a97e3190cfd1aab98a83a4f1fd9ffd8dae7a4988abd4b7669f1157e",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH party filled with four uniquely-keyed healthy own-lead clones; boxes unchanged",
+        "SYNTH continue warp 14.7 (3,3); gift_box pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_gift_box_a_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_gift_box_synth_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    },
+    {
+      "case": "gift_box",
+      "side": "b",
+      "file": "tests/fixtures/gen3/exp_gift_box_synth_b.sav",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "synth_seed_sha256": "d6721f4650e11b592758ee3666e3be539c16de142e9f2225c710187d52c7b3d6",
+      "sha256": "92516fe3d49618935a6e65df6c9c6bbfda89de4d3b90fdc274f04ff02bf533ba",
+      "edits": [
+        "SYNTH flag 0x12a=0",
+        "SYNTH flag 0x3c8=0",
+        "SYNTH flag 0x3c7=1",
+        "SYNTH flag 0x2d7=1",
+        "SYNTH var 0x40c6=0",
+        "SYNTH party filled with four uniquely-keyed healthy own-lead clones; boxes unchanged",
+        "SYNTH continue warp 14.7 (3,3); gift_box pending"
+      ],
+      "qualification": "docs/gen3_emerald/probes/exp_acq_gift_box_b_qual_fd673a1c.txt",
+      "synth_seed_retention": "patch/build/exp_gift_box_synth_b_unqualified.sav",
+      "synth_seed_evidence": "Derived/reproducible offline bytes; retained ignored artifact, not a native acquisition receipt"
+    }
+  ],
+  "pending_pass_token": "Derived label backed by exp_seed_problems; not an independent runtime sensor"
+}

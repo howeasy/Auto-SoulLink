@@ -1,0 +1,12 @@
+SOURCE=f12d549b87c41a73962543c3b46a351ec8aab937 (retrospective author attribution; original console did not stamp; native pending-seed save only)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=514 map=0.10 pos=(6,17)
+phase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=596 counter=2
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=2->3
+phase flushed frame=1587 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+
+FULL_BOX_PENDING_NATIVE_SAVE_PASS

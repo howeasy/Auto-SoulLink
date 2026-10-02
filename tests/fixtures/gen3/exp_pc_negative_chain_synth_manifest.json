@@ -1,0 +1,86 @@
+{
+  "seed": "tests/fixtures/gen3/exp_pc.sav",
+  "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+  "file": "tests/fixtures/gen3/exp_pc_negative_chain_synth.sav",
+  "raw_sha256": "ed998876eed12ea347a69c672b1518b74f51c3e2a53dfe158f0c10bc6e47645e",
+  "sha256": "3a4f110cd259af30136d0c93bc9af099b0a23ef10f5160d329542bec0a42ee3d",
+  "qualification_status": "NATIVE_CONTINUE_SAVE_ONLY",
+  "qualification": "native make-exp CONTINUE/SAVE: embedded console below; no acquisition or PC release executed",
+  "evidence": "Disclosed SOURCE/MODEL SYNTH setup + native CONTINUE/SAVE qualification only; PC acquisition and release chain NOT exercised.",
+  "initial_usable": 5,
+  "release_chain_usable": [
+    5,
+    4,
+    3,
+    3,
+    2
+  ],
+  "derivation": "tools/gen3_fixtures.py:build_exp_pc_negative_chain_seed; copy box0slot0 to empty box0slot2 with personality XOR0x13572468, native encrypted codec; preserve every old party/box byte; request CONTINUE_GAME_WARP at unchanged Oldale tile.",
+  "extra": {
+    "box": 0,
+    "slot": 2,
+    "species": 263,
+    "personality": 1226728194,
+    "ot_id": 539298085,
+    "key": "491E6302:20250925"
+  },
+  "counter": {
+    "seed": 2,
+    "raw": 2,
+    "native": 3
+  },
+  "raw_image_contract": "One active14-sector slot on erased flash. This raw image is not a native re-save; qualification must clear CONTINUE_GAME_WARP and advance the counter without changing party/storage records.",
+  "source_control": "AtLeastThreeUsableMons native release precondition; initial5 -> normal release4 -> bypass discard3 -> cancel withdraw still3 -> YES release2. No native release predicate change.",
+  "qualification_source": "9b2d0d30eb1a70a12c56a90c9cf10d55801125bf",
+  "qualification_script": "lua/tests/gen3_emerald_boot_check.lua",
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "qualification_console": "SYNTH seed pc_negative_chain_synth: C:\\slink-wt\\exp-xg3-state\\pc-chain-qual-9b2d0d30\\fixture-runs\\make_exp_exp_pc_negative_chain_synth\\gen3 pokeemerald.SaveRAM sha256=ed998876eed12ea347a69c672b1518b74f51c3e2a53dfe158f0c10bc6e47645e counter=2 party=[{'key': '4D55444B:20250925', 'species': 258, 'level': 5}, {'key': '504F4F4D:20250925', 'species': 261, 'level': 3}]\n[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_pokeemerald.gba\n[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (5s)\nphase start frame=1 title=emerald\nphase seeded frame=1 domain=SRAM counter=2\nphase overworld-cb2 frame=514 map=0.10 pos=(6,17)\nphase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1\nphase save-menu frame=596 counter=2\nphase save-dialog frame=656 row=3/6\nphase saved frame=1183 counter=2->3\nphase flushed frame=1587 map=0.10 pos=(6,17)\nRESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)\nwrote tests\\fixtures\\gen3\\exp_pc_negative_chain_synth.sav (131072 bytes) sha256=3a4f110cd259af30136d0c93bc9af099b0a23ef10f5160d329542bec0a42ee3d slot=1 counter=3 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 258, 'level': 5}, {'key': '504F4F4D:20250925', 'species': 261, 'level': 3}]\n",
+  "qualified_records": [
+    {
+      "location": "party:0",
+      "key": "4D55444B:20250925",
+      "species": 258,
+      "checksum_ok": true,
+      "is_egg": 0,
+      "hp": 20
+    },
+    {
+      "location": "party:1",
+      "key": "504F4F4D:20250925",
+      "species": 261,
+      "checksum_ok": true,
+      "is_egg": 0,
+      "hp": 15
+    },
+    {
+      "location": "box:0:0",
+      "key": "5A49476A:20250925",
+      "species": 263,
+      "checksum_ok": true,
+      "is_egg": 0
+    },
+    {
+      "location": "box:0:1",
+      "key": "57555251:20250925",
+      "species": 265,
+      "checksum_ok": true,
+      "is_egg": 0
+    },
+    {
+      "location": "box:0:2",
+      "key": "491E6302:20250925",
+      "species": 263,
+      "checksum_ok": true,
+      "is_egg": 0
+    }
+  ],
+  "native_slot_status": [
+    1,
+    1
+  ],
+  "native_controls": {
+    "continue_warp_cleared": true,
+    "old_and_extra_storage_bytes_preserved": true,
+    "usable_identities": 5
+  }
+}

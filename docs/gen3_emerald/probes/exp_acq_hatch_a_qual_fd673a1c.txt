@@ -1,0 +1,16 @@
+source=fd673a1c379d88b17b948653acb403e0555cd92b SOURCE/MODEL setup + PHYSICAL native resave; uncommitted harness
+SYNTH_QUALIFY case=hatch side=a run=C:\slink-wt\exp-xg3\patch\build\gen3_fixture_runs\exp_acquisition_hatch_a_c45427b3 seed_sha256=01461f8e030c63f56f9595d88d417fe41daf911bb33d2e3c9fda09b013d2c937
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_pokeemerald.gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=14.7 pos=(3,5)  (4s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=513 map=14.7 pos=(3,5)
+phase field frame=596 map=14.7 pos=(3,5) saveFileStatus=1
+phase save-menu frame=596 counter=2
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=2->3
+phase flushed frame=1603 map=14.7 pos=(3,5)
+RESULT: PASS counter 2 -> 3 map=14.7 pos=(3,5)
+SYNTH_QUALIFY PASS case=hatch side=a counter=2->3 file=tests\fixtures\gen3\exp_hatch_synth.sav sha256=cbb7b91135516f2ad4d39b6b086743d245e83d38b3ff624d4676695cae941121 acquisition_pending=true
+
+exit=0

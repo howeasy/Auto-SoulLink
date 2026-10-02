@@ -1,0 +1,99 @@
+# gen3_final_cut row=whiteout_gen3_exp_as_a item=XG3_TEST-ONLY_duo cut=f255136395a6b4613937e4f061e1bda901cc4615
+# lane=C:/slink-wt/exp-fc-f2551363-s2
+# command: python tools/e2e_duo.py --game gen3_exp --scenario whiteout_gen3   (cwd=C:/slink-wt/exp-fc-f2551363-s2)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-f2551363-s2\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-f2551363-s2\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-f2551363-s2\.cache\x1-probe\probe.o
+# verdict: FAIL exit=1
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T09:12:05 cpu=86% emuhawk=4 python=19
+start_utc=2026-10-02T13:12:03Z tracked_clean_before=True
+EXPANSION_CUT requested=f255136395a6b4613937e4f061e1bda901cc4615 before=f255136395a6b4613937e4f061e1bda901cc4615
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=3696a0573e6099493895278636edaf95b0ee742e746e3495056d737915f0be79 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=f255136395a6b4613937e4f061e1bda901cc4615
+[duo] server up: tcp=54482 http=54483 data=C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 09:12:07,245 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 09:12:07,245 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.8s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1 path=C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1 path=C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped 504F4F4D:20250925 and 504F4F4D:DFDAF6DA
+[duo] timing orchestrate 175.8s
+[duo] RESULT_LINE a: RESULT: FAIL (the whiteout run: the lone starter did not faint: whiteout a: the fallback keeps winning instead of the lead fainting (hunts=6))
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before a: A parked in the start_menu negative control
+[duo] whiteout_gen3: a client finished before 'a: A parked in the start_menu negative control' (a: RESULT: FAIL (the whiteout run: the lone starter did not faint: whiteout a: the fallback keeps winning instead of the lead fainting (hunts=6)); b: no RESULT)
+--- whiteout_gen3 a result (last 25 lines) ---
+LOSE_FALLBACK 4D55444B:20250925 turn=60 slot=0 hp=6
+XG3_FAINT_HOOK frame=34097 r4=1 counter=0 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=34097 active=1 battler0_slot=0 battle_hp=6 party_hp=6 counter=0
+TX safe - {"event":"safe","player":"a","seq":1139}
+LOSE_REHUNT_WIN 4D55444B:20250925 turn=61 hunts=3
+LOSE_FALLBACK 4D55444B:20250925 turn=62 slot=0 hp=6
+LOSE_FALLBACK 4D55444B:20250925 turn=63 slot=0 hp=5
+XG3_FAINT_HOOK frame=35843 r4=1 counter=0 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=35843 active=1 battler0_slot=0 battle_hp=5 party_hp=5 counter=0
+TX safe - {"event":"safe","player":"a","seq":1197}
+LOSE_REHUNT_WIN 4D55444B:20250925 turn=64 hunts=4
+LOSE_FALLBACK 4D55444B:20250925 turn=65 slot=0 hp=5
+LOSE_FALLBACK 4D55444B:20250925 turn=66 slot=0 hp=4
+XG3_FAINT_HOOK frame=37630 r4=1 counter=0 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=37630 active=1 battler0_slot=0 battle_hp=4 party_hp=4 counter=0
+TX safe - {"event":"safe","player":"a","seq":1261}
+LOSE_REHUNT_WIN 4D55444B:20250925 turn=67 hunts=5
+LOSE_FALLBACK 4D55444B:20250925 turn=68 slot=0 hp=7
+LOSE_FALLBACK 4D55444B:20250925 turn=69 slot=0 hp=5
+LOSE_FALLBACK 4D55444B:20250925 turn=70 slot=0 hp=3
+XG3_FAINT_HOOK frame=39833 r4=1 counter=0 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=39833 active=1 battler0_slot=0 battle_hp=3 party_hp=3 counter=0
+TX safe - {"event":"safe","player":"a","seq":1332}
+WRITES 12
+RESULT: FAIL (the whiteout run: the lone starter did not faint: whiteout a: the fallback keeps winning instead of the lead fainting (hunts=6))
+--- whiteout_gen3 b result (last 25 lines) ---
+booted frame=610 map=map=10 at=(6,17) balls=5
+HELLO_WATCH {"baselined":true,"frozen":false,"game_is_live":true,"hello_ready":true,"hello_sent":true,"hello_visible":true,"hello_why":"verified overworld checkpoint","in_battle":false,"journal_busy":"unavailable","journal_failure":"unavailable","live_why":"unavailable","location":{"map_group":0,"map_num":10},"map_x":6,"map_y":17,"party_hidden":"unavailable","phase":"await-start","policy_ok":true,"policy_reason":"overworld","policy_why":"verified overworld checkpoint","raw":{"callback1":{"match":"thumb-bit-stripped","names":["CB1_Overworld"],"raw":135868577},"callback2":{"match":"thumb-bit-stripped","names":["CB2_Overworld"],"raw":135879677},"field_message_box_mode":{"address":33580524,"raw":0,"size":1},"gPaletteFade":{"active_mask":"0x80","active_offset":15,"active_word":0,"address":33755796,"bytes":[0,0,0,0,140,20,0,3,144,20,0,3,103,0,0,0,0,128,6,32,0,0,0,0]},"sGlobalScriptContextStatus":{"address":50337477,"raw":2,"size":1},"sLockFieldControls":{"address":50337476,"raw":0,"size":1},"tasks":[{"address":50359328,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_WeatherMain"],"raw":135578037},"isActive":1,"slot":0},{"address":50359368,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunPerStepCallback"],"raw":135574237},"isActive":1,"slot":1},{"address":50359408,"data0_raw":10,"data0_s16":10,"func":{"match":"thumb-bit-stripped","names":["Task_MuddySlope"],"raw":135574381},"isActive":1,"slot":2},{"address":50359448,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunTimeBasedEvents"],"raw":135574285},"isActive":1,"slot":3},{"address":50359568,"data0_raw":1,"data0_s16":1,"func":{"match":"thumb-bit-stripped","names":["Task_MapNamePopUpWindow"],"raw":135782349},"isActive":1,"slot":6}]},"refusal_clauses":{},"sample_frame":610,"samples":0,"snapshot":{"gPokemonStoragePtr":33585408,"gSaveBlock1Ptr":33619680,"gSaveBlock2Ptr":33635376},"snapshot_why":"unavailable","start_frame":610,"wire_event":"tick","wire_seq":3}
+JITTER requested=0 applied=0 attempt=1
+RX box_mon key=504F4F4D:DFDAF6DA
+[client] [SLink-gen3] write overworld 0x020079A4 +80 frame 2162
+[client] [SLink-gen3] write overworld 0x02031BC8 +100 frame 2162
+[client] [SLink-gen3] write overworld 0x02031B54 +1 frame 2162
+TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":56,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+MIRROR_DEPOSITED 504F4F4D:DFDAF6DA
+DEPOSITED_FOR_REBUILD 504F4F4D:DFDAF6DA
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 43922
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 43922
+RX msgbox text=Route 103 is a dead zone!
+[duo] data dir kept: C:\slink-wt\exp-fc-f2551363-state\s2\slink_duo_whiteout_gen3_ixzzfdy1
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1)
+
+EXPANSION_CUT after=f255136395a6b4613937e4f061e1bda901cc4615
+exit=1 end_utc=2026-10-02T13:15:04Z tracked_clean_after=True classification=real

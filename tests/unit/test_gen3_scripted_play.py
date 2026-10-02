@@ -519,7 +519,7 @@ def test_pc_release_confirms_yes_before_the_trailing_messages():
     assert 'PC.popup("pc_release", 1, 1, 3)' in leg_src
     assert 'PC.select("pc_release", PC_RELEASE_MON)' in leg_src
     assert 'PC.release("pc_release")' in leg_src
-    body = _SCRIPT_SRC.split("function PC.release(label)", 1)[1].split("\nend", 1)[0]
+    body = _SCRIPT_SRC.split("function PC.release(label, answer)", 1)[1].split("\nend", 1)[0]
     assert body.index('G.tap("Up", 3, 20)') < body.index('G.tap("A", 3, 13)')
     assert body.count('G.tap("A", 3, 13)') == 3
 

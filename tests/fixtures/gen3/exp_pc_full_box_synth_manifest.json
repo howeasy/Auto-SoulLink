@@ -1,0 +1,38 @@
+{
+  "seed": "tests/fixtures/gen3/exp_pc.sav",
+  "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+  "raw_sha256": "71cff6225efba71bcf54ce8f03ba6a64d713650871cb9820c604ee9c2f5189ac",
+  "evidence": "SEED-PENDING:SOURCE/MODEL full storage + native CONTINUE/SAVE only; no deposit refusal demonstrated",
+  "file": "tests/fixtures/gen3/exp_pc_full_box_synth.sav",
+  "sha256": "93b7bbde014885ac37c5ed7d05387bd639d71563ce0b8582ba6947fd2b0f92c3",
+  "counter": [
+    2,
+    3
+  ],
+  "derivation": "tools/gen3_static_wild_rows.py:build_full_box_seed: pack PokemonStorage.boxes offset4/size33600/count14; clone seed box0slot0 with personality XOR ((index+1)*0x01001001) modulo2^32, native encrypted codec, all420slots; other SaveBlocks unchanged.",
+  "raw_sha256_identity": "SHA256 of reproducible pre-CONTINUE SYNTH image; retained ignored patch/build/exp_pc_full_box_unqualified.sav; generated, not a second native receipt.",
+  "raw_records": 420,
+  "decoded_identities": 420,
+  "slot_derivation": {
+    "seed_counter": 2,
+    "raw_counter": 2,
+    "native_counter": 3,
+    "raw_slot_status": [
+      1,
+      0
+    ],
+    "native_slot_status": [
+      1,
+      1
+    ],
+    "seed_to_raw_changed_bytes_per_64KiB": [
+      43585,
+      49077
+    ],
+    "raw_to_native_changed_bytes_per_64KiB": [
+      8019,
+      47359
+    ],
+    "explanation": "Generator emits one active14-sector slot on erased flash and fills storage; removes old inactive seed slot. Native SAVE writes counter3 to alternate slot and rotates sectors, retaining counter2 slot. Thus both64KiB halves differ from the original seed; one-slot contract applies only to pre-CONTINUE generator output."
+  }
+}

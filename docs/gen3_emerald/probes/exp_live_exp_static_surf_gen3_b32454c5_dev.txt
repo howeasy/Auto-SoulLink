@@ -1,0 +1,38 @@
+DEV SOURCE=b32454c5dd3f46aa7a94d07840703a1532deb8c5; native expansion test-only row; nofinalcutclaim
+
+========== scenario: exp_static_surf_gen3 ==========
+[duo] exp_static_surf_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=2a58b211d0a6df0c7d16be511cd2a356ce36564edf7fd74220e4faa9482df88c b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=725b2b4e836ca90d19aea02b23d4e51642c0fcd24d89329d5364a05cad867681 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=b32454c5dd3f46aa7a94d07840703a1532deb8c5
+[duo] server up: tcp=58304 http=58305 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:55:22,158 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:55:22,158 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for exp_static_surf_gen3: e2e_exp_static_surf_gen3_a_attempt1_result.txt, e2e_exp_static_surf_gen3_a_result.txt, e2e_exp_static_surf_gen3_b_attempt1_result.txt, e2e_exp_static_surf_gen3_b_result.txt, e2e_exp_static_surf_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.2s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 15.3s
+[duo] timing results 1.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=10ae3ed942e00f0697754f308458782656fd620ce991187530b4ba86527f51c2 file=10ae3ed942e00f0697754f308458782656fd620ce991187530b4ba86527f51c2 match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=6a24956d88ca30ecfd328194fd402d61d23f6ca578cc3f6484835c77633755ba file=6a24956d88ca30ecfd328194fd402d61d23f6ca578cc3f6484835c77633755ba match=true saves=1 counter=4->5 rtc=normalized
+[duo] exp static/wild: native battle, ordinary capture, independent saved keys and controls
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] exp_static_surf_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_sv4e2ifs
+
+========== summary ==========
+  exp_static_surf_gen3: PASS (attempt 1 of 1)
+
+EXIT 0

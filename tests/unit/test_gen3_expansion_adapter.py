@@ -88,7 +88,10 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert a.parse_ot_id("12345678:87654321") == "87654321"
     assert a.status_token(0x88) == "TOX"
     assert a.gift_link_area("route_101") == "gift_route_101"
-    assert not a.is_fixed_species_gift("gift_beldum")  # no unextracted static policy
+    # EXP-ADAPTER-POLICY: fixed-species policy is census-derived (was a pinned limitation);
+    # "gift_beldum" is not a real area id, the real one is mossdeep_city_stevens_house.
+    assert not a.is_fixed_species_gift("gift_beldum")
+    assert a.is_fixed_species_gift("mossdeep_city_stevens_house")
     assert a.area_pack == "gen3_exp/28877d73"
     assert a.pairing_kind("companion") == "companion"
 

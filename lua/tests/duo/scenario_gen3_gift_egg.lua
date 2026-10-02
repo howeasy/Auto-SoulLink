@@ -2,7 +2,9 @@
 -- Facts are validated against the booted title's own ROM before launch.
 return function(ctx)
     local f, kind = ctx.D.acquisition_facts, ctx.D.acquisition_kind
-    if not f or (kind ~= "gift" and kind ~= "hatch") then return false, "unproven gift/egg facts" end
+    if not f or (kind ~= "gift" and kind ~= "hatch" and kind ~= "gift_box" and kind ~= "egg_receive") then
+        return false, "unproven gift/egg facts"
+    end
     local function gift_flag()
         if f.flag_address then
             return (memory.read_u8(f.flag_address, "System Bus") & f.flag_mask) ~= 0
@@ -20,6 +22,9 @@ return function(ctx)
     if kind == "gift" and (#before >= 6 or gift_flag() ~= false) then
         return false, "gift already received or no party slot"
     end
+    if (kind == "egg_receive" and #before >= 6) or (kind == "gift_box" and #before ~= 6) then
+        return false, "wrong party space for acquisition case"
+    end
     local location = ctx.reader.read_location()
     local x, y = ctx.G.pos(ctx.cp)
     if not location or location.map_group ~= f.group or location.map_num ~= f.num
@@ -28,24 +33,35 @@ return function(ctx)
     end
     ctx.jlog("ACQUISITION_BEFORE", {captures=ctx.sent("capture"), balls=ctx.balls(),
                                   count=#before, egg=egg and egg.is_egg or 0})
+    if f.probes and event and event.on_bus_exec then
+        for _, probe in ipairs(f.probes) do
+            local id = event.on_bus_exec(function(address)
+                ctx.jlog("ACQUISITION_PROBE", {name=probe.name,address=address,
+                    frame=emu.framecount(),r0=emu.getregister("R0"),r1=emu.getregister("R1"),
+                    r15=emu.getregister("R15"),sp=emu.getregister("R13")})
+            end, probe.address, "exp-acquisition-"..probe.name, "System Bus")
+            assert(id, "native acquisition diagnostic hook refused")
+        end
+    end
     if ctx.sent("capture") ~= 0 then return false, "egg/fixture was captured before native acquisition" end
     local signals, drain = ctx.session.signals, ctx.session.signals.drain
     signals.drain = function(self)
         local out = drain(self)
         for _, s in ipairs(out) do
             if s.kind == "mon_given" or s.kind == "hatch" then
-                ctx.jlog("ACQUISITION_SIGNAL", {kind=s.kind, address=s.address, frame=s.frame})
+                ctx.jlog("ACQUISITION_SIGNAL", {kind=s.kind, address=s.address, frame=s.frame,
+                    callback_address=s.callback_address,raw_r15=s.raw_r15})
             end
         end
         return out
     end
     local mon, steps, scene = nil, 0, false
-    if kind == "gift" then
+    if kind ~= "hatch" then
         if not ctx.face(f.face) then return false, "cannot face native gift object" end
         -- YES to the offer, then B as soon as the party grows: NO to nickname.
         if not ctx.mash_until(function()
             local party = ctx.party()
-            return party and #party == #before + 1
+            return party and (kind == "gift_box" and gift_flag() == true or #party == #before + 1)
         end, 120, "A") then return false, "native gift never joined party" end
         if not ctx.mash_until(function()
             return gift_flag() == true and ctx.on_field() and ctx.player_idle()
@@ -53,7 +69,20 @@ return function(ctx)
                 and ctx.G.pred_ok(ctx.cp, "field_controls_locked")
         end, 120, "B") then return false, "native gift script did not finish" end
         for _, m in ipairs(ctx.party() or {}) do if not old[m.key] then mon = m end end
-        if not mon or mon.species ~= f.species or mon.level ~= f.level or mon.is_egg ~= 0 then
+        if kind == "gift_box" then
+            if not ctx.wait_until(function() return ctx.sent("capture") == 1 end, 60, "boxed gift capture") then
+                return false, "boxed gift capture absent"
+            end
+            local cap = ctx.last_sent("capture")
+            local at = ctx.locate(cap.key)
+            if not at or at.party ~= false or not at.box then return false, "gift is not uniquely boxed" end
+            local box, slot = at.box:match("^(%d+):(%d+)$")
+            local mons = box and ctx.reader.read_box(tonumber(box))
+            mon = mons and mons[tonumber(slot)+1]
+            if mon then mon.key = ctx.reader.key(mon) end
+        end
+        if not mon or mon.species ~= f.species or (kind ~= "gift_box" and mon.level ~= f.level)
+           or mon.is_egg ~= (kind == "egg_receive" and 1 or 0) then
             return false, "native gift record differs from own-title script"
         end
     else
@@ -92,6 +121,13 @@ return function(ctx)
         end, 600, "native walking and hatch scene")
         if not ok or not mon then return false, "native hatch never completed" end
         if mon.level ~= f.hatch_level or mon.species ~= egg.species then return false, "wrong native hatchling" end
+    end
+    if kind == "egg_receive" then
+        if ctx.sent("capture") ~= 0 then return false, "unhatched NPC egg was captured" end
+        ctx.jlog("ACQUISITION_AFTER", {key=mon.key,balls=ctx.balls(),egg=1,flag=gift_flag()})
+        ctx.jlog("EGG_RECEIVED", {key=mon.key,species_id=mon.species,is_egg=true})
+        if not ctx.wait_go("SAVE") then return false, "egg receipt save gate missing" end
+        return ctx.save(kind)
     end
     if not ctx.wait_until(function() return ctx.sent("capture", mon.key) == 1 end, 60, "production acquisition TX") then
         return false, "native acquisition TX missing or duplicated"

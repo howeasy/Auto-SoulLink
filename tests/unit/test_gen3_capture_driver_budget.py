@@ -75,6 +75,24 @@ def test_capture_of_an_observed_encounter_does_not_hunt_again():
     assert lua.globals().ctx.catch("already at the native battle menu", True) == "caught"
 
 
+@pytest.mark.parametrize("expected_ball", (None, 4))
+def test_emerald_capture_forwards_the_optional_expected_ball(expected_ball):
+    lua = _capture_model(catch_on=1)
+    lua.globals().requested_ball = expected_ball
+    lua.execute('''
+        EMERALD_ENGINE=true; helper_calls=0
+        ctx.hunt=function() error("already observed encounter must not hunt again") end
+        SP.EMH={throw_ball=function(cp,label,expected_ball)
+            assert(expected_ball==requested_ball, "ctx.catch lost its requested ball")
+            helper_calls=helper_calls+1; spent=spent+1; return true
+        end}
+    ''')
+    catch = lua.globals().ctx.catch
+    result = catch("explicit ball", True) if expected_ball is None else catch("explicit ball", True, expected_ball)
+    assert result == "caught"
+    assert lua.globals().helper_calls == lua.globals().spent == 1
+
+
 def test_lead_faint_answers_use_next_yes_switches_and_keeps_throwing():
     lua = _capture_model(catch_on=3)
     lua.execute('''

@@ -1,0 +1,46 @@
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=f2ef83e931a2319dfd642291852e16818750419889c4bc4ee7fc0304836cc686 profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=ea9c8a070e2a9f44c56d6a2957d577525f674871
+[duo] server up: tcp=56509 http=56510 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:37:39,621 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:37:39,621 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v path=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v path=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 19.8s
+[duo] timing results 4.8s
+[duo] RESULT_LINE a: RESULT: PASS (round trip of 504F4F4D:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (round trip of 504F4F4D:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f2d374549a1467d85c8a0effa3c6fdb6739cf26ff16c9af2f626a9677df136e5 file=f2d374549a1467d85c8a0effa3c6fdb6739cf26ff16c9af2f626a9677df136e5 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=b8f9fe6c127d31ce817b035f7604527609e13f4bf37b5a36e7d31fc8daadf6ec file=b8f9fe6c127d31ce817b035f7604527609e13f4bf37b5a36e7d31fc8daadf6ec match=true saves=1 counter=3->4 rtc=normalized
+[duo] boxsync: 504F4F4D:20250925 / 504F4F4D:DFDAF6DA deposited and withdrawn, saved once in party with the fixture record
+[duo] MARKER a: TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":36,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[duo] MARKER a: BOXED_OBSERVED 504F4F4D:20250925 box=0:2
+[duo] MARKER a: TX box_to_party 504F4F4D:20250925 {"area_id":"","event":"box_to_party","key":"504F4F4D:20250925","player":"a","seq":71}
+[duo] MARKER a: RETURNED_OBSERVED 504F4F4D:20250925 slot=1
+[duo] MARKER b: RX box_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":36,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[duo] MARKER b: BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+[duo] MARKER b: RX party_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX sync_retrieve_done 504F4F4D:DFDAF6DA {"event":"sync_retrieve_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":71}
+[duo] MARKER b: RETURNED_OBSERVED 504F4F4D:DFDAF6DA slot=1
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_qgjajp6v
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)

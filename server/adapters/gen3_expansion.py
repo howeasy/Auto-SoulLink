@@ -8,8 +8,9 @@ Regenerate with tools/extract_expansion_data.py --rom <reference.gba>
 --output data/games/gen3_exp/28877d73/data.json; add --check for read-only comparison.
 
 Recorded limits: area/static-policy packs and ability prose are not extracted (trainer panels
-ARE, since XC4/XC4b; wild tables ARE, since EXP-DATA-WILD -- see below). Explicit gift_
-events work; no unproved fixed-gift exemption is inherited from vanilla.
+ARE, since XC4/XC4b; wild tables ARE, since EXP-DATA-WILD -- see below). Gift areas
+and the fixed-species exemption are derived from the pack's own census (see _gift_policy()); the
+exemption is NOT inherited from vanilla.
 Sprites use National Dex base art, not form art. This adapter only READS
 expansion data/records.
 
@@ -82,6 +83,7 @@ PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/data.
 CONFIG_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/config.json"
 CALC_NAMES_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/calc_names.json"
 TRAINERS_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/gen3_exp_trainers.json"
+GIFTS_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/expansion_gifts.json"
 ENCOUNTERS_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/expansion_encounters.json"
 _SOURCES_LOCK = Path(__file__).resolve().parents[2] / "data/gen3_exp_sources.lock.json"
 
@@ -102,6 +104,46 @@ def _load_trainers_pack() -> tuple[dict[int, dict], dict[str, list[int]]]:
     trainers = {int(k): v for k, v in raw["trainers"].items()}
     trainers_by_area = {k: list(v) for k, v in raw["trainers_by_area"].items()}
     return trainers, trainers_by_area
+
+
+def _gift_policy() -> tuple[frozenset[str], frozenset[str]]:
+    """The policy, or a ValueError/OSError the same way on every call. The area predicates run on
+    every area_enter / capture / no_catch, so a bad pack must fail closed WITHOUT re-reading and
+    re-parsing the census per event: the outcome (value or error) is cached once."""
+    value, error = _gift_policy_result()
+    if error is not None:
+        raise error
+    return value
+
+
+@functools.cache
+def _gift_policy_result():
+    try:
+        return _load_gift_policy(), None
+    except (OSError, ValueError, KeyError) as exc:
+        return None, exc
+
+
+def _load_gift_policy() -> tuple[frozenset[str], frozenset[str]]:
+    """(gift area ids, fixed-species gift area ids), derived from expansion_gifts.json active rows
+    (same pin-commit guard as the packs above). Gift areas follow Emerald's namespace (the pack's
+    write_checkpoint.json gift_areas.ids == the census' active gift/egg gift_area values; a test
+    pins the equality). An area is a FIXED-species gift iff its active kind=="gift" rows name
+    exactly one species: Beldum (MossdeepCity_StevensHouse/scripts.inc:86) and Castform
+    (Route119_WeatherInstitute_2F/scripts.inc:85). The Birch-lab Johto starters (:336/:377/:418)
+    and the Devon fossils (RustboroCity_DevonCorp_2F:146/:191) are player CHOICES, and the Wynaut
+    egg (LavaridgeTown/scripts.inc:245, kind "egg") is not a gift row, so none are fixed."""
+    raw = json.loads(GIFTS_PACK.read_text(encoding="utf-8"))
+    lock = json.loads(_SOURCES_LOCK.read_text(encoding="utf-8"))
+    if raw.get("source_commit") != lock["source"]["commit"]:
+        raise ValueError(f"{GIFTS_PACK} source_commit does not match the pin in {_SOURCES_LOCK}")
+    rows = [r for r in raw["declarations"] if r["status"] == "active" and r["gift_area"]]
+    species: dict[str, set[int]] = {}
+    for r in rows:
+        if r["kind"] == "gift":
+            species.setdefault(r["gift_area"], set()).add(r["species_id"])
+    return (frozenset(r["gift_area"] for r in rows),
+            frozenset(a for a, s in species.items() if len(s) == 1))
 
 
 @functools.cache
@@ -217,10 +259,13 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return "gen3_exp/28877d73"
 
     def is_gift_area(self, area_id):
-        return (area_id or "").startswith("gift_")
+        area_id = area_id if isinstance(area_id, str) else ""
+        return area_id in _gift_policy()[0] or area_id.startswith("gift_")
 
     def is_fixed_species_gift(self, area_id):
-        return False
+        # As gen3_frlge's Emerald: gift_link_area may have prefixed gift_<area>; strip it.
+        area_id = area_id if isinstance(area_id, str) else ""
+        return area_id.removeprefix("gift_") in _gift_policy()[1]
 
     def is_daycare_area(self, area_id):
         return False
@@ -352,6 +397,13 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         for k in ("calc_label", "fight_label"):
             if tr.get(k):
                 out[k] = tr[k]
+        # Same rule as Gen3Adapter._frlg_trainer_brief (gen3_frlge.py:810-818); expansion
+        # Route103/scripts.inc:23-24 (and Route110, Lilycove): MALE (0) -> May, FEMALE (1) -> Brendan.
+        const = tr.get("const", "")
+        if const.startswith("TRAINER_MAY_"):
+            out["required_player_gender"] = 0
+        elif const.startswith("TRAINER_BRENDAN_"):
+            out["required_player_gender"] = 1
         return out
 
     def milestone_cap_for_fight_label(self, fight_label):

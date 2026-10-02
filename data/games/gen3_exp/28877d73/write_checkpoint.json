@@ -185,10 +185,18 @@
       "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
       "thumb": 1
     },
-    "gift_areas": [],
+    "gift_areas": {
+      "ids": [
+        "lavaridge_town",
+        "littleroot_town_professor_birchs_lab",
+        "mossdeep_city_stevens_house",
+        "route119_weather_institute_2f",
+        "rustboro_city_devon_corp_2f"
+      ],
+      "source": "gen3_exp/28877d73 expansion_gifts.json active gift/egg rows x area_map.json"
+    },
     "open": {
-      "battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
-      "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"
+      "battle_handoff": "source and ROM handoff shape bound; wild linked_faint_active_gen3 PHYSICAL PASS on the expansion at ddf6ebd8/c9c215f7 (docs/gen3_emerald/XG3_FAINT_evidence_2026-09-27.md); the natural-play A faint did not hit the former Cmd_tryfaintmon marker (the expansion faint site is now pinned inside SetValuesOnFaint, which both the opcode and the C fallback reach); trainer, doubles, whiteout and Explode unqualified; receipts predate current master"
     },
     "pointers": {
       "gPokemonStoragePtr": {

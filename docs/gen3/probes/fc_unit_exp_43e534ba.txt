@@ -1,0 +1,33 @@
+# gen3_final_cut row=unit_exp item=XG3_MODEL cut=43e534ba35916b2648cf720a092fbf08c7cbf969
+# lane=C:/slink-wt/exp-fc-43e534ba-s1
+# command: python -m pytest tests/unit/test_build_expansion.py tests/unit/test_e2e_duo_gen3_exp.py tests/unit/test_extract_expansion_config.py tests/unit/test_extract_expansion_data.py tests/unit/test_gen3_codec_expansion.py tests/unit/test_gen3_exp_acquisition_rows.py tests/unit/test_gen3_exp_entry.py tests/unit/test_gen3_exp_faint_pin.py tests/unit/test_gen3_exp_hello_diagnostics.py tests/unit/test_gen3_exp_mon_given.py tests/unit/test_gen3_exp_pack.py tests/unit/test_gen3_exp_pc_chain_fixture.py tests/unit/test_gen3_exp_pc_negative_legs.py tests/unit/test_gen3_exp_pc_receipt.py tests/unit/test_gen3_exp_player_gender.py tests/unit/test_gen3_exp_reads.py tests/unit/test_gen3_exp_release_row.py tests/unit/test_gen3_exp_safety.py tests/unit/test_gen3_exp_script_mirror_scope.py tests/unit/test_gen3_exp_signal_mirror.py tests/unit/test_gen3_exp_sites.py tests/unit/test_gen3_exp_static_wild_rows.py tests/unit/test_gen3_exp_whiteout_fixture.py tests/unit/test_gen3_expansion_adapter.py tests/unit/test_gen3_expansion_calc_names.py tests/unit/test_gen3_expansion_faint_oracle.py tests/unit/test_gen3_expansion_gift_policy.py tests/unit/test_gen3_expansion_gifts.py tests/unit/test_gen3_expansion_masks.py tests/unit/test_gen3_expansion_refusal.py tests/unit/test_gen3_expansion_towns.py tests/unit/test_gen3_expansion_trainer_panel.py tests/unit/test_gen3_expansion_trainer_sets.py tests/unit/test_gen3_expansion_wild.py tests/unit/test_gen3_expansion_wild_rom.py tests/unit/test_gen3_final_cut.py tests/unit/test_gen3_final_cut_exp.py tests/unit/test_gen3_fixture_exp.py tests/unit/test_gen3_title_syms_exp.py tests/unit/test_gen_expansion_facts.py -q -p no:randomly -rs   (cwd=C:/slink-wt/exp-fc-43e534ba-s1)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-43e534ba-s1\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-43e534ba-s1\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-43e534ba-s1\.cache\x1-probe\probe.o
+# verdict: FAIL skipped, and ALLOWED_SKIPS does not excuse it
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T10:13:46 cpu=100% emuhawk=1 python=35
+start_utc=2026-10-02T14:13:44Z tracked_clean_before=True
+EXPANSION_CUT requested=43e534ba35916b2648cf720a092fbf08c7cbf969 before=43e534ba35916b2648cf720a092fbf08c7cbf969
+........................................................................ [  7%]
+..sssssssss............................................................. [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 37%]
+........................................................................ [ 44%]
+........................................................................ [ 52%]
+........................................................................ [ 59%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 82%]
+........................................................................ [ 89%]
+........................................................................ [ 96%]
+.............................                                            [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\unit\test_extract_expansion_data.py:39: Emerald ROM absent: C:\slink-wt\exp-fc-43e534ba-s1\Pokemon - Emerald Version (USA, Europe).gba
+SKIPPED [1] tests\unit\test_extract_expansion_data.py:53: Emerald ROM absent: C:\slink-wt\exp-fc-43e534ba-s1\Pokemon - Emerald Version (USA, Europe).gba
+SKIPPED [6] tests\unit\test_extract_expansion_data.py:71: Emerald ROM absent: C:\slink-wt\exp-fc-43e534ba-s1\Pokemon - Emerald Version (USA, Europe).gba
+SKIPPED [1] tests\unit\test_extract_expansion_data.py:81: Emerald ROM absent: C:\slink-wt\exp-fc-43e534ba-s1\Pokemon - Emerald Version (USA, Europe).gba
+956 passed, 9 skipped in 850.95s (0:14:10)
+
+EXPANSION_CUT after=43e534ba35916b2648cf720a092fbf08c7cbf969
+exit=0 end_utc=2026-10-02T14:28:02Z tracked_clean_after=True classification=real

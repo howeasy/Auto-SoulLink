@@ -1,0 +1,11 @@
+SOURCE=9094ef93c5b1e92434a2477531f2b7f2cc2851e8; SEED-PENDING native CONTINUE/SAVE only; no acquisition
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=514 map=0.10 pos=(6,17)
+phase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=596 counter=2
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=2->3
+phase flushed frame=1587 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+BOX0_FULL_PENDING_NATIVE_SAVE_PASS {"seed": "tests/fixtures/gen3/exp_pc.sav", "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a", "raw_sha256": "69c3d7bab6907ed02290efbea897454119ef829d503fa2ba65375086a4023455", "file": "tests/fixtures/gen3/exp_pc_box0_full_synth.sav", "sha256": "79c19313a21d794dbfe1de4e0f0e7da8b23f3d7f445c8b63dca6515b23f4df04", "source": "9094ef93c5b1e92434a2477531f2b7f2cc2851e8", "counter": [2, 3], "evidence": "SEED-PENDING SOURCE/MODEL + native CONTINUE/SAVE; box0 exactly30, others empty; no deposit refusal or positive sibling demonstrated", "qualification": "docs/gen3_emerald/probes/exp_box0_full_seed_console.txt"}

@@ -1,0 +1,15 @@
+cut=8e3486d9f55562f42f3fe524370ed1729504a800
+script=lua/tests/gen3_scripted_play.lua
+fixture=tests\fixtures\gen3\exp_pc.sav
+fixture_sha256=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a
+rom_sha1=28877d733492299599f2b8fff50493109d72653c
+source_script_sha256=ef85b97dca2daec0978b283e34bf3c290c9bb74dd4fa8e1d2157863be85bb86f
+from=emerald_enter_pc
+stop_after=emerald_pc_release_cancel
+state=None
+result=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_8e3486d9_20261002T004234Z_normal_result.txt
+shadow=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_8e3486d9_20261002T004234Z_normal.shadow.log
+shadow_source=C:\slink-wt\exp-xg3\patch\build\gen3_scripted_play_emerald_result.shadow.log
+shadow_archive_recovered=true
+observed_bypass_window=5813..6991 pc_release_begin=0 pc_release_frame=6609 observer_status_rows=11
+passed=False
