@@ -11,7 +11,8 @@
   - n's raw per-case case is a coverage FAIL: `static_pc=false/reset=false`, queued-event-at-close not exercised.
   - b: the wrong-overlay collision was not observed.
   - f: PERF, blocked by foreign EmuHawks.
-- **Row o at `6290dd3a`:** all 4 PASS (consume_receipt verified): `g1b-hg1-1119`, `g1b-hg2-1122`, `g1b-hge1-1123`, `g1b-hge2-1124`. The HG pair stays current at `aa45dd94`; the hge pair is STALE (hge pack changed) and needs a re-run.
+- **Row o, all 4 current PASS at `aa45dd94`** (consume_receipt verified by the coordinator): HG `g1b-hg1-1119` and `g1b-hg2-1122` (from 6290, still current); hge re-runs `g1c-hge1-1222` and `g1c-hge2-1224` (the 6290 hge pair is historical/stale).
+- **hge k replay (scratch, not frozen):** `.cache/gen4-next-cut/replay_hge_rtc_frame.py` is red on 977/979 for the next cut.
 - **hge at `aa45dd94`** (`C:/slink/g4/g1cprobeHGE-1215/heartgold_hge-08256aad427a/combined.txt`, coordinator-verified): a,c,d,e,g,h,i,j,l PASS; **b FAIL, k FAIL**; f/m/n/o OPEN; missed=[]; RESULT FAIL.
   - c: 20/20 transitions matched, including 129/131 at lag 1.
   - **k FAIL: "RTC compared at different frame counts" (977 vs 979).** The bytes are identical, so this is a harness sampling point that drifts with boot length. Codex's note misreported it as PASS. Next cut: a red-first fixed-frame k sample.
