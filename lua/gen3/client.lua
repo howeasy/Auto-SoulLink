@@ -485,7 +485,11 @@ function Client.new(p)
         end
         if found then return end
         -- party full: the mon went to the PC (SendMonToPC)
+        local before_n, known_boxed = #st.box_cache, 0
+        for _, e in ipairs(st.box_cache) do if st.known[e.key] then known_boxed = known_boxed + 1 end end
         rescan_boxes()
+        log(string.format("acquisition boxes: cache before=%d (known %d) now=%d ok=%s gen=%d",
+                          before_n, known_boxed, #st.box_cache, tostring(st.boxes_ok), st.box_generation))
         local fresh = {}
         for _, e in ipairs(st.box_cache) do
             if e.is_egg == 1 then st.eggs[e.key] = true end
@@ -1174,6 +1178,8 @@ function Client.new(p)
         -- capture right after the hello. Only the very first baseline is taken here.
         if not st.baselined and not hidden then
             seed_known(own)                                    -- box-key seeding at connect
+            log(string.format("baseline(hello): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #own))
             rebaseline(party)
             st.baselined = true
             -- the quiet interval starts from THIS count: a mon added after hello is a change
@@ -1499,7 +1505,16 @@ function Client.new(p)
         if not party then return end
         update_frozen(party)
         if st.frozen or recovery_hidden() then return end      -- withheld RAM is never a baseline
-        if not st.baselined then rescan_boxes(); st.baselined = true end
+        if not st.baselined then
+            rescan_boxes(); st.baselined = true
+            log(string.format("baseline(quiet): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #party))
+        end
+        -- A settled quiet count-change re-baselines the boxes with the party. A cold boot
+        -- baselines at party=0 / boxes n=0 before CONTINUE loads the save; without this rescan
+        -- the pre-existing boxed keys stay unknown and the next boxed gift reads as ambiguous.
+        -- Quiet frames only (st.flags empty above): a new boxed mon signals on its own frame.
+        rescan_boxes()
         seed_known(party)
         st.seen_count = count
     end
