@@ -44,6 +44,17 @@
 2. Codex runs the bound landing re-runs, at most 2 lanes: PC deposit/SAVE/reload, catch and hatch on HG/SS/hge, plus faint on HG/hge (one-mon and 2-mon).
 3. The coordinator presents the G2 cell table (`G2_PRODUCER_PLAN.md` §6) for the owner signature, then STOPS.
 
+**Queued after the G2 re-runs** (it touches frozen surface files): OMP cx-3bab37d5's review of `3f5f447d`.
+1. **F1 MAJOR:** `place` never writes SavedMapObject `vecY` (+0x2C, the world height restored at `map_object.c:494-496`), and `--height` writes only `currentY`. Either refuse a cross-map place, or write `vecY`, and pin +0x2C in the tests.
+2. **F5:** the save_state cite should be `:365-374`.
+3. **F3:** derive the FieldSystem-level probe key set instead of hand-listing it.
+4. **F2:** the temp-flag branch is dead; the tests should assert reasons.
+5. **F4:** pin `bics`/`str` at +0x54/+0x58.
+6. **F6:** hgss map_objects 0x2348 IS summable (SOURCE+FILE).
+7. **F7:** there is no map-bounds gate.
+8. **F8:** read VAR_BASE/NUM_VARS from the pack.
+9. **F9:** document that all five Locations are written.
+
 **Open owner items:** ruling 35 at G2. Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
 
 
