@@ -13,9 +13,9 @@ Both generations keep a table of loaded overlays and both let a hook site live i
 differ, the pitfalls do not:
 
 - the entry becomes **active before the load is known to have succeeded**; a failed load leaves the entry
-  active (no rollback), so the flag can **lead** the real code (Gen 5: FILE, `rom_overlay_loader.md`);
+  active (no rollback), so the flag can **lead** the real code (Gen 5: INFERRED from the loader instructions, `rom_overlay_loader.md`; no runtime measurement yet);
 - on unload `active` is cleared but the **id stays**, so an id match alone is meaningless;
-- aliased overlays (Gen 5 B2W2 ov11 / ov12 at `0x02150400`, any pair sharing RAM) can put other bytes where a
+- aliased overlays (Gen 5 B2W2 ov11 / ov12 at `0x021503C0` (Black 2) / `0x02150400` (White 2; White 2 is +0x40, `rom_structure.md`), any pair sharing RAM) can put other bytes where a
   site was registered.
 
 The Gen 4 `NDS.resident` (`lua/nds/hook_binding.lua`, Gen 4 branch) hard-asserts the HGSS geometry

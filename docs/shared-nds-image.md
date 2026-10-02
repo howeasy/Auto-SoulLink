@@ -109,10 +109,10 @@ for non-TCM blocks). Autoload data runs contiguously from `autoload_start` in li
 
 - Classification by RAM base: ITCM `0x01FF8000..0x02000000`; DTCM
   `0x027E0000`(Gen 4) or `0x02FE0000`(Gen 5), 16 KiB. Both DTCM bases and the 12-byte
-  row width are exercised by synthetic fixtures (`test_gen4_12_byte_rows_...`).
+  row width are exercised by synthetic fixtures (`test_gen4_12_byte_rows_classify_itcm_and_dtcm_at_the_gen4_bases`).
 - **Row width is not fixed.** FILE: the Gen 4 SDK (SoulSilver, hg-engine) uses 12-byte
   rows `{ram, size, bss}`; the Gen 5 SDK uses **16-byte** rows `{ram, size, ram-again,
-  bss}` (the third word equals the RAM base in all four ROMs, meaning unknown). The
+  bss}` (the third word equals the RAM base in all four ROMs, meaning unknown; the proof is indirect: the 16-byte width is only accepted when it holds, `nds_image.py` width selection, and the four-ROM retail test tiles with it; the research names it `sinit`, a name that is not established). The
   width is chosen by requiring the entry sizes to sum to `autoload_list_start -
   autoload_start`; an ambiguous or non-tiling table is refused (`entry_size=` overrides).
 - Row sanity (refused, `ImageError`): a row with RAM address 0 or size 0, and a 16-byte
@@ -141,7 +141,7 @@ FILE (decoded ARM9 offsets), all four ROMs share the DTCM/other rows:
 
 For the Gen 4 mailbox-arena candidate: SoulSilver/hg-engine ITCM is 0x01FF8000 size
 0x620 (DTCM 0x027E0000 size 0x60 bss 0x20), consistent with an ITCM tail
-0x01FF8620..0x02000000 (FILE, read-only).
+0x01FF8620..0x02000000 (Gen 4 coordinator measurement, census W1-W3, commit 29febbf3 on claude/gen4-support-framework-dfd5e2; read-only; not requalified in this worktree, no test here asserts 0x620).
 
 ## Tests and memory
 
