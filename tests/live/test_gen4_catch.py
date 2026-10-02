@@ -350,21 +350,49 @@ def test_judge_wrong_capture_branch_is_load_bearing(clause, needle, obs, mons, v
     assert slipped, f"{clause}: removing the clause no longer matters"
 
 
-def test_verdict_receipt_is_bound_at_consumption(tmp_path):
-    """verdict.json carries HEAD + the probe script hash; a moved HEAD or an edited probe is STALE."""
+def _verdict_doc(**over):
     from tools import gen4_routes as routes
 
-    binding = routes.receipt_binding(SCRIPT, extra_modules=("tests/live/test_gen4_catch.py",))
-    assert binding["script"] == "lua/tests/probe_gen4_catch.lua"
-    assert binding["script_sha256"] == digest(SCRIPT)
-    path = tmp_path / "verdict.json"
-    path.write_text(json.dumps({**binding, "verdict": "PASS"}), encoding="utf-8")
-    assert routes.verify_receipt(path, head=binding["source_head"])[0] == "PASS"
-    assert routes.verify_receipt(path, head="0" * 40)[0] == "STALE"
-    path.write_text(
-        json.dumps({**binding, "script_sha256": "0" * 64, "verdict": "PASS"}), encoding="utf-8"
+    doc = {
+        **routes.receipt_binding(SCRIPT, kind="catch"),
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
+        "verdict": "PASS",
+    }
+    return {**doc, **over}
+
+
+def test_verdict_receipt_is_bound_at_consumption(tmp_path):
+    """verdict.json carries HEAD, the probe script + hash, every required module hash and the pinned ROM."""
+    from tools import gen4_routes as routes
+
+    doc = _verdict_doc()
+    assert doc["script"] == "lua/tests/probe_gen4_catch.lua" and doc["script_sha256"] == digest(
+        SCRIPT
     )
-    assert routes.verify_receipt(path, head=binding["source_head"])[0] == "STALE"
+    path = tmp_path / "verdict.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert routes.verify_receipt(path, "catch", head=doc["source_head"])[0] == "PASS"
+    assert routes.verify_receipt(path, "catch", head="0" * 40)[0] == "STALE"
+    path.write_text(json.dumps(_verdict_doc(script_sha256="0" * 64)), encoding="utf-8")
+    assert routes.verify_receipt(path, "catch", head=doc["source_head"])[0] == "STALE"
+
+
+def test_a_route_receipt_does_not_pass_as_a_catch_verdict(tmp_path):
+    from tools import gen4_routes as routes
+
+    route_doc = {
+        **routes.receipt_binding(),
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
+        "final_status": "PC_DEPOSIT",
+    }
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(route_doc), encoding="utf-8")
+    assert routes.verify_receipt(path, "route", head=route_doc["source_head"])[0] == "PASS"
+    assert (
+        routes.verify_receipt(path, "catch", head=route_doc["source_head"])[0] == "STALE"
+    )  # wrong script/kind
 
 
 def test_synth_bag_sidecar_checked(tmp_path):
@@ -447,11 +475,13 @@ def test_live_wild_capture():
     from tools import gen4_routes as routes
 
     # bound at consumption: HEAD + the probe script + every module the verdict depended on
-    binding = routes.receipt_binding(SCRIPT, extra_modules=("tests/live/test_gen4_catch.py",))
+    binding = routes.receipt_binding(SCRIPT, kind="catch")
     (lane / "verdict.json").write_text(
         json.dumps(
             {
                 **binding,
+                "title": TITLES["title"],
+                "rom_sha1": payload.get("rom_sha1"),
                 "verdict": verdict,
                 "reason": why,
                 "game": GAME,

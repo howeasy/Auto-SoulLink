@@ -1193,51 +1193,152 @@ def test_plan_hatch_paces_between_two_plain_tiles_and_skips_grass_coord_and_warp
 
 
 # --- receipts bound at consumption (verify_receipt) ------------------------------------------------
-def _bound_receipt(tmp_path, **over):
+HEAD = "a" * 40
+
+
+def _route_doc(**over):
+    from tools import gen4_pins
+
     doc = {
-        "source_head": "a" * 40,
-        "script": "lua/tests/gen4_route_play.lua",
-        "script_sha256": gr._sha256(gr.LUA),
-        "module_sha256": {"tools/gen4_routes.py": gr._sha256(gr.REPO / "tools/gen4_routes.py")},
+        **gr.receipt_binding(),
+        "source_head": HEAD,
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
         "final_status": "PC_DEPOSIT",
-        **over,
     }
+    return {**doc, **over}
+
+
+def _catch_doc(**over):
+    from tools import gen4_pins
+
+    doc = {
+        **gr.receipt_binding(kind="catch"),
+        "source_head": HEAD,
+        "title": "soulsilver",
+        "rom_sha1": gen4_pins.ROM_SPECS["soulsilver"][0],
+        "verdict": "PASS",
+    }
+    return {**doc, **over}
+
+
+def _consume(tmp_path, doc, kind="route"):
     path = tmp_path / "receipt.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
-    return path
+    return gr.verify_receipt(path, kind, head=HEAD)
 
 
-def test_verify_receipt_passes_only_a_receipt_bound_to_this_tree(tmp_path):
-    head = "a" * 40
-    assert gr.verify_receipt(_bound_receipt(tmp_path), head=head)[0] == "PASS"
-    assert (
-        gr.verify_receipt(_bound_receipt(tmp_path, final_status="HATCH_OK"), head=head)[0] == "PASS"
-    )
-    assert (
-        gr.verify_receipt(_bound_receipt(tmp_path, final_status="RESYNC_LOOP"), head=head)[0]
-        == "FAIL"
-    )
-    assert gr.verify_receipt(_bound_receipt(tmp_path, final_status="OPEN"), head=head)[0] == "OPEN"
+def test_verify_receipt_passes_only_a_receipt_bound_to_this_tree(tmp_path, monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"  # baseline green before any fault
+    assert _consume(tmp_path, _route_doc(final_status="HATCH_OK"))[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(final_status="RESYNC_LOOP"))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(final_status="OPEN"))[0] == "OPEN"
+    assert _consume(tmp_path, _catch_doc(), "catch")[0] == "PASS"
+    assert _consume(tmp_path, _catch_doc(verdict="FAIL"), "catch")[0] == "FAIL"
 
 
-@pytest.mark.parametrize("fault", ["head", "script", "module", "unbound_head", "unbound_modules"])
-def test_verify_receipt_is_stale_never_pass(tmp_path, fault):
+@pytest.mark.parametrize(
+    "fault", ["head", "script_hash", "module_hash", "unbound_head", "no_modules"]
+)
+def test_verify_receipt_is_stale_never_pass(tmp_path, monkeypatch, fault):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    mods = dict(_route_doc()["module_sha256"])
     over = {
         "head": {"source_head": "b" * 40},
-        "script": {"script_sha256": "0" * 64},
-        "module": {"module_sha256": {"tools/gen4_routes.py": "0" * 64}},
+        "script_hash": {"script_sha256": "0" * 64},
+        "module_hash": {"module_sha256": {**mods, "tools/gen4_routes.py": "0" * 64}},
         "unbound_head": {"source_head": ""},
-        "unbound_modules": {"module_sha256": {}},
+        "no_modules": {"module_sha256": {}},
     }[fault]
-    verdict, why = gr.verify_receipt(_bound_receipt(tmp_path, **over), head="a" * 40)
+    verdict, why = _consume(tmp_path, _route_doc(**over))
     assert verdict == "STALE", why
-    # a passing status does not rescue a stale receipt; the same receipt, unfaulted, passes
-    assert gr.verify_receipt(_bound_receipt(tmp_path), head="a" * 40)[0] == "PASS"
 
 
 def test_a_missing_bound_file_is_stale(tmp_path):
-    path = _bound_receipt(tmp_path, script="lua/tests/no_such_script.lua")
-    assert gr.verify_receipt(path, head="a" * 40)[0] == "STALE"
+    path = tmp_path / "r.json"
+    mods = _route_doc()["module_sha256"]
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    doc = _route_doc(module_sha256={**mods, "lua/gen4/no_such_module.lua": "0" * 64})
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert gr.verify_receipt(path, "route", head=HEAD)[0] == "STALE"
+
+
+def test_b1_a_trimmed_receipt_is_refused_for_each_required_module(tmp_path):
+    """B1: module_sha256 must be a superset of the kind's required set; dropping any one hash is STALE."""
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    for kind, doc_fn in (("route", _route_doc), ("catch", _catch_doc)):
+        full = doc_fn()
+        assert _consume(tmp_path, full, kind)[0] == "PASS"
+        for mod in gr.RECEIPT_KINDS[kind]["modules"]:
+            trimmed = {k: v for k, v in full["module_sha256"].items() if k != mod}
+            verdict, why = _consume(tmp_path, {**full, "module_sha256": trimmed}, kind)
+            assert verdict == "STALE" and mod in why, (kind, mod, why)
+
+
+def test_b2_the_script_must_be_the_kinds_script(tmp_path):
+    """B2: a receipt hashing some OTHER (even unchanged) Lua script is not evidence for this kind."""
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    other = "lua/tests/probe_gen4_catch.lua"
+    doc = _route_doc(script=other, script_sha256=gr._sha256(gr.REPO / other))
+    verdict, why = _consume(tmp_path, doc)
+    assert verdict == "STALE" and "not the route script" in why
+    assert (
+        _consume(tmp_path, _catch_doc(script="lua/tests/gen4_route_play.lua"), "catch")[0]
+        == "STALE"
+    )
+
+
+def test_b4_the_rom_is_bound_to_the_pinned_title_rom(tmp_path):
+    """B4: rom_sha1 must equal the pinned ROM of the receipt's title; absent is unbound, wrong is FAIL."""
+    from tools import gen4_pins
+
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(rom_sha1="0" * 40))[0] == "FAIL"
+    # the SS ROM is not the HG ROM: a receipt cannot claim one title and ship the other's artifact
+    ss = gen4_pins.ROM_SPECS["soulsilver"][0]
+    assert _consume(tmp_path, _route_doc(rom_sha1=ss))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(title="soulsilver", rom_sha1=ss))[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(title="no_such_title"))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(rom_sha1=""))[0] == "STALE"
+    assert _consume(tmp_path, _route_doc(title=""))[0] == "STALE"
+
+
+def test_b5_a_receipt_of_one_kind_never_passes_as_the_other(tmp_path):
+    """B5: the expected kind picks the script, modules and passing statuses."""
+    route, catch = _route_doc(), _catch_doc()
+    assert (
+        _consume(tmp_path, route, "route")[0] == "PASS"
+        and _consume(tmp_path, catch, "catch")[0] == "PASS"
+    )
+    assert _consume(tmp_path, route, "catch")[0] != "PASS"
+    assert _consume(tmp_path, catch, "route")[0] != "PASS"
+    # a route-status verdict under the catch kind, and a PASS verdict under the route kind, are not passes
+    assert _consume(tmp_path, _catch_doc(verdict="PC_DEPOSIT"), "catch")[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(final_status="PASS"), "route")[0] == "FAIL"
+    with pytest.raises(KeyError):
+        _consume(tmp_path, route, "nonsense")
+
+
+def test_every_lua_dofile_is_in_the_bound_module_set():
+    """The scripts' own dofile/loadfile/require targets must all be hashed in their kind's module set."""
+    pat = re.compile(r"""(?:dofile|loadfile|require)\s*\(\s*[^"')]*["']/?([\w./-]+?)["']""")
+    for kind, script in (("route", gr.LUA), ("catch", gr.REPO / "lua/tests/probe_gen4_catch.lua")):
+        text = script.read_text(encoding="utf-8")
+        found = {m.group(1) for m in pat.finditer(text)}
+        assert found, f"{script.name}: no dofile target found (pattern drifted)"
+        bound = set(gr.RECEIPT_KINDS[kind]["modules"])
+        assert {f for f in found if f.endswith(".lua")} <= bound, (kind, found - bound)
+    assert {"lua/json_codec.lua", "lua/gen4/reads.lua", "lua/gen4/pk4.lua"} <= set(
+        gr.RECEIPT_KINDS["route"]["modules"]
+    )
+    assert "lua/json_codec.lua" in gr.RECEIPT_KINDS["catch"]["modules"]
+    # a script growing an unbound dofile is caught: the check on a synthetic script text
+    extra = pat.findall('local X = dofile(REPO .. "/lua/gen4/new_module.lua")')
+    assert (
+        extra == ["lua/gen4/new_module.lua"] and "lua/gen4/new_module.lua" not in gr.BOUND_MODULES
+    )
 
 
 def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monkeypatch):
@@ -1247,5 +1348,10 @@ def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monk
     assert b["script_sha256"] == gr._sha256(gr.LUA)
     assert set(gr.BOUND_MODULES) <= set(b["module_sha256"])
     synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
-    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], {"status": "PC_DEPOSIT", "detail": "d"})
+    rec = gr.build_receipt(
+        "SS", "s.SaveRAM", synth, [], {"status": "PC_DEPOSIT", "detail": "d"}, "f" * 40
+    )
     assert {k: rec[k] for k in b} == b
+    assert (
+        rec["title"] == "soulsilver" and rec["rom_sha1"] == "f" * 40
+    )  # B4: the title and ROM travel

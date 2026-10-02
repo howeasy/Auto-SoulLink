@@ -975,7 +975,31 @@ BOUND_MODULES = (
     "data/games/gen4_hgss/profile.json",
     "data/games/gen4_hge/profile.json",
 )
-PASS_STATUSES = ("PC_DEPOSIT", "HATCH_OK", "PASS")
+# Per receipt kind: the Lua script that must have run, the modules whose hashes MUST be present (a trimmed
+# receipt is refused), and the statuses that count as a pass. A receipt of one kind never passes as the other.
+RECEIPT_KINDS = {
+    "route": {
+        "script": "lua/tests/gen4_route_play.lua",
+        "modules": BOUND_MODULES,
+        "status_key": "final_status",
+        "pass": ("PC_DEPOSIT", "HATCH_OK"),
+    },
+    "catch": {
+        "script": "lua/tests/probe_gen4_catch.lua",
+        "modules": (
+            "lua/json_codec.lua",
+            "tests/live/test_gen4_catch.py",
+            "tools/gen4_routes.py",
+            "tools/gen4_fixtures.py",
+            "tools/gen4_pins.py",
+            "server/adapters/gen4_codec.py",
+            "data/games/gen4_hgss/profile.json",
+            "data/games/gen4_hge/profile.json",
+        ),
+        "status_key": "verdict",
+        "pass": ("PASS",),
+    },
+}
 
 
 def _sha256(path) -> str:
@@ -986,10 +1010,12 @@ def git_head() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
 
 
-def receipt_binding(script=None, extra_modules=()) -> dict:
-    """source_head + script_sha256 + module_sha256 for a receipt produced now, from this tree."""
-    script = Path(script or LUA)
-    mods = {m: _sha256(REPO / m) for m in (*BOUND_MODULES, *extra_modules)}
+def receipt_binding(script=None, extra_modules=(), kind: str = "route") -> dict:
+    """source_head + script + script_sha256 + module_sha256 for a receipt produced now, from this tree.
+    The module set is the kind's required set (RECEIPT_KINDS) plus any extras."""
+    spec = RECEIPT_KINDS[kind]
+    script = Path(script or REPO / spec["script"])
+    mods = {m: _sha256(REPO / m) for m in (*spec["modules"], *extra_modules)}
     return {
         "source_head": git_head(),
         "script": script.resolve().relative_to(REPO).as_posix(),
@@ -998,14 +1024,22 @@ def receipt_binding(script=None, extra_modules=()) -> dict:
     }
 
 
-def verify_receipt(path, *, head: str | None = None) -> tuple[str, str]:
-    """Consume a receipt/verdict JSON: (verdict, reason). STALE when it is unbound or any of its
-    source_head / script_sha256 / module_sha256 differs from the tree now; otherwise the receipt's own
-    status decides (PASS only for a passing status, FAIL for any other). Never PASS when stale."""
+def verify_receipt(path, kind: str, *, head: str | None = None) -> tuple[str, str]:
+    """Consume a receipt/verdict JSON of `kind` ("route" | "catch"): (verdict, reason).
+    STALE when it is unbound, trimmed (a required module hash absent), names the wrong script for its
+    kind, or any of source_head / script_sha256 / module_sha256 differs from the tree now. FAIL when the
+    ROM it ran on is not the pinned ROM of its title. Otherwise the receipt's own status for THIS kind
+    decides (PASS only for that kind's passing statuses; another kind's status is FAIL)."""
+    spec = RECEIPT_KINDS[kind]
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    for key in ("source_head", "script", "script_sha256", "module_sha256"):
+    for key in ("source_head", "script", "script_sha256", "module_sha256", "title", "rom_sha1"):
         if not doc.get(key):
             return "STALE", f"unbound receipt: {key} absent"
+    if doc["script"] != spec["script"]:
+        return "STALE", f"script {doc['script']} is not the {kind} script {spec['script']}"
+    missing = sorted(set(spec["modules"]) - set(doc["module_sha256"]))
+    if missing:
+        return "STALE", f"trimmed receipt: module hashes absent for {missing}"
     head = head or git_head()
     if doc["source_head"] != head:
         return "STALE", f"source_head {doc['source_head'][:8]} != HEAD {head[:8]}"
@@ -1016,16 +1050,25 @@ def verify_receipt(path, *, head: str | None = None) -> tuple[str, str]:
         mod = REPO / rel
         if not mod.is_file() or _sha256(mod) != digest:
             return "STALE", f"module {rel} changed since the run"
-    status = doc.get("final_status") or doc.get("verdict")
-    if status in PASS_STATUSES:
+    from tools import gen4_pins
+
+    pin = gen4_pins.ROM_SPECS.get(doc["title"])
+    if pin is None or doc["rom_sha1"] != pin[0]:
+        return "FAIL", f"rom {doc['rom_sha1']} is not the pinned {doc['title']} ROM"
+    status = doc.get(spec["status_key"])
+    if status in spec["pass"]:
         return "PASS", "bound to the current tree"
-    return ("OPEN" if status == "OPEN" else "FAIL"), f"receipt status {status}"
+    return ("OPEN" if status == "OPEN" else "FAIL"), f"{kind} receipt status {status}"
 
 
-def build_receipt(game, save, synth: dict, legs: list[dict], final: dict) -> dict:
+def build_receipt(
+    game, save, synth: dict, legs: list[dict], final: dict, rom_sha1: str | None = None
+) -> dict:
     """The run's receipt: SYNTH label + sidecar hash first, then each leg's status line."""
     return {
         **receipt_binding(),
+        "title": GAMES[game][1],  # the pinned-ROM key (tools/gen4_pins.py ROM_SPECS)
+        "rom_sha1": rom_sha1,
         "setup": synth["setup"],
         "sidecar": synth["sidecar"],
         "sidecar_sha256": synth["sidecar_sha256"],
@@ -1161,7 +1204,8 @@ def run_lane(
         lane_saveram_dir=ld / "SaveRAM",
     )
     rom_staged = stage_rom(rom, ld)
-    saved_path = stage_save(save, ld, sha1_of(rom_staged), rom_basename=rom_staged.name)
+    rom_sha1 = sha1_of(rom_staged)
+    saved_path = stage_save(save, ld, rom_sha1, rom_basename=rom_staged.name)
     world = load_world(rom, pret)
     start = save_position(save, game)
     err = load_errand(rom, pret, errand, start["map"]) if errand else None
@@ -1256,7 +1300,7 @@ def run_lane(
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
         if kind:
-            result["receipt"] = build_receipt(game, save, synth, history, result)
+            result["receipt"] = build_receipt(game, save, synth, history, result, rom_sha1)
             (ld / f"{tag}_receipt.json").write_text(
                 json.dumps(result["receipt"], indent=1), encoding="utf-8"
             )
