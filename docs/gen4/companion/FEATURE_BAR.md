@@ -180,3 +180,19 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - hge hooks only `GF_Snd_LoadSeq` and `GF_Snd_LoadSeqEx` (`hooks:290-291`).
   - Its own `include/sound.h:46-50` declares the same `SND_WORK` with the `unk_BEB78` handle array, which its `src/sound.c` uses.
   - The SE id table is value-identical across 1373 shared ids. So the vanilla handle poll plan stands for all three artifacts.
+
+## Full-party decision (OMP cx-f329e1ef, coordinator-verified; pinned pret + hge fork)
+
+- **Vanilla never routes a received mon to the PC.**
+  - `GiveMon` returns `Party_AddMon`'s BOOL, which is FALSE on a full party, with no box fallback (`src/script_pokemon_util.c:38-45`, `src/party.c:46-49`).
+  - hge's own `GiveMon` (`hg-engine/src/pokemon.c:1357-1400`) is the same: `PokeParty_Add`, no fallback. hge widens the script retvar to u16 (`armips/asm/abilities.s:44`), so a companion that reads it handles it per title.
+  - The starter gift refuses up front on `GetPartyCount == 6` with one message (`scr_seq_0740_T01R0301.s:602-605,691-697`).
+  - The only script-reachable box deposit is Pal Park, which `GF_ASSERT`s the placement (`src/scrcmd_12.c:68`).
+- **The native trade shape is slot overwrite.**
+  - The NPC trade picks a party slot with `GetPartySelection` (255 = cancel) and overwrites it via `Party_SafeCopyMonToSlot_ResetAprijuiceModifiers` (`src/npc_trade.c:153-156`). A full party cannot arise.
+  - That is also the Gen 1/2 link-trade shape (send one, receive into that slot). **The companion trade copies it: choose a slot, the party arm overwrites, no capacity question.**
+- **The box arm is NEW behaviour, not mimicry.** If C5 keeps it (e.g. deliver-to-box with no outgoing mon):
+  - copy the only native room-anywhere ordering, `CountPCEmptySpace` then `GetPartyCount == 6` (`scr_seq_0119_D47R0101.s:580-586`);
+  - handle a FALSE from `PCStorage_PlaceMonInFirstEmptySlotInAnyBox` as a message, never an assert;
+  - use a writable 0x88 scratch.
+  - Whether C5 needs a box arm at all is a C5 design decision. Open.
