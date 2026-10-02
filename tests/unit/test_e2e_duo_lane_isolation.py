@@ -540,7 +540,9 @@ def test_the_window_offset_leaves_lane_zero_and_primary_alone(monkeypatch, tmp_p
 # ── the pureRGB pairing row ─────────────────────────────────────────────────────────────────────
 
 
-def test_the_pure_pairing_row_names_the_staged_builds_and_its_fixtures():
+def test_the_pure_pairing_row_names_its_clean_sources_and_its_fixtures():
+    """`rom` is the clean pinned build: the instances boot the overlay (`patched_saves`), and only
+    admit_randomized_new reads these, as the sources its randomized companion pair is made from."""
     row = duo.GAMES["gen1_pure"]
     assert row["main"] == duo.GAMES["gen1_new"]["main"]      # same driver, same scenarios
     assert row["game"] == "gen1_new"                         # the scenario registry selects on this

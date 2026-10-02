@@ -4523,7 +4523,7 @@ class DuoRun:
             with self._timed(f"launch_{inst}"):
                 self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
             if b_first and inst == "b":
-                self.wait_for("clean B's contract verdict before A launches", lambda: (
+                self.wait_for("un-randomized companion B's contract verdict before A launches", lambda: (
                     ((self._status() or {}).get("players") or {}).get("b", {})
                     .get("admission") == "rejected"), 120)
         print("[duo] two EmuHawk instances launched")
@@ -7291,7 +7291,8 @@ class DuoRun:
             return (status if a.get("admission") == "admitted" and a.get("admission_reason")
                     and b.get("admission") == "rejected" else None)
 
-        status = self.wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
+        status = self.wait_for("randomized A admitted and un-randomized companion B rejected",
+                               both_verdicts, 180)
         a, b = status["players"]["a"], status["players"]["b"]
         if a.get("admission_reason") != "cartridge matches the contract":
             raise RuntimeError(f"A admission reason differs: {a.get('admission_reason')!r}")
@@ -7339,17 +7340,17 @@ class DuoRun:
         if ("[a] admission: admitted — cartridge matches the contract" not in log_text
                 or "[b] admission: rejected — " + reason not in log_text):
             raise RuntimeError("slink.log omitted an admission transition")
-        self._pydec_note(f"F-4 public verdicts: A admitted, clean B rejected; "
+        self._pydec_note(f"F-4 public verdicts: A admitted, un-randomized companion B rejected; "
                          f"expected={want[:12]} reported={got[:12]} (admission-only, no save mutation)")
         self._live_complete["admit_randomized_new"] = True
 
     def assert_admit_randomized_saved(self, results):
         """F-4's saved half, with explicit provenance for both cartridges.
 
-        A runs the STAGED randomized Red, whose SaveRAM carries the filename-derived name
-        BizHawk resolves for a hash it does not know — so the default read would qualify the
-        untouched clean-name seed against the clean ROM and prove nothing. B's readback shows
-        the rejected cartridge's save was not touched by the server: party and current box
+        A runs the STAGED randomized companion Red, whose SaveRAM carries the filename-derived
+        name BizHawk resolves for a hash it does not know (`_gen1_save_name`, the one name it was
+        seeded under), qualified against that staged ROM. B -- the un-randomized companion build --
+        shows the rejected cartridge's save was not touched by the server: party and current box
         unchanged from the seed it booted with, its rejection the only durable record, and none
         of its keys anywhere in links.json.
         """

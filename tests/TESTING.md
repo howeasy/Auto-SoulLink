@@ -478,7 +478,7 @@ Committed, both generations:
 
 | Fixture | Rebuild |
 |---|---|
-| `tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM` | `python tools/gen1_playthrough.py --rom red --target town` |
+| `tests/fixtures/gen1/{red,blue,yellow,purered,pureblue,puregreen}_{town,battle}.SaveRAM`, `{red,purered}_town_ot2.SaveRAM` | `python tools/gen1_fixtures.py red town` (`--qualify` re-checks the committed set, no emulator). Scripted play boots the COMPANION cartridge, since the harness refuses a clean Red/Blue/pureRGB: Red/Blue on `*_patched_cold`, so run `python patch/gen1/tools/build.py` first; pureRGB on `*_overlay_cold`, staged from the pinned clean build plus `patch/dist/SLink-Pure*.ups`. Yellow has no companion and boots clean |
 | `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM` | no one-shot CLI today. `tools/gen2_playthrough.py` (the old single-title, town-only builder) is retired along with the legacy duo chain; `tools/gen2_fixtures.py` is the read-only plan/qualification side (`fixture_manifest`, `run_play`, `qualify`) that a played-and-qualified rebuild is composed from, orchestrated per session through `tools/run_gb_gate.py` |
 
 These are **battery saves, not savestates**. A `.SaveRAM` is plain SRAM and is not

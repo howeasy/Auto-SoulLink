@@ -1948,7 +1948,7 @@ def test_soft_reset_oracle_refuses_a_stat_for_a_mon_that_was_never_booted(tmp_pa
 
 def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
     """F-4 is B's CONTRACT verdict. If A's randomized hello commits the run's artifact kind
-    first, a pure clean B is refused earlier by the mixed-kinds gate (server.py
+    first, an un-randomized B is refused earlier by the mixed-kinds gate (server.py
     _mixed_games_error), which records no admission verdict, and the live wait times out
     (gen1_pure lane, 2026-09-25). B hellos alone first; A launches only after B's verdict."""
     run = duo.DuoRun.__new__(duo.DuoRun)
