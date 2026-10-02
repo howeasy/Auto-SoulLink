@@ -92,7 +92,7 @@ def test_every_engine_and_checkpoint_pin_matches_rom(context):
     pack = read("engine_signals.json")
     assert pack["live_verified"] is False
     sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
-    assert len(sites) == 21
+    assert len(sites) == 22
     assert {kind for kind, row in pack["inventory"].items() if row["status"] == "OPEN"} == set()
     for kind, row in sites.items():
         data = bytes.fromhex(row["expected_hex"])
@@ -417,12 +417,111 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
     for name in ("area_map.json", "gen3_exp_areas.lua", "gen3_exp_locations.lua"):
         assert (tmp_path / name).read_text(encoding="utf-8") == (PACK / name).read_text(encoding="utf-8")
     mapping = read("area_map.json")
-    assert len(mapping) == 240
+    assert len(mapping) == 240 + 13 + 7  # + EXP-GIFT-AREAS: 5 gift + 8 static maps; + EXP-TOWNS: 7 wild-less towns
     assert {"altering_cave", "altering_cave_frlg", "victory_road", "kanto_victory_road"} <= set(mapping.values())
     for name in ("gen3_exp_areas.lua", "gen3_exp_locations.lua"):
         text = (PACK / name).read_text(encoding="utf-8")
         assert text.count("return {") == 1
     assert len(re.findall(r'^  \["', (PACK / "gen3_exp_locations.lua").read_text(), re.M)) == 935
+
+
+# ── EXP-GIFT-AREAS: gift_areas is the five interior gift maps, never a wild route ────────────
+GIFT_IDS = ["lavaridge_town", "littleroot_town_professor_birchs_lab", "mossdeep_city_stevens_house",
+            "route119_weather_institute_2f", "rustboro_city_devon_corp_2f"]
+GIFT_KEYS = {"0:12": "lavaridge_town", "1:4": "littleroot_town_professor_birchs_lab",
+             "11:1": "rustboro_city_devon_corp_2f", "14:7": "mossdeep_city_stevens_house",
+             "32:1": "route119_weather_institute_2f"}
+
+
+def test_exp_gift_areas_are_exactly_the_five_interior_gift_maps():
+    gift = read("write_checkpoint.json")[TITLE]["gift_areas"]
+    assert isinstance(gift, dict) and gift["ids"] == GIFT_IDS and gift["source"]
+    assert "gift_areas" not in read("write_checkpoint.json")[TITLE]["open"]
+    mapping = read("area_map.json")
+    assert {k: mapping.get(k) for k in GIFT_KEYS} == GIFT_KEYS
+
+
+def test_exp_gift_areas_hold_no_wild_route_and_match_the_census():
+    wild = set(read("expansion_encounters.json")["encounters"])
+    assert not set(GIFT_IDS) & wild
+    mapping = read("area_map.json")
+    gifts = set()
+    for r in read("expansion_gifts.json")["declarations"]:
+        if r["status"] != "active" or not r["map_group_num"]:
+            continue
+        assert r["area_id"] == mapping[r["map_group_num"]], r["source"]
+        if r["kind"] in ("gift", "egg"):
+            assert r["gift_area"] == r["area_id"]
+            gifts.add(r["area_id"])
+        else:
+            assert r["kind"] == "static" and r["gift_area"] is None
+    assert gifts == set(GIFT_IDS)
+
+
+def test_exp_gift_areas_fail_closed_when_a_wild_route_leaks_in(tmp_path, monkeypatch):
+    base = tmp_path / "data/games/gen3_exp/28877d73"
+    base.mkdir(parents=True)
+    for name in ("area_map.json", "expansion_gifts.json", "expansion_encounters.json"):
+        (base / name).write_bytes((PACK / name).read_bytes())
+    monkeypatch.setattr(checkpoint, "ROOT", tmp_path)
+    assert checkpoint.gift_areas("gen3_exp", TITLE)["ids"] == GIFT_IDS
+    mapping = json.loads((base / "area_map.json").read_text())
+    mapping["1:4"] = "route_101"
+    (base / "area_map.json").write_text(json.dumps(mapping))
+    with pytest.raises(SystemExit, match="route_101"):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+    del mapping["1:4"]
+    (base / "area_map.json").write_text(json.dumps(mapping))
+    with pytest.raises(SystemExit, match="1:4"):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+
+
+def _census_copy(tmp_path, monkeypatch):
+    base = tmp_path / "data/games/gen3_exp/28877d73"
+    base.mkdir(parents=True)
+    for name in ("area_map.json", "expansion_gifts.json", "expansion_encounters.json"):
+        (base / name).write_bytes((PACK / name).read_bytes())
+    monkeypatch.setattr(checkpoint, "ROOT", tmp_path)
+    return base
+
+
+@pytest.mark.parametrize("kind", ["choice_gift", "fixed_gift", "mystery_kind"])
+def test_exp_gift_areas_refuse_an_active_row_the_generator_does_not_account_for(tmp_path, monkeypatch, kind):
+    base = _census_copy(tmp_path, monkeypatch)
+    assert checkpoint.gift_areas("gen3_exp", TITLE)["ids"] == GIFT_IDS  # the real census passes
+    census = json.loads((base / "expansion_gifts.json").read_text())
+    row = next(r for r in census["declarations"] if r["status"] == "active" and r["kind"] == "gift")
+    census["declarations"].append({**row, "kind": kind})
+    (base / "expansion_gifts.json").write_text(json.dumps(census))
+    with pytest.raises(SystemExit, match=kind):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+
+
+# M3: a static shares its MAPSEC area with the wild table when one exists (Emerald's precedent).
+# Pinned so a new coincidence is a conscious decision; it does not fail the build.
+STATIC_AREAS_SHARING_A_WILD_AREA = {"new_mauville", "route_120", "sky_pillar"}
+
+
+def test_exp_statics_that_share_a_wild_area_are_pinned():
+    wild = set(read("expansion_encounters.json")["encounters"])
+    statics = {r["area_id"] for r in read("expansion_gifts.json")["declarations"]
+               if r["status"] == "active" and r["kind"] == "static" and r["area_id"]}
+    assert statics & wild == STATIC_AREAS_SHARING_A_WILD_AREA
+
+
+def test_other_packs_gift_areas_are_byte_identical_to_their_committed_checkpoints():
+    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        committed = json.loads((ROOT / "data/games" / pack / "write_checkpoint.json").read_text("utf-8"))
+        for title, row in committed.items():
+            assert checkpoint.gift_areas(pack, title) == row["gift_areas"], (pack, title)
+
+
+def test_exp_battle_handoff_open_text_states_the_faint_evidence_honestly():
+    text = read("write_checkpoint.json")[TITLE]["open"]["battle_handoff"]
+    assert "pending" not in text
+    for needle in ("linked_faint_active_gen3", "c9c215f7", "SetValuesOnFaint", "trainer", "doubles",
+                   "whiteout", "Explode", "predate"):
+        assert needle in text, needle
 
 
 # ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────

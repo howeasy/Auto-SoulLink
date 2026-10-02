@@ -68,7 +68,7 @@
           "ability": "Run Away"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt"
     },
     "3": {
@@ -117,7 +117,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (2)"
     },
     "4": {
@@ -146,7 +146,7 @@
           "ability": "Inner Focus"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (3)"
     },
     "5": {
@@ -175,7 +175,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (4)"
     },
     "6": {
@@ -702,7 +702,7 @@
           "ability": "Run Away"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "calc_label": "Team Aqua Grunt (11)"
     },
     "18": {
@@ -751,7 +751,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "calc_label": "Team Aqua Grunt (12)"
     },
     "19": {
@@ -820,7 +820,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "calc_label": "Team Aqua Grunt (13)"
     },
     "20": {
@@ -1063,7 +1063,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "calc_label": "Team Aqua Grunt (19)"
     },
     "27": {
@@ -1092,7 +1092,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (20)"
     },
     "28": {
@@ -1121,7 +1121,7 @@
           "ability": "Inner Focus"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (21)"
     },
     "29": {
@@ -1219,7 +1219,7 @@
           "ability": "Inner Focus"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "key": true,
       "level_cap": 34,
       "calc_label": "Aqua Admin Matt"
@@ -1299,7 +1299,7 @@
           "ability": "Intimidate"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "key": true,
       "level_cap": 28,
       "calc_label": "Aqua Admin Shelly"
@@ -8371,7 +8371,7 @@
           "ability": "Soundproof"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Guitarist Kirk"
     },
     "192": {
@@ -8420,7 +8420,7 @@
           "ability": "Inner Focus"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (22)"
     },
     "193": {
@@ -8449,7 +8449,7 @@
           "ability": "Rough Skin"
         }
       ],
-      "area": "lilycove_city",
+      "area": "aqua_hideout",
       "calc_label": "Team Aqua Grunt (23)"
     },
     "194": {
@@ -8498,7 +8498,7 @@
           "ability": "Magnet Pull"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Guitarist Shawn"
     },
     "195": {
@@ -8901,7 +8901,7 @@
           "ability": "Oblivious"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Kindler Cole"
     },
     "202": {
@@ -8950,7 +8950,7 @@
           "ability": "Magma Armor"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Kindler Jeff"
     },
     "203": {
@@ -8979,7 +8979,7 @@
           "ability": "Oblivious"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Kindler Axle"
     },
     "204": {
@@ -9008,7 +9008,7 @@
           "ability": "Magma Armor"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Kindler Jace"
     },
     "205": {
@@ -9037,7 +9037,7 @@
           "ability": "Magma Armor"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Kindler Keegan"
     },
     "206": {
@@ -12196,7 +12196,7 @@
           "ability": "Sturdy"
         }
       ],
-      "area": "route_104",
+      "area": "rustboro_city",
       "key": true,
       "level_cap": 15,
       "calc_label": "Leader Roxanne"
@@ -12360,7 +12360,7 @@
           "ability": "Static"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "key": true,
       "level_cap": 24,
       "calc_label": "Leader Wattson"
@@ -12452,7 +12452,7 @@
           "ability": "White Smoke"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "key": true,
       "level_cap": 29,
       "calc_label": "Leader Flannery"
@@ -12656,7 +12656,7 @@
           "ability": "Natural Cure"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "key": true,
       "level_cap": 33,
       "calc_label": "Leader Winona"
@@ -15011,7 +15011,7 @@
           "ability": "Rock Head"
         }
       ],
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Youngster Josh"
     },
     "321": {
@@ -15058,7 +15058,7 @@
           "ability": "Rock Head"
         }
       ],
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Youngster Tommy"
     },
     "322": {
@@ -15136,7 +15136,7 @@
           "ability": "Liquid Ooze"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Youngster Ben"
     },
     "324": {
@@ -18674,7 +18674,7 @@
           "ability": "Chlorophyll"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Bird Keeper Jared"
     },
     "402": {
@@ -18703,7 +18703,7 @@
           "ability": "Keen Eye"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Bird Keeper Humberto"
     },
     "403": {
@@ -18801,7 +18801,7 @@
           "ability": "Keen Eye"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Bird Keeper Edwardo"
     },
     "405": {
@@ -23368,7 +23368,7 @@
           "ability": "Oblivious"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Hiker Eli"
     },
     "502": {
@@ -27629,7 +27629,7 @@
           "ability": "Rock Head"
         }
       ],
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Hiker Marc"
     },
     "572": {
@@ -28476,7 +28476,7 @@
           "ability": "Run Away"
         }
       ],
-      "area": "route_119",
+      "area": "route119_weather_institute_2f",
       "calc_label": "Team Aqua Grunt (26)"
     },
     "597": {
@@ -31286,7 +31286,7 @@
           "ability": "Color Change"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Cooltrainer Gerald"
     },
     "649": {
@@ -31335,7 +31335,7 @@
           "ability": "Pure Power"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Battle Girl Vivian"
     },
     "650": {
@@ -31364,7 +31364,7 @@
           "ability": "Pure Power"
         }
       ],
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Battle Girl Danielle"
     },
     "651": {
@@ -31560,7 +31560,7 @@
           "ability": "Synchronize"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Camper Flint"
     },
     "655": {
@@ -31629,7 +31629,7 @@
           "ability": "Natural Cure"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Picnicker Ashley"
     },
     "656": {
@@ -31658,7 +31658,7 @@
           "ability": "Synchronize"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "key": true,
       "level_cap": 16,
       "calc_label": "Pokémon Trainer Wally (2)"
@@ -37463,7 +37463,7 @@
       "key": true,
       "level_cap": 37,
       "fight_label": "Rematch 1",
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Leader Roxanne Rematch 1"
     },
     "771": {
@@ -37577,7 +37577,7 @@
       "key": true,
       "level_cap": 42,
       "fight_label": "Rematch 2",
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Leader Roxanne Rematch 2"
     },
     "772": {
@@ -37691,7 +37691,7 @@
       "key": true,
       "level_cap": 47,
       "fight_label": "Rematch 3",
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Leader Roxanne Rematch 3"
     },
     "773": {
@@ -37825,7 +37825,7 @@
       "key": true,
       "level_cap": 52,
       "fight_label": "Rematch 4",
-      "area": "route_104",
+      "area": "rustboro_city",
       "calc_label": "Leader Roxanne Rematch 4"
     },
     "774": {
@@ -38355,7 +38355,7 @@
       "key": true,
       "level_cap": 40,
       "fight_label": "Rematch 1",
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Leader Wattson Rematch 1"
     },
     "779": {
@@ -38469,7 +38469,7 @@
       "key": true,
       "level_cap": 45,
       "fight_label": "Rematch 2",
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Leader Wattson Rematch 2"
     },
     "780": {
@@ -38583,7 +38583,7 @@
       "key": true,
       "level_cap": 50,
       "fight_label": "Rematch 3",
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Leader Wattson Rematch 3"
     },
     "781": {
@@ -38717,7 +38717,7 @@
       "key": true,
       "level_cap": 55,
       "fight_label": "Rematch 4",
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Leader Wattson Rematch 4"
     },
     "782": {
@@ -38812,7 +38812,7 @@
       "key": true,
       "level_cap": 40,
       "fight_label": "Rematch 1",
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Leader Flannery Rematch 1"
     },
     "783": {
@@ -38927,7 +38927,7 @@
       "key": true,
       "level_cap": 45,
       "fight_label": "Rematch 2",
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Leader Flannery Rematch 2"
     },
     "784": {
@@ -39062,7 +39062,7 @@
       "key": true,
       "level_cap": 50,
       "fight_label": "Rematch 3",
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Leader Flannery Rematch 3"
     },
     "785": {
@@ -39197,7 +39197,7 @@
       "key": true,
       "level_cap": 55,
       "fight_label": "Rematch 4",
-      "area": "route_112",
+      "area": "lavaridge_town",
       "calc_label": "Leader Flannery Rematch 4"
     },
     "786": {
@@ -39767,7 +39767,7 @@
       "key": true,
       "level_cap": 45,
       "fight_label": "Rematch 1",
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Leader Winona Rematch 1"
     },
     "791": {
@@ -39901,7 +39901,7 @@
       "key": true,
       "level_cap": 50,
       "fight_label": "Rematch 2",
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Leader Winona Rematch 2"
     },
     "792": {
@@ -40035,7 +40035,7 @@
       "key": true,
       "level_cap": 55,
       "fight_label": "Rematch 3",
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Leader Winona Rematch 3"
     },
     "793": {
@@ -40169,7 +40169,7 @@
       "key": true,
       "level_cap": 60,
       "fight_label": "Rematch 4",
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Leader Winona Rematch 4"
     },
     "794": {
@@ -41232,7 +41232,7 @@
           "ability": "Illuminate"
         }
       ],
-      "area": "route_110",
+      "area": "mauville_city",
       "calc_label": "Bug Maniac Angelo"
     },
     "803": {
@@ -41261,7 +41261,7 @@
           "ability": "Chlorophyll"
         }
       ],
-      "area": "route_119",
+      "area": "fortree_city",
       "calc_label": "Bird Keeper Darius"
     },
     "804": {
@@ -44394,6 +44394,9 @@
     }
   },
   "trainers_by_area": {
+    "aqua_hideout": [
+      30
+    ],
     "dewford_town": [
       266,
       774,
@@ -44408,12 +44411,25 @@
       264,
       335
     ],
+    "fortree_city": [
+      270,
+      790,
+      791,
+      792,
+      793
+    ],
     "jagged_pass": [
       597,
       602
     ],
+    "lavaridge_town": [
+      268,
+      782,
+      783,
+      784,
+      785
+    ],
     "lilycove_city": [
-      30,
       661,
       662,
       663,
@@ -44424,6 +44440,14 @@
     "magma_hideout": [
       601,
       732
+    ],
+    "mauville_city": [
+      267,
+      656,
+      778,
+      779,
+      780,
+      781
     ],
     "meteor_falls": [
       804
@@ -44444,6 +44468,9 @@
       788,
       789
     ],
+    "route119_weather_institute_2f": [
+      32
+    ],
     "route_103": [
       520,
       523,
@@ -44453,52 +44480,35 @@
       535
     ],
     "route_104": [
-      265,
       592,
       593,
       599,
       600,
       768,
-      769,
-      770,
-      771,
-      772,
-      773
+      769
     ],
     "route_110": [
-      267,
       521,
       524,
       527,
       530,
       533,
-      536,
-      656,
-      778,
-      779,
-      780,
-      781
-    ],
-    "route_112": [
-      268,
-      782,
-      783,
-      784,
-      785
+      536
     ],
     "route_119": [
-      32,
-      270,
       522,
       525,
       528,
       531,
       534,
-      537,
-      790,
-      791,
-      792,
-      793
+      537
+    ],
+    "rustboro_city": [
+      265,
+      770,
+      771,
+      772,
+      773
     ],
     "seafloor_cavern": [
       33,

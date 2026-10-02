@@ -59,13 +59,20 @@ def memorial_hp_lost_problems(before: dict, after: dict, *, source_hp: int,
 
 
 def natural_faint_receipt_problems(text: str, key: str) -> list[str]:
-    """A's normal battle: raw in-battle party HP0 precedes its client faint event."""
+    """A's no-command battle: observed HP0, engine site, TX, then completion.
+
+    FORCED_HP0 names a read-only harness watcher. Alone it does not prove cause.
+    Sound-labelled writes are allowed only in GBA IWRAM; that address guard does
+    not prove sound semantics, but rejects a relabelled party/EWRAM write.
+    """
     k = re.escape(key)
     markers = [
         ("normal battle choice", rf"(?m)^LOSE {k} status_move_slot=\d+$"),
-        ("raw in-battle HP0", rf"(?m)^FORCED_HP0 {k} frame=\d+ in_battle=1 battler=1$"),
-        ("natural faint completion", rf"(?m)^LINKED_FAINTED {k}$"),
+        ("raw in-battle HP0", rf"(?m)^FORCED_HP0 {k} frame=(\d+) in_battle=1 battler=1$"),
+        ("engine faint site", r"(?m)^ENGINE_FAINT_SITE frame=(\d+) active=0 battler0_slot=0 "
+         r"battle_hp=0 party_hp=0 counter=[1-9]\d*$"),
         ("faint event", rf"(?m)^TX faint {k}(?=\s|$)"),
+        ("natural faint completion", rf"(?m)^LINKED_FAINTED {k} frame=(\d+)$"),
     ]
     found = [(name, re.search(pattern, text)) for name, pattern in markers]
     missing = [f"a: missing {name} for {key}" for name, hit in found if hit is None]
@@ -73,11 +80,22 @@ def natural_faint_receipt_problems(text: str, key: str) -> list[str]:
         return missing
     positions = [hit.start() for _, hit in found]
     problems = []
+    if len(list(re.finditer(markers[2][1], text))) != 1:
+        problems.append(f"a: duplicate engine faint site for {key}")
+    if len(list(re.finditer(markers[3][1], text))) != 1:
+        problems.append(f"a: duplicate faint event for {key}")
     if positions != sorted(positions) or len(set(positions)) != len(positions):
         problems.append(f"a: natural faint witnesses for {key} are out of order")
-    prefix = text[:positions[-1]]
+    hp0_frame, site_frame, done_frame = (int(found[i][1].group(1)) for i in (1, 2, 4))
+    if not hp0_frame < site_frame <= done_frame:
+        problems.append(f"a: HP0/site/completion frames for {key} are out of order")
+    prefix = text[:found[4][1].start()]
     if re.search(r"(?m)^RX force_(?:faint|explode)\b", prefix):
         problems.append(f"a: {key} received a force command before its natural faint")
-    if re.search(r"(?m)^\[client\].*\bwrite\b", prefix):
+    if re.search(r"(?m)^\[client\].*\bwrite\s+(?!sound\b)", prefix):
         problems.append(f"a: {key} has an SLink write before its natural faint")
+    for line in re.findall(r"(?m)^\[client\].*\bwrite\s+sound\b[^\n]*", prefix):
+        address = re.search(r"\b0x[0-9A-Fa-f]+\b", line)
+        if not address or not 0x03000000 <= int(address[0], 16) < 0x03008000:
+            problems.append(f"a: {key} has an SLink write labelled sound outside IWRAM")
     return problems

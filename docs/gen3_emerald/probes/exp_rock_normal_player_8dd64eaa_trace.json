@@ -1,0 +1,203 @@
+{
+  "source_head": "8dd64eaa4b9ae019208215aea92d52e7e0fcbd8f",
+  "scope": "PHYSICAL DEV ordinary-input diagnostic; not default-row/frozen qualification",
+  "diagnostic_flag": "SLINK_ROCK_PLAYER_PROBE=1",
+  "accepted_native_limit": "After a Rock Smash wild battle the field script is left WAITING (EventScript_SmashRock waitstate not resumed by Task_ReturnToFieldNoScript; identical in vanilla pret); the SLink overworld checkpoint withholds hello and writes until the player's next script (NPC/sign interaction, door or map load); also true of the qualified Emerald title; fail-closed; possible later fix = a checkpoint clause (signed predicate, separate project)",
+  "receipt_annotation": "Historical ROCK_PLAYER_PROBE_RESULT waiting-after-all-inputs is a last-iteration label bug; both raw final observations are status2/unlocked and both saved/PYDEC PASS. Raw receipts remain unchanged.",
+  "sides": {
+    "a": {
+      "stages": [
+        {
+          "stage": "capture-return",
+          "frame": 4992,
+          "status": 1,
+          "field_lock": 1,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "idle-before",
+          "frame": 5026,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "idle-after",
+          "frame": 5326,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "menu-open",
+          "frame": 5359,
+          "status": 1,
+          "field_lock": 1,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "menu-close",
+          "frame": 5452,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "empty-B",
+          "frame": 5485,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "empty-A",
+          "frame": 5518,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "one-step",
+          "frame": 5534,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-facing",
+          "frame": 5556,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-interact",
+          "frame": 5589,
+          "status": 0,
+          "field_lock": 1,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "waiting-after-all-inputs",
+          "frame": 6229,
+          "status": 2,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        }
+      ],
+      "return_to_shutdown_frames": 1237,
+      "bare_to_shutdown_frames": 1203,
+      "result": [
+        "RESULT: PASS"
+      ]
+    },
+    "b": {
+      "stages": [
+        {
+          "stage": "capture-return",
+          "frame": 3728,
+          "status": 1,
+          "field_lock": 1,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "idle-before",
+          "frame": 3762,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "idle-after",
+          "frame": 4062,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "menu-open",
+          "frame": 4095,
+          "status": 1,
+          "field_lock": 1,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "menu-close",
+          "frame": 4188,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "empty-B",
+          "frame": 4221,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "empty-A",
+          "frame": 4254,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "one-step",
+          "frame": 4270,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-facing",
+          "frame": 4292,
+          "status": 1,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-interact",
+          "frame": 4325,
+          "status": 0,
+          "field_lock": 1,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "waiting-after-all-inputs",
+          "frame": 4965,
+          "status": 2,
+          "field_lock": 0,
+          "x": 18,
+          "y": 101
+        }
+      ],
+      "return_to_shutdown_frames": 1237,
+      "bare_to_shutdown_frames": 1203,
+      "result": [
+        "RESULT: PASS"
+      ]
+    }
+  }
+}

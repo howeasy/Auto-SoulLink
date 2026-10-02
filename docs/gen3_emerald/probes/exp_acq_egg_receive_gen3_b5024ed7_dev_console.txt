@@ -1,0 +1,37 @@
+DEV SOURCE=b5024ed74315b00bda86972e902f00c49687929b; no final-cut claim
+
+========== scenario: egg_receive_gen3 ==========
+[duo] egg_receive_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=c501c5a9aec124aeff847ceb3cefba06730e7a5995fbe918fd8db6c379e03e3d b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=3dc315998fdd1954ec4c26c325fb320315799b3b75aaac1c04d5031fe0325f69 write_checkpoint.json=c8675dbf23403dc7a2b7c90ec5e98fac7afd8a6799c39f1779c1f15272b8b90b profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=b5024ed74315b00bda86972e902f00c49687929b
+[duo] server up: tcp=59432 http=59433 data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:45:02,623 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:45:02,623 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.5s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.5s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 7.9s
+[duo] timing results 1.8s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=bb7d8097d4fc760825c14abe4480f7bae6ac9396a0588032d56f18897c6747c9 file=bb7d8097d4fc760825c14abe4480f7bae6ac9396a0588032d56f18897c6747c9 match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=419d3d128a3b2d110bb4a9114d3116701b9cbe0b5ee264c1428e46c6c975bb8d file=419d3d128a3b2d110bb4a9114d3116701b9cbe0b5ee264c1428e46c6c975bb8d match=true saves=1 counter=4->5 rtc=normalized
+[duo] exp egg_receive: own engine site, keyed native acquisition, independently saved flash/controls
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] egg_receive_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_egg_receive_gen3_3oyz5_9c
+
+========== summary ==========
+  egg_receive_gen3: PASS (attempt 1 of 1)
+
+exit=0

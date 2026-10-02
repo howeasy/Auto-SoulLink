@@ -18,6 +18,39 @@ any randomizer change inside the companion's protected code/data spans. The
 final ROM hash belongs to the run contract. Native capability and randomized
 pairing remain separate; the hello uses the existing `rand` wire kind.
 
+**Title screen and main menu.** Every Gen 3 companion (FireRed, LeafGreen, Emerald, and Radical Red's ABI1 build) puts a
+SoulLink wordmark in the Pokémon logo's style on the title and prints the patch version (`SoulLink vX.Y.Z`, or `SoulLink
+dev`) on the main menu, the New Game / Continue screen. The version lives there and nowhere else (owner, 2026-10-02: like
+the Game Boy menus).
+
+*Title:* a static asset patch with no code (`patch/tools/gen3_title.py`, art from `tools/gen_gen1_title.py`): the title's own
+LZ77 graphics are relocated into the ROM's free tail with the wordmark added and the two literal-pool words that name them are
+repointed, so the game's loader draws it and the fade-in, flash and restarts treat it as part of the title. FR / LG / RR use
+the Charizard / Venusaur layer on its empty rows under the flames, the wordmark's ink centred on PRESS START, in the logo
+palette's unused bank; Emerald uses the affine Pokémon-logo layer (the clouds and Rayquaza scroll and blend) under the
+"Emerald Version" banner, in the logo's own palette indices, centred on the screen, so it slides in with the logo. The
+title spans join the manifest's protected spans.
+
+*Main menu:* neither menu has a static BG asset (the whole BG0 map is built by windows at run time), so the payload's frame
+hook owns one window (`patch/src/trade_targets/native_menu.h`, shared by the FR / LG / Emerald companions and Radical Red's
+`handlers.c`). While `gMain.callback2` is the menu and its task (always `gTasks[0]`) idles in its input or cursor function,
+it draws the line once in the game's own font, right-aligned on tile rows 17-18, and frees the window the moment the menu is
+left. That is the free band under the boxes, or, with a Mystery Gift box there, the right half of that box (the layout is
+read from `gTasks[0].data[0]`). FR / LG have no menu at all on a cartridge without a save (the game goes straight to the
+intro); Emerald shows New Game / Option with the line below. `build.py --version vX.Y.Z[-dev]` (default `dev`, at most ten
+characters) encodes the line in the charmap and passes it to the compiler as `-DSLINK_MENU_TEXT=...`; the receipt and the
+manifest row record it as `menu_version`. Per-game addresses are the `SLINK_TARGET_MENU_*` defines in the target headers
+(RR's `SLM_*` literals in `handlers.c`; RR's menu is FireRed's, byte for byte). The state byte is arena offset `0x920` on the
+native companions and `0x0203FF61` on RR.
+
+Measured facts: `tests/fixtures/gen3/title_*.json` (`lua/tests/probe_gen3_title_vram.lua`, `tools/analyze_gen3_title.py`) and
+`tests/fixtures/gen3/menu_*.json` (`lua/tests/probe_gen3_menu_plan.lua`, vanilla menus in every layout); tests:
+`tests/unit/test_gen3_title_screen.py`, `tests/unit/test_gen3_menu_version.py` (the ROM checks need `SLINK_GEN3_ROMS`, the
+compile checks a toolchain).
+**Not promoted:** the published UPS files and `gen3_companions.json` are still the build without the title wordmark or the
+menu line, so `build.py --check` differs until the owner regenerates them (every companion ROM hash, and the pins built on
+it, moves); `tools/make_release.py` does not yet re-stamp the version.
+
 > The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
 > `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
@@ -170,8 +203,8 @@ The trade-carrying Red/Blue patches are separate UPS files for their exact clean
 
 | Patch | Clean ROM md5 | Patched ROM md5 |
 |---|---|---|
-| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a241ebcd9e7799fce4b3e80ffac45a45` |
-| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `1298581bf3eb21dd03ffb3d7c5a7a0b7` |
+| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a9a70f99008559734ba01a9a80d78d5c` |
+| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `fa47b8ba0c10e82f2545791abd157ad3` |
 
 Rebuild them from the clean dumps and the current Gen 1 build:
 

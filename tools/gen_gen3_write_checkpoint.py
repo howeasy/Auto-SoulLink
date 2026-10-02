@@ -987,9 +987,38 @@ GIFT_KINDS = ("gift", "choice_gift", "fixed_gift")
 GIFT_WILD_ROUTES = {"emerald": {"route_101"}}
 
 
+def expansion_gift_areas(title: str) -> dict:
+    """EXP-GIFT-AREAS: the areas of the pinned expansion's active gift/egg declarations
+    (expansion_gifts.json) through its own area_map.json. The starter is chosen at runtime on wild
+    route_101 (src/battle_setup.c, no map), so unlike Emerald there is no wild exception to carry:
+    any gift area that is also a wild encounter area, or a gift map with no area, fails the build."""
+    base = ROOT / "data" / "games" / "gen3_exp" / "28877d73"
+    area_map = json.loads((base / "area_map.json").read_text("utf-8"))
+    wild = set(json.loads((base / "expansion_encounters.json").read_text("utf-8"))["encounters"])
+    ids = set()
+    for row in json.loads((base / "expansion_gifts.json").read_text("utf-8"))["declarations"]:
+        if row["status"] != "active" or row["kind"] == "static":
+            continue  # statics share their MAPSEC area with the wild table and are not gift areas
+        if row["kind"] not in ("gift", "egg"):  # fail closed: choice_gift/fixed_gift/unknown
+            raise SystemExit(f"{title}: active {row['kind']} row {row['source']}:{row['line']} is not "
+                             f"accounted for by expansion_gift_areas(); handle the kind (GIFT_KINDS)")
+        if row["map_group_num"] is None:
+            if row["source"] != "src/battle_setup.c":
+                raise SystemExit(f"{title}: gift {row['source']}:{row['line']} has no map; census it")
+            continue
+        if row["map_group_num"] not in area_map:
+            raise SystemExit(f"{title}: gift map {row['map_group_num']} has no area; run gen_area_map.py --expansion")
+        ids.add(area_map[row["map_group_num"]])
+    if ids & wild:
+        raise SystemExit(f"{title}: gift areas {sorted(ids & wild)} are wild encounter areas")
+    return {"ids": sorted(ids), "source": "gen3_exp/28877d73 expansion_gifts.json active gift/egg rows x area_map.json"}
+
+
 def gift_areas(pack: str, title: str) -> dict:
     if pack in KANTO_GIFT_PACKS:
         return {"ids": GIFT_AREAS_FRLG, "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"}
+    if pack == "gen3_exp":
+        return expansion_gift_areas(title)
     if pack != "gen3_emerald":
         raise SystemExit(f"{pack}/{title}: no gift_areas rule; add the pack to gift_areas()")
     base = ROOT / "data" / "games" / pack
@@ -1503,9 +1532,14 @@ def build_expansion(context):
                    "commit_hold": "HOLD: only the exact battler-0 Perish+controller handoff plan is proved; other battle commits remain refused."},
         "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
                      for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
-        "sound": sound, "gift_areas": [],
-        "open": {"battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
-                 "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
+        "sound": sound, "gift_areas": expansion_gift_areas(EXPANSION_TITLE),
+        "open": {"battle_handoff": (
+            "source and ROM handoff shape bound; wild linked_faint_active_gen3 PHYSICAL PASS on the expansion "
+            "at ddf6ebd8/c9c215f7 (docs/gen3_emerald/XG3_FAINT_evidence_2026-09-27.md); the natural-play A faint "
+            "did not hit the former Cmd_tryfaintmon marker (the expansion faint site is now pinned inside "
+            "SetValuesOnFaint, which both the opcode and the C fallback reach); trainer, doubles, "
+            "whiteout and Explode unqualified; "
+            "receipts predate current master")},
     }}
 
 

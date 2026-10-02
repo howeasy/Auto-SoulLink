@@ -191,6 +191,33 @@ static int ncall_owned(void);
 #include "native_carrier.h"
 #include "native_sound.h"
 #include "native_rival.h"
+/* The patch version on the main menu: one owned window, drawn once per menu entry (native_menu.h). */
+#define SLM_GMAIN_CB2 (SLINK_TARGET_GMAIN+4u)
+#define SLM_CB2 SLINK_TARGET_MENU_CB2
+#define SLM_TASK0 SLINK_TARGET_PANEL_TASKS
+#define SLM_TASK_INPUT SLINK_TARGET_MENU_TASK_INPUT
+#define SLM_TASK_SELECT SLINK_TARGET_MENU_TASK_SELECT
+#define SLM_MENU_TYPE_BOXED SLINK_TARGET_MENU_TYPE_BOXED
+#define SLM_STATE (NT_BASE+0x920u)
+#define SLM_ADD_WINDOW SLINK_TARGET_PANEL_ADD_WINDOW
+#define SLM_REMOVE_WINDOW SLINK_TARGET_MENU_REMOVE_WINDOW
+#define SLM_PUT_TILEMAP SLINK_TARGET_PANEL_PUT_TILEMAP
+#define SLM_COPY SLINK_TARGET_PANEL_COPY
+#define SLM_FILL SLINK_TARGET_MENU_FILL
+#define SLM_PRINT SLINK_TARGET_PANEL_PRINT
+#define SLM_WIDTH SLINK_TARGET_PANEL_WIDTH
+#define SLM_FONT FONT_NORMAL
+#define SLM_LEFT SLINK_TARGET_MENU_LEFT
+#define SLM_TOP SLINK_TARGET_MENU_TOP
+#define SLM_COLS SLINK_TARGET_MENU_COLS
+#define SLM_BASE SLINK_TARGET_MENU_BASE
+#define SLM_TEXT_Y SLINK_TARGET_MENU_TEXT_Y
+#define SLM_MARGIN SLINK_TARGET_MENU_MARGIN
+#define SLM_PLAIN_TEXT SLINK_TARGET_MENU_PLAIN_TEXT
+#define SLM_PLAIN_SHADOW SLINK_TARGET_MENU_PLAIN_SHADOW
+/* One state byte at 0x920: past NT_SCRIPT (0x900..0x909, reserved to 0x910), before NP_RUNTIME (0x940); no other struct spans it. */
+_Static_assert(0x910u <= 0x920u && 0x920u + 1u <= 0x940u, "menu state/script/panel overlap");
+#include "native_menu.h"
 #ifdef SLINK_TARGET_CALL_FEATURE
 #include "native_call.h"
 #endif
@@ -222,6 +249,7 @@ __attribute__((used)) void slink_native_frame(void)
         slink_native_panel_service();
         slink_native_sound_service();
         slink_native_rival_service();
+        slm_service();
 #ifdef SLINK_TARGET_CALL_FEATURE
         NT_MB->capabilities |= SLINK_CAP_MATCH_CALL;
         slink_native_call_service();

@@ -485,7 +485,11 @@ function Client.new(p)
         end
         if found then return end
         -- party full: the mon went to the PC (SendMonToPC)
+        local before_n, known_boxed = #st.box_cache, 0
+        for _, e in ipairs(st.box_cache) do if st.known[e.key] then known_boxed = known_boxed + 1 end end
         rescan_boxes()
+        log(string.format("acquisition boxes: cache before=%d (known %d) now=%d ok=%s gen=%d",
+                          before_n, known_boxed, #st.box_cache, tostring(st.boxes_ok), st.box_generation))
         local fresh = {}
         for _, e in ipairs(st.box_cache) do
             if e.is_egg == 1 then st.eggs[e.key] = true end
@@ -1174,6 +1178,8 @@ function Client.new(p)
         -- capture right after the hello. Only the very first baseline is taken here.
         if not st.baselined and not hidden then
             seed_known(own)                                    -- box-key seeding at connect
+            log(string.format("baseline(hello): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #own))
             rebaseline(party)
             st.baselined = true
             -- the quiet interval starts from THIS count: a mon added after hello is a change
@@ -1301,14 +1307,23 @@ function Client.new(p)
             return census
         end
         local function release_begin(sig)
-            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp, frame = sig.frame}
         end
         local function release_done(sig)
             local before = st.release_snapshot
             st.release_snapshot = nil
-            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
-            if not before or not before.keys or before.epoch ~= trade_reset_epoch
-               or before.sp ~= sig.sp + 4 then return end
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch then return end
+            -- A pack whose two sites sit mid-body in one task invocation (no push/pop between,
+            -- SP delta 0) declares pairing = frame_window: same-invocation by framecount.
+            -- Otherwise (every vanilla pack: no `pairing` key) ReleaseMon entry SP and its
+            -- pre-pop return SP differ by the saved LR.
+            local site = p.sites and p.sites.pc_release
+            local pairing = site and site.pairing
+            if pairing and pairing.mode == "frame_window" then
+                local dt = sig.frame and before.frame and sig.frame - before.frame
+                if not dt or dt < 0 or dt > (tonumber(pairing.window) or 0) then return end
+            elseif pairing then return        -- declared but unknown mode: refuse, never the SP rule
+            elseif before.sp ~= sig.sp + 4 then return end
             local after, gone = release_census(), nil
             if not after then return end
             for k in pairs(after) do if not before.keys[k] then return end end
@@ -1324,9 +1339,10 @@ function Client.new(p)
             end
         end
         local function capture_hatch(sig)
-            -- All pinned AddHatchedMonToParty returns leave the mon pointer in R5.
+            -- Pinned AddHatchedMonToParty returns leave the mon pointer in R5 (FR/LG/RR/Emerald);
+            -- the expansion build keeps it in R4 (R5 is the species/save pointer): R5 first.
             -- Read AT the completed mutation, before later callbacks can move the party.
-            local base, ptr = call("party_base"), sig.point and sig.point.R5
+            local base, ptr = call("party_base"), sig.point and (sig.point.R5 or sig.point.R4)
             local party = party_read()
             if not base or not ptr or not party then return end
             for _, mon in ipairs(party) do
@@ -1489,7 +1505,18 @@ function Client.new(p)
         if not party then return end
         update_frozen(party)
         if st.frozen or recovery_hidden() then return end      -- withheld RAM is never a baseline
-        if not st.baselined then rescan_boxes(); st.baselined = true end
+        -- A settled quiet count-change re-baselines the boxes with the party. A cold boot
+        -- baselines at party=0 / boxes n=0 before CONTINUE loads the save; without this rescan
+        -- the pre-existing boxed keys stay unknown and the next boxed gift reads as ambiguous.
+        -- Quiet frames only (st.flags empty above): a new boxed mon signals on its own frame.
+        -- ONE scan per settle: the first baseline logs after it (it used to scan twice).
+        local first = not st.baselined
+        rescan_boxes()
+        if first then
+            st.baselined = true
+            log(string.format("baseline(quiet): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #party))
+        end
         seed_known(party)
         st.seen_count = count
     end

@@ -1,0 +1,39 @@
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=f2ef83e931a2319dfd642291852e16818750419889c4bc4ee7fc0304836cc686 profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=0d067d6f6a9ab6aec0f8af5c4b5bdfff89906fe8+dirty dirty=[data/games/gen3_exp/28877d73/area_map.json,data/games/gen3_exp/28877d73/gen3_exp_areas.lua,data/games/gen3_exp/28877d73/gen3_exp_locations.lua,tests/unit/test_gen3_exp_pack.py,tools/gen3_final_cut.py,tools/gen_area_map.py,.omp_reply_cx6a8f81c6.md,tests/unit/test_gen3_final_cut_exp.py]
+[duo] server up: tcp=59134 http=59135 data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:48:30,122 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:48:30,122 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.2s
+[duo] cleared 5 stale artifact(s) for whiteout_gen3: e2e_whiteout_gen3_a_attempt1_result.txt, e2e_whiteout_gen3_a_result.txt, e2e_whiteout_gen3_b_attempt1_result.txt, e2e_whiteout_gen3_b_result.txt, e2e_whiteout_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo path=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped 504F4F4D:20250925 and 504F4F4D:DFDAF6DA
+[duo] queued for a: {'cmd': 'box_mon', 'key': '504F4F4D:20250925'}
+[duo] timing orchestrate 81.2s
+[duo] timing results 3.6s
+[duo] RESULT_LINE a: RESULT: PASS (pair 504F4F4D:20250925 rebuilt after the whiteout; the write landed at the healed landing 2.2 (7,4))
+[duo] RESULT_LINE b: RESULT: PASS (pair 504F4F4D:DFDAF6DA rebuilt after the whiteout)
+[duo] timing oracle 0.0s
+[duo] PYDEC: FAIL the receipt's source is +dirty (data/games/gen3_exp/28877d73/area_map.json, data/games/gen3_exp/28877d73/gen3_exp_areas.lua, data/games/gen3_exp/28877d73/gen3_exp_locations.lua, tests/unit/test_gen3_exp_pack.py, tools/gen3_final_cut.py, ...): a G4 receipt must come from a clean cut
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_tyxq6mzo
+[duo] whiteout_gen3: attempt 1 aborted — RuntimeError: the receipt's source is +dirty (data/games/gen3_exp/28877d73/area_map.json, data/games/gen3_exp/28877d73/gen3_exp_areas.lua, data/games/gen3_exp/28877d73/gen3_exp_locations.lua, tests/unit/test_gen3_exp_pack.py, tools/gen3_final_cut.py, ...): a G4 receipt must come from a clean cut
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1) — RuntimeError: the receipt's source is +dirty (data/games/gen3_exp/28877d73/area_map.json, data/games/gen3_exp/28877d73/gen3_exp_areas.lua, data/games/gen3_exp/28877d73/gen3_exp_locations.lua, tests/unit/test_gen3_exp_pack.py, tools/gen3_final_cut.py, ...): a G4 receipt must come from a clean cut
+EXIT 1

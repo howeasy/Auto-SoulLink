@@ -1464,18 +1464,23 @@ EXPANSION_BINDINGS = {
         "Entry before battle initialization/save relocation. Dedupe and battle-type filtering required."),
     "battle_end": ("ReturnFromBattleToOverworld", 0x38, "src/battle_main.c:5422-5457", ["R0", "R15", "CPSR"],
         "BL SetMainCallback2 after inBattle clear/callback1 restore on completion path. R0 saved callback; link-wait return bypasses this point. Not evolution-settled."),
-    "faint": ("Cmd_tryfaintmon", 0x8A, "src/battle_script_commands.c:1906; src/battle_util.c:11125-11153", ["R4", "R15", "CPSR"],
-        "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint."),
+    "faint": ("SetValuesOnFaint", 0x86, "src/battle_util.c:11125-11150; src/battle_script_commands.c:1906; src/battle_move_resolution.c:3730", ["R4", "R15", "CPSR"],
+        "The pop {r4-r7} at +0x86 (080DF52A) is the unique join of the player branch (falls through from the faint-counter store at +0x84) and the opponent branch (b #080DF52A at +0xAE), so both reach this instruction and it fires once per fainted battler of either side. R4 is still the battler id at the hook (the hook fires BEFORE the instruction executes). Exactly two BL callers in this build, both verified by ROM-wide scan: Cmd_tryfaintmon+0x86 (080A5BDA, the battle opcode 0x19) and MoveEndFaintBlock+0x1E8 (080936FC, the C fallback that contains FAINT_BLOCK_FAINT_TARGET) -- the old Cmd_tryfaintmon pin missed the latter. The fire alone proves a faint of EITHER side and nothing more: the client reads no register here (settle_faints is a party/HP census), so player-side ownership, identity dedupe and the player/opponent split are the client's to decide."),
     "capture_wild": ("GiveCapturedMonToPlayer", 0x62, "src/battle_script_commands.c:8371; src/pokemon.c:2941-2961", ["R0", "R6", "R13", "R15", "CPSR"],
-        "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine."),
-    "mon_given": ("GiveCapturedMonToPlayer", 0x62, "src/pokemon.c:2941-2961; src/script_pokemon_util.c:76", ["R0", "R6", "R13", "R15", "CPSR"],
-        "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild."),
+        "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success. mon_given now lives in GiveScriptedMonToPlayer and never fires for a capture. ScriptGiveEgg also calls this routine (caller LR not in the two Cmd_givecaughtmon returns: ignore)."),
+    "mon_given": ("GiveScriptedMonToPlayer", 0x68, "src/pokemon.c:6674-6706; src/script_pokemon_util.c:368-398", ["R0", "R7", "R8", "R13", "R15", "CPSR"],
+        "Single common return of GiveScriptedMonToPlayer (the only Give* routine that createmon/givemon, ScriptGiveMon and so the starter reach), after the party copy or CopyMonToPC, both Pokedex flag sets and the inlined CalculatePlayerPartyCount store. The fire ALONE proves nothing: the client reads no register for mon_given (it sets f.acquire only), the return is also reached with outcome 2 (MON_CANT_GIVE), and an explicit-slot createmon overwrites that party slot. The party/box census in settle_acquisitions decides what was actually acquired and where. Wild capture and ScriptGiveEgg go through GiveCapturedMonToPlayer instead and never reach this site, so there is no capture_wild double-fire; eggs are acquired at hatch."),
     "pc_move": ("CopyMonToPC", 0x72, "src/pokemon.c:2963", ["R0", "R5", "R7", "R8", "R15", "CPSR"],
         "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation."),
     "whiteout": ("CB2_WhiteOut", 0x80, "src/overworld.c:1956-1981", ["R0", "R15", "CPSR"],
         "BL SetMainCallback2(CB2_Overworld) after whiteout healing/load completion; early state<120 return bypasses it. Not an HP-at-faint witness."),
     "map_load": ("CB2_LoadMap2", 0x22, "src/overworld.c:1992-1998", ["R0", "R15", "CPSR"],
         "BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop and callback1 restoration. Other map loaders remain outside this signal's coverage."),
+    "hatch": ("AddHatchedMonToParty", 0xDA, "src/egg_hatch.c:307-352", ["R4", "R15", "CPSR"],
+        "AddHatchedMonToParty +0xDA, the first instruction after the BL CalculateMonStats returns (MonRestorePP and CalculateMonStats done, function not inlined); "
+        "R4 = completed hatchling (&gParties[B_TRAINER_PLAYER][id], set once at +0x0C and never rewritten; R5 is the species, later gSaveBlock2Ptr). "
+        "Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; "
+        "O-15 publishes one gift_daycare capture at hatch, never at GiveEgg."),
     "evolve_species_store": ("Task_EvolutionScene", 0x2D6, "src/evolution_scene.c:786-792", ["R4", "R15", "CPSR"],
         "After SetMonData(MON_DATA_SPECIES=18), before evolution-tracker reset and stat/dex updates. R4 mon; cancellation bypasses this state."),
     "trade_evolve_species_store": ("Task_TradeEvolutionScene", 0x252, "src/evolution_scene.c:1214-1220", ["R7", "R15", "CPSR"],
@@ -1502,6 +1507,33 @@ EXPANSION_BINDINGS = {
         "State 3 common continuation after inlined party ZeroMonData or box ZeroBoxMonAt and optional AddBagItem; R5=&sStorage. Emit only with a matching pc_release_begin snapshot, because the moved-mon flag-clear path also joins here. Resolve identity from that snapshot, never from cleared storage."),
 }
 EXPANSION_OPEN = {}
+
+# Per-site release-pairing rule. Vanilla ReleaseMon brackets the pair with PUSH {LR}/POP, so the client
+# pairs by SP delta +4. Task_ReleaseMon (081D24F0, 0x5FC) is one switch body whose only SP changes are
+# the prologue and epilogue (Thumb disassembly 081D24F0..081D2AEC): +0xFA and +0x17C are in the same
+# frame of the same task invocation and SP is equal at both. The client pairs by framecount instead.
+EXPANSION_PAIRING = {
+    kind: {"mode": "frame_window", "window": 0,
+           "reason": "Task_ReleaseMon +0xFA..+0x17C is straight-line mid-body: SP is equal at both sites "
+                     "(no push/pop between), so pair only when both fire on the same frame"}
+    for kind in ("pc_release_begin", "pc_release")
+}
+
+# Script-reachable ROM mirror. In the expansion build every `callnative` that requests effects
+# (givemon/createmon/specials) stores `func + ROM_SIZE`, and every gScriptCmdTable entry is
+# `value + ROM_SIZE`, i.e. a pointer into the 0x0A ROM mirror. The CPU then executes script command
+# handlers at their 0x0A aliases (ScrCmd_createmon 081FDEC8 runs at 0A1FDEC8, GiveScriptedMonToPlayer
+# 081C2EDC at 0A1C2EDC), and exec hooks match the exact PC, so a hook on the 0x08 address alone is
+# silent for script gifts. Every site is therefore also hooked at address+ROM_SIZE.
+# ROM_SIZE: constants/gba_constants.inc:33 (`.set ROM_SIZE, 0x2000000`); users: asm/macros/event.inc:273-283
+# (callnative/gotonative), data/script_cmd_table.inc:11, data/specials.inc:8. Vanilla packs never carry this key.
+EXPANSION_ROM_SIZE = 0x2000000
+EXPANSION_MIRROR_CONTRACT = (
+    "Every site is also hooked at address+capture_offset+mirror_offset (ROM_SIZE=0x2000000, "
+    "constants/gba_constants.inc:33): script command handlers run through callnative/gScriptCmdTable "
+    "pointers that carry +ROM_SIZE (asm/macros/event.inc:273-283, data/script_cmd_table.inc:11), so the "
+    "CPU executes them at the 0x0A mirror alias, which an exec hook on the 0x08 address never matches. "
+    "The dispatched signal keeps the canonical 0x08 address; callback_address records the real PC.")
 
 # Per-build PC cursor/state facts, bound to the .sym by expansion_symbol (which refuses a
 # name that is not unique) and cross-checked against the ROM. `from_sStorage` is the byte offset
@@ -1619,13 +1651,17 @@ def build_expansion(context):
         # A returned pack is caller-owned. Handing out the module constant by reference would let
         # one build's mutation leak into the next build, so each pack gets its own copy.
         sites[kind]["snapshot"] = copy.deepcopy(provenance)
+    for kind, pairing in EXPANSION_PAIRING.items():
+        sites[kind]["pairing"] = copy.deepcopy(pairing)
     for kind in sites:
         sites[kind].setdefault("snapshot", None)
+    for site in sites.values():
+        site["mirror_offsets"] = [EXPANSION_ROM_SIZE]
     register_proof = {symbol: expansion_pool_register(context, symbol)
                       for symbol in ("Task_DepositMenu", "Task_ReleaseMon")}
     result = {"schema": "gen3-engine-signals-v1", "pack": "gen3_exp", "build": context["build"],
               "evidence": "SOURCE_BYTE_PIN", "live_verified": False, "source": context["source"],
-              "inventory": inventory, "titles": {EXPANSION_TITLE: {"artifacts": {"clean": {
+              "mirror_contract": EXPANSION_MIRROR_CONTRACT, "inventory": inventory, "titles": {EXPANSION_TITLE: {"artifacts": {"clean": {
                   "rom_sha1": context["source"]["rom_sha1"], "rom_md5": hashlib.md5(context["rom"]).hexdigest(),
                   "cursor_symbols": cursors, "register_pool_proof": register_proof, "sites": sites}}}}}
     result["sha256"] = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

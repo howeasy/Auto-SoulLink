@@ -22,14 +22,15 @@ local t = G.open("ewram_tail")
 
 -- The first run proved 0x0203FD44..0x0203FFFF untouched. SlinkInfo later claimed
 -- 0x0203FD44..0x0203FE4B, and RR-DURABLE then claimed 0x0203FE50..0x0203FF60
--- (shadow mailbox, witness, producer, and pre-save flag; handlers.c RT_*).
+-- (shadow mailbox, witness, producer, and pre-save flag; handlers.c RT_*), and the main-menu version line
+-- then claimed 0x0203FF61 (handlers.c SLM_STATE).
 -- Never paint owned state: the producer writes its shadow mailbox every frame.
-local RT_BASE, RT_END = 0x0203FE50, 0x0203FF61 -- RT_END is exclusive
+local RT_BASE, RT_END = 0x0203FE50, 0x0203FF62 -- RT_END is exclusive (past RT_PRESAVE 0x0203FF60 and SLM_STATE 0x0203FF61)
 local TAIL_LO, TAIL_HI = RT_END, 0x0203FFFF
-local N = TAIL_HI - TAIL_LO + 1                     -- 159
-if t.P.INFO + 264 > RT_BASE or RT_BASE + 0x111 ~= TAIL_LO then
+local N = TAIL_HI - TAIL_LO + 1                     -- 158
+if t.P.INFO + 264 > RT_BASE or RT_BASE + 0x112 ~= TAIL_LO then
     t.fail("the watched tail starts after RR-DURABLE", string.format(
-        "INFO+264=0x%08X RT_END=0x%08X", t.P.INFO + 264, RT_BASE + 0x111))
+        "INFO+264=0x%08X RT_END=0x%08X", t.P.INFO + 264, RT_BASE + 0x112))
 end
 local log = t.log
 local function finish(ok)

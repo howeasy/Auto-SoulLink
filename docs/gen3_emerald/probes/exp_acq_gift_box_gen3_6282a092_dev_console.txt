@@ -1,0 +1,84 @@
+DEV SOURCE=6282a0923e501947256053c1209a631eea340e3d; no final-cut claim
+
+========== scenario: gift_box_gen3 ==========
+[duo] gift_box_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=c3284d4e8a97e3190cfd1aab98a83a4f1fd9ffd8dae7a4988abd4b7669f1157e b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=92516fe3d49618935a6e65df6c9c6bbfda89de4d3b90fdc274f04ff02bf533ba write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=6282a0923e501947256053c1209a631eea340e3d
+[duo] server up: tcp=50528 http=50529 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 16:02:33,435 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 16:02:33,435 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.4s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.5s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 67.6s
+[duo] RESULT_LINE a: RESULT: FAIL (boxed gift capture absent)
+[duo] RESULT_LINE b: RESULT: FAIL (boxed gift capture absent)
+[duo] PYDEC: FAIL client RESULT before a: native acquisition ready
+[duo] gift_box_gen3: a client finished before 'a: native acquisition ready' (a: RESULT: FAIL (boxed gift capture absent); b: RESULT: FAIL (boxed gift capture absent))
+--- gift_box_gen3 a result (last 25 lines) ---
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(14,7)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=261 level=3 hp=15/15
+MYKEY 2 4D654448:20250925
+PARTY slot=2 key=4D654448:20250925 species=258 level=5 hp=20/20
+MYKEY 3 4D15444F:20250925
+PARTY slot=3 key=4D15444F:20250925 species=258 level=5 hp=20/20
+MYKEY 4 4D05444E:20250925
+PARTY slot=4 key=4D05444E:20250925 species=258 level=5 hp=20/20
+MYKEY 5 4D35444D:20250925
+PARTY slot=5 key=4D35444D:20250925 species=258 level=5 hp=20/20
+booted frame=610 map=map=3591 at=(3,3) balls=5
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":6,"egg":0}
+ACQUISITION_SIGNAL {"address":136064732,"callback_address":169619164,"frame":1367,"kind":"mon_given","raw_r15":169619166}
+[client] [SLink-gen3] acquisition: 3 new boxed keys, none reported (ambiguous)
+TIMEOUT waiting for boxed gift capture [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (boxed gift capture absent)
+--- gift_box_gen3 b result (last 25 lines) ---
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(14,7)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+MYKEY 2 4D654448:DFDAF6DA
+PARTY slot=2 key=4D654448:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 3 4D15444F:DFDAF6DA
+PARTY slot=3 key=4D15444F:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 4 4D05444E:DFDAF6DA
+PARTY slot=4 key=4D05444E:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 5 4D35444D:DFDAF6DA
+PARTY slot=5 key=4D35444D:DFDAF6DA species=258 level=5 hp=20/20
+booted frame=610 map=map=3591 at=(3,3) balls=5
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":6,"egg":0}
+ACQUISITION_SIGNAL {"address":136064732,"callback_address":169619164,"frame":1056,"kind":"mon_given","raw_r15":169619166}
+[client] [SLink-gen3] acquisition: 3 new boxed keys, none reported (ambiguous)
+TIMEOUT waiting for boxed gift capture [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (boxed gift capture absent)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gift_box_gen3_1o7kbdxl
+
+========== summary ==========
+  gift_box_gen3: FAIL (attempt 1 of 1)
+
+exit=1

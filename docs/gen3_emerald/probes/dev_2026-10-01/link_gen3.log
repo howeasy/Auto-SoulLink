@@ -1,0 +1,38 @@
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 write_checkpoint.json=f2ef83e931a2319dfd642291852e16818750419889c4bc4ee7fc0304836cc686 profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=ea9c8a070e2a9f44c56d6a2957d577525f674871
+[duo] server up: tcp=56371 http=56372 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:36:57,305 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:36:57,305 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n path=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n path=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=65AD1818:20250925 b=26029438:DFDAF6DA
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 65AD1818:20250925 <-> 26029438:DFDAF6DA on route_102, alive
+[duo] timing orchestrate 20.8s
+[duo] timing results 5.2s
+[duo] RESULT_LINE a: RESULT: PASS (caught 65AD1818:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (caught 26029438:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=8f865c5d0a5da5758221bd9e14aaf436ac39ceaa3e357bf1f34e6ac9aa402de5 file=8f865c5d0a5da5758221bd9e14aaf436ac39ceaa3e357bf1f34e6ac9aa402de5 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=65eca958a78f4e6f7266b6db40657e1ec27b6ad9dc006737091d7ccc946ae21a file=65eca958a78f4e6f7266b6db40657e1ec27b6ad9dc006737091d7ccc946ae21a match=true saves=1 counter=3->4 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=b native_grant=0
+[duo] link: 65AD1818:20250925 <-> 26029438:DFDAF6DA alive on route_102 and saved once in each party
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_48fa9m1n
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)

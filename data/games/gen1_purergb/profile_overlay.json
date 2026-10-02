@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "d85b256fe0133bbee8c21c33dff9694483e2f40fe666c12297095dda9c1d35b0"
+   "sha256": "869faad4030c2f9c5583e0ace192c91a9e7e7605d537adefd58d7977d094bf00"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "e03094c6c71dead76686bb7db5cac8d54c6f6ea259ca2b8b35af6441f4297fc9"
+   "sha256": "0206b9c206b2e6cca09b46a98cdd0779a18fdd57efd19e11b81decf56594a68e"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "d049d08e9e25d166fe36651f54457204b694ca1a3a4568af3fa39e516dd204d9"
+   "sha256": "b6f309bf0b49d1dc180059165403c1e8d04846585dcbc6507800e2cf10807939"
   }
  },
  "titles": {
@@ -266,9 +266,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27985,
+     "addr": 28002,
      "bank": 1,
-     "flat": 27985
+     "flat": 28002
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -436,14 +436,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -546,9 +546,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -601,7 +601,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "f2a54f64d28c4c14e0f69562909c506de2d5da05",
+   "rom_sha1": "fe62598a6834b0e88d0e879aafcab39876ec988c",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -927,9 +927,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27990,
+     "addr": 28007,
      "bank": 1,
-     "flat": 27990
+     "flat": 28007
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -1097,14 +1097,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -1207,9 +1207,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -1262,7 +1262,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "34094ce40d59dd3978c49cd8f67c7564b5e0fadd",
+   "rom_sha1": "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1588,9 +1588,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27984,
+     "addr": 28001,
      "bank": 1,
-     "flat": 27984
+     "flat": 28001
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -1758,14 +1758,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -1868,9 +1868,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -1923,7 +1923,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "74e2f451a9928b73da7f98149d6287c4714954e8",
+   "rom_sha1": "999a702c4027db9e522486fd6330c86ff6932d4b",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,

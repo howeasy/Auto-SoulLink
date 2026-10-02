@@ -242,7 +242,7 @@ def test_provenance_lock_and_admission_agree(title):
     assert out["sha1"] not in _json("admission")  # a distinct artifact, never a clean row
     assert PROVENANCE["overlay"]["sources"] == {
         p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in overlay.OVERLAY_SRC.iterdir() if p.suffix in (".asm", ".inc")}
+        for p in overlay.OVERLAY_SRC.iterdir() if p.suffix in (".asm", ".inc", ".2bpp")}
     assert PROVENANCE["overlay"]["edits"] == len(overlay.EDITS)
 
 

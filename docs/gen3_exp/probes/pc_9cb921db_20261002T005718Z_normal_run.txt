@@ -1,0 +1,12 @@
+cut=9cb921dbb0c20fa8fef5644275cfeac965ae1dbd
+script=lua/tests/gen3_scripted_play.lua
+fixture=tests\fixtures\gen3\exp_pc.sav
+fixture_sha256=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a
+rom_sha1=28877d733492299599f2b8fff50493109d72653c
+source_script_sha256=1f1a8ba3fa940de1fe0f7cbff0bc2259eb996a46e2adf9e3f97c532be0923bea
+from=emerald_enter_pc
+stop_after=emerald_pc_release_cancel
+state=None
+result=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_9cb921db_20261002T005718Z_normal_result.txt
+shadow=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_9cb921db_20261002T005718Z_normal.shadow.log
+passed=False

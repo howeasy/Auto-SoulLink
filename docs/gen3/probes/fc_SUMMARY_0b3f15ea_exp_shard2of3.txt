@@ -1,0 +1,13 @@
+# G4 final cut 0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3 -- tools/gen3_final_cut.py summary (written 2026-10-02T14:45:57Z)
+# RUN 6 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_grass_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_grass_gen3_exp_as_a_0b3f15ea.txt |
+| 2 | exp_static_surf_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_surf_gen3_exp_as_a_0b3f15ea.txt |
+| 3 | exp_static_altering0_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_altering0_gen3_exp_as_a_0b3f15ea.txt |
+| 4 | gift_box_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_gift_box_gen3_exp_as_a_0b3f15ea.txt |
+| 5 | linked_faint_active_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_linked_faint_active_gen3_exp_as_a_0b3f15ea.txt |
+| 6 | boxsync_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_boxsync_gen3_exp_as_a_0b3f15ea.txt |
+
+OVERALL: PASS (6/6 rows)

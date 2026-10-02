@@ -22,6 +22,17 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
 * **The START-menu row and the panel.** A `SLINK` row appended after EXIT (so every existing
   index keeps its position), a ROM0 stub that draws it, and a bank-`$3F` entry that opens the
   panel and returns to the menu. Pairs, badges and dead zones, paged with A and closed with B.
+* **The title screen and the main menu.** The 16-pixel band under the Pokemon logo keeps its "Red Version" line and gains a
+  SoulLink logo in the Pokemon logo's style on its left; the title carries no version. One routine in
+  bank `$3F` (`tools/title_screen.py`) replaces `PrintGameVersionOnTitleScreen`. The art comes from
+  `tools/gen_gen1_title.py`. The patch version (`SoulLink dev`, or `SoulLink vX.Y.Z[-dev]` from
+  `build.py --version`) is printed on the New Game / Continue screen instead: `MainMenu.next2`'s `call UpdateSprites`
+  is redirected to a 13-byte stub in the free ROM0 tail that makes the call and then `PlaceString`s the text on tile
+  row 17, the one row neither menu box nor the Continue info box (rows 7-16) covers; `ClearScreen` wipes it on every
+  re-entry and the same hook draws it again. The title graphics and
+  the credits' copyright text are untouched. The title's mon swap used to scroll from tile row 9, so its start line
+  is moved to row 10 (one byte) and the band stays still. `inject.py --version` stamps randomized builds the same way;
+  the Manager's randomized runs are stamped `dev` until it passes a release version.
 * **The SLINK TRADE receptionist.** The Cable Club receptionist in every Pokémon Center now
   opens a `SLINK TRADE` menu (`trade_receptionist.asm`), fed by a foreground service that runs
   from the `DelayFrame` bridge in the reserved RST padding (`trade_service.asm`). Three
@@ -100,8 +111,8 @@ the bridge (never from an interrupt), and the fade case is held rather than drop
 
 | | Base ROM md5 | Patched md5 (current build) |
 |---|---|---|
-| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a241ebcd9e7799fce4b3e80ffac45a45` |
-| Blue | `50927e843568814f7ed45ec4f944bd8b` | `1298581bf3eb21dd03ffb3d7c5a7a0b7` |
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a9a70f99008559734ba01a9a80d78d5c` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `fa47b8ba0c10e82f2545791abd157ad3` |
 
 `patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
 

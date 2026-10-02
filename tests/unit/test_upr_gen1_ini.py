@@ -143,7 +143,7 @@ def test_the_three_overlay_builds_have_their_own_entries(overlay_entries):
         assert ov["statics"] == clean["statics"]
     e = overlay_entries("purered")
     # header CRC of the trade-capability overlay build (admission_overlay.json purered header_crc)
-    assert e["CRCInHeader"] == 0xABE1 and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
+    assert e["CRCInHeader"] == 0x702F and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
 
 
 def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries):

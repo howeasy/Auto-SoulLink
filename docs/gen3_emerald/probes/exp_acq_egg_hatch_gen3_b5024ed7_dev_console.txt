@@ -1,0 +1,84 @@
+DEV SOURCE=b5024ed74315b00bda86972e902f00c49687929b; no final-cut claim
+
+========== scenario: egg_hatch_gen3 ==========
+[duo] egg_hatch_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=cbb7b91135516f2ad4d39b6b086743d245e83d38b3ff624d4676695cae941121 b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=23e0709d1f457f9c5a586f1d40b2a1e977fcba11a476459a60c6b6cc4f0046c4 write_checkpoint.json=c8675dbf23403dc7a2b7c90ec5e98fac7afd8a6799c39f1779c1f15272b8b90b profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=b5024ed74315b00bda86972e902f00c49687929b
+[duo] server up: tcp=55498 http=55499 data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:45:14,567 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:45:14,567 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.5s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n path=C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.5s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.3s
+[duo] RESULT_LINE a: RESULT: FAIL (wrong native hatchling)
+[duo] RESULT_LINE b: RESULT: FAIL (wrong native hatchling)
+[duo] PYDEC: FAIL client RESULT before a: native acquisition ready
+[duo] egg_hatch_gen3: a client finished before 'a: native acquisition ready' (a: RESULT: FAIL (wrong native hatchling); b: RESULT: FAIL (wrong native hatchling))
+--- egg_hatch_gen3 a result (last 25 lines) ---
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":2,"egg":1}
+RX hud_show text=Partner caught Mudkip in Gift Daycare
+ACQUISITION_SIGNAL {"address":135377758,"callback_address":135377758,"frame":8477,"kind":"hatch","raw_r15":135377760}
+TX capture 693D6023:20250925 {"area_id":"gift_daycare","event":"capture","gift":true,"held_item_id":0,"hp":10,"is_egg":false,"key":"693D6023:20250925","level":0,"maxHP":10,"nickname":"Mudkip","player":"a","seq":266,"species_id":258,"stats":{"attack":5,"defense":5,"level":0,"maxHP":10,"pp1":35,"pp2":40,"pp3":0,"pp4":0,"spAtk":5,"spDef":5,"speed":5}}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 8481
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 8481
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 8481
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 8481
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 8481
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 8481
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 8481
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 8481
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 8481
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 8481
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 8481
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 8481
+RX msgbox text=Mudkip and Mudkip linked!
+RX party_mon key=693D6023:20250925
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/exp-xg3/lua/gen3/safety.lua:105: forbidden state: callback2)
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/exp-xg3/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+TX sync_retrieve_done 693D6023:20250925 {"event":"sync_retrieve_done","key":"693D6023:20250925","player":"a","seq":291}
+WRITES 12
+RESULT: FAIL (wrong native hatchling)
+--- egg_hatch_gen3 b result (last 25 lines) ---
+PARTY slot=1 key=693D6023:DFDAF6DA species=258 level=1 hp=20/20
+booted frame=610 map=map=3591 at=(3,5) balls=5
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":2,"egg":1}
+ACQUISITION_SIGNAL {"address":135377758,"callback_address":135377758,"frame":8143,"kind":"hatch","raw_r15":135377760}
+TX capture 693D6023:DFDAF6DA {"area_id":"gift_daycare","event":"capture","gift":true,"held_item_id":0,"hp":10,"is_egg":false,"key":"693D6023:DFDAF6DA","level":0,"maxHP":10,"nickname":"Mudkip","player":"b","seq":255,"species_id":258,"stats":{"attack":5,"defense":5,"level":0,"maxHP":10,"pp1":35,"pp2":40,"pp3":0,"pp4":0,"spAtk":5,"spDef":5,"speed":5}}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 8222
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 8222
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 8222
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 8222
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 8222
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 8222
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 8222
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 8222
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 8222
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 8222
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 8222
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 8222
+RX msgbox text=Mudkip and Mudkip linked!
+RX party_mon key=693D6023:DFDAF6DA
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/exp-xg3/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+TX sync_retrieve_done 693D6023:DFDAF6DA {"event":"sync_retrieve_done","key":"693D6023:DFDAF6DA","player":"b","seq":280}
+WRITES 12
+RESULT: FAIL (wrong native hatchling)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_egg_hatch_gen3_d0hx_v7n
+
+========== summary ==========
+  egg_hatch_gen3: FAIL (attempt 1 of 1)
+
+exit=1

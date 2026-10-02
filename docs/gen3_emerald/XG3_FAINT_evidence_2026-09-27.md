@@ -34,3 +34,27 @@ Run: `python tools/e2e_duo.py --game gen3_exp --scenario linked_faint_active_gen
 The committed Python receipt identifies the exact source cut and input hashes.
 The current generated checkpoint's `open.battle_handoff` text still describes the
 pre-live state; this document records the later bounded wild-row result.
+
+## 2026-10-01 update
+
+The sentence above is no longer true of the checkpoint. `write_checkpoint.json`'s
+`emerald_expansion_28877d73.open.battle_handoff` now reads (abridged):
+
+> source and ROM handoff shape bound; wild linked_faint_active_gen3 PHYSICAL PASS on the expansion
+> at ddf6ebd8/c9c215f7 (docs/gen3_emerald/XG3_FAINT_evidence_2026-09-27.md); the natural-play A
+> faint did not hit the Cmd_tryfaintmon marker; trainer, doubles, whiteout and Explode
+> unqualified; receipts predate current master
+
+So the checkpoint states the **real** evidence rather than the pre-live state: a wild-row PHYSICAL
+pass is claimed at the named cuts, the natural-play faint's marker miss is recorded, and trainer,
+doubles, whiteout and Explode stay unqualified.
+
+Two caveats that travel with that text:
+
+- **The receipts predate current master.** The wild-row PASS is at `ddf6ebd8`/`c9c215f7`, not at
+  the branch tip; re-run it at the frozen cut before treating it as current.
+- **It is a wild-row result, not a clean-cut receipt.** In
+  `docs/gen3_emerald/probes/dev_2026-10-01/`, `lfa2.log` shows both clients reaching
+  `RESULT: PASS` but the harness **failing** the run at the clean-cut gate
+  (`PYDEC: FAIL the receipt's source is +dirty`, `FAIL (attempt 1 of 1)`). That makes the dev
+  rerun a **dev result, not a receipt**.
