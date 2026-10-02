@@ -98,3 +98,14 @@ Owner: "Synth tests ARE allowed."
 
 - **Up to two concurrent functional lanes** (different `C:/slink/g4/<lane>` dirs, own PIDs) are allowed to cut wall time.
 - **Performance receipts (row f / gen4-PERF)** still need a quiet machine. No other Gen 4 lane runs during them, and foreign PIDs are recorded.
+
+## Owner rulings: G1 rows i and c (2026-10-02, AskUserQuestion)
+
+- **Row i: persistence only.** Owner chose "Persistence only (Recommended)".
+  - Row i PASSes when a box write survives a native SAVE and a cold reload. The box dirty flag is recorded as an observation, not a requirement.
+  - Evidence: `C:/slink/g4/probe/shakedown-hg-ac0d70aa43/boxed-fix/observation.json` (at `bf58a7c8`). The box was original 70, target 71, and read 71 both with the dirty flag and without it.
+- **Row c: 2-frame tolerance.** Owner chose "Accept 2 frames (Recommended)".
+  - Overlay residency may trail its pinned `HandleLoadOverlay` cause by 0..2 frames.
+  - Evidence: same receipt. On PC-derived input, id0 was caused at frame 220 and resident at 222; id38 caused at 229, resident at 231. Stock-save baseline measured 0..1.
+  - The receipt must cite the measured lag.
+- **ROM companion patch:** answered by the owner's 2026-10-01 patch-first policy (from another lane). There is no hard ROM-patch requirement. Gen 4 ships with no companion until one is admitted.
