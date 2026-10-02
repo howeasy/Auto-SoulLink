@@ -71,6 +71,8 @@ def check_version(version: str) -> str:
 
 
 def rom_dir_for(name: str, rom_dirs: list[pathlib.Path]) -> pathlib.Path:
+    if not rom_dirs:                       # --plan: print the commands, find nothing
+        return pathlib.Path("<rom-dir>")
     for d in rom_dirs:
         if (d / name).is_file():
             return d
@@ -204,6 +206,9 @@ def main() -> int:
     ap.add_argument("--promote-overlays", action="store_true", dest="promote",
                     help="Gen 2: run --promote-overlays even if the rows are not ADMITTED yet (owner G4 signature + green release evidence)")
     ap.add_argument("--rom-dir", action="append", type=pathlib.Path, default=[], help="where the clean ROMs live (repeatable)")
+    ap.add_argument("--accept-new-identity", action="store_true",
+                    help="regenerate after an INTENTIONAL identity change (a code change or a new masking rule): the canonical-identity "
+                         "check is reported but does not stop the tool. Never use it for a release stamp.")
     ap.add_argument("--no-jar", action="store_true",
                     help="do not install the updated UPR fork jar (it is a shared cache file outside git: other trees' tests read it)")
     ap.add_argument("--gen2-arg", action="append", default=[], help="extra argument for tools/build_gen2_companion.py (repeatable)")
@@ -214,7 +219,7 @@ def main() -> int:
         raise SystemExit(f"--only must name some of {FAMILIES}")
     main_checkout = pathlib.Path(subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True,
                                                 text=True, check=True).stdout.strip()).resolve().parent
-    rom_dirs = [*args.rom_dir, ROOT, main_checkout]
+    rom_dirs = [] if args.plan else [*args.rom_dir, ROOT, main_checkout]
     steps = plan(version, families, rom_dirs, promote=args.promote or None, gen2_args=tuple(args.gen2_arg),
                   jar=not args.no_jar)
     if args.plan:
@@ -227,6 +232,9 @@ def main() -> int:
         run(step)
         seen.add(step.family)
     drift = identity_drift(before, identities(), families)
+    if drift and args.accept_new_identity:
+        print("\nNOTE: the canonical identity moved (accepted by --accept-new-identity):\n  " + "\n  ".join(drift))
+        drift = []
     if drift:
         print("\nSTOP: the canonical identity moved, so this was not a version-only change. Restore the artifacts and qualify the\n"
               "change as code:\n  " + "\n  ".join(drift), file=sys.stderr)

@@ -12,6 +12,7 @@ and `lua/slink_gen1.lua`), and the actual built ZIP has to contain it.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -321,6 +322,7 @@ def _stamp_record(dist, version, files):
 
     import stamp_release
     dist.mkdir(parents=True, exist_ok=True)
+    files = {**{name: name.encode() for name in stamp_release.SHIPPED}, **files}        # a release ships every companion
     for name, body in files.items():
         (dist / name).write_bytes(body)
     (dist / "companion_version.json").write_text(json.dumps({
@@ -342,9 +344,12 @@ def test_companions_stamped_for_another_version_are_refused(tmp_path):
 
 
 def test_a_companion_edited_after_stamping_or_never_covered_is_refused(tmp_path):
-    _stamp_record(tmp_path, "v1.2.3", {"SLink-RR.ups": b"rr"})
+    _stamp_record(tmp_path, "v1.2.3", {})
     (tmp_path / "SLink-RR.ups").write_bytes(b"edited")
-    (tmp_path / "SLink-Crystal.ups").write_bytes(b"new")
+    record = tmp_path / "companion_version.json"
+    doc = json.loads(record.read_text(encoding="utf-8"))
+    del doc["files"]["SLink-Crystal.ups"]
+    record.write_text(json.dumps(doc), encoding="utf-8")
     errors = make_release.companion_stamp_errors("1.2.3", tmp_path)
     assert any("SLink-RR.ups changed after it was stamped" in e for e in errors)
     assert any("SLink-Crystal.ups is not covered" in e for e in errors)
@@ -355,3 +360,10 @@ def test_a_missing_record_is_refused_and_build_release_exits(tmp_path, monkeypat
     monkeypatch.setattr(make_release, "companion_stamp_errors", lambda version, dist=None: ["nope"])
     with pytest.raises(SystemExit):
         make_release.build_release(version="1.2.3", out_dir=tmp_path, skip_generators=True, with_patch=True)
+
+
+def test_a_shipped_companion_missing_from_dist_is_refused_even_if_the_record_vouches_for_it(tmp_path):
+    _stamp_record(tmp_path, "v1.2.3", {})
+    (tmp_path / "SLink-Emerald.ups").unlink()
+    errors = make_release.companion_stamp_errors("1.2.3", tmp_path)
+    assert any("SLink-Emerald.ups is missing" in e for e in errors)

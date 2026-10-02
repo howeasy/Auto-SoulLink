@@ -590,6 +590,7 @@ def companion_stamp_errors(version: str, dist: Path | None = None) -> list[str]:
     for name in stamp_release.SHIPPED:
         path = dist / name
         if not path.is_file():
+            errors.append(f"{name} is missing from {dist} (a release ships every companion the record vouches for)")
             continue
         if name not in files:
             errors.append(f"{name} is not covered by {record.name}")

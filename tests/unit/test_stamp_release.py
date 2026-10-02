@@ -104,3 +104,8 @@ def test_the_shared_jar_is_only_installed_when_asked(roms):
     names = [s.name for s in sr.plan("dev", ("pure",), roms)]
     assert names[-1] == "randomizer jar entries"
     assert "randomizer jar entries" not in [s.name for s in sr.plan("dev", ("pure",), roms, jar=False)]
+
+
+def test_plan_needs_no_clean_roms():
+    steps = sr.plan("dev", sr.FAMILIES, [])
+    assert any("<rom-dir>" in a for s in steps for a in s.argv)

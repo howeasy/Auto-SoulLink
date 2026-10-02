@@ -15,16 +15,22 @@ from __future__ import annotations
 import hashlib
 
 FIELD = 20                       # bytes reserved for "SoulLink <version>" + terminator + padding, in every family
+PREFIX = 9                       # len("SoulLink "): one byte per character in every charmap, and part of the canonical identity
 GB_CHECKSUM = (0x14E, 0x14F)     # Game Boy global checksum: the one place outside the field a version stamp reaches
 VERSION_MAX = 10                 # "v0.3.0-dev"; "SoulLink " + 10 characters + terminator <= FIELD
 
 
 def _spans(rom_len: int, slots, gb: bool) -> list[tuple[int, int]]:
+    """The byte ranges the canonical identity zeroes. A slot of exactly FIELD bytes names a version FIELD and only its version part
+    (everything after the PREFIX) is masked: the "SoulLink " wordmark stays in the identity, so a wordmark or charmap change is a
+    code change, never a stamp. Any other slot (the Gen 2 Stadium table) is masked whole."""
     spans = []
     for slot in slots:
         off, length = (slot["offset"], slot["length"]) if isinstance(slot, dict) else slot
         if off < 0 or length <= 0 or off + length > rom_len:
             raise ValueError(f"version slot {off:#x}+{length} is outside the {rom_len}-byte ROM")
+        if length == FIELD:
+            off, length = off + PREFIX, FIELD - PREFIX
         spans.append((off, off + length))
     if gb:
         spans.append((GB_CHECKSUM[0], GB_CHECKSUM[1] + 1))
@@ -68,7 +74,9 @@ def slot_from_sym(sym_text: str, label: str, length: int = FIELD) -> dict:
         parts = line.split()
         if len(parts) == 2 and parts[1] == label and ":" in parts[0]:
             bank, addr = (int(x, 16) for x in parts[0].split(":"))
-            offset = addr if bank == 0 or addr < 0x4000 else bank * 0x4000 + (addr - 0x4000)
+            if bank and addr < 0x4000:
+                raise ValueError(f"{label} is at {parts[0]}: a banked label below $4000 has no ROM offset")
+            offset = addr if bank == 0 else bank * 0x4000 + (addr - 0x4000)
             return {"offset": offset, "length": length}
     raise KeyError(f"{label} is not in the symbol file")
 

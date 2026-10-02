@@ -112,7 +112,7 @@ MENU_FIELD = 20        # patch/tools/rom_identity.py FIELD and native_menu.h SLM
 
 def menu_field(version: str = DEFAULT_VERSION) -> bytes:
     """menu_bytes padded with zeros to MENU_FIELD: the exact bytes the compiler lays down for the payload's slm_text."""
-    return menu_bytes(version).ljust(MENU_FIELD, bytes(1))
+    return menu_bytes(version).ljust(MENU_FIELD, b"\x00")
 
 
 def menu_define(version: str = DEFAULT_VERSION) -> str:

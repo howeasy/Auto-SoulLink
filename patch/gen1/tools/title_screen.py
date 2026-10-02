@@ -92,7 +92,7 @@ def menu_text(version: str) -> bytes:
     Gen 1's charset puts 'A' at $80, 'a' at $A0, '0' at $F6, space at $7F, '-' at $E3 and '.' at $E8
     (constants/charmap.asm; manifest.SLINK_TEXT is the same mapping)."""
     out = bytes(_tile(c) for c in MENU_PREFIX + check_version(version))
-    return (out + bytes((END,))).ljust(FIELD, bytes(1))
+    return (out + bytes((END,))).ljust(FIELD, b"\x00")
 
 
 def _tile(c: str) -> int:
