@@ -660,7 +660,17 @@ def test_f10_a_second_fire_inside_one_frameadvance_is_a_zero_byte_noop():
     w.dispatch_seam(cmd=seam_cmd(w))
     w.advance(1)
     assert len(w.writes) == 3                                         # the first fire's three spans, nothing more
-    assert any("lease already used" in s for s in w.logs)             # the second fire was refused by the lease itself
+    assert w.state.d7_refires == 1                                    # the second fire was refused by the lease itself
+
+
+def test_r3_f10_repeated_fires_queue_no_events_so_they_cannot_latch_a_registry_failure():
+    w = armed_world()
+    for _ in range(20):                                               # far more than max_pending (8)
+        w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert len(w.writes) == 3 and w.state.d7_refires == 19
+    st = w.signals.status(w.signals)
+    assert st["failure"] is None and w.state.revoked is None and not any("ENGINE SIGNALS STOPPED" in x for x in w.logs)
 
 
 def test_f4_a_landed_write_never_hands_a_later_command_a_false_done():
@@ -675,7 +685,7 @@ def test_f4_a_landed_write_never_hands_a_later_command_a_false_done():
     assert (res[0] if isinstance(res, tuple) else res) != "done"
 
 
-def test_f4_a_noop_fire_retires_only_its_own_entry():
+def test_f4_a_noop_fire_retires_its_entry_with_zero_bytes():
     w = armed_world()
     w.set_battle_hp(0, 0)                                              # the game's own faint took both copies to zero
     w.put(w.battle_party_rec(0), codec_plain(w.party[0], 0))
@@ -717,7 +727,7 @@ def frame_reads(w, frames=30):
 
 
 @pytest.mark.parametrize("where", ["overworld", "battle"])
-def test_f6_the_per_frame_read_budget_with_a_full_party(where):
+def test_f6_steady_state_frame_reads_with_a_full_party_stay_under_budget(where):
     w = World(party=list(SIX), area_of=AREA, charmap={0x12: "A"})
     w.boot(100)
     if where == "battle":
@@ -725,6 +735,20 @@ def test_f6_the_per_frame_read_budget_with_a_full_party(where):
         w.advance(5)
     worst = frame_reads(w)
     assert worst <= BUDGET[where], f"{where}: {worst} reads in one frame"
+
+
+def test_r3_f6_a_full_box_signature_pass_is_bounded():
+    w = World(party=two_mon(), boxes={(0, 0): Mon(0x11111111, 16, 3, 13, 13)})
+    w.boot(80)
+    base = frame_reads(w, 10)
+    w.field(task=1)
+    w.advance(3)
+    w.field(task=0)
+    before = w.reads
+    w.advance(1)                                                       # the idle rising edge: one signature pass, no decode
+    spent = w.reads - before
+    slots = w.prof["boxes"] * w.prof["mons_per_box"]
+    assert 2 * slots <= spent <= 2 * slots + base + 40, f"{spent} reads for {slots} slots"   # 2 reads per slot, no more
 
 
 def test_f6_a_party_change_is_seen_the_next_frame_including_the_tail_only_hp():
@@ -835,17 +859,67 @@ def test_r2_f1_a_deposit_shifts_the_party_extra_and_clears_the_last_entry():
     assert w.saved_extra(2) == bytes(5)                                 # the last entry cleared
 
 
-def test_r2_f1_without_a_pinned_extra_geometry_party_shape_changes_refuse_with_a_pack_gap():
-    mon = Mon(0x55555555)
-    w = ready(party=[Mon(0x10000001), Mon(0x10000002)], boxes={(0, 0): mon}, party_extra=None)
+def test_r3_f1_with_no_pack_block_the_named_default_applies_and_party_shape_changes_succeed():
+    mon = Mon(0x55555555, 155, 7, 3, 30)
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002), Mon(0x10000003)], boxes={(0, 0): mon})
+    e1 = w.saved_extra(1)
     w.reply({"cmd": "box_mon", "key": w.party[0].key})
     w.reply({"cmd": "party_mon", "key": mon.key, "stats": STATS})
-    w.advance(6)
-    assert w.writes == []
-    assert [m["reason"] for m in w.events("box_mon_failed")] == ["pack_gap:party_off.extra"]
-    assert [m["reason"] for m in w.events("sync_retrieve_failed")] == ["pack_gap:party_off.extra"]
+    w.advance(8)
+    assert w.events("box_mon_failed") == [] and w.events("sync_retrieve_failed") == []
+    assert w.saved_keys() == [key_of(0x10000002), key_of(0x10000003), mon.key]
+    assert w.saved_extra(0) == e1 and w.saved_extra(2) == bytes(5)       # shifted, and the withdrawn slot cleared
 
 
+@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+def test_r3_f2_a_party_array_one_notch_too_small_refuses_and_names_it(title):
+    need = 8 + 6 * 236 + 6 * 5                                          # PartyCore + 6 * PERFORMANCE_MAX
+    ok = ready(title, party=[Mon(0x10000001), Mon(0x10000002)], party_array_size=need)
+    ok.reply({"cmd": "box_mon", "key": ok.party[0].key})
+    ok.advance(5)
+    assert ok.events("box_mon_failed") == []
+    w = ready(title, party=[Mon(0x10000001), Mon(0x10000002)], party_array_size=need - 1)
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.advance(5)
+    assert w.writes == [] and "too small for PartyExtra" in w.events("box_mon_failed")[0]["reason"]
+
+
+@pytest.mark.parametrize(("override", "why"), [
+    ({"stride": 4}, "differs from PERFORMANCE_MAX without a cited override"),
+    ({"off": 0x5B0}, "too small for PartyExtra"),                       # out of the array
+    ({"off": 0x100}, "too small for PartyExtra"),                       # overlaps mons[]
+])
+def test_r3_f2_a_bad_party_extra_override_refuses(override, why):
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002)], party_extra=override)
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.advance(5)
+    assert w.writes == [] and why in w.events("box_mon_failed")[0]["reason"]
+
+
+# F7 (party): a flags-only change is re-decoded, never served from the cache
+def test_r3_f7_a_partydecrypted_flag_flip_with_tail_and_checksum_unchanged_is_not_served_from_cache():
+    w = World(party=two_mon())
+    w.boot(80)
+    assert w.state.party is not None
+    w.w(w.party_base + 8 + 4, 1, 2)                                     # partyDecrypted: pid, tail, checksum word untouched
+    w.advance(1)
+    assert w.state.party is None and "locked" in w.state.party_why
+
+
+# F8: a reset disarms the hook
+def test_r3_f8_a_reset_disarms_the_armed_seam_hook():
+    w = armed_world()
+    assert len(w.hooks) == 1
+    w.session.driver.on_reset()
+    assert w.hooks == {} and w.state.d7 is None
+
+
+# F9: the signature offsets are bounded by the record size
+def test_r3_f9_signature_offsets_beyond_the_party_record_refuse_construction():
+    def shrink(title):
+        title["profile"]["pkm"]["party_size"] = 150
+    w = World(patch_title=shrink, start=False)
+    assert w.session is None and "party signature" in w.admit_why
 def test_r2_f1_a_withdraw_clears_the_new_slots_extra():
     mon = Mon(0x55555555, 155, 7, 3, 30)
     w = ready(party=[Mon(A.pid)], boxes={(2, 4): mon})
@@ -865,12 +939,12 @@ def test_r2_f5_the_vacated_party_slot_is_zeromondata_not_raw_zeros():
 
 
 def test_r2_f6_spans_are_written_as_aligned_words_not_bytes():
-    w = ready(party=[Mon(0x10000001), Mon(0x10000002), Mon(0x10000003)])
+    w = ready(party=[Mon(0x10000001 + i) for i in range(6)])
     w.reply({"cmd": "box_mon", "key": w.party[0].key})
     w.advance(5)
-    widths = [n for _, _, n in w.writes]
-    assert 4 in widths and len(w.writes) < 300                           # ~700 bytes moved in a few dozen writes
-    assert w.writes and all(a % n == 0 for _, a, n in w.writes)          # every write is naturally aligned
+    total = sum(n for _, _, n in w.writes)                              # bytes moved
+    assert total > 1000 and len(w.writes) <= total // 2 + 10 and len(w.writes) >= total // 4
+    assert 4 in [n for _, _, n in w.writes] and all(a % n == 0 for _, a, n in w.writes)
 
 
 def test_r2_f2_a_retrying_command_does_not_rescan_the_boxes_every_frame():
@@ -899,12 +973,13 @@ def test_r2_f3_a_stale_checkpoint_never_arms_a_write():
     assert w.writes == [] and w.saved_hp(0) == 20
 
 
-def test_r2_f9_the_key_change_queue_is_capped_with_a_logged_drop():
+def test_r3_f3_overflowing_key_changes_are_sent_to_the_server_not_dropped_and_never_on_the_hud():
     w = ready()
-    for i in range(14):                                                  # one unanswered alias, then 13 more NPC trades
+    for i in range(40):                                                  # one unanswered alias, then 39 more NPC trades
         w.party[0] = Mon(0x40000000 + i, 16, 3, 13, 13, otid=0x0000BEEF)
         w.write_party()
         w.advance(6)
-    assert len(w.events("key_change")) == 1                              # only the first went out: the alias is unanswered
-    assert len(w.state.changes) <= 8
-    assert any("key_change queue full" in s for s in w.logs)
+    assert len(w.state.changes) <= 32
+    assert len(w.events("key_change")) + len(w.state.changes) == 40      # every change is on the wire or still queued
+    assert sum("key_change queue full" in x for x in w.logs) == 1        # one console line
+    assert not any("key_change" in str(h) for h in w.hud)                # never the HUD

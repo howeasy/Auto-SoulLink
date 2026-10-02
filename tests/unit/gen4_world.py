@@ -18,8 +18,8 @@ model the client's contracts are tested against (the live proof is the probe's j
 
 D7_MODEL below is a MODEL of profile.battle.d7 (the pack carries it since b8150e11; the client prefers the
 pack's). It is used only when a test strips the pack block (no_pack_d7) or overrides it with `d7=`. The
-PartyExtra geometry ({stride: 5}, pret include/constants/pokemon.h:132) is still a pack gap: `party_extra`
-supplies it as a MODEL.
+PartyExtra geometry is the client's named default (PERFORMANCE_MAX 5, pret include/constants/pokemon.h:132);
+`party_extra` overrides it and `party_array_size` sizes the party array.
 """
 from __future__ import annotations
 
@@ -115,8 +115,9 @@ def py(v):
 class World:
     def __init__(self, title="heartgold", *, party=None, boxes=None, d7="model", connected=True, rom_hash=None,
                  start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None, order="hook_new",
-                 party_extra="model"):
+                 party_extra=None, party_array_size=0x5B4, patch_title=None):
         self.title_name = title
+        self.party_array_size = party_array_size
         self.order = order          # "hook_new": the hook sees the NEW framecount; "hook_old": the OLD one
         self.reads = 0              # io read calls (the per-frame read budget)
         self.read_log = None        # when a list: every read address (which reads a code path makes)
@@ -168,11 +169,11 @@ class World:
             cfg["area_of"] = self.lua.eval(area_of)
         if charmap is not None:
             cfg["charmap"] = to_lua(self.lua, charmap)
-        if party_extra == "model":                       # MODEL: the pack carries no PartyExtra geometry yet
-            party_extra = {"stride": 5}
-        if party_extra is not None:
+        if party_extra is not None:                      # an OVERRIDE of the default geometry (stride 5, after mons[6])
             cfg["party_extra"] = to_lua(self.lua, party_extra)
-        if no_pack_d7:
+        if patch_title is not None:
+            patch_title(self.title)
+        if no_pack_d7 or patch_title is not None:
             cfg["title_profile"] = to_lua(self.lua, self.title)
         res = self.Client.new(self.lua.table_from(cfg))
         self.admit_why = None
@@ -224,7 +225,7 @@ class World:
         general = 0xF628
         pc_off, pc_extra = PC_OFF[self.title_name]
         self.pc_size = prof["boxes"] * 0x1000 + pc_extra
-        self.arrays = {1: (0x30, 0x60), 2: (0x5B4, 0x90), 5: (0x84, 0x1234), 41: (self.pc_size, pc_off)}
+        self.arrays = {1: (0x30, 0x60), 2: (self.party_array_size, 0x90), 5: (0x84, 0x1234), 41: (self.pc_size, pc_off)}
         self.dyn = SD + sv["dynamic_region_off"]
         for i, (size, off) in self.arrays.items():
             self.put(SD + sv["array_headers_off"] + i * sv["array_header_size"], struct.pack("<IIIHH", i, size, off, 0, 0))

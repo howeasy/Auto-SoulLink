@@ -76,7 +76,10 @@ local Client = {}
 Client.PHASE = "d7"
 Client.EFFECT_WINDOW = 900
 Client.BOX_RETRY_FRAMES = 60
-Client.MAX_CHANGES = 8          -- observed key changes waiting behind one unanswered alias
+Client.MAX_CHANGES = 32         -- observed key changes waiting behind one unanswered alias (overflow: sent unaliased)
+-- PartyExtraSub is u8 unk_00[PERFORMANCE_MAX]; PERFORMANCE_MAX = 5u (pret pokeheartgold@ad7a3afa
+-- include/constants/pokemon.h:132, pinned tree E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold).
+Client.PERFORMANCE_MAX = 5
 -- NDS platform facts for BizHawk's melonDS core (the NDS binding takes them as config, never defaults).
 Client.PLATFORM = { bus_domain = "ARM9 System Bus", pc_register = "ARM9 r15", pc_offset = { thumb = 4, arm = 8 },
                     arg_registers = { "ARM9 r0", "ARM9 r1" } }
@@ -159,7 +162,9 @@ function Client.new(p)
     -- status / level / HP / maxHP / stats (the tail is outside the checksum, and the reducer reads party
     -- HP). Torn or unreadable words only cost a full decode (R.party double-reads); a change inside a
     -- block that keeps the checksum word identical is the (2^-16) limit, as for the box signature.
-    local SIG_OFFS = { 0, 4, 0x88, 0x8C, 0x90, 0x94, 0x98 }
+    local TAIL = pk4.BOX_MON_SIZE                      -- the party tail starts where the box record ends
+    local SIG_OFFS = { 0, 4, TAIL, TAIL + 4, TAIL + 8, TAIL + 12, TAIL + 16 }
+    if SIG_OFFS[#SIG_OFFS] + 4 > psize then return nil, "party signature offsets exceed pkm.party_size" end
     local function party_sig(sd)
         local base = R.array(mem, prof, sd, po.array_id)
         if not base then return nil end
@@ -451,8 +456,9 @@ function Client.new(p)
             for k, v in pairs(extra or {}) do e[k] = v end
             return e
         end
-        if not lease then return ev("refused", "no lease") end
-        if lease.fired then return ev("refused", "lease already used by an earlier fire") end
+        -- no event for a stray or repeated fire: events fill max_pending and would latch a registry failure
+        if not lease then st.d7_stray = (st.d7_stray or 0) + 1; return nil end
+        if lease.fired then st.d7_refires = (st.d7_refires or 0) + 1; return nil end
         if not lease.renewed then return ev("refused", "lease not renewed by the previous frame") end
         lease.fired = true                                    -- single shot, even inside one frameadvance
         if st.revoked then return ev("refused", "revoked: " .. st.revoked) end
@@ -547,6 +553,7 @@ function Client.new(p)
     end
     function drv.on_reset()
         pe:reset()
+        if signals then signals:disarm(Client.PHASE) end        -- never leave the seam armed for a save that is gone
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
         st.party_sig = nil
         st.boxes = { gen = st.boxes.gen, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 }
@@ -689,10 +696,18 @@ function Client.new(p)
         for _, n in ipairs(notes) do
             local old, new = n:match("^slot_replace:([^>]+)>(.+)$")
             if old then
-                if #st.changes >= Client.MAX_CHANGES then
-                    log("key_change queue full: dropped " .. old .. " > " .. new)
-                else
-                    st.changes[#st.changes + 1] = { old = old, new = new }
+                st.changes[#st.changes + 1] = { old = old, new = new }
+                if #st.changes > Client.MAX_CHANGES then
+                    -- Never silently drop an identity change: the server must hear every one. Past the cap they go
+                    -- out in order WITHOUT a local alias (console line, once per overflow; no HUD).
+                    log("key_change queue full: sending " .. #st.changes .. " changes without a local alias")
+                    for _, c in ipairs(st.changes) do
+                        local m
+                        for _, mm in ipairs(party or {}) do if mm.key == c.new then m = mm end end
+                        session.send("key_change", { old_key = c.old, new_key = c.new, reason = "npc_trade",
+                                                     new_species = m and m.species })
+                    end
+                    st.changes = {}
                 end
             end
         end
@@ -753,19 +768,29 @@ function Client.new(p)
         return { sd = sd, party = party, party_size = psz, pc = pc }
     end
     -- PartyExtra (pokemon_types_def.h:322-326): Party = { PartyCore core; PartyExtra extra }, extra =
-    -- aprijuiceModifiers[PARTY_SIZE] of PERFORMANCE_MAX bytes (5, include/constants/pokemon.h:132),
-    -- right after mons[6] in the same save array. Party_RemoveMon (src/party.c:56-68) shifts mons[] AND
-    -- extra[] and clears the last entry; Party_AddMon (:47-54) clears extra[curCount]. The pack carries no
-    -- geometry for it (pinned for HGSS only): party_off.extra = { stride, off? } or p.party_extra; without
-    -- it every write that changes the party's SHAPE refuses with a pack-gap reason instead of guessing.
+    -- aprijuiceModifiers[PARTY_SIZE] of Client.PERFORMANCE_MAX (5) bytes, right after mons[6] in the same
+    -- save array. Party_RemoveMon (src/party.c:56-68) shifts mons[] AND extra[] and clears the last entry;
+    -- Party_AddMon (:47-54) clears extra[curCount]. Default geometry: off = mons_off + 6 * psize, stride =
+    -- PERFORMANCE_MAX. A pack override (party_off.extra = { stride, off?, cite }) or p.party_extra is honoured
+    -- only when present; a stride other than PERFORMANCE_MAX needs a `cite`. The geometry is bounded against
+    -- the LIVE array size every time (the hge layout is unpinned: a party array too small to hold it refuses,
+    -- by name, instead of writing past the array).
     local function extra_geometry(L)
-        local g = po.extra or p.party_extra
-        if type(g) ~= "table" or math.type(g.stride) ~= "integer" or g.stride < 1 then
-            return nil, "pack_gap:party_off.extra"
+        local g = po.extra or p.party_extra or {}
+        local stride = g.stride == nil and Client.PERFORMANCE_MAX or g.stride
+        local base = po.mons_off + R.PARTY_CAPACITY * psize
+        local off = g.off == nil and base or g.off
+        if math.type(stride) ~= "integer" or math.type(off) ~= "integer" or stride < 1 then
+            return nil, "bad party extra geometry"
         end
-        local off = g.off or (po.mons_off + R.PARTY_CAPACITY * psize)
-        if off + R.PARTY_CAPACITY * g.stride > L.party_size then return nil, "party extra outside the party array" end
-        return { off = off, stride = g.stride }
+        if stride ~= Client.PERFORMANCE_MAX and not g.cite then
+            return nil, "party extra stride " .. stride .. " differs from PERFORMANCE_MAX without a cited override"
+        end
+        if base > L.party_size or off < base or off + R.PARTY_CAPACITY * stride > L.party_size then
+            return nil, "party array too small for PartyExtra (" .. L.party_size .. " bytes; needs "
+                .. (off + R.PARTY_CAPACITY * stride) .. ")"
+        end
+        return { off = off, stride = stride }
     end
     local function extra_addr(L, g, slot) return L.party + g.off + slot * g.stride end
     local function box_addr(L, box, slot)
