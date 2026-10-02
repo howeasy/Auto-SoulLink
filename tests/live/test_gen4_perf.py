@@ -301,6 +301,8 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
                 "SpeedPercent",
                 "FrameSkip",
                 "AutoMinimizeSkipping",
+                "VSyncThrottle",
+                "SuperHawkThrottle",
             )
         },
     }

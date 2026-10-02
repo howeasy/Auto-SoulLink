@@ -271,14 +271,15 @@ def test_cli_exit_codes(tmp_path, capsys):
 
 def test_pace_1x_pins_real_time_pacing_and_refuses_missing_keys(tmp_path):
     base = _base()
-    base.update(Unthrottled=True, ClockThrottle=False, SpeedPercent=300, FrameSkip=4, AutoMinimizeSkipping=True)
+    base.update(Unthrottled=True, ClockThrottle=False, SpeedPercent=300, FrameSkip=4, AutoMinimizeSkipping=True,
+                VSyncThrottle=True, SuperHawkThrottle=True)
     unpaced, _ = _cfg(tmp_path, base)
     assert unpaced["Unthrottled"] is True and unpaced["FrameSkip"] == 4  # default leaves pacing alone
     paced, out = _cfg(tmp_path, base, pace_1x=True)
     on_disk = json.loads(out.read_text(encoding="utf-8"))
     # literal, not derived from PACE_1X: dropping a key from the constant must go red (OMP cx-b6e028df P3)
     want = {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0,
-            "AutoMinimizeSkipping": False}
+            "AutoMinimizeSkipping": False, "VSyncThrottle": False, "SuperHawkThrottle": False}
     assert want == g4.PACE_1X
     for cfg in (paced, on_disk):
         assert {k: cfg[k] for k in want} == want

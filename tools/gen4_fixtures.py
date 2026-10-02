@@ -98,7 +98,7 @@ def check_saveram_path(saveram_dir: Path | str, name: str) -> None:
 
 
 PACE_1X = {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0,
-            "AutoMinimizeSkipping": False}
+            "AutoMinimizeSkipping": False, "VSyncThrottle": False, "SuperHawkThrottle": False}
 
 
 def write_nds_run_config(base_config, out_path, *, initial_time: str, lane_saveram_dir,
