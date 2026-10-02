@@ -723,7 +723,7 @@ CALLSTD_RE = re.compile(r"^\s*CallStd\s+(\S+)\s*(?:@.*)?$")
 READ_ONLY_RE = re.compile(r"^\s*(?:Compare|GoTo\w*|Call\w*|Switch|Case)\b")
 TOKEN_RE = re.compile(r"\b((?:FLAG|VAR)_\w+)\b")
 COMPARE_RE = re.compile(r"^\s*Compare\s+(\w+),\s*(\S+)\s*$")
-REACHABILITY_SCOPE = "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates) and common scripts reached through CallStd (scr_seq member 3)"
+REACHABILITY_SCOPE = "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates). CallStd callees ARE resolved (sScriptBankMapping) and their flag/var write-set checked against the caller's gates (conflicts fail generation); hge paths through the differing common-script member 3 are flagged inherits_unproven, not proved"
 
 
 def _gate(kind: str, token: str, scope: str, cite: str, cls: str, **extra) -> dict:

@@ -290,7 +290,7 @@
       "note": "one zone per Safari area, resolved at runtime"
     }
   },
-  "reachability_scope": "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates) and common scripts reached through CallStd (scr_seq member 3)",
+  "reachability_scope": "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates). CallStd callees ARE resolved (sScriptBankMapping) and their flag/var write-set checked against the caller's gates (conflicts fail generation); hge paths through the differing common-script member 3 are flagged inherits_unproven, not proved",
   "out_of_scope_commands": {
     "GiveDaycareEgg": {
       "count": 1,
