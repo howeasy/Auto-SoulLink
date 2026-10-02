@@ -55,6 +55,19 @@
 8. **F8:** read VAR_BASE/NUM_VARS from the pack.
 9. **F9:** document that all five Locations are written.
 
+**Also queued (client, G3):** OMP cx-09f09a39's review of `c6977960`.
+1. **F1 MAJOR:** the PartyExtra pack gap disables box_mon/party_mon/memorialize-from-party in production. Use a pret-sourced `PERFORMANCE_MAX = 5` plus array bounds instead.
+2. **F2:** bound `mons_off + 6*psize <= party_size`, and stride == 5.
+3. **F3:** a dropped key_change must be server-visible, not log-only, and needs a larger cap. NOT a HUD notice (owner rule: the HUD is player-facing only).
+4. **F4:** test the bounds.
+5. **F5:** the write-count test should be against span bytes, with a 6-mon fixture.
+6. **F6:** rename the read-budget test, and add a box-pass bound (~1080 reads).
+7. **F7:** party analogue of the box flags test.
+8. **F8:** on_reset should disarm the hook.
+9. **F9:** derive SIG_OFFS from pk4.
+10. **F10:** do not queue a "lease already used" event.
+11. **F11:** rename the test.
+
 **Open owner items:** ruling 35 at G2. Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
 
 
