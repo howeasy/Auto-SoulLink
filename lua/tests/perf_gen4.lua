@@ -162,6 +162,7 @@ local function run()
             mem[key]=function(a) memory_counts[key]=memory_counts[key]+1; return memory[api](a,P.BUS)&0xFFFFFFFF end
         end
         local pk4=dofile(root.."/lua/gen4/pk4.lua")
+        pk4.crypto=dofile(root.."/lua/nds/pkm45_crypto.lua")
         local safety=dofile(root.."/lua/gen4/safety.lua")
         if cfg.cold_boot then
             local boot_gate=safety.new(title,mem,{reads=reads,encounter_active=function() return false end})

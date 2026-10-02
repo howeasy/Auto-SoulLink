@@ -185,6 +185,7 @@ function Entry.build(deps)
                        "unknown title " .. title_name .. " in " .. pack)
     end
     local pk4, Reads, Safety = L("lua/gen4/pk4.lua"), L("lua/gen4/reads.lua"), L("lua/gen4/safety.lua")
+    pk4.crypto = L("lua/nds/pkm45_crypto.lua")
     Reads.pk4 = pk4
     local safety = Safety.new(title, assert(deps.mem, "deps.mem required"),
         { reads = Reads, encounter_active = assert(deps.encounter_active, "deps.encounter_active required") })

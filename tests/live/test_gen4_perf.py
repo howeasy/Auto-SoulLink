@@ -29,6 +29,7 @@ SCRIPT = REPO / "lua/tests/perf_gen4.lua"
 MODULES = (
     "lua/gen4/reads.lua",
     "lua/gen4/pk4.lua",
+    "lua/nds/pkm45_crypto.lua",
     "lua/gen4/safety.lua",
     "lua/json_codec.lua",
     "lua/tests/probe_gen4_hooks.lua",

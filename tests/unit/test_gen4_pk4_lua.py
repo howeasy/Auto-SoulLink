@@ -18,6 +18,7 @@ from server.adapters import gen4_codec as codec
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "lua/gen4/pk4.lua"
+CRYPTO = ROOT / "lua/nds/pkm45_crypto.lua"  # injected as Pk4.crypto, as lua/gen4/entry.lua does
 SAVE_DIR = Path("E:/Howard/Bizhawk/NDS/SaveRAM")
 SAVES = {
     "hg": ("SLINK_GEN4_HG_SAVE", "Pokemon - HeartGold Version (USA).SaveRAM", "hgss"),
@@ -28,10 +29,13 @@ TEXT_FIELDS = {"nickname", "ot_name"}  # the Lua module leaves text conversion t
 LIST_FIELDS = {"nickname_raw", "ot_name_raw", "moves", "pp", "pp_ups", "evs", "ivs", "stats"}
 
 
-def load_lua(source: str | None = None):
+def load_lua(source: str | None = None, crypto_source: str | None = None):
     lua = lupa.LuaRuntime()
     src = source if source is not None else MODULE.read_text(encoding="utf-8")
-    return lua, lua.eval("function(s) return assert(load(s, '=pk4'))() end")(src)
+    csrc = crypto_source if crypto_source is not None else CRYPTO.read_text(encoding="utf-8")
+    mod = lua.eval("function(s) return assert(load(s, '=pk4'))() end")(src)
+    mod.crypto = lua.eval("function(s) return assert(load(s, '=pkm45_crypto'))() end")(csrc)
+    return lua, mod
 
 
 def py(v):
@@ -215,21 +219,22 @@ def test_wrong_pid_is_not_a_box_checksum_failure_but_the_party_tail_is_flagged(p
 
 
 def test_controls_mutated_lua_must_diverge_from_the_oracle():
-    """Known-positive controls: break the shuffle / PRNG / party-tail seed in a COPY of the module
-    and the oracle equality must go red (a probe that cannot fail proves nothing)."""
-    src = MODULE.read_text(encoding="utf-8")
+    """Known-positive controls: break the shuffle / PRNG / party-tail seed in a COPY of the injected cipher
+    (lua/nds/pkm45_crypto.lua, which pk4 delegates to) and the oracle equality must go red (a probe that
+    cannot fail proves nothing)."""
+    src = CRYPTO.read_text(encoding="utf-8")
     raw = enc(build_plain(0x0003_0000 | 0x1357))
     want = codec.decrypt_party(raw)
     mutations = {
         "shuffle row": ("% 24 + 1", "% 24 + 2"),
         "prng multiplier": ("0x41C64E6D", "0x41C64E6C"),
-        "party tail seed": ("lcg_xor(tail, 0, u(b, 0, 4))", "lcg_xor(tail, 0, 0)"),
+        "party tail seed": ("lcg_xor(tail, 0, info.pid)", "lcg_xor(tail, 0, 0)"),
     }
-    _, mod = load_lua(src)
+    _, mod = load_lua()
     assert bytes(py(mod.decrypt_party(raw))) == want  # unmutated copy is green
     for name, (old, new) in mutations.items():
         assert src.count(old) == 1, f"mutation anchor for {name!r} drifted"
-        _, bad = load_lua(src.replace(old, new))
+        _, bad = load_lua(crypto_source=src.replace(old, new))
         got = bad.decrypt_party(raw)
         got = got[0] if isinstance(got, tuple) else got  # multi-return (nil, reason)
         assert got is None or bytes(py(got)) != want, f"mutating the {name} did not break the decode"
@@ -380,3 +385,13 @@ def test_torn_pid_exhaustion_on_the_real_party_records(pk4, which):
 def test_pk4_documents_that_box_plausible_is_not_the_torn_read_guard():
     src = MODULE.read_text(encoding="utf-8")
     assert "NOT a wrong-PID guard" in src and "double-read" in src and "STABLE wrong PID" in src
+
+
+def test_pk4_delegates_to_the_injected_shared_cipher():
+    """pk4 has no cipher of its own: without Pk4.crypto it refuses loudly, and a stand-in crypto is what runs."""
+    lua = lupa.LuaRuntime()
+    mod = lua.eval("function(s) return assert(load(s, '=pk4'))() end")(MODULE.read_text(encoding="utf-8"))
+    ok = lua.eval("function(f, x) return pcall(f, x) end")
+    assert ok(mod.decrypt_box, bytes(0x88))[0] is False  # crypto not injected -> assert, never a silent decode
+    mod.crypto = lua.eval("{decrypt_stored = function() return nil, 'stand-in' end}")
+    assert tuple(mod.decrypt_box(bytes(0x88))) == (None, "stand-in")

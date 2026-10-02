@@ -62,6 +62,7 @@ def make_lua(reads_src: str | None = None):
     lua = lupa.LuaRuntime()
     loader = lua.eval("function(s, n) return assert(load(s, n))() end")
     pk4 = loader(PK4.read_text(encoding="utf-8"), "=pk4")
+    pk4.crypto = loader((ROOT / "lua/nds/pkm45_crypto.lua").read_text(encoding="utf-8"), "=pkm45_crypto")
     reads = loader(reads_src if reads_src is not None else READS.read_text(encoding="utf-8"), "=reads")
     reads.pk4 = pk4
     return lua, reads

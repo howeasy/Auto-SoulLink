@@ -1026,6 +1026,7 @@ BOUND_MODULES = (
     "lua/json_codec.lua",
     "lua/gen4/reads.lua",
     "lua/gen4/pk4.lua",
+    "lua/nds/pkm45_crypto.lua",
     "server/adapters/gen4_codec.py",
     "data/games/gen4_hgss/profile.json",
     "data/games/gen4_hge/profile.json",

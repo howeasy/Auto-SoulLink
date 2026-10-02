@@ -630,6 +630,7 @@ local function party_mons()
   if not Reads then
     Reads = dofile(REPO .. "/lua/gen4/reads.lua")
     Reads.pk4 = dofile(REPO .. "/lua/gen4/pk4.lua")
+    Reads.pk4.crypto = dofile(REPO .. "/lua/nds/pkm45_crypto.lua")
     route.profile = denull(route.profile) -- JSON null decodes to a table: pk4_profile would read it as present
   end
   return Reads.party({u8 = r8, u16 = r16, u32 = r32}, route.profile)

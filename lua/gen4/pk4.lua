@@ -28,19 +28,6 @@ Pk4.PROFILES = {
 }
 local MAX_EXP = 1640000 -- exp at level 100 on the largest curve (Fluctuating)
 
--- Row = (pid >> 13) & 31 (== (pid & 0x3E000) >> 13); rows 24-31 repeat rows 0-7 (% 24).
--- Column = logical block A..D, value = stored byte offset of that block.
-local SHUFFLE = {
-    { 0x00, 0x20, 0x40, 0x60 }, { 0x00, 0x20, 0x60, 0x40 }, { 0x00, 0x40, 0x20, 0x60 },
-    { 0x00, 0x60, 0x20, 0x40 }, { 0x00, 0x40, 0x60, 0x20 }, { 0x00, 0x60, 0x40, 0x20 },
-    { 0x20, 0x00, 0x40, 0x60 }, { 0x20, 0x00, 0x60, 0x40 }, { 0x40, 0x00, 0x20, 0x60 },
-    { 0x60, 0x00, 0x20, 0x40 }, { 0x40, 0x00, 0x60, 0x20 }, { 0x60, 0x00, 0x40, 0x20 },
-    { 0x20, 0x40, 0x00, 0x60 }, { 0x20, 0x60, 0x00, 0x40 }, { 0x40, 0x20, 0x00, 0x60 },
-    { 0x60, 0x20, 0x00, 0x40 }, { 0x40, 0x60, 0x00, 0x20 }, { 0x60, 0x40, 0x00, 0x20 },
-    { 0x20, 0x40, 0x60, 0x00 }, { 0x20, 0x60, 0x40, 0x00 }, { 0x40, 0x20, 0x60, 0x00 },
-    { 0x60, 0x20, 0x40, 0x00 }, { 0x40, 0x60, 0x20, 0x00 }, { 0x60, 0x40, 0x20, 0x00 },
-}
-
 -- Accept a string or an array; always hand back a fresh 1-based array (callers never alias).
 local function arr(b)
     if type(b) == "string" then
@@ -71,77 +58,26 @@ local function slice(b, off, len)
     return out
 end
 
--- XOR each u16 from `off` to the end with the next LCG output; symmetric.
-local function lcg_xor(b, off, seed)
-    for i = off + 1, #b, 2 do
-        seed = (seed * 0x41C64E6D + 0x6073) & 0xFFFFFFFF
-        local x = (b[i] | (b[i + 1] << 8)) ~ (seed >> 16)
-        b[i], b[i + 1] = x & 0xFF, x >> 8
-    end
-end
-
--- u16 sum of the 64 words of the four blocks (`b` holds them from 0-based `off`).
-function Pk4.checksum(b, off)
-    local total = 0
-    for i = off + 1, off + 4 * BLOCK, 2 do total = total + (b[i] | (b[i + 1] << 8)) end
-    return total & 0xFFFF
-end
-
--- Move block `src` (0-based offset table row, `to_stored` picks direction) of 0x80 body bytes.
-local function reorder(b, pid, to_stored)
-    local row = SHUFFLE[((pid >> 13) & 31) % 24 + 1]
-    local out = {}
-    for which = 0, 3 do
-        local logical, stored = HEADER + which * BLOCK, HEADER + row[which + 1]
-        local from, to = logical, stored
-        if not to_stored then from, to = stored, logical end
-        for i = 1, BLOCK do out[to + i] = b[from + i] end
-    end
-    for i = 1, HEADER do out[i] = b[i] end
-    return out
-end
+-- The cipher is the shared NDS core (lua/nds/pkm45_crypto.lua, the PK4/PK5 0x88 cipher with the party tail
+-- length as a parameter), injected as Pk4.crypto by whoever loads this module (lua/gen4/entry.lua, the
+-- test harnesses). pk4 keeps its single-value API: plain | nil, reason ("size" | "locked" | "checksum").
+local function crypto() return assert(Pk4.crypto, "Pk4.crypto (lua/nds/pkm45_crypto.lua) not injected") end
 
 function Pk4.decrypt_box(raw)
-    local b = arr(raw)
-    if #b ~= Pk4.BOX_MON_SIZE then return nil, "size" end
-    local pid, flags, stored_sum = u(b, 0, 4), u(b, 4, 2), u(b, 6, 2)
-    if flags & 0x3 ~= 0 then return nil, "locked" end
-    lcg_xor(b, HEADER, stored_sum)
-    if Pk4.checksum(b, HEADER) ~= stored_sum then return nil, "checksum" end
-    return reorder(b, pid, false)
+    local plain, why = crypto().decrypt_stored(raw)
+    if not plain then return nil, why end
+    return plain
 end
 
-function Pk4.encrypt_box(plain)
-    local p = arr(plain)
-    if #p ~= Pk4.BOX_MON_SIZE then return nil, "size" end
-    local b = reorder(p, u(p, 0, 4), true)
-    local csum = Pk4.checksum(b, HEADER)
-    b[7], b[8] = csum & 0xFF, csum >> 8
-    lcg_xor(b, HEADER, csum)
-    return b
-end
+function Pk4.encrypt_box(plain) return crypto().encrypt_stored(plain) end
 
--- The party tail has no checksum and is keyed by the PID.
 function Pk4.decrypt_party(raw)
-    local b = arr(raw)
-    if #b ~= Pk4.PARTY_MON_SIZE then return nil, "size" end
-    local head, why = Pk4.decrypt_box(slice(b, 0, Pk4.BOX_MON_SIZE))
-    if not head then return nil, why end
-    local tail = slice(b, TAIL, Pk4.PARTY_MON_SIZE - TAIL)
-    lcg_xor(tail, 0, u(b, 0, 4))
-    for i = 1, #tail do head[TAIL + i] = tail[i] end
-    return head
+    local plain, why = crypto().decrypt_party(raw, Pk4.PARTY_MON_SIZE)
+    if not plain then return nil, why end
+    return plain
 end
 
-function Pk4.encrypt_party(plain)
-    local p = arr(plain)
-    if #p ~= Pk4.PARTY_MON_SIZE then return nil, "size" end
-    local head = Pk4.encrypt_box(slice(p, 0, Pk4.BOX_MON_SIZE))
-    local tail = slice(p, TAIL, Pk4.PARTY_MON_SIZE - TAIL)
-    lcg_xor(tail, 0, u(p, 0, 4))
-    for i = 1, #tail do head[TAIL + i] = tail[i] end
-    return head
-end
+function Pk4.encrypt_party(plain) return crypto().encrypt_party(plain, Pk4.PARTY_MON_SIZE) end
 
 function Pk4.mon_key(pid, otid) return string.format("%08X:%08X", pid, otid) end
 
