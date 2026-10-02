@@ -37,7 +37,11 @@
 #define SLINK_SIGNATURE 0x4B4E4C53u
 #define SLINK_ABI_VERSION 3u          /* 3 = witness save_status PENDING; Gen 3 is 2 */
 #define SLINK_NDS_STAGE_LAYOUT 1u     /* record-staging layout version (below) */
-#define SLINK_ARENA_SIZE 0x1000u
+#define SLINK_ARENA_SIZE 0x1000u      /* Gen 3 heap carve-out size. An NDS arena hosted in a TCM autoload window
+                                       * must be at least this large; the HGSS/hge ITCM block (0x620) and the Gen 5
+                                       * BW ITCM block (0x820) are smaller, so they cannot host it inside the
+                                       * autoloaded part. Hosting is a per-title decision (Gen 5 plans
+                                       * payload-overlay BSS). */
 #define SLINK_MAILBOX_OFFSET 0x000u
 #define SLINK_WITNESS_OFFSET 0x050u
 #define SLINK_BLOB_OFFSET 0x100u      /* holds SlinkRecordStageV1 */
@@ -259,6 +263,7 @@ _Static_assert(sizeof(SlinkMailboxV2) == 0x50, "mailbox ABI size");
 _Static_assert(offsetof(SlinkMailboxV2, capabilities) == 0x40, "capability ABI offset");
 _Static_assert(sizeof(SlinkTradeWitnessV2) == 0x50, "witness ABI size");
 _Static_assert(offsetof(SlinkTradeWitnessV2, milestone_seq) == 0x20, "milestone ABI offset");
+_Static_assert(SLINK_MAILBOX_OFFSET + sizeof(SlinkMailboxV2) <= SLINK_WITNESS_OFFSET, "mailbox/witness overlap");
 _Static_assert(SLINK_WITNESS_OFFSET + sizeof(SlinkTradeWitnessV2) <= SLINK_BLOB_OFFSET, "witness/blob overlap");
 _Static_assert(sizeof(SlinkRecordStageV1) == 0x10 + SLINK_MAX_RECORD, "record stage ABI size");
 _Static_assert(offsetof(SlinkRecordStageV1, record) == 0x10, "record stage payload offset");
@@ -266,6 +271,8 @@ _Static_assert(offsetof(SlinkRecordStageV1, claimed_pid) == 0x08, "record stage 
 _Static_assert(offsetof(SlinkRecordStageV1, stage_len) == 0x04, "record stage length offset");
 _Static_assert(SLINK_BLOB_OFFSET + sizeof(SlinkRecordStageV1) <= SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE, "stage exceeds blob");
 _Static_assert(SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE <= SLINK_TEXT_OFFSET, "blob/text overlap");
+_Static_assert(SLINK_TEXT_OFFSET + SLINK_TEXT_SIZE <= SLINK_MENU_OFFSET, "text/menu overlap");
+_Static_assert(SLINK_MENU_OFFSET + SLINK_MENU_SIZE <= SLINK_INFO_OFFSET, "menu/info overlap");
 _Static_assert(SLINK_INFO_OFFSET + SLINK_INFO_SIZE <= SLINK_CONTROL_OFFSET, "info/control overlap");
 _Static_assert(sizeof(SlinkInfoV2) == SLINK_INFO_SIZE, "info ABI size");
 _Static_assert(offsetof(SlinkInfoV2, text) == SLINK_INFO_TEXT_FIELD, "info text ABI offset");

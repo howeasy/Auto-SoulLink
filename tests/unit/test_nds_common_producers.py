@@ -920,6 +920,7 @@ def test_pk45_lifecycle(pk45, binding, name, sc, var):
 
 
 TP = "trade_producer.h"
+HARNESS = "<harness>"  # edit target is the PK45 scenario C source, not a header
 MUTANTS = {
     "truncate-to-100": ((1, 0), [(TP, "i < len ? st->record[i] : 0", "i < 100 ? st->record[i] : 0")]),
     "pending-is-failure": ((1, 0), [(TP, "if (polled == SLINK_SAVEPOLL_PENDING) return;", "")]),
@@ -935,6 +936,12 @@ MUTANTS = {
                                           "w->received_pid = s->incoming_id.pid; w->received_otid = s->incoming_id.otid;")]),
     "validate-open-without-verify": ((2, 18), [("record_binding.h", "if (!d || !d->verify) return 0;",
                                                 "if (!d) return 0;\n    if (!d->verify) return 1;")]),
+    # received_key is only an independent witness if it is NOT derived from the staging decoder: a received_key
+    # that decodes the staged record (same dec_read at otid_logical_off) agrees with incoming_id by construction.
+    "received-key-from-staging-decoder": ((3, 0), [(HARNESS, "static int received(void *p,unsigned slot,uint32_t *pid,uint32_t *ot) { (void)p;(void)slot; if (!recv_ok) return 0; *pid=recv_pid;*ot=recv_ot;return 1; }",
+                                                    "static int dec_read(void *p,const uint8_t *r,uint16_t n,uint16_t off,uint32_t *out); "
+                                                    "static int received(void *p,unsigned slot,uint32_t *pid,uint32_t *ot) { (void)p;(void)slot;(void)recv_pid;(void)recv_ot; uint32_t ot_; "
+                                                    "  if (!recv_ok || !dec_read(0,last_rec,B->party_len,B->otid_logical_off,&ot_)) return 0; memcpy(pid,last_rec,4);*ot=ot_;return 1; }")]),
 }
 
 
@@ -944,6 +951,7 @@ def test_producer_falsifiers_fail_on_known_bad_mutants(tmp_path, mutation):
     scenario, edits = MUTANTS[mutation]
     mutant = tmp_path / "common"
     shutil.copytree(COMMON, mutant)
+    harness = PK45_C
     if mutation == "begin-is-success":  # initiating the save is recorded as success without polling
         path = mutant / TP
         text = path.read_text()
@@ -952,11 +960,15 @@ def test_producer_falsifiers_fail_on_known_bad_mutants(tmp_path, mutation):
         path.write_text(pattern.sub(lambda hit: hit.group(1) + "tp_save_resolve(s,m,w,SLINK_SAVEPOLL_OK,e);", text, count=1))
     else:
         for name, needle, replacement in edits:
+            if name == HARNESS:
+                assert needle in harness, needle
+                harness = harness.replace(needle, replacement)
+                continue
             path = mutant / name
             text = path.read_text()
             assert needle in text, needle
             path.write_text(text.replace(needle, replacement))
-    exe = _build(tmp_path, "mutant", PK45_C, includes=(mutant,), defines=["-DBIND=slink_binding_gen5_pk5"])
+    exe = _build(tmp_path, "mutant", harness, includes=(mutant,), defines=["-DBIND=slink_binding_gen5_pk5"])
     done = subprocess.run([str(exe), *map(str, scenario)], capture_output=True, text=True, timeout=10)
     assert done.returncode != 0 and "FAIL line" in done.stdout, f"mutant {mutation} was not detected: {done}"
 
@@ -984,7 +996,7 @@ def test_nds_headers_have_no_gba_addresses_and_do_not_include_gen3(header):
 def test_readme_exists_and_static_assert_blocks_are_pinned():
     assert (COMMON / "README.md").exists()
     # exact counts: adding or dropping an ABI/record invariant is a deliberate, reviewed change
-    pinned = {"abi.h": 23, "record_binding.h": 3, "trade_producer.h": 0, "panel_producer.h": 0, "sound_producer.h": 0}
+    pinned = {"abi.h": 26, "record_binding.h": 3, "trade_producer.h": 0, "panel_producer.h": 0, "sound_producer.h": 0}
     actual = {h: _strip_comments((COMMON / h).read_text()).count("_Static_assert(") for h in pinned}
     assert actual == pinned
 

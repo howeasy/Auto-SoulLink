@@ -158,6 +158,10 @@ static const SlinkRecordBinding slink_binding_gen3_pk3 = {
     { 1, SLINK_CHARSET_GEN3, 0xFFu },
     slink_pk3_validate, slink_pk3_identity, slink_rb_same_identity
 };
+/* PK4: the 0x0C OT offset is the shared PK45 plain layout (matches the Lua and Python
+ * ciphers); the real received_key hook must be implemented INDEPENDENTLY of the
+ * staging decoder, or the identity chain is a tautology (UNVERIFIED until an adapter
+ * exists). */
 static const SlinkRecordBinding slink_binding_gen4_pk4 = {
     SLINK_BIND_GEN4_PK4, 4,
     SLINK_RB_RAW_ENCRYPTED | SLINK_RB_OTID_DECODED | SLINK_RB_COMMIT_MUTATES_INPUT,

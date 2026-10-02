@@ -43,7 +43,9 @@ Rules both share (FILE for Gen 5, `rom_overlay_loader.md`; Gen 4 per its own res
 taken, `active = 1; id = ID` is written, then the code is copied; unload clears `active` only.
 
 The fakes in the test file are the executable form of this table. Entry field order inside the 8 bytes is the
-lane's business (the fakes use `id` at +0, `active` at +4).
+lane's business (the fakes use `id` at +0, `active` at +4). **Caution:** the geometries in this table and in the fakes
+(HGSS 3 x 8 x 8 B, the HGSS entry field order, the Gen 5 header and counts) are carried from research, not
+measured on a ROM or emulator. They are an unmeasured fixture assumption: the fakes prove the contract, not the games.
 
 ## The strategy
 

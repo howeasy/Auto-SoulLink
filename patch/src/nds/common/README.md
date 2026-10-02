@@ -131,6 +131,14 @@ remove/compact. The party commit primitive resets the slot's extra itself.
 
 ## Could not verify
 
+- `record_binding.h`'s PK4 binding carries no inline "UNVERIFIED independent-implementation" comment like
+  the PK5 binding does (~line 168); it should get one (coordinator: comment-only edit at the `SLINK_BIND_GEN4_PK4`
+  initialiser, ~line 162). Its raw staging, 0x0C OT offset and MUTATES_INPUT flag are likewise not checked against
+  an independent implementation or a ROM.
+- The producer harness identity chain is only independent where `received_key` is: the
+  `received-key-from-staging-decoder` mutant (decodes the staged record via the same `dec_read` instead of an
+  independent value) must stay RED. The real `received_key` hook must read the game's received party slot, never
+  the staging decoder.
 - No Gen 4/5 ROM or emulator was touched; Gen 4/5 offsets (OT at logical +0x0C,
   party 0xEC / 0xDC, plaintext PID at +0) come from the brief and prior notes.
 - **Whether the actual TRADE commit (pret `src/trade.c`) is a raw party-form copy

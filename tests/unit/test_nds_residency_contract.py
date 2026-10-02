@@ -1,7 +1,9 @@
 """lua/nds/residency_contract.lua: the shared NDS residency strategy contract and its arming rule.
 
-Reference fakes (written in Lua, over a Python byte-addressed "RAM") implement the contract with the real
-geometries: an HGSS-shaped static 3 x 8 x 8 B array, and the Gen 5 heap block behind a pointer global:
+Reference fakes (written in Lua, over a Python byte-addressed "RAM") implement the contract with research-derived,
+UNMEASURED geometries (a fixture assumption; nothing here was read from a ROM or emulator, and the entry
+field order, id at +0 and active at +4, is not measured either): an HGSS-shaped static 3 x 8 x 8 B array, and
+the Gen 5 heap block behind a pointer global:
 header = u8 counts at P+0/+1/+2, u32 list pointers at P+4/+8/+0xC, region-0 entries inline from P+0x10, each
 entry a {u32 id; u32 active} pair; counts BW 16/4/4, B2W2 20/4/4 (docs/gen5/research/rom_overlay_loader.md).
 Their epoch() is the cheap kind the Gen 4 arming path needs: a pointer plus a loader-call counter plus a
