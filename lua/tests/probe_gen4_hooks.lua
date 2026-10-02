@@ -280,25 +280,42 @@ validators.f=function(x)
     -- Owner superseded the cap-three ruling: averages and unthrottled curves
     -- characterize cost but cannot qualify sustained full-client 1x delivery.
     local sustained=need(x.sustained,"f:gen4-PERF sustained full-client timing records (0 hooks and 1 on-demand)")
-    for _,name in ipairs({"zero","one"}) do
+    for _,name in ipairs({"zero","one","overworld_zero"}) do
         local sample=need(sustained[name],"f:sustained "..name.."-hook load sample")
+        check(sample.execution_mode=="paced_production_frameadvance","requested 1x is not proof of normal frame delivery")
+        local throttle=need(sample.throttle_config,"f:read-back throttle settings")
+        check(throttle.Unthrottled==false and throttle.ClockThrottle==true and throttle.SpeedPercent==100
+            and throttle.FrameSkip==0 and throttle.AutoMinimizeSkipping==false,"unpaced performance config")
         check(sample.requested_rate==100 and sample.frames>=3000,"sustained measurement needs >=3000 frames at 1x")
-        check(sample.registered_hooks==(name=="zero" and 0 or 1),"incorrect sustained hook count")
+        check(sample.registered_hooks==(name=="one" and 1 or 0),"incorrect sustained hook count")
         check(sample.timing_kind=="wall_frame_interval" and type(sample.clock_source)=="string" and sample.clock_source~="",
             "sustained measurement requires a declared wall-clock frame-interval source")
         local times=need(sample.frame_times,"f:raw per-frame timings")
         check(#times==sample.frames,"incomplete sustained timing sequence")
-        local sorted={}
-        for i,t in ipairs(times) do check(type(t)=="number" and t>0 and t<math.huge,"invalid frame time"); sorted[i]=t end
+        local sorted,total={},0
+        for i,t in ipairs(times) do check(type(t)=="number" and t>0 and t<math.huge,"invalid frame time"); sorted[i]=t; total=total+t end
         table.sort(sorted)
-        local p50=sorted[math.ceil(#sorted*0.5)]
         local p99=sorted[math.ceil(#sorted*0.99)]
         local maximum=sorted[#sorted]
-        check(p50<=1/60 and p99<=1/60 and maximum<=1/60,"sustained frame deadline exceeds 1/60 second")
+        local native_fps=33513982/560190 -- BizHawk MelonDS.cs DefaultFpsNumerator/Denominator
+        check(math.abs((#times/total)/native_fps-1)<=0.001,"mean FPS outside native-cadence 0.1% tolerance")
+        local floor=need(sample.floor,"f:same-session bare-floor sample")
+        check(floor.session_id==sample.session_id and floor.phase==sample.phase and floor.clock_source==sample.clock_source,
+            "floor belongs to a different session/phase/clock")
+        check(floor.requested_rate==100 and floor.registered_hooks==0 and floor.instrumentation_floor==true,"floor not bare paced zero-hook")
+        local baseline=need(floor.frame_times,"f:raw floor timing sequence")
+        check(#baseline>=3000,"floor window too short")
+        local fs={}; for i,t in ipairs(baseline) do check(type(t)=="number" and t>0 and t<math.huge,"invalid floor interval"); fs[i]=t end
+        table.sort(fs)
+        check(p99<=fs[math.ceil(#fs*0.99)]+0.001,"p99 exceeds same-session floor plus 1ms")
+        check(maximum<=0.03343,"frame interval exceeds 33.43ms owner limit")
         local load=need(sample.load_counts,"f:full-client workload counts")
-        for _,work in ipairs({"pointer_chain","battle_mons_hp","party_diff","json_encode"}) do
+        for _,work in ipairs({"pointer_chain","party_diff","json_encode"}) do
             check(type(load[work])=="number" and load[work]>=sample.frames,"missing per-frame client load: "..work)
         end
+        if name=="overworld_zero" then
+            check(sample.phase=="overworld" and load.battle_attempts>=sample.frames and load.battle_mons_hp==0,"overworld battle-chain/load accounting")
+        else check(load.battle_mons_hp>=sample.frames,"battle HP workload missing") end
         check(sample.ending_registered==0,"hook retained in steady state after measurement")
         if name=="one" then check(sample.on_demand==true and sample.removed_after_fire==true,"one-hook sample must prove on-demand removal") end
     end

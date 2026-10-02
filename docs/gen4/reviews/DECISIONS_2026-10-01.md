@@ -65,7 +65,7 @@ Owner, replying to the paced HG floor (receipt `heartgold-8355974c3c30`), "Thats
   | Overworld + full client load | 59.824 | 18.20 ms | 22.21 ms |
 
   The jitter is host/throttle noise, and it is present without the client.
-- **Row f passes (coordinator operationalization of the ruling) when every production row meets all three conditions:**
+- **Row f passes (coordinator operationalization of the ruling) when every production row meets all four conditions (the rows below, plus the three checks):**
   - The rows are 0 hooks + load in the overworld and in battle, and 1 on-demand hook + load in battle.
   - The mean fps is within 0.1% of 59.8261 over at least 3000 paced frames.
   - p99 is no more than 1.0 ms above the same session's bare floor.

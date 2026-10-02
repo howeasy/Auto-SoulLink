@@ -84,6 +84,30 @@ def row_o(path: Path | None, title: str, sha1: str, source_head: str) -> tuple[s
     return status, payload
 
 
+def perf_f(path, title, rom_sha1, source_head):
+    """Read gen4-PERF's bound observations; Lua f remains the sole pass authority."""
+    if path is None or not Path(path).is_file():
+        return None, "gen4-PERF bundle absent"
+    bundle = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert bundle["schema"] == "gen4-perf-bundle-v1" and bundle["producer"] == "gen4-PERF", "wrong PERF producer/schema"
+    assert bundle["level"] == "PHYSICAL" and bundle["title"] == title and bundle["rom_sha1"] == rom_sha1, "wrong PERF artifact/evidence"
+    assert bundle["source_head"] == source_head, "PERF belongs to a different source cut"
+    observation = bundle.get("observation")
+    if observation is None:
+        return None, bundle.get("reason", "gen4-PERF required samples absent")
+    sources = set()
+    for name in ("zero", "one", "overworld_zero"):
+        sample = observation["sustained"][name]
+        assert sample["producer"] == "gen4-PERF" and sample["result"] == "PASS" and sample["level"] == "PHYSICAL", "incomplete PERF sample"
+        assert sample["title"] == title and sample["rom_sha1"] == rom_sha1 and sample["source_head"] == source_head, "PERF sample binding mismatch"
+        assert not sample["concurrent_load"] and sample["ending_registered"] == 0, "PERF concurrent load/retained hook"
+        assert sample["module_sha256"]["lua/tests/probe_gen4_hooks.lua"] == digest(SCRIPT), "PERF uses a different f authority"
+        sources.add(sample["clock_source"])
+        sample["frames"] = sample["frames_requested"]
+    assert len(sources) == 1, "mixed PERF clock sources"
+    return observation, None
+
+
 def finish_rows(api, observations: dict, errors: dict, external_o: tuple[str, dict]) -> tuple[str, dict]:
     rows = {}
     for row in ROWS:
@@ -146,11 +170,18 @@ def examples():
         "e": {"before": 10, "kept": 10, "removed": 0, "reloaded": 0},
         "f": {"fps": [208.6, 97.3, 79.7, 66.1, 57.9, 52.9], "sustained": {
             name: {"requested_rate": 100, "frames": 3000, "registered_hooks": hooks,
+                   "execution_mode": "paced_production_frameadvance",
+                   "throttle_config": {"Unthrottled": False, "ClockThrottle": True, "SpeedPercent": 100, "FrameSkip": 0, "AutoMinimizeSkipping": False},
                    "timing_kind": "wall_frame_interval", "clock_source": "MODEL high-resolution wall clock",
-                   "frame_times": [1 / 60] * 3000,
-                   "load_counts": dict.fromkeys(("pointer_chain", "battle_mons_hp", "party_diff", "json_encode"), 3000),
+                   "frame_times": [560190 / 33513982] * 3000,
+                   "session_id": "MODEL session",
+                   "floor": {"session_id": "MODEL session", "phase": "overworld" if name == "overworld_zero" else "battle",
+                             "clock_source": "MODEL high-resolution wall clock", "requested_rate": 100,
+                             "registered_hooks": 0, "instrumentation_floor": True, "frame_times": [560190 / 33513982] * 3000},
+                   "load_counts": {**dict.fromkeys(("pointer_chain", "party_diff", "json_encode", "battle_attempts"), 3000), "battle_mons_hp": 0 if name == "overworld_zero" else 3000},
+                   "phase": "overworld" if name == "overworld_zero" else "battle",
                    "ending_registered": 0, "on_demand": name == "one", "removed_after_fire": name == "one"}
-            for name, hooks in (("zero", 0), ("one", 1))}},
+            for name, hooks in (("zero", 0), ("one", 1), ("overworld_zero", 0))}},
         "g": {"domains": {"Main RAM": 4194304, "Shared WRAM": 32768, "ARM7 WRAM": 65536,
                           "SRAM": 524288, "Instruction TCM": 32768, "Data TCM": 16384, "ARM9 System Bus": 0},
               "registers": {f"ARM9 r{i}": 0 for i in range(16)}, "bogus_refused": True},
@@ -279,7 +310,7 @@ def test_f_owner_sustained_deadline_and_load_red_revert(api, fault):
     bad = copy.deepcopy(original)
     sample = bad["sustained"]["one"]
     if fault == "one_slow_frame":
-        sample["frame_times"][-1] = 0.020  # Average/p99 still appear fine; max must catch it.
+        sample["frame_times"][-1] = 0.034  # Average/p99 still appear fine; max must catch it.
     elif fault == "load_missing":
         sample["load_counts"]["json_encode"] = 2999
     elif fault == "retained_hook":
@@ -303,6 +334,26 @@ def test_f_average_and_hook_curve_cannot_qualify(api):
     current = examples()["f"]
     current["fps"] = [200] * 6
     assert api.evaluate("f", to_lua(r, current)) == "PASS"
+
+
+@pytest.mark.parametrize("fault", ["gap_34ms", "mean_59fps", "p99_floor_plus_1_5ms", "foreign_floor"])
+def test_f_owner_native_cadence_floor_red_revert(api, fault):
+    original = examples()["f"]
+    r = api._runtime
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
+    bad = copy.deepcopy(original)
+    sample = bad["sustained"]["one"]
+    period = 560190 / 33513982
+    if fault == "gap_34ms":
+        sample["frame_times"][-1] = .034
+    elif fault == "mean_59fps":
+        sample["frame_times"] = [1 / 59] * 3000
+    elif fault == "p99_floor_plus_1_5ms":
+        sample["frame_times"] = [period - .0015 * 60 / 2940] * 2940 + [period + .0015] * 60
+    else:
+        sample["floor"]["session_id"] = "other"
+    assert api.evaluate("f", to_lua(r, bad))[0] == "FAIL"
+    assert api.evaluate("f", to_lua(r, original)) == "PASS"
 
 
 def phase_examples():
@@ -963,6 +1014,14 @@ def test_gen4_hook_probe(api, title):
                     "cases": measured,
                 }
                 errors.pop("n", None)
+        performance = os.environ.get("SLINK_GEN4_PERF_RECEIPT")
+        if performance:
+            observed_perf, perf_reason = perf_f(performance.format(title=title), title, rom_sha1, source_head)
+            if observed_perf is not None:
+                observations["f"] = observed_perf
+                errors.pop("f", None)
+            else:
+                errors["f"] = ("OPEN", {"reason": perf_reason})
         external = os.environ.get("SLINK_GEN4_ROW_O")
         required_o = row_o(Path(external.format(title=title)) if external else None, title, rom_sha1, source_head)
         result, rows = finish_rows(api, observations, errors, required_o)
