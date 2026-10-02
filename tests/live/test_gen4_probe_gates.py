@@ -419,6 +419,40 @@ def test_pc_facing_boot_stops_title_inputs_when_field_live(api):
     assert result.first_field_live_frame == 120
 
 
+def test_a_live_field_with_no_idle_stalls_the_boot_instead_of_overworld(api):
+    """F3 (OMP cx-b86e97a1): with the field live but never idle, the boot stays bounded and reports
+    overworld=false at the limit, never claiming the overworld and never hanging."""
+    r = api._runtime
+    r.execute('''FRAME=0; INPUTS=0
+        live=function() return FRAME>=1 end
+        idle=function() return false end
+        step=function(buttons) INPUTS=INPUTS+1; FRAME=FRAME+1 end
+        frame=function() return FRAME end''')
+    result = api.boot("persistence", 50, r.globals().idle, r.globals().live, r.globals().step, r.globals().frame)
+    assert result.overworld is False
+    assert result.boot_frame == 50 and r.globals().INPUTS == 50
+    assert result.other_boot_buttons == 0
+
+
+def test_inputs_keep_flowing_until_the_field_is_live_and_idle_still_wins(api):
+    """The mirror case: idle() is reachable before the field gate closes, so A/Start keep flowing up to the
+    live frame, then stop, and the boot still completes."""
+    r = api._runtime
+    r.execute('''FRAME=0; LAST_INPUT=-1
+        live=function() return FRAME>=140 end
+        idle=function() return FRAME>=100 end
+        step=function(buttons)
+            if buttons.A or buttons.Start then LAST_INPUT=FRAME end
+            FRAME=FRAME+1
+        end
+        frame=function() return FRAME end''')
+    result = api.boot("persistence", 500, r.globals().idle, r.globals().live, r.globals().step, r.globals().frame)
+    assert result.overworld is True
+    assert 100 < r.globals().LAST_INPUT < 140
+    assert result.boot_frame > 140
+    assert result.boot_inputs.A > 0 and result.boot_inputs.Start > 0
+
+
 def test_core_bogus_register_fact_red_revert(api):
     original = examples()["g"]
     assert api.evaluate("g", to_lua(api._runtime, original)) == "PASS"
@@ -966,6 +1000,40 @@ def save_setup(save):
             "src_sha1": meta["src_sha1"].lower(), "out_sha1": meta["out_sha1"].lower(), "new_pid": pid}
 
 
+# Each shakedown negative control, the row it must turn red and a needle from that row's own check string
+# (probe_gen4_hooks.lua). rtc-repeat is absent on purpose: it must PASS and feed row k's repeat comparison.
+CONTROL_REDS = {
+    "patched-rom": {"j": "ROM hash differs"},
+    "rtc-unpinned": {"c": "unpinned core settings"},
+    "no-buttons": {"l": "buttons-only CONTINUE failed"},
+}
+
+
+def control_red_failures(collected: dict) -> list:
+    """[(case, row, status, reason)] for every control that did not FAIL its targeted row with its own reason."""
+    out = []
+    for case, want in CONTROL_REDS.items():
+        for row, needle in want.items():
+            status, payload = collected[case][row]
+            reason = str(payload.get("reason", ""))
+            if status != "FAIL" or needle not in reason:
+                out.append((case, row, status, reason))
+    return out
+
+
+def test_a_control_that_does_not_go_red_fails_the_shakedown():
+    """OMP cx-8adf1fc7 S4: a control receipt whose targeted row PASSes, or FAILs for another reason, must fire."""
+    good = {case: {row: ("FAIL", {"reason": '[string "main"]:11: ' + needle}) for row, needle in want.items()}
+            for case, want in CONTROL_REDS.items()}
+    assert control_red_failures(good) == []
+    for case, want in CONTROL_REDS.items():
+        for row in want:
+            for bad in (("PASS", {"observation": {}}), ("FAIL", {"reason": "some unrelated failure"})):
+                broke = {c: dict(rows) for c, rows in good.items()}
+                broke[case][row] = bad
+                assert control_red_failures(broke) == [(case, row, bad[0], bad[1].get("reason", ""))], (case, row)
+
+
 def synth_identity_present(decoded, new_pid):
     return (any(mon["pid"] == new_pid for mon in decoded.party())
             or any(mon["pid"] == new_pid for box in decoded.boxes() for mon in box["mons"].values()))
@@ -1378,6 +1446,8 @@ def test_gen4_hook_probe(api, title):
         for case in ("baseline", "rtc-repeat", "rtc-unpinned", "no-buttons", "patched-rom"):
             rows, battery = launch_probe(module, title, source, save, profile, base, case, batch / case, cfg)
             collected[case] = rows
+        missed = control_red_failures(collected)  # a control that does not go red proves nothing
+        assert not missed, f"control(s) did not produce their targeted red: {missed}"
         for row, (status, payload) in collected["baseline"].items():
             if payload.get("observation") is not None:
                 observations[row] = payload["observation"]
