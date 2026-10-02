@@ -74,6 +74,18 @@
 10. **F10:** do not queue a "lease already used" event.
 11. **F11:** rename the test.
 
+**2026-10-02 afternoon:**
+- Step 1 fixes are committed: client r3 `c32ce7d2`, place/pack `c935530b`. **New FROZEN cut: `c935530b`**, which supersedes the c6977960 client freeze noted above.
+- Owner: keep HG and SS in the RC (not hge-only). hg-engine cannot build on SoulSilver as-is: the fork's Makefile gates on gamecode IPKE.
+- **Queued client minors (OMP cx-c01cf37c):**
+  - N2: a PartyExtra `off != base` override needs a cite.
+  - N3: `cite` should be validated, not a bare string.
+  - N4: delete the unreachable bound.
+  - N5: surface or drop the `d7_stray`/`refires` counters.
+  - N6: carry `new_species`/`new_nickname` on the queued key_change note.
+  - N7: relax the burst-count assertion.
+  - **Rejected:** N1, verified against the real hge fork.
+
 **OWNER RULING 2026-10-02: ROM companion patch REQUIRED for the first Gen 4 RC, at the Gen 1/2 feature bar** (DECISIONS). This adds a companion workstream before G4, re-runs every PHYSICAL receipt on the patched ROMs, and coordinates with the Gen 5 shared NDS companion stack.
 
 **Open owner items:** ruling 35 at G2 (ACCEPTED). Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
