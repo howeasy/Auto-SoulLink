@@ -1,5 +1,17 @@
 # Gen 4 resume note
 
+## Checkpoint 9 (2026-10-02, owner: "Do the Gen 4 adoption cut now") - shared NDS adoption cut DONE (SOURCE/MODEL)
+
+- **Commits:**
+  - `8a36e6ee` imports the shared stack @`b13c897f` as a file import, not a merge (master 735dea38 is not an ancestor). It is blob-identical, and 604 shared tests pass in this tree.
+  - `36fd0615` makes pk4 delegate its cipher to the injected `lua/nds/pkm45_crypto.lua`. `BOUND_MODULES` and the perf `MODULES` bind it.
+  - `b4e17db2`:
+    - production `hook_binding` / `phase_signals` adopt `residency_contract`: arm = table-active AND full pin; loading refusals counted; latch only after `settle_polls=16`; `may_fire` at context; battle end always disarms.
+    - The D7 seam pin is FILE-proven on every build: the hge pack gains addr 35951836 + pin `004a1047`, and the client never mints a pin from RAM. (Codex cx-e7249b41 did the binding; the coordinator did the pack and pk4 halves.)
+- **Verified:** gen4+nds suites 2633 passed (coordinator, independent); Codex reports gen4 1611 and nds 617. The only red is the out-of-scope `test_gen3_borrowed_rows` (needs `patch/build/slink_RR.gba`).
+- **ALL `aa45dd94` PHYSICAL receipts are STALE at HEAD.** The evidence surface globs `lua/nds/*.lua` and hashes pk4, the binding and the hge pack.
+- **Next:** the live re-run at `b4e17db2`: row o ×4, HG/hge/SS a–n, plus the D7 seam on hge, now pinned. It needs an owner go-ahead for the emulator lane and must avoid foreign EmuHawks. The hge k fixed-frame fix should ride in the same cut first (replay staged in `.cache/gen4-next-cut/replay_hge_rtc_frame.py`).
+
 ## Checkpoint 8 (2026-10-02 12:25 EDT; owner timebox: stop 13:31 EDT / 17:31Z; final status appended at stop)
 
 ### G1 carry-over
