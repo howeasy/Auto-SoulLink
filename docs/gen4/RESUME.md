@@ -44,6 +44,12 @@
 2. Codex runs the bound landing re-runs, at most 2 lanes: PC deposit/SAVE/reload, catch and hatch on HG/SS/hge, plus faint on HG/hge (one-mon and 2-mon).
 3. The coordinator presents the G2 cell table (`G2_PRODUCER_PLAN.md` §6) for the owner signature, then STOPS.
 
+**G2 SIGNED 2026-10-02** (`docs/gen4/reviews/G2_SIGNATURE_2026-10-02.md`); ruling 35 accepted.
+- Landing runs at the frozen cut `c1123171`: 9 G2 cells PASS (see the package).
+- **G1 row o:** hge one-mon faint PASS, bound, verified by `consume_receipt` (`C:/slink/g4/g2faintHGE1-0932`).
+- **Not run (stopped at the milestone):** HG one-mon and two-mon faint, and hge two-mon faint. Preparation-only lanes `g2faintHG2-route-0932` and `g2faintHGE2-route-0936` are left on disk.
+- Codex: all 52 owned PIDs exited and the original saves are unchanged. A running EmuHawk at the stop (PID 41196) is a Gen 2 gate run from another lane; it was left alone.
+
 **Queued after the G2 re-runs** (it touches frozen surface files): OMP cx-3bab37d5's review of `3f5f447d`.
 1. **F1 MAJOR:** `place` never writes SavedMapObject `vecY` (+0x2C, the world height restored at `map_object.c:494-496`), and `--height` writes only `currentY`. Either refuse a cross-map place, or write `vecY`, and pin +0x2C in the tests.
 2. **F5:** the save_state cite should be `:365-374`.
