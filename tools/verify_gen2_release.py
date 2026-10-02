@@ -1409,6 +1409,9 @@ def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
                                     minute=minute, second=second)
         # Historical zero-minute disclosures omit these keys. New U1 captures
         # spell them out; both must describe exactly the same rebuilt bytes.
+        # This loop only normalizes key presence: the minute is bound by new_hex/sha256,
+        # which day_clock computed WITH it, so never compare just the two clock fields.
+        # ponytail: u1_attempt stays optional because round-1 Crystal (11:23) predates it.
         for key, value in (("game_minute", minute), ("game_second", second)):
             if key in setup:
                 again[key] = value

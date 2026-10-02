@@ -1,0 +1,61 @@
+{
+ "artifacts": {
+  "crystal": {
+   "binding_sha256": "c3837ed1107c1fed3c31f8abc172727b72ca8654f1b11519342d5959257f4f88",
+   "kind": "overlay",
+   "rom_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057"
+  },
+  "gold": {
+   "binding_sha256": "3f1f94782aebc773363affe357e397836f788fe3b8226bd0aa1196a2c3052084",
+   "kind": "overlay",
+   "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a"
+  },
+  "silver": {
+   "binding_sha256": "cc145315c9ea18b68f7494da5e2fb96ce9e2b0d338bfd27207d25d67aa956e9f",
+   "kind": "overlay",
+   "rom_sha1": "583d8df4deb1831523521d20065504258cbaba28"
+  }
+ },
+ "code_digest": {
+  "commit": "07388de906dd74111985c467896fa4e019b4974f",
+  "digest": "37bb6e82e38a753f5c93d4d4df87a08c8f4f2443b59b0d510a703aaf1bcff215",
+  "dirty": [
+   "server/cartridges.py"
+  ],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "evidence_level": "PHYSICAL",
+ "pytest": {
+  "deselected": 0,
+  "errors": 0,
+  "failed": 0,
+  "passed": 7,
+  "skipped": 0,
+  "xfailed": 0,
+  "xpassed": 0
+ },
+ "requirement_ids": [
+  "R-1",
+  "R-2",
+  "R-3",
+  "R-4",
+  "R-5g"
+ ],
+ "result": "PASS",
+ "schema": "gen2-live-new-gates-attestation-v1",
+ "test": "tests/live/test_gen2_new_gates.py",
+ "titles": {
+  "crystal": "PASS",
+  "gold": "PASS",
+  "silver": "PASS"
+ }
+}
