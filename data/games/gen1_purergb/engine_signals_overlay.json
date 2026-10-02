@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "8078701cd5c2681fda25c5d2095e09612f928a4fcf302e26675e23385f4a65a2",
+ "sha256": "ac7cd53c58ca2fcc459b413655d688209c1c72b88645b7a4872ab27135456f9a",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -44,7 +44,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "fe62598a6834b0e88d0e879aafcab39876ec988c",
+   "rom_sha1": "a297c93bb26d54105cfc540cd3554ac232c3d00b",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -867,7 +867,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "869faad4030c2f9c5583e0ace192c91a9e7e7605d537adefd58d7977d094bf00"
+   "symbols_sha256": "b7a224a7fb84f0ae859063479cb19fb9a51f298f1e5f9e64848424b0a5717d08"
   },
   "puregreen": {
    "addresses": {
@@ -910,7 +910,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554",
+   "rom_sha1": "49497bdacb2543d9c2689c450ae50b9026e51dba",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -1733,7 +1733,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "0206b9c206b2e6cca09b46a98cdd0779a18fdd57efd19e11b81decf56594a68e"
+   "symbols_sha256": "9aed6b717234f864d34ea62c21cc3d3afa247a3c5c4a79e41cca6ea3bedf2e08"
   },
   "purered": {
    "addresses": {
@@ -1776,7 +1776,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "999a702c4027db9e522486fd6330c86ff6932d4b",
+   "rom_sha1": "af199b7cc168853cfed6ab1950525b0a434d569a",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -2599,7 +2599,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "b6f309bf0b49d1dc180059165403c1e8d04846585dcbc6507800e2cf10807939"
+   "symbols_sha256": "59d4a05e055d650bcaa4a1a0b5fa2070d4b7f44831d7d2932b9c1a466448312c"
   }
  }
 }

@@ -142,8 +142,9 @@ def test_the_three_overlay_builds_have_their_own_entries(overlay_entries):
                 assert a == b or ((a >> 14) in (0, 1, 3) and (a >> 14) == (b >> 14)), f"{title}.{k}: {a:#x} -> {b:#x}"
         assert ov["statics"] == clean["statics"]
     e = overlay_entries("purered")
-    # header CRC of the trade-capability overlay build (admission_overlay.json purered header_crc)
-    assert e["CRCInHeader"] == 0x702F and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
+    # header CRC of the trade-capability overlay build: read from admission_overlay.json, not pinned as a literal, because
+    # the global checksum moves with the version stamp (the stamp regenerates the admission row and this entry together)
+    assert e["CRCInHeader"] == int(by_title["purered"]["header_crc"], 16) and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
 
 
 def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries):

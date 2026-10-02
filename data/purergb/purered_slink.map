@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 15060 bytes used / 1324 free
-	ROMX: 914227 bytes used / 117965 free in 63 banks
+	ROMX: 914234 bytes used / 117958 free in 63 banks
 	SRAM: 25983 bytes used / 6785 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
 	WRAMX: 4216 bytes used / 3976 free in 2 banks
@@ -26274,11 +26274,11 @@ ROMX bank #63:
 	         $5095 = SlinkTitleLinePureClear.loop
 	         $509a = SlinkTitleLineRow
 	         $50a1 = SlinkTitleLineTiles
-	SECTION: $5101-$5116 ($0016 bytes) ["SLink main menu version"]
+	SECTION: $5101-$511d ($001d bytes) ["SLink main menu version"]
 	         $5101 = SlinkMenuVersionText
-	         $510e = SlinkMainMenuVersion
-	EMPTY: $5117-$7fff ($2ee9 bytes)
-	TOTAL EMPTY: $2ee9 bytes
+	         $5115 = SlinkMainMenuVersion
+	EMPTY: $511e-$7fff ($2ee2 bytes)
+	TOTAL EMPTY: $2ee2 bytes
 
 VRAM bank #0:
 	EMPTY

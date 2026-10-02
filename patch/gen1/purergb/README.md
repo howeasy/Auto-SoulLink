@@ -78,6 +78,11 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   version line on row 17. The save-file and no-save-file layouts both fall into `MainMenu.next2`, so one `farcall` after
   the game's line covers both. Choosing CONTINUE draws `DisplayContinueGameInfo`'s box over rows 7-16 from column 4
   (`TextBoxBorder` takes b+2 rows), which cuts row 16, so `.choseContinue` blanks the four cells left of the box first.
+  The text is a fixed-width 20-byte field (`db` text, `@`, then `ds` zero padding; `SlinkMenuVersionText` in the generated
+  `main_menu_version.inc`), so a release stamp changes only that field and the global checksum. `build_purergb_overlay.py`
+  records the field's slot (from the `.sym`) and the build's canonical sha1 (`patch/tools/rom_identity.py`: the sha1 with the
+  field and the checksum zeroed) per output in `overlay_provenance.json`; `admission_overlay.json` rows carry both, and
+  `equivalent_sha1s` (earlier exact builds proved canonical-equal) when a stamp has produced any.
 
 ## ABI (unchanged from the vanilla patch, B5)
 
