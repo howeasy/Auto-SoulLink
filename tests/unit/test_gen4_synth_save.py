@@ -486,3 +486,176 @@ def test_bag_and_egg_refuse_an_output_under_the_bizhawk_root(tmp_path, monkeypat
     src.write_bytes(_image())
     for kind in ("bag", "egg1"):
         assert _synth(kind, src, root / "NDS" / f"{kind}.SaveRAM") == synth.REFUSED
+
+
+# ---------------------------------------------------------------------------
+# party6 / species (G2 producer plan section 4)
+# ---------------------------------------------------------------------------
+def _raw_party(image: bytes, variant: str) -> list:
+    """The stored (encrypted) 0xEC party records, read at the profile offset, not through the tool."""
+    s = codec.parse_save(image, variant)
+    off = s.profile.party_off + 8
+    return [s.general[off + i * codec.PARTY_MON_SIZE : off + (i + 1) * codec.PARTY_MON_SIZE] for i in range(6)]
+
+
+def _species_run(src: Path, out: Path, species, variant: str = "hgss") -> int:
+    return synth.main(["species", str(species), "--profile", variant, "--src", str(src), "--out", str(out)])
+
+
+def _assert_checksums_valid(image: bytes, variant: str, count: int) -> None:
+    """Independent of the tool: decrypting a party record verifies its checksum, and a raw
+    recompute over the stored blocks must equal the stored header checksum."""
+    for raw in _raw_party(image, variant)[:count]:
+        codec.decrypt_party(raw)                                   # raises Gen4CodecError on a bad checksum
+        stored_sum = struct.unpack_from("<H", raw, 6)[0]
+        assert codec.checksum(codec._lcg_xor(raw[8:0x88], stored_sum)) == stored_sum
+
+
+def _assert_party6_contract(src: bytes, out: bytes, variant: str) -> None:
+    a, b = codec.parse_save(src, variant), codec.parse_save(out, variant)
+    assert (b.bank, b.counter) == (a.bank, a.counter)
+    mons, was = b.party(), a.party()
+    assert len(mons) == 6
+    assert mons[0] == was[0]                                       # decoded slot 0 unchanged
+    assert _raw_party(out, variant)[0] == _raw_party(src, variant)[0]  # ... and byte-identical
+    assert len({m["pid"] for m in mons}) == 6 and len({m["key"] for m in mons}) == 6
+    for m in mons[1:]:
+        assert m["tail_plausible"] and not m["shiny"] and m["nickname"] == "SYNTH"
+        assert (m["species"], m["level"], m["otid"], m["nature"], m["stats"], m["max_hp"]) == (
+            was[0]["species"], was[0]["level"], was[0]["otid"], was[0]["nature"], was[0]["stats"], was[0]["max_hp"])
+    _assert_checksums_valid(out, variant, 6)
+    n = a.profile.party_off
+    assert struct.unpack_from("<II", b.general, n) == (6, 6)
+    _assert_only_changed(src, out, variant, n + 4, n + 8 + 6 * codec.PARTY_MON_SIZE)
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_party6_fills_the_party_with_distinct_valid_clones(tmp_path, variant):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "p6.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _synth("party6", src, out, variant) == synth.WRITTEN
+    assert src.read_bytes() == _owner(variant)                     # the owner save is never modified
+    _assert_party6_contract(src.read_bytes(), out.read_bytes(), variant)
+    row = json.loads((tmp_path / "p6.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    mons = codec.parse_save(out.read_bytes(), variant).party()
+    assert (row["kind"], row["profile"], row["slots"]) == ("party6", variant, [1, 2, 3, 4, 5])
+    assert row["new_pids"] == [m["pid"] for m in mons[1:]] and row["note"] == synth.PARTY6_NOTE
+    assert row["src_sha1"] == hashlib.sha1(src.read_bytes()).hexdigest()
+    assert row["out_sha1"] == hashlib.sha1(out.read_bytes()).hexdigest()
+
+
+def test_party6_is_deterministic_and_tops_up_a_partly_full_party(tmp_path):
+    src, a, b = tmp_path / "src.SaveRAM", tmp_path / "a.SaveRAM", tmp_path / "b.SaveRAM"
+    src.write_bytes(_image(count=3))
+    assert _synth("party6", src, a) == synth.WRITTEN and _synth("party6", src, b) == synth.WRITTEN
+    assert a.read_bytes() == b.read_bytes()
+    before = codec.parse_save(src.read_bytes(), "hgss").party()
+    after = codec.parse_save(a.read_bytes(), "hgss").party()
+    assert after[:3] == before and len(after) == 6 and len({m["key"] for m in after}) == 6
+
+
+def test_party6_refuses_a_full_party_and_an_empty_one(tmp_path, capsys):
+    out = tmp_path / "out.SaveRAM"
+    for count, why in ((6, "party_full"), (0, "no_party")):
+        src = tmp_path / f"c{count}.SaveRAM"
+        src.write_bytes(_image(count=count))
+        assert _synth("party6", src, out) == synth.REFUSED and why in capsys.readouterr().err
+        assert not out.exists() and not Path(str(out) + ".synth.json").exists()
+    one, full = tmp_path / "one.SaveRAM", tmp_path / "again.SaveRAM"   # party6 of a party6 output is refused
+    one.write_bytes(_image())
+    assert _synth("party6", one, full) == synth.WRITTEN and _synth("party6", full, out) == synth.REFUSED
+    assert not out.exists()
+
+
+def test_party6_refuses_to_write_over_the_source(tmp_path):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    before = src.read_bytes()
+    assert _synth("party6", src, src) == synth.REFUSED and src.read_bytes() == before
+
+
+def test_a_corrupted_party_checksum_is_caught_by_the_independent_check(tmp_path):
+    """Negative control for the checksum assertions: flip one stored-checksum bit in an output
+    mon (and re-stamp the general CRC so only the mon is wrong) and the checks must fail."""
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "p6.SaveRAM"
+    src.write_bytes(_image())
+    assert _synth("party6", src, out) == synth.WRITTEN
+    good = out.read_bytes()
+    _assert_checksums_valid(good, "hgss", 6)
+    at = HGSS.party_off + 8 + 3 * codec.PARTY_MON_SIZE + 6          # slot 3 stored checksum
+    bad = _reseal(good, "hgss", lambda body: body[:at] + bytes([body[at] ^ 1]) + body[at + 1 :])
+    with pytest.raises(codec.Gen4CodecError):
+        _assert_checksums_valid(bad, "hgss", 6)
+    with pytest.raises(codec.Gen4CodecError):
+        _assert_party6_contract(src.read_bytes(), bad, "hgss")
+
+
+@pytest.mark.parametrize("variant,species", [("hgss", 25), ("hgss", 493), ("hge", 25), ("hge", 1000)])
+def test_species_rewrites_the_clone_to_a_valid_mon_of_that_species(tmp_path, variant, species):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "sp.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _species_run(src, out, species, variant) == synth.WRITTEN
+    assert src.read_bytes() == _owner(variant)
+    a, b = codec.parse_save(src.read_bytes(), variant), codec.parse_save(out.read_bytes(), variant)
+    was, mons = a.party(), b.party()
+    assert (b.bank, b.counter) == (a.bank, a.counter) and len(mons) == 2
+    assert mons[0] == was[0] and _raw_party(out.read_bytes(), variant)[0] == _raw_party(src.read_bytes(), variant)[0]
+    mon = mons[1]
+    assert (mon["species"], mon["nickname"], mon["shiny"], mon["tail_plausible"]) == (species, "SYNTH", False, True)
+    assert mon["key"] != was[0]["key"] and mon["form"] == 0
+    assert (mon["level"], mon["otid"], mon["nature"], mon["stats"]) == (
+        was[0]["level"], was[0]["otid"], was[0]["nature"], was[0]["stats"])    # tail carried, not recomputed
+    _assert_checksums_valid(out.read_bytes(), variant, 2)
+    n = a.profile.party_off
+    _assert_only_changed(src.read_bytes(), out.read_bytes(), variant, n + 4, n + 8 + 2 * codec.PARTY_MON_SIZE)
+    row = json.loads((tmp_path / "sp.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    assert (row["kind"], row["species"], row["mode"], row["new_pid"]) == ("species", species, "clone", mon["pid"])
+    assert row["tail_policy"] == synth.TAIL_POLICY and row["note"] == synth.SPECIES_NOTE
+    assert row["src_sha1"] == hashlib.sha1(src.read_bytes()).hexdigest()
+    assert row["out_sha1"] == hashlib.sha1(out.read_bytes()).hexdigest()
+
+
+def test_species_on_a_party2_output_equals_species_on_the_source(tmp_path):
+    """The in-place rewrite of a party2 clone yields the same slot-1 record as the one-step clone."""
+    src, p2, one, two = (tmp_path / n for n in ("src.SaveRAM", "p2.SaveRAM", "one.SaveRAM", "two.SaveRAM"))
+    src.write_bytes(_owner("hgss"))
+    assert _run(src, p2) == synth.WRITTEN
+    assert _species_run(src, one, 25) == synth.WRITTEN and _species_run(p2, two, 25) == synth.WRITTEN
+    assert _raw_party(one.read_bytes(), "hgss")[1] == _raw_party(two.read_bytes(), "hgss")[1]
+    assert json.loads((tmp_path / "two.SaveRAM.synth.json").read_text(encoding="utf-8"))["mode"] == "rewrite"
+    again = tmp_path / "again.SaveRAM"                              # still a SYNTH clone, so it can be rewritten again
+    assert _species_run(two, again, 152) == synth.WRITTEN
+    assert codec.parse_save(again.read_bytes(), "hgss").party()[1]["species"] == 152
+
+
+@pytest.mark.parametrize("variant,species", [("hgss", 0), ("hgss", 494), ("hgss", 495), ("hgss", 496), ("hgss", 1000),
+                                             ("hge", 0), ("hge", 494), ("hge", 496), ("hge", 1314), ("hge", 1476),
+                                             ("hgss", 65536), ("hgss", -1)])
+def test_species_out_of_range_or_placeholder_is_refused(tmp_path, capsys, variant, species):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_image())
+    assert _species_run(src, out, species, variant) == synth.REFUSED
+    assert "bad_species" in capsys.readouterr().err
+    assert not out.exists() and not Path(str(out) + ".synth.json").exists()
+
+
+def test_the_species_range_follows_the_profile():
+    assert synth.valid_species("hgss") == set(range(1, 494))       # Egg and Bad Egg are not species
+    hge = synth.valid_species("hge")
+    assert 1000 in hge and 1475 in hge and 494 not in hge and 1314 not in hge and 1476 not in hge
+
+
+def test_species_refuses_a_real_second_mon_a_big_party_and_an_empty_one(tmp_path, capsys):
+    out = tmp_path / "out.SaveRAM"
+    for count, why in ((2, "slot1_not_synth"), (6, "party_too_big"), (0, "no_party")):
+        src = tmp_path / f"c{count}.SaveRAM"
+        src.write_bytes(_image(count=count))                       # a count-2 slot 1 has no SYNTH nickname
+        assert _species_run(src, out, 25) == synth.REFUSED and why in capsys.readouterr().err
+        assert not out.exists()
+
+
+def test_species_refuses_to_write_over_the_source(tmp_path):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    before = src.read_bytes()
+    assert _species_run(src, src, 25) == synth.REFUSED and src.read_bytes() == before
