@@ -1376,3 +1376,94 @@ def test_battle_evidence_records_the_owning_struct_per_field(mode, title):
     assert (owner["hp_off"], owner["hp_width"], owner["mon_size"]) == ("BattleMon",) * 3
     assert "battle.h:527" in ev["type_off"]["owner"]["cite"] and "battle.h:394" in ev["mons_off"]["owner"]["cite"]
     assert "battle.h:248" in ev["hp_off"]["owner"]["cite"] and "accessor literal" in ev["outcome_off"]["owner"]["cite"]
+
+
+# ---- card gen4-G3-pack-d7: profile.battle.d7 (the in-battle linked-faint seam lua/gen4/client.lua reads) ----------------
+D7_TITLES = [("hgss", "heartgold"), ("hgss", "soulsilver"), ("hge", "heartgold_hge")]
+D7_FIELDS = ("seam.cmd", "seam.overlay_id", "ctx_cmd_off", "bs_party_off", "party_hp_off", "repl_flag_off")
+
+
+@pytest.mark.parametrize("mode,title", D7_TITLES)
+def test_d7_block_has_the_client_field_names_and_the_proven_values(mode, title):
+    from tests.unit.gen4_world import D7_MODEL
+    d7 = _pack(mode)["titles"][title]["profile"]["battle"]["d7"]
+    model = D7_MODEL["heartgold_hge" if mode == "hge" else "heartgold"]
+    assert d7 == model  # the pack block and the client's MODEL fallback agree key for key
+    assert set(d7) == {"seam", "ctx_cmd_off", "bs_party_off", "party_hp_off", "repl_flag_off"}
+    seam = d7["seam"]
+    assert set(seam) == ({"cmd", "overlay_id", "table"} if mode == "hge" else {"cmd", "overlay_id", "addr", "pin_hex"})
+    assert (seam["cmd"], seam["overlay_id"]) == ((9, 12) if mode == "hge" else (11, 12))
+
+
+@pytest.mark.parametrize("mode,title", D7_TITLES)
+def test_every_d7_field_carries_evidence_and_a_physical_reference(mode, title):
+    prof = _pack(mode)["titles"][title]["profile"]
+    ev = prof["battle_evidence"]["d7"]
+    assert set(ev["fields"]) == set(D7_FIELDS)
+    for key, e in ev["fields"].items():
+        assert e["class"] in ("FILE", "SOURCE") and e["cite"] and e["owner"]["struct"] and e["owner"]["cite"], key
+        assert e["physical"].startswith("PHYSICAL:") or title == "soulsilver", key  # HG/hge: a receipt; SS: stated absence
+        assert ("pret/pokeheartgold@ad7a3afa" in e["owner"]["cite"]) == (mode == "hgss"), key
+        assert ("hg-engine fork@" in e["owner"]["cite"]) == (mode == "hge"), key
+    assert ev["fields"]["seam.cmd"]["class"] == ev["fields"]["repl_flag_off"]["class"] == "FILE"
+    if title == "soulsilver":
+        assert all(e["physical"].startswith("none: no SoulSilver run") for e in ev["fields"].values())
+    else:
+        assert all("battle_faint_seam.md" in e["physical"] for e in ev["fields"].values())
+
+
+def test_d7_is_absent_for_platinum_with_an_explicit_open():
+    pt = _pack("pt")["titles"]["platinum"]
+    assert pt["profile"]["battle"] is None and "battle.d7" in pt["open"]["battle"] and "OPEN" in pt["open"]["battle"]
+
+
+def _flip(images: g.Images, image: str, addr: int) -> g.Images:
+    """A copy of `images` with one byte of `image` inverted at `addr`."""
+    ovs = {i: (ram, bytearray(data), bss) for i, (ram, data, bss) in images.overlays.items()}
+    ram, data, _ = ovs[int(image[2:])]
+    data[addr - ram] ^= 0xFF
+    return g.Images(images.arm9_base, images.arm9, ovs)
+
+
+def _d7_inputs():
+    inputs = _need("heartgold", "soulsilver", "heartgold_hge", "heartgold_xmap")
+    return (g.load_xmap(inputs.paths["heartgold_xmap"]), g.load_images(inputs.paths["heartgold"]),
+            g.load_images(inputs.paths["soulsilver"]), g.load_images(inputs.paths["heartgold_hge"], raw_arm9=True))
+
+
+def test_d7_pin_hex_and_seam_match_the_pinned_rom_bytes_in_all_three_roms():
+    xm, hg, ss, hge = _d7_inputs()
+    addr = _pack("hgss")["titles"]["heartgold"]["profile"]["battle"]["d7"]["seam"]["addr"]
+    pin = _pack("hgss")["titles"]["heartgold"]["profile"]["battle"]["d7"]["seam"]["pin_hex"]
+    for img in (hg, ss):  # ov12 bytes at the seam address: the pin the client registers on
+        assert img.read("ov12", addr, 4).hex() == pin == g.D7_SEAM_PIN_HEX
+        assert struct.unpack("<I", img.read("ov12", 0x0226CA90 + 4 * 11, 4))[0] == addr | 1  # dispatch entry 11 names it
+    assert g.d7_file_checks(xm, hg, "hgss") == _pack("hgss")["titles"]["heartgold"]["profile"]["battle_d7_file_checks"]
+    assert g.d7_file_checks(xm, ss, "hgss") == _pack("hgss")["titles"]["soulsilver"]["profile"]["battle_d7_file_checks"]
+    checks = g.d7_file_checks(xm, hge, "hge", hg)
+    assert checks == _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle_d7_file_checks"]
+    assert checks["table"]["entry_word"] == 0x022494DD and checks["table"]["identical_in_vanilla"] is True
+    table = _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle"]["d7"]["seam"]["table"]
+    assert struct.unpack("<I", hge.read("ov12", table + 4 * 9, 4))[0] == 0x022494DD  # what the client reads at first use
+
+
+def test_d7_revert_a_corrupted_pin_byte_a_wrong_table_entry_or_a_wrong_repl_flag_fail_the_generator(monkeypatch):
+    xm, hg, ss, hge = _d7_inputs()
+    assert g.d7_file_checks(xm, hg, "hgss")["pin_bytes"]["bytes"] == "f8b582b0"  # control: the real ROM passes
+    for i in range(4):  # a flipped byte anywhere in the 4-byte pin is caught (HG and SS)
+        for img in (hg, ss):
+            with pytest.raises(g.Fail, match="PHYSICAL-proven seam pin"):
+                g.d7_file_checks(xm, _flip(img, "ov12", 0x0224A70C + i), "hgss")
+    with pytest.raises(g.Fail, match="not BattleControllerPlayer_UpdateFieldConditionExtra"):  # dispatch entry 11 retargeted
+        g.d7_file_checks(xm, _flip(hg, "ov12", 0x0226CA90 + 4 * 11 + 1), "hgss")
+    with pytest.raises(g.Fail, match="differs from the vanilla"):  # hge entry 9 no longer the shared command
+        g.d7_file_checks(xm, _flip(hge, "ov12", 0x0226CA90 + 4 * 9 + 1), "hge", hg)
+    with pytest.raises(g.Fail, match="differs from the vanilla"):  # no vanilla baseline: never accepted
+        g.d7_file_checks(xm, hge, "hge", None)
+    for img in (hg, hge):  # the replacement-flag offset: either halfword of the proven movs/lsls pair
+        for off in (0x0224D540 + 0x4A, 0x0224D540 + 0x4E):
+            with pytest.raises(g.Fail, match="replacement-flag halfwords"):
+                g.d7_file_checks(xm, _flip(img, "ov12", off), "hge" if img is hge else "hgss", hg)
+    monkeypatch.setattr(g, "D7_SEAM_PIN_HEX", "f8b582b1")  # a wrong typed constant is red too
+    with pytest.raises(g.Fail, match="PHYSICAL-proven seam pin"):
+        g.d7_file_checks(xm, hg, "hgss")

@@ -1956,6 +1956,134 @@ def battle_values(template: dict, build: str) -> dict:
     }
 
 
+# ---- battle.d7: the in-battle linked-faint seam (lua/gen4/client.lua D7; docs/gen4/research/battle_faint_seam.md) ----------
+# The typed constants below are the PHYSICAL-proven values (lua/tests/probe_gen4_battle_faint.lua L.* / SEAMS, doc sections 9-13a);
+# the generator FAILS if the ROM bytes disagree, so a wrong value can never be emitted as FILE-proven.
+D7_OV, D7_CMD_VANILLA, D7_CMD_HGE = "ov12", 11, 9
+D7_SEAM_PIN_HEX = "f8b582b0"      # probe ufce.pin 0xB082B5F8 little-endian: the 4 bytes the bus-exec hook registers on
+D7_HGE_ENTRY = 0x022494DD         # hge ROM dispatch word for command 9 (Thumb bit set): trampoline at 0x022494DC (doc section 10)
+D7_REPL_PIN = (0x4A, 0x214F, 0x4E, 0x0089)  # ov12_0224D540: +0x4A `movs r1,#0x4f`, +0x4E `lsls r1,r1,#2` (4f << 2 == 0x13C)
+S_CMD_ENUM = _c("include/constants/battle.h", "596-609", "typedef enum ControllerCommand")
+S_CMD_TABLE_UFCE = _c("src/battle/battle_controller_player.c", "109", "CONTROLLER_COMMAND_UPDATE_FIELD_CONDITION_EXTRA")
+S_CMD_DISPATCH = _c("src/battle/battle_controller_player.c", "166", "sPlayerBattleCommands[ctx->command]")
+S_CTX_CMD = _c(_BH, "282", "ControllerCommand command;")
+S_BS_PARTY = _c(_BH, "548", "Party *trainerParty[4]")
+S_CTX_REPL = _c(_BH, "341", "u32 unk_13C[4]")
+S_PARTY_HP = _c("include/pokemon_types_def.h", "203", "u16 hp;")
+H_CMD_ENUM = _ch("include/battle.h", "1092", "typedef enum ControllerCommand")
+H_CMD_FIELD_COND = _ch("include/battle.h", "1102", "CONTROLLER_COMMAND_UPDATE_FIELD_CONDITION,")
+H_CTX_CMD = _ch("include/battle.h", "1283", "int server_seq_no")
+H_BS_PARTY = _ch("include/battle.h", "1595", "struct Party *trainerParty[4]")
+H_CTX_REPL = _ch("include/battle.h", "1345", "client_status[CLIENT_MAX]")
+H_PARTY_HP = _ch("include/pokemon.h", "345", "u16 hp")
+
+
+def d7_file_checks(xm: XMap, images: Images, build: str, vanilla: Images | None = None) -> dict:
+    """FILE: the D7 seam and the replacement-flag offset, read from the ROM image and compared with the typed PHYSICAL constants.
+    build hgss: dispatch entry 11 == UpdateFieldConditionExtra|1 and the 4 pin bytes there; hge: entry 9 (Thumb word) equals the typed
+    value AND the vanilla ROM's (the client reads the pin from the live ROM at that address)."""
+    tbl = xm.lookup("sPlayerBattleCommands")
+    if tbl.image != D7_OV:
+        raise Fail(f"sPlayerBattleCommands is in {tbl.image}, not {D7_OV}")
+    cmd = D7_CMD_HGE if build == "hge" else D7_CMD_VANILLA
+    word = struct.unpack("<I", images.read(D7_OV, tbl.address + 4 * cmd, 4))[0]
+    addr = word & ~1
+    out = {"table": {"symbol": "sPlayerBattleCommands", "address": tbl.address, "image": D7_OV, "cmd": cmd, "entry_word": word,
+                     "entry_address": addr, "bytes_source": f"decompressed {D7_OV}"}}
+    if not word & 1:
+        raise Fail(f"D7 dispatch entry {cmd} word {word:#x} is not a Thumb address")
+    pin = images.read(D7_OV, addr, 4).hex()
+    out["pin_bytes"] = {"address": addr, "image": D7_OV, "bytes": pin, "decodes_as": ("hge trampoline `ldr r2,[pc]; bx r2` (halfwords 0x4a00 0x4710, little-endian file order)" if build == "hge"
+                                                                 else "Thumb prologue halfwords, little-endian file order")}
+    if build == "hge":
+        if vanilla is None or struct.unpack("<I", vanilla.read(D7_OV, tbl.address + 4 * cmd, 4))[0] != word:
+            raise Fail(f"hge dispatch entry {cmd} differs from the vanilla ROM's: the seam is no longer the shared ov12 command")
+        if word != D7_HGE_ENTRY:
+            raise Fail(f"hge dispatch entry {cmd} is {word:#010x}, not the PHYSICAL-proven {D7_HGE_ENTRY:#010x}")
+        out["table"]["identical_in_vanilla"] = True
+    else:
+        fn = xm.lookup("BattleControllerPlayer_UpdateFieldConditionExtra")
+        if (fn.image, fn.address) != (D7_OV, addr):
+            raise Fail(f"dispatch entry {cmd} {word:#x} is not BattleControllerPlayer_UpdateFieldConditionExtra {fn.address:#x}")
+        if pin != D7_SEAM_PIN_HEX:
+            raise Fail(f"ROM bytes {pin} at {addr:#x} != the PHYSICAL-proven seam pin {D7_SEAM_PIN_HEX}")
+    d540 = xm.lookup("ov12_0224D540")
+    off_a, hw_a, off_b, hw_b = D7_REPL_PIN
+    got = [struct.unpack("<H", images.read(D7_OV, d540.address + o, 2))[0] for o in (off_a, off_b)]
+    if got != [hw_a, hw_b] or (hw_a & 0xFF) << 2 != 0x13C:
+        raise Fail(f"ov12_0224D540 replacement-flag halfwords {[hex(x) for x in got]} != the proven movs r1,#0x4f / lsls r1,r1,#2")
+    out["repl_flag"] = {"symbol": "ov12_0224D540", "function_address": d540.address, "image": D7_OV, "movs_at": d540.address + off_a,
+                        "lsls_at": d540.address + off_b, "halfwords": [f"{x:#06x}" for x in got],
+                        "decodes_as": "movs r1,#0x4f ; ... ; lsls r1,r1,#2  (0x4f << 2 = 0x13C)", "value": 0x13C,
+                        "bytes_source": f"decompressed {D7_OV}"}
+    return out
+
+
+def d7_values(checks: dict, build: str) -> dict:
+    seam = {"cmd": checks["table"]["cmd"], "overlay_id": overlay_id(D7_OV)}
+    if build == "hge":
+        seam["table"] = checks["table"]["address"]
+    else:
+        seam.update(addr=checks["table"]["entry_address"], pin_hex=checks["pin_bytes"]["bytes"])
+    return {"seam": seam, "ctx_cmd_off": 0x08, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": checks["repl_flag"]["value"]}
+
+
+def d7_evidence(build: str, title: str) -> dict:
+    """{field: {class, cite, physical, owner}} per D7 field. class = the strongest proof (FILE > SOURCE); `physical` names the live
+    receipt (docs/gen4/research/battle_faint_seam.md) or says why there is none (SS)."""
+    hge = build == "hge"
+    src = HGE_SRC if hge else PRET_HG
+    if title == "soulsilver":
+        phys = ("none: no SoulSilver run; HG==SS bytes at the seam, the dispatch table and ov12_0224D540 are FILE-compared in the SS ROM "
+                "(profile.battle_d7_file_checks); the offsets are struct layout shared by the two ROMs")
+    elif hge:
+        phys = (f"PHYSICAL: {_PHYS_HG} sections 10, 13 (hge build cb2dc435; cmd 9 seam hit r15 0x022494E0, receipt "
+                "heartgold_hge_seam_ufce_bit_p2_201513; four p2 rows PASS)")
+    else:
+        phys = (f"PHYSICAL: {_PHYS_HG} sections 9, 13a (receipt heartgold_seam_ufce_bit_p2_201242: cmd 11 hit r15 0x0224A710; "
+                "four p2 rows PASS)")
+
+    def ref(hge_ref: str, hg_ref: str) -> str:
+        return f"{src} {hge_ref if hge else hg_ref}"
+
+    def own(struct_name: str, cite: str) -> dict:
+        return {"struct": struct_name, "cite": f"{src} {cite}"}
+
+    seam_file = ("FILE: profile.battle_d7_file_checks.table (the hge ROM's own dispatch word for the command, equal to the vanilla "
+                 "ROM's; the client derives the address from it at first use; the table is in ov12)" if hge else
+                 "FILE: profile.battle_d7_file_checks (ov12 ROM bytes: dispatch entry 11 == UpdateFieldConditionExtra|1; the 4 bytes "
+                 "at that address are the typed PHYSICAL pin)")
+    fields = {
+        "seam.cmd": {"class": "FILE", "cite": "; ".join([seam_file, ref(H_CMD_ENUM + " / " + H_CMD_FIELD_COND,
+                                                                           S_CMD_ENUM + " / " + S_CMD_TABLE_UFCE)]),
+                     "physical": phys, "owner": own("sPlayerBattleCommands", ref(H_CMD_FIELD_COND, S_CMD_TABLE_UFCE))},
+        "seam.overlay_id": {"class": "FILE", "cite": f"FILE: the xMAP symbols sPlayerBattleCommands and UpdateFieldConditionExtra sit in {D7_OV}; "
+                            "overlay id 12 is also read from gOverlayTemplate_Battle (profile.battle.template_id)", "physical": phys,
+                            "owner": own("sPlayerBattleCommands", ref(H_CMD_ENUM, S_CMD_DISPATCH))},
+        "ctx_cmd_off": {"class": "SOURCE", "cite": ref(H_CTX_CMD + " (`/*0x8*/ int server_seq_no`, explicit)",
+                                                       S_CTX_CMD + " (BattleContext.command after two u8[4] = 0x08; the dispatch indexes the table "
+                                                       "with it, " + S_CMD_DISPATCH + ")"),
+                        "physical": phys, "owner": own("BattleContext", ref(H_CTX_CMD, S_CTX_CMD))},
+        "bs_party_off": {"class": "SOURCE", "cite": ref(H_BS_PARTY + " (hand-counted from sp at 0x30: opponentData[4] 0x34, maxBattlers 0x44, "
+                                                        "playerProfile[4] 0x48, bag/bagCursor/pokedex/storage 0x58-0x64, trainerParty 0x68; "
+                                                        "equals battle_faint_seam.md section 5)",
+                                                        S_BS_PARTY + " (hand-counted from ctx at 0x30, same layout)"),
+                         "physical": phys, "owner": own("BattleSystem", ref(H_BS_PARTY, S_BS_PARTY))},
+        "party_hp_off": {"class": "SOURCE", "cite": ref(H_PARTY_HP + " (`/* 0x08E */ u16 hp`, explicit, PartyPokemon tail)",
+                                                        S_PARTY_HP + " (`/* 0x08E */`, explicit)"),
+                         "physical": phys, "owner": own("PartyPokemon", ref(H_PARTY_HP, S_PARTY_HP))},
+        "repl_flag_off": {"class": "FILE", "cite": "; ".join([
+            "FILE: profile.battle_d7_file_checks.repl_flag (ov12_0224D540 `movs r1,#0x4f ; ... ; lsls r1,r1,#2` = 0x13C"
+            + (", ROM-identical in hge)" if hge else ")"),
+            ref(H_CTX_REPL + " (`/*0x13C*/ client_status[CLIENT_MAX]`, explicit; bit0 = replacement needed)",
+                S_CTX_REPL + " (BattleContext.unk_13C[4])")]),
+                          "physical": phys, "owner": own("BattleContext", ref(H_CTX_REPL, S_CTX_REPL))},
+    }
+    return {"fields": fields, "class": "FILE",
+            "cite": "per-field evidence in `fields` (seam FILE-checked in the ROM; offsets SOURCE or FILE; a PHYSICAL receipt reference per field)",
+            "owner": {"struct": "per field (see fields[*].owner)", "cite": f"{PRET_HG} {S_CMD_DISPATCH}"}}
+
+
 # ---- battle enums (poll_events cfg: outcomes / trainer_mask / exempt_mask) ------------------------
 OUTCOME_CODES = {"none": 0, "win": 1, "lose": 2, "draw": 3, "caught": 4, "player_fled": 5, "foe_fled": 6}
 EXEMPT_ROLES = ("link", "multi", "tag", "safari", "frontier", "pal_park", "tutorial", "bug_contest", "debug")
@@ -2149,9 +2277,11 @@ def validate_diagnostic_sites(title: dict, images: Images) -> list[str]:
 def battle_profile(build: str, title: str, xm: XMap, images: Images, hge_vs: Images | None = None) -> dict:
     """The profile keys the card adds: battle (+ evidence, FILE checks, physical corroboration) and battle_enums."""
     template = template_check(xm, images, "gOverlayTemplate_Battle", 12)
+    d7_checks = d7_file_checks(xm, images, build, hge_vs)
     out = {
-        "battle": battle_values(template, build), "battle_evidence": battle_evidence(build, template),
-        "battle_file_checks": battle_file_checks(xm, images), "battle_enums": battle_enums("hge" if build == "hge" else "hgss"),
+        "battle": {**battle_values(template, build), "d7": d7_values(d7_checks, build)},
+        "battle_evidence": {**battle_evidence(build, template), "d7": d7_evidence(build, title)},
+        "battle_d7_file_checks": d7_checks, "battle_file_checks": battle_file_checks(xm, images), "battle_enums": battle_enums("hge" if build == "hge" else "hgss"),
         "battle_physical": copy.deepcopy(BATTLE_PHYSICAL[title]),
     }
     if hge_vs is not None:  # build == hge: `images` is the hge image, `hge_vs` the vanilla baseline
@@ -2385,7 +2515,11 @@ SCHEMA_NOTES = {
               "+ b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] "
               "(fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; "
               "battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap "
-              "addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+              "addresses seen (corroboration only, never match targets). battle.d7 = the D7 in-battle linked-faint seam read by lua/gen4/client.lua: "
+              "seam {cmd, overlay_id, addr + pin_hex (HG/SS) | table (hge: the ROM dispatch word for cmd, client reads the pin live)}, ctx_cmd_off (u32 "
+              "BattleContext.command), bs_party_off (BattleSystem.trainerParty[]), party_hp_off (PartyPokemon.hp), repl_flag_off (BattleContext "
+              "replacement flag u32[ctx + off + 4*b] & 1); evidence in battle_evidence.d7.fields (class + cite + PHYSICAL receipt per field) and "
+              "battle_d7_file_checks (the ROM bytes). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= "
                     "no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, "
                     "bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
@@ -2830,7 +2964,8 @@ def pt_open() -> dict:
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
         "battle": "Platinum battle context offsets are not established (BattleContext/BattleMon have no offset annotations or accessor pins "
                   "in pokeplatinum, and a hand-counted layout of those nested structs was not attempted); do not derive from HGSS. "
-                  "profile.battle_enums IS filled: the constants are plain bit values in include/constants/battle.h",
+                  "profile.battle_enums IS filled: the constants are plain bit values in include/constants/battle.h. "
+                  "profile.battle.d7 (the in-battle linked-faint seam) is therefore ABSENT, OPEN: Platinum is a bind-check only",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
