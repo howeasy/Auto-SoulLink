@@ -36,11 +36,11 @@ def _block(profile, body: bytes, size: int, slot: int, count: int) -> bytes:
     return data + _footer(profile, count, size, slot, codec.crc16_ccitt(data))
 
 
-def _image(count: int = 1, pid: int = 0x0BADF00D, otid: int = 0x74C066C6) -> bytes:
+def _image(count: int = 1, pid: int = 0x0BADF00D, otid: int = 0x74C066C6, maxc: int = 6, box_pids=()) -> bytes:
     gen_size, pc_at, pc_size = 0xF628, 0xF700, 0x12310   # the spans the owner's saves use
     body = bytearray(gen_size)
     struct.pack_into("<HH", body, 0xB64, 17, 5)                  # Potion x5: the bag layout anchor
-    struct.pack_into("<II", body, HGSS.party_off, 6, count)
+    struct.pack_into("<II", body, HGSS.party_off, maxc, count)
     for i in range(count):
         plain = bytearray(codec.PARTY_MON_SIZE)
         struct.pack_into("<I", plain, 0, pid + i)
@@ -50,7 +50,14 @@ def _image(count: int = 1, pid: int = 0x0BADF00D, otid: int = 0x74C066C6) -> byt
         body[off : off + codec.PARTY_MON_SIZE] = codec.encrypt_party(bytes(plain))
     bank = bytearray(codec.BANK_SIZE)
     bank[:gen_size] = _block(HGSS, bytes(body), gen_size, 0, 1)
-    bank[pc_at : pc_at + pc_size] = _block(HGSS, b"", pc_size, 1, 1)
+    pc = bytearray(pc_size - HGSS.footer_size)
+    for j, box_pid in enumerate(box_pids):                       # box 0, slots 0..: a non-empty mon each
+        plain = bytearray(codec.BOX_MON_SIZE)
+        struct.pack_into("<I", plain, 0, box_pid)
+        struct.pack_into("<HHI", plain, 8, 155, 0, otid)
+        at = HGSS.boxes_off + j * codec.BOX_MON_SIZE
+        pc[at : at + codec.BOX_MON_SIZE] = codec.encrypt_box(bytes(plain))
+    bank[pc_at : pc_at + pc_size] = _block(HGSS, bytes(pc), pc_size, 1, 1)
     return b"\xff" * codec.BANK_SIZE + bytes(bank)
 
 
@@ -507,8 +514,21 @@ def _assert_checksums_valid(image: bytes, variant: str, count: int) -> None:
     recompute over the stored blocks must equal the stored header checksum."""
     for raw in _raw_party(image, variant)[:count]:
         codec.decrypt_party(raw)                                   # raises Gen4CodecError on a bad checksum
-        stored_sum = struct.unpack_from("<H", raw, 6)[0]
-        assert codec.checksum(codec._lcg_xor(raw[8:0x88], stored_sum)) == stored_sum
+
+
+def _assert_changed_within(src: bytes, out: bytes, variant: str, spans) -> None:
+    """Like _assert_only_changed but with the tool tight spans (general-relative [lo, hi) list)."""
+    s = codec.parse_save(src, variant)
+    blk = s.blocks[(s.bank, 0)]
+    crc = blk.start + blk.size - 2
+    changed = [i for i, (x, y) in enumerate(zip(src, out, strict=True)) if x != y]
+    assert changed and crc in changed, "the CRC must be re-stamped"
+    assert all(i in (crc, crc + 1) or any(blk.start + lo <= i < blk.start + hi for lo, hi in spans) for i in changed)
+
+
+def _tail(raw: bytes) -> bytes:
+    """The decrypted 0x88..0xEC party tail of a stored record."""
+    return codec.decrypt_party(raw)[codec.TAIL_OFF :]
 
 
 def _assert_party6_contract(src: bytes, out: bytes, variant: str) -> None:
@@ -516,17 +536,21 @@ def _assert_party6_contract(src: bytes, out: bytes, variant: str) -> None:
     assert (b.bank, b.counter) == (a.bank, a.counter)
     mons, was = b.party(), a.party()
     assert len(mons) == 6
-    assert mons[0] == was[0]                                       # decoded slot 0 unchanged
-    assert _raw_party(out, variant)[0] == _raw_party(src, variant)[0]  # ... and byte-identical
+    assert mons[:len(was)] == was                                  # decoded pre-existing mons unchanged
+    raw_a, raw_b = _raw_party(src, variant), _raw_party(out, variant)
+    assert raw_b[:len(was)] == raw_a[:len(was)]                    # ... and byte-identical, every slot
     assert len({m["pid"] for m in mons}) == 6 and len({m["key"] for m in mons}) == 6
     for m in mons[1:]:
         assert m["tail_plausible"] and not m["shiny"] and m["nickname"] == "SYNTH"
         assert (m["species"], m["level"], m["otid"], m["nature"], m["stats"], m["max_hp"]) == (
             was[0]["species"], was[0]["level"], was[0]["otid"], was[0]["nature"], was[0]["stats"], was[0]["max_hp"])
     _assert_checksums_valid(out, variant, 6)
+    for raw in raw_b[len(was):]:
+        assert _tail(raw) == _tail(raw_a[0])                       # the party tail is carried from slot 0 byte-exact
     n = a.profile.party_off
     assert struct.unpack_from("<II", b.general, n) == (6, 6)
-    _assert_only_changed(src, out, variant, n + 4, n + 8 + 6 * codec.PARTY_MON_SIZE)
+    first = n + 8 + len(was) * codec.PARTY_MON_SIZE
+    _assert_changed_within(src, out, variant, [(n + 4, n + 8), (first, n + 8 + 6 * codec.PARTY_MON_SIZE)])
 
 
 @pytest.mark.parametrize("variant", ["hgss", "hge"])
@@ -606,8 +630,10 @@ def test_species_rewrites_the_clone_to_a_valid_mon_of_that_species(tmp_path, var
     assert (mon["level"], mon["otid"], mon["nature"], mon["stats"]) == (
         was[0]["level"], was[0]["otid"], was[0]["nature"], was[0]["stats"])    # tail carried, not recomputed
     _assert_checksums_valid(out.read_bytes(), variant, 2)
+    assert _tail(_raw_party(out.read_bytes(), variant)[1]) == _tail(_raw_party(src.read_bytes(), variant)[0])
     n = a.profile.party_off
-    _assert_only_changed(src.read_bytes(), out.read_bytes(), variant, n + 4, n + 8 + 2 * codec.PARTY_MON_SIZE)
+    _assert_changed_within(src.read_bytes(), out.read_bytes(), variant,
+                           [(n + 4, n + 8), (n + 8 + codec.PARTY_MON_SIZE, n + 8 + 2 * codec.PARTY_MON_SIZE)])
     row = json.loads((tmp_path / "sp.SaveRAM.synth.json").read_text(encoding="utf-8"))
     assert (row["kind"], row["species"], row["mode"], row["new_pid"]) == ("species", species, "clone", mon["pid"])
     assert row["tail_policy"] == synth.TAIL_POLICY and row["note"] == synth.SPECIES_NOTE
@@ -630,7 +656,8 @@ def test_species_on_a_party2_output_equals_species_on_the_source(tmp_path):
 
 @pytest.mark.parametrize("variant,species", [("hgss", 0), ("hgss", 494), ("hgss", 495), ("hgss", 496), ("hgss", 1000),
                                              ("hge", 0), ("hge", 494), ("hge", 496), ("hge", 1314), ("hge", 1476),
-                                             ("hgss", 65536), ("hgss", -1)])
+                                             ("hgss", 65536), ("hgss", -1),
+                                             ("hge", 1313), ("hge", 1475)])
 def test_species_out_of_range_or_placeholder_is_refused(tmp_path, capsys, variant, species):
     src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
     src.write_bytes(_image())
@@ -642,12 +669,16 @@ def test_species_out_of_range_or_placeholder_is_refused(tmp_path, capsys, varian
 def test_the_species_range_follows_the_profile():
     assert synth.valid_species("hgss") == set(range(1, 494))       # Egg and Bad Egg are not species
     hge = synth.valid_species("hge")
-    assert 1000 in hge and 1475 in hge and 494 not in hge and 1314 not in hge and 1476 not in hge
+    # hg-engine include/constants/species.h:1093-1096: MAX_MON_NUM = SPECIES_PECHARUNT = 1075 and the
+    # mega/forme ids start at SPECIES_MEGA_START = 1076 (names.json marks each forme with a base key)
+    assert max(hge) == 1075 and 1075 in hge and 1000 in hge
+    assert not any(i in hge for i in (494, 495, 496, 1076, 1313, 1314, 1475, 1476))
+    assert len(hge) == 1075 - (543 - 494 + 1)                      # minus Egg, Bad Egg and the placeholder gap 496..543
 
 
 def test_species_refuses_a_real_second_mon_a_big_party_and_an_empty_one(tmp_path, capsys):
     out = tmp_path / "out.SaveRAM"
-    for count, why in ((2, "slot1_not_synth"), (6, "party_too_big"), (0, "no_party")):
+    for count, why in ((2, "slot1_unattested"), (6, "party_too_big"), (0, "no_party")):
         src = tmp_path / f"c{count}.SaveRAM"
         src.write_bytes(_image(count=count))                       # a count-2 slot 1 has no SYNTH nickname
         assert _species_run(src, out, 25) == synth.REFUSED and why in capsys.readouterr().err
@@ -659,3 +690,82 @@ def test_species_refuses_to_write_over_the_source(tmp_path):
     src.write_bytes(_image())
     before = src.read_bytes()
     assert _species_run(src, src, 25) == synth.REFUSED and src.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# review fixes (OMP cx-82aea86c)
+# ---------------------------------------------------------------------------
+def test_synth_pid_keeps_the_template_nature_across_the_32_bit_wrap(monkeypatch):
+    """F5: pid % 25 == template % 25 for every seed, including the seeds near 2**32 where the old
+    modular add wrapped (seed 4294967275, template nature 24 gave pid 3)."""
+    seeds = [0, 1, 24, 25, (1 << 32) - 1, (1 << 32) - 2, 4294967275, 4294967276, 4294967290, 4294967295]
+    seeds += [(1 << 32) - 1 - 7 * i for i in range(60)] + [(i * 2654435761) % (1 << 32) for i in range(300)]
+    for seed in seeds:
+        monkeypatch.setattr(synth, "_seed", lambda kind, sha, seed=seed: seed)
+        for nature in range(25):
+            template = nature + 25 * 1000
+            pid = synth.synth_pid("x", template, 0x74C066C6)
+            assert pid % 25 == nature and 0 <= pid < 1 << 32 and pid != template, (seed, nature, pid)
+
+
+def test_party6_avoids_pids_already_in_the_boxes(tmp_path, monkeypatch):
+    """F6: a clone PID equal to a stored box mon key would be a duplicate identity."""
+    monkeypatch.setattr(synth, "_seed", lambda kind, sha: 0x1000 + 25 * len(kind))  # image-independent
+    out = tmp_path / "out.SaveRAM"
+    plain = tmp_path / "plain.SaveRAM"
+    plain.write_bytes(_image())
+    assert _synth("party6", plain, out) == synth.WRITTEN
+    want = [m["pid"] for m in codec.parse_save(out.read_bytes(), "hgss").party()[1:]]
+    boxed = tmp_path / "boxed.SaveRAM"
+    boxed.write_bytes(_image(box_pids=want[:3]))                  # boxes already hold three of the PIDs
+    out2 = tmp_path / "out2.SaveRAM"
+    assert _synth("party6", boxed, out2) == synth.WRITTEN
+    got = codec.parse_save(out2.read_bytes(), "hgss")
+    pids = [m["pid"] for m in got.party()]
+    assert not set(pids[1:]) & set(want[:3]) and len(set(pids)) == 6
+    boxes = {m["pid"] for b in got.boxes() for m in b["mons"].values()}
+    assert boxes == set(want[:3]) and not boxes & set(pids)
+
+
+def test_party6_and_species_refuse_a_party_max_below_six(tmp_path, capsys):
+    """F7: PartyCore.maxCount is part of the contract; a smaller cap would make count 6 invalid."""
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    for maxc in (5, 1):
+        src.write_bytes(_image(maxc=maxc))
+        assert _synth("party6", src, out) == synth.REFUSED and "party_max" in capsys.readouterr().err
+        assert _species_run(src, out, 25) == synth.REFUSED and "party_max" in capsys.readouterr().err
+        assert not out.exists()
+
+
+def test_the_outputs_keep_party_max_six(tmp_path):
+    src, p6, sp = (tmp_path / n for n in ("src.SaveRAM", "p6.SaveRAM", "sp.SaveRAM"))
+    src.write_bytes(_image())
+    assert _synth("party6", src, p6) == synth.WRITTEN and _species_run(src, sp, 25) == synth.WRITTEN
+    for path in (p6, sp):
+        g = codec.parse_save(path.read_bytes(), "hgss").general
+        assert struct.unpack_from("<I", g, HGSS.party_off)[0] == 6
+
+
+def test_species_rewrite_needs_a_sidecar_attested_clone_not_just_the_nickname(tmp_path, capsys):
+    """F8: the guard is the sidecar of the tool own output (matching out_sha1 and new_pid), not the
+    player-editable nickname: a bare copy, an edited image and a wrong new_pid are all refused."""
+    out = tmp_path / "out.SaveRAM"
+    src, p2 = tmp_path / "src.SaveRAM", tmp_path / "p2.SaveRAM"
+    src.write_bytes(_image())
+    assert _run(src, p2) == synth.WRITTEN
+    bare = tmp_path / "bare.SaveRAM"                              # a genuine clone, but nothing attests it
+    bare.write_bytes(p2.read_bytes())
+    assert _species_run(bare, out, 25) == synth.REFUSED and "slot1_unattested" in capsys.readouterr().err
+    assert not out.exists()
+    assert _species_run(p2, out, 25) == synth.WRITTEN             # the tool own output is accepted
+    side = Path(str(p2) + ".synth.json")
+    good = side.read_text(encoding="utf-8")
+    edited = tmp_path / "edited.SaveRAM"                          # same bytes + one edit: the sidecar no longer attests it
+    edited.write_bytes(_reseal(p2.read_bytes(), "hgss", lambda b: b[:0xB64] + struct.pack("<HH", 17, 6) + b[0xB68:]))
+    Path(str(edited) + ".synth.json").write_text(good, encoding="utf-8")
+    assert _species_run(edited, tmp_path / "o2.SaveRAM", 25) == synth.REFUSED
+    row = json.loads(good)                                        # wrong new_pid for the slot-1 mon
+    row["new_pid"] ^= 2
+    side.write_text(json.dumps(row), encoding="utf-8")
+    assert _species_run(p2, tmp_path / "o3.SaveRAM", 25) == synth.REFUSED
+    assert "slot1_unattested" in capsys.readouterr().err

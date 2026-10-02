@@ -53,8 +53,14 @@ independent of the Lua reader) and a NEW 0x80000 image is written:
   table (``pokemon_data`` has types only), so the party tail (level, HP, five stats) and the
   exp/ability/moves/gender are CARRIED from the template, not recomputed for the new species:
   they are plausible and nature-consistent for the template, not the species' base stats.  The
-  game rebuilds them whenever it recalculates the mon; a native NPC trade only reads the species,
-  level and OTID.  ``tail_policy`` in the sidecar records this.
+  tail is repaired natively on the intended routes (pinned pret tree pokeheartgold ad7a3afa,
+  E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold): the mon an NPC trade hands back is
+  built and re-levelled by ``CalcMonLevelAndStats`` (src/npc_trade.c:232), and a deposit ->
+  withdraw round trip recalculates through ``CopyBoxPokemonToPokemon`` (src/pokemon.c:3245).  The
+  trade itself only reads the species, level and OTID.  ``tail_policy`` in the sidecar records this.
+  ``species`` rewrites an existing slot 1 only when the source sidecar attests it (``out_sha1`` of
+  the image and ``new_pid`` of the mon), because the nickname is player-editable.  Clone PIDs also
+  avoid every PID already stored in the boxes.
 
 In every kind the verifier also proves that no byte outside the intended span (plus the two
 CRC bytes of the newest general footer) differs from the source.
@@ -189,13 +195,16 @@ def _seed(kind: str, src_sha1: str) -> int:
 
 def synth_pid(src_sha1: str, template_pid: int, otid: int, kind: str = KIND, taken=()) -> int:
     """A deterministic clone PID: same nature (pid % 25) as the template, never shiny, never equal
-    to the template or any PID in ``taken``."""
-    seed = _seed(kind, src_sha1)
-    pid = (seed + (template_pid % 25) - (seed % 25)) % (1 << 32)  # +25 keeps the nature
-    for _ in range(256):
+    to the template or any PID in ``taken``.
+
+    Candidates are ``25 * j + nature`` with ``j`` stepping (mod the count that fits in 32 bits),
+    so the nature survives the wrap that a plain ``+ 25`` mod 2**32 would break."""
+    nature, seed = template_pid % 25, _seed(kind, src_sha1)
+    slots = ((1 << 32) - 1 - nature) // 25 + 1  # j in 0..slots-1 keeps 25 * j + nature below 2**32
+    for i in range(256):
+        pid = 25 * ((seed // 25 + i) % slots) + nature
         if pid != template_pid and pid not in taken and not _shiny(pid, otid):
             return pid
-        pid = (pid + 25) % (1 << 32)
     raise Refusal("no_clone_pid", "no non-shiny clone PID in 256 candidates")
 
 
@@ -546,18 +555,40 @@ SPECIES_NOTE = "SYNTH setup: party slot 1 is a clone of slot 0 rewritten to the 
 TAIL_POLICY = "carried from the template; not recomputed (no base-stat table for this profile)"
 
 
+# Highest base species id.  hgss: Arceus 493 is the last vanilla species (Egg 494, Bad Egg 495 follow).
+# hge: include/constants/species.h:1093 MAX_MON_NUM = SPECIES_PECHARUNT = 1075, and the mega/forme ids
+# start at SPECIES_MEGA_START = 1076 (:1096); names.json marks every forme row with a ``base`` key.
+MAX_SPECIES = {"hgss": 493, "hge": 1075}
+
+
 def valid_species(profile_name: str) -> set:
-    """Real species ids of the profile: non-placeholder rows of the generated names pack."""
+    """Real BASE species ids of the profile: non-placeholder rows of the generated names pack that
+    are not formes (no ``base`` key) and not above the profile MAX_MON_NUM."""
     names = json.loads((ROOT / "data" / "games" / f"gen4_{profile_name}" / "names.json").read_text(encoding="utf-8"))
-    return {int(k) for k, v in names["species"].items() if not v.get("placeholder")}
+    top = MAX_SPECIES[profile_name]
+    return {int(k) for k, v in names["species"].items()
+            if not v.get("placeholder") and "base" not in v and 0 < int(k) <= top}
 
 
 def _party_mons(image: bytes, profile):
     save = codec.parse_save(image, profile)
+    maxc = struct.unpack_from("<I", save.general, save.profile.party_off)[0]
+    if maxc < MAX_PARTY:
+        raise Refusal("party_max", f"PartyCore.maxCount is {maxc}; a 6-mon party needs {MAX_PARTY}")
     mons = save.party()
     if not mons:
         raise Refusal("no_party", "the source party is empty; there is nothing to clone")
     return save, mons
+
+
+def _raw_slots(image: bytes, save, n: int) -> list:
+    base = save.profile.party_off + 8
+    general = codec.parse_save(image, save.profile).general
+    return [general[base + i * codec.PARTY_MON_SIZE : base + (i + 1) * codec.PARTY_MON_SIZE] for i in range(n)]
+
+
+def _box_pids(save) -> set:
+    return {m["pid"] for box in save.boxes() for m in box["mons"].values()}
 
 
 def _verify_clones(src, out, save, party, first: int, count: int, species, spans) -> None:
@@ -565,8 +596,12 @@ def _verify_clones(src, out, save, party, first: int, count: int, species, spans
     ``species`` when given), all keys distinct, nothing outside ``spans`` changed."""
     got = codec.parse_save(out, save.profile)
     mons = got.party()
+    if struct.unpack_from("<I", got.general, got.profile.party_off)[0] != MAX_PARTY:
+        raise Refusal("verify", "PartyCore.maxCount is not 6")
     if got.bank != save.bank or got.counter != save.counter or len(mons) != count or mons[:first] != party[:first]:
         raise Refusal("verify", "bank, save counter, party count or the untouched mons changed")
+    if _raw_slots(out, got, first) != _raw_slots(src, save, first):
+        raise Refusal("verify", "an existing party slot is not byte-identical")
     template = mons[0]
     for mon in mons[first:]:
         same = _same_mon(mon, template) if species is None else (
@@ -587,7 +622,7 @@ def build_party6(image: bytes, profile) -> tuple[bytes, dict]:
         raise Refusal("party_full", f"party already holds {len(party)} mons; nothing to fill")
     template = party[0]
     src_sha1 = hashlib.sha1(image).hexdigest()
-    taken, pids = {m["pid"] for m in party}, {}
+    taken, pids = {m["pid"] for m in party} | _box_pids(save), {}
     for slot in range(len(party), MAX_PARTY):
         pids[slot] = synth_pid(src_sha1, template["pid"], template["otid"], f"party6:{slot}", taken)
         taken.add(pids[slot])
@@ -607,19 +642,33 @@ def build_party6(image: bytes, profile) -> tuple[bytes, dict]:
                      otid=template["otid"])
 
 
-def build_species(image: bytes, profile, species: int) -> tuple[bytes, dict]:
+def _load_sidecar(src: Path) -> dict | None:
+    try:
+        return json.loads(Path(str(src) + SIDECAR_SUFFIX).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def build_species(image: bytes, profile, species: int, sidecar: dict | None = None) -> tuple[bytes, dict]:
+    """``sidecar`` = the ``<src>.synth.json`` of the source image: it attests that a slot-1 mon is this
+    tool own clone (matching ``out_sha1`` of the image and ``new_pid`` of the mon).  The nickname is
+    editable by the player, so it is not the guard."""
     save, party = _party_mons(image, profile)
     p = save.profile
     if species not in valid_species(p.name):
         raise Refusal("bad_species", f"species {species} is not a real {p.name} species id")
     if len(party) > 2:
         raise Refusal("party_too_big", f"party count is {len(party)}; this tool only touches slot 1")
-    if len(party) == 2 and party[1]["nickname"] != NICKNAME:
-        raise Refusal("slot1_not_synth", f"party slot 1 is {party[1]['nickname']!r}, not a SYNTH clone; refusing to rewrite a real mon")
+    if len(party) == 2 and not (
+            sidecar and sidecar.get("kind") in ("party2", "species") and sidecar.get("schema") == SCHEMA
+            and sidecar.get("out_sha1") == hashlib.sha1(image).hexdigest() and sidecar.get("new_pid") == party[1]["pid"]):
+        raise Refusal("slot1_unattested", "party slot 1 is not attested as a SYNTH clone by the source sidecar "
+                      "(out_sha1 + new_pid); refusing to rewrite a mon this tool did not make")
     template = party[0]
     src_sha1 = hashlib.sha1(image).hexdigest()
     rewrite = len(party) == 2
-    pid = party[1]["pid"] if rewrite else synth_pid(src_sha1, template["pid"], template["otid"])
+    pid = party[1]["pid"] if rewrite else synth_pid(
+        src_sha1, template["pid"], template["otid"], taken={m["pid"] for m in party} | _box_pids(save))
     off = p.party_off + 8
     at = off + CLONE_SLOT * codec.PARTY_MON_SIZE
 
@@ -640,7 +689,7 @@ BUILDERS = {
     "bag": lambda image, a: build_bag(image, a.profile, a.count),
     "egg1": lambda image, a: build_egg1(image, a.profile, a.species, a.cycles),
     "party6": lambda image, a: build_party6(image, a.profile),
-    "species": lambda image, a: build_species(image, a.profile, a.species_id),
+    "species": lambda image, a: build_species(image, a.profile, a.species_id, _load_sidecar(a.src)),
 }
 
 
