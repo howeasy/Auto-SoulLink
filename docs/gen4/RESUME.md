@@ -86,6 +86,15 @@
   - N7: relax the burst-count assertion.
   - **Rejected:** N1, verified against the real hge fork.
 
+**G1 row o COMPLETE at FROZEN `c935530b`** (all verified with consume_receipt by the coordinator), all in `C:/slink/g4/`:
+
+| | One-mon | Two-mon |
+|---|---|---|
+| HG | `g1hg-one-1018` | `g1hg-two-1022` |
+| hge | `g1hge-one-1026` | `g1hge-two-1029` |
+
+Two-mon runs: replacement, slot 1 sent in, slot 0 zero in the save, no whiteout. Next: probe a–n per-case on HG/hge/SS, then PERF last on a quiet machine.
+
 **OWNER RULING 2026-10-02: ROM companion patch REQUIRED for the first Gen 4 RC, at the Gen 1/2 feature bar** (DECISIONS). This adds a companion workstream before G4, re-runs every PHYSICAL receipt on the patched ROMs, and coordinates with the Gen 5 shared NDS companion stack.
 
 **Open owner items:** ruling 35 at G2 (ACCEPTED). Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
