@@ -9,13 +9,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from tools.gen2_source_data import ARTIFACTS, ROOT, load_overlay_context, rom_offset
+from tools import gen_gen2_engine_signals as _signals
+from tools.gen2_source_data import (
+    ARTIFACTS,
+    ROOT,
+    SourceVerificationUnavailable,
+    load_overlay_context,
+    rom_offset,
+)
 from tools.gen_gen2_area_map import build_area_map
 from tools.gen_gen2_engine_signals import SPEC_PATH, generate_pack, read_specs
 from tools.gen_gen2_write_checkpoint import build_title
@@ -84,11 +91,143 @@ def _byte_spans(value, prefix=""):
             yield from _byte_spans(item, f"{prefix}/{index}")
 
 
-def _explain_spans(old, new, ctx, label, *, assembled):
-    """Every changed covered span gets source reassembly or exact symbol evidence.
+def _operand_facts(ctx, expression, scope):
+    """(kind, symbol) for one source operand, mirroring `_operand`'s own resolution order.
 
-    Unassembled small oracle prologues must remain byte-identical. Expanding
-    their contract to a changed prologue needs source instructions, not repins.
+    "symbol"   -- resolved through ctx.symbol(...): a BANK() byte, a `sym`, or a `sym +/- n` address.
+    "wildcard" -- a constant expression (1 << PSN, NAME_LENGTH, NPCTRADE_GIVEMON). `_operand` returns
+                  [None] * width for these and generate_pack's `expected is not None` filter then
+                  copies the ROM's own byte in, so the ROM -- not the source -- carries them. A change
+                  there is unexplained by construction and must refuse.
+    "literal"  -- a numeric immediate fixed by the pinned source line itself.
+    """
+    expression = expression.strip()
+    name = scope + expression if expression.startswith(".") else expression
+    if expression.startswith("BANK(") and expression.endswith(")"):
+        return "symbol", expression[5:-1]
+    if match := re.fullmatch(r"([A-Za-z_][\w.]*)\s*[+-]\s*[0-9]+", expression):
+        return "symbol", match.group(1)
+    if re.fullmatch(r"\(\s*[0-9]+\s*<<\s*[0-9]+\s*\)", expression) or \
+            re.fullmatch(r"-?[0-9]+|\$[0-9a-fA-F]+|%[01]+", expression):
+        return "literal", expression
+    if re.fullmatch(r"[A-Z][A-Z0-9_]*(?:\s*(?:<<|>>|[+|&-])\s*(?:[0-9]+|[A-Z][A-Z0-9_]*))*"
+                    r"|[0-9]+\s*<<\s*[A-Z][A-Z0-9_]*", expression):
+        return "wildcard", expression
+    if name in ctx.symbols:
+        return "symbol", name
+    raise ValueError(f"unsupported CPU operand {expression!r}")
+
+
+def _site_provenance(ctx, specs, site):
+    """(proved, wildcards, start, length): the source evidence behind one site's expected_hex.
+
+    `proved` maps a byte offset in the site's instruction stream to the SYMBOL whose operand resolved
+    it; `wildcards` holds the constant-expression offsets; start/length bound the published expected_hex
+    window inside that stream (generate_pack's hook slice).
+
+    Positions are recovered exactly rather than guessed. `_operand` is temporarily wrapped to return a
+    unique marker string per call instead of bytes; `_instruction` only ever SPREADS an operand result
+    into its pattern (or indexes it, for ldh), so every marker lands on precisely the bytes that operand
+    produced, while opcode and literal positions keep their integer values and stay distinguishable.
+    The wrapper is a module attribute, so it is restored in a finally and the generator stays
+    single-threaded by construction.
+    """
+    repo = ctx.source_record()["repo"]
+    specification = next(s for s in specs["sites"] if s["id"] == site)
+    definition = specification["sources"][repo]
+    symbol = ctx.symbol(definition["symbol"])
+    scope = definition["symbol"].split(".")[0]
+    hook, count = definition["hook_index"], definition["hook_count"]
+    real_operand = _signals._operand
+    proved, wildcards, markers, lengths = {}, set(), {}, []
+    offset, address, serial = 0, symbol.address, 0
+    for instruction in definition["instructions"]:
+
+        def recording(inner, expression, width, inner_scope):
+            nonlocal serial
+            serial += 1
+            kind, name = _operand_facts(inner, expression, inner_scope)
+            tag = f"\x00operand:{serial}"
+            markers[tag] = (kind, name)
+            return [tag] * width
+
+        _signals._operand = recording
+        try:
+            pattern = _signals._instruction(ctx, instruction, address, scope, ctx.read_source)
+        finally:
+            _signals._operand = real_operand
+        for position, value in enumerate(pattern):
+            if isinstance(value, str):
+                kind, name = markers[value]
+                if kind == "wildcard":
+                    wildcards.add(offset + position)
+                elif kind == "symbol":
+                    proved[offset + position] = name
+        lengths.append(len(pattern))
+        offset += len(pattern)
+        address += len(pattern)
+    # The published window is generate_pack's hook slice of that stream (gen_gen2_engine_signals.py:412).
+    return proved, wildcards, sum(lengths[:hook]), sum(lengths[hook:hook + count])
+
+
+def _site_change_reasons(ctx, specs):
+    """The per-site `operands` callback `_explain_spans` uses: accept a changed byte only where a
+    pinned source operand PROVED it against the overlay symbols, and refuse every other changed byte
+    with a message that says which kind of position it was.
+
+    Refusal is deliberately the conservative direction. A changed byte that is neither a symbol-resolved
+    operand nor a wildcard -- an opcode, a literal immediate, or a call/jp/jr target resolved through
+    ctx.symbol() rather than `_operand` -- is refused too, even though generate_pack has already proved
+    such a byte against the ROM. D2 requires an unexplained opcode/control-flow change to refuse, and
+    proving more than asked is the safe direction: the cost is a precise refusal on a future
+    republication, never a silent acceptance.
+    """
+    cache = {}
+
+    def verify(path, before_hex, after_hex):
+        name = path.lstrip("/")
+        if "/" in name:
+            raise ValueError(
+                f"sites{path}: nested guard span is not a proved source operand window; it must stay "
+                f"byte-identical (a changed guard prelude needs source instructions, not a repin)")
+        if name not in cache:
+            cache[name] = _site_provenance(ctx, specs, name)
+        proved, wildcards, start, length = cache[name]
+        if len(after_hex) != len(before_hex) or length * 2 != len(after_hex):
+            raise ValueError(
+                f"sites{path}: published window is {length} bytes but the span is "
+                f"{len(after_hex) // 2}; the hook slice and the span disagree")
+        before, after = bytes.fromhex(before_hex), bytes.fromhex(after_hex)
+        names = []
+        for index, (old, new) in enumerate(zip(before, after, strict=True)):
+            if old == new:
+                continue
+            position = start + index
+            if position in wildcards:
+                raise ValueError(
+                    f"sites{path}: byte {position} (span index {index}, 0x{old:02x} -> 0x{new:02x}) is a "
+                    f"constant-expression operand carried by the ROM, not proved by any pinned source "
+                    f"operand; a change there is unexplained")
+            if position not in proved:
+                raise ValueError(
+                    f"sites{path}: byte {position} (span index {index}, 0x{old:02x} -> 0x{new:02x}) is not a "
+                    f"symbol-resolved operand byte (it is an opcode, literal immediate, or branch target); "
+                    f"an unexplained opcode/control-flow change must refuse generation")
+            names.append(proved[position])
+        return ("pinned source operand " + ", ".join(sorted(set(names))) +
+                " re-resolved in the overlay symbol table and proved against the overlay ROM")
+
+    return verify
+
+
+def _explain_spans(old, new, ctx, label, *, operands=None, allow=None):
+    """Every changed covered span must be PROVED by a source fact, byte by byte.
+
+    `operands(path, before_hex, after_hex)` returns the reason naming what verified the change, or
+    raises. It is used for engine sites, where the evidence is per byte. Spans with no per-byte source
+    provenance (map headers, checkpoint anchors) use `allow(path)` as the whole test. Unassembled small
+    oracle prologues must stay byte-identical: expanding their contract to a changed prologue needs
+    source instructions, not repins.
     """
     previous = dict(_byte_spans(old))
     changes = []
@@ -101,11 +240,14 @@ def _explain_spans(old, new, ctx, label, *, assembled):
             if raw.hex() != row["expected_hex"].lower():
                 raise ValueError(f"{label}{path}: expected bytes differ from overlay")
         if before["expected_hex"].lower() != row["expected_hex"].lower():
-            if not assembled(path):
+            if operands is not None:
+                reason = operands(path, before["expected_hex"], row["expected_hex"])
+            elif allow is not None and allow(path):
+                reason = "pinned source instructions reassembled with overlay symbol operands"
+            else:
                 raise ValueError(f"unexplained changed execution bytes: {label}{path}")
             changes.append({"scope": label + path, "before_hex": before["expected_hex"],
-                            "after_hex": row["expected_hex"],
-                            "reason": "pinned source instructions reassembled with overlay symbol operands"})
+                            "after_hex": row["expected_hex"], "reason": reason})
     if previous:
         raise ValueError(f"{label}: execution spans disappeared")
     return changes
@@ -135,9 +277,9 @@ def generate_binding(title: str, root: Path = ROOT) -> dict:
     old_checkpoint = clean_checkpoint["titles"][title]
     if sites.keys() != old_sites.keys() or areas.keys() != clean_areas.keys():
         raise ValueError("overlay changed gameplay site/map inventory")
-    changes = _explain_spans(old_sites, sites, ctx, "sites", assembled=lambda _path: True)
+    changes = _explain_spans(old_sites, sites, ctx, "sites", operands=_site_change_reasons(ctx, specs))
     changes += _explain_spans(old_checkpoint, checkpoint, ctx, "checkpoint",
-                             assembled=lambda path: "/anchors/" in path)
+                             allow=lambda path: "/anchors/" in path)
     headers = []
     changed_headers = 0
     for key in sorted(areas):
@@ -199,6 +341,11 @@ def main(argv=None) -> int:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(payload)
         return 0
+    except SourceVerificationUnavailable as exc:
+        # Fail closed, but never as a stale artifact: the source is UNVERIFIED, not changed. Exit 2
+        # separates an infrastructure outage from the exit 1 a real stale/mismatched binding produces.
+        print(f"overlay binding generation HALTED (infrastructure, not a verdict): {exc}", file=sys.stderr)
+        return 2
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"overlay binding generation refused: {exc}", file=sys.stderr)
         return 1

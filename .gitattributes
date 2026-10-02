@@ -34,6 +34,7 @@ data/gen2/*.map -text whitespace=cr-at-eol
 data/gen2_sources.lock.json text eol=lf
 data/gen2/*.json text eol=lf
 data/games/gen2_*/*.json text eol=lf
+data/games/gen2_*/overlay/*.json text eol=lf
 data/games/gen2_*/charmap.lua text eol=lf
 
 # Gen 2 coverage-map lane hashes these raw working-tree bytes against pins in

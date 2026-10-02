@@ -59,11 +59,62 @@ class SourceUnavailable(ValueError):
     needs the source still counts that skip as red."""
 
 
+class SourceVerificationUnavailable(ValueError):
+    """The pinned checkout could not be VERIFIED because git itself could not answer -- git missing,
+    killed, resource-starved, or a lock/index it could not read. A NON-ZERO git exit with no diagnostic
+    is that, not a verdict: an empty stderr means git never got far enough to judge the source. The
+    source may be perfectly intact. Callers must still fail closed (never treat this as verified), but
+    they must report it as infrastructure, so a flaky lane is not published as a stale artifact and a
+    release gate does not read it as proof the source changed."""
+
+    def __init__(self, source: Path, args: tuple, detail: str = ""):
+        command = " ".join(("git", *args))
+        self.source, self.args, self.detail = Path(source), tuple(args), detail
+        reason = detail or "git produced no diagnostic"
+        super().__init__(f"cannot verify source {source}: git exited non-zero for `{command}` -- {reason}. "
+                         f"This is an INFRASTRUCTURE failure, not a source-integrity verdict: the source is "
+                         f"UNVERIFIED here, so nothing downstream may treat it as verified or as changed")
+
+
+
+
+# git's own words for "I could not do the job", as opposed to "here is the answer". These are the
+# failure modes a busy shared lane actually produces (several agents and test runs against one
+# checkout), and none of them is a statement about the source's content.
+_GIT_INFRASTRUCTURE = (
+    "could not lock", "unable to create", "cannot lock", "unable to write", "failed to write",
+    "index file", "too many open files", "resource temporarily unavailable", "out of memory",
+    "cannot allocate", "broken pipe", "the requested operation cannot be performed",
+)
+
+
 def _git(source: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(source), *args], capture_output=True,
-                            text=True, check=False)
+    """One read-only git query against the pinned checkout, with two deliberately distinct failures.
+
+    INTEGRITY. This module judges the source itself, and it does so by comparing git's SUCCESSFUL
+    output (rev-parse/ls-files/status) -- "source tree is dirty", "source HEAD differs from locked
+    commit". A git that RAN and reported some OTHER failure has therefore not judged the content, so
+    it stays a plain ValueError and --check and the release gates keep failing closed on it.
+
+    INFRASTRUCTURE. A git that could not do its job at all -- no diagnostic, a spawn error, or one of
+    its own lock/resource complaints -- could not answer, so the source is UNVERIFIED rather than
+    changed. That is SourceVerificationUnavailable: still a refusal (it never returns a value, so it
+    can never be mistaken for a verification), but reported as infrastructure so a busy lane is not
+    published as a stale artifact. Observed on this repo: the whole-file test run that failed while
+    the same test passed alone was exactly a non-zero git exit with no diagnostic.
+    """
+    try:
+        result = subprocess.run(["git", "-C", str(source), *args], capture_output=True,
+                                text=True, check=False)
+    except OSError as exc:   # git absent, not executable, or out of processes: never a source verdict
+        raise SourceVerificationUnavailable(source, args, detail=f"{type(exc).__name__}: {exc}") from exc
     if result.returncode:
-        raise ValueError(f"cannot verify source {source}: {result.stderr.strip()}")
+        detail = (result.stderr or "").strip()
+        if not detail:
+            raise SourceVerificationUnavailable(source, args)
+        if any(marker in detail.lower() for marker in _GIT_INFRASTRUCTURE):
+            raise SourceVerificationUnavailable(source, args, detail=detail)
+        raise ValueError(f"cannot verify source {source}: {detail}")
     return result.stdout.strip()
 
 
