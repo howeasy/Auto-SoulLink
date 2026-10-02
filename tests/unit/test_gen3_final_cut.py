@@ -1349,7 +1349,7 @@ def test_a_carried_row_writes_its_receipt_and_is_counted_as_carried(pass_env, mo
     got = receipts.read_run_receipt(str(probes / f"fc_{rid}_{cut[:8]}.txt"))
     assert got["verdict"].startswith(f"CARRIED from ph_{rid}_{X[:8]}.txt @{X}")
     summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
-    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FAIL 0" in summary
+    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FROZEN 0 / FAIL 0" in summary
 
 
 # ---------------------------------------------------------------------------
@@ -1413,7 +1413,7 @@ def test_merge_summary_validates_every_row_receipt(pass_env):
     _carried(probes, "link_gen3_fr_as_a", f"ph_link_gen3_fr_as_a_{X[:8]}.txt", cut=cut)
     assert fc.main(base) == 0
     s = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
-    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FAIL 0" in s
+    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FROZEN 0 / FAIL 0" in s
     # the origin disappears: the carried receipt no longer authenticates
     (probes / f"ph_link_gen3_fr_as_a_{X[:8]}.txt").unlink()
     assert fc.main(base) == 1
@@ -1612,7 +1612,7 @@ def test_a_cache_hit_copies_the_states_and_writes_a_cached_receipt(cache_env):
     assert hdr["verdict"] == (f"CACHED key={key} from fc_states_firered_town_{'d' * 8}.txt "
                               f"@{'d' * 40}")
     summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
-    assert "# RUN 0 / CARRIED 0 / CACHED 1 / FAIL 0" in summary
+    assert "# RUN 0 / CARRIED 0 / CACHED 1 / FROZEN 0 / FAIL 0" in summary
 
 
 def test_a_cached_receipt_whose_cache_entry_is_gone_is_invalid(cache_env):
@@ -1672,3 +1672,202 @@ def test_no_emerald_row_is_carried_on_frlg_shaped_deps():
     for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
         deps = fc.row_deps(r)
         assert deps is None or any("gen3_emerald" in d or "emerald" in d for d in deps), r.id
+
+
+# ---------------------------------------------------------------------------
+# FROZEN history: a PASS that ran on a CLEAN cartridge survives later client edits
+# (owner 2026-10-02 "Refuse clean, keep proofs": the launcher will refuse clean carts, so those
+# rows cannot be re-run). Identity comes from the receipt itself, never from the row name.
+# ---------------------------------------------------------------------------
+
+PATCHED_FR = "421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007"   # gen3_companions.json
+PATCHED_RR = "d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5"   # slink_RR.gba
+RULING = "owner 2026-10-02 'Refuse clean, keep proofs'"
+CLIENT_EDIT = ["lua/gen3/entry.lua"]
+
+
+def _clean_roms(*titles):
+    return {f"rom:{t}": fc.CLEAN_ROM_SHA256[t] for t in titles}
+
+
+def _any_row(row_id):
+    plan = fc.build_plan(CUT, LANE, MASTER) + fc.build_plan_rr(CUT, LANE, MASTER) \
+        + fc.build_plan_emerald(CUT, LANE, MASTER)
+    return {r.id: r for r in plan}[row_id]
+
+
+def _frozen(row_id, ev, ancestor=True):
+    return fc.frozen_decision(_any_row(row_id), CUT, [ev], lambda x, c: ancestor)
+
+
+def test_a_clean_fr_receipt_is_frozen_though_lua_gen3_changed_since_its_cut():
+    rid = "link_gen3_fr_as_a"
+    ev = _ev(rid, inputs=_clean_roms("firered", "leafgreen"))
+    # the problem: the glob-bound carry refuses it as soon as the client moves
+    assert _decide(_row(rid), [ev], CLIENT_EDIT, inputs=_clean_roms("firered", "leafgreen")).kind == "RUN"
+    d = _frozen(rid, ev)
+    assert d.kind == "FROZEN"
+    assert d.reason == f"FROZEN from ph_{rid}.txt @{X} (clean cartridge; {RULING})"
+
+
+def test_a_clean_receipt_must_still_be_from_an_ancestor_cut():
+    rid = "link_gen3_fr_as_a"
+    assert _frozen(rid, _ev(rid, inputs=_clean_roms("firered", "leafgreen")), ancestor=False) is None
+
+
+@pytest.mark.parametrize("rid,titles", [
+    ("faint_cmd_gen3_rr_as_a", ("radical_red",)), ("link_gen3_em_as_a", ("emerald",)),
+    ("checkpoint_firered", ("firered",)), ("bootcheck_leafgreen_party_town", ("leafgreen",))])
+def test_clean_rr_emerald_checkpoint_and_bootcheck_receipts_freeze_too(rid, titles):
+    assert _frozen(rid, _ev(rid, inputs=_clean_roms(*titles))).kind == "FROZEN"
+
+
+def test_a_stale_patched_companion_receipt_still_runs():
+    rid = "link_gen3_fr_as_a"
+    patched = {"rom:firered": PATCHED_FR, "rom:leafgreen": fc.CLEAN_ROM_SHA256["leafgreen"]}
+    assert _frozen(rid, _ev(rid, inputs=patched)) is None          # one patched side is enough
+    assert _decide(_row(rid), [_ev(rid, inputs=patched)], CLIENT_EDIT, inputs=patched).kind == "RUN"
+    rr = "link_gen3_rr_as_a"
+    assert _frozen(rr, _ev(rr, inputs={"rom:radical_red": PATCHED_RR})) is None
+
+
+def test_the_clean_pins_never_equal_a_companion_identity():
+    with open(os.path.join(fc.REPO, "patch", "dist", "gen3_companions.json"), encoding="utf-8") as f:
+        companions = json.load(f)["titles"]
+    patched = {t["rom_sha256"] for t in companions.values()} | {PATCHED_RR}
+    assert patched.isdisjoint(fc.CLEAN_ROM_SHA256.values())
+
+
+def test_a_stale_expansion_receipt_is_still_refused(tmp_path):
+    rid = "faint_cmd_gen3_exp_as_a"
+    row = fc.Row(rid, "XG3", [], LANE, 0)
+    assert fc.frozen_decision(row, CUT, [_ev(rid, inputs={"rom:exp": "9" * 64})],
+                              lambda x, c: True) is None
+    # even an expansion receipt that (wrongly) records a pinned clean dump never freezes
+    assert fc.frozen_decision(row, CUT, [_ev(rid, inputs=_clean_roms("emerald"))],
+                              lambda x, c: True) is None
+    verdict = f"FROZEN from ph_{rid}.txt @{X} (clean cartridge; {RULING})"
+    text = receipts.run_receipt_text(row=rid, item="XG3", cut=CUT, lane=LANE, command="c", cwd=".",
+                                     env={}, attempts=[], verdict=verdict)
+    _hdr, ok, why = fc.fc_check(f"fc_{rid}_{CUT[:8]}.txt", text, str(tmp_path))
+    assert not ok and "exact cut" in why
+
+
+def test_a_receipt_with_no_recorded_rom_identity_is_not_frozen():
+    rid = "link_gen3_fr_as_a"
+    assert _frozen(rid, _ev(rid, inputs={})) is None
+    # a ph receipt whose text has no IDENTITY line maps to empty inputs
+    text = _ph("link_gen3", "fr").replace("[duo] IDENTITY", "[duo] NOTHING")
+    ev = fc.receipt_evidence("ph_link_gen3_fr_as_a_aaaaaaaa.txt", text)
+    assert ev.inputs == {} and _frozen(rid, ev) is None
+    # only one of the two cartridges recorded: still not enough
+    assert _frozen(rid, _ev(rid, inputs=_clean_roms("firered"))) is None
+    # a MISSING hash is not an identity
+    assert _frozen(rid, _ev(rid, inputs={"rom:firered": "MISSING", "rom:leafgreen": "MISSING"})) is None
+
+
+@pytest.mark.parametrize("rid", ["states_firered_town", "tutorials_firered", "zip_build", "zip_check",
+                                 "zip_boot_firered", "release_gate_quick", "probe_gates",
+                                 "item6_route_diff", "rr_opcode_gates"])
+def test_builds_zips_gates_and_item6_are_never_frozen(rid):
+    every_rom = {f"rom:{t}": h for t, h in fc.CLEAN_ROM_SHA256.items()}
+    assert _frozen(rid, _ev(rid, inputs=every_rom)) is None
+
+
+def _clean_ph(scen, o, x=X):
+    title, other = ("firered", "leafgreen") if o == "fr" else ("leafgreen", "firered")
+    return (_ph(scen, o, x).replace(ROMS["rom:" + title], fc.CLEAN_ROM_SHA256[title])
+            .replace(ROMS["rom:" + other], fc.CLEAN_ROM_SHA256[other]))
+
+
+def test_a_frozen_row_writes_a_citable_receipt_and_is_counted_as_frozen(pass_env, monkeypatch):
+    cut, ran, probes = pass_env
+    rid = "faint_cmd_gen3_fr_as_a"
+    (probes / f"ph_{rid}_{X[:8]}.txt").write_text(_clean_ph("faint_cmd_gen3", "fr"))
+    monkeypatch.setattr(fc, "git_diff_names", lambda x, c: CLIENT_EDIT)    # the refusal's own edit
+    monkeypatch.setattr(fc, "git_is_ancestor", lambda x, c: True)
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--carry",
+                    "--rows", "faint_cmd_*,states_firered_town"]) == 0
+    assert ran == ["states_firered_town"]
+    name = f"fc_{rid}_{cut[:8]}.txt"
+    got = receipts.read_run_receipt(str(probes / name))
+    assert got["verdict"] == f"FROZEN from ph_{rid}_{X[:8]}.txt @{X} (clean cartridge; {RULING})"
+    ev = _ev_of(probes, name)       # citable through its validated origin, never itself
+    assert (ev.receipt, ev.cut, ev.passed) == (f"ph_{rid}_{X[:8]}.txt", X, True)
+    summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+    assert "# RUN 1 / CARRIED 0 / CACHED 0 / FROZEN 1 / FAIL 0" in summary
+    assert "(2/2 rows)" in summary
+    # and it merges: --merge-summary accepts and counts it
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--merge-summary",
+                    "--rows", "faint_cmd_*"]) == 0
+
+
+def test_a_frozen_receipt_must_cite_a_real_clean_pass(tmp_path):
+    rid = "faint_cmd_gen3_fr_as_a"
+    verdict = f"FROZEN from ph_{rid}_{X[:8]}.txt @{X} (clean cartridge; {RULING})"
+    text = receipts.run_receipt_text(row=rid, item="x", cut=CUT, lane=LANE, command="c", cwd=".",
+                                     env={}, attempts=[], verdict=verdict)
+    name = f"fc_{rid}_{CUT[:8]}.txt"
+    (tmp_path / name).write_text(text, encoding="utf-8")
+    assert not fc.fc_check(name, text, str(tmp_path))[1]            # origin missing
+    (tmp_path / f"ph_{rid}_{X[:8]}.txt").write_text(_ph("faint_cmd_gen3", "fr"))
+    assert not fc.fc_check(name, text, str(tmp_path))[1]            # a PASS, but not on clean carts
+    (tmp_path / f"ph_{rid}_{X[:8]}.txt").write_text(_clean_ph("faint_cmd_gen3", "fr"))
+    assert fc.fc_check(name, text, str(tmp_path))[1]
+    bare = text.replace(f" (clean cartridge; {RULING})", "")        # the ruling must be on the record
+    assert not fc.fc_check(name, bare, str(tmp_path))[1]
+
+
+def _duo_fc_receipt(tmp_path, rid, identity_line, cut=X, inputs_note=""):
+    """A runner receipt for a duo row whose only ROM identity is the IDENTITY line in its output
+    (RR and Emerald rows record `# inputs: (none)`)."""
+    out = f"{identity_line}\n  {rid}: PASS (attempt 1 of 3)"
+    attempt = {"load": "cpu=1%", "start_utc": "2026-09-24T12:00:00Z", "end_utc": "2026-09-24T12:01:00Z",
+               "rc": 0, "tracked_before": True, "tracked_after": True, "classification": "pass",
+               "output": f"========== scenario: {rid} ==========\n{out}"}
+    text = receipts.run_receipt_text(row=rid, item="x", cut=cut, lane=LANE, command="c", cwd=".",
+                                     env={}, attempts=[attempt], verdict="PASS", note=inputs_note)
+    name = f"fc_{rid}_{cut[:8]}.txt"
+    (tmp_path / name).write_text(text, encoding="utf-8")
+    return name
+
+
+def test_an_rr_or_emerald_receipt_proves_its_cartridge_through_its_identity_line(tmp_path):
+    ident = "[duo] IDENTITY a={t}:rom={h}:fixture=" + "2" * 64 + " b={t}:rom={h}:fixture=" + "4" * 64
+    for rid, title in (("link_gen3_rr_as_a", "radical_red"), ("link_gen3_em_as_a", "emerald")):
+        clean = _ev_of(tmp_path, _duo_fc_receipt(
+            tmp_path, rid, ident.format(t=title, h=fc.CLEAN_ROM_SHA256[title])))
+        assert clean.passed and fc.frozen_problem(rid, clean.inputs) is None, rid
+    patched = _ev_of(tmp_path, _duo_fc_receipt(
+        tmp_path, "link_gen3_rr_as_a", ident.format(t="radical_red", h=PATCHED_RR), cut="c" * 40))
+    assert patched.passed and fc.frozen_problem("link_gen3_rr_as_a", patched.inputs)
+    # an IDENTITY line that disagrees with the runner's own `# inputs:` hash is never clean
+    liar = _ev_of(tmp_path, _duo_fc_receipt(
+        tmp_path, "link_gen3_em_as_a", ident.format(t="emerald", h=fc.CLEAN_ROM_SHA256["emerald"]),
+        cut="d" * 40, inputs_note="inputs: rom:emerald=" + "7" * 64))
+    assert fc.frozen_problem("link_gen3_em_as_a", liar.inputs)
+
+
+def test_clean_pins_match_the_dumps_when_present():
+    """Absent dumps skip; a present dump that does not match its pin fails."""
+    import hashlib
+    root = fc.main_checkout()
+    with open(os.path.join(fc.REPO, "patch", "dist", "gen3_companions.json"), encoding="utf-8") as f:
+        companions = json.load(f)["titles"]
+    with open(os.path.join(fc.REPO, "server", "patcher.py"), encoding="utf-8") as f:
+        rr_md5 = re.search(r'"rr":\s*\{.*?"base_md5":\s*"([0-9a-f]{32})"', f.read(), re.S)[1]
+    seen = 0
+    for title, name in {**fc.ROOT_DUMPS, "radical_red": "Pokemon - Radical Red.gba"}.items():
+        path = os.path.join(root, name)
+        if title not in fc.CLEAN_ROM_SHA256 or not os.path.isfile(path):
+            continue
+        with open(path, "rb") as f:
+            raw = f.read()
+        assert hashlib.sha256(raw).hexdigest() == fc.CLEAN_ROM_SHA256[title], title
+        if title == "radical_red":
+            assert hashlib.md5(raw).hexdigest() == rr_md5
+        else:
+            assert hashlib.sha1(raw).hexdigest() == companions[title]["base_sha1"], title
+        seen += 1
+    if not seen:
+        pytest.skip("no clean dumps beside the main checkout")
