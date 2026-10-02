@@ -47,7 +47,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / "tools"), str(REPO)]
 import e2e_duo  # noqa: E402
 
-LANE_ROOT = Path("C:/Users/howar/AppData/Local/Temp")
+# Lanes + evidence live on the work drive, never C: (owner 2026-10-02); tools/slink_space.work_root() replaces this.
+WORK_ROOT = Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work"))
+LANE_ROOT = WORK_ROOT / "lanes" / "gen2"   # fs1..N stay short: BizHawk's 240-char SaveRAM path budget
 COPY = ("gen2-build", "gen2-fixtures")
 JUNCTION = ("pret", "build-tools", "downloads")
 PAIRS = {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}
@@ -134,6 +136,7 @@ def make_lane(index, sha):
     path = LANE_ROOT / f"fs{index}"
     if path.exists():
         drop_lane(path)
+    LANE_ROOT.mkdir(parents=True, exist_ok=True)
     git(REPO, "worktree", "add", "--detach", str(path), sha)
     (path / ".cache").mkdir(exist_ok=True)
     for name in COPY:
@@ -364,7 +367,7 @@ def main(argv=None):
     parser.add_argument("--sha", default="HEAD")
     parser.add_argument("--only", nargs="*", help="cell ids (exact) to run instead of all")
     parser.add_argument("--stagger", type=float, default=10.0, help="seconds between cell starts (preflight ~9 s)")
-    parser.add_argument("--out", type=Path, default=LANE_ROOT / f"fsw-{time.strftime('%m%d-%H%M')}")
+    parser.add_argument("--out", type=Path, default=WORK_ROOT / "evidence" / f"gen2-fsw-{time.strftime('%m%d-%H%M')}")
     parser.add_argument("--pin", type=Path, metavar="OUT", help="install and repin a finished sweep's PASS receipts")
     args = parser.parse_args(argv)
     if args.pin:
