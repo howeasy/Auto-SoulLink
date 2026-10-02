@@ -63,6 +63,7 @@ PROVENANCE_SCHEMA = "purergb-overlay-provenance-v1"
 # build; the version line is centred on it, see patch/gen1/tools/title_screen.py)
 PURE_INK_LAST = 59
 PURE_INK_LAST_GREEN = 67          # "Green Version" is a tile longer: ink 68 pixels wide
+PURE_LINE_CELLS = 12              # the Pure title's text line (title_band.asm: SLINK_PURE_LINE_CELLS)
 
 TITLES = {
     "pokered": ("purered", "SLink-PureRed.ups"),
@@ -129,6 +130,12 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
     green_tiles = title_screen.version_tiles(version, PURE_INK_LAST_GREEN)
     (checkout / overlay.OVERLAY_DST / "title_version.2bpp").write_bytes(version_tiles)
     (checkout / overlay.OVERLAY_DST / "title_version_green.2bpp").write_bytes(green_tiles)
+    # the Pure title's single line, "SoulLink vX.Y.Z" in 12 cells (a "-dev" suffix does not fit, so it is dropped there)
+    pure_text = "SoulLink " + version.removesuffix("-dev")
+    if len(pure_text) * 6 - 1 > PURE_LINE_CELLS * 8:
+        raise RuntimeError(f"{pure_text!r} does not fit the Pure title's {PURE_LINE_CELLS}-cell line")
+    line_tiles = title_screen.text_tiles(pure_text, PURE_LINE_CELLS, (PURE_LINE_CELLS * 8 - (len(pure_text) * 6 - 1)) // 2)
+    (checkout / overlay.OVERLAY_DST / "title_line.2bpp").write_bytes(line_tiles)
     command = make(checkout, rgbds_bin, devkit_bin, lock)
 
     outputs: dict[str, dict] = {}
@@ -168,7 +175,7 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
             "sources": {p.name: _sha256(p.read_bytes()) for p in sorted(overlay.OVERLAY_SRC.iterdir())
                         if p.suffix in (".asm", ".inc", ".2bpp")},
             "version": version,
-            "version_sha256": _sha256(version_tiles + green_tiles),
+            "version_sha256": _sha256(version_tiles + green_tiles + line_tiles),
         },
         "toolchain": _toolchain_record(rgbds_bin, devkit_bin, lock),
         "command": command,

@@ -60,21 +60,26 @@ def check_version(version: str) -> str:
     return version
 
 
-def version_tiles(version: str, ink_last: int = STRIP_INK_LAST) -> bytes:
-    """The version line as 2bpp tiles: 5x7 glyphs, centred under the strip's ink, one pixel below the band row's top."""
-    width = VER_CELLS * 8
+def text_tiles(text: str, cells: int, x: int) -> bytes:
+    """`text` as 2bpp tiles, `cells` wide: 5x7 glyphs from pixel `x`, one pixel below the top of the cell row."""
+    width = cells * 8
     rows = [0] * 8
-    x = (ink_last - (len(version) * 6 - 1)) // 2
-    for c in version:
-        for y, bits in enumerate(SMALL[c]):
-            rows[y + 1] |= bits << (width - 5 - x)
+    for c in text:
+        if c != " ":
+            for y, bits in enumerate(SMALL[c]):
+                rows[y + 1] |= bits << (width - 5 - x)
         x += 6
     out = bytearray()
-    for t in range(VER_CELLS):
+    for t in range(cells):
         for y in range(8):
             b = (rows[y] >> (width - 8 - 8 * t)) & 0xFF
             out += bytes((b, b))                                         # both planes: set bit = colour 3
     return bytes(out)
+
+
+def version_tiles(version: str, ink_last: int = STRIP_INK_LAST) -> bytes:
+    """The version line as 2bpp tiles, centred under the strip's ink (the game's own line is ink_last + 1 pixels wide)."""
+    return text_tiles(version, VER_CELLS, (ink_last - (len(version) * 6 - 1)) // 2)
 
 
 def _w(v: int) -> bytes:

@@ -11,7 +11,7 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
 | piece | where |
 |---|---|
 | sources (bank $3F + three ROM0 stubs + the 14-byte WRAMX mailbox) | `overlay/` (copied to `engine/slink/` in the checkout) |
-| hook edits to the pinned checkout (19, verify-then-replace) | `tools/apply_purergb_overlay.py` |
+| hook edits to the pinned checkout (21, verify-then-replace) | `tools/apply_purergb_overlay.py` |
 | build + publish (fresh copy of `.cache/purergb` → apply → `make` → UPS/sym/map/provenance) | `tools/build_purergb_overlay.py` |
 | UPS artifacts (CRC-bound to the locked pure ROM) | `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
 | symbols, map, provenance | `data/purergb/*_slink.{sym,map}`, `data/purergb/overlay_provenance.json` |
@@ -63,11 +63,15 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   The hook is `PrintGameVersionOnTitleScreen` in `engine/movie/title.asm`: on the vanilla-style title it calls
   `SlinkTitleBand` and prints the game's line one tile (Green: two) further right; the opt-in Pure title
   (`BIT_NEW_TITLE_SCREEN`, only ever set after a save is loaded, because `Init` zero-fills WRAM) animates rows 7-8 itself
-  and falls through to the original printer untouched. BG tile ids $60-$79 hold the art (measured free on all three
+  and falls through to the original printer for the band. BG tile ids $60-$79 hold the art (measured free on all three
   clean titles: `tests/fixtures/gen1/title_vram_pure*.json`). The title's mon swap raster-scrolls from scanline $48 =
   tile row 9, where the logo's second row sits, so `title2.asm` moves the start line to $50. The art is
   `tools/gen_gen1_title.py`'s (shared with Red/Blue); the version line is rendered by `build_purergb_overlay.py
   --version` (default `dev`) because the overlay builds from source with no other knob.
+  The Pure title has too few free BG ids for the logo (12 usable: `tests/fixtures/gen1/title_refs_pure*_pure.json`), so it
+  gets one text line, "SoulLink vX.Y.Z", on tile row 9 under the PureRed banner (`SlinkTitleLinePure`, drawn when the
+  banner animation ends); the player-pointing pose overwrites those ids on a button press, so `SlinkTitleLinePureClear`
+  blanks the row first.
 
 ## ABI (unchanged from the vanilla patch, B5)
 

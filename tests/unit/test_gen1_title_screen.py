@@ -235,3 +235,47 @@ def test_pure_hooks_leave_the_pure_title_alone_and_move_the_swap_scroll():
     assert head.index("jr nz") < head.index("farcall SlinkTitleBand")             # the band is skipped on the Pure title
     assert "ld l, $50" in edits[("engine/movie/title2.asm", "\tld h, d\n\tld l, $48\n")]
     assert "SLink title band" in apply_overlay.ROMX_SECTIONS
+
+
+def _refs(title, pure=False):
+    d = json.loads((ROOT / f"tests/fixtures/gen1/title_refs_{title}{'_pure' if pure else ''}.json").read_text())
+    return set(d["referenced"])
+
+
+@pytest.mark.parametrize("title", PURE_TITLES)
+def test_pure_band_ids_are_never_drawn_on_the_vanilla_style_title(title):
+    """Sampled every 4 frames from the start of the title to idle, both BG maps' visible cells."""
+    band = set(range(0x60, 0x60 + art.TILE_COUNT + ts.VER_CELLS))
+    assert not (band & _refs(title))
+
+
+@pytest.mark.parametrize("title", PURE_TITLES)
+def test_pure_line_ids_are_never_drawn_on_the_pure_title(title):
+    asm = (OVERLAY / "title_band.asm").read_text()
+    ids = [int(x.strip().lstrip("$"), 16) for x in re.search(r"SlinkTitleLineRow:\n\tdb ([^\n]+)", asm).group(1).split(",")]
+    assert ids[-1] == 0x50 and len(ids) - 1 == int(re.search(r"SLINK_PURE_LINE_CELLS EQU (\d+)", asm).group(1))
+    assert not (set(ids[:-1]) & _refs(title, pure=True)) and min(ids[:-1]) >= 0x60
+
+
+def test_pure_line_is_cleared_before_the_pointing_tiles_overwrite_its_ids():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import apply_purergb_overlay as apply_overlay
+    edits = {(f, old): new for f, old, new in apply_overlay.EDITS}
+    clear = edits[("engine/movie/title.asm", '\t; load the "player pointing" tiles in\n')]
+    assert clear.index("farcall SlinkTitleLinePureClear") < clear.index("; load the")
+    draw = edits[("engine/movie/title.asm", "\tcall PureTitleScreenVersionAnimation\n\tjr .skipOldTitleStuff1\n")]
+    assert "farcall SlinkTitleLinePure " in draw
+
+
+@pytest.mark.parametrize("text", ["SoulLink dev", "SoulLink v0.2.6"])
+def test_pure_line_draws_the_wordmark_and_version(text):
+    cells = 12
+    rows = []
+    tiles = ts.text_tiles(text, cells, (cells * 8 - (len(text) * 6 - 1)) // 2)
+    for y in range(8):
+        rows.append("".join(format(tiles[t * 16 + y * 2], "08b") for t in range(cells)).replace("0", ".").replace("1", "#"))
+    glyphs = [[format(r, "05b").replace("0", ".").replace("1", "#") for r in art.SMALL[c]] if c != " " else ["....."] * 7
+              for c in text]
+    expect = [".".join(g[y - 1] if y else "." * 5 for g in glyphs) for y in range(8)]
+    x = (cells * 8 - (len(text) * 6 - 1)) // 2
+    assert [r[x:x + len(text) * 6 - 1] for r in rows] == expect

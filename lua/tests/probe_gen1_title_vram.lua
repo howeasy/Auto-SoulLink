@@ -1,6 +1,11 @@
 -- Dump the settled vanilla title: which BG tile ids hold data, and both BG maps. Output is committed as a test fixture.
 local out = io.open(os.getenv("SLINK_SHOT_DIR") .. "/title_vram.json", "w")
-for f = 1, tonumber(os.getenv("SLINK_PROBE_FRAME") or "1900") do emu.frameadvance() end
+-- SLINK_FORCE_PURE=<addr>: keep pureRGB's BIT_NEW_TITLE_SCREEN (bit 6 of wSpriteOptions2) set so the opt-in Pure title is the one dumped
+local force = tonumber(os.getenv("SLINK_FORCE_PURE") or "")
+for f = 1, tonumber(os.getenv("SLINK_PROBE_FRAME") or "1900") do
+  if force and f >= 12 then memory.write_u8(force, bit.bor(memory.read_u8(force, "System Bus"), 0x40), "System Bus") end
+  emu.frameadvance()
+end
 local function nonzero(base)           -- 128 tiles, "1" when any of the 16 bytes is non-zero
   local s = {}
   for i = 0, 127 do

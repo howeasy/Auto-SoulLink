@@ -128,6 +128,17 @@ EDITS: list[tuple[str, str, str]] = [
     ("engine/movie/title.asm",
      "\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n",
      ".slinkPrint\n\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n"),
+    # The opt-in Pure title only has room for one text line (tile row 9, 12 BG ids): drawn once the PureRed
+    # banner has finished animating, and cleared again before the player-pointing tiles overwrite its ids.
+    ("engine/movie/title.asm",
+     "\tcall PureTitleScreenVersionAnimation\n\tjr .skipOldTitleStuff1\n",
+     "\tcall PureTitleScreenVersionAnimation\n"
+     "\tfarcall SlinkTitleLinePure ; SLink overlay: \"SoulLink vX.Y.Z\" under the PureRed banner\n"
+     "\tjr .skipOldTitleStuff1\n"),
+    ("engine/movie/title.asm",
+     "\t; load the \"player pointing\" tiles in\n",
+     "\tfarcall SlinkTitleLinePureClear ; SLink overlay: the pointing tiles overwrite the ids the line uses\n"
+     "\t; load the \"player pointing\" tiles in\n"),
     ("engine/movie/title2.asm",
      "\tld h, d\n\tld l, $48\n",
      "\tld h, d\n\tld l, $50 ; SLink overlay: scroll from tile row 10, so the title band's second row stays still\n"),

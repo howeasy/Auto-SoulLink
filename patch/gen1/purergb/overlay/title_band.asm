@@ -57,3 +57,50 @@ IF DEF(_GREEN)
 ELSE
 	INCBIN "engine/slink/title_version.2bpp"
 ENDC
+
+; ---- the opt-in Pure title ---------------------------------------------------------------------
+; It has no room for the logo: of the BG tile ids, only $62 $67 $6C and $71-$79 are never drawn between the
+; banner animation and the idle loop (tests/fixtures/gen1/title_refs_pure*.json), 12 in all. So it gets one line
+; of text, "SoulLink vX.Y.Z", on tile row 9 under the PureRed banner, rendered by build_purergb_overlay.py
+; (title_line.2bpp). The player-pointing pose (PureTitlePlayerSpritePointing, vChars2 tile $4F-$78) overwrites
+; those ids when the player presses a button, so the hook clears the row first.
+
+DEF SLINK_PURE_LINE_CELLS EQU 12
+DEF SLINK_PURE_LINE_X EQU 5
+
+SlinkTitleLinePure::
+	ld de, SlinkTitleLineTiles
+	ld hl, vChars2 tile $62
+	lb bc, BANK(SlinkTitleLineTiles), 1
+	call CopyVideoData
+	ld de, SlinkTitleLineTiles + 1 * TILE_SIZE
+	ld hl, vChars2 tile $67
+	lb bc, BANK(SlinkTitleLineTiles), 1
+	call CopyVideoData
+	ld de, SlinkTitleLineTiles + 2 * TILE_SIZE
+	ld hl, vChars2 tile $6C
+	lb bc, BANK(SlinkTitleLineTiles), 1
+	call CopyVideoData
+	ld de, SlinkTitleLineTiles + 3 * TILE_SIZE
+	ld hl, vChars2 tile $71
+	lb bc, BANK(SlinkTitleLineTiles), 9
+	call CopyVideoData
+	hlcoord SLINK_PURE_LINE_X, 9
+	ld de, SlinkTitleLineRow
+	jp PlaceString
+
+SlinkTitleLinePureClear::
+	hlcoord SLINK_PURE_LINE_X, 9
+	ld a, $7F
+	ld b, SLINK_PURE_LINE_CELLS
+.loop
+	ld [hli], a
+	dec b
+	jr nz, .loop
+	ret
+
+SlinkTitleLineRow:
+	db $62, $67, $6C, $71, $72, $73, $74, $75, $76, $77, $78, $79, $50
+
+SlinkTitleLineTiles:
+	INCBIN "engine/slink/title_line.2bpp"
