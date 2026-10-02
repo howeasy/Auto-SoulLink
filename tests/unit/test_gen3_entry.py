@@ -198,9 +198,13 @@ def test_rr_anchor_admission_keeps_its_existing_kind(kind):
 def test_rand_routes_through_the_single_gate_and_uses_clean_sites():
     world = World(pack="gen3_frlg", title="firered", build=False)
     codec = world.lua.eval(f'dofile("{(REPO / "lua/json_codec.lua").as_posix()}")')
-    got = world.Entry.admit_routed(world.lua.table(root=REPO.as_posix(), json=codec,
-        rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE"))
-    assert got.kind == "rand"
+    args = world.lua.table(root=REPO.as_posix(), json=codec,
+        rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE")
+    # the bare admission still names the artifact; the LAUNCHER gate refuses a clean rand build
+    # (patch-first, owner 2026-10-02: FireRed requires the companion)
+    assert world.Entry.admit(args).kind == "rand"
+    got, why = world.Entry.admit_routed(args)
+    assert got is None and "needs the SLink companion patch" in why
     world.kind = "rand"
     _observer, parts = world.Entry.build(world.deps())
     assert parts.kind == "rand" and parts.artifact_kind == "clean"

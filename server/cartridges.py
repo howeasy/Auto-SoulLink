@@ -21,18 +21,20 @@ class CartridgeError(Exception):
     """The selected cartridges could not be provisioned; the message is the refusal."""
 
 
-# Patch-first (owner 2026-10-01): the titles whose SLink companion the launcher ADMITS. Every
-# cartridge of these titles gets its companion, decided here per player, never by the browser.
-# Yellow has no free WRAM for the mailbox, so it is handed out as picked. Crystal/Gold/Silver need
-# their companion for trade; each is composed only while its overlay row is activated (fail closed).
+# Patch-first (owner 2026-10-01, REQUIRED 2026-10-02): the titles whose SLink companion the
+# launcher and the server REQUIRE. Every cartridge of these titles gets its companion, decided
+# here per player, never by the browser, and a pick that cannot get it is refused, not handed out
+# clean. Yellow has no free WRAM for the mailbox, so it is handed out as picked. Radical Red is
+# patched through /patcher (describe_rom does not identify it, so the Manager never sees a pick
+# of it); it is listed so the list is exactly the patcher's targets, test_cartridges.py pins that.
 COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
-                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald")
+                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald", "Radical Red")
+_GEN2_TITLES = ("Crystal", "Gold", "Silver")
 
 
 def companion_admitted(info: dict) -> bool:
     """Does this pick's title get the companion? describe_rom's variant, e.g. 'Red'. A Gen 2 title
-    also needs its activated catalog row, so a rolled-back row hands out the clean cartridge rather
-    than one the launcher refuses."""
+    also needs its activated catalog row."""
     variant = info.get("variant")
     if variant in ("Crystal", "Gold", "Silver"):
         return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
@@ -106,6 +108,14 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     # Per player: a pick whose title has no admitted companion (Yellow) is handed out as picked;
     # its partner still gets its own companion.
     want = {pid: bool(companion) and companion_admitted(infos[pid]) for pid in sources}
+    # Patch-first (owner 2026-10-02): the launcher and the server refuse a clean cartridge of a
+    # companion title, so one that cannot be given its companion is refused here, never handed out.
+    for pid, info in infos.items():
+        variant = info.get("variant")
+        if variant in COMPANION_TITLES and variant not in _GEN2_TITLES and not want[pid]:
+            raise CartridgeError(
+                f"player {pid}: {variant} needs the SLink companion patch, so a clean cartridge "
+                "is not prepared (companion cannot be turned off)")
     if family == FAMILY_VANILLA:
         for pid, rom in data.items():
             if want[pid]:

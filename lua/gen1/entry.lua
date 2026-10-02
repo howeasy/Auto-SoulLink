@@ -232,6 +232,17 @@ local function admission_candidates(root, json)
     table.sort(candidates, function(a,b) return a.pack .. a.title .. a.kind < b.pack .. b.title .. b.kind end)
     return candidates
 end
+-- Patch-first (owner 2026-10-02): every title below REQUIRES the SLink companion patch, so Entry.admit
+-- never admits its CLEAN artifacts: the pinned stock dump (kind clean), nor a randomized stock build
+-- (an anchors match of a clean row, kind rand). Yellow has no free WRAM for the mailbox and is exempt,
+-- like Archipelago builds (those are in no catalog). A patched Red/Blue is in no sha1 table either and
+-- boots as the header-named family: admit_routed tells it from a stock one by the patch itself.
+Entry.COMPANION_REQUIRED = { red = true, blue = true, purered = true, pureblue = true, puregreen = true }
+local COMPANION_NEEDED = "needs the SLink companion patch"
+local function companion_reason(title)
+    return "this " .. tostring(title) .. " cartridge " .. COMPANION_NEEDED .. "; "
+           .. "prepare it through the Manager or /patcher"
+end
 function Entry.admit(args)
     local actual_sha
     local ok, decision, why = pcall(function()
@@ -247,6 +258,9 @@ function Entry.admit(args)
             end,
             hashes=function(candidate) return candidate.hashes end,
             eligible=function(candidate, mode, _request, artifact)
+                if candidate.kind == "clean" and Entry.COMPANION_REQUIRED[candidate.title] then
+                    return false, companion_reason(candidate.title)
+                end
                 if mode == "sha1" then return true end
                 local header = Entry.header_title(artifact.read_u8)
                 for _, expected in ipairs(candidate.headers) do
@@ -272,6 +286,7 @@ function Entry.admit(args)
     if not ok then why, decision = tostring(decision), nil end
     if decision then return decision end
     local header, sha = tostring(args.header or ""), actual_sha or tostring(args.rom_sha1 or "")
+    if tostring(why):find(COMPANION_NEEDED, 1, true) then return nil, tostring(why) end
     if tostring(why):find("ambiguous", 1, true) then
         return nil, "ambiguous: header " .. header .. ": sha1 " .. sha .. ": " .. tostring(why)
     end
@@ -282,6 +297,66 @@ function Entry.admit(args)
     end
     return nil, "header " .. header .. " is not an admitted Gen 1 cartridge: sha1 " .. sha .. ": " .. tostring(why)
 end
+-- THE companion detector for a vanilla Red/Blue cartridge (also called by lua/tests harnesses). The
+-- companion's bank-$3F module writes the 'SLNK' beacon into its mailbox, and that code is in the ROM
+-- from frame 0 -- unlike the beacon itself, which only exists in WRAM once frames have run, so an
+-- admission decision cannot see it. The writer is `ld a, "S" / ld [mailbox], a` = 3E 53 EA lo hi
+-- (patch/gen1/tools/inject.py _BEACON_WRITER emits it). A stock cartridge, randomized or not, has
+-- no such bytes in bank $3F. `mailbox` defaults to the shipped vanilla patch's (PACKS.gen1_rby.trade).
+function Entry.has_companion_beacon(read_rom_u8, mailbox)
+    if not read_rom_u8 then return false end
+    mailbox = mailbox or Entry.PACKS.gen1_rby.trade.mailbox
+    local want = { 0x3E, 0x53, 0xEA, mailbox & 0xFF, (mailbox >> 8) & 0xFF }
+    local first = 0x3F * 0x4000                       -- ROM offset of bank $3F, the last bank of 1 MiB
+    for offset = first, first + 0x4000 - #want do
+        if read_rom_u8(offset) == want[1] then
+            local hit = true
+            for i = 2, #want do
+                if read_rom_u8(offset + i - 1) ~= want[i] then hit = false; break end
+            end
+            if hit then return true end
+        end
+    end
+    return false
+end
+
+-- The LAUNCHER's admission (lua/gen1/run.lua): Entry.admit, the vanilla named-family fallback,
+-- and the companion rule. One place, so a caller that dofiles run.lua and a lupa test are held
+-- to the same gate. args are Entry.admit's plus args.family (Entry.detect_title's first value);
+-- args.log is optional. Returns the admitted table or nil, reason.
+function Entry.admit_routed(args)
+    local log = args.log or function() end
+    local admitted, why = Entry.admit(args)
+    -- A refusal for lack of the companion is final: never retried as the named family below.
+    if not admitted and tostring(why):find(COMPANION_NEEDED, 1, true) then return nil, tostring(why) end
+    if not admitted then
+        -- The vanilla companion-patch and randomized artifacts are vanilla-layout by construction
+        -- and predate the admission table (their sha1s are not pinned anywhere): a recognised
+        -- vanilla header still boots the vanilla pack exactly as before admission existed
+        -- (kind "named"). A non-pinned pureRGB build carries the same header and DOES reach this
+        -- path (its sha1 and anchors admit nothing): it is then refused by the vanilla pack's own
+        -- engine-site verification (signals.lua "engine sites differ from the ROM"), never booted
+        -- against the wrong addresses. The pinned pure builds never get here.
+        local family = args.family
+        if family == "red" or family == "blue" or family == "yellow" then
+            log("[SLink-gen1] no admission row for this cartridge (" .. tostring(why) .. "); booting the vanilla "
+                .. family .. " pack by header (named family)")
+            admitted = { title = family, pack = "gen1_rby", kind = "named",
+                         rom_sha1 = tostring(args.rom_sha1 or ""):lower() }
+        else
+            return nil, tostring(why)
+        end
+    end
+    -- The named family is a vanilla cartridge with no admission row: a patched Red/Blue (its bank-$3F
+    -- beacon writer is what makes the cartridge a companion one) or a stock one. Only the patched one
+    -- boots; the server asks the same question again from the hello's `panel`.
+    if admitted.kind == "named" and Entry.COMPANION_REQUIRED[admitted.title]
+       and not Entry.has_companion_beacon(args.read_rom_u8) then
+        return nil, companion_reason(admitted.title)
+    end
+    return admitted
+end
+
 -- ── build ────────────────────────────────────────────────────────────────────────────
 
 -- Reads of $D000-$DFFF go through the flat WRAM domain (bank 1 at 0x1000) when the profile

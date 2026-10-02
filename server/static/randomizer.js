@@ -389,7 +389,8 @@ function randomizerFields(form) {
     cartridgesBody() {
       var body = { rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b,
                    // patch-first: the server decides per player (server/cartridges.py); a pick
-                   // without an admitted companion goes out as picked, its partner still patched
+                   // whose title has no companion (Yellow) goes out as picked, its partner still
+                   // patched, and a title that requires one it cannot get is refused
                    companion: true, randomize: !!this.rdraft.randomize };
       if (this.rdraft.randomize) { body.jar = this.rdraft.jar; body.spec = this.rdraft.spec; }
       return body;

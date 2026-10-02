@@ -453,16 +453,30 @@ def _memorial():
     return (GEN2_MEMORIAL_AREA, GEN2_MEMORIAL_A, GEN2_MEMORIAL_B) if GAME == "gen2" else None
 
 
+def _companion_fields(rom_type: str) -> dict:
+    """The mock cartridges are PATCHED ones: a hello for a title that requires the SLink companion is
+    refused by the server without this evidence (patch-first, owner 2026-10-02; the same fields
+    GameRulesAdapter.companion_refusal asks for). Yellow, Archipelago and Gen 4/5 need none."""
+    name = rom_type.lower()
+    if name in ("red", "blue"):
+        return {"artifact_kind": "named", "panel": True}
+    if name in ("purered", "pureblue", "puregreen"):
+        return {"artifact_kind": "overlay"}
+    if name in ("firered", "leafgreen", "emerald", "firered_rr"):
+        return {"artifact_kind": "companion"}
+    return {}
+
+
 def _hello_extra(player: str) -> dict:
     """Identity fields each generation's real client puts in its hello."""
     ot = "30B8" if player == "a" else "7B0B"
     if _is_gen1():
-        return {"ot_id": ot}
+        return {"ot_id": ot, **_companion_fields(_rom_type(player))}
     if GAME == "gen2":
         # lua/gen2/client.lua send_hello; the Gen 2 wire's ot_id is the integer.
         return {"foundation": "gen2_gsc", "artifact_kind": "clean", "ot_id": int(ot, 16),
                 "rom_sha1": _gen2_rom_sha1(), "party": []}
-    return {}
+    return _companion_fields(_rom_type(player))
 
 
 def _capture_extra(gender: str, species: int, item: int) -> dict:

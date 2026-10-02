@@ -123,14 +123,27 @@ def test_a_pack_dropped_from_routed_is_refused_even_when_anchors_admit_it():
     assert any("gen3_frlg" in line and "not yet routed" in line for line in logs), logs
 
 
+def test_a_clean_companion_title_is_refused_by_the_launcher_and_never_built():
+    """Patch-first (owner 2026-10-02): the pinned CLEAN FireRed is a known hash, yet run.lua refuses it
+    with the companion reason, and (boot_failure would otherwise fire) never reaches build."""
+    shown = []
+    rom = seed_rom(sites_of("gen3_frlg", "firered", "clean"))
+    digest = artifact_of("gen3_frlg", "firered", "clean")["rom_sha1"]
+    client, logs = _run(rom, digest, hud_messages=shown, boot_failure="build")
+    assert client == "stale"
+    assert any("needs the SLink companion patch" in line and "Manager or /patcher" in line for line in logs), logs
+    assert not any("engine sites differ" in line for line in logs)
+
+
 @pytest.mark.parametrize("phase", ["admit", "build", "start"])
 def test_boot_refusals_keep_diagnostics_on_console_and_short_text_on_hud(phase):
     shown = []
     if phase == "admit":
         rom, digest = seed_rom({}, header_code="BPEE"), "f" * 40
     else:
-        rom = seed_rom(sites_of("gen3_frlg", "firered", "clean"))
-        digest = artifact_of("gen3_frlg", "firered", "clean")["rom_sha1"]
+        # the COMPANION artifact: a clean FireRed is refused before it can boot (patch-first)
+        rom = seed_rom(sites_of("gen3_frlg", "firered", "companion"))
+        digest = artifact_of("gen3_frlg", "firered", "companion")["rom_sha1"]
     client, logs = _run(
         rom, digest, hud_messages=shown, boot_failure=None if phase == "admit" else phase
     )

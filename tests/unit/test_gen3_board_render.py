@@ -76,7 +76,7 @@ from tests.unit.test_dashboard_contract import parse
 # artifact kind is set once from the first hello (server.py:2174) and every later hello
 # must agree, or the foundation lock refuses it (test_mixed_foundations).
 RUNS = {
-    "firered": ("clean", 27, "Leader", "Roxanne"),
+    "firered": ("companion", 27, "Leader", "Roxanne"),   # a clean FireRed is refused (patch-first, 2026-10-02)
     "firered_rr": ("companion", 43, "Gym Leader", "Falkner"),
 }
 

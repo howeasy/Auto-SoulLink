@@ -63,20 +63,21 @@ from tools import make_release
 # share an adapter and an area map, so any two of them can link; the same holds for
 # FireRed/LeafGreen, Gold/Silver/Crystal, HeartGold/SoulSilver, Black/White. What
 # separates families is a different map (Radical Red from vanilla FireRed, Emerald,
-# Platinum from HGSS, B2W2 from BW) or a reshuffled world (the Archipelago builds).
+# Platinum from HGSS, B2W2 from BW). The Archipelago builds are not listed: no SLink client
+# supports them yet (Gen 1 has no AP profile, the Gen 3 launcher refuses a header-only build).
 # Every new run names its family up front, so the Manager knows which cartridge (and which
 # companion) to hand out. Runs created before 2026-10-01 may still carry "" (detected).
 GAMES = [
     ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
-    ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
-    ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
     ("gen3_e", "Emerald", ["emerald"]),
 ]
-UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
+# Listed but not admitted by the client: shown in the Manager with a "not admitted" label, never created. Empty
+# since the Archipelago games left the list (owner 2026-10-02), the seam stays for the next one.
+UNADMITTED_GAMES: frozenset[str] = frozenset()
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a run's game names (upr_settings.FAMILY_*): a pure run takes pure
@@ -87,7 +88,7 @@ GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # verifies against), so a run named "gen3_rr" never lands in randomizer_games and never offers
 # the randomizer -- see test_manager_names_the_frlg_family / the RR refusal test in
 # test_upr_pipeline_gen3.py.
-GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
+GAME_FAMILY = {"gen1": "gen1_rby", "gen1_purergb": "gen1_purergb",
                "gen2": "gen2_gsc", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
                 "gen2_gsc": "Gold / Silver / Crystal",
@@ -308,8 +309,7 @@ def new_run_form() -> dict:
         "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
         "gen1_games": [k for k, _, m in GAMES if m and all(
-            rt in ("red", "blue", "yellow", "red_ap", "blue_ap",
-                   "purered", "pureblue", "puregreen") for rt in m)],
+            rt in ("red", "blue", "yellow", "purered", "pureblue", "puregreen") for rt in m)],
         # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
         "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY],
     }
@@ -1228,8 +1228,8 @@ class RunManager:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
         if len(name) > 80:
             return web.json_response({"ok": False, "error": "name is too long (80 characters max)"}, status=400)
-        # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
-        # because the client would refuse the run at hello.
+        # Only a listed game can be created (an unlisted one, e.g. an Archipelago key from an old
+        # page, is refused here instead of at hello).
         game = str(body.get("game", "") or "").strip().lower()  # one normalized key: check, store, message
         if game not in GAME_MEMBERS:
             return web.json_response({"ok": False, "error": "choose the game this run plays"}, status=400)

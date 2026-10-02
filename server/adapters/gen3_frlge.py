@@ -32,7 +32,7 @@ from server.pokemon_data import (
 )
 
 from . import gen3_codec, gen3_rom_tables
-from .base import GameAdapter, humanize_area_id
+from .base import GameAdapter, companion_required_reason, humanize_area_id
 
 log = logging.getLogger(__name__)
 
@@ -430,6 +430,21 @@ class Gen3Adapter(GameAdapter):
         # "named": a companion RR and a clean RR are the same layout and pair. The
         # committed kind stays "companion" -- only this comparison maps it.
         return {"named": "clean", "companion": "clean"}.get(kind, kind)
+
+    # Owner 2026-10-02: FireRed, LeafGreen, Emerald and Radical Red require the companion. The AP
+    # builds (firered_ap/leafgreen_ap) and the Emerald Expansion (rom_type emerald_expansion_*,
+    # which inherits this method) are not listed, so they stay clean-admitted.
+    _COMPANION_ROM_TYPES = frozenset({"firered", "leafgreen", "emerald", "firered_rr"})
+
+    @classmethod
+    def companion_refusal(cls, hello):
+        # The Gen 3 hello declares "companion" for a patched cartridge. A randomized one declares
+        # "rand" either way (lua/gen3/client.lua folds rand_companion into it), so the wire cannot
+        # refuse that case; the launcher does (lua/gen3/entry.lua admit_routed refuses kind rand).
+        rom_type = hello.get("rom_type")
+        if rom_type in cls._COMPANION_ROM_TYPES and hello.get("artifact_kind", "clean") in ("clean", "named"):
+            return companion_required_reason(rom_type)
+        return None
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

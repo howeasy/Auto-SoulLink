@@ -114,25 +114,18 @@ def test_native_messages_is_disabled_for_every_game(tmp_path):
     assert SoulLinkState(data_dir=str(tmp_path), native_messages=True).native_messages is False
 
 
-def test_unadmitted_gen3_variants_carry_the_suffix():
-    """Archipelago FRLG is not admitted by the Gen 3 client yet (owner 2026-09-23,
-    docs/gen3/PLAN.md §14.1); its label carries a 'not admitted' suffix so players know they
-    cannot start a SLink with it. Vanilla gen3, gen3_rr and gen3_e (Emerald, EG4) are all
-    admitted and have no such suffix."""
-    labels = GAME_LABELS
-    assert "not admitted by the SLink client yet" in labels["gen3_ap"]
-    assert "not admitted by the SLink client yet" not in labels["gen3"]
-    assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
-    assert "not admitted by the SLink client yet" not in labels["gen3_e"]
-
-
-def test_new_run_form_marks_exactly_the_unadmitted_games():
-    """The template greys a chip from this flag (manager.html :disabled="g.unadmitted"), derived
-    from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart. gen3_e
-    (Emerald) left UNADMITTED_GAMES at EG4; only the Archipelago FRLG build remains."""
-    from server.manager import UNADMITTED_GAMES, new_run_form
-    flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
-    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap"}
+def test_the_archipelago_games_are_not_listed():
+    """Owner 2026-10-02: no SLink client supports Archipelago yet (Gen 1 has no AP profile, the Gen 3
+    launcher refuses a header-only build), so the Manager lists no AP game and the New-run form has
+    no chip for one. Every listed game is one a run can be created for."""
+    from server.manager import GAME_FAMILY, GAMES, new_run_form
+    keys = {k for k, _, _ in GAMES}
+    assert not {"gen1_ap", "gen3_ap"} & keys and "gen1_ap" not in GAME_FAMILY
+    members = {m for _, _, ms in GAMES for m in ms}
+    assert not {m for m in members if m.endswith("_ap")}
+    from server.manager import UNADMITTED_GAMES
+    assert not UNADMITTED_GAMES, "no game is listed-but-not-admitted now; the seam stays for the next one"
+    assert all(not g["unadmitted"] and "Archipelago" not in g["label"] for g in new_run_form()["games"])
 
 
 def test_gen4_and_gen5_are_not_offered_in_the_manager():

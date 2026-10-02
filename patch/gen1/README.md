@@ -12,8 +12,9 @@ it does NOT play sound.**
 This started as a spike answering *can SLink inject code into Pokémon Red/Blue cleanly?*
 The answer was yes. What it grew into is a START-menu row that opens a full-screen Soul Link
 panel the player can read without leaving the game, and a Cable Club receptionist that runs
-the in-game trade. It enforces no Soul Link rule on its own and the Lua client does not
-require it.
+the in-game trade. It enforces no Soul Link rule on its own, but since 2026-10-02 the launcher
+and the server REQUIRE it for Red/Blue: a clean Red/Blue is refused (Yellow has no free WRAM, so it
+has no patch and stays admitted clean). The Lua rule paths still work on any admitted cartridge.
 
 ## What it carries
 

@@ -486,6 +486,18 @@ _FOUNDATION_ABSENT = object()
 _KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
 
 
+def _companion_refusal(player_id: str, msg: dict) -> str:
+    """Patch-first (owner 2026-10-02): why this hello's cartridge lacks the SLink companion patch its
+    title requires, or "". The adapter CLASS owns the rule (`companion_refusal`, a class lookup like
+    `pairing_kind`), so no game or title is named here. Module level: `_decide_admission` is also
+    called unbound on a stub self."""
+    from server.adapters import adapter_class_for_rom_type
+    rom_type = msg.get("rom_type", "")
+    cls = adapter_class_for_rom_type(rom_type) if isinstance(rom_type, str) and rom_type else None
+    why = cls.companion_refusal(msg) if cls else None
+    return f"Slot {player_id.upper()}: {why}" if why else ""
+
+
 def _randomized_binding_error(rom_type, kind, committed_rom_type, committed_kind, *, candidate_class=None) -> str:
     """Both halves of the run identity require an explicit randomized-title binding."""
     from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
@@ -819,6 +831,11 @@ class SLinkServer:
         Returns the admission record; never raises. A player who cannot be admitted is not
         an error condition, it is a run that has not started for them yet.
         """
+        # The same refusal as the wire seam in handle_client (HUD line there), so a hello that
+        # reaches `_dispatch` another way is held to it too.
+        needs_companion = _companion_refusal(player_id, msg)
+        if needs_companion:
+            return {"state": "rejected", "reason": needs_companion}
         payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
         refused = _randomized_binding_error(
             msg.get("rom_type", self.state.rom_type), kind, self.state.rom_type, self.state.artifact_kind,
@@ -1720,6 +1737,21 @@ class SLinkServer:
                     # `_dispatch`'s "hello" branch and committed only on acceptance, so a
                     # contract- or identity-rejected hello leaves connected_players and the
                     # adapter exactly as they were.
+                    # Patch-first (owner 2026-10-02): a title that requires the SLink companion
+                    # patch is refused when the hello shows none -- the cartridge bypassed the
+                    # Manager. Same refusal shape as the checks above; the adapter owns the rule.
+                    _needs = _companion_refusal(player_id, msg)
+                    if _needs:
+                        log.warning(f"[{player_id}] REJECTED: {_needs}")
+                        self.state.identity_error[player_id] = _needs
+                        self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, _needs, msg)
+                        await self._respond(writer, [{
+                            "cmd": "hud_show", "text": "[x] NEEDS COMPANION PATCH",
+                            "color": [255, 0, 0], "duration": 600,
+                        }])
+                        self._notify_sse()
+                        continue
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
