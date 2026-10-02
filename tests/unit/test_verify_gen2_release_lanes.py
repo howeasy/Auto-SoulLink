@@ -2868,3 +2868,43 @@ def test_the_committed_activated_rows_pass_the_g4_packet():
     # the real generator rows carry the grant only inside runtime_gate; the verifier also demanded a
     # top-level row.grant_fingerprint that no producer writes, so every activated row read "invalid" (ROMPatch)
     assert gate.g4_packet_errors(REPO) == []
+
+
+# ---- version-masked identity (owner ruling 2026-10-02): a receipt bound to a version-equivalent build stays valid ----
+
+def test_accepted_overlay_shas_are_the_published_hash_plus_its_proven_equivalents():
+    row = {"sha1": "b" * 40, "equivalent_sha1s": ["a" * 40]}
+    assert gate._accepted_overlay_shas(row) == {"a" * 40, "b" * 40}
+    assert gate._accepted_overlay_shas({"sha1": "b" * 40}) == {"b" * 40}
+    assert gate._accepted_overlay_shas({}) == set() and gate._accepted_overlay_shas(None) == set()
+
+
+def _overlay_tree(tmp_path, published, equivalents):
+    prov = tmp_path / "data/gen2/overlay_provenance.json"
+    prov.parent.mkdir(parents=True)
+    row = {"slink_title": "crystal", "sha1": published}
+    if equivalents is not None:
+        row["equivalent_sha1s"] = equivalents
+    prov.write_text(json.dumps({"outputs": {"pokecrystal": row}}), encoding="utf-8")
+    fixture = tmp_path / "tests/fixtures/gen2/crystal_x.SaveRAM"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(b"save")
+    return {"schema": "s", "result": "PASS", "evidence_level": "PHYSICAL", "title": "crystal",
+            "fixture": "crystal_x", "fixture_sha256": hashlib.sha256(b"save").hexdigest()}
+
+
+@pytest.mark.parametrize("named, equivalents, ok", [
+    ("b" * 40, None, True),                 # the published build itself
+    ("a" * 40, ["a" * 40], True),           # an earlier build the builder proved version-equivalent
+    ("a" * 40, [], False),                  # not proven: the receipt is for another build
+    ("c" * 40, ["a" * 40], False),          # a build nobody vouched for
+])
+def test_overlay_gate_receipts_follow_the_equivalence_list(tmp_path, monkeypatch, named, equivalents, ok):
+    receipt = _overlay_tree(tmp_path, "b" * 40, equivalents)
+    receipt["overlay_sha1"] = named
+    monkeypatch.setattr(gate, "_fixture_sha256", lambda root, fixture: receipt["fixture_sha256"])
+    identity = {"kind": "overlay", "rom_sha1": named, "base_sha1": "e" * 40, "binding_sha256": "f" * 64}
+    monkeypatch.setattr(gate, "_execution_identity", lambda root, title, kind: identity)   # the executed build
+    receipt.update(artifact_kind="overlay", rom_sha1=named, base_sha1="e" * 40, binding_sha256="f" * 64)
+    errors = gate._overlay_gate_errors(tmp_path, "crystal", receipt, "s", "x gate")
+    assert (errors == []) is ok, errors

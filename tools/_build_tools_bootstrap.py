@@ -166,9 +166,11 @@ def _install_rgbds_windows(version: str) -> pathlib.Path:
     cache_dir = REPO_ROOT / ".cache" / "build-tools" / f"rgbds-{version}"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # Skip if already extracted and binaries exist
-    if all((cache_dir / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
-        return cache_dir
+    # Skip if already extracted and binaries exist (the zip puts them under bin/; re-extracting over binaries another build is
+    # running raced with it: "PermissionError ... bin\rgbgfx.exe")
+    for installed in (cache_dir / "bin", cache_dir):
+        if all((installed / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
+            return installed
 
     zip_path = _download_and_verify(pin["url"], pin["sha256"], pin["size"])
 
@@ -225,12 +227,13 @@ def ensure_rgbds(version: str = RGBDS_VERSION) -> pathlib.Path:
         raise RuntimeError(f"SLINK_RGBDS_BIN={override} is missing {REQUIRED_BINARIES}")
 
     cache_dir = REPO_ROOT / ".cache" / "build-tools" / f"rgbds-{version}"
-    if all((cache_dir / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
-        rgbasm = cache_dir / _binary_name("rgbasm")
-        if _verify_rgbds_version(rgbasm, version):
-            return cache_dir
-        # Cache exists but wrong version — refresh
-        shutil.rmtree(cache_dir)
+    for installed in (cache_dir / "bin", cache_dir):
+        if all((installed / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
+            if _verify_rgbds_version(installed / _binary_name("rgbasm"), version):
+                return installed
+            # Cache exists but wrong version — refresh
+            shutil.rmtree(cache_dir)
+            break
 
     rgbasm_on_path = _check_existing_path("rgbasm")
     if rgbasm_on_path and _verify_rgbds_version(rgbasm_on_path, version):
