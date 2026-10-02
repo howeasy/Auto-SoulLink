@@ -68,6 +68,10 @@ python -m server.manager --host 0.0.0.0
 
 Open **http://localhost:8090/** on the machine running the Manager.
 
+Which port is which: **8090** is the Manager (the page above). Each run the Manager starts gets
+its own dashboard, starting at **8081** and counting up. **8080** is the dashboard of a single run
+started by hand with `python -m server.server` (its `--http-port` default); the Manager never uses it.
+
 <img src="docs/images/manager-new.png" width="900" alt="Creating a run: choose a name, game family, and optional rules">
 
 1. **Create a run.** Give it a name, choose your game family, and select the rules you

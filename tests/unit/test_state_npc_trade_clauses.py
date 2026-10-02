@@ -204,7 +204,10 @@ def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_p
                         "party": [], "party_hidden": True})
     before = deepcopy(entry)
     msg, replies = _exchange(srv, entry, ids["Charmander"])
-    assert replies["a"] == [{"cmd": "noop", "refused": refusal}]
+    # docs/protocol.md section 2.1: a well-formed key_change is answered key_change_rejected{party hidden}
+    # (still before any mutation); every other hidden event keeps the bare noop.
+    assert replies["a"] == [{"cmd": "key_change_rejected", "old_key": msg["old_key"],
+                             "new_key": msg["new_key"], "reason": refusal.replace("_", " ")}]
     assert entry == before and entry.status == LinkStatus.ALIVE
     assert not msg.get("_key_change_status")
     assert not any(c["cmd"] in ("force_faint", "memorialize") for c in replies["b"])

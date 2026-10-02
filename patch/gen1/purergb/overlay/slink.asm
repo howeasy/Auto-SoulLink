@@ -6,6 +6,7 @@ DEF SLINK_ABI_VERSION  EQU 3
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
 DEF SLINK_CAP_SFX_NOTIFY EQU 1 << 2   ; knows SFX code 4 (an older build drops it unplayed)
+DEF SLINK_CAP_TRADE  EQU 1 << 4   ; patch/gb/slink_abi.inc; set when slink_overlay.asm links trade
 
 ; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
 DEF SLINK_PANEL_CLOSED EQU 0
@@ -61,8 +62,13 @@ SlinkHook::
 	ld [wSlinkBeacon + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [wSlinkAbi], a
-	; Panel and SFX: the SFX request is served on the main thread (SlinkSfxService), never here.
-	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+	; Panel and SFX (the SFX request is served on the main thread, SlinkSfxService, never
+	; here), plus trade when slink_overlay.asm links it (the patch/gen2/src/slink.asm pattern).
+DEF SLINK_BUILD_CAPS EQU SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+IF DEF(SLINK_TRADE_ENABLED)
+REDEF SLINK_BUILD_CAPS EQU SLINK_BUILD_CAPS | SLINK_CAP_TRADE
+ENDC
+	ld a, SLINK_BUILD_CAPS
 	ld [wSlinkCaps], a
 
 	; 16-bit little-endian frame counter; `inc [hl]` sets Z on wrap.

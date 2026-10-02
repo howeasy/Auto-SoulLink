@@ -169,8 +169,8 @@ The trade-carrying Red/Blue patches are separate UPS files for their exact clean
 
 | Patch | Clean ROM md5 | Patched ROM md5 |
 |---|---|---|
-| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `cd0af68e5097b8cfa9733225ef055e8a` |
-| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `40cc749ee03edfd4a9b31bf088c1a4d2` |
+| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a241ebcd9e7799fce4b3e80ffac45a45` |
+| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `1298581bf3eb21dd03ffb3d7c5a7a0b7` |
 
 Rebuild them from the clean dumps and the current Gen 1 build:
 
