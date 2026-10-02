@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from patch.gen1.tools import boot_splash, manifest
+from patch.gen1.tools import manifest, title_screen
 from tools._build_tools_bootstrap import ensure_rgbds
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -217,7 +217,7 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
     assert patched[0x0100:0x0150] == pristine[0x0100:0x0150]
     permitted = set(range(manifest.INJECT_OFFSET, manifest.INJECT_OFFSET + manifest.BANK_SIZE))
     permitted.update(range(manifest.HOOK_SITE, manifest.HOOK_SITE + len(manifest.HOOK_ORIGINAL)))
-    for offset, before, after, _why in manifest.MENU_PATCHES + boot_splash.splash_spans():
+    for offset, before, after, _why in manifest.MENU_PATCHES + title_screen.title_spans(pristine):
         assert len(before) == len(after)
         assert pristine[offset:offset + len(before)] == before
         assert patched[offset:offset + len(after)] == after
@@ -248,4 +248,7 @@ def test_panel_payload_is_bit_identical_to_panel_only_link(built):
 def test_red_blue_trade_bank_bytes_identical(built):
     red, blue = built["red"], built["blue"]
     assert red[0xFC500:0xFDA00] == blue[0xFC500:0xFDA00]
-    assert red[0xFC000:0x100000] == blue[0xFC000:0x100000]
+    # the payload is one image; past it only the title band's own 'Red Version' / 'Blue Version' ids differ
+    assert red[0xFC000:title_screen.FREE_FROM] == blue[0xFC000:title_screen.FREE_FROM]
+    differ = [i for i in range(title_screen.FREE_FROM, 0x100000) if red[i] != blue[i]]
+    assert differ and all(title_screen.RV_OFFSET <= i < title_screen.RV_OFFSET + title_screen.VERSION_TEXT_LEN for i in differ)
