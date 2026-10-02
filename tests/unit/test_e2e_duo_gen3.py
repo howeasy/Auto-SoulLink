@@ -2200,10 +2200,17 @@ def test_explode_receipt_cannot_omit_or_forge_the_pp_witness(ph):
 
 def test_no_driver_pokes_game_memory():
     """Scripted normal inputs only: no scenario module or the driver writes the cartridge."""
-    texts = [DRIVER.read_text(encoding="utf-8")] + [
-        f.read_text(encoding="utf-8") for f in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")]
-    for text in texts:
-        assert not re.search(r"memory\.write", text)
+    files = [DRIVER] + list((REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua"))
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        if f.name == "scenario_gen3_static_wild.lua":
+            # The ONE disclosed SYNTH write (XG3 "runtime SFC32 Rock state"): rock_rng_prep stages the
+            # 16-byte expansion RNG so the Rock Smash roll is deterministic. It must stay exactly that.
+            staged = 'memory.write_u8(f.rock_rng_address+i,tonumber(f.rock_rng_state_hex:sub(i*2+1,i*2+2),16),"System Bus")'
+            assert text.count("memory.write") == 1 and text.count(staged) == 1
+            assert text.index("local function rock_rng_prep") < text.index(staged) < text.index("return before")
+        else:
+            assert not re.search(r"memory\.write", text), f.name
         assert "zero_hp" not in text
 
 
