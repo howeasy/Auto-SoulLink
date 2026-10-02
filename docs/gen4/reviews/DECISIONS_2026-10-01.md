@@ -137,3 +137,14 @@ The owner wrote "ROM Patch is now required", then answered via AskUserQuestion:
   - hge test.nds is IPKE, unitcode 0, NTR 0xB7483E0 == file size.
   - HG/SS ARM9 is BLZ-compressed; hge's ARM9 is raw.
   - hge is post-patchable, keyed on the pinned sha1 cb2dc435.
+
+## Owner rulings: Gen 4 companion scope (2026-10-02, AskUserQuestion)
+
+1. **Trade in the minimum.** Owner chose "In the minimum (Recommended)". The first RC companion requires the beacon/caps handshake, native sound codes, the START-menu SLINK panel AND the receptionist trade.
+2. **Two artifacts.** Owner chose "Two artifacts (Recommended)":
+   - hge: the companion module goes inside the owner's hg-engine fork (a SLink branch), followed by a new pinned hge build;
+   - HG/SS: a patch from a pinned pret pokeheartgold source rebuild, diffed against the vanilla dumps.
+3. **Deferrals carry over.** Owner chose "Yes, both deferred (Recommended)". No peer ghost and no native message boxes in the Gen 4 first RC.
+4. **Shared NDS stack: go ahead.** Owner chose "Go ahead (Recommended)". Gen 5 opens card 1 (the byte-preserving writer + pin/receipt schema) with one writer lease; Gen 4 reviews it and co-owns.
+
+The feature bar and build shape are in `docs/gen4/companion/FEATURE_BAR.md`.
