@@ -18,6 +18,21 @@ any randomizer change inside the companion's protected code/data spans. The
 final ROM hash belongs to the run contract. Native capability and randomized
 pairing remain separate; the hello uses the existing `rand` wire kind.
 
+**Title screen.** Every Gen 3 companion (FireRed, LeafGreen, Emerald, and Radical Red's ABI1 build) puts a
+SoulLink wordmark in the Pokémon logo's style and the patch version (`vX.Y.Z`, or `dev`) on the title. It is a static
+asset patch with no code (`patch/tools/gen3_title.py`, art from `tools/gen_gen1_title.py`): the title's own LZ77
+graphics are relocated into the ROM's free tail with the band added and the two literal-pool words that name them are
+repointed, so the game's loader draws it and the fade-in, flash and restarts treat it as part of the title.
+FR / LG / RR use the Charizard / Venusaur layer on its empty rows under the flames, centred on PRESS START, in the
+logo palette's unused bank; Emerald uses the affine Pokémon-logo layer (the clouds and Rayquaza scroll and blend)
+under the "Emerald Version" banner, in the logo's own palette indices, so it slides in with the logo. `build.py
+--version vX.Y.Z` stamps the text (default `dev`); the title spans join the manifest's protected spans. The payload
+hash is unchanged. Measured facts: `tests/fixtures/gen3/title_*.json` (`lua/tests/probe_gen3_title_vram.lua`,
+`tools/analyze_gen3_title.py`); tests: `tests/unit/test_gen3_title_screen.py` (the ROM checks need `SLINK_GEN3_ROMS`).
+**Not promoted:** the published UPS files and `gen3_companions.json` are still the build without the title, so
+`build.py --check` differs until the owner regenerates them (every companion ROM hash, and the pins built on it,
+moves); `tools/make_release.py` does not yet re-stamp the version.
+
 > The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
 > `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
