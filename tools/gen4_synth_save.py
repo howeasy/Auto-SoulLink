@@ -97,6 +97,17 @@ BAG_SLOTS = {
 # bag = party_off + 0x5B4 = 0x644 (include/pokemon_types_def.h:316-327).  No per-array CRC
 # is maintained for the bag (SaveSubstruct_UpdateCRC has no SAVE_BAG caller in src/).
 PARTY_ARRAY_SIZE = 0x5B4
+# The offset model is only trusted after the bytes agree with it: every non-empty slot of these
+# pockets must hold an item of that pocket's class, and at least one must (a positive anchor, so
+# an all-empty read proves nothing).  Classes = the fieldPocket column of pret
+# files/itemtool/itemdata/item_data.csv joined to include/constants/items.h by item name.
+POCKET_CLASS = {
+    "medicine": ((17, 54),),                # Potion .. Sacred Ash
+    "balls": ((1, 16), (492, 500)),         # Master..Cherish, Fast..Park
+    "berries": ((149, 212),),
+    "mail": ((137, 148),),
+}
+VANILLA_MAX_ITEM = 536  # include/constants/items.h; hg-engine ids above this are its own additions
 
 # --- egg -------------------------------------------------------------------------------
 # One entry per supported species: base stats HP/Atk/Def/Spe/SpA/SpD and gender ratio and
@@ -289,7 +300,30 @@ def bag_layout(profile) -> dict:
     for pocket in POCKETS:
         offs[pocket] = at
         at += 4 * slots[pocket]
-    return {"bag_off": base, "balls_off": offs["balls"], "balls_slots": slots["balls"], "end": at + 4}
+    return {"bag_off": base, "balls_off": offs["balls"], "balls_slots": slots["balls"], "end": at + 4,
+            "pockets": {name: (offs[name], slots[name]) for name in POCKETS}}
+
+
+def check_bag_layout(general: bytes, profile, lay: dict) -> int:
+    """Refuse (``bag_layout_unverified``) unless the saved bytes agree with the modelled pocket
+    offsets; returns the number of positively classified slots.
+
+    A swapped or shifted pocket model reads another pocket's items here, which are outside the
+    class (a Potion is not a ball), so it refuses instead of writing at a wrong offset."""
+    anchors = 0
+    for name, ranges in POCKET_CLASS.items():
+        off, n = lay["pockets"][name]
+        for i in range(n):
+            iid, qty = struct.unpack_from("<HH", general, off + 4 * i)
+            if iid == 0 and qty == 0:
+                continue
+            if any(lo <= iid <= hi for lo, hi in ranges) and 1 <= qty <= BAG_SLOT_QUANTITY_MAX:
+                anchors += 1
+            elif not (profile.name == "hge" and iid > VANILLA_MAX_ITEM and 1 <= qty <= BAG_SLOT_QUANTITY_MAX):
+                raise Refusal("bag_layout_unverified", f"{name} slot {i} holds item {iid} x{qty}: not that pocket's class")
+    if not anchors:
+        raise Refusal("bag_layout_unverified", "no medicine/ball/berry/mail item to confirm the pocket offsets against")
+    return anchors
 
 
 def build_bag(image: bytes, profile, count: int = 10) -> tuple[bytes, dict]:
@@ -301,9 +335,8 @@ def build_bag(image: bytes, profile, count: int = 10) -> tuple[bytes, dict]:
     block = save.blocks[(save.bank, 0)]
     if lay["end"] > block.size - save.profile.footer_size:
         raise Refusal("bag_layout", "the Bag array would run past the general block")
+    check_bag_layout(save.general, save.profile, lay)
     slots = [struct.unpack_from("<HH", save.general, lay["balls_off"] + 4 * i) for i in range(lay["balls_slots"])]
-    if any(q > BAG_SLOT_QUANTITY_MAX for _, q in slots):
-        raise Refusal("pocket_implausible", "a Balls slot holds a quantity > 999: the pocket offset is wrong")
     # Pocket_GetItemSlotForAdd (src/bag.c:108-130): the existing stack wins (and refuses when
     # it would overflow); otherwise the FIRST empty slot (id == 0 and quantity == 0).
     stack = next((i for i, (iid, _) in enumerate(slots) if iid == ITEM_POKE_BALL), None)
@@ -407,8 +440,8 @@ def build_egg1(image: bytes, profile, species: int = 172, cycles: int = 1) -> tu
     row = EGG_SPECIES.get(species)
     if row is None:
         raise Refusal("bad_species", f"--species must be one of {sorted(EGG_SPECIES)}")
-    if not 0 <= cycles <= 255:
-        raise Refusal("bad_cycles", "--cycles must fit the friendship byte (0..255)")
+    if not 0 <= cycles <= row["egg_cycles"]:  # SetEggStats starts the counter at BASE_EGG_CYCLES
+        raise Refusal("bad_cycles", f"--cycles must be 0..{row['egg_cycles']} (the species' egg cycles)")
     save = codec.parse_save(image, profile)
     p = save.profile
     party = save.party()

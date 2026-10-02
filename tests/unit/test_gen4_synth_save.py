@@ -39,6 +39,7 @@ def _block(profile, body: bytes, size: int, slot: int, count: int) -> bytes:
 def _image(count: int = 1, pid: int = 0x0BADF00D, otid: int = 0x74C066C6) -> bytes:
     gen_size, pc_at, pc_size = 0xF628, 0xF700, 0x12310   # the spans the owner's saves use
     body = bytearray(gen_size)
+    struct.pack_into("<HH", body, 0xB64, 17, 5)                  # Potion x5: the bag layout anchor
     struct.pack_into("<II", body, HGSS.party_off, 6, count)
     for i in range(count):
         plain = bytearray(codec.PARTY_MON_SIZE)
@@ -400,6 +401,37 @@ def test_egg1_refuses_a_full_party_an_empty_party_and_bad_args(tmp_path):
     assert _synth("egg1", one, out, "hgss", "--species", "25") == synth.REFUSED
     assert _synth("egg1", one, out, "hgss", "--cycles", "256") == synth.REFUSED
     assert not out.exists()
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+@pytest.mark.parametrize("pair", [("medicine", "balls"), ("medicine", "berries")])
+def test_a_swapped_pocket_model_is_refused_not_written(tmp_path, monkeypatch, variant, pair):
+    """Revert test: the offset model is checked against the saved bytes, not only read back."""
+    order = list(synth.POCKETS)
+    i, j = order.index(pair[0]), order.index(pair[1])
+    order[i], order[j] = order[j], order[i]
+    monkeypatch.setattr(synth, "POCKETS", tuple(order))
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _synth("bag", src, out, variant) == synth.REFUSED and not out.exists()
+
+
+def test_the_layout_check_needs_a_positive_anchor_and_a_classed_item(tmp_path, capsys):
+    out = tmp_path / "out.SaveRAM"
+    bare = tmp_path / "bare.SaveRAM"          # a Potion-less bag: nothing to confirm the offsets against
+    bare.write_bytes(_reseal(_image(), "hgss", lambda b: b[:0xB64] + bytes(4) + b[0xB68:]))
+    assert _synth("bag", bare, out) == synth.REFUSED and "bag_layout_unverified" in capsys.readouterr().err
+    wrong = tmp_path / "wrong.SaveRAM"        # a Potion where the Balls pocket should be
+    wrong.write_bytes(_bag_image({0: (17, 5)}))
+    assert _synth("bag", wrong, out) == synth.REFUSED and "bag_layout_unverified" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_egg1_cycles_are_bounded_by_the_species_egg_cycles(tmp_path):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    assert _synth("egg1", src, tmp_path / "o.SaveRAM", "hgss", "--cycles", "11") == synth.REFUSED
+    assert _synth("egg1", src, tmp_path / "o.SaveRAM", "hgss", "--cycles", "10") == synth.WRITTEN
 
 
 def test_bag_and_egg_refuse_an_output_under_the_bizhawk_root(tmp_path, monkeypatch):
