@@ -58,21 +58,26 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   text before the DV store, so the chip is not consumed. The APEX site anchors move by the
   14-byte prelude; HL is the DV pointer again at the relocated `apex_preflight`.
 
-* **Title band** (`title_band.asm`, bank $3F): a SoulLink logo in the Pokemon logo's style and the patch version
-  join the game's own "Red/Blue/Green Version" line in the 16 pixel band under the Pokemon logo (tile rows 8-9).
+* **Title band** (`title_band.asm`, bank $3F): a SoulLink logo in the Pokemon logo's style joins the game's own
+  "Red/Blue/Green Version" line in the 16 pixel band under the Pokemon logo (tile rows 8-9); the title carries no version.
   The hook is `PrintGameVersionOnTitleScreen` in `engine/movie/title.asm`: on the vanilla-style title it calls
-  `SlinkTitleBand` and prints the game's line one tile (Green: two) further right; the opt-in Pure title
+  `SlinkTitleBand` and prints the game's line on tile row 8, moved right of the logo (column 11; Green's longer name column 10); the opt-in Pure title
   (`BIT_NEW_TITLE_SCREEN`, only ever set after a save is loaded, because `Init` zero-fills WRAM) animates rows 7-8 itself
-  and falls through to the original printer for the band. BG tile ids $60-$79 hold the art (measured free on all three
+  and falls through to the original printer for the band. BG tile ids $60-$71 hold the art (measured free on all three
   clean titles: `tests/fixtures/gen1/title_vram_pure*.json`). The title's mon swap raster-scrolls from scanline $48 =
   tile row 9, where the logo's second row sits, so `title2.asm` moves the start line to $50. The art is
-  `tools/gen_gen1_title.py`'s (shared with Red/Blue); the version line is rendered by `build_purergb_overlay.py
-  --version` (default `dev`) because the overlay builds from source with no other knob.
+  `tools/gen_gen1_title.py`'s (shared with Red/Blue).
   The Pure title has too few free BG ids for the logo (12 usable: `tests/fixtures/gen1/title_refs_pure*_pure.json`), so it
-  gets one text line, "SoulLink vX.Y.Z", on tile row 9 under the PureRed banner (`SlinkTitleLinePure`, drawn when the
-  banner animation ends). The banner reveals itself letter by letter, so the line types in one cell every two frames
-  rather than popping in (on the vanilla-style title the band already scrolls in with the game's own line). The
-  player-pointing pose overwrites those ids on a button press, so `SlinkTitleLinePureClear` blanks the row first.
+  gets one text line, "SoulLink", on tile row 9 under the PureRed banner in the banner's own bold dark-red lettering
+  (`SlinkTitleLinePure`, `title_line.2bpp`, drawn when the banner animation ends). The banner reveals itself letter by letter,
+  so the line types in one cell every three frames rather than popping in (on the vanilla-style title the band already scrolls
+  in with the game's own line). The player-pointing pose overwrites those ids on a button press, so `SlinkTitleLinePureClear`
+  blanks the row first.
+* **Main menu version** (`main_menu_version.asm`, bank $3F): `SoulLink dev` (or `SoulLink vX.Y.Z[-dev]`, from
+  `build_purergb_overlay.py --version`, default `dev`) is printed on tile row 16, directly above pureRGB's own
+  version line on row 17. The save-file and no-save-file layouts both fall into `MainMenu.next2`, so one `farcall` after
+  the game's line covers both. Choosing CONTINUE draws `DisplayContinueGameInfo`'s box over rows 7-16 from column 4
+  (`TextBoxBorder` takes b+2 rows), which cuts row 16, so `.choseContinue` blanks the four cells left of the box first.
 
 ## ABI (unchanged from the vanilla patch, B5)
 

@@ -12,7 +12,9 @@ The logo is drawn once in the Pokemon logo's style (grey fill, black outline, da
 
     python tools/gen_gen1_title.py             # rewrite all of it, preview -> patch/build/gen1_title_logo.png
 
-The version line is NOT drawn here: each patcher renders it from --version with the 5x7 font in title_art.SMALL.
+No title carries the version: each patcher prints "SoulLink <version>" (--version) on its game's main menu in the game's
+own font, so this file draws the wordmark only. (The 5x7 font in title_art.SMALL is still written, for the Gen 3 title
+patcher until that is switched over.)
 Needs Pillow (dev only); the patchers import plain bytes.
 """
 import pathlib
@@ -164,6 +166,48 @@ def write_gen2() -> str:
     return ", ".join(out)
 
 
+# The opt-in Pure title (pureRGB): the PureRed / PureBlue / PureGreen banner above it is a white box with bold dark-red
+# letters (gfx/title/pure_red.png: 5 rows, 2 pixel stems, lowercase 4 rows high). "SoulLink" is set in the same letters,
+# colour index 2, on one tile row under the banner (title_band.asm: SlinkTitleLinePure).
+PURE_GLYPHS = {
+    "S": (".RRRR", "RR...", ".RRR.", "...RR", "RRRR."),
+    "o": ("....", ".RRR", "RR.R", "RR.R", ".RRR"),
+    "u": ("....", "RR.R", "RR.R", "RR.R", ".RRR"),
+    "l": ("RR",) * 5,
+    "L": ("RR...", "RR...", "RR...", "RR...", "RRRRR"),
+    "i": ("RR", "..", "RR", "RR", "RR"),
+    "n": ("....", "RRR.", "RR.R", "RR.R", "RR.R"),
+    "k": ("RR..", "RR.R", "RRR.", "RR.R", "RR.R"),
+}
+PURE_LINE_CELLS, PURE_LINE_X, PURE_LINE_INK_X, PURE_LINE_INK_Y = 6, 7, 4, 1       # tile cells at column 7 of row 9
+
+
+def write_pure_line() -> str:
+    """title_line.2bpp: "SoulLink" in the Pure banner's lettering across 6 tiles (48 x 8 pixels, committed art)."""
+    width = PURE_LINE_CELLS * 8
+    rows = [[0] * width for _ in range(8)]
+    x = PURE_LINE_INK_X
+    for ch in "SoulLink":
+        glyph = PURE_GLYPHS[ch]
+        for y, line in enumerate(glyph):
+            for dx, c in enumerate(line):
+                if c == "R":
+                    rows[PURE_LINE_INK_Y + y][x + dx] = 2
+        x += len(glyph[0]) + 1
+    assert x - 1 <= width, "the line does not fit its cells"
+    data = bytearray()
+    for cell in range(PURE_LINE_CELLS):
+        for y in range(8):
+            lo = hi = 0
+            for dx in range(8):
+                v = rows[y][cell * 8 + dx]
+                lo |= (v & 1) << (7 - dx)
+                hi |= (v >> 1) << (7 - dx)
+            data += bytes((lo, hi))
+    (OVERLAY / "title_line.2bpp").write_bytes(bytes(data))
+    return f"pure line {x - 1 - PURE_LINE_INK_X}px in {PURE_LINE_CELLS} tiles"
+
+
 GEN3_ART = ROOT / "patch/tools/gen3_title_art.py"
 
 
@@ -182,6 +226,7 @@ def write_gen3() -> str:
 def main() -> int:
     print(write_gen2())
     print(write_gen3())
+    print(write_pure_line())
     img = draw()
     tiles, ids, order = [], {}, []
     for ty in range(ROWS):

@@ -1,38 +1,38 @@
 {
-  "1dfe1354df75e8a64a8b58c472aa9ad1cafa3436": {
-    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-    "crc32": "41C593A3",
-    "header_crc": "8AA7",
-    "header_title": "POKEMON RED",
-    "kind": "overlay",
-    "md5": "e97c9e03255fa9e53a8d2d4fbbd2bf85",
-    "profile_id": "gen1_purergb/purered",
-    "size": 1048576,
-    "title": "purered",
-    "ups": "patch/dist/SLink-PureRed.ups"
-  },
-  "87ac3cb8e1617e9e980593a2daafce0ee181b105": {
+  "4ec8c7359101fe80e51453c1d212b67b52a78d0a": {
     "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-    "crc32": "DD8F6228",
-    "header_crc": "C5E1",
+    "crc32": "A5F8A9EA",
+    "header_crc": "9E0D",
     "header_title": "POKEMON GREEN",
     "kind": "overlay",
-    "md5": "1fc817425a1322a1afe12472675d3523",
+    "md5": "ec5a77aaf30d66d0b63f23d2aeb0a337",
     "profile_id": "gen1_purergb/puregreen",
     "size": 1048576,
     "title": "puregreen",
     "ups": "patch/dist/SLink-PureGreen.ups"
   },
-  "c31debc72eda71fc98831ea0b4b5b21da8ce3977": {
+  "c445dfc541f7a64b7cf7d628ae79fb4155faccdf": {
     "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-    "crc32": "A241FBD3",
-    "header_crc": "C1F1",
+    "crc32": "DAB97012",
+    "header_crc": "A769",
     "header_title": "POKEMON BLUE",
     "kind": "overlay",
-    "md5": "8a9ef5721ff9a36c9dd11bfc67248b6f",
+    "md5": "ef933a7a482c35b643474683e6cef959",
     "profile_id": "gen1_purergb/pureblue",
     "size": 1048576,
     "title": "pureblue",
     "ups": "patch/dist/SLink-PureBlue.ups"
+  },
+  "cd7eb8c1cbfba78760f4c973fcf5dcdced94d71a": {
+    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+    "crc32": "7119B7AB",
+    "header_crc": "701F",
+    "header_title": "POKEMON RED",
+    "kind": "overlay",
+    "md5": "86ce98a5336089b3f5f640fc83245e94",
+    "profile_id": "gen1_purergb/purered",
+    "size": 1048576,
+    "title": "purered",
+    "ups": "patch/dist/SLink-PureRed.ups"
   }
 }

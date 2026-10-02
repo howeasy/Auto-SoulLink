@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "31e6ee30a6046713b5e7ddf52e5af7d2735fc36e7acf9708f25a02ec521606da",
+ "sha256": "01765acb36f798477bb5dd39f86417b5cfc0c24b5d2ffd2d6fcf8d4dd6ba3291",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -44,7 +44,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "c31debc72eda71fc98831ea0b4b5b21da8ce3977",
+   "rom_sha1": "c445dfc541f7a64b7cf7d628ae79fb4155faccdf",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -686,7 +686,7 @@
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "2199770601C7C9E5",
+     "expected_hex": "21AA770601C7C9E5",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -867,7 +867,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "d9df93b1345e90e36290c1e714fa8b11a5a2c573539d170a7a5d63d38689ebb8"
+   "symbols_sha256": "869faad4030c2f9c5583e0ace192c91a9e7e7605d537adefd58d7977d094bf00"
   },
   "puregreen": {
    "addresses": {
@@ -910,7 +910,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "87ac3cb8e1617e9e980593a2daafce0ee181b105",
+   "rom_sha1": "4ec8c7359101fe80e51453c1d212b67b52a78d0a",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -1552,7 +1552,7 @@
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "219E770601C7C9E5",
+     "expected_hex": "21AF770601C7C9E5",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -1733,7 +1733,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "0a9c8e58336185f9f7efcb2d75291c4fe56f965488e36c08dfb7772b5828376a"
+   "symbols_sha256": "0206b9c206b2e6cca09b46a98cdd0779a18fdd57efd19e11b81decf56594a68e"
   },
   "purered": {
    "addresses": {
@@ -1776,7 +1776,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "1dfe1354df75e8a64a8b58c472aa9ad1cafa3436",
+   "rom_sha1": "cd7eb8c1cbfba78760f4c973fcf5dcdced94d71a",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -2418,7 +2418,7 @@
      "assert": "RemovePokemon::\n\tjpfar _RemovePokemon",
      "bank": 0,
      "capture_offset": 0,
-     "expected_hex": "2198770601C7C9E5",
+     "expected_hex": "21A9770601C7C9E5",
      "point": [
       "wWhichPokemon",
       "wPartyCount",
@@ -2599,7 +2599,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "f5554706ae00ffef2cf9fe927d5adb69b495be590101a0f451c0d9db55dc3f21"
+   "symbols_sha256": "b6f309bf0b49d1dc180059165403c1e8d04846585dcbc6507800e2cf10807939"
   }
  }
 }
