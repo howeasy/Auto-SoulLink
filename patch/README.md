@@ -60,6 +60,14 @@ exact value or is listed in the record's `equivalent_sha1s` / `equivalent_payloa
 absent = none; `build.py` extends the lists on a version-only rebuild and retires them on a real change). Nothing carries the Radical Red
 companion's sha1 as a literal: `tools/rr_companion.py` reads the `rr` row.
 
+**Releasing (every family).** `python tools/stamp_release.py --version vX.Y.Z` rebuilds Red/Blue, pureRGB, Gen 2 and Gen 3 with that version,
+regenerates everything that names the exact bytes (UPS, sym/map, provenance, admission rows, `companion_pins.json`, the UPR ini and, unless
+`--no-jar`, the fork jar's overlay entries via `tools/upr_resource_update.py`, the Gen 2 grant when the overlay rows are ADMITTED, the md5
+tables in the READMEs), stops with exit 2 if any family's canonical identity moved (that is a code change, not a stamp), and writes
+`patch/dist/companion_version.json` (version + sha256 of every shipped companion file). Commit the result, tag, then
+`python tools/make_release.py --version X.Y.Z --with-patch`, which refuses companions that record does not vouch for. `--plan` prints the
+steps. `python tools/stamp_release.py --version dev` restores the committed dev builds.
+
 **Published:** `SLink-{FireRed,LeafGreen,Emerald,RR}.ups`, `gen3_companions.json` and `companion_pins.json` are the default `dev` build with
 the title wordmark and the fixed-width menu line (2026-10-02), and `build.py --check` reproduces them (the Radical Red `--check` also
 verifies the `rr` row). The frozen-cut receipts under `docs/gen3/probes` are bound to earlier exact hashes (see docs/gen3_requirements.md).

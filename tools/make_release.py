@@ -18,6 +18,11 @@ Optionally (RR players) it also bundles, under companion/:
   - the patch guide
   - a pre-patched ROM                                              [--rom <path>]
 
+Every companion shows "SoulLink <version>" on its game's main menu, so a release must carry its own version:
+run `python tools/stamp_release.py --version vX.Y.Z` first (it rebuilds and re-pins every companion; commit the result, then
+tag). Bundling companions that patch/dist/companion_version.json does not vouch for under this --version is refused
+(--allow-unstamped-companions overrides).
+
 Usage:
     python tools/make_release.py
     python tools/make_release.py --version 1.2.3
