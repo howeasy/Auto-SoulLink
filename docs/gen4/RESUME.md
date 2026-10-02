@@ -18,7 +18,10 @@
   - **k FAIL: "RTC compared at different frame counts" (977 vs 979).** The bytes are identical, so this is a harness sampling point that drifts with boot length. Codex's note misreported it as PASS. Next cut: a red-first fixed-frame k sample.
   - b raw FAIL: no own-overlay faint trigger on the indoor fixture.
   - m/n named OPEN: no battle route; PC withdraw unrouted.
-- **SS a–n:** not yet run. The boxed fixture is ready: `C:/slink/g4/g1inputs-c935-1015/ss_boxed.SaveRAM`.
+- **SS at `aa45dd94`** (`C:/slink/g4/g1cprobeSS-1227/soulsilver-410efd246406/combined.txt`, coordinator-verified; the first SS a–n): a,c,d,e,g,h,i,j,k,l PASS; b FAIL (no battle faint trigger in the indoor subset); f/m/n/o OPEN; missed=[]; RESULT FAIL.
+  - k PASS on SS (frames 1025/1025). This supports the hge k drift being a hge boot-length sampling issue.
+  - SS row o has never run; it needs SS battle states.
+- **b FAILs on hge and SS** share one cause: the prepared indoor fixture has no battle. Row b needs a battle route on those titles (as HG's phase legs have).
 - **Historical (do not relabel):**
   - HG `g1bprobeHG-1125` at 6290: n FAIL from the async-load race;
   - hge `g1bprobeHGE-1135` at 6290: c FAIL from the missing symbol;
