@@ -133,11 +133,11 @@ class Overlay:
     def admit(self):
         return self.entry.admit(self.admit_args())
 
-    def build(self, forged_kind=None):
+    def build(self, forged_kind=None, title=None):
         emu, io, net, hud, logs, log = self.lua.execute(EMULATOR)(self.image, self.profile["ram"]["hROMBank"])
         io.model_only = False
         io.domains = self.lua.eval('function() return {"ROM", "System Bus", "CartRAM"} end')
-        args = self.admit_args(title=self.title, io=io, net=net, hud=hud, player="a", log=log)
+        args = self.admit_args(title=title or self.title, io=io, net=net, hud=hud, player="a", log=log)
         if forged_kind is not None:
             args.artifact_kind = forged_kind
         return self.entry.build(args)
@@ -450,3 +450,305 @@ def test_fixture_binding_takes_the_view_and_refuses_another_rom_or_kind():
     assert not ok(v.M.bind_fixture_qualification(write, lua_reports, v.view("clean")))
     assert not ok(v.S.bind_fixture_qualification(v.clean_receipt("engine_sites"), lua_reports, v.view()))
     assert not ok(v.M.bind_fixture_qualification(v.clean_receipt("write_window"), lua_reports, v.view()))
+
+
+# --- the REAL artifact.lua + the REAL committed binding sidecar (review L4/L5) -----------------------------------------
+# No stub: the overlay cartridge is the shipped UPS applied to the clean build, the view is lua/gen2/artifact.lua's own
+# read of data/games/gen2_<t>/overlay/binding.json pinned by its sha256, and only the overlay RECEIPTS are synthetic (the
+# committed clean receipts relabelled the way the capture lane stamps them, which the production validators accept).
+
+# Records what compose hands to its collaborators: write_safety.new(pack, title, io, evaluator, ownership, receipt, view),
+# signals.new(options) (spied to refuse after recording) and client.new(params).
+SPY = r"""
+return function(state)
+    local original = dofile
+    dofile = function(path)
+        local module = original(path)
+        local name = path:match("lua/gen2_write_safety%.lua$") and "ws" or path:match("lua/gen2/signals%.lua$") and "signals"
+                     or path:match("lua/gen2/client%.lua$") and "client"
+        if not name then return module end
+        return setmetatable({new=function(...)
+            state[name] = table.pack(...)
+            if name == "signals" then return nil, "spied" end
+            return module.new(...)
+        end}, {__index=module})
+    end
+end
+"""
+
+
+def real_binding_pin(title):
+    raw = (ROOT / f"data/games/gen2_{title}/overlay/binding.json").read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def real_overlay_image(title):
+    from patch.tools.make_ups import ups_apply
+    published = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
+    out = next(row for row in published.values() if row["slink_title"] == title)
+    image = ups_apply(clean_image(title), (ROOT / out["ups"]["file"]).read_bytes())
+    assert sha1(image) == out["sha1"], "the shipped UPS no longer rebuilds the published overlay"
+    return image
+
+
+def real_overlay_files(title, sha, binding):
+    """The activated catalog row (real sha1/base/UPS, the real binding pin) and the relabelled overlay receipts."""
+    matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text(encoding="utf-8"))
+    row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
+    assert row["sha1"] == sha
+    row.pop("grant_fingerprint", None)
+    row.update(selection="SELECTED", status="ADMITTED", binding_sha256=binding,
+               runtime_gate={"id": "G4", "state": "ADMITTED", "grant_fingerprint": GRANT})
+    files = {f"gen2_{title}/admission.json": json.dumps(matrix)}
+    files.update(overlay_receipts(title, sha, binding=binding))
+    if title == "silver":       # O-23: Silver's CLEAN write window is Gold's; the overlay has its own (never Gold's)
+        own = json.loads((ROOT / "data/games/gen2_silver/receipts/gold.write_window.json").read_text(encoding="utf-8"))
+        own["title"] = "silver"
+        for mode, run in own["runs"].items():
+            run["title"] = "silver"
+            run["fixture"] = run["fixture"].replace("gold_", "silver_")
+            report = json.loads((ROOT / f"data/games/gen2_silver/receipts/{run['fixture']}.qualification.json")
+                                .read_text(encoding="utf-8"))          # the run ran on Silver's own qualified fixture
+            run["qualification_attempt_id"] = report["attempt_id"]
+            if mode in ("town", "battle", "boxes", "battle_faint", "battle_bench"):     # the runs U3 binds by fixture bytes
+                run["fixture_sha256"] = report["fixtures"][0]["artifacts"]["fixture"]["sha256"]
+        files["gen2_silver/receipts/overlay/silver.write_window.json"] = json.dumps(stamp(own, sha, binding=binding))
+    return files
+
+
+class RealOverlay(Overlay):
+    def __init__(self, title):
+        self.title = title
+        self.profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
+        self.image = real_overlay_image(title)
+        self.sha = sha1(self.image)
+        self.binding = real_binding_pin(title)
+        self.lua = LuaRuntime(unpack_returned_tuples=True)
+        self.lua.execute(OPEN)(self.lua.table_from(real_overlay_files(title, self.sha, self.binding)))
+        self.spied = self.lua.table()
+        self.lua.execute(SPY)(self.spied)
+        self.entry = self.lua.eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_real_overlay_view_admits_and_composes_with_the_decision_identity_for_every_title(title):
+    world = RealOverlay(title)
+    decision = world.admit()
+    assert not isinstance(decision, tuple), decision
+    assert (decision.title, decision.pack, decision.kind, decision.rom_sha1, decision.binding_sha256) == (
+        title, f"gen2_{title}", "overlay", world.sha, world.binding)
+    assert decision.rom_sha1 != world.profile["rom_sha1"]
+
+    parts = world.build()
+    assert not isinstance(parts, tuple), parts
+    assert parts.production_admitted is True
+    assert (parts.artifact_kind, parts.runtime_rom_sha1) == ("overlay", world.sha)
+    assert (parts.client.artifact_kind, parts.client.rom_sha1) == ("overlay", world.sha)
+    view = parts.view
+    assert (view.kind, view.rom_sha1, view.base_sha1, view.binding_sha256) == (
+        "overlay", world.sha, world.profile["rom_sha1"], world.binding)
+    assert parts.proven_sites is not None and parts.write_scope is not None
+    assert all(parts.checkpoint.covers(parts.checkpoint, kind)
+               for kind in ("party_hp", "party_collection", "battle_faint", "battle_bench"))
+
+    # D5: the executed view (not the clean pack) reaches the checkpoint and the signals binder
+    rawequal = world.lua.eval("rawequal")
+    assert rawequal(world.spied.ws[7], view), "write_safety.new did not get the executed view"
+    assert world.spied.ws[2] == title
+    world.spied.client[1].signals(world.lua.table(capture=world.lua.eval("function() return 1 end"),
+                                                  valid=world.lua.eval("function() return true end")))
+    options = world.spied.signals[1]
+    assert rawequal(options.view, view), "signals.new did not get the executed view"
+    assert options.runtime_qualification is not None
+
+    # the production `admitted` observation is exactly (this title, the ACTUAL overlay sha1): neither the clean sha1
+    # (what the pack says) nor any other ROM, nor another title
+    admitted = world.spied.ws[5].admitted
+    assert admitted(title, world.sha) is True
+    assert admitted(title, world.profile["rom_sha1"]) is False
+    assert admitted(title, "0" * 40) is False
+    assert admitted("gold" if title != "gold" else "crystal", world.sha) is False
+
+
+def test_production_build_refuses_a_requested_title_the_admission_decision_does_not_name():
+    world = RealOverlay("crystal")
+    assert world.admit().title == "crystal"
+    reason = refused(world.build(title="gold"), "admitted title crystal", "requested gold")
+    assert "differs" in reason
+    assert not isinstance(world.build(title="crystal"), tuple)
+    clean = World("gold")                       # the clean cartridge is held to the same rule
+    args = clean.args()
+    args.candidate_only, args.title = None, "crystal"
+    args.net, args.hud, args.player = clean.lua.table(), clean.lua.table(), "a"
+    emu, io, net, hud, logs, log = clean.lua.execute(EMULATOR)(clean.image, clean.profile["ram"]["hROMBank"])
+    io.model_only = False
+    args.io, args.log, args.net, args.hud = io, log, net, hud
+    refused(clean.entry.build(args), "differs from the requested")
+
+
+# --- D5: each validator holds its own guards (the two validators back each other up in compose, so every guard is
+# exercised by calling the validator directly, with receipts that are valid in every other respect) ------------------
+
+def lua_view(v, **fields):
+    """A view built field by field (nil for None), for shapes Validators.view cannot express."""
+    base = {"kind": "overlay", "rom_sha1": v.sha, "base_sha1": v.clean_sha, "binding_sha256": BINDING,
+            "sites": v.sites.titles[v.title].sites, "checkpoint": v.checkpoint.titles[v.title]}
+    base.update(fields)
+    return v.lua.table(**base)
+
+
+def shipped(v, name, sha=None, **kw):
+    """A shipped receipt as a dict, relabelled for an overlay build when `sha` is given."""
+    text = (ROOT / f"data/games/gen2_{v.title}/receipts/{v.title}.{name}.json").read_text(encoding="utf-8")
+    receipt = json.loads(text)
+    return stamp(receipt, sha, **kw) if sha else receipt
+
+
+def reports(v, sha=None):
+    """The shipped fixture-qualification reports; `sha` rewrites the ROM they say they qualified."""
+    found = {}
+    for path in (ROOT / f"data/games/gen2_{v.title}/receipts").glob("*.json"):
+        if path.name.endswith((".engine_sites.json", ".write_window.json")):
+            continue
+        report = json.loads(path.read_text(encoding="utf-8"))
+        for row in report.get("fixtures", []) if sha else []:
+            row["provenance"]["rom_sha1"] = sha
+        found[path.name.split(".")[0]] = v.decode(json.dumps(report))
+    return v.lua.table_from(found)
+
+
+def test_each_validator_refuses_an_overlay_view_that_is_the_clean_rom_or_a_foreign_base():
+    v = Validators()
+    for label, view, sha in (("the overlay view's ROM is the clean ROM", lua_view(v, rom_sha1=v.clean_sha), v.clean_sha),
+                             ("the overlay view is built on another base", lua_view(v, base_sha1="f" * 40), v.sha)):
+        engine, write = v.receipt("engine_sites", sha=sha), v.receipt("write_window", sha=sha)
+        assert not ok(v.S.qualified_sites("crystal", v.sites, engine, view)), label
+        assert not ok(v.M.qualified(v.checkpoint, "crystal", write, view)), label
+    assert ok(v.S.qualified_sites("crystal", v.sites, v.receipt("engine_sites"), lua_view(v)))      # the control
+    assert ok(v.M.qualified(v.checkpoint, "crystal", v.receipt("write_window"), lua_view(v)))
+
+
+@pytest.mark.parametrize("binding", [None, "b" * 63, "g" * 64, "B" * 65])
+def test_each_validator_refuses_an_overlay_view_whose_binding_is_not_a_sha256(binding):
+    v = Validators()
+    view = lua_view(v, binding_sha256=binding)
+    engine, write = v.receipt("engine_sites", binding=binding), v.receipt("write_window", binding=binding)
+    assert not ok(v.S.qualified_sites("crystal", v.sites, engine, view))
+    assert not ok(v.M.qualified(v.checkpoint, "crystal", write, view))
+
+
+def test_each_validator_refuses_a_clean_view_that_is_not_the_pack_rom_or_carries_a_binding():
+    v = Validators()
+    engine, write = v.clean_receipt("engine_sites"), v.clean_receipt("write_window")
+    for label, view in (("a clean view of another ROM", lua_view(v, kind="clean", rom_sha1="a" * 40, binding_sha256=None)),
+                        ("a clean view carrying a binding", lua_view(v, kind="clean", rom_sha1=v.clean_sha))):
+        assert not ok(v.S.qualified_sites("crystal", v.sites, engine, view)), label
+        assert not ok(v.M.qualified(v.checkpoint, "crystal", write, view)), label
+    clean = lua_view(v, kind="clean", rom_sha1=v.clean_sha, binding_sha256=None)                  # the control
+    assert ok(v.S.qualified_sites("crystal", v.sites, engine, clean))
+    assert ok(v.M.qualified(v.checkpoint, "crystal", write, clean))
+
+
+@pytest.mark.parametrize("field,value", [("artifact_kind", "clean"), ("binding_sha256", "e" * 64)])
+def test_a_receipt_is_refused_when_only_its_top_level_or_only_its_runs_name_another_kind_or_binding(field, value):
+    v = Validators()
+    overlay = lua_view(v)
+    for name, qualify in (("write_window", lambda r: v.M.qualified(v.checkpoint, "crystal", r, overlay)),
+                          ("engine_sites", lambda r: v.S.qualified_sites("crystal", v.sites, r, overlay))):
+        assert ok(qualify(v.decode(json.dumps(shipped(v, name, v.sha))))), name
+        top = shipped(v, name, v.sha)
+        top[field] = value
+        assert not ok(qualify(v.decode(json.dumps(top)))), f"{name}: the receipt itself says {field}={value}"
+        runs = shipped(v, name, v.sha)
+        for run in runs["runs"].values() if isinstance(runs["runs"], dict) else runs["runs"]:
+            run[field] = value
+        assert not ok(qualify(v.decode(json.dumps(runs)))), f"{name}: every run says {field}={value}"
+
+
+def test_fixture_binding_owns_every_run_by_its_rom_kind_and_binding():
+    v = Validators()
+    overlay, clean_reports, overlay_reports = lua_view(v), reports(v), reports(v, v.sha)
+    # each case is consistent with its own reports, so only the ownership of the run by the SELECTED view refuses it
+    for name, bind in (("engine_sites", v.S.bind_fixture_qualification), ("write_window", v.M.bind_fixture_qualification)):
+        cases = {
+            "a clean run": (shipped(v, name), clean_reports),
+            "an overlay-stamped run of the clean ROM": (shipped(v, name, v.clean_sha), clean_reports),
+            "an overlay run with another binding": (shipped(v, name, v.sha, binding="e" * 64), overlay_reports),
+        }
+        for label, (receipt, qualification) in cases.items():
+            assert not ok(bind(v.decode(json.dumps(receipt)), qualification, overlay)), f"{name}: {label}"
+        assert ok(bind(v.decode(json.dumps(shipped(v, name, v.sha))), overlay_reports, overlay)), name          # control
+
+
+def test_fixture_binding_owns_a_v1_engine_site_receipt_too():
+    v = Validators()
+    overlay = lua_view(v)
+    shipped_runs = shipped(v, "engine_sites")["runs"]
+    live = next(run for run in shipped_runs if "synth" not in run["fixture"])
+    clean_reports, overlay_reports = reports(v), reports(v, v.sha)
+    one = lambda run: v.decode(json.dumps(run))              # noqa: E731  a single run is a v1-shaped receipt
+    assert ok(v.S.bind_fixture_qualification(one(live), clean_reports[live["fixture"]], lua_view(
+        v, kind="clean", rom_sha1=v.clean_sha, binding_sha256=None)))
+    assert ok(v.S.bind_fixture_qualification(one(stamp(copy.deepcopy(live), v.sha)), overlay_reports[live["fixture"]], overlay))
+    for label, run, report in (
+            ("a clean receipt", live, clean_reports),
+            ("an overlay-stamped receipt of the clean ROM", stamp(copy.deepcopy(live), v.clean_sha), clean_reports),
+            ("another binding", stamp(copy.deepcopy(live), v.sha, binding="e" * 64), overlay_reports)):
+        assert not ok(v.S.bind_fixture_qualification(one(run), report[live["fixture"]], overlay)), label
+
+
+HELD = r"""
+-- A host whose every observation satisfies the checkpoint for one hold, so the evaluation runs all the way through
+-- (admitted identity asked at the start AND again at the end of the held execution); `seen` records each sha1 asked.
+return function(mem, mapped_bank, executed, seen)
+    local io = {read_u8=function(address) return mem[address] or 0 end, domain_size=function() return 0x100000 end}
+    return {
+        io=io,
+        ownership={capture=function() return 1 end, valid=function() return true end,
+                   admitted=function(_, sha) seen[#seen + 1] = sha; return sha == executed end,
+                   no_conflicting_owner=function() return true end,
+                   mapped_rom_bank=function() return mapped_bank end, effective_wram_bank=function() return 1 end},
+        evaluator={check=function(_, host, accept) return accept(function(a, d) return host.read_u8(a, d) end) end},
+    }
+end
+"""
+
+
+def held_memory(facts, which, in_battle=False):
+    """System Bus bytes that satisfy every ownership and state predicate of one hold of the checkpoint pack."""
+    hold = facts[which]
+    owner = hold["ownership_requirements"]
+    memory = {owner["rom_bank_shadow"]["address"]: owner["rom_bank_shadow"]["equals"],
+              owner["wram_bank_register"]["address"]: owner["effective_wram_bank"],
+              owner["serial_control"]["address"]: owner["serial_control"]["value"]}
+    memory.update({c["address"]: c["value"] for c in hold["state_predicates"]})
+    if in_battle:        # the frame hold needs the overworld predicate wBattleMode to REFUSE
+        battle = next(c for c in facts["primary"]["state_predicates"] if c["symbol"] == "wBattleMode")
+        memory[battle["address"]] = (battle["value"] + 1) % 256
+    return memory, owner["mapped_rom_bank"]
+
+
+@pytest.mark.parametrize("kind", ["overlay", "clean"])
+def test_the_held_checkpoint_asks_for_the_executed_sha1_at_every_site_it_checks_identity(kind):
+    v = Validators()
+    facts = json.loads((ROOT / "data/games/gen2_crystal/write_checkpoint.json").read_text(encoding="utf-8"))["titles"]["crystal"]
+    executed = v.sha if kind == "overlay" else v.clean_sha
+    receipt = v.receipt("write_window") if kind == "overlay" else v.clean_receipt("write_window")
+    # (write kind, hold, how many times the hold asks: at the start and again before it accepts)
+    for write_kind, which, asks in (("party_hp", "primary", 2), ("battle_faint", "battle_hold", 2),
+                                    ("battle_bench", "battle_hold", 1)):
+        memory, bank = held_memory(facts, which, in_battle=write_kind == "battle_bench")
+        seen = v.lua.table()
+        host = v.lua.execute(HELD)(v.lua.table_from(memory), bank, executed, seen)
+        checkpoint = v.M.new(v.checkpoint, "crystal", host.io, host.evaluator, host.ownership, receipt, v.view(kind))
+        assert checkpoint.covers(checkpoint, write_kind) is True, write_kind
+        result = checkpoint.check(checkpoint, write_kind)
+        assert (result[0] if isinstance(result, tuple) else result) is True, (write_kind, result)
+        assert list(seen.values()) == [executed] * asks, (write_kind, list(seen.values()))
+    # the identity observation is live: a host that admits some other ROM authorizes nothing
+    seen = v.lua.table()
+    memory, bank = held_memory(facts, "primary")
+    host = v.lua.execute(HELD)(v.lua.table_from(memory), bank, "0" * 40, seen)
+    checkpoint = v.M.new(v.checkpoint, "crystal", host.io, host.evaluator, host.ownership, receipt, v.view(kind))
+    result = checkpoint.check(checkpoint, "party_hp")
+    assert (result[0] if isinstance(result, tuple) else result) is False

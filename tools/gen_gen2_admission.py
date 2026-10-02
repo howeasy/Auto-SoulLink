@@ -10,7 +10,8 @@ an identity, never a runtime admission). Neither mode emits ADMITTED artifacts; 
 owner signed the G4 row of PLAN §6.1, the published overlay pins match, each overlay has its generated binding sidecar
 (data/games/gen2_<t>/overlay/binding.json) matching the published build, and each overlay's own receipts validate under
 the production validators (lua/gen2/entry.lua Entry.activation_proof). Activation is NOT the full release-evidence:
-that runs after the freeze (tools/verify_gen2_release.py --release-evidence). G1 opens only for a
+that runs after the freeze (tools/verify_gen2_release.py --release-evidence). The same activation preconditions are re-run whenever
+any overlay row is already ADMITTED, so --check and plain regeneration never bless a self-consistent but unproven catalog. G1 opens only for a
 title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
 is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
 PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
@@ -558,11 +559,6 @@ def main(argv: list[str] | None = None) -> int:
             bindings = read_bindings(args.out_dir) if (args.promote_overlays or admitted) else None
             if args.promote_overlays:
                 promoted = True
-                if not args.check:
-                    blockers = activation_blockers(args.out_dir, overlay)
-                    require(not blockers,
-                            f"G4 activation refused, {len(blockers)} blocker(s): "
-                            + "; ".join(blockers[:5]))
             elif admitted:
                 require(all(stored == current_grant for _pack, stored, _binding in admitted),
                         "stored G4 grant differs from the current lock/build/overlay/UPS identity; "
@@ -576,13 +572,22 @@ def main(argv: list[str] | None = None) -> int:
                 promoted = True
             else:
                 promoted = False
+            # D6: the ACTIVATION preconditions (G4 packet, binding sidecars, overlay proofs) gate every new promotion AND
+            # every catalog that already carries ADMITTED overlay rows: --check/regeneration never bless a self-consistent
+            # but unproven one. (--promote-overlays --check validates the committed tree, so it writes and proves nothing.)
+            verify_activation = bool(admitted) or (args.promote_overlays and not args.check)
+            if verify_activation:
+                blockers = activation_blockers(args.out_dir, overlay)
+                require(not blockers,
+                        f"G4 activation refused, {len(blockers)} blocker(s): "
+                        + "; ".join(blockers[:5]))
             if promoted:
                 missing = [title for title, value in bindings.items() if value is None]
                 require(not missing, f"overlay binding sidecar missing for {missing}")
 
             matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay,
                                       promoted=promoted, grant_fingerprint=current_grant, bindings=bindings)
-            if args.promote_overlays and not args.check:
+            if verify_activation:
                 proof_errors = overlay_proof_errors(matrices)
                 require(not proof_errors, "G4 activation refused, overlay proofs: " + "; ".join(proof_errors[:5]))
             if provenance is not None:

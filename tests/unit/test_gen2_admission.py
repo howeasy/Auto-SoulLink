@@ -1,9 +1,11 @@
 """P1 matrix falsifiers: source evidence never grants runtime admission."""
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -442,10 +444,13 @@ def test_promotion_binds_one_grant_and_plain_regeneration_does_not_regrant(tmp_p
     assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
     assert len({row["runtime_gate"]["grant_fingerprint"] for row in rows.values()}) == 1
 
-    # The promoted tree checks clean without the flag, and plain regeneration keeps this exact grant.
-    monkeypatch.setattr(admission, "activation_blockers", lambda *a: pytest.fail("no new grant is being made"))
+    # The promoted tree checks clean without the flag, and plain regeneration keeps this exact grant. Both re-run the
+    # activation preconditions (an ADMITTED catalog is never blessed on self-consistency alone), neither re-grants.
+    real_blockers, asked = admission.activation_blockers, []
+    monkeypatch.setattr(admission, "activation_blockers", lambda *a: asked.append(a) or real_blockers(*a))
     assert admission.main([*args, "--check"]) == 0
     assert admission.main(args) == 0
+    assert len(asked) == 2
     assert rows == _overlay_rows(paths["out"])
 
 
@@ -521,12 +526,66 @@ def test_interrupted_atomic_publish_is_completed_by_the_same_promotion(
     assert len({row["runtime_gate"]["grant_fingerprint"] for row in rows.values()}) == 1
 
 
-def test_committed_tree_cannot_promote_until_the_owner_signs_g4():
+def _blank_g4(plan):
+    """PLAN with the G4 ledger row's Signed cell blanked (the unsigned state the old test looked for)."""
+    lines = []
+    for line in plan.splitlines(keepends=True):
+        if line.replace(" ", "").startswith("|G4|"):
+            cells = line.strip().strip("|").split("|")
+            cells[1] = " — "
+            line = "|" + "|".join(cells) + "|\n"
+        lines.append(line)
+    blank = "".join(lines)
+    assert blank != plan, "the G4 row was not found to blank"
+    return blank
+
+
+def _packet_root(path, plan):
+    """The files tools/verify_gen2_release.py g4_packet_errors reads, copied from the committed tree, with this PLAN."""
+    overlay = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())
+    files = ["data/gen2_sources.lock.json", "data/gen2/build_provenance.json", "data/gen2/overlay_provenance.json",
+             *(out["ups"]["file"] for out in overlay["outputs"].values())]
+    for title in ("crystal", "gold", "silver"):
+        files += [f"data/gen2/{title}_slink.sym", f"data/gen2/{title}_slink.map",
+                  f"data/games/gen2_{title}/admission.json", f"data/games/gen2_{title}/overlay/binding.json"]
+    for relative in files:
+        (path / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, path / relative)
+    (path / "docs/gen2").mkdir(parents=True, exist_ok=True)
+    (path / "docs/gen2/PLAN.md").write_text(plan, encoding="utf-8", newline="\n")
+    return path
+
+
+def test_committed_tree_cannot_promote_until_the_owner_signs_g4(tmp_path, monkeypatch, capsys):
+    import verify_gen2_release as release
     plan = (ROOT / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
-    if "| G4 | — |" in plan:
-        errors = admission.g4_packet_errors()
-        assert "docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in errors
-        assert not any("not ADMITTED at the published overlay" in b for b in errors)
+    monkeypatch.setattr(release, "ROOT", _packet_root(tmp_path / "signed", plan))
+    assert not any("owner signature" in e for e in admission.g4_packet_errors())      # the control: G4 is signed now
+
+    # G4 blanked in a COPY of PLAN.md: the production wrapper (require_admitted=False) names the signature, and nothing
+    # about the not-yet-written ADMITTED rows
+    monkeypatch.setattr(release, "ROOT", _packet_root(tmp_path / "blank", _blank_g4(plan)))
+    errors = admission.g4_packet_errors()
+    assert "docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in errors
+    assert not any("not ADMITTED at the published overlay" in e for e in errors)
+
+    # ... and --promote-overlays on the committed tree refuses with that blocker, writing nothing. Everything but the
+    # PLAN is the committed tree, so a promotion that ignored the blocker could only refuse later for another reason:
+    # the refusal text is what proves the G4 gate fired.
+    games = ROOT / "data/games"
+    before = {p: p.read_bytes() for p in games.rglob("*.json")}
+    monkeypatch.setattr(admission, "_publish", lambda pending: pytest.fail("a blanked G4 was published"))
+    monkeypatch.setattr(admission, "_exclusive_publication_lock", lambda out_dir: contextlib.nullcontext())
+    overlay = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())
+    assert "packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in \
+        admission.activation_blockers(games, overlay)
+    assert admission.main(["--lock", str(ROOT / "data/gen2_sources.lock.json"),
+                           "--provenance", str(ROOT / "data/gen2/build_provenance.json"),
+                           "--overlay-provenance", str(ROOT / "data/gen2/overlay_provenance.json"),
+                           "--out-dir", str(games), "--promote-overlays"]) == 1
+    err = capsys.readouterr().err
+    assert "G4 activation refused" in err and "blocker(s)" in err
+    assert before == {p: p.read_bytes() for p in before}
 
 
 # --- schema v2 (OVERLAY_ADMISSION D1/D6): activation is its own gate, not the full release-evidence -------------------
@@ -637,3 +696,114 @@ def test_the_real_overlay_proof_check_runs_the_lua_entry_and_refuses_an_unbound_
         matrices[title] = matrix
     errors = admission.overlay_proof_errors(matrices)
     assert len(errors) == 3 and all("overlay proofs refused" in e for e in errors)
+
+
+# --- an ADMITTED catalog is re-proven by --check and by regeneration (review M1; OVERLAY_ADMISSION D6) -------------------
+
+def _promoted_tree(tmp_path, built, monkeypatch):
+    """A disposable tree promoted for real (the production checks open); returns the two production checks."""
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    real = (admission.g4_packet_errors, admission.overlay_proof_errors)
+    _open_activation(monkeypatch)
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
+    return args, paths, real
+
+
+def test_check_of_an_admitted_catalog_reruns_the_overlay_proofs_and_refuses_unproven_rows(
+        tmp_path, built, monkeypatch, capsys):
+    args, paths, _real = _promoted_tree(tmp_path, built, monkeypatch)
+    asked = []
+    monkeypatch.setattr(admission, "overlay_proof_errors", lambda matrices: asked.append(sorted(matrices)) or [])
+    assert admission.main([*args, "--check"]) == 0
+    assert asked == [["gen2_crystal", "gen2_gold", "gen2_silver"]]
+    capsys.readouterr()
+    monkeypatch.setattr(admission, "overlay_proof_errors",
+                        lambda matrices: ["gold: overlay proofs refused: no receipts"])
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    for argv in ([*args, "--check"], args):         # regeneration is held to the same preconditions
+        assert admission.main(argv) == 1
+        assert "overlay proofs" in capsys.readouterr().err
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_check_of_an_admitted_catalog_with_a_valid_grant_and_binding_but_no_receipts_fails(
+        tmp_path, built, monkeypatch, capsys):
+    # the production Lua validators (Entry.activation_proof), run on a hand-built ADMITTED catalog that has a valid grant
+    # and binding pin but no overlay receipts anywhere
+    args, paths, (_packet, proofs) = _promoted_tree(tmp_path, built, monkeypatch)
+    repo = paths["root"]
+
+    def production_proofs(matrices):
+        monkeypatch.setattr(admission, "ROOT", ROOT)       # the committed pack and validators; no overlay receipts
+        try:
+            return proofs(matrices)
+        finally:
+            monkeypatch.setattr(admission, "ROOT", repo)
+    monkeypatch.setattr(admission, "overlay_proof_errors", production_proofs)
+    capsys.readouterr()
+    assert admission.main([*args, "--check"]) == 1
+    assert "overlay proofs refused" in capsys.readouterr().err
+
+
+def test_check_of_an_admitted_catalog_refuses_a_blanked_g4(tmp_path, built, monkeypatch, capsys):
+    import verify_gen2_release as release
+    args, paths, _real = _promoted_tree(tmp_path, built, monkeypatch)
+    assert admission.main([*args, "--check"]) == 0
+    blank = _blank_g4((ROOT / "docs/gen2/PLAN.md").read_text(encoding="utf-8"))
+    monkeypatch.setattr(admission, "g4_packet_errors", lambda: [
+        f"docs/gen2/PLAN.md §6.1: {e}" for e in release.g4_signature_errors(blank)])
+    capsys.readouterr()
+    before = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    for argv in ([*args, "--check"], args):
+        assert admission.main(argv) == 1
+        err = capsys.readouterr().err
+        assert "G4 activation refused" in err and "carries no owner signature" in err
+    assert before == {p: p.read_bytes() for p in before}
+
+
+def test_a_complete_looking_but_partial_promotion_is_refused_even_with_a_valid_grant(
+        tmp_path, built, monkeypatch, capsys):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    built_catalogs = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    _open_activation(monkeypatch)
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    gold = paths["out"] / "gen2_gold" / "admission.json"
+    gold.write_bytes(built_catalogs[gold])       # Crystal and Silver keep their genuine grant; Gold is back to BUILT
+    assert sorted(pack for pack, status in _overlay_statuses(paths["out"]).items() if status == "ADMITTED") == [
+        "gen2_crystal", "gen2_silver"]
+    partial = {p: p.read_bytes() for p in paths["out"].rglob("admission.json")}
+    capsys.readouterr()
+    for argv in ([*args, "--check"], args):
+        assert admission.main(argv) == 1
+        assert "partial G4 promotion" in capsys.readouterr().err
+    assert partial == {p: p.read_bytes() for p in partial}
+
+
+@pytest.mark.parametrize("ext", ["sym", "map"])
+def test_a_binding_sidecar_must_carry_the_published_symbol_hashes(tmp_path, built, monkeypatch, ext):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "g4_packet_errors", lambda: [])
+    overlay = json.loads(paths["overlay"].read_text())
+    overlay["symbols"] = {f"{title}_slink.{e}": hashlib.sha256(f"{title}.{e}".encode()).hexdigest()
+                          for title in admission.TITLE_OUTPUTS for e in ("sym", "map")}
+    for title in admission.TITLE_OUTPUTS:
+        sidecar = paths["out"] / f"gen2_{title}" / "overlay" / "binding.json"
+        binding = json.loads(sidecar.read_text())
+        binding.update({f"{e}_sha256": overlay["symbols"][f"{title}_slink.{e}"] for e in ("sym", "map")})
+        sidecar.write_text(json.dumps(binding, sort_keys=True), newline="\n")
+    assert admission.activation_blockers(paths["out"], overlay) == []
+    sidecar = paths["out"] / "gen2_crystal" / "overlay" / "binding.json"
+    binding = json.loads(sidecar.read_text())
+    for tampered in ("0" * 64, None):         # a different hash, and the pin left out altogether
+        changed = dict(binding)
+        if tampered is None:
+            changed.pop(f"{ext}_sha256")
+        else:
+            changed[f"{ext}_sha256"] = tampered
+        sidecar.write_text(json.dumps(changed, sort_keys=True), newline="\n")
+        assert admission.activation_blockers(paths["out"], overlay) == [
+            f"crystal: overlay binding {ext}_sha256 differs from the published overlay build"]
