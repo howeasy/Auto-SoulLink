@@ -5493,7 +5493,8 @@ class DuoRun:
                 or not (name.startswith(title_a) or f"{title_a} version" in name)):
             raise RuntimeError(f"--wrong-save must name an existing second-OT {title_a} SaveRAM")
         sram = source.read_bytes()
-        rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
+        # the cartridge A boots (its companion build), never the clean dump the run refuses
+        rom = (Path(REPO) / self._rom_for("a")).read_bytes()
         problems = qualify(sram, rom)  # gen1_fixtures.py:81-148, game's checksum/stat oracle
         if problems:
             raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")

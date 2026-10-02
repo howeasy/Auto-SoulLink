@@ -677,6 +677,28 @@ def test_the_oracle_reads_the_companion_save_and_rom_never_the_clean_seed(monkey
     assert roms == [b"COMPANION-RED"], "the save was qualified against the clean ROM"
 
 
+def test_the_wrong_save_leg_qualifies_against_the_companion_rom_never_the_clean_dump(monkeypatch, tmp_path):
+    """The reconnect leg's second-OT save check (`_wrong_red_save_ot`) qualifies the save against
+    the cartridge A boots -- its companion build -- not the clean dump the run refuses."""
+    import gen1_fixtures
+
+    for rel, raw in (("patch/gen1/build/slink_red.gb", b"COMPANION-RED"),
+                     ("patch/build/gen1_red.gb", b"CLEAN-RED"),
+                     ("data/games/gen1_rby/profile.json",
+                      Path(_REPO, "data", "games", "gen1_rby", "profile.json").read_bytes())):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(raw)
+    wrong = tmp_path / "red_town_ot2.SaveRAM"
+    wrong.write_bytes(Path(g1.fixture_path("red", "battle")).read_bytes())
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    roms = []
+    monkeypatch.setattr(gen1_fixtures, "qualify",
+                        lambda sram, rom, notes=None: roms.append(rom) or [])
+    _gen1_oracle_run(tmp_path)._wrong_red_save_ot(str(wrong), expected_ot=-1)
+    assert roms == [b"COMPANION-RED"], "the wrong save was qualified against the clean ROM"
+
+
 def test_the_oracle_names_the_overlay_save_on_a_pure_row(tmp_path):
     run = _gen1_oracle_run(tmp_path, "gen1_pure_green")
     assert run._gen1_save_name("a") == "gen1 purered overlay.SaveRAM"

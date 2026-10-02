@@ -550,8 +550,8 @@ def test_reconnect_kills_only_a_and_leaves_b_process_running(runner, monkeypatch
 def test_existing_red_town_is_not_a_second_ot_save():
     town = REPO / "tests/fixtures/gen1/red_town.SaveRAM"
     battle = REPO / "tests/fixtures/gen1/red_battle.SaveRAM"
-    if not town.exists() or not battle.exists() or not (REPO / "patch/build/gen1_red.gb").exists():
-        pytest.skip("Red town/battle saves or clean ROM absent")
+    if not town.exists() or not battle.exists() or not (REPO / "patch/gen1/build/slink_red.gb").exists():
+        pytest.skip("Red town/battle saves or the companion Red build absent")
     profile = json.loads((REPO / "data/games/gen1_rby/profile.json").read_text(
         encoding="utf-8"))["titles"]["red"]["ram"]
     offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
