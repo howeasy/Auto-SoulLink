@@ -8,7 +8,9 @@ and model-tested but **not yet run**. This note refines [battle_faint.md](battle
 **Pins.**
 - pokeheartgold @ad7a3afa (`E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold`). Every `file:line` below
   is that tree. The asm counts as source.
-- HG ROM sha1 `4fcded0e…`; hge build `cb2dc435…` (fork @fc5175764, built at `.cache/gen4/hge/build-fc5175764983/`).
+- HG ROM sha1 `4fcded0e…`; hge build `cb2dc435…` (fork @fc5175764, built at `.cache/gen4/hge/build-fc5175764983/`; `.cache/` is gitignored and lives in the worktree
+  checkout that ran the build, so no committed path holds the exports: they are pinned by `data/gen4_sources.lock.json`
+  (`hge_offsets`, `hge_rom_gen_ld`, `hge_nm_all` sha256) and by the tracked `data/games/gen4_hge/profile.json` `hge_replacements`).
   Both are pinned in `data/gen4_sources.lock.json`.
 - pret xMAP `.cache/gen4/xmap/heartgoldus.xMAP`.
 
@@ -38,7 +40,8 @@ and model-tested but **not yet run**. This note refines [battle_faint.md](battle
    - The `11 → 12 → TurnEnd` interval can fall inside one `BattleContext_Main` pair, so a boundary poll never
      sees command 11 or 12 for that turn. **[SOURCE]**
    - A poll that writes in an earlier state (command 9-11, mid-script) has ≤1-frame latency but unproven safety. **[MODEL]**
-   - The probe measures how often a poll misses a real seam hit (`hits_without_poll_sight`). **[PHYSICAL-OPEN]**
+   - The probe MEASURES, per scenario, exact hook dispatches of both seams against frame-boundary sightings of the same command
+     (`poll_vs_hook`, section 11). It is a measurement, not a falsifier of this claim. **[PHYSICAL-OPEN]**
 4. **hge still runs the vanilla TurnEnd sweep.**
    - TurnEnd, `ov12_0224D540`, `ov12_0224D7EC`, `ov12_0224DD18`, UpdateFieldConditionExtra and `CheckIfAnyoneShouldFaint`
      are byte-identical to vanilla in the pinned build's ov12. The dispatch-table entries for commands 5, 9-12, 40
@@ -78,7 +81,8 @@ TurnEnd asm reads `[ctx,#8]`, FILE). It is dispatched through `sPlayerBattleComm
 - **Disassembly of the seam (FILE, both ROMs):**
 
   ```
-  0224A958 38b5     push {r3,r4,r5,lr}      ; r0 = BattleSystem*, r1 = BattleContext*
+  0224A958 38b5     push {r3,r4,r5,lr}      ; bytes 38 b5 = halfword 0xB538: PUSH, low byte 0x38 = r3,r4,r5, +LR
+                                            ; r0 = BattleSystem*, r1 = BattleContext*
   0224A964 03f0d8f9 bl   0224DD18           ; EXP-gain script check
   0224A970 02f03cff bl   0224D7EC           ; win/lose sweep
   0224A97C 02f0e0fd bl   0224D540           ; replacement sweep
@@ -135,8 +139,11 @@ If the hook path is rejected, the only other writer is a per-frame poll that wri
 - **Not complete** (§3): it can see none of them for a turn.
 - **Safety is unproven in the scripts.** With `command == 22` (RUN_SCRIPT) during Future Sight/Perish/poison, a script
   may be mid-arithmetic on `battleMons[b].hp` (for example `hpCalc = hp * -1`, `:1622`).
-- The probe's `hits_without_poll_sight` field counts seam hits for which the poll never saw command 11/12 within ±1
-  frame. A non-zero count is the physical refutation. **[PHYSICAL-OPEN]**
+- The old `hits_without_poll_sight` counter restated this section and could not falsify it; it is gone. Its
+  replacement, `poll_vs_hook`, compares the exact dispatch count of each seam (hooks on command 11 and 12, both armed in
+  every scenario) with the frames a boundary poll saw that command. `dispatches - seen_by_poll` is the number of
+  dispatches the poll missed; `seen_by_poll == dispatches` over many turns would count against the claim. It is still a
+  measurement of one battle's turns, not a proof about all paths. **[PHYSICAL-OPEN]**
 
 **Recommendation.** Use the S1 execution hook as the writer and the frame poll only as the arming, residency and
 disposition logic.
@@ -244,7 +251,7 @@ wrapper asserts the run FAILs before any write.
 
 **Per run it records:**
 - Hook and observer hits: `hits`, `wrong_image`, `stale`, `bad_state`, and the frames of each hit.
-- `hits_without_poll_sight` (§4).
+- `poll_vs_hook` (§4): exact dispatches vs boundary-poll sightings, for both seams.
 - Latency: `cmd_to_write`, `input_frames` and `write_to_effect`, in frames, from the state load.
 - The `HealParty` and `Task_Blackout` hit frames.
 - A change-log trace of command, result byte, battle HP, party HP, selected slot and saved HP.
@@ -300,8 +307,8 @@ Receipts: `C:/slink/g4/faint/heartgold_<scenario>_<hhmmss>/receipt.txt` (final r
   battle-to-party copy restored the HP and the battle played on (the later natural LOSE is outside the 900-frame
   effect window, so the control correctly stays red).
 - **Poll coverage:** in both primary runs command 11 was never seen at a frame boundary (trace jumps 10 -> 12 in
-  `seam_turnend`); the hooks fired. `hits_without_poll_sight` is 0 because it counts only command 11/12 sightings
-  within +-1 frame of a hit; command 12 was seen at +-1 there.
+  `seam_turnend`); the hooks fired. (The `hits_without_poll_sight` counter used for that run was 0 only because it counted command 11 OR 12
+  sightings; it is replaced by `poll_vs_hook`, section 11.)
 - **Source fixes during the live run:** (1) the first A only wakes the D-pad cursor, so FIGHT needs a second A; (2) the
   effect must follow the write within 900 frames, because a later natural faint had satisfied the control oracle;
   (3) dense post-write screenshots; (4) `seam_ufce_bit` promoted to primary (owner ruling).
@@ -341,3 +348,55 @@ Final receipts: `heartgold_hge_seam_turnend_170701`, `..._seam_ufce_bit_170839`,
   first hge run (170202) failed `save_party` for exactly that reason before the fix.
 - **Counter fix:** `hits_without_poll_sight` now looks for the seam's own command (11 HG, 9 hge) or 12.
 - **Foreign EmuHawk PIDs** seen before the first hge boot: 53068 and 52416 (a gen3 duo run, `patch/build/duo_*`); untouched.
+
+## 11. Card C1-8D (offline): review cx-fd56a73d, the 2-mon replacement path, hardened controls
+
+**Review outcome.** The adversarial review could not break the offsets, crypto, seam ordering, FAINTED-bit/EXP separation,
+hge byte identity or oracle independence. Findings and what was done:
+
+| Finding | Disposition |
+|---|---|
+| BLOCKER: row o only on a ONE-mon whiteout; with 2+ mons the write takes the D540 replacement branch | New PRIMARY scenarios `seam_ufce_bit_p2` and `seam_turnend_p2` on a SYNTH 2-mon party (below). The one-mon runs are now `secondary`. |
+| MAJOR: `battle_only` could PASS on a hung game | The control now needs game-side liveness AND the specific wrong outcome (below). |
+| MAJOR: `emu.getregister` in `on_bus_exec` may classify every hit stale | Evidence plus a visible failure mode (below). |
+| MAJOR: `hits_without_poll_sight` cannot falsify | Replaced by `poll_vs_hook`, a measurement (section 4). |
+| MINOR: "38b5 = push {r0,r2,r4,r5,lr}" | **Refuted.** The bytes are little-endian: `38 b5` is the halfword `0xB538`; PUSH is `0xB4xx`/`0xB5xx` (bit 8 = LR) and the register list is the LOW byte `0x38` = bits 3,4,5 = r3,r4,r5. Capstone agrees. The FILE test now decodes the halfword. The note's text is clarified, not changed. |
+| MINOR: `.cache/gen4/hge/...` citations point at a directory missing from the worktree | Header now says `.cache/` is gitignored, lives in the checkout that ran the build, and names the tracked pins. |
+
+**2-mon setup (SYNTH, disclosed).** `tools/gen4_synth_save.py party2` clones party slot 0 into slot 1 (new PID, same species, level and
+OTID, nickname `SYNTH`) and writes `<out>.synth.json`. Saves made offline:
+`C:/slink/g4/saves/hg_base_26310_party2.SaveRAM` (sidecar sha256 `66f657ce...`) and
+`C:/slink/g4/saves/hge_a_OOO_630_party2.SaveRAM` (sidecar sha256 `ad57f5b7...`). Receipts carry `setup: SYNTH` and the
+sidecar sha256; the wrapper refuses a sidecar that does not describe the save file. The clone's identical species and OTID also make the
+PID:OTID discrimination real (same-species slots), which the one-mon runs could not exercise.
+
+**New primary scenarios** (HG: cmd 11 + FAINTED bit `seam_ufce_bit_p2`, TurnEnd `seam_turnend_p2`; hge uses cmd 9 for the first):
+1. Write both HP copies of slot 0 at the seam (unchanged contract).
+2. Faint text advances with A. The oracle for the replacement branch is the game's own D540 flag `u32[ctx+0x13C+4*b] & 1` (FILE: D540
+   clears then sets it, `movs r1,#0x4f; lsls r1,r1,#2`), with no result byte `2` and no `HealParty`/`Task_Blackout` hit.
+3. Drive the party screen with normal input (Down, A, A, repeated up to 10 cycles with a screenshot per cycle) until
+   `selectedMonIndex[0] == 1` **and** the BattleMon PID equals slot 1's PID (index alone is not accepted).
+4. Fight on with A until the battle ends; then read the SAVE array party: slot 0 must be 0, slot 1 alive, map unchanged.
+- PASS needs all of it; a LOSE byte, a heal, a whiteout warp or a slot-0 copy-back not at 0 is FAIL; anything not reached is OPEN with the reason.
+- **Open input risk (cannot be tested offline):** the party-screen key sequence. Whether Down + A + A selects and confirms slot 1 in the
+  REPLACE/PARTY screen is unknown; the cycles and `shot("p2_c<N>")` exist so the first live run shows it. If the sequence is wrong the run is OPEN
+  ("slot 1 never sent in"), never a false PASS.
+
+**Controls.** `battle_only` PASS now needs: readback red, game liveness (`gSystem.vblankCounter` advanced >= 90% of the elapsed frames,
+`newKeys` showed our A at least 3 times; offsets from the pack's `profile.system` and pret `system.h`), AND the specific wrong outcome:
+the D540 replacement flag set while the party copy was still alive. `party_only` needs the game restoring the party-copy HP. "No LOSE"
+alone, which a hung game also produces, is OPEN. Revert checks: removing the liveness, the specific-outcome, the whiteout or the copy-back checks
+each turns a model test red; a slot-1 index without its PID turns one red.
+
+**Registers in the hook.** The classification reads `ARM9 r0/r1` (BattleSystem*, BattleContext*) and requires them to equal the chain-derived
+pointers. Evidence they are read correctly: in every earlier live receipt (HG and hge) every counted hit passed that equality (hits > 0, `stale = 0`) and the
+wrote; a wrong read could not match both pointers by accident. The receipt now also records the FIRST hit's raw `r0, r1, r15` and the chain pointers,
+reports "ALL seam hits classified stale" if the read is ever suspect, and `cfg.regs=false` is a recorded fallback (chain + command + pin only,
+`regs_mode: chain_only`). Both paths are exercised by the model tests.
+
+**Plan for the lane (not run).**
+1. Route to a 2-mon battle state per title on the SYNTH save, in lane `C:/slink/g4/faint2`: `python tools/gen4_routes.py run --save
+   C:/slink/g4/saves/hg_base_26310_party2.SaveRAM --lane faint2 --tag p2hg` (hge: `--game hge --errand pokegear --save ..._party2.SaveRAM --tag p2hge`).
+2. `SLINK_LIVE=1 pytest tests/live/test_gen4_battle_faint.py -m live -k "p2 and heartgold and not hge"`, then hge; then the hardened controls and
+   one regression of the two secondary one-mon scenarios per title.
+3. Estimate (not measured): route 5-10 min per title, each p2 run 1-3 min (more if the party-screen sequence needs a second attempt).

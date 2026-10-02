@@ -28,8 +28,16 @@ from tools import gen4_fixtures as g4, gen4_pins
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_battle_faint.lua"
-LANE_ROOT = Path("C:/slink/g4/faint")  # HG; hge uses LANES["heartgold_hge"]
-LANES = {"heartgold": LANE_ROOT, "heartgold_hge": Path("C:/slink/g4/faint_hge")}
+LANE_ROOT = Path("C:/slink/g4/faint2")  # card C1-8D lane (earlier cards used faint / faint_hge)
+LANES = {"heartgold": LANE_ROOT, "heartgold_hge": LANE_ROOT}
+# SYNTH 2-mon setup (owner ruling 2026-10-01): python tools/gen4_synth_save.py party2 --profile {hgss|hge} ...
+P2_SAVES = {"heartgold": Path("C:/slink/g4/saves/hg_base_26310_party2.SaveRAM"),
+            "heartgold_hge": Path("C:/slink/g4/saves/hge_a_OOO_630_party2.SaveRAM")}
+P2_PROFILE = {"heartgold": "hgss", "heartgold_hge": "hge"}
+# the C1-9 route tool (`tools/gen4_routes.py run --save <party2> [--game hge --errand pokegear] --lane faint2 --tag p2hg|p2hge`)
+# leaves <tag>_leg<N>_battle_settled.State + <tag>_leg<N>.log in the lane
+P2_TAG = {"heartgold": "p2hg", "heartgold_hge": "p2hge"}
+P2_SCENARIOS = ("seam_turnend_p2", "seam_ufce_bit_p2")
 HGE_STATE = Path("C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State")
 HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")
 # the route log of each state must name the settled FIGHT-menu battle (title -> (RESULT regex, settled regex))
@@ -46,8 +54,9 @@ PACK = {"heartgold": "gen4_hgss", "heartgold_hge": "gen4_hge"}
 RECEIPT_RE = re.compile(r"^PROBE o (PASS|FAIL|OPEN) (\{.*\})$")
 INITIAL_TIME = "2010-01-01T12:00:00"
 # name -> kind; must equal the Lua table (test_scenario_table_matches_lua)
-SCENARIOS = {"seam_turnend": "primary", "battle_only": "control", "party_only": "control",
-             "seam_ufce_bit": "primary", "poll_fightmenu": "exploratory"}
+SCENARIOS = {"seam_turnend_p2": "primary", "seam_ufce_bit_p2": "primary",  # 2-mon replacement path (production)
+             "seam_turnend": "secondary", "seam_ufce_bit": "secondary",  # one-mon whiteout
+             "battle_only": "control", "party_only": "control", "poll_fightmenu": "exploratory"}
 FAULTS = {"identity": "wrong_pid_accepted", "verify_party": "battle_only_not_detected",
           "verify_high": "two_byte_stale_high_not_detected", "locked": "locked_accepted",
           "slot": "wrong_slot_accepted"}
@@ -117,12 +126,38 @@ def seam_overrides(title: str, rom: Path) -> dict:
     return {"ufce": {"addr": addr, "pin": pin, "cmd": cmd, "name": UFCE_NAME[cmd]}}
 
 
+def check_synth(save: Path, title: str) -> dict:
+    """The party2 save must carry its sidecar and match it: absent skips by name, a sidecar that does not describe
+    THIS file (hash, kind, profile) fails. Returns the receipt's `synth` record (incl. the sidecar sha256)."""
+    need(save, f"{title} SYNTH party2 save")
+    sidecar = save.with_name(save.name + ".synth.json")
+    need(sidecar, f"{title} SYNTH sidecar")
+    row = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert row.get("schema") == "gen4-synth-v1" and row.get("kind") == "party2", f"{sidecar}: not a party2 sidecar"
+    assert row.get("profile") == P2_PROFILE[title], f"{sidecar}: profile {row.get('profile')} != {P2_PROFILE[title]}"
+    assert row.get("out_sha1") == g4.sha1_of(save), f"{sidecar} does not describe {save} (out_sha1 differs)"
+    return {"sidecar": sidecar.as_posix(), "sidecar_sha256": digest(sidecar), "src_sha1": row.get("src_sha1"),
+            "out_sha1": row["out_sha1"], "new_pid": row.get("new_pid")}
+
+
+def p2_state(title: str) -> Path:
+    """Newest `<tag>_leg*_battle_settled.State` the route tool left in the lane for the party2 save (env override)."""
+    env = os.environ.get("SLINK_GEN4_P2_STATE_" + title.upper())
+    if env:
+        return Path(env)
+    hits = sorted(LANE_ROOT.glob(f"{P2_TAG[title]}_leg*_battle_settled.State"), key=lambda q: q.stat().st_mtime)
+    if not hits:
+        pytest.skip(f"OPEN {title} party2 battle state: no {P2_TAG[title]}_leg*_battle_settled.State in {LANE_ROOT}")
+    return hits[-1]
+
+
 def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state: Path, source_head: str,
                  profile: Path, fault: str | None = None, max_frames: int = 5400,
-                 seams: dict | None = None) -> dict:
+                 seams: dict | None = None, synth: dict | None = None) -> dict:
     prof = json.loads(profile.read_text(encoding="utf-8"))["titles"][title]["profile"]
-    pack = {"save": prof["save"], "battle": prof["battle"]}  # offsets come from the pack, never hard-coded
-    return {"pack": pack, "seams": seams or {}, "run_id": f"{lane.parent.name}/{lane.name}", "title": title, "rom_sha1": rom_sha1,
+    # offsets come from the pack, never hard-coded: save header table, battle layout, gSystem (liveness counters)
+    pack = {"save": prof["save"], "battle": prof["battle"], "system": prof["system"]}
+    return {"pack": pack, "seams": seams or {}, "setup": "SYNTH" if synth else "NATIVE", "synth": synth, "run_id": f"{lane.parent.name}/{lane.name}", "title": title, "rom_sha1": rom_sha1,
             "scenario": scenario, "state_path": state.as_posix(), "shot_dir": lane.as_posix(),
             "requested_rate": 300, "fault": fault, "max_frames": max_frames, "move_right": True,
             "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head}
@@ -138,7 +173,8 @@ def terminal(out: Path) -> bool:
     return out.is_file() and any(ln.startswith("RESULT:") for ln in out.read_text(encoding="utf-8").splitlines())
 
 
-def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fault: str | None = None):
+def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fault: str | None = None,
+           synth: dict | None = None):
     assert title in PACK, title
     need(EMUHAWK, "EmuHawk")
     profile = REPO / "data/games" / PACK[title] / "profile.json"
@@ -155,7 +191,7 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     shutil.copyfile(state, lane_state)  # route/ is never written, nor read by the emulator
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     cfg = build_config(title=title, rom_sha1=rom_sha1, scenario=scenario, lane=lane, state=lane_state,
-                       source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom))
+                       source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom), synth=synth)
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
     out = lane / "receipt.txt"
     env = dict(os.environ, SLINK_ROOT=REPO.as_posix(), SLINK_GEN4_FAINT_CONFIG=(lane / "probe.json").as_posix(),
@@ -166,8 +202,7 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     deadline = time.monotonic() + int(os.environ.get("SLINK_GEN4_FAINT_TIMEOUT", "900"))
     try:
         while proc.poll() is None and time.monotonic() < deadline:
-            if out.is_file() and out.read_text(encoding="utf-8").rstrip().splitlines()[-1:][0:1] and \
-                    out.read_text(encoding="utf-8").splitlines()[-1].startswith("RESULT:"):
+            if terminal(out):
                 break
             time.sleep(0.5)
         assert out.is_file(), f"no terminal receipt in {lane}; exit={proc.poll()}"
@@ -175,6 +210,9 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
                                         run_id=cfg["run_id"])
         assert payload["script_sha256"] == cfg["script_sha256"], "receipt from a different script"
         assert payload["callback_errors"] == 0, f"callback faults in {lane}: {payload.get('callback_error')}"
+        assert payload.get("setup") == ("SYNTH" if synth else "NATIVE"), "receipt does not disclose the setup kind"
+        if synth:
+            assert payload["synth"]["sidecar_sha256"] == synth["sidecar_sha256"], "receipt carries another sidecar"
         return status, payload, lane, out
     finally:
         if proc.poll() is None:
@@ -243,6 +281,39 @@ def test_config_binds_run_identity_and_scripts(tmp_path):
     assert cfg["scenario"] == "seam_turnend" and cfg["fault"] == "identity" and cfg["requested_rate"] == 300
     assert cfg["script_sha256"] == digest(SCRIPT) and cfg["profile_sha256"] == digest(profile)
     assert cfg["run_id"] == f"{tmp_path.name}/lane"
+    assert cfg["setup"] == "NATIVE" and cfg["synth"] is None
+    assert {"save", "battle", "system"} <= set(cfg["pack"]) and cfg["pack"]["system"]["vblank_counter_off"] == 44
+    synth = {"sidecar_sha256": "ab" * 32}
+    cfg = build_config(title="heartgold", rom_sha1="ab" * 20, scenario="seam_turnend_p2", lane=tmp_path / "lane",
+                       state=tmp_path / "start.State", source_head="cut", profile=profile, synth=synth)
+    assert cfg["setup"] == "SYNTH" and cfg["synth"] == synth
+
+
+def test_synth_party2_sidecar_absent_skips_wrong_fails_ok_binds_the_hash(tmp_path):
+    save = tmp_path / "x_party2.SaveRAM"
+    with pytest.raises(pytest.skip.Exception, match="OPEN heartgold SYNTH party2 save"):
+        check_synth(save, "heartgold")
+    save.write_bytes(b"" * 64)
+    with pytest.raises(pytest.skip.Exception, match="OPEN heartgold SYNTH sidecar"):
+        check_synth(save, "heartgold")
+    side = save.with_name(save.name + ".synth.json")
+    row = {"schema": "gen4-synth-v1", "kind": "party2", "profile": "hgss", "out_sha1": g4.sha1_of(save),
+           "src_sha1": "s", "new_pid": 5}
+    side.write_text(json.dumps(row), encoding="utf-8")
+    got = check_synth(save, "heartgold")
+    assert got["sidecar_sha256"] == digest(side) and got["out_sha1"] == row["out_sha1"]
+    for patch, why in [({"out_sha1": "0" * 40}, "does not describe"), ({"profile": "hge"}, "profile"),
+                       ({"kind": "other"}, "not a party2 sidecar")]:
+        side.write_text(json.dumps({**row, **patch}), encoding="utf-8")
+        with pytest.raises(AssertionError, match=why):
+            check_synth(save, "heartgold")
+
+
+def test_real_party2_saves_and_sidecars_if_present():
+    for title, save in P2_SAVES.items():
+        if not save.is_file():
+            pytest.skip(f"OPEN {title} party2 save absent: {save}")
+        assert check_synth(save, title)["out_sha1"] == g4.sha1_of(save)
 
 
 def lua_api():
@@ -303,6 +374,13 @@ def test_seam_pins_and_flow_hold_in_the_pinned_rom_bytes(title):
     # TurnEnd = DD18 (EXP) -> D7EC (win/lose) -> D540 (replacement): the seam is BEFORE all three
     targets = [thumb_bl_target(ov12.data, off + o, turn_end + o) for o in (0x0C, 0x18, 0x24)]
     assert targets == [0x0224DD18, 0x0224D7EC, 0x0224D540]
+    # TurnEnd's prologue bytes 38 b5 are the halfword 0xB538 = PUSH {r3,r4,r5,lr} (r3-r5 from the low byte 0x38)
+    hw = struct.unpack_from("<H", ov12.data, off)[0]
+    assert hw >> 8 == 0xB5 and [r for r in range(8) if hw >> r & 1] == [3, 4, 5]
+    # ov12_0224D540 clears/sets the "replacement needed" flag at ctx+0x13C: movs r1,#0x4f ; ... ; lsls r1,r1,#2
+    d540 = 0x0224D540 - ov12.ramAddress
+    assert struct.unpack_from("<H", ov12.data, d540 + 0x4A)[0] == 0x214F
+    assert struct.unpack_from("<H", ov12.data, d540 + 0x4E)[0] == 0x0089 and m.L.ctx_repl == 0x4F << 2
     table = 0x0226CA90
     assert word(table + 4 * 11) == m.SEAMS.ufce.addr | 1 and word(table + 4 * 12) == turn_end | 1
     assert word(table + 4 * 5) == 0x02248848 | 1  # SelectionScreenInput: the idle-at-menu command
@@ -310,7 +388,18 @@ def test_seam_pins_and_flow_hold_in_the_pinned_rom_bytes(title):
 
 
 # ---------------------------------------------------------------- live (one owned emulator lane)
-def _live_inputs(title: str):
+def _live_inputs(title: str, p2: bool = False):
+    if p2:
+        save = P2_SAVES[title]
+        synth = check_synth(save, title)
+        state = p2_state(title)
+        log = state.with_name(state.name.replace("_battle_settled.State", ".log"))
+        need(state, f"{title} party2 battle state")
+        text = need(log, f"{title} party2 route log").read_text(encoding="utf-8", errors="replace")
+        assert re.search(r"RESULT BATTLE\b", text) and re.search(r"settled after \d+ frames", text), \
+            f"{log} does not show a settled battle"
+        rom = gen4_pins.default_locations().roms[title]
+        return state, need(rom, f"{title} ROM"), save, synth
     if title == "heartgold":
         state = check_state(ROUTE_STATE, ROUTE_LOG)
         save = need(Path(os.environ.get("SLINK_GEN4_HEARTGOLD_SAVE", DEFAULT_SAVE)), "heartgold played save")
@@ -320,7 +409,7 @@ def _live_inputs(title: str):
         state = check_state(state_path, log, title)
         save = need(Path(os.environ.get("SLINK_GEN4_HEARTGOLD_HGE_SAVE", HGE_SAVE)), "hge played save")
     rom = gen4_pins.default_locations().roms[title]
-    return state, need(rom, f"{title} ROM"), save
+    return state, need(rom, f"{title} ROM"), save, None
 
 
 live = pytest.mark.skipif(os.environ.get("SLINK_LIVE") != "1",
@@ -332,15 +421,15 @@ live = pytest.mark.skipif(os.environ.get("SLINK_LIVE") != "1",
 @pytest.mark.parametrize("title", PACK)
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_live_row_o_scenario(title, scenario):
-    state, rom, save = _live_inputs(title)
-    status, payload, lane, out = launch(title, scenario, state, rom, save)
+    state, rom, save, synth = _live_inputs(title, p2=scenario in P2_SCENARIOS)
+    status, payload, lane, out = launch(title, scenario, state, rom, save, synth=synth)
     kind = SCENARIOS[scenario]
     assert status != "FAIL", f"{scenario} FAIL: {payload.get('reason')} ({lane})"
     if kind == "control":
         assert status == "PASS", f"control {scenario} did not go red as required: {payload.get('reason')}"
     if status == "OPEN":
         pytest.skip(f"OPEN {scenario}: {payload.get('reason')} ({out})")
-    if kind == "primary":  # the only receipt row_o() will accept as the physical row
+    if kind in ("primary", "secondary"):  # the receipts row_o() may accept as the physical row
         shutil.copyfile(out, LANES[title] / f"row_o_{title}_{scenario}.txt")
 
 
@@ -350,7 +439,7 @@ def test_live_row_o_scenario(title, scenario):
 def test_live_instrument_controls_go_red_when_a_check_is_disabled(fault):
     """Revert-test on the real memory: disabling ONE guard/readback check must turn the run FAIL
     with that control named, before any game memory is written."""
-    state, rom, save = _live_inputs("heartgold")
+    state, rom, save, _ = _live_inputs("heartgold")
     status, payload, lane, _ = launch("heartgold", "seam_turnend", state, rom, save, fault=fault)
     assert status == "FAIL" and FAULTS[fault] in payload["reason"], (status, payload.get("reason"))
     assert payload["observation"].get("write") is None, "a write happened despite red instrument controls"

@@ -24,6 +24,10 @@ M.L = {
   mon_size = 0xC0, mon_hp = 0x4C, mon_maxhp = 0x50, mon_pid = 0x68, mon_otid = 0x74,
   -- Party {int max; int count; Pokemon mons[6]}; Pokemon = 0xEC; PartyPokemon tail @0x88
   party_count = 0x04, party_mons = 0x08, rec_size = 0xEC, rec_hp = 0x8E, rec_maxhp = 0x90,
+  -- ctx+0x13C: u32 unk_13C[4], bit0 = "replacement needed", cleared then re-set by ov12_0224D540 (FILE: `movs r1,#0x4f; lsls r1,#2`)
+  ctx_repl = 0x13C,
+  -- gSystem (SYS/sys_vbl come from the pack: profile.system); newKeys @0x48 (pret include/system.h: after heldKeys @0x44)
+  sys_new_keys = 0x48,
   FAINT_SHIFT = 24, CMD_SELECT = 5, CMD_UFCE = 11, CMD_TURN_END = 12,
 }
 local L = M.L
@@ -34,6 +38,7 @@ function M.configure(pack)
   L.SAVE_HDR, L.SAVE_DYN, L.HDR_SIZE = sv.array_headers_off, sv.dynamic_region_off, sv.array_header_size
   L.HDR_OFFSET, L.PARTY_ID = sv.array_header_fields.offset, sv.array_ids.party
   L.bs_ctx, L.ctx_mons, L.ctx_sel, L.mon_hp, L.mon_size = b.ctx_off, b.mons_off, b.selected_off, b.hp_off, b.mon_size
+  if pack.system then L.SYS, L.sys_vbl = pack.system.address, pack.system.vblank_counter_off end
 end
 local BT_DOUBLES, BT_UNSUPPORTED = 0x02, 0x1C -- link | multi | tag: refuse (OPEN, no live case)
 
@@ -47,12 +52,15 @@ M.OBS = {
   heal = {addr = 0x02090C1C, pin = 0xB083B5F0, name = "HealParty"},
   blackout = {addr = 0x02052858, pin = 0xB086B5F8, name = "Task_Blackout"},
 }
+-- primary = the 2-mon (SYNTH) replacement path (production); secondary = the one-mon whiteout (ruling 2026-10-01)
 M.SCENARIOS = {
-  seam_turnend = {kind = "primary", seam = "turnend", apply = {battle = true, party = true}},
-  seam_ufce_bit = {kind = "primary", seam = "ufce", apply = {battle = true, party = true}, faint_bit = true},
+  seam_turnend_p2 = {kind = "primary", p2 = true, seam = "turnend", apply = {battle = true, party = true}},
+  seam_ufce_bit_p2 = {kind = "primary", p2 = true, seam = "ufce", apply = {battle = true, party = true}, faint_bit = true},
+  seam_turnend = {kind = "secondary", seam = "turnend", apply = {battle = true, party = true}},
+  seam_ufce_bit = {kind = "secondary", seam = "ufce", apply = {battle = true, party = true}, faint_bit = true},
   poll_fightmenu = {kind = "exploratory", seam = "poll", apply = {battle = true, party = true}},
-  battle_only = {kind = "control", seam = "turnend", apply = {battle = true}},
-  party_only = {kind = "control", seam = "turnend", apply = {party = true}},
+  battle_only = {kind = "control", seam = "turnend", apply = {battle = true}, expect = "repl"},
+  party_only = {kind = "control", seam = "turnend", apply = {party = true}, expect = "restore"},
 }
 local BOTH = {battle = true, party = true}
 M.EFFECT_WINDOW = 900 -- frames after the write within which the game result byte must appear
@@ -293,25 +301,65 @@ function M.judge_controls(c)
 end
 
 -- ----- scenario judge (pure; examples in the model test are hypothetical, never physical) -----
+-- The game kept running: vblank advanced with the emulated frames AND our A presses reached its input layer.
+-- (A hung or softlocked game keeps the emulator frame counter moving; only game-side counters prove liveness.)
+function M.live_ok(o)
+  local l = o.liveness
+  return l ~= nil and l.frames ~= nil and l.frames >= 300 and l.vbl_delta ~= nil and l.vbl_delta >= 0.9 * l.frames
+    and (l.keys_seen or 0) >= 3
+end
+
+-- 2-mon (SYNTH) replacement path: the linked faint must reach the REPLACEMENT branch, never a whiteout.
+function M.judge_p2(o)
+  local e, w = o.effect or {}, o.write
+  if not w.verify.ok then return "FAIL", "readback: " .. table.concat(w.verify.reasons, ",") end
+  if e.lose_frame then return "FAIL", "LOSE result byte on a 2-mon party (whiteout path)" end
+  if (o.heal and #o.heal > 0) or (o.blackout and #o.blackout > 0) then return "FAIL", "HealParty/Task_Blackout ran (whiteout)" end
+  if not M.live_ok(o) then return "OPEN", "no evidence the game kept running" end
+  if not e.repl_flag_frame then return "OPEN", "replacement branch (ctx+0x13C bit0) never observed after the write" end
+  if not (o.p2 and o.p2.switched_frame) then return "OPEN", "slot 1 never sent in by normal input" end
+  if e.chain_gone_frame == nil or not e.outcome_final or e.outcome_final == 0 then
+    return "OPEN", "battle did not finish after the switch-in"
+  end
+  if e.outcome_final == 2 then return "FAIL", "battle finished as a LOSE" end
+  local s = o.saved_final_slots
+  if not s or s.s0 == nil or s.s1 == nil then return "OPEN", "saved party not readable at the end" end
+  if s.s0 ~= 0 then return "FAIL", "copy-back: slot 0 saved at HP " .. tostring(s.s0) .. ", not 0" end
+  if s.s1 <= 0 then return "FAIL", "copy-back: slot 1 not alive" end
+  if o.map_before ~= nil and o.map_after ~= o.map_before then return "FAIL", "map changed (warp)" end
+  return "PASS", "linked faint -> replacement branch -> slot 1 sent in -> battle finished; save has slot 0 at 0 and slot 1 alive; no whiteout"
+end
+
 function M.judge(scn, o)
   if o.fatal then return "FAIL", "fatal: " .. tostring(o.fatal) end
   if not o.controls_ok then return "FAIL", "instrument controls red: " .. tostring(o.controls_why) end
   local w = o.write
   if not w then return "OPEN", "no write performed: " .. tostring(o.no_write_reason) end
+  if scn.p2 then return M.judge_p2(o) end
   local heal = o.heal and o.heal[1]
+  local e = o.effect or {}
   -- the game result must FOLLOW the write closely: a later natural faint (live run 163725, party_only) is not evidence
   local lat = o.latency and o.latency.write_to_effect
-  local ended = o.effect and o.effect.outcome_frame ~= nil and lat ~= nil and lat <= M.EFFECT_WINDOW
+  local ended = e.outcome_frame ~= nil and lat ~= nil and lat <= M.EFFECT_WINDOW
   local copyback_zero = heal ~= nil and heal.saved_hp_at_entry == 0
   if scn.kind == "control" then
     if w.verify.ok then return "FAIL", "single-copy write passed the full readback (control cannot go red)" end
     if ended and copyback_zero then return "FAIL", "single-copy write passed the full-write oracle (control cannot go red)" end
-    return "PASS", "single-copy write detected by readback and red against the copy-back oracle"
+    -- "no LOSE" alone also fits a hung game: demand liveness AND the specific wrong outcome
+    if not M.live_ok(o) then return "OPEN", "no evidence the game kept running (vblank/input)" end
+    if scn.expect == "repl" and not e.repl_flag_frame then
+      return "OPEN", "wrong outcome not positively observed: replacement branch never taken with the live party copy"
+    end
+    if scn.expect == "restore" and not e.party_restored_frame then
+      return "OPEN", "wrong outcome not positively observed: the game never restored the party-copy HP"
+    end
+    return "PASS", "single-copy write detected by readback; game alive; specific wrong outcome observed (" .. tostring(scn.expect) .. ")"
   end
   if not w.verify.ok then return "FAIL", "readback: " .. table.concat(w.verify.reasons, ",") end
-  if scn.kind ~= "primary" then return "OPEN", "exploratory observation recorded (not a gate)" end
+  if scn.kind == "exploratory" then return "OPEN", "exploratory observation recorded (not a gate)" end
   if not ended then return "OPEN", "no game result byte observed after the write within budget" end
-  if o.effect.outcome_value ~= 2 then return "FAIL", "unexpected game result byte " .. tostring(o.effect.outcome_value) end
+  if e.outcome_value ~= 2 then return "FAIL", "unexpected game result byte " .. tostring(e.outcome_value) end
+  if e.repl_flag_frame then return "FAIL", "replacement branch taken on a ONE-mon party" end
   if not heal then return "OPEN", "no HealParty observed: pre-heal witness absent" end
   if not copyback_zero then return "FAIL", "copy-back lost the zero: saved HP at heal entry " .. tostring(heal.saved_hp_at_entry) end
   if o.post_heal_saved_hp == nil or o.post_heal_saved_hp ~= o.saved_max_hp then
@@ -369,6 +417,15 @@ local function run()
     obs.cmd_at_start = mem.r32(c0.ctx + L.ctx_cmd)
     local locp = mem.r32(c0.fs + 0x20)
     if inram(locp) then obs.map_before = s32(mem.r32(locp)) end
+    local want1
+    if scn.p2 then -- SYNTH second party member: a distinct PID:OTID clone at slot 1
+      local _, count = M.save_party(mem)
+      assert(count and count >= 2, "p2 scenario needs a 2+ mon party (SYNTH setup)")
+      want1 = assert(M.want_from_save(mem, 1))
+      assert(want1.pid ~= want.pid, "slot 1 shares slot 0's PID")
+      obs.want1 = {pid = want1.pid, otid = want1.otid}
+      obs.saved_before_slots = {s0 = (M.saved_hp(mem, 0)), s1 = (M.saved_hp(mem, 1))}
+    end
     shot("pre")
 
     -- instrument controls (shadow only; the game memory is untouched)
@@ -384,21 +441,24 @@ local function run()
     obs.saved_max_hp = select(2, M.saved_hp(mem, want.slot))
 
     -- state
-    local S = {hits = 0, wrong_image = 0, stale = 0, bad_state = 0, hit_frames = json.array({}),
-               refusals = json.array({}), done = false}
-    local O = {turnend_hits = 0}
+    local S = {done = false}
     local armed, write_frame, input_done_frame = false, nil, nil
-    local seen12 = {}
+    local seen_cmd = {}
     local heal_hits, blackout_hits = json.array({}), json.array({})
+    local refusals = json.array({})
     local had_chain, chain_gone_frame = true, nil
     local left5 = false
     local last_key
+    local stats = {}
+    for _, k in ipairs({"turnend", "ufce"}) do
+      stats[k] = {hits = 0, wrong_image = 0, stale = 0, bad_state = 0, frames = json.array({})}
+    end
 
     local function do_write(fr, where, ctx_cmd)
       local plan, rwhy = M.resolve(mem, want, opts)
       if not plan then
-        S.refusals[#S.refusals + 1] = {frame = fr, reason = rwhy}
-        if #S.refusals >= 8 then S.done = true; obs.no_write_reason = "refused x8: " .. tostring(rwhy) end
+        refusals[#refusals + 1] = {frame = fr, reason = rwhy}
+        if #refusals >= 8 then S.done = true; obs.no_write_reason = "refused x8: " .. tostring(rwhy) end
         return
       end
       if plan.noop then S.done = true; obs.no_write_reason = "target already at zero (game faint)"; return end
@@ -419,30 +479,33 @@ local function run()
       S.done = true
     end
 
-    local function seam_cb(spec)
-      return function(a, val)
+    -- Both seams are hooked in every scenario; `scn.seam` is the only one that writes. The other counts exact
+    -- dispatches so the frame poll can be measured against them. The classification reads r0/r1 (BattleSystem*,
+    -- BattleContext*) in the callback; the FIRST hit's raw registers are recorded so a wrong read is visible, and
+    -- cfg.regs == false falls back to chain+command+pin only (recorded as regs_mode).
+    local function seam_cb(key)
+      local spec, st = M.SEAMS[key], stats[key]
+      return function()
         local fr = emu.framecount()
-        if mem.r32(spec.addr) ~= spec.pin then S.wrong_image = S.wrong_image + 1; return end -- wrong overlay: drop first
+        if mem.r32(spec.addr) ~= spec.pin then st.wrong_image = st.wrong_image + 1; return end -- wrong overlay: drop first
         local r0 = u32(emu.getregister("ARM9 r0")); local r1 = u32(emu.getregister("ARM9 r1"))
         local ch = M.chain(mem)
-        if not ch or ch.bs ~= r0 or ch.ctx ~= r1 then S.stale = S.stale + 1; return end
+        if not st.first then
+          st.first = {r0 = r0, r1 = r1, r15 = u32(emu.getregister("ARM9 r15")), bs = ch and ch.bs, ctx = ch and ch.ctx}
+        end
+        if not ch or (cfg.regs ~= false and (ch.bs ~= r0 or ch.ctx ~= r1)) then st.stale = st.stale + 1; return end
         local cmd = mem.r32(ch.ctx + L.ctx_cmd)
-        if cmd ~= spec.cmd then S.bad_state = S.bad_state + 1; return end
-        S.hits = S.hits + 1
-        if #S.hit_frames < 64 then S.hit_frames[#S.hit_frames + 1] = fr end
-        if armed and not S.done then do_write(fr, spec.name, cmd) end
+        if cmd ~= spec.cmd then st.bad_state = st.bad_state + 1; return end
+        st.hits = st.hits + 1
+        if #st.frames < 64 then st.frames[#st.frames + 1] = fr end
+        if key == scn.seam and armed and not S.done then do_write(fr, spec.name, cmd) end
       end
     end
-
     local seam = M.SEAMS[scn.seam == "poll" and "turnend" or scn.seam]
-    obs.seam = {addr = seam.addr, pin = seam.pin, name = seam.name, armed_mode = scn.seam}
-    hook(seam, seam_cb(seam))
-    if scn.seam == "ufce" then -- plus TurnEnd as an observer for hit-vs-poll coverage
-      hook(M.SEAMS.turnend, function()
-        if mem.r32(M.SEAMS.turnend.addr) ~= M.SEAMS.turnend.pin then return end
-        O.turnend_hits = O.turnend_hits + 1
-      end)
-    end
+    obs.seam = {addr = seam.addr, pin = seam.pin, name = seam.name, armed_mode = scn.seam,
+                regs_mode = (cfg.regs == false) and "chain_only" or "r0r1"}
+    hook(M.SEAMS.turnend, seam_cb("turnend"))
+    hook(M.SEAMS.ufce, seam_cb("ufce"))
     local function observer(spec, list)
       hook(spec, function()
         if mem.r32(spec.addr) ~= spec.pin then return end
@@ -455,11 +518,19 @@ local function run()
     observer(M.OBS.blackout, blackout_hits)
 
     -- per-frame poll: change log + the observables the effect judge needs
-    local first_out, outv, script_frame, bit_set_seen, bit_clear_frame
+    local first_out, outv, outlast, script_frame, bit_set_seen, bit_clear_frame
+    local repl_frame, lose_frame, restored_frame, switched_frame
+    local keys_seen, vbl0, fr0v, vbl1, fr1v = 0, nil, nil, nil, nil
     local function sample()
       local fr = emu.framecount()
       local ch = M.chain(mem)
       local key
+      if L.SYS and write_frame then -- game-side liveness: gSystem.vblankCounter and newKeys (A bit)
+        local vbl = mem.r32(L.SYS + L.sys_vbl)
+        if not vbl0 then vbl0, fr0v = vbl, fr end
+        vbl1, fr1v = vbl, fr
+        if (mem.r32(L.SYS + L.sys_new_keys) & 1) ~= 0 then keys_seen = keys_seen + 1 end
+      end
       if ch then
         local cmd = mem.r32(ch.ctx + L.ctx_cmd)
         local out_b = mem.r8(ch.bs + L.bs_outcome)
@@ -468,23 +539,34 @@ local function run()
         local sel = mem.r8(ch.ctx + L.ctx_sel)
         local party = mem.r32(ch.bs + L.bs_party)
         local php = (inram(party) and sel < 6) and (M.rec_hp(mem, party + L.party_mons + L.rec_size * sel)) or -1
-        if cmd == L.CMD_TURN_END or cmd == seam.cmd then seen12[fr] = true end -- seam.cmd: 11 on HG, 9 on hge
-        if cmd ~= L.CMD_SELECT then left5 = true end
-        if write_frame and out_b ~= 0 and not first_out then first_out, outv = fr, out_b end
-        if write_frame and cmd == 22 and not script_frame then script_frame = fr end -- RUN_SCRIPT after the write
-        local fb = (mem.r32(ch.ctx + L.ctx_status) >> L.FAINT_SHIFT) & 1
-        if write_frame and scn.faint_bit then
-          if fb == 1 then bit_set_seen = true elseif bit_set_seen and not bit_clear_frame then bit_clear_frame = fr end
+        local repl = mem.r32(ch.ctx + L.ctx_repl) & 1 -- D540 set "replacement needed" for battler 0
+        if cmd == 9 or cmd == 11 or cmd == 12 then
+          seen_cmd[cmd] = seen_cmd[cmd] or {}
+          seen_cmd[cmd][fr] = true
         end
-        key = cmd .. "," .. out_b .. "," .. bhp .. "," .. php .. "," .. sel
-        if key ~= last_key and #obs.trace < 120 then
-          obs.trace[#obs.trace + 1] = {f = fr, cmd = cmd, out = out_b, bhp = bhp, php = php, sel = sel}
+        if cmd ~= L.CMD_SELECT then left5 = true end
+        outlast = out_b
+        if write_frame then
+          if out_b ~= 0 and not first_out then first_out, outv = fr, out_b end
+          if (out_b & 2) ~= 0 and not lose_frame then lose_frame = fr end
+          if cmd == 22 and not script_frame then script_frame = fr end -- RUN_SCRIPT after the write
+          if repl == 1 and not repl_frame then repl_frame = fr end
+          if scn.apply and not scn.apply.battle and php > 0 and bhp > 0 and not restored_frame then restored_frame = fr end
+          if want1 and sel == 1 and mem.r32(mon0 + L.mon_pid) == want1.pid and not switched_frame then switched_frame = fr end
+          if scn.faint_bit then
+            local fb = (mem.r32(ch.ctx + L.ctx_status) >> L.FAINT_SHIFT) & 1
+            if fb == 1 then bit_set_seen = true elseif bit_set_seen and not bit_clear_frame then bit_clear_frame = fr end
+          end
+        end
+        key = cmd .. "," .. out_b .. "," .. bhp .. "," .. php .. "," .. sel .. "," .. repl
+        if key ~= last_key and #obs.trace < 160 then
+          obs.trace[#obs.trace + 1] = {f = fr, cmd = cmd, out = out_b, bhp = bhp, php = php, sel = sel, repl = repl}
         end
         had_chain = true
       else
         if had_chain and not chain_gone_frame then chain_gone_frame = fr end
         key = "nochain," .. tostring((M.saved_hp(mem, want.slot)))
-        if key ~= last_key and #obs.trace < 120 then
+        if key ~= last_key and #obs.trace < 160 then
           obs.trace[#obs.trace + 1] = {f = fr, nochain = true, saved_hp = (M.saved_hp(mem, want.slot))}
         end
       end
@@ -528,11 +610,33 @@ local function run()
       if not ch and had_chain then obs.no_write_reason = obs.no_write_reason or "battle ended before a seam hit"; break end
     end
     if armed and not S.done and not obs.no_write_reason then obs.no_write_reason = "budget exhausted without a seam hit" end
-    if not write_frame and #S.refusals > 0 then
-      obs.no_write_reason = tostring(obs.no_write_reason) .. "; last refusal: " .. tostring(S.refusals[#S.refusals].reason)
+    local sk = stats[scn.seam == "poll" and "turnend" or scn.seam]
+    if not write_frame and sk.stale > 0 and sk.hits == 0 then
+      obs.no_write_reason = tostring(obs.no_write_reason) .. "; ALL seam hits classified stale (r0/r1 read suspect)"
+    end
+    if not write_frame and #refusals > 0 then
+      obs.no_write_reason = tostring(obs.no_write_reason) .. "; last refusal: " .. tostring(refusals[#refusals].reason)
     end
     local nshots, last_shot = 0, 0
     if write_frame then shot("after_write") end
+
+    -- 2-mon replacement path: advance the faint text, then drive the party screen with normal input
+    local p2 = {cycles = 0}
+    if scn.p2 and write_frame then
+      local deadline = emu.framecount() + budget
+      while not switched_frame and emu.framecount() < deadline and p2.cycles < (cfg.p2_cycles or 10) do
+        if lose_frame or chain_gone_frame then break end
+        if repl_frame then -- the party screen is (or is about to be) up: slot 0 is fainted, move to slot 1 and confirm
+          p2.cycles = p2.cycles + 1
+          tap("Down", 3, 15); tap("A", 3, 40); tap("A", 3, 80)
+          shot("p2_c" .. p2.cycles)
+        else
+          step(40); tap("A", 2, 0)
+        end
+      end
+      p2.switched_frame = switched_frame
+    end
+
     -- after the write: advance text and observe until the field is idle again
     local quiet, spent = 0, 0
     if scn.kind == "control" then budget = 1500 end -- controls only need the window after the write
@@ -557,19 +661,32 @@ local function run()
       lat.write_to_effect = first_out and (first_out - write_frame) or nil
     end
     obs.latency = lat
-    obs.effect = {outcome_frame = first_out, outcome_value = outv, chain_gone_frame = chain_gone_frame,
-                  script_after_write_frame = script_frame, faint_bit_consumed_frame = bit_clear_frame}
+    obs.effect = {outcome_frame = first_out, outcome_value = outv, outcome_final = outlast, chain_gone_frame = chain_gone_frame,
+                  script_after_write_frame = script_frame, faint_bit_consumed_frame = bit_clear_frame,
+                  repl_flag_frame = repl_frame, lose_frame = lose_frame, party_restored_frame = restored_frame}
+    if write_frame and vbl0 then
+      obs.liveness = {frames = fr1v - fr0v, vbl_delta = u32(vbl1 - vbl0), keys_seen = keys_seen}
+    end
+    obs.p2 = scn.p2 and p2 or nil
     obs.heal = heal_hits
     obs.blackout = blackout_hits
-    obs.seam.hits, obs.seam.wrong_image, obs.seam.stale, obs.seam.bad_state = S.hits, S.wrong_image, S.stale, S.bad_state
-    obs.seam.hit_frames = S.hit_frames; obs.seam.refusals = S.refusals
-    local nosight = 0
-    for _, hf in ipairs(S.hit_frames) do
-      if not (seen12[hf] or seen12[hf - 1] or seen12[hf + 1]) then nosight = nosight + 1 end
+    obs.seam.hits, obs.seam.wrong_image, obs.seam.stale, obs.seam.bad_state = sk.hits, sk.wrong_image, sk.stale, sk.bad_state
+    obs.seam.hit_frames, obs.seam.refusals, obs.seam.first = sk.frames, refusals, sk.first
+    obs.seams = stats
+    -- MEASUREMENT (not a falsifier): exact hook dispatches per seam vs. frame-boundary polls that saw that command
+    -- within +-1 frame of a dispatch. dispatches - seen_by_poll = dispatches a boundary poll would have missed.
+    local pvh = {}
+    for key, st in pairs(stats) do
+      local c, seen = M.SEAMS[key].cmd, 0
+      for _, hf in ipairs(st.frames) do
+        local s = seen_cmd[c] or {}
+        if s[hf] or s[hf - 1] or s[hf + 1] then seen = seen + 1 end
+      end
+      pvh[key] = {cmd = c, dispatches = st.hits, seen_by_poll = seen}
     end
-    obs.seam.hits_without_poll_sight = nosight -- frame-boundary poll never saw the command at that hit (+-1 frame)
-    obs.turnend_observer_hits = (scn.seam == "ufce") and O.turnend_hits or nil
+    obs.poll_vs_hook = pvh
     obs.saved_final = (M.saved_hp(mem, want.slot))
+    if scn.p2 then obs.saved_final_slots = {s0 = (M.saved_hp(mem, 0)), s1 = (M.saved_hp(mem, 1))} end
     obs.post_heal_saved_hp = heal_hits[1] and obs.saved_final or nil
     local fs2 = mem.r32(L.FS)
     local lp2 = inram(fs2) and mem.r32(fs2 + 0x20) or 0
@@ -587,7 +704,8 @@ local function run()
     mode = cfg.scenario, reason = reason, observation = obs, requested_rate = cfg.requested_rate,
     script_sha256 = cfg.script_sha256, profile_sha256 = cfg.profile_sha256, callback_errors = callback_errors,
     source_head = cfg.source_head, producer = "C1-8",
-    oracle = "game result byte BattleSystem+0x2420; save-array party HP read at HealParty entry (independent of both written spans)",
+    setup = (cfg.setup ~= nil and cfg.setup ~= json.null) and cfg.setup or "NATIVE", synth = cfg.synth,
+    oracle = "game result byte BattleSystem+0x2420; save-array party HP read at HealParty entry / at the end (independent of both written spans); D540 replacement flag ctx+0x13C",
     negative_control = obs.controls, callback_error = callback_error,
   }
   if callback_errors > 0 and scn_status ~= "FAIL" then payload.reason = "callback fault"; scn_status = "FAIL" end
