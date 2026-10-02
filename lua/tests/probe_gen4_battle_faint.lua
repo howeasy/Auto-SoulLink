@@ -716,7 +716,8 @@ local function run()
   local payload = {
     schema = "gen4-probe-row-v1", run_id = cfg.run_id, title = cfg.title, rom_sha1 = cfg.rom_sha1, level = "PHYSICAL",
     mode = cfg.scenario, reason = reason, observation = obs, requested_rate = cfg.requested_rate,
-    script_sha256 = cfg.script_sha256, profile_sha256 = cfg.profile_sha256, callback_errors = callback_errors,
+    script_sha256 = cfg.script_sha256, profile_sha256 = cfg.profile_sha256, module_sha256 = cfg.modules,
+    callback_errors = callback_errors,
     source_head = cfg.source_head, producer = "C1-8",
     setup = (cfg.setup ~= nil and cfg.setup ~= json.null) and cfg.setup or "NATIVE", synth = cfg.synth,
     oracle = "game result byte BattleSystem+0x2420; save-array party HP read at HealParty entry / at the end (independent of both written spans); D540 replacement flag ctx+0x13C",

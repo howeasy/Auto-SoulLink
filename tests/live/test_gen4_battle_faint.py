@@ -19,6 +19,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -115,15 +116,28 @@ def head() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
 
 
+# Every file the probe `dofile`s (test_every_probe_dofile_is_bound greps the script and fails on an unbound one).
+MODULES = ("lua/json_codec.lua",)
+
+
+def module_digests() -> dict[str, str]:
+    return {m: digest(REPO / m) for m in MODULES}
+
+
 def current_cut(title: str) -> dict:
-    """The cut a receipt must carry to be consumed: this HEAD, this probe script file, this title's pack profile."""
+    """The cut a receipt must carry to be consumed: this HEAD, this probe script file, this title's pack profile, the
+    sha256 of every module the probe dofiles, and the pinned ROM sha1 for the title."""
     profile = REPO / "data/games" / PACK[title] / "profile.json"
-    return {"source_head": head(), "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile)}
+    return {"source_head": head(), "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile),
+            "module_sha256": module_digests(), "rom_sha1": gen4_pins.ROM_SPECS[title][0]}
 
 
 def bind_cut(payload: dict, expected_cut: dict) -> None:
-    for key in ("script_sha256", "profile_sha256", "source_head"):
-        if payload.get(key) != expected_cut[key]:
+    for key in ("script_sha256", "profile_sha256", "source_head", "module_sha256", "rom_sha1"):
+        got, want = payload.get(key), expected_cut[key]
+        if isinstance(want, str) and key == "rom_sha1":
+            got, want = (got or "").lower(), want.lower()
+        if got != want:
             raise StaleReceiptError(f"STALE {key}: receipt differs from the current cut")
 
 
@@ -229,7 +243,8 @@ def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state:
     return {"pack": pack, "seams": seams or {}, "setup": "SYNTH" if synth else "NATIVE", "synth": synth, "run_id": f"{lane.parent.name}/{lane.name}", "title": title, "rom_sha1": rom_sha1,
             "scenario": scenario, "state_path": state.as_posix(), "shot_dir": lane.as_posix(),
             "requested_rate": 300, "fault": fault, "max_frames": max_frames, "move_right": True,
-            "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head}
+            "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head,
+            "modules": module_digests()}
 
 
 def emuhawk_command(lane: Path, rom: Path) -> list[str]:
@@ -583,7 +598,12 @@ def _cut_receipt(cut, **over):
     return "PROBE o PASS " + json.dumps(payload) + "\nRESULT: PASS\n"
 
 
-MODEL_CUT = {"source_head": "cut", "script_sha256": "1" * 64, "profile_sha256": "2" * 64}
+MODEL_CUT = {"source_head": "cut", "script_sha256": "1" * 64, "profile_sha256": "2" * 64,
+             "module_sha256": {"lua/json_codec.lua": "3" * 64}, "rom_sha1": "ab" * 20}
+
+
+def _stale_value(field):
+    return {"lua/json_codec.lua": "0" * 64} if field == "module_sha256" else "0" * 7
 
 
 @pytest.mark.parametrize("field", tuple(MODEL_CUT))
@@ -593,7 +613,7 @@ def test_consume_receipt_stale_cut_red_revert(field):
 
     assert consume(_cut_receipt(MODEL_CUT))[0] == "PASS"
     with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
-        consume(_cut_receipt(MODEL_CUT, **{field: "old"}))
+        consume(_cut_receipt(MODEL_CUT, **{field: _stale_value(field)}))
     assert consume(_cut_receipt(MODEL_CUT))[0] == "PASS"  # revert: the fresh receipt is accepted again
 
 
@@ -614,11 +634,44 @@ def test_current_cut_is_this_head_and_these_files(monkeypatch):
     assert cut["profile_sha256"] == digest(REPO / "data/games/gen4_hgss/profile.json")
     assert current_cut("heartgold_hge")["profile_sha256"] == digest(REPO / "data/games/gen4_hge/profile.json")
     # default binding (no injected cut): a receipt from another HEAD or another script file is STALE
-    fresh = _cut_receipt(cut)
-    assert consume_receipt(fresh, title="heartgold", rom_sha1="ab" * 20)[0] == "PASS"
+    rom = cut["rom_sha1"]
+    fresh = _cut_receipt(cut, rom_sha1=rom)
+    assert consume_receipt(fresh, title="heartgold", rom_sha1=rom)[0] == "PASS"
     for field in cut:
         with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
-            consume_receipt(_cut_receipt(cut, **{field: "0" * 7}), title="heartgold", rom_sha1="ab" * 20)
+            consume_receipt(_cut_receipt(cut, **{field: _stale_value(field)}), title="heartgold", rom_sha1=rom)
     monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "moved\n")  # HEAD moves: the same receipt is now STALE
     with pytest.raises(StaleReceiptError, match="STALE source_head"):
-        consume_receipt(fresh, title="heartgold", rom_sha1="ab" * 20)
+        consume_receipt(fresh, title="heartgold", rom_sha1=rom)
+
+
+def test_every_probe_dofile_is_bound():
+    """B3: a module the probe loads is part of the evidence cut. Grep the script's dofile paths; each must be in MODULES,
+    so the cut hashes it and a change to it makes old receipts STALE."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    paths = set(re.findall(r'dofile\(\s*root\s*\.\.\s*"/?([^"]+)"', text))
+    assert paths, "the grep found no dofile (pattern drifted from the probe's `dofile(root .. \"/lua/...\")` form)"
+    assert not re.findall(r"\b(?:loadfile|require)\(", text), "a loadfile/require would bypass the dofile grep"
+    unbound = paths - set(MODULES)
+    assert not unbound, f"probe loads unbound modules {sorted(unbound)}: add them to MODULES"
+    assert set(current_cut("heartgold")["module_sha256"]) >= paths
+
+
+def test_unbound_dofile_is_detected_red_revert(tmp_path, monkeypatch):
+    """Revert-test of the grep itself: a probe that loads another module makes the check fail."""
+    fake = tmp_path / "probe.lua"
+    fake.write_text(SCRIPT.read_text(encoding="utf-8") + '\nlocal extra = dofile(root .. "/lua/hud.lua")\n', encoding="utf-8")
+    monkeypatch.setitem(globals(), "SCRIPT", fake)
+    with pytest.raises(AssertionError, match="unbound modules"):
+        test_every_probe_dofile_is_bound()
+
+
+def test_module_change_makes_receipts_stale(monkeypatch):
+    cut = current_cut("heartgold")
+    fresh = _cut_receipt(cut, rom_sha1=cut["rom_sha1"])
+    assert consume_receipt(fresh, title="heartgold", rom_sha1=cut["rom_sha1"])[0] == "PASS"
+    monkeypatch.setattr(sys.modules[__name__], "module_digests", lambda: {"lua/json_codec.lua": "e" * 64})
+    with pytest.raises(StaleReceiptError, match="STALE module_sha256"):
+        consume_receipt(fresh, title="heartgold", rom_sha1=cut["rom_sha1"])
+    # the receipt itself records the module hashes the run used
+    assert "module_sha256" in cut and cut["module_sha256"]["lua/json_codec.lua"] == digest(REPO / "lua/json_codec.lua")
