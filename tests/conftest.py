@@ -157,7 +157,10 @@ def _absent_gen2_clone(exc):
         seen.add(id(exc))
         name = getattr(exc, "filename", None) if isinstance(exc, FileNotFoundError) else None
         if name:
-            rel = os.path.relpath(os.path.abspath(str(name)), _GEN2_BUILD)
+            try:
+                rel = os.path.relpath(os.path.abspath(str(name)), _GEN2_BUILD)
+            except ValueError:                         # a path on another drive is not in the Gen 2 clone
+                rel = ".."
             repo = rel.replace("\\", "/").split("/")[0]
             if not rel.startswith("..") and repo and not os.path.isdir(os.path.join(_GEN2_BUILD, repo)):
                 return f"{repo} not cloned: {os.path.join(_GEN2_BUILD, repo)}"
