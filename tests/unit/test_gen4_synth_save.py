@@ -213,3 +213,200 @@ def test_the_bind_only_platinum_profile_is_not_offered(tmp_path):
     with pytest.raises(SystemExit):
         _run(src, tmp_path / "out.SaveRAM", "pt")
     assert not (tmp_path / "out.SaveRAM").exists()
+
+
+# ---------------------------------------------------------------------------
+# bag / egg1 (G2 producer plan): the owner saves are read-only, outputs under tmp_path
+# ---------------------------------------------------------------------------
+# Independent of the tool: general-block offset of the Balls pocket, from the pret layout
+# (items 165, key 50, TMs 101, mail 12, medicine 40, berries 64 slots after the Bag at 0x644;
+# hge expands items/key/balls, hg-engine include/constants/item.h:2870-2880).
+BALLS_AT = {"hgss": 0x644 + 4 * (165 + 50 + 101 + 12 + 40 + 64), "hge": 0x644 + 4 * (245 + 92 + 101 + 12 + 40 + 64)}
+MEDICINE_AT = {"hgss": 0xB64, "hge": 0xD4C}  # FILE: Potion x5 in medicine slot 0 of both owner saves
+
+
+def _synth(kind: str, src: Path, out: Path, variant: str = "hgss", *extra: str) -> int:
+    return synth.main([kind, "--profile", variant, "--src", str(src), "--out", str(out), *extra])
+
+
+def _assert_only_changed(src: bytes, out: bytes, variant: str, lo: int, hi: int) -> None:
+    """Only general-relative bytes [lo, hi) and the newest general footer CRC may differ."""
+    s = codec.parse_save(src, variant)
+    blk = s.blocks[(s.bank, 0)]
+    crc = blk.start + blk.size - 2
+    changed = [i for i, (x, y) in enumerate(zip(src, out, strict=True)) if x != y]
+    assert changed and crc in changed, "the CRC must be re-stamped"
+    assert all(i in (crc, crc + 1) or blk.start + lo <= i < blk.start + hi for i in changed)
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_the_owner_save_pins_the_bag_layout_the_tool_assumes(variant):
+    """FILE evidence for the Bag offset: Potion x5 is medicine slot 0 and the Balls pocket is empty."""
+    general = codec.parse_save(_owner(variant), variant).general
+    assert struct.unpack_from("<HH", general, MEDICINE_AT[variant]) == (17, 5)  # ITEM_POTION
+    n = 24 if variant == "hgss" else 26
+    assert all(struct.unpack_from("<HH", general, BALLS_AT[variant] + 4 * i) == (0, 0) for i in range(n))
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_bag_puts_ten_pokeballs_in_the_first_balls_slot(tmp_path, variant):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "bag.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _synth("bag", src, out, variant) == synth.WRITTEN
+    a, b = src.read_bytes(), out.read_bytes()
+    assert a == _owner(variant)                                  # the owner save is never modified
+    ga, gb = codec.parse_save(a, variant), codec.parse_save(b, variant)
+    assert struct.unpack_from("<HH", gb.general, BALLS_AT[variant]) == (4, 10)   # ITEM_POKE_BALL x10
+    assert (gb.bank, gb.counter) == (ga.bank, ga.counter) and gb.party() == ga.party()
+    assert gb.party()[0]["tail_plausible"]
+    other = 1 - gb.bank
+    assert b[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE] == a[
+        other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE]
+    pc = gb.blocks[(gb.bank, 1)]
+    assert b[pc.start : pc.start + pc.size] == a[pc.start : pc.start + pc.size]
+    _assert_only_changed(a, b, variant, BALLS_AT[variant], BALLS_AT[variant] + 4)
+    row = json.loads((tmp_path / "bag.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    assert (row["kind"], row["profile"], row["item"], row["count"]) == ("bag", variant, 4, 10)
+    assert row["src_sha1"] == hashlib.sha1(a).hexdigest() and row["out_sha1"] == hashlib.sha1(b).hexdigest()
+    assert row["general_off"] == BALLS_AT[variant] and row["before"] == [0, 0] and row["after"] == [4, 10]
+
+
+def test_a_wrong_bag_offset_would_fail_the_layout_assertion(tmp_path, monkeypatch):
+    """Revert test: shift the Party array size by one word and the independent offset check trips."""
+    monkeypatch.setattr(synth, "PARTY_ARRAY_SIZE", 0x5B0)
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "bag.SaveRAM"
+    src.write_bytes(_owner("hgss"))
+    assert _synth("bag", src, out) == synth.WRITTEN
+    got = codec.parse_save(out.read_bytes(), "hgss").general
+    assert struct.unpack_from("<HH", got, BALLS_AT["hgss"]) != (4, 10)
+
+
+def _bag_image(slots: dict) -> bytes:
+    def mutate(body):
+        for i, (iid, qty) in slots.items():
+            struct.pack_into("<HH", body, BALLS_AT["hgss"] + 4 * i, iid, qty)
+        return body
+    return _reseal(_image(), "hgss", mutate)
+
+
+def _balls(image: bytes) -> list:
+    g = codec.parse_save(image, "hgss").general
+    return [struct.unpack_from("<HH", g, BALLS_AT["hgss"] + 4 * i) for i in range(24)]
+
+
+def test_bag_never_overwrites_a_slot_and_uses_the_first_empty_one(tmp_path):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_bag_image({0: (3, 7), 1: (2, 1)}))          # Great Ball, Ultra Ball
+    assert _synth("bag", src, out, "hgss", "--count", "3") == synth.WRITTEN
+    assert _balls(out.read_bytes())[:4] == [(3, 7), (2, 1), (4, 3), (0, 0)]
+
+
+def test_bag_adds_to_an_existing_pokeball_stack_even_past_an_empty_slot(tmp_path):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_bag_image({0: (3, 7), 2: (4, 5)}))          # an empty slot 1 sits before the stack
+    assert _synth("bag", src, out) == synth.WRITTEN
+    assert _balls(out.read_bytes())[:3] == [(3, 7), (0, 0), (4, 15)]
+
+
+def test_bag_refuses_a_full_pocket_and_a_stack_overflow(tmp_path):
+    out = tmp_path / "out.SaveRAM"
+    full = tmp_path / "full.SaveRAM"
+    full.write_bytes(_bag_image(dict.fromkeys(range(24), (3, 1))))   # every slot a Great Ball
+    assert _synth("bag", full, out) == synth.REFUSED and not out.exists()
+    stack = tmp_path / "stack.SaveRAM"
+    stack.write_bytes(_bag_image({0: (4, 995)}))
+    assert _synth("bag", stack, out) == synth.REFUSED and not out.exists()
+    assert _synth("bag", stack, out, "hgss", "--count", "4") == synth.WRITTEN   # 999 is allowed
+    assert _balls(out.read_bytes())[0] == (4, 999)
+
+
+@pytest.mark.parametrize("count", ["0", "1000"])
+def test_bag_refuses_an_out_of_range_count(tmp_path, count):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    assert _synth("bag", src, tmp_path / "out.SaveRAM", "hgss", "--count", count) == synth.REFUSED
+
+
+@pytest.mark.parametrize("kind", ["bag", "egg1"])
+def test_bag_and_egg_refuse_to_write_over_the_source(tmp_path, kind):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    before = src.read_bytes()
+    assert _synth(kind, src, src) == synth.REFUSED
+    assert src.read_bytes() == before and not (tmp_path / "src.SaveRAM.synth.json").exists()
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_egg1_appends_a_valid_egg_after_the_last_mon(tmp_path, variant):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "egg.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _synth("egg1", src, out, variant) == synth.WRITTEN
+    a, b = src.read_bytes(), out.read_bytes()
+    assert a == _owner(variant)
+    ga, gb = codec.parse_save(a, variant), codec.parse_save(b, variant)
+    assert (gb.bank, gb.counter) == (ga.bank, ga.counter)
+    assert len(ga.party()) == 1 and len(gb.party()) == 2
+    assert gb.party()[0] == ga.party()[0]                        # the first mon is not rewritten
+    egg, player = gb.party()[1], ga.player()
+    assert egg["is_egg"] and egg["tail_plausible"] and not egg["shiny"] and not egg["has_nickname"]
+    assert egg["key"] != gb.party()[0]["key"] and egg["otid"] == player["id"] and egg["ot_name"] == player["name"]
+    assert (egg["species"], egg["nickname"], egg["friendship"], egg["level"]) == (172, "Egg", 1, 1)
+    assert (egg["hp"], egg["max_hp"]) == (11, 11) and egg["ball"] == 4 and egg["met_level"] == 0
+    assert (egg["egg_location"], egg["met_location"], egg["origin_game"]) == (2000, 0, player["version"])
+    assert egg["moves"][:2] == (84, 204) and egg["nature"] % 6 == 0
+    # the other bank and the PC block are byte-identical; only the new slot, the count and the CRC move
+    other = 1 - gb.bank
+    assert b[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE] == a[
+        other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE]
+    pc = gb.blocks[(gb.bank, 1)]
+    assert b[pc.start : pc.start + pc.size] == a[pc.start : pc.start + pc.size]
+    _assert_only_changed(a, b, variant, 0x94, 0x90 + 8 + 2 * codec.PARTY_MON_SIZE)
+    row = json.loads((tmp_path / "egg.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    assert (row["kind"], row["new_pid"], row["otid"], row["slot"]) == ("egg1", egg["pid"], egg["otid"], 1)
+    assert row["src_sha1"] == hashlib.sha1(a).hexdigest() and row["out_sha1"] == hashlib.sha1(b).hexdigest()
+
+
+def test_egg1_is_deterministic_and_honours_species_and_cycles(tmp_path):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_owner("hgss"))
+    one, two, togepi = (tmp_path / n for n in ("a.SaveRAM", "b.SaveRAM", "t.SaveRAM"))
+    assert _synth("egg1", src, one) == synth.WRITTEN and _synth("egg1", src, two) == synth.WRITTEN
+    assert one.read_bytes() == two.read_bytes()
+    assert _synth("egg1", src, togepi, "hgss", "--species", "175", "--cycles", "0") == synth.WRITTEN
+    egg = codec.parse_save(togepi.read_bytes(), "hgss").party()[1]
+    assert (egg["species"], egg["friendship"], egg["is_egg"], egg["tail_plausible"]) == (175, 0, True, True)
+    assert egg["ability"] in (55, 32) and egg["moves"][:2] == (45, 204)
+
+
+def test_bag_then_egg_compose(tmp_path):
+    src, bag, both = (tmp_path / n for n in ("src.SaveRAM", "bag.SaveRAM", "both.SaveRAM"))
+    src.write_bytes(_owner("hgss"))
+    assert _synth("bag", src, bag) == synth.WRITTEN and _synth("egg1", bag, both) == synth.WRITTEN
+    got = codec.parse_save(both.read_bytes(), "hgss")
+    assert struct.unpack_from("<HH", got.general, BALLS_AT["hgss"]) == (4, 10)
+    assert got.party()[1]["is_egg"]
+
+
+def test_egg1_refuses_a_full_party_an_empty_party_and_bad_args(tmp_path):
+    out = tmp_path / "out.SaveRAM"
+    full = tmp_path / "full.SaveRAM"
+    full.write_bytes(_image(count=6))
+    assert _synth("egg1", full, out) == synth.REFUSED and not out.exists()
+    empty = tmp_path / "empty.SaveRAM"
+    empty.write_bytes(_image(count=0))
+    assert _synth("egg1", empty, out) == synth.REFUSED and not out.exists()
+    one = tmp_path / "one.SaveRAM"
+    one.write_bytes(_image())
+    assert _synth("egg1", one, out, "hgss", "--species", "25") == synth.REFUSED
+    assert _synth("egg1", one, out, "hgss", "--cycles", "256") == synth.REFUSED
+    assert not out.exists()
+
+
+def test_bag_and_egg_refuse_an_output_under_the_bizhawk_root(tmp_path, monkeypatch):
+    root = tmp_path / "Bizhawk"
+    (root / "NDS").mkdir(parents=True)
+    monkeypatch.setattr(synth, "BIZHAWK_ROOT", root)
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_image())
+    for kind in ("bag", "egg1"):
+        assert _synth(kind, src, root / "NDS" / f"{kind}.SaveRAM") == synth.REFUSED
