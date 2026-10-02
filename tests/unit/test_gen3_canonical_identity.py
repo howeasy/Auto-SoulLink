@@ -138,7 +138,7 @@ def test_every_manifest_row_records_a_consistent_version_slot(title):
     assert row["menu_version"] == "dev"                                    # published and committed builds are the default version
 
 
-@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+@pytest.mark.parametrize("title", NATIVE)
 def test_stamping_the_published_payload_moves_the_exact_digest_and_not_the_canonical_one(title):
     row = manifest()[title]
     span = row["protected_spans"][0]
