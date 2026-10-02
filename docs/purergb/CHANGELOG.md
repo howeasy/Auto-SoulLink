@@ -656,3 +656,28 @@ Environment: `SLINK_PURERGB_SRC` / `SLINK_PURERGB_ROMS` (default `.cache/purergb
 `SLINK_PURERGB_OVERLAY_SRC` / `_ROMS` (default `.cache/purergb-overlay`), `SLINK_UPR_JAR`
 (default search: repo, `.cache/slink-upr`, `.cache/upr`), `SLINK_GEN1_ROMS` /
 `SLINK_GEN1_OVERLAY_ROMS` (live-gate title selection), `SLINK_PURE_WRONG_SAVE` (reconnect leg).
+---
+
+## 9. 2026-10-02: the companion is required, so the pure lanes run on the overlays
+
+Owner ruling 2026-10-02: a clean Red/Blue/pureRGB cartridge is refused; Yellow, which has no
+companion, stays clean. This entry supersedes the lane names and counts in §3.7, §4, §6 and §8
+without rewriting them. Those sections record what was true when they were written.
+
+- **Lanes.** `inspect-purergb-overlay` is retired. `inspect-purergb` now runs on
+  `purered_overlay` / `pureblue_overlay` / `puregreen_overlay`, and `apex-purergb` on
+  `purered_overlay`. `tools/verify_gen1_release.py` has 17 lanes (§3.7 and §8 still say 19).
+  `SLINK_GEN1_OVERLAY_ROMS` is no longer read; `SLINK_GEN1_ROMS` is the only title selection.
+  (`6d83f443`)
+- **Duo rows.** `gen1_pure_overlay` is gone. `gen1_pure` and `gen1_pure_green` boot the overlay
+  builds and run all 20 scenarios, including `trade_new`, `trade_decline_new` and `explode_new`.
+  A missing overlay fails the run instead of skipping it. (`c3f6018f`, `59cca559`)
+- **Harness refusal.** `lua/tests/gen1_gate.lua` and `lua/tests/duo/duo_gen1_main.lua` refuse
+  a running sha1 equal to a clean pin (`build_provenance.json` roms), even when the title is
+  named. (`99119674`)
+- **Fixtures.** `tools/gen1_fixtures.py` builds pure fixtures on `*_overlay_cold` and reads
+  `gen1 pure<x> overlay.SaveRAM`. The committed pure fixtures still qualify against the overlay
+  ROMs, because the overlay leaves base stats and the save layout unchanged. (`ac836b8e`)
+- **Evidence.** The clean-build pure duo receipts in §6 (15 + 15, and the overlay pairing's
+  three) are superseded. Re-running `duo-pairs-purergb` (40 cases) and `inspect-purergb` on the
+  overlays is PENDING.
