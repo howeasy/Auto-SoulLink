@@ -40,6 +40,15 @@ TITLES = {
         "pin": "heartgold",
         "tag": "catchhg",
     },
+    "SS": {
+        "lane": "C:/slink/g4/catch_ss",
+        "bag": "ss_bag",
+        "title": "soulsilver",
+        "pack": "gen4_hgss",
+        "codec": "hgss",
+        "pin": "soulsilver",
+        "tag": "catchhg",
+    },
     "hge": {
         "lane": "C:/slink/g4/catch_hge",
         "bag": "hge_bag",
@@ -113,10 +122,10 @@ def launch(mode: str, keys: list, *, tag: str, extra: dict | None = None, timeou
     need(EMUHAWK, "EmuHawk")
     synth = check_synth_bag(BAG_SAVE)
     state = settled_state()
-    if GAME == "hge":
+    if GAME in ("hge", "SS"):
         from tools import gen4_routes as routes
 
-        rom_src = routes.HGE_ROM
+        rom_src = routes.HGE_ROM if GAME == "hge" else routes.SS_ROM
     else:
         rom_src = gen4_pins.default_locations().roms["heartgold"]
     profile = REPO / f"data/games/{TITLES['pack']}/profile.json"
