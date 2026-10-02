@@ -171,7 +171,9 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
     if trade_candidate:
         flag = "-DSLINK_NATIVE_COMPANION=1"
     entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
-    run([GCC, *CFLAGS, flag,
+    # The companion prints "SoulLink <version>" on the main menu (native_menu.h): the charmap bytes are a compile-time define
+    menu = ["-D" + gen3_title.menu_define(version or gen3_title.DEFAULT_VERSION)] if trade_candidate else []
+    run([GCC, *CFLAGS, flag, *menu,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
     run([LD, "-T", str(header.with_suffix(".ld")), "-e", entry,
          "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
@@ -246,10 +248,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
                                   "replacement":data[offset:offset+8].hex(),"symbol":symbol})
     title_spans = []
     if production:
-        # The SoulLink title band: static graphics in the ROM's free tail past the payload's linker bound
+        # The SoulLink title wordmark: static graphics in the ROM's free tail past the payload's linker bound
         if gen3_title.TARGETS[title]["base"] < spec["CODE_CANDIDATE"] + 0x14000:
             raise ValueError("title assets overlap the payload's linker region")
-        title_spans = gen3_title.apply_title(data, title, version or gen3_title.DEFAULT_VERSION)
+        title_spans = gen3_title.apply_title(data, title)
     rom = out / "probe.gba"
     rom.write_bytes(data)
     receipt = {"status": "PRODUCTION_COMPANION" if production else "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
@@ -267,7 +269,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
                "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
                "frame_detour": frame_receipt,
                "trade_detours": trade_detours,
-               "title": {"version": version or gen3_title.DEFAULT_VERSION, "spans": title_spans} if production else None,
+               "title": {"spans": title_spans} if production else None,
+               # the version the payload prints on the main menu (native_menu.h), from the same --version
+               "menu": {"version": version or gen3_title.DEFAULT_VERSION,
+                        "text": gen3_title.menu_text(version or gen3_title.DEFAULT_VERSION)} if trade_candidate else None,
                "compiler": run([GCC, "--version"])}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(f"{'PRODUCTION' if production else 'DIAGNOSTIC ONLY'}: {rom}")
@@ -295,7 +300,7 @@ def publish_native(title, rom_path, *, check=False, version=None):
                + [{"offset":item.get("address",item.get("detour"))-ROM_BASE,"size":len(bytes.fromhex(item["original"]))}
                   for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]
                + [{"offset":span["offset"],"size":span["size"]} for span in receipt["title"]["spans"]],
-           "title_version":receipt["title"]["version"]}
+           "menu_version":receipt["menu"]["version"]}
     manifest = Path(DIST)/"gen3_companions.json"
     data = json.loads(manifest.read_text()) if manifest.exists() else {"schema":"slink-gen3-companions-v1","titles":{}}
     if check:
@@ -423,7 +428,7 @@ def main():
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--version", default=None,
-                    help="SoulLink version drawn on the title screen: 'dev' (default) or vX.Y.Z; a release re-stamps it")
+                    help="SoulLink version printed on the main menu: 'dev' (default) or vX.Y.Z[-dev]; a release re-stamps it")
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
                     help="skip folding in the RR4.1_Custom Battle Calc delta "
@@ -433,6 +438,11 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.version is not None:
+        try:
+            gen3_title.check_version(args.version)
+        except ValueError as error:
+            ap.error(str(error))
     if args.trade_candidate:
         if args.arena_probe or args.check or args.describe or args.no_verify_md5:
             ap.error("trade candidate cannot combine with probes/check/describe/verification bypass")
@@ -493,7 +503,9 @@ def main():
     elf = os.path.join(BUILD, "handlers.elf")
     binf = os.path.join(BUILD, "handlers.bin")
     print("[1/7] compile")
-    run([GCC, *CFLAGS, "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
+    # "SoulLink <version>" on the main menu (native_menu.h): the charmap bytes are a compile-time define
+    run([GCC, *CFLAGS, "-D" + gen3_title.menu_define(args.version or gen3_title.DEFAULT_VERSION),
+         "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
     print(f"[2/7] link @ {CODE_BASE:#x}")
     run([LD, "-T", os.path.join(SRC, "slink.ld"), "-e", "slink_hook",
          "--no-warn-rwx-segments", obj, "-o", elf])
@@ -596,9 +608,9 @@ def main():
                      "— Battle Calc layout changed; re-RE before re-pointing")
         data[bt_off:bt_off + 4] = thumb_bl(BT_DETOUR, bt_hook_addr)
         print(f"      re-pointed BattlePutTextOnWindow detour @ {BT_DETOUR:#x} -> shim {bt_hook_addr:#x}")
-    # The SoulLink title band, in the 1.6 MB 0xFF run at 0x08B71D04 (no payload or Battle Calc byte lives there)
-    title_spans = gen3_title.apply_title(data, "radical_red", args.version or gen3_title.DEFAULT_VERSION)
-    print(f"      title band: {len(title_spans)} spans, version {args.version or gen3_title.DEFAULT_VERSION}")
+    # The SoulLink title wordmark, in the 1.6 MB 0xFF run at 0x08B71D04 (no payload or Battle Calc byte lives there)
+    title_spans = gen3_title.apply_title(data, "radical_red")
+    print(f"      title wordmark: {len(title_spans)} spans; main menu line {gen3_title.menu_text(args.version or gen3_title.DEFAULT_VERSION)!r}")
     with open(out_rom, "wb") as f:
         f.write(data)
 

@@ -2057,11 +2057,41 @@ static void stage_enemy_party(u8 count)
     R8(gEnemyPartyCount) = count;
 }
 
+/* The patch version on the main menu (native_menu.h, shared with the FR/LG/Emerald companions). RR's menu is FireRed's, byte for
+ * byte at these functions (CFRU does not touch it; verified against the ROM and live), so these are FR's addresses. The state
+ * byte is the first of the free tail after RT_PRESAVE (ADDRESSES.md: 0x0203FF61..0x0203FFFF, watched by test_live_ewramtail). */
+#define SLM_GMAIN_CB2 (gMain + 4u)
+#define SLM_CB2 0x0800C2D5u
+#define SLM_TASK0 0x03005090u                  /* gTasks */
+#define SLM_TASK_INPUT 0x0800CA55u
+#define SLM_TASK_SELECT 0x0800CA29u
+#define SLM_MENU_TYPE_BOXED 2u
+#define SLM_STATE 0x0203FF61u
+#define SLM_ADD_WINDOW 0x08003CE4u
+#define SLM_REMOVE_WINDOW 0x08003E3Cu
+#define SLM_PUT_TILEMAP 0x08003FA0u
+#define SLM_COPY 0x08003F20u
+#define SLM_FILL 0x0800445Cu
+#define SLM_PRINT 0x0812E5A4u
+#define SLM_WIDTH 0x08005ED4u
+#define SLM_FONT FONT_NORMAL
+#define SLM_LEFT 13u
+#define SLM_TOP 17u
+#define SLM_COLS 14u
+#define SLM_BASE 0x1D5u
+#define SLM_TEXT_Y 2u
+#define SLM_MARGIN 2u
+#define SLM_PLAIN_TEXT 10u
+#define SLM_PLAIN_SHADOW 14u
+_Static_assert(RT_BASE + 0x111u <= SLM_STATE && SLM_STATE + 1u <= 0x02040000u, "menu state outside the free EWRAM tail");
+#include "trade_targets/native_menu.h"
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
     MB->signature   = SLNK_SIG;   /* presence beacon, every frame */
     MB->abi_version = ABI_VER;
+    slm_service();                /* the patch version on the main menu (New Game / Continue) */
 
     /* Capture the overworld FIELD callback while the player is walking (you can't walk in a menu /
      * battle / trade scene), then gate the sprite-touching drivers off when we're NOT on the field —

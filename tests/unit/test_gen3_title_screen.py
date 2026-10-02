@@ -1,5 +1,6 @@
-"""The Gen 3 title band (patch/tools/gen3_title.py): the codec, the art, what the measured vanilla titles leave free, how
-build.py stamps it, and -- with the owner ROMs (SLINK_GEN3_ROMS) -- the patched assets themselves.
+"""The Gen 3 title wordmark (patch/tools/gen3_title.py): the codec, the art, what the measured vanilla titles leave free, how
+build.py stamps it, and -- with the owner ROMs (SLINK_GEN3_ROMS) -- the patched assets themselves. The title carries the
+wordmark ONLY: the version is on the main menu (tests/unit/test_gen3_menu_version.py).
 
 Absent input skips; present-but-wrong input fails.
 """
@@ -41,10 +42,18 @@ def rom(request):
     return request.param, owner_rom(request.param)
 
 
-def patched(clean: bytes, target: str, version: str = "v0.1.0") -> bytes:
+def patched(clean: bytes, target: str) -> bytes:
     out = bytearray(clean)
-    g.apply_title(out, target, version)
+    g.apply_title(out, target)
     return bytes(out)
+
+
+def bg1_ink(blobs: dict[bytes, int], entries: dict[tuple[int, int], int]) -> set[tuple[int, int]]:
+    """Screen pixels (x, y) the 4bpp band draws: a nibble is a palette index within the entry's bank, 0 is clear."""
+    by_id = {tile_id: tile for tile, tile_id in blobs.items()}
+    return {(col * 8 + x, row * 8 + y) for (col, row), entry in entries.items()
+            for y in range(8) for x in range(8)
+            if by_id[entry & 0x3FF][y * 4 + x // 2] >> (4 * (x & 1)) & 15}
 
 
 # ---- the codec -----------------------------------------------------------------------------------------------------
@@ -87,27 +96,23 @@ def test_lz77_refuses_a_stream_that_is_not_lz77():
         g.lz77_decompress(b"\x11\x04\x00\x00abcd")
 
 
-# ---- the version and the art -----------------------------------------------------------------------------------------
+# ---- the wordmark and the art -----------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("version,shown", [("dev", "dev"), ("v0.1.0", "v0.1.0"), ("v1.2.3", "v1.2.3"),
-                                           ("v10.2.3", "v10.2.3"), ("v0.1.0-dev", "v0.1.0")])
-def test_versions_the_band_can_show(version, shown):
-    assert g.check_version(version) == shown
-    assert len(shown) * 6 - 1 <= g.MAX_TEXT_PX
-
-
-@pytest.mark.parametrize("bad", ["", "1.2.3", "v1.2", "v100.200.300", "vx.y.z", "dev-dev", "v1.2.3\n", "DEV", " dev"])
-def test_versions_the_band_refuses(bad):
-    with pytest.raises(ValueError, match="version"):
-        g.check_version(bad)
+def test_the_title_carries_no_version_text():
+    """Owner decision 2026-10-02: the version lives on the main menu, not the title. Nothing about the title depends on it."""
+    import inspect
+    assert "version" not in inspect.signature(g.apply_title).parameters and "version" not in inspect.signature(g.title_spans).parameters
+    assert list(inspect.signature(g.bg1_band).parameters) == ["first_id", "bank", "cols"]
+    assert list(inspect.signature(g.affine_band).parameters) == ["free_ids", "role_index"]
+    assert not hasattr(g, "SMALL") and not hasattr(g, "MAX_TEXT_PX") and not hasattr(g, "TEXT_GAP")
 
 
 def test_art_is_self_consistent():
     assert len(g.LOGO) == 16 and all(len(row) == 72 and set(row) <= set("0123") for row in g.LOGO)
     assert {r for row in g.LOGO for r in row} == set("0123")                    # background, fill, extrusion, outline
-    assert set("dev0123456789.") <= set(g.SMALL)                               # every glyph a shown version can need
-    assert all(len(rows) == 7 and max(rows) < 32 for rows in g.SMALL.values())
     assert g.LOGO_W == 72 and g.LOGO_H == 16
+    ink = [x for x in range(g.LOGO_W) if any(row[x] != "0" for row in g.LOGO)]
+    assert (ink[0], ink[-1], g.LOGO_INK_CENTRE) == (4, 66, 35)                  # the canvas margins are uneven: centre the INK
 
 
 # ---- what the measured vanilla titles leave free (no ROM needed) ------------------------------------------------------------
@@ -121,7 +126,7 @@ def test_bg1_band_fits_what_the_measured_title_leaves_free(game):
     assert (bg[1]["bpp8"], bg[1]["charblock"], bg[1]["screenblock"], bg[1]["priority"]) == (0, 1, 30, 1)
     assert (bg[0]["bpp8"], bg[0]["priority"]) == (1, 0)
     first_id = max(bg[1]["nonzero_tiles"]) + 1
-    blobs, entries = g.bg1_band("v10.2.3", first_id, spec["bank"], spec["cols"])
+    blobs, entries = g.bg1_band(first_id, spec["bank"], spec["cols"])
     occupied = {tuple(cell) for cell in bg[1]["map_cells"]}
     assert not set(entries) & occupied
     assert all(row in g.BG1_ROWS and col < spec["cols"] for col, row in entries)
@@ -141,17 +146,19 @@ def test_bg1_band_fits_what_the_measured_title_leaves_free(game):
 
 
 @pytest.mark.parametrize("game", BG1)
-def test_bg1_band_is_centred_and_never_wider_than_its_free_columns(game):
+def test_bg1_wordmark_is_centred_on_press_start_and_nothing_else_is_drawn(game):
     spec = g.TARGETS[game]
-    for version in ("dev", "v0.1.0", "v10.2.3"):
-        text = g.check_version(version)
-        blobs, entries = g.bg1_band(text, 135, spec["bank"], spec["cols"])
-        assert entries and max(col for col, _ in entries) < spec["cols"]
-        width = g.LOGO_W + g.TEXT_GAP + len(text) * 6 - 1
-        assert min(col for col, _ in entries) * 8 <= min(g.BG1_CENTRE_X - width // 2, spec["cols"] * 8 - width) + 7
-    # a band wider than the free columns is refused, not clipped
+    blobs, entries = g.bg1_band(135, spec["bank"], spec["cols"])
+    ink = bg1_ink(blobs, entries)
+    xs, ys = [p[0] for p in ink], [p[1] for p in ink]
+    assert max(col for col, _ in entries) < spec["cols"]
+    # the wordmark alone: its ink is 63 x 12 px, centred on PRESS START (x 40-136 -> 88), in the vertical middle of the 16 px band
+    assert (max(xs) - min(xs) + 1, max(ys) - min(ys) + 1) == (63, 12)
+    assert (min(xs) + max(xs)) / 2 == g.BG1_CENTRE_X
+    assert min(ys) - 112 == 127 - max(ys) == 2
+    # a wordmark wider than the free columns is refused, not clipped
     with pytest.raises(ValueError, match="does not fit"):
-        g.bg1_band("v10.2.3", 135, spec["bank"], 10)
+        g.bg1_band(135, spec["bank"], 8)
 
 
 def test_emerald_band_fits_what_the_measured_title_leaves_free():
@@ -164,7 +171,7 @@ def test_emerald_band_fits_what_the_measured_title_leaves_free():
     for role, (index, colour) in spec["index"].items():
         assert index in aff["palette_indices_used"] and aff["colours"][str(index)] == f"{colour:04X}", role
     free = [t for t in aff["blank_tile_ids"] if t]
-    blobs, new_map = g.affine_band("v10.2.3", free, {role: index for role, (index, _) in spec["index"].items()})
+    blobs, new_map = g.affine_band(free, {role: index for role, (index, _) in spec["index"].items()})
     assert len(blobs) <= len(free) and set(blobs.values()) <= set(free)
     assert not any(new_map[:g.AFF_STRIP_ROW * 32]) and len(new_map) == (g.AFF_STRIP_ROW + g.AFF_STRIP_ROWS) * 32
     # the ink: canvas x + 29 is the screen, and no opaque sprite sits on it
@@ -174,7 +181,7 @@ def test_emerald_band_fits_what_the_measured_title_leaves_free():
            for y in range(8) for x in range(8) if tile[y * 8 + x]]
     assert ink and all(0 <= x < 240 and 0 <= y < 160 for x, y in ink)
     xs, ys = [p[0] for p in ink], [p[1] for p in ink]
-    assert abs((min(xs) + max(xs)) / 2 - 120) <= 6                                       # centred on the screen
+    assert (min(xs) + max(xs)) / 2 == 120 and max(xs) - min(xs) + 1 == 63                # the wordmark alone, centred on the screen
     boxes = [s for s in fx["sprites_xywh_tile_pal_prio_opaque"] if s[7]]
     for x, y, w, h, *_ in boxes:
         assert not (x < max(xs) + 1 and x + w > min(xs) and y < max(ys) + 1 and y + h > min(ys)), (x, y, w, h)
@@ -207,10 +214,9 @@ def test_radical_red_assets_avoid_the_payload_and_the_battle_calc():
 
 def test_build_py_stamps_the_title_into_every_production_rom():
     text = (ROOT / "patch/tools/build.py").read_text()
-    assert '"--version"' in text and "title_version" in text
+    assert '"--version"' in text and "menu_define" in text and "title_version" not in text
     assert text.count("gen3_title.apply_title(") == 2                          # the vanilla production path and RR's
-    assert 'gen3_title.apply_title(data, title, version or gen3_title.DEFAULT_VERSION)' in text
-    assert 'gen3_title.apply_title(data, "radical_red"' in text
+    assert "gen3_title.apply_title(data, title)" in text and 'gen3_title.apply_title(data, "radical_red")' in text
     vanilla = text[text.index("def build_arena_probe"):text.index("def publish_native")]
     assert "if production:" in vanilla and vanilla.index("apply_title") > vanilla.index("if production:")
 
@@ -219,7 +225,7 @@ def test_build_py_stamps_the_title_into_every_production_rom():
 
 def test_spans_are_the_whole_difference_and_start_from_what_the_rom_holds(rom):
     target, clean = rom
-    spans = g.title_spans(clean, target, "v0.1.0")
+    spans = g.title_spans(clean, target)
     out = patched(clean, target)
     assert len(out) == len(clean)
     covered = set()
@@ -237,16 +243,15 @@ def test_spans_are_the_whole_difference_and_start_from_what_the_rom_holds(rom):
 def test_the_band_is_deterministic_and_a_second_pass_is_refused(rom):
     target, clean = rom
     assert patched(clean, target) == patched(clean, target)
-    assert patched(clean, target, "dev") != patched(clean, target, "v0.1.0")
     with pytest.raises(ValueError):
-        g.title_spans(patched(clean, target), target, "v0.1.0")
+        g.title_spans(patched(clean, target), target)
 
 
 def test_a_rom_of_the_other_layout_is_refused(rom):
     target, clean = rom
     other = "emerald" if target != "emerald" else "firered"
     with pytest.raises(ValueError):
-        g.title_spans(clean, other, "v0.1.0")
+        g.title_spans(clean, other)
 
 
 @pytest.mark.parametrize("game", BG1)
@@ -258,7 +263,7 @@ def test_bg1_assets_are_vanilla_plus_the_band(game):
     old_map = g.lz77_decompress(clean, g._u32(clean, g.BG1_MAP_LIT) - g.ROM_BASE)
     new_tiles = g.lz77_decompress(out, g._u32(out, g.BG1_TILES_LIT) - g.ROM_BASE)
     new_map = g.lz77_decompress(out, g._u32(out, g.BG1_MAP_LIT) - g.ROM_BASE)
-    blobs, entries = g.bg1_band(g.check_version("v0.1.0"), len(old_tiles) // 32, spec["bank"], spec["cols"])
+    blobs, entries = g.bg1_band(len(old_tiles) // 32, spec["bank"], spec["cols"])
     assert new_tiles == old_tiles + b"".join(blobs)
     expected = bytearray(old_map)
     for (col, row), entry in entries.items():
@@ -271,7 +276,7 @@ def test_bg1_assets_are_vanilla_plus_the_band(game):
     bank = spec["bank"] * 32
     assert out[pals:pals + bank] == clean[pals:pals + bank]
     assert out[pals + bank + 32:pals + g.BG1_PALS_BYTES] == clean[pals + bank + 32:pals + g.BG1_PALS_BYTES]
-    assert struct.unpack_from("<5H", out, pals + bank) == spec["colors"]
+    assert struct.unpack_from("<4H", out, pals + bank) == spec["colors"] and not any(out[pals + bank + 8:pals + bank + 32])
     assert g._u32(out, g.BG1_TILES_LIT) >= spec["base"]
 
 
@@ -292,7 +297,7 @@ def test_emerald_logo_renders_identically_and_carries_the_band():
     new_gfx, new_map = load(out)
     assert render(old_gfx, old_map, range(8)) == render(new_gfx, new_map, range(8))          # the Pokemon logo, pixel for pixel
     band = {p: v for p, v in render(new_gfx, new_map, range(g.AFF_STRIP_ROW, g.AFF_STRIP_ROW + g.AFF_STRIP_ROWS)).items() if v}
-    assert band and set(band.values()) <= {index for index, _ in spec["index"].values()}
+    assert band and set(band.values()) == {index for index, _ in spec["index"].values()}      # fill, extrusion, outline: no text colour
     assert not any(new_map[8 * 32:g.AFF_STRIP_ROW * 32])
     # no tile the logo rows still name was reused for the band
     logo_ids = set(new_map[:256])
