@@ -229,3 +229,18 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - Measured in the hge ROM table: hge's own overlays load in a reserved top-of-RAM window: ov129 0x023D8000, ov130 0x023C4000, ov131 0x023C8000, and most of 133-149 at 0x023C0400. Two load at 0x021E5900.
   - The panel overlay can take the shared 0x023C0400 app slot (mutually exclusive with the others there) or 0x021E5900 like vanilla. C6 decides, measured against the hge linker scripts.
 - **Clone target:** `src/overlay_trainer_card.c` (124 lines), single-overlay; drop the signature child. The B-exit binding is unverified; trace it at C4.
+
+## C4/C6 follow-up (OMP cx-352fb685, coordinator-reconciled)
+
+- **The trainer card is a LIFECYCLE template only.**
+  - `overlay_trainer_card.c` (124 lines) has no input code. The UI, including the exit, is hand-written asm: `asm/overlay_trainer_card_main.s`, 4367 lines.
+  - The exit behaviour to copy: B (`gSystem+0x48` bit 1) or touch-cancel -> `PlaySE(SEQ_SE_GS_GEARCANCEL)` -> palette fade -> the child returns TRUE -> `TRAINERCARD_RUN_EXIT` (`ov51_021E6A54` `:1867-1904`; `TrainerCardMainApp_Main` `:393-412`).
+  - The panel writes its B-exit in C from that behaviour.
+- **hge overlay origins:**
+  - ov129 = `hg-engine/src/linker.ld:5-6` (0x023D8000+0x60, resident from boot);
+  - ov130 = `src/battle/linker.ld:5-6` (0x023C4000, len 0x14000, ending at ov129's base);
+  - ov131's origin file was not found.
+  - hge has NO ArenaHi lowering: its only `OS_SetArenaHi` restores the initial value (`src/save.c:738`). Nothing proven keeps the main arena out of 0x023C0000-0x023E0000.
+  - **Decision: the hge panel overlay takes the vanilla-style slot 0x021E5900** (an app slot exclusive with field, as hge's own ov142/147 do), not the unproven top window.
+- **0x02000CD0:** hge's `bl load_arm9_expansion` from Main. Our pack already uses it as the hge-discriminating admission anchor (`hge_differs`, profile.json:65), so it is not a collision. The companion's hge registration must NOT hook this site; use a `hooks` row or ride `load_arm9_expansion`.
+

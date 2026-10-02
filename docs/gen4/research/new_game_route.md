@@ -63,3 +63,25 @@
   - the warp tiles: bedroom stairs (map 64) and lab door (map 60). Take them from the zone event data via the route tooling, never vision;
   - the T20R0202 bedroom script trigger chain;
   - the default ball.
+
+## Leg table (OMP cx-cb390914, coordinator spot-checked; zone events `files/fielddata/eventdata/zone_event/<member>_<token>.json`, where the member prefix is not the map id)
+
+| Leg | Map | Move | Trigger | Input | Poll |
+|---|---|---|---|---|---|
+| 1 | main menu | none | blank save forces NEW GAME | A | OVY_36 |
+| 2 | Oak | none | gender opens on MALE | A (and through text) | OVY_53 |
+| 3 | 64 bedroom (`061_T20R0202.json`) | spawn x6 y6 -> warp (3,4) | warp to 63 | walk | map id |
+| 4 | 64 bedroom | none | `scr_seq_0846` entry 000, branch on `VAR_SPECIAL_RESULT` | 0 or 1 A | var |
+| 5 | 63 house 1F (`060_T20R0201.json`) | forced | MAP-INIT `InitScriptGoToIfEqual VAR_SCENE_PLAYERS_HOUSE_1F, 0` (`scr_seq_0618_T20R0201_hdr.s:14`): LockAll + ApplyMovement; mom's gifts | about 5 A; poll `FLAG_GOT_BAG` -> `_TRAINER_CARD` -> `_SAVE_BUTTON` -> `_OPTIONS_BUTTON`, never a press count; do NOT talk to mom | flags |
+| 6 | 63 | -> warp (3,10) | to 60 | walk | map id |
+| 7 | 60 New Bark (`057_T20.json`) | from the house door (695,396) -> lab door (684,393) | no coord trigger on that path | walk | map id |
+| 8 | 61 lab 1F (`058_T20R0101.json`) | up the x=3 column | coord (3,10) sets `VAR_SCENE_ELMS_LAB`=0 and runs the forced-movement script | walk | var |
+| 9 | 61 | Elm at (6,5) | the Elm script | A | app |
+| 10 | starter app | none | `choose_starter_app.c:1071-1103` | one nav input, then two A | `FLAG_GOT_STARTER` |
+
+- **YES/NO:** exactly one template in `src/` sets `initialCursorPos = 1` (`alph_puzzle.c:1346`), so every prompt on this path defaults to YES.
+- **Open:**
+  - the default starter index (`curSelection` has no visible initialiser; read `msg_0190` and `sSpecies`);
+  - the per-warp arrival tiles (from the target maps' entrance data);
+  - the bedroom branch condition.
+- Walking legs use the route tooling's map parse, never vision.
