@@ -97,7 +97,13 @@ HGE_ROM = REPO / ".cache/gen4/hge/build-fc5175764983/test.nds"
 GAMES = {
     "HG": (REPO / "data/games/gen4_hgss/profile.json", "heartgold", "hgss"),
     "hge": (REPO / "data/games/gen4_hge/profile.json", "heartgold_hge", "hge"),
+    # SoulSilver (sha1 f8dc38ea, data/gen4_sources.lock.json): the same HGSS pack, its own title. The
+    # matrix, land-data and zone-event NARCs are byte-identical to HG's (a unit test pins the hashes),
+    # so the pret events are reused; same symbols, same Location offset.
+    "SS": (REPO / "data/games/gen4_hgss/profile.json", "soulsilver", "hgss"),
 }
+SS_ROM = Path("E:/Howard/hgss_archipelago-master/Pokemon - SoulSilver Version (USA).nds")
+SS_SAVE = Path("C:/slink/g4/saves/ss_DDDD_25944.SaveRAM")  # owner SS save: Totodile L5, DDDD
 MATRIX_NARC, LAND_NARC = "a/0/4/1", "a/0/6/5"
 TERRAIN_OFF, CELL = 0x14, 32
 DOOR_BAND = range(0x68, 0x70)  # TILE_BEHAVIOR_104..111: what a warp tile must decode to
@@ -1086,12 +1092,15 @@ def run_lane(
 # --- CLI -------------------------------------------------------------------------------------
 def _defaults(a) -> None:
     """Fill the per-game defaults for options left unset (hge: its own ROM, save, lane, tag)."""
-    hge = a.game == "hge"
-    a.rom = a.rom or str(HGE_ROM if hge else DEFAULT_ROM)
-    a.save = a.save or str(HGE_SAVE if hge else DEFAULT_SAVE)
+    rom, save, lane = {
+        "hge": (HGE_ROM, HGE_SAVE, "route_hge"),
+        "SS": (SS_ROM, SS_SAVE, "route_ss"),
+    }.get(a.game, (DEFAULT_ROM, DEFAULT_SAVE, "route"))
+    a.rom = a.rom or str(rom)
+    a.save = a.save or str(save)
     a.pret = a.pret or str(DEFAULT_PRET)
     if hasattr(a, "lane"):
-        a.lane = a.lane or ("route_hge" if hge else "route")
+        a.lane = a.lane or lane
         a.tag = a.tag or a.lane
 
 

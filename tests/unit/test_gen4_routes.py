@@ -1042,3 +1042,37 @@ def test_run_lane_reports_a_saved_file_that_lacks_the_clone(real, tmp_path, monk
     assert (
         res["status"] == "SAVE_MISMATCH" and "saved_mismatch" in res["detail"] and len(calls) == 1
     )
+
+
+# --- SoulSilver (same HGSS pack, title "soulsilver") ---------------------------------------------
+SS_ROM, SS_SAVE = gr.SS_ROM, gr.SS_SAVE
+
+
+def test_ss_uses_the_hgss_pack_title_and_the_same_location_offset():
+    assert gr.GAMES["SS"][1:] == ("soulsilver", "hgss")
+    assert gr.location_spec("SS")["general_off"] == 0x1234
+    assert gr.pack_ram("SS") == gr.pack_ram("HG")  # same symbols, same save geometry
+    assert gr.pack_legs("SS", gr.SAVE_LEGS) == gr.pack_legs("HG", gr.SAVE_LEGS)
+
+
+def test_real_ss_world_files_are_byte_identical_to_vanilla_hg():
+    import hashlib
+
+    ndspy_rom = pytest.importorskip("ndspy.rom")
+    for p, what in ((ROM, "HG ROM"), (SS_ROM, "SS ROM")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    a = ndspy_rom.NintendoDSRom.fromFile(str(ROM))
+    b = ndspy_rom.NintendoDSRom.fromFile(str(SS_ROM))
+    for name in (gr.MATRIX_NARC, gr.LAND_NARC, "a/0/3/2"):
+        assert (
+            hashlib.sha1(a.getFileByName(name)).digest()
+            == hashlib.sha1(b.getFileByName(name)).digest()
+        ), f"{name} differs between HG and SS"
+
+
+def test_real_ss_save_position_is_new_bark():
+    if not Path(SS_SAVE).exists():
+        pytest.skip(f"SS save absent: {SS_SAVE}")
+    pos = gr.save_position(SS_SAVE, "SS")
+    assert (pos["map"], pos["x"], pos["y"]) == (60, 687, 397)
