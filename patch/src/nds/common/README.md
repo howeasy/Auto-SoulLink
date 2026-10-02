@@ -27,7 +27,7 @@ The struct layouts, constants and milestone order are the Gen 3 v2 contract, but
 the **witness semantics diverge**, so the NDS ABI is **version 3** and a Gen 3
 reader must not be pointed at an NDS arena (`lua/gen3/native.lua:631` rejects a
 witness with PRE_SAVE_OK set unless `save_status` is 1 or 255; NDS publishes 2
-while an asynchronous save is in flight). There is no single reader today.
+while an asynchronous save is in flight). The NDS reader is `lua/nds/native_witness.lua` (ABI 2 keeps the Gen 3 rule, ABI 3 accepts SAVE_PENDING); see `docs/shared-nds-witness.md`.
 
 **READER RULE** for the future shared witness reader: under ABI >= 3,
 `save_status == 2` (PENDING) is legal only while milestone bits 8 (POST_SAVE_OK)

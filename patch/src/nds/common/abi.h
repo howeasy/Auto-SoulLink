@@ -7,7 +7,7 @@
  * because the witness SEMANTICS diverge: while an asynchronous native save is in
  * flight save_status is SLINK_SAVE_PENDING (2). Gen 3 readers reject a witness
  * with PRE_SAVE_OK set unless save_status is 1 or 255, so a Gen 3 reader must
- * not be pointed at an NDS arena. There is no single reader today.
+ * not be pointed at an NDS arena. The NDS reader is lua/nds/native_witness.lua.
  *
  * READER RULE (for the future shared witness reader): under ABI >= 3,
  * save_status == 2 (PENDING) is legal only while milestone bits 8 (POST_SAVE_OK)
