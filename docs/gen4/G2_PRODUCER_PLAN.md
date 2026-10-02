@@ -145,5 +145,8 @@ Already PHYSICAL on HG, SS and hge, needing only the landing-HEAD re-run: PC dep
   - Node 7 → state 0xA9 (`:17367`). That is the deposit leg's documented first-button path, so the deposit's bare A is on **node 7 = STORE**.
   - Node 8 → state 0x97 (`:17377`), after writing 8 to `data+0x2C` (`:17374`). This is a free in-RAM witness that the branch was taken.
   - **Node 8 = WITHDRAW is UNVERIFIED** (OMP cx-11763169). State 0x97 is a trampoline (`:25770-25776`) → `ov14_021F027C` (`data+0x1E=0`, `data+0x30=9`, `:21396-21405`) → a palette fade (`ov14_021F0204`, `:21324-21348`). No box→party call was found within 4 hops, and `data+0x2C` (an op enum with values 0/1/8/0x25) is not read on that path.
-  - **Next step:** follow the post-fade successor of `ov14_021F0204` to the operation, or use one live Right+A trial with a manager-state/`data+0x2C` readback.
+  - **Chain (OMP cx-600a3abc):** node 8 → state 0x97 → `ov14_021F0204` fades and **returns 2** (`:21344`). State 2 is `ov14_021EB170` (`:36968`).
+    - `data+0x30` is a **pending next-state**, consumed by the init state at `:11498`; it is not an op mode.
+    - No box→party call was found in 3 hops.
+  - **Next step:** a live Right+A trial asserting `data+0x2C == 8` and `data+0x30 == 9` plus the manager state names the branch cheaply. Static walking has diminishing returns.
   - The toolbar spans nodes 6..11 plus three negative-coded nodes; their meaning is UNKNOWN.

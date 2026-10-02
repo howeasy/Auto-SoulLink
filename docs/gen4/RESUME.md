@@ -103,4 +103,25 @@ Supporting tools and data:
 
 ### In flight at stop
 
-(filled at wrap-up)
+Session stopped at the owner timebox (2026-10-01, 22:09 EDT). HEAD is at the end of the `c8b7a99f..` range, below.
+
+- **Nothing in flight.** Codex is frozen and has released the lane. All OMP cards are reconciled, with outcomes recorded. The working tree is clean.
+  - The last OMP card, cx-600a3abc (the node-8 path: 0x97 → state 2), is recorded in `G2_PRODUCER_PLAN.md` §6b.
+- **EmuHawk:** PID 32580 was running at the stop and is NOT ours. Codex's PIDs all exited, and the coordinator launched none. It was left alone.
+- **This session's commits (`c8b7a99f..HEAD`):**
+  - pack wording `49ca5e35`
+  - pace pins `31c7fa9d` and `b943f588`
+  - probe boot fix / boxed SYNTH `c5cca903`
+  - `first_field_live_frame` `d15438ef`
+  - control-red assertion + boot tests `4e7bf0f9`
+  - docs `204d55d7`, `220b93f9`, `bf58a7c8`, `d970ea6e`, `35b786de`
+- **Live evidence this session:** `C:/slink/g4/probe/shakedown-hg-ac0d70aa43/boxed-fix/observation.json` (at `bf58a7c8`, HG only). See next action 3.
+- **Decisions waiting for the owner or the next session:**
+  1. **Row i premise.** A box write persisted WITHOUT the dirty flag. Should row i still require the flag?
+  2. **Row c tolerance.** The 2-frame residency lag on PC-derived input against `census_ok` 0..1.
+  3. **Ruling 35**, at G2.
+  4. **The ROM-patch question** from the other session.
+- **Design inputs ready for the client card:** `docs/gen4/reviews/CLIENT_DESIGN_PROPOSAL_2026-10-01.md`:
+  - N2 is settled as a client lease, with the guard in the callback; framecount −1 still needs a live confirm.
+  - The idle predicate is settled, with no new pack data.
+  - F2 is closed.
