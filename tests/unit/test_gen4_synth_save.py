@@ -769,3 +769,236 @@ def test_species_rewrite_needs_a_sidecar_attested_clone_not_just_the_nickname(tm
     side.write_text(json.dumps(row), encoding="utf-8")
     assert _species_run(p2, tmp_path / "o3.SaveRAM", 25) == synth.REFUSED
     assert "slot1_unattested" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# place (G2 producer plan section 4; research synth_place_save_layout.md, corrected against the owner saves)
+# ---------------------------------------------------------------------------
+# Offsets are written out here independently of the pack the tool reads (test_gen4_pack pins pack == these):
+# general-block offsets measured/derived for the owner saves.
+LOC_AT = {"hgss": 0x1234, "hge": 0x1424}           # FILE: Location (60,-1,x,y,1) x5 at +0/+0x14/+0x28/+0x3C/+0x50
+OBJ_AT = {"hgss": 0x2348, "hge": 0x2CC0}           # FILE: entry 0 is the player; SavedMapObject stride 0x50
+VARS_AT = {"hgss": 0xDE4, "hge": 0xFD4}            # 368 u16, then 364 flag bytes; LocalFieldData follows at +0x450
+FLAGS_AT = {v: VARS_AT[v] + 0x2E0 for v in VARS_AT}
+STATE_OFF = 0x70                                    # LocalFieldData + 0x6C PlayerSaveData {u16, u16, s32 state}
+PLAYER_FIELDS = {"flags": 0, "movement": 9, "init_face": 0xC, "cur_face": 0xD, "next_face": 0xE, "map": 0x10,
+                 "cur_x": 0x26, "cur_y": 0x28, "cur_z": 0x2A}
+
+
+def _obj(variant: str, i: int) -> int:
+    return OBJ_AT[variant] + 0x50 * i
+
+
+def _read_player_object(general: bytes, variant: str, i: int = 0) -> dict:
+    o = _obj(variant, i)
+    return {"flags": struct.unpack_from("<I", general, o)[0], "movement": general[o + 9],
+            "faces": tuple(general[o + 0xC : o + 0xF]), "map": struct.unpack_from("<H", general, o + 0x10)[0],
+            "cur": struct.unpack_from("<hhh", general, o + 0x26)}
+
+
+def _hermetic_place_image(state: int = 2, extra_player: bool = False, lone_follower: bool = False) -> bytes:
+    """_image() plus the field data place needs: Location x5, a player + follower + NPC object list, flags/vars, a
+    non-zero avatar state (the player is 'surfing')."""
+    def mutate(body):
+        for k in range(5):
+            struct.pack_into("<5i", body, LOC_AT["hgss"] + 20 * k, 60, -1, 695, 397, 1)
+        struct.pack_into("<i", body, LOC_AT["hgss"] + STATE_OFF, state)
+        entries = [(0x2000E431, 255, 1, 1, 1, 695, 2, 397), (0x200CE661, 253, 48, 1, 1, 695, 2, 397),
+                   (0xC061, 0, 0, 3, 60, 682, 2, 391), (0xC061, 1, 2, 2, 60, 683, 2, 399)]
+        if lone_follower:
+            entries = entries[1:]
+        for i, (fl, oid, mv, face, mp, cx, cy, cz) in enumerate(entries):
+            o = OBJ_AT["hgss"] + 0x50 * i
+            struct.pack_into("<IIBB", body, o, fl, 0, oid, mv)
+            body[o + 0xC : o + 0xF] = bytes([face]) * 3
+            struct.pack_into("<H", body, o + 0x10, mp)
+            struct.pack_into("<hhhhhh", body, o + 0x20, cx, 0, cz, cx, cy, cz)
+        if extra_player:
+            o = OBJ_AT["hgss"] + 0x50 * 9
+            struct.pack_into("<IIBB", body, o, 0x2000E431, 0, 255, 1)
+            struct.pack_into("<hhhhhh", body, o + 0x20, 1, 0, 1, 1, 2, 1)
+        for vid, value in ((0x4030, 155), (0x4035, 56150)):
+            struct.pack_into("<H", body, VARS_AT["hgss"] + 2 * (vid - 0x4000), value)
+        body[FLAGS_AT["hgss"] + 13] = 0x04
+        return body
+    return _reseal(_image(), "hgss", mutate)
+
+
+def _place(src: Path, out: Path, variant: str = "hgss", *args: str) -> int:
+    return synth.main(["place", "--profile", variant, "--src", str(src), "--out", str(out), *args])
+
+
+GOOD = ("--map", "100", "--x", "700", "--y", "410", "--dir", "2")
+
+
+def _assert_place_written(a: bytes, b: bytes, variant: str, *, map_id=100, x=700, y=410, d=2, flags=None, vars_=None,
+                          height=None) -> None:
+    """Raw reads of every field the card says place writes, from the output, at the independent offsets."""
+    ga, gb = codec.parse_save(a, variant), codec.parse_save(b, variant)
+    assert (gb.bank, gb.counter) == (ga.bank, ga.counter)
+    assert gb.party() == ga.party() and gb.player() == ga.player()      # the codec oracle: nothing else moved
+    g, g0 = gb.general, ga.general
+    for k in range(5):                                                   # Location x5, warpId -1
+        assert struct.unpack_from("<5i", g, LOC_AT[variant] + 20 * k) == (map_id, -1, x, y, d)
+    assert struct.unpack_from("<i", g, LOC_AT[variant] + STATE_OFF)[0] == 0          # avatar state: walking
+    player = _read_player_object(g, variant)
+    assert player["movement"] == 1 and player["flags"] & 1 and player["faces"] == (d, d, d)
+    assert player["cur"][0] == x and player["cur"][2] == y
+    before = _read_player_object(g0, variant)
+    assert player["map"] == before["map"]                                # the player mapId is not the map id: untouched
+    assert player["cur"][1] == (before["cur"][1] if height is None else height)
+    actives = [i for i in range(64) if struct.unpack_from("<I", g, _obj(variant, i))[0] & 1]
+    assert actives == [0]                                                # only the player is active
+    for i in range(1, 64):                                               # the others keep every bit but ACTIVE
+        assert struct.unpack_from("<I", g, _obj(variant, i))[0] == struct.unpack_from("<I", g0, _obj(variant, i))[0] & ~1
+    for fid, value in (flags or {}).items():
+        assert (g[FLAGS_AT[variant] + fid // 8] >> (fid % 8)) & 1 == value
+    for vid, value in (vars_ or {}).items():
+        assert struct.unpack_from("<H", g, VARS_AT[variant] + 2 * (vid - 0x4000))[0] == value
+
+
+def _place_spans(variant: str, a: bytes, *, flags=(), vars_=(), height=False) -> list:
+    """The tight general-relative spans place may touch, built from the independent constants."""
+    g0 = codec.parse_save(a, variant).general
+    o = _obj(variant, 0)
+    spans = [(LOC_AT[variant], LOC_AT[variant] + 100), (LOC_AT[variant] + STATE_OFF, LOC_AT[variant] + STATE_OFF + 4),
+             (o + 0xC, o + 0xF), (o + 0x26, o + 0x28), (o + 0x2A, o + 0x2C)]
+    if height:
+        spans.append((o + 0x28, o + 0x2A))
+    spans += [(_obj(variant, i), _obj(variant, i) + 4) for i in range(1, 64) if struct.unpack_from("<I", g0, _obj(variant, i))[0] & 1]
+    spans += [(FLAGS_AT[variant] + f // 8, FLAGS_AT[variant] + f // 8 + 1) for f in flags]
+    spans += [(VARS_AT[variant] + 2 * (v - 0x4000), VARS_AT[variant] + 2 * (v - 0x4000) + 2) for v in vars_]
+    return spans
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_the_owner_saves_pin_the_place_layout(variant):
+    """FILE: the entry-0 player object, the flag/var arrays and the avatar state sit where place assumes."""
+    g = codec.parse_save(_owner(variant), variant).general
+    loc = struct.unpack_from("<5i", g, LOC_AT[variant])
+    player = _read_player_object(g, variant)
+    assert player["movement"] == 1 and player["flags"] & 1 and (player["cur"][0], player["cur"][2]) == (loc[2], loc[3])
+    assert [i for i in range(64) if struct.unpack_from("<I", g, _obj(variant, i))[0] & 1 and g[_obj(variant, i) + 9] == 1] == [0]
+    assert struct.unpack_from("<H", g, VARS_AT[variant] + 2 * 0x30)[0] == 155            # VAR 0x4030, the same in HG/SS/hge
+    assert g[FLAGS_AT[variant] + 13] == 0x04 and struct.unpack_from("<i", g, LOC_AT[variant] + STATE_OFF)[0] == 0
+    assert VARS_AT[variant] + 0x44C + 4 == LOC_AT[variant]                               # vars+flags then the CRC close on Location
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_place_writes_location_player_object_and_flags_on_the_owner_saves(tmp_path, variant):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "place.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _place(src, out, variant, *GOOD, "--flag", "2000=1", "--flag", "0x7D1=1", "--var", "0x4040=3", "--var", "16500=65535") == synth.WRITTEN
+    assert src.read_bytes() == _owner(variant)
+    a, b = src.read_bytes(), out.read_bytes()
+    _assert_place_written(a, b, variant, flags={2000: 1, 2001: 1}, vars_={0x4040: 3, 16500: 65535})
+    _assert_changed_within(a, b, variant, _place_spans(variant, a, flags=(2000, 2001), vars_=(0x4040, 16500)))
+    other = 1 - codec.parse_save(a, variant).bank
+    assert b[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE] == a[other * codec.BANK_SIZE : (other + 1) * codec.BANK_SIZE]
+    row = json.loads((tmp_path / "place.SaveRAM.synth.json").read_text(encoding="utf-8"))
+    assert (row["kind"], row["profile"], row["map"], row["x"], row["y"], row["dir"]) == ("place", variant, 100, 700, 410, 2)
+    assert row["src_sha1"] == hashlib.sha1(a).hexdigest() and row["out_sha1"] == hashlib.sha1(b).hexdigest()
+    assert row["flags"] == {"2000": 1, "2001": 1} and row["vars"] == {"0x4040": 3, "0x4074": 65535}
+    assert row["player_entry"] == 0 and row["layout"]["map_objects"]["general_off"] == OBJ_AT[variant]
+    assert row["layout"]["map_objects"]["evidence_class"] == "FILE"
+
+
+def test_place_clears_flags_height_and_the_follower_on_a_hermetic_save(tmp_path):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_hermetic_place_image())                        # state 2, a follower and two NPCs
+    assert _place(src, out, "hgss", *GOOD, "--flag", "106=0", "--flag", "5=1", "--height", "7") == synth.WRITTEN
+    a, b = src.read_bytes(), out.read_bytes()
+    _assert_place_written(a, b, "hgss", flags={106: 0, 5: 1}, height=7)
+    _assert_changed_within(a, b, "hgss", _place_spans("hgss", a, flags=(106, 5), height=True))
+    g0, g = codec.parse_save(a, "hgss").general, codec.parse_save(b, "hgss").general
+    assert struct.unpack_from("<i", g0, LOC_AT["hgss"] + STATE_OFF)[0] == 2 and struct.unpack_from("<i", g, LOC_AT["hgss"] + STATE_OFF)[0] == 0
+    assert g0[FLAGS_AT["hgss"] + 13] == 0x04 and g[FLAGS_AT["hgss"] + 13] == 0   # a flag can be cleared
+    assert json.loads((tmp_path / "out.SaveRAM.synth.json").read_text(encoding="utf-8"))["cleared_entries"] == [1, 2, 3]
+
+
+def test_place_is_deterministic_and_leaves_unrelated_flags_alone(tmp_path):
+    src, a, b = tmp_path / "src.SaveRAM", tmp_path / "a.SaveRAM", tmp_path / "b.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    assert _place(src, a, "hgss", *GOOD) == synth.WRITTEN and _place(src, b, "hgss", *GOOD) == synth.WRITTEN
+    assert a.read_bytes() == b.read_bytes()
+    g0, g = codec.parse_save(src.read_bytes(), "hgss").general, codec.parse_save(a.read_bytes(), "hgss").general
+    assert g[FLAGS_AT["hgss"] : FLAGS_AT["hgss"] + 364] == g0[FLAGS_AT["hgss"] : FLAGS_AT["hgss"] + 364]
+    assert g[VARS_AT["hgss"] : VARS_AT["hgss"] + 0x2E0] == g0[VARS_AT["hgss"] : VARS_AT["hgss"] + 0x2E0]
+
+
+BAD_PLACE_ARGS = [
+    {"--map": "540"}, {"--map": "-1"}, {"--x": "-1"}, {"--x": "32768"}, {"--y": "40000"}, {"--dir": "4"}, {"--dir": "-1"},
+    {"--height": "40000"}, {"--flag": ["0=1"]}, {"--flag": ["0x4000=1"]}, {"--flag": ["16384=0"]}, {"--flag": ["2912=1"]},
+    {"--flag": ["7=2"]}, {"--flag": ["7=-1"]}, {"--flag": ["abc"]}, {"--flag": ["5=1", "5=0"]},
+    {"--var": ["0x3FFF=1"]}, {"--var": ["0x4170=1"]}, {"--var": ["0x8000=1"]}, {"--var": ["0x4040=65536"]},
+    {"--var": ["0x4040=-1"]}, {"--var": ["nope"]}, {"--var": ["0x4040=1", "0x4040=2"]},
+]
+
+
+@pytest.mark.parametrize("bad", BAD_PLACE_ARGS, ids=[next(iter(b)) + ":" + str(next(iter(b.values()))) for b in BAD_PLACE_ARGS])
+def test_place_refuses_bad_arguments_and_writes_nothing(tmp_path, capsys, bad):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    before = src.read_bytes()
+    args = {"--map": "100", "--x": "700", "--y": "410", "--dir": "2", **bad}
+    argv = []
+    for key, value in args.items():
+        for item in value if isinstance(value, list) else [value]:
+            argv += [key, item]
+    assert _place(src, out, "hgss", *argv) == synth.REFUSED, bad
+    assert "refuse:" in capsys.readouterr().err
+    assert src.read_bytes() == before and not out.exists() and not Path(str(out) + ".synth.json").exists()
+
+
+@pytest.mark.parametrize("variant", ["hgss", "hge"])
+def test_place_refuses_a_flag_id_above_the_flag_count_and_below_temp_on_every_profile(tmp_path, variant):
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_owner(variant))
+    assert _place(src, out, variant, *GOOD, "--flag", "2911=1") == synth.WRITTEN        # the last real flag
+    assert _place(src, tmp_path / "o2.SaveRAM", variant, *GOOD, "--flag", "2912=1") == synth.REFUSED
+
+
+def test_place_refuses_a_source_without_exactly_one_active_player_object(tmp_path, capsys):
+    out = tmp_path / "out.SaveRAM"
+    for name, image in (("no player", _hermetic_place_image(lone_follower=True)),
+                        ("two players", _hermetic_place_image(extra_player=True)),
+                        ("zeros", _reseal(_image(), "hgss", lambda b: b))):
+        src = tmp_path / "src.SaveRAM"
+        src.write_bytes(image)
+        assert _place(src, out, "hgss", *GOOD) == synth.REFUSED, name
+        assert "place_layout_unverified" in capsys.readouterr().err and not out.exists(), name
+
+
+def test_place_refuses_when_the_player_object_does_not_sit_on_the_location(tmp_path, capsys):
+    """A shifted offset model would find a movement==1 entry that is not the player: the Location cross-check refuses."""
+    src, out = tmp_path / "src.SaveRAM", tmp_path / "out.SaveRAM"
+    src.write_bytes(_reseal(_hermetic_place_image(), "hgss",
+                            lambda b: b[: OBJ_AT["hgss"] + 0x26] + struct.pack("<h", 123) + b[OBJ_AT["hgss"] + 0x28 :]))
+    assert _place(src, out, "hgss", *GOOD) == synth.REFUSED
+    assert "place_layout_unverified" in capsys.readouterr().err and not out.exists()
+
+
+def test_place_refuses_to_write_over_the_source_and_the_bizhawk_root(tmp_path, monkeypatch):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    before = src.read_bytes()
+    assert _place(src, src, "hgss", *GOOD) == synth.REFUSED and src.read_bytes() == before
+    root = tmp_path / "Bizhawk"
+    (root / "NDS").mkdir(parents=True)
+    monkeypatch.setattr(synth, "BIZHAWK_ROOT", root)
+    assert _place(src, root / "NDS" / "p.SaveRAM", "hgss", *GOOD) == synth.REFUSED
+
+
+def test_the_platinum_profile_is_not_offered_for_place(tmp_path):
+    src = tmp_path / "src.SaveRAM"
+    src.write_bytes(_hermetic_place_image())
+    with pytest.raises(SystemExit):
+        _place(src, tmp_path / "out.SaveRAM", "pt", *GOOD)
+
+
+def test_place_composes_with_party6_and_species(tmp_path):
+    src, p6, both = (tmp_path / n for n in ("src.SaveRAM", "p6.SaveRAM", "both.SaveRAM"))
+    src.write_bytes(_owner("hgss"))
+    assert _synth("party6", src, p6) == synth.WRITTEN and _place(p6, both, "hgss", *GOOD) == synth.WRITTEN
+    got = codec.parse_save(both.read_bytes(), "hgss")
+    assert len(got.party()) == 6 and struct.unpack_from("<5i", got.general, LOC_AT["hgss"])[0] == 100

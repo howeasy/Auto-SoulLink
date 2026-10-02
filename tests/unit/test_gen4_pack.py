@@ -1467,3 +1467,184 @@ def test_d7_revert_a_corrupted_pin_byte_a_wrong_table_entry_or_a_wrong_repl_flag
     monkeypatch.setattr(g, "D7_SEAM_PIN_HEX", "f8b582b1")  # a wrong typed constant is red too
     with pytest.raises(g.Fail, match="PHYSICAL-proven seam pin"):
         g.d7_file_checks(xm, hg, "hgss")
+
+
+# ---- card gen4-G2-synth-place: profile.field_save (flags / vars / map objects / avatar state for the SYNTH place kind) ----
+FIELD_SAVE_EXPECT = {  # independent of the generator: FILE-measured or summed offsets, see tests/unit/test_gen4_synth_save.py
+    "hgss": {"vars": 0xDE4, "flags": 0xDE4 + 0x2E0, "map_objects": 0x2348, "location": 0x1234},
+    "hge": {"vars": 0xFD4, "flags": 0xFD4 + 0x2E0, "map_objects": 0x2CC0, "location": 0x1424},
+}
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_field_save_offsets_match_the_independent_constants_and_close_on_location(mode):
+    prof = _profile(mode)
+    fs, want = prof["field_save"], FIELD_SAVE_EXPECT[mode]
+    assert fs["vars"]["general_off"] == want["vars"] and fs["flags"]["general_off"] == want["flags"]
+    assert fs["map_objects"]["general_off"] == want["map_objects"]
+    assert fs["vars"]["count"] == 0x170 and fs["flags"]["count"] == 2912 and fs["flags"]["bytes"] == 364
+    # SaveVarsFlags is vars[0x170] u16 + flags[364] u8 = 0x44C bytes, then its 4-byte CRC slot, then LocalFieldData
+    assert want["vars"] + 0x44C + 4 == prof["location"]["file_cross_check"]["general_off_of_array"] == want["location"]
+    assert fs["map_objects"]["count"] == 64 and fs["map_objects"]["stride"] == 0x50 and fs["map_objects"]["active_mask"] == 1
+    f = fs["map_objects"]["fields"]
+    assert (f["flags"], f["movement"], f["currentFacing"], f["mapId"], f["currentX"], f["currentY"], f["currentZ"]) == (
+        0, 9, 0xD, 0x10, 0x26, 0x28, 0x2A)
+    ps = fs["player_state"]
+    assert (ps["player_off_in_local_field"], ps["state_off_in_local_field"], ps["state_width"]) == (0x6C, 0x70, 4)
+
+
+@pytest.mark.parametrize("mode", ["hgss", "hge"])
+def test_field_save_offsets_decode_the_owner_saves(mode):
+    """FILE: the pack numbers applied to the real saves land on the player object, the known vars and the walking state."""
+    prof, general = _profile(mode), _general(mode)
+    fs, loc = prof["field_save"], prof["location"]["file_cross_check"]["general_off_of_array"]
+    _, _, x, y, _ = struct.unpack_from("<5i", general, loc)
+    mo, F = fs["map_objects"], fs["map_objects"]["fields"]
+    entry = [mo["general_off"] + i * mo["stride"] for i in range(mo["count"])]
+    active = [i for i, o in enumerate(entry) if struct.unpack_from("<I", general, o + F["flags"])[0] & mo["active_mask"]]
+    players = [i for i in active if general[entry[i] + F["movement"]] == 1]
+    assert players == [0]
+    assert (struct.unpack_from("<h", general, entry[0] + F["currentX"])[0], struct.unpack_from("<h", general, entry[0] + F["currentZ"])[0]) == (x, y)
+    assert struct.unpack_from("<H", general, fs["vars"]["general_off"] + 2 * 0x30)[0] == 155      # VAR 0x4030, shared by HG, SS and hge
+    assert struct.unpack_from("<H", general, fs["vars"]["general_off"] + 2 * 0x35)[0] == 56150    # VAR 0x4035
+    assert general[fs["flags"]["general_off"] + 13] == 0x04                                      # the same flag byte in both owner saves
+    assert struct.unpack_from("<i", general, loc + fs["player_state"]["state_off_in_local_field"])[0] == 0
+    assert all(not any(general[o : o + mo["stride"]]) for o in entry[8:])                         # the list is compact: the tail is zero
+
+
+def test_field_save_evidence_is_graded_and_honest_about_hge_and_pt():
+    hg, hge = _profile("hgss")["field_save"], _profile("hge")["field_save"]
+    assert [hg[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["SOURCE+FILE", "SOURCE+FILE", "FILE"]
+    assert [hge[k]["evidence_class"] for k in ("vars", "flags", "map_objects")] == ["DERIVED+FILE", "DERIVED+FILE", "FILE"]
+    for fs in (hg, hge):
+        for key in ("vars", "flags", "map_objects", "player_state"):
+            assert fs[key]["evidence"] and fs[key]["evidence_class"]
+        assert "src/save.c:733-768" in fs["vars"]["evidence"] and "include/map_object.h:6-33" in fs["map_objects"]["evidence"]
+    assert "DERIVED" in hge["vars"]["file_cross_check"] and "Not read from a documented hge array table" in hge["vars"]["file_cross_check"]
+    assert "field_save" not in _profile("pt")                                                   # Platinum: OPEN / absent
+    for mode in ("hgss", "hge"):
+        assert "tools/gen4_routes.py docstring" not in _profile(mode)["location"]["file_cross_check"]["evidence"]
+
+
+# ---- card gen4-G3-pack-d7 review fixes (OMP cx-85b55e38): probe binding, whole-load pin, single repo id, hge trampoline ----
+PROBE = Path(__file__).resolve().parents[2] / "lua" / "tests" / "probe_gen4_battle_faint.lua"
+
+
+def _probe_ufce(text: str) -> dict:
+    """The seam the PHYSICAL probe registered its exec hook on: M.SEAMS.ufce = {addr, pin (u32 of the first 4 bytes), cmd}."""
+    m = re.search(r"ufce\s*=\s*\{addr\s*=\s*(0x[0-9A-Fa-f]+),\s*pin\s*=\s*(0x[0-9A-Fa-f]+),\s*cmd\s*=\s*(\d+)", text)
+    assert m, "the probe SEAMS.ufce row moved"
+    return {"addr": int(m[1], 16), "pin_hex": struct.pack("<I", int(m[2], 16)).hex(), "cmd": int(m[3])}
+
+
+def _probe_hge_cmds(text: str) -> set:
+    """The commands the probe frame poll treats as the faint seam; hge folds 9-11 into command 9."""
+    m = re.search(r"if cmd == (\d+) or cmd == (\d+) or cmd == (\d+) then", text)
+    assert m, "the probe command-seen row moved"
+    return {int(x) for x in m.groups()}
+
+
+def _assert_d7_matches_probe(text: str) -> None:
+    probe = _probe_ufce(text)
+    for title in ("heartgold", "soulsilver"):
+        seam = _pack("hgss")["titles"][title]["profile"]["battle"]["d7"]["seam"]
+        assert (seam["addr"], seam["pin_hex"], seam["cmd"]) == (probe["addr"], probe["pin_hex"], probe["cmd"]), title
+    hge = _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle"]["d7"]["seam"]
+    hg_checks = _pack("hgss")["titles"]["heartgold"]["profile"]["battle_d7_file_checks"]
+    assert hge["cmd"] in _probe_hge_cmds(text) and hge["cmd"] == 9          # hge folds commands 9-11 into command 9
+    assert hge["table"] == hg_checks["table"]["address"]                      # the shared ov12 sPlayerBattleCommands
+    assert _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle_d7_file_checks"]["table"]["entry_word"] == 0x022494DD
+
+
+def test_d7_seam_constants_equal_the_probe_that_physically_proved_them():
+    text = PROBE.read_text(encoding="utf-8")
+    _assert_d7_matches_probe(text)
+    assert _probe_ufce(text) == {"addr": 0x0224A70C, "pin_hex": "f8b582b0", "cmd": 11}   # the typed PHYSICAL receipt values
+
+
+@pytest.mark.parametrize("old,new", [("addr = 0x0224A70C", "addr = 0x0224A710"), ("pin = 0xB082B5F8", "pin = 0xB082B5F9"),
+                                     ("pin = 0xB082B5F8, cmd = 11", "pin = 0xB082B5F8, cmd = 12")])
+def test_mutating_the_probe_seam_row_goes_red(old, new):
+    text = PROBE.read_text(encoding="utf-8")
+    assert old in text
+    with pytest.raises(AssertionError):
+        _assert_d7_matches_probe(text.replace(old, new, 1))
+
+
+@pytest.mark.parametrize("mode,title", D7_TITLES)
+def test_every_owner_cite_names_the_repository_exactly_once(mode, title):
+    ev = _pack(mode)["titles"][title]["profile"]["battle_evidence"]["d7"]
+    repo = "hg-engine fork@" if mode == "hge" else "pret/pokeheartgold@"
+    for key, e in ev["fields"].items():
+        assert e["owner"]["cite"].count(repo) == 1, (key, e["owner"]["cite"])
+    assert ev["owner"]["cite"].count("pret/pokeheartgold@") == 1
+
+
+def test_d7_repl_flag_pin_covers_the_indexed_load_and_the_hge_trampoline_is_typed(monkeypatch):
+    xm, hg, ss, hge = _d7_inputs()
+    assert [o for o, _ in g.D7_REPL_PIN] == [0x4A, 0x4C, 0x4E, 0x50]          # the literal AND the load that consumes it
+    for img, build in ((hg, "hgss"), (ss, "hgss"), (hge, "hge")):
+        assert g.d7_file_checks(xm, img, build, hg)["repl_flag"]["halfwords"] == ["0x214f", "0x9807", "0x0089", "0x5842"]
+    for off in (0x4C, 0x50):                                                  # the load halfwords were not covered before
+        for img, build in ((hg, "hgss"), (hge, "hge")):
+            with pytest.raises(g.Fail, match="replacement-flag halfwords"):
+                g.d7_file_checks(xm, _flip(img, "ov12", 0x0224D540 + off), build, hg)
+    hge_pin = _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle_d7_file_checks"]["pin_bytes"]
+    assert hge_pin["bytes"] == g.D7_HGE_TRAMPOLINE_HEX == "004a1047"          # ldr r2,[pc]; bx r2
+    for i in range(4):                                                        # a flipped trampoline byte is red
+        with pytest.raises(g.Fail, match="trampoline"):
+            g.d7_file_checks(xm, _flip(hge, "ov12", 0x022494DC + i), "hge", hg)
+    monkeypatch.setattr(g, "D7_HGE_TRAMPOLINE_HEX", "004a1048")               # and so is a wrong typed constant
+    with pytest.raises(g.Fail, match="trampoline"):
+        g.d7_file_checks(xm, hge, "hge", hg)
+
+
+# ---- hge probe_field review fixes (OMP cx-62760365): preserved-prefix invariant, wording, cite, state semantics, 54AC ----
+def test_hge_probe_field_offsets_are_a_checked_invariant_below_the_preserved_prefix(monkeypatch):
+    xm, hg, ss, hge = _d7_inputs()
+    checks = g.hge_field_checks(xm, hg, hge)
+    pre = checks["preserved_prefix"]
+    assert (pre["end"], pre["max_probe_field_offset"]) == (0xE4, 0xD8) and pre["max_probe_field_offset"] < pre["end"]
+    assert g.FS_SIZE == 0x128 and pre["end"] < g.FS_SIZE
+    assert checks == _pack("hge")["titles"]["heartgold_hge"]["profile"]["probe_field_hge_checks"]
+    for bad in (0xE4, 0xE8, 0x108):  # a FieldSystem-level offset in the extended / follower part is red
+        monkeypatch.setitem(g.PROBE_FIELD, "save_driver", (bad, "ASM", "x"))
+        with pytest.raises(g.Fail, match="preserved"):
+            g.hge_field_checks(xm, hg, hge)
+    monkeypatch.setitem(g.PROBE_FIELD, "save_driver", (0xD8, "ASM", "x"))
+    monkeypatch.setitem(g.PROBE_FIELD, "live", (0xE4, "ASM", "x"))
+    with pytest.raises(g.Fail, match="preserved"):
+        g.hge_field_checks(xm, hg, hge)
+
+
+def test_hge_projection_wording_says_prefix_preserved_not_struct_unchanged():
+    ev = _pack("hge")["titles"]["heartgold_hge"]["profile"]["probe_field_evidence"]
+    for key in PROBE_KEYS - {"save", "task"}:
+        cite = ev[key]["cite"]
+        assert "vanilla prefix preserved; hge extends FieldSystem to 0x128" in cite, key
+        assert "StoreFieldSysPtr hook" in cite and "below the preserved prefix 0xE4" in cite, key
+        assert "struct unchanged" not in cite and "projected onto hge" not in cite, key
+
+
+def test_the_save_driver_cite_covers_both_asm_lines_and_the_state_semantics_sit_on_the_entry():
+    for mode, title in (("hgss", "heartgold"), ("hgss", "soulsilver"), ("hge", "heartgold_hge")):
+        ev = _pack(mode)["titles"][title]["profile"]["probe_field_evidence"]
+        assert "overlay_01_021F6830.s:91-92 (add r4,#0xd8; str r0,[r4]" in ev["save_driver"]["cite"], title
+        sem = ev["save_state"]["semantics"]
+        assert (sem["width"], sem["type"]) == (1, "u8") and set(sem["values"]) == {"0", "1", "2"}
+        assert sem["values"]["0"].startswith("init") and sem["values"]["1"].startswith("idle") and "only value that accepts" in sem["values"]["1"]
+        assert sem["values"]["2"].startswith("requested")
+        assert all(ref in sem["evidence"] for ref in (":124-137", ":365-373", ":431-436"))
+        assert ":365-373" in ev["save_state"]["cite"]
+
+
+def test_the_running_field_map_writer_is_byte_identical_in_hge():
+    xm, hg, ss, hge = _d7_inputs()
+    assert "ov01_021F54AC" in g.HGE_IDENTICAL_FUNCS
+    s = xm.lookup("ov01_021F54AC")
+    assert hg.read(s.image, s.address, s.size) == hge.read(s.image, s.address, s.size)
+    names = {f["symbol"] for f in _pack("hge")["titles"]["heartgold_hge"]["profile"]["probe_field_hge_checks"]["functions_byte_identical"]}
+    assert "ov01_021F54AC" in names
+    # revert: a changed byte in the writer fails the generator
+    with pytest.raises(g.Fail, match="ov01_021F54AC"):
+        g.hge_field_checks(xm, hg, _flip(hge, s.image, s.address + 2))

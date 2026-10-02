@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disclosed SYNTH setup (O-33) for the Gen 4 test rows: ``party2``, ``bag``, ``egg1``, ``party6``, ``species``.
+"""Disclosed SYNTH setup (O-33) for the Gen 4 test rows: ``party2``, ``bag``, ``egg1``, ``party6``, ``species``, ``place``.
 
 Every owner save holds one party mon, and Gen 4 refuses to deposit the last one ("You can't
 leave the party empty"), so the SETUP is synthesized and everything after it runs natively:
@@ -61,6 +61,32 @@ independent of the Lua reader) and a NEW 0x80000 image is written:
   ``species`` rewrites an existing slot 1 only when the source sidecar attests it (``out_sha1`` of
   the image and ``new_pid`` of the mon), because the nickname is player-editable.  Clone PIDs also
   avoid every PID already stored in the boxes.
+
+``place`` (G2 producer plan section 4, research docs/gen4/research/synth_place_save_layout.md) puts the
+player at a map position and sets story flags / vars so a story-gated site can be exercised natively:
+
+    python tools/gen4_synth_save.py place --profile hgss --src <battery> --out <path> --map 192 --x 10 --y 20 --dir 1 \
+        [--flag 2000=1 ...] [--var 0x4040=3 ...] [--height H]
+
+A Location-only write is NOT coherent (CONTINUE restores the saved map objects wholesale and re-attaches the avatar to
+the saved ``movement == 1`` object at its OLD coordinates, src/save_local_field_data.c:133-151, src/map_object.c:413-425,
+src/player_avatar.c:169-180), so the tool writes, in the newest general block only:
+
+* Location x5 (current, entrance, previous, dynamicWarp, specialSpawn) with warpId -1;
+* the single active ``movement == 1`` SavedMapObject (the player): currentX/currentZ = x/y (Location.y is the north-south
+  tile, the object's Z), initial/current/next facing = dir; currentY (height) only with ``--height``, else carried;
+* MAPOBJECTFLAG_ACTIVE cleared on every other saved object (the follower; NPCs are rebuilt from the map's events);
+* PlayerSaveData.state = 0 (walking);
+* the requested flags / vars (flag 0, temp flags >= 0x4000, ids >= NUM_FLAGS and vars outside 0x4000..0x416F are refused).
+
+Offsets come from the pack (``profile.field_save``, generator tools/gen_gen4_pack.py) with an evidence class each:
+vars/flags SOURCE+FILE (hgss) or DERIVED+FILE (hge), map objects FILE, player state SOURCE.  CORRECTION to the research:
+the SavedMapObject offsets there (+0x8 facing, +0xC mapId, +0x1C.. coordinates) are the LocalMapObject ones; the saved
+struct (include/map_object.h:6-33) has currentFacing +0xD, mapId +0x10, currentX/Y/Z +0x26/+0x28/+0x2A, and the list is
+not at 0x12B8 (Pokedex/Daycare/PalPad/Misc sit between) but at 0x2348 (hgss) / 0x2CC0 (hge), measured on the owner saves.
+The player entry own mapId is 1 on map 60 in every owner save (the object is KEEP, src/map_object.c:158), so it is
+NOT written.  Positive anchors: exactly one active ``movement == 1`` entry whose currentX/currentZ equal the source
+Location.  Only the sector footer CRC is re-sealed (no per-array CRC).  OFFLINE: where the avatar lands is a physical card.
 
 In every kind the verifier also proves that no byte outside the intended span (plus the two
 CRC bytes of the newest general footer) differs from the source.
@@ -684,11 +710,181 @@ def build_species(image: bytes, profile, species: int, sidecar: dict | None = No
                      slot=CLONE_SLOT, mode="rewrite" if rewrite else "clone", tail_policy=TAIL_POLICY)
 
 
+# ---------------------------------------------------------------------------
+# place: Location + player map object + flags / vars
+# ---------------------------------------------------------------------------
+PLACE_NOTE = "SYNTH setup: player placed on a map with story flags/vars set for a native story-gated test"
+LOCATION_ARRAY_SPAN = 5 * 20            # current, entrance, previous, dynamicWarp, specialSpawn (src/save_local_field_data.c:13-19)
+DIRECTIONS = (0, 1, 2, 3)               # DIR_NORTH/SOUTH/WEST/EAST (include/constants/global_fieldmap.h:5-8)
+VAR_BASE, NUM_VARS = 0x4000, 0x170      # include/constants/vars.h:4,384
+MAX_TILE = 0x7FFF                       # SavedMapObject coordinates are s16
+
+
+def _field_save(profile_name: str) -> tuple[dict, int]:
+    """(profile.field_save, general offset of the Location array) from the generated pack."""
+    pack = json.loads((ROOT / "data" / "games" / f"gen4_{profile_name}" / "profile.json").read_text(encoding="utf-8"))
+    for title in pack["titles"].values():
+        prof = title["profile"]
+        if "field_save" in prof:
+            return prof["field_save"], prof["location"]["file_cross_check"]["general_off_of_array"]
+    raise Refusal("place_layout_unknown", f"profile {profile_name!r} has no field_save layout in its pack")
+
+
+def valid_maps() -> set:
+    """Map header ids the pack knows (hgss area_map.json; hge keeps the vanilla ids, hge-only maps are not listed)."""
+    maps = json.loads((ROOT / "data" / "games" / "gen4_hgss" / "area_map.json").read_text(encoding="utf-8"))["maps"]
+    return {int(k) for k in maps}
+
+
+def _pairs(items, what: str) -> dict:
+    out = {}
+    for item in items or ():
+        try:
+            key, value = str(item).split("=", 1)
+            key, value = int(key, 0), int(value, 0)
+        except ValueError:
+            raise Refusal("bad_place_arg", f"--{what} {item!r} is not ID=VALUE") from None
+        if out.get(key, value) != value:
+            raise Refusal("bad_place_arg", f"--{what} {key:#x} is given two different values")
+        out[key] = value
+    return out
+
+
+def check_place_args(map_id, x, y, direction, flags: dict, vars_: dict, height, nflags: int) -> None:
+    if map_id not in valid_maps():
+        raise Refusal("bad_map", f"map id {map_id} is not in the pack map table")
+    if not (0 <= x <= MAX_TILE and 0 <= y <= MAX_TILE):
+        raise Refusal("bad_coord", f"x/y must be 0..{MAX_TILE}, got {x},{y}")
+    if direction not in DIRECTIONS:
+        raise Refusal("bad_dir", f"--dir must be one of {DIRECTIONS} (north south west east), got {direction}")
+    if height is not None and not -0x8000 <= height <= MAX_TILE:
+        raise Refusal("bad_coord", f"--height {height} does not fit an s16")
+    for fid, value in flags.items():
+        if fid == 0:
+            raise Refusal("bad_flag", "flag id 0 is a no-op in the game (src/save_vars_flags.c:45-54)")
+        if fid >= 0x4000:
+            raise Refusal("bad_flag", f"flag {fid:#x} is a RAM-only temp flag (>= 0x4000); it is never saved")
+        if not 0 < fid < nflags:
+            raise Refusal("bad_flag", f"flag {fid} is outside 1..{nflags - 1}")
+        if value not in (0, 1):
+            raise Refusal("bad_flag", f"flag {fid} value must be 0 or 1, got {value}")
+    for vid, value in vars_.items():
+        if not VAR_BASE <= vid < VAR_BASE + NUM_VARS:
+            raise Refusal("bad_var", f"var {vid:#x} is outside {VAR_BASE:#x}..{VAR_BASE + NUM_VARS - 1:#x}")
+        if not 0 <= value <= 0xFFFF:
+            raise Refusal("bad_var", f"var {vid:#x} value must fit a u16, got {value}")
+
+
+def build_place(image: bytes, profile, map_id: int, x: int, y: int, direction: int, flags=(), vars_=(),
+                height: int | None = None) -> tuple[bytes, dict]:
+    flags, vars_ = _pairs(flags, "flag"), _pairs(vars_, "var")
+    save = codec.parse_save(image, profile)
+    p = save.profile
+    fs, loc_off = _field_save(p.name)
+    check_place_args(map_id, x, y, direction, flags, vars_, height, fs["flags"]["count"])
+    party = save.party()
+    g = save.general
+    mo, F = fs["map_objects"], fs["map_objects"]["fields"]
+    state_at = loc_off + fs["player_state"]["state_off_in_local_field"]
+    if mo["general_off"] + mo["count"] * mo["stride"] > len(g) or fs["flags"]["general_off"] + fs["flags"]["bytes"] > len(g):
+        raise Refusal("place_layout", "the field_save layout runs past the general block")
+
+    def entry(i: int) -> int:
+        return mo["general_off"] + i * mo["stride"]
+
+    active = [i for i in range(mo["count"])
+              if struct.unpack_from("<I", g, entry(i) + F["flags"])[0] & mo["active_mask"]]
+    players = [i for i in active if g[entry(i) + F["movement"]] == 1]
+    if len(players) != 1:
+        raise Refusal("place_layout_unverified", f"{len(players)} active movement==1 map objects (need exactly one: the player)")
+    pl = players[0]
+    here = struct.unpack_from("<5i", g, loc_off)
+    cx = struct.unpack_from("<h", g, entry(pl) + F["currentX"])[0]
+    cz = struct.unpack_from("<h", g, entry(pl) + F["currentZ"])[0]
+    if (cx, cz) != (here[2], here[3]):
+        raise Refusal("place_layout_unverified", f"player object at ({cx},{cz}) != Location ({here[2]},{here[3]}): offsets are wrong")
+    others = [i for i in active if i != pl]
+    state_before = struct.unpack_from("<i", g, state_at)[0]
+    o = entry(pl)
+    fb = fs["flags"]["general_off"]
+    vb = fs["vars"]["general_off"]
+
+    spans = [(loc_off, loc_off + LOCATION_ARRAY_SPAN), (state_at, state_at + 4),
+             (o + F["initialFacing"], o + F["currentFacing"] + 2),  # initial, current, next facing
+             (o + F["currentX"], o + F["currentX"] + 2), (o + F["currentZ"], o + F["currentZ"] + 2)]
+    if height is not None:
+        spans.append((o + F["currentY"], o + F["currentY"] + 2))
+    spans += [(entry(i) + F["flags"], entry(i) + F["flags"] + 4) for i in others]
+    spans += [(fb + fid // 8, fb + fid // 8 + 1) for fid in flags]
+    spans += [(vb + 2 * (vid - VAR_BASE), vb + 2 * (vid - VAR_BASE) + 2) for vid in vars_]
+
+    def edit(data: bytearray) -> None:
+        for k in range(5):
+            struct.pack_into("<5i", data, loc_off + 20 * k, map_id, -1, x, y, direction)
+        struct.pack_into("<i", data, state_at, 0)
+        data[o + F["initialFacing"] : o + F["currentFacing"] + 2] = bytes([direction]) * 3
+        struct.pack_into("<h", data, o + F["currentX"], x)
+        struct.pack_into("<h", data, o + F["currentZ"], y)
+        if height is not None:
+            struct.pack_into("<h", data, o + F["currentY"], height)
+        for i in others:
+            at = entry(i) + F["flags"]
+            struct.pack_into("<I", data, at, struct.unpack_from("<I", data, at)[0] & ~mo["active_mask"])
+        for fid, value in flags.items():
+            data[fb + fid // 8] = (data[fb + fid // 8] & ~(1 << fid % 8) & 0xFF) | (value << fid % 8)
+        for vid, value in vars_.items():
+            struct.pack_into("<H", data, vb + 2 * (vid - VAR_BASE), value)
+
+    out = _seal(image, save, edit)
+    want = {"loc": (map_id, -1, x, y, direction), "pl": pl, "x": x, "z": y, "dir": direction,
+            "height": height, "flags": flags, "vars": vars_, "state_at": state_at}
+    _verify_place(image, out, save, party, fs, loc_off, want, spans)
+    layout = {k: {"general_off": fs[k]["general_off"], "evidence_class": fs[k]["evidence_class"]}
+              for k in ("vars", "flags", "map_objects")}
+    layout["player_state"] = {"general_off": state_at, "evidence_class": fs["player_state"]["evidence_class"]}
+    return out, _row("place", PLACE_NOTE, image, out, save, map=map_id, x=x, y=y, dir=direction, height=height,
+                     flags={str(k): v for k, v in sorted(flags.items())}, vars={f"{k:#x}": v for k, v in sorted(vars_.items())},
+                     player_entry=pl, cleared_entries=others, location_before=list(here), state_before=state_before,
+                     layout=layout, coherence="Location x5 + player map object + other objects inactive + player state 0")
+
+
+def _verify_place(src, out, save, party, fs, loc_off, want, spans) -> None:
+    """Raw re-read of every written field from the output image, independent of the writer arithmetic."""
+    got = codec.parse_save(out, save.profile)
+    if got.bank != save.bank or got.counter != save.counter or got.party() != party:
+        raise Refusal("verify", "bank, save counter or party changed")
+    g, mo, F = got.general, fs["map_objects"], fs["map_objects"]["fields"]
+    if any(struct.unpack_from("<5i", g, loc_off + 20 * k) != want["loc"] for k in range(5)):
+        raise Refusal("verify", "a Location does not read back as written")
+    if struct.unpack_from("<i", g, want["state_at"])[0] != 0:
+        raise Refusal("verify", "player state is not 0")
+    at = [mo["general_off"] + i * mo["stride"] for i in range(mo["count"])]
+    active = [i for i, a in enumerate(at) if struct.unpack_from("<I", g, a + F["flags"])[0] & mo["active_mask"]]
+    pl = want["pl"]
+    o = at[pl]
+    if active != [pl] or g[o + F["movement"]] != 1:
+        raise Refusal("verify", f"active objects {active}, expected only the player entry {pl}")
+    if (struct.unpack_from("<h", g, o + F["currentX"])[0], struct.unpack_from("<h", g, o + F["currentZ"])[0]) != (want["x"], want["z"]):
+        raise Refusal("verify", "player object coordinates do not read back")
+    if tuple(g[o + F["initialFacing"] : o + F["currentFacing"] + 2]) != (want["dir"],) * 3:
+        raise Refusal("verify", "player object facing does not read back")
+    if want["height"] is not None and struct.unpack_from("<h", g, o + F["currentY"])[0] != want["height"]:
+        raise Refusal("verify", "player object height does not read back")
+    for fid, value in want["flags"].items():
+        if (g[fs["flags"]["general_off"] + fid // 8] >> fid % 8) & 1 != value:
+            raise Refusal("verify", f"flag {fid} does not read back")
+    for vid, value in want["vars"].items():
+        if struct.unpack_from("<H", g, fs["vars"]["general_off"] + 2 * (vid - VAR_BASE))[0] != value:
+            raise Refusal("verify", f"var {vid:#x} does not read back")
+    _only_changed(src, out, save, spans)
+
+
 BUILDERS = {
     "party2": lambda image, a: build_party2(image, a.profile),
     "bag": lambda image, a: build_bag(image, a.profile, a.count),
     "egg1": lambda image, a: build_egg1(image, a.profile, a.species, a.cycles),
     "party6": lambda image, a: build_party6(image, a.profile),
+    "place": lambda image, a: build_place(image, a.profile, a.map_id, a.x, a.y, a.direction, a.flag, a.var, a.height),
     "species": lambda image, a: build_species(image, a.profile, a.species_id, _load_sidecar(a.src)),
 }
 
@@ -700,13 +896,22 @@ def main(argv: list[str] | None = None) -> int:
                         ("bag", "put Poke Balls into the Balls pocket"),
                         ("egg1", "append one egg to the party"),
                         ("party6", "fill the party to 6 with clones of slot 0"),
-                        ("species", "make party slot 1 a clone of slot 0 with the given species id")):
+                        ("species", "make party slot 1 a clone of slot 0 with the given species id"),
+                        ("place", "place the player on a map and set story flags / vars")):
         cmd = sub.add_parser(kind, help=help_)
         cmd.add_argument("--profile", required=True, choices=PROFILES)
         cmd.add_argument("--src", required=True, type=Path, help="battery save to read (never modified)")
         cmd.add_argument("--out", required=True, type=Path, help="new battery save to write")
         if kind == "bag":
             cmd.add_argument("--count", type=int, default=10, help="Poke Balls to add (default 10)")
+        if kind == "place":
+            cmd.add_argument("--map", dest="map_id", required=True, type=int, help="map header id")
+            cmd.add_argument("--x", required=True, type=int, help="tile x")
+            cmd.add_argument("--y", required=True, type=int, help="tile y (Location.y, the north-south tile)")
+            cmd.add_argument("--dir", dest="direction", required=True, type=int, help="0 north, 1 south, 2 west, 3 east")
+            cmd.add_argument("--flag", action="append", metavar="N=0|1", help="save flag (repeatable)")
+            cmd.add_argument("--var", action="append", metavar="0x40xx=V", help="save var (repeatable)")
+            cmd.add_argument("--height", type=int, help="object currentY; omitted = carried from the source")
         if kind == "species":
             cmd.add_argument("species_id", metavar="ID", type=int, help="species id (profile range, see names.json)")
         if kind == "egg1":
