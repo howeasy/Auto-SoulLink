@@ -897,3 +897,31 @@ Only the positive Electrode static seed supplies one own-build Master Ball (item
 Surf/Rock Smash/Old Rod/Altering0/1 positive samples now use own Master4qty1, natively CONTINUE/SAVE qualified. They prove method -> native encounter slot/species -> capture publish -> save, not catch-rate behaviour. Grass remains unchanged with its65e Poké Ball PASS; static_run remains its native RUN negative.
 
 Both Rock fixtures now natively read layout392/VAR_MIRAGE_TOWER_STATE3/visibleflagclear (SYNTH resolved-tower prep). NAMED UNSUPPORTED CASE: Route111 with Mirage Tower visible: overworld checkpoint refuses task UpdateMirageTowerPulseBlend (not allow-listed); also true of qualified Emerald; fail-closed. No checkpoint or allow-list change; later purity audit/owner decision may admit palette task in both packs.
+
+
+### exp_pc_negative_chain_synth.sav: five usable records for the PC negative chain
+
+**Native CONTINUE/SAVE qualified at source `9b2d0d30eb1a70a12c56a90c9cf10d55801125bf`.**
+The existing `make-exp` driver cold-booted the disclosed offline SYNTH setup and
+saved at unchanged Oldale 0.10 (6,17), counter2->3, with CONTINUE_GAME_WARP cleared.
+Every old record and the extra boxed record persisted exactly. The embedded
+console and all five independent decoded identities are in
+`exp_pc_negative_chain_synth_manifest.json`; `raw_sha256` remains separate from
+qualified `sha256`. This qualifies CONTINUE/SAVE only; no acquisition or PC release
+was exercised.
+
+The recipe preserves every old party/box record from `exp_pc.sav`, then copies
+box0-slot0's usable Zigzagoon to empty box0-slot2 using a distinct personality
+(XOR 0x13572468) and the encrypted native codec. Party remains Mudkip/Poochyena;
+boxes hold the original Zigzagoon/Wurmple plus the extra Zigzagoon. Oldale map
+0.10, tile (6,17), layout11, and bag contents are unchanged. The disclosed boot
+control requests CONTINUE at that same tile.
+
+Initial usable total5 permits the native chain: normal release5->4, bypass
+discard4->3, cancel/withdraw still3, then YES release3->2. This follows the native
+`AtLeastThreeUsableMons` guard; the guard itself is unchanged. The extra record
+is SYNTH setup, not acquisition evidence.
+
+| file | qualification | map / tile | SHA256 role |
+|---|---|---|---|
+| `exp_pc_negative_chain_synth.sav` | native CONTINUE/SAVE only; PC chain pending | OldaleTown (0.10), (6,17), layout11; counter2->3 | `3a4f110cd259af30136d0c93bc9af099b0a23ef10f5160d329542bec0a42ee3d` (native re-save; raw hash in manifest) |

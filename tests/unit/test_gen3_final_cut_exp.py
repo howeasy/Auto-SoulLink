@@ -445,3 +445,16 @@ def test_exp_zip_launch_uses_flag_and_requires_actual_server_and_client_logs(tmp
     monkeypatch.setattr(fc.subprocess, "Popen", launch)
     assert fc.zip_boot(str(zip_path), str(lane), timeout=2, title="exp") == (0 if logged else 1)
     assert len(calls) == 2
+
+
+def test_exp_plan_requires_cited_shadow_negatives_before_duos_and_zip():
+    plan=fc.build_plan_exp(CUT,"L:/lane","unused")
+    row=next((r for r in plan if r.id=="shadow_negatives_exp"),None)
+    assert row is not None,"expansion PC observer controls absent from final-cut plan"
+    assert row.emulator is False and row.budget==120
+    assert row.argv[1:]==["tools/gen3_shadow_negatives.py","docs/gen3_exp/negatives_manifest.json"]
+    assert row.deps is None
+    names=[r.id for r in plan]
+    assert names.index(row.id)<names.index("unit_exp")
+    duo_count=sum(e2e_duo.scenario_applies(n,"gen3_exp")for n in e2e_duo.SCENARIOS)
+    assert len(plan)==duo_count+11

@@ -1576,10 +1576,11 @@ EXP_STATIC_WILD_KINDS = {
 }
 EXP_FULL_BOX_KIND = "pc_full_box_synth"
 EXP_BOX0_FULL_KIND = "pc_box0_full_synth"
+EXP_PC_CHAIN_KIND = "pc_negative_chain_synth"
 EXP_MIRAGE_TOWER_VISIBLE_FLAG = 0x14E  # own flags.h; Route111_OnTransition selects the native layout
 EXP_ROUTE111_NO_TOWER_LAYOUT = 392    # own layouts.json LAYOUT_ROUTE111_NO_MIRAGE_TOWER
 EXP_KINDS |= EXP_ACQUISITION_KINDS | EXP_STATIC_WILD_KINDS
-EXP_KINDS[EXP_FULL_BOX_KIND] = EXP_KINDS[EXP_BOX0_FULL_KIND] = EXP_KINDS["pc"]
+EXP_KINDS[EXP_FULL_BOX_KIND] = EXP_KINDS[EXP_BOX0_FULL_KIND] = EXP_KINDS[EXP_PC_CHAIN_KIND] = EXP_KINDS["pc"]
 # pret pokeemerald species id -> this build's (national-order) id; data.json names checked by test
 EXP_SPECIES = {283: 258, 286: 261, 288: 263, 290: 265}
 EXP_ITEM_POKE_BALL = 1     # include/constants/items.h:13 ITEM_POKE_BALL; pokeball.h:7 BALL_POKE = 1
@@ -1651,6 +1652,8 @@ def build_exp_seed(kind: str, flags: list[int], *, side: str = "a") -> bytes:
         raise ValueError(f"unknown expansion fixture side {side}")
     if kind not in EXP_TRANSPLANT_KINDS:
         seed = (FIXTURES_DIR / f"exp_pc{'_b' if side == 'b' else ''}.sav").read_bytes()
+        if kind == EXP_PC_CHAIN_KIND:
+            return build_exp_pc_negative_chain_seed(seed)
         if kind in (EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND):
             from tools.gen3_static_wild_rows import build_box0_full_seed, build_full_box_seed
             return (build_box0_full_seed if kind == EXP_BOX0_FULL_KIND else build_full_box_seed)(seed)
@@ -1705,6 +1708,43 @@ def exp_ball_pocket(body: bytes) -> list[tuple[int, int]]:
     return [(item, qty ^ key) for item, qty in struct.iter_unpack("<HH", pocket) if item]
 
 
+def build_exp_pc_negative_chain_seed(seed: bytes) -> bytes:
+    """Offline only: preserve four own records and add one usable box0-slot2 clone."""
+    title = codec.TITLE_EXPANSION
+    if not codec.qualify_flash(seed, title=title)[0]:
+        raise ValueError("PC chain source flash does not qualify")
+    parsed = codec.parse_flash(seed, title=title)
+    storage = bytearray(parsed["storage"])
+    start = codec.BOX_DATA_OFFSET
+    extra = start + 2 * codec.BOX_MON_SIZE
+    if any(storage[extra:extra + codec.BOX_MON_SIZE]):
+        raise ValueError("PC chain box0 slot 2 is already occupied")
+    problems = exp_fixture_problems(seed, "pc")
+    if problems:
+        raise ValueError("PC chain source is not the PC fixture: " + "; ".join(problems))
+    mon = codec.decode_box_mon(bytes(storage[start:start + codec.BOX_MON_SIZE]))
+    # Preserve packed expansion lanes and PID parity; own encoder rekeys/checksums secure bytes.
+    mon["personality"] ^= 0x13572468
+    old_party = codec.party_from_save(seed, title=title, layout=_record_layout(title))
+    old_boxes = codec.boxes_from_save(seed, title=title, layout=_record_layout(title))
+    old_keys = {(m["personality"], m["ot_id"]) for m in old_party}
+    old_keys.update((m["personality"], m["ot_id"]) for row in old_boxes for m in row
+                    if m["personality"] or m["ot_id"])
+    if not mon["personality"] or (mon["personality"], mon["ot_id"]) in old_keys:
+        raise ValueError("PC chain extra identity collides with an old record")
+    raw = codec.encode_box_mon(mon)
+    back = codec.decode_box_mon_masked(raw, layout=_record_layout(title))
+    if not back["checksum_ok"] or not back["species"] or back["is_egg"] or back["is_bad_egg"]:
+        raise ValueError("PC chain extra record is not usable")
+    storage[extra:extra + codec.BOX_MON_SIZE] = raw
+    sb2 = bytearray(parsed["sb2"])
+    sb2[9] |= 1  # disclosed CONTINUE_GAME_WARP; cleared only by the later native SAVE qualification
+    sb1 = bytearray(parsed["sb1"])
+    sb1[0x0C:0x14] = sb1[0x04:0x0C]  # CONTINUE returns to the source's unchanged Oldale tile
+    return exp_write_slot({"sb1": bytes(sb1), "sb2": bytes(sb2), "storage": bytes(storage)},
+                          counter=parsed["counter"])
+
+
 def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
     """What a NATIVE re-save of an expansion `kind` seed must show: it qualifies, the game cleared
     the continue-game warp, the player is on the kind's tile, the party (and for "pc" box 1) is
@@ -1747,13 +1787,23 @@ def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
         return problems + seed_problems(body, own)
     layout = _record_layout(codec.TITLE_EXPANSION)
     party = codec.party_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
-    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind in ("pc", EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND) else [(258, STARTER_LEVEL)]
+    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind in ("pc", EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND, EXP_PC_CHAIN_KIND) else [(258, STARTER_LEVEL)]
     if [(m["species"], m["level"]) for m in party] != want:
         problems.append(f"party {[(m['species'], m['level']) for m in party]} != {want}")
     boxes = codec.boxes_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
     occupied = {(b, s): m["species"] for b, row in enumerate(boxes) for s, m in enumerate(row)
                 if m["personality"] or m["ot_id"]}
     want_box = {(0, 0): 263, (0, 1): 265} if kind == "pc" else {}
+    if kind == EXP_PC_CHAIN_KIND:
+        want_box = {(0, 0): 263, (0, 1): 265, (0, 2): 263}
+        seed_name = "exp_pc_b.sav" if _trainer_identity(sb2)[1] == EMERALD_OT[1] ^ 0xFFFFFFFF else "exp_pc.sav"
+        expected = codec.parse_flash(build_exp_pc_negative_chain_seed((FIXTURES_DIR / seed_name).read_bytes()),
+                                    title=codec.TITLE_EXPANSION)
+        count_off, party_off = codec._TITLE_PARTY_OFFSETS[codec.TITLE_EXPANSION]
+        if sb1[count_off] != expected["sb1"][count_off] or sb1[party_off:party_off + 2 * codec.PARTY_MON_SIZE] != expected["sb1"][party_off:party_off + 2 * codec.PARTY_MON_SIZE]:
+            problems.append("PC chain party records differ from the source")
+        if parsed["storage"] != expected["storage"]:
+            problems.append("PC chain box records differ from the one-extra-record recipe")
     if kind in (EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND):
         from tools.gen3_static_wild_rows import box0_full_seed_problems, full_box_seed_problems
         problems.extend((box0_full_seed_problems if kind == EXP_BOX0_FULL_KIND else full_box_seed_problems)(body))

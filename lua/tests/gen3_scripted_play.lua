@@ -1915,6 +1915,26 @@ function PC.cursor(label, area, pos)
     local storage = pc_storage()
     if not storage or not pc_task(PC_STORAGE_MAIN) then return pc_fail(label, "storage_cursor_not_ready") end
     if memory.read_u8(PC_CURSOR_AREA) ~= area then return pc_fail(label, "storage_cursor_wrong_area") end
+    if area == 0 then
+        -- BOX area: positions 0..29 on a 6-column x 5-row grid (the box remembers where the last
+        -- leg left its cursor, e.g. slot 6 after the bypass grab, which the 0..5 party walker
+        -- below calls "invalid"). Walk rows with Up/Down, then columns with Left/Right, always
+        -- TOWARD the target so no edge wrap can occur; a stall or an area change still fails.
+        for _ = 1, 12 do
+            local current = memory.read_u8(PC_CURSOR_POS)
+            if current == pos then return true end
+            if current > 29 then return pc_fail(label, "storage_cursor_invalid") end
+            local key
+            if current // 6 ~= pos // 6 then key = (current // 6 < pos // 6) and "Down" or "Up"
+            else key = (current < pos) and "Right" or "Left" end
+            G.tap(key, 3, 20)
+            if not pc_wait(label, "storage_cursor_stalled", function()
+                return memory.read_u8(PC_CURSOR_POS) ~= current
+            end, 90) then return false end
+            if memory.read_u8(PC_CURSOR_AREA) ~= area then return pc_fail(label, "storage_cursor_wrong_area") end
+        end
+        return pc_fail(label, "storage_cursor_stalled")
+    end
     for _ = 1, 8 do
         local current = memory.read_u8(PC_CURSOR_POS)
         if current == pos then return true end
@@ -3809,14 +3829,18 @@ if TITLE == Syms.EXP_TITLE then
                                .. "SLINK_GEN3_PLAY_FROM=%s boots cold and lands here",
                                pre.party.n, L))
             end
-            local staged = em_box_key(pre, 0, 0)
-            if not staged then
-                return em_fail(L, "precondition: box 0 slot 0 occupied (in-chain after "
-                               .. "emerald_save_town; a cold boot has the fixture's own box)")
+            -- The bypass leg (registered before this one) grabbed and discarded the FIRST occupied
+            -- box-0 slot, so slot 0 is no longer guaranteed occupied: withdraw whichever slot is
+            -- the first occupied one NOW (live PHYSICAL finding, pc_8e3486d9: slot 0 was gone).
+            local staged_slot = em_first_occupied_box_slot(pre)
+            if not staged_slot then
+                return em_fail(L, "precondition: box 0 has an occupied slot to withdraw (in-chain "
+                               .. "after emerald_save_town and the bypass leg; a cold boot has the "
+                               .. "fixture's own box)")
             end
             PC.open(cp, L)
             PC.mode(L, PC.OPTION.withdraw)
-            PC.popup(L, 0, 0, 0)                  -- box slot 0, WITHDRAW row 0
+            PC.popup(L, 0, staged_slot, 0)        -- first occupied box slot, WITHDRAW row 0
             PC.select(L, PC_WITHDRAW_MON)
             PC.withdraw(L)
             PC.leave(cp, L)
@@ -3851,11 +3875,16 @@ if TITLE == Syms.EXP_TITLE then
             -- an EMPTY slot that left species == 0 is outside the snapshot entirely. So the
             -- claim is "the cancel moved no mon between party and box and changed no occupied
             -- box record", not "all 14 boxes are byte-identical".
+            -- The target is the mon this leg WITHDREW into the party just above, so it is a PARTY
+            -- mon before the cancel (live PHYSICAL finding pc_f96df71a: the old 'must still be
+            -- boxed' clause contradicted the leg's own setup). A cancelled release keeps it in the
+            -- party and puts it in no box: the party is unchanged (count and every PID), the
+            -- target is in no box record.
             if after.party.n ~= before.party.n or play.departed_key(before.party, after.party)
-               or not before.boxes[target] or after.boxes[target] then
-                return em_fail(L, string.format("cancel_readback: party %d -> %d, %s must still be "
-                               .. "boxed and nothing may leave the party", before.party.n,
-                               after.party.n, target))
+               or before.boxes[target] or after.boxes[target] then
+                return em_fail(L, string.format("cancel_readback: party %d -> %d, %s must stay in "
+                               .. "the party (no box) and nothing may leave the party",
+                               before.party.n, after.party.n, target))
             end
             if not boxes_unchanged(L, before.boxes, after.boxes, nil) then return end
 

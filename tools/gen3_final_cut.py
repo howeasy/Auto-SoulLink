@@ -564,6 +564,10 @@ def build_plan_exp(cut, lane, master):
         # .cache/expansion-src junction, checked against the lock around every row.
         ("wild_rom_check", "verify_gen3_exp_wild.py", ["--check"]),
     )]
+    # Same semantic receipt checker as Emerald; raw PC-window liveness and positive
+    # siblings are separately bound by the expansion's observer tests/manifest.
+    rows.append(Row("shadow_negatives_exp", "XG3 SOURCE", [PY, "tools/gen3_shadow_negatives.py",
+                    "docs/gen3_exp/negatives_manifest.json"], lane, 120, emulator=False))
     rows.append(Row("unit_exp", "XG3 MODEL", [PY, "-m", "pytest", *EXPANSION_UNIT_FILES,
                     "-q", "-p", "no:randomly", "-rs"], lane, 1800, emulator=False))
     rows += [_duo(s, "gen3_exp", "XG3 TEST-ONLY duo", lane) for s in names]

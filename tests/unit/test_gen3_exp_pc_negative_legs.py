@@ -456,3 +456,35 @@ def test_the_bypass_leg_reads_back_a_grab_purged_mon_and_needs_only_one_party_mo
     assert "if before.party.n < 1 then" in leg and "at least 2" not in leg
     assert "if after.boxes[target] then" in leg and "boxes_unchanged(L, before.boxes, after.boxes, target)" in leg
     assert "still = after.boxes[target]" not in leg and "byte-identical" not in leg.split("run = function")[1]
+
+
+def test_the_cancel_leg_withdraws_the_first_occupied_box_slot_not_a_fixed_slot_0():
+    """Live PHYSICAL finding (pc_8e3486d9): the bypass leg grabs and discards the first occupied
+    box-0 slot, so the cancel leg that follows it cannot assume slot 0 is still occupied."""
+    block = _exp_block()
+    leg = block.split('name = "emerald_pc_release_cancel"')[1]
+    run = leg.split("run = function(cp)")[1].split("local before = owned_snapshot")[0]
+    assert "em_first_occupied_box_slot(pre)" in run
+    assert "PC.popup(L, 0, staged_slot, 0)" in run
+    assert "em_box_key(pre, 0, 0)" not in run and "PC.popup(L, 0, 0, 0)" not in run
+
+
+def test_pc_cursor_walks_the_6x5_box_grid_toward_the_target_not_the_party_0_to_5_walker():
+    """Live PHYSICAL finding (pc_1dba386c): the box area remembers the last leg's cursor (slot 6
+    after the bypass grab) and the old walker treated any position > 5 as invalid."""
+    src = _lua_source()
+    cur = src.split("function PC.cursor(label, area, pos)")[1].split("function PC.popup")[0]
+    box = cur.split("if area == 0 then")[1].split("for _ = 1, 8 do")[0]
+    assert "current // 6 ~= pos // 6" in box and '"Down" or "Up"' in box and '"Right" or "Left"' in box
+    assert "current > 29" in box and "storage_cursor_wrong_area" in box
+    assert "current > 5" in cur.split("for _ = 1, 8 do")[1]      # the party walker is unchanged
+
+
+def test_the_cancel_readback_keeps_the_withdrawn_target_in_the_party_not_in_a_box():
+    """Live PHYSICAL finding (pc_f96df71a): the target is withdrawn into the party before the
+    cancel, so 'must still be boxed' contradicted the leg's own setup."""
+    block = _exp_block()
+    leg = block.split('name = "emerald_pc_release_cancel"')[1]
+    rb = leg.split("-- The target is the mon this leg WITHDREW")[1].split("boxes_unchanged(L, before.boxes")[0]
+    assert "or before.boxes[target] or after.boxes[target] then" in rb
+    assert "not before.boxes[target]" not in rb and "must still be boxed" not in rb

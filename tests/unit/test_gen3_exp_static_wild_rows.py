@@ -367,3 +367,31 @@ def test_enemy_slot_check_waits_for_native_action_menu_and_logs_entry_record():
     lua.execute("ctx.await_turn=function()return 'over'end")
     result=fn(lua.globals().ctx)
     assert result[0] is None and 'action menu' in result[1]
+
+
+def test_capture_settle_observer_is_read_only_bounded_and_stoppable():
+    import re
+
+    from lupa import LuaRuntime
+    source=(ROOT/"lua/tests/duo/duo_gen3_main.lua").read_text()
+    match=re.search(r"(?ms)^local function install_capture_settle_watch\(.*?^end$",source)
+    assert match,"capture settle observer absent"
+    lua=LuaRuntime(unpack_returned_tuples=True)
+    lua.execute("""
+        now=0;logs={};shots={};reads=0
+        watch=function(fn,name)poll=fn;assert(name=='capture-settle-log')end
+        read=function()reads=reads+1;return {sGlobalScriptContextStatus={raw=1}}end
+        emit=function(row)logs[#logs+1]=row end
+        shot=function(name)shots[#shots+1]=name end
+        frame=function()return now end
+    """)
+    install=lua.execute(match.group()+"\nreturn install_capture_settle_watch")
+    stop=install(*[lua.globals()[n]for n in ('watch','read','emit','shot','frame')])
+    for frame in range(1,303):
+        lua.globals().now=frame
+        assert lua.globals().poll() is False
+    assert len(lua.globals().logs)==11 and lua.globals().reads==11
+    assert [lua.globals().shots[i]for i in range(1,3)]==['first-hold','hold-300']
+    stop()
+    assert lua.globals().poll() is True
+    assert len(lua.globals().logs)==12

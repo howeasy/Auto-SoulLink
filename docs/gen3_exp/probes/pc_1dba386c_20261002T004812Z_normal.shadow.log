@@ -1,0 +1,22 @@
+NOTE observer building unadmitted gen3_exp/emerald_expansion_28877d73
+STATUS frame=613 registered=44 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=714 kind=map_load key= address=135875778 callback_address=135875778 cpsr=536870975 mode=thumb raw_r15=135875780 sp=50363880 thumb=1
+STATUS frame=1213 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=558
+SHADOW t=2 frame=1522 kind=pc_box_place key= address=136103998 callback_address=136103998 cpsr=1610612799 mode=thumb raw_r15=136104000 sp=50363792 thumb=1
+SHADOW t=3 frame=1522 kind=pc_deposit key= address=136127458 callback_address=136127458 cpsr=63 mode=thumb raw_r15=136127460 sp=50363816 thumb=1
+STATUS frame=1813 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1113
+STATUS frame=2413 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1704
+SHADOW t=4 frame=2494 kind=pc_withdraw key= address=136104062 callback_address=136104062 cpsr=1610612799 mode=thumb raw_r15=136104064 sp=50363816 thumb=1
+STATUS frame=3013 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2259
+SHADOW t=5 frame=3479 kind=pc_box_place key= address=136103998 callback_address=136103998 cpsr=1610612799 mode=thumb raw_r15=136104000 sp=50363820 thumb=1
+STATUS frame=3613 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2855
+STATUS frame=4213 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3410
+SHADOW t=6 frame=4619 kind=pc_release_begin key= address=136127978 callback_address=136127978 cpsr=1610612799 mode=thumb raw_r15=136127980 sp=50363840 thumb=1
+SHADOW t=7 frame=4619 kind=pc_release key= address=136128108 callback_address=136128108 cpsr=1610612799 mode=thumb raw_r15=136128110 sp=50363840 thumb=1
+STATUS frame=4813 registered=44 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=3973
+STATUS frame=5413 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4564
+SHADOW t=8 frame=5668 kind=save key= address=136271842 callback_address=136271842 cpsr=536870975 mode=thumb raw_r15=136271844 sp=50363808 thumb=1
+STATUS frame=6013 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4920
+SHADOW t=9 frame=6609 kind=pc_release key= address=136128108 callback_address=136128108 cpsr=1610612799 mode=thumb raw_r15=136128110 sp=50363840 thumb=1
+STATUS frame=6613 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5514
+STATUS frame=7213 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6069

@@ -163,7 +163,7 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
     import hashlib
     readme = (FIXTURES / "README.md").read_text(encoding="utf-8")
     names = sorted(p.name for p in FIXTURES.glob("exp_*.sav"))
-    singletons = {"center", fx.EXP_FULL_BOX_KIND, fx.EXP_BOX0_FULL_KIND}
+    singletons = {"center", fx.EXP_FULL_BOX_KIND, fx.EXP_BOX0_FULL_KIND, fx.EXP_PC_CHAIN_KIND}
     expected = {f"exp_{kind}{suffix}.sav" for kind in fx.EXP_KINDS
                 for suffix in (("",) if kind in singletons else ("", "_b"))}
     assert set(names) == expected
@@ -180,6 +180,7 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
       for kind in fx.EXP_STATIC_WILD_KINDS for side in ("a", "b")],
     (fx.EXP_FULL_BOX_KIND, "a", "exp_pc_full_box_synth_manifest.json", None),
     (fx.EXP_BOX0_FULL_KIND, "a", "exp_pc_box0_full_synth_manifest.json", None),
+    (fx.EXP_PC_CHAIN_KIND, "a", "exp_pc_negative_chain_synth_manifest.json", None),
 ])
 def test_registered_synth_generator_replays_the_published_raw_hash(kind, side, manifest_name, case, context):
     import hashlib

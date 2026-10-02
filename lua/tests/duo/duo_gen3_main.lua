@@ -587,7 +587,8 @@ local function hello_raw_snapshot(u8, u16, u32, symbols, structs)
         return sym and {address=sym.address,size=sym.size,raw=u8(sym.address)} or "unavailable"
     end
     local out = {sGlobalScriptContextStatus=byte("sGlobalScriptContextStatus"),
-                 sLockFieldControls=byte("sLockFieldControls"),tasks={}}
+                 sLockFieldControls=byte("sLockFieldControls"),
+                 field_message_box_mode=byte("sFieldMessageBoxMode"),tasks={}}
     local main, task, palette = structs.Main, structs.Task, structs.PaletteFadeControl
     local m, t, p = symbols.by_name.gMain, symbols.by_name.gTasks, symbols.by_name.gPaletteFade
     if m and main then
@@ -615,6 +616,33 @@ local function hello_raw_snapshot(u8, u16, u32, symbols, structs)
                           active_offset=active.offset,active_mask=active.mask}
     else out.gPaletteFade="unavailable" end
     return out
+end
+
+-- Read-only observer on the existing frame drain: no gate/input/advance calls.
+local function install_capture_settle_watch(watch, read, emit, shot, frame)
+    local active,start,held,second,sampled=true,frame(),nil,false,false
+    watch(function()
+        if not active then return true end
+        local now=frame()
+        if not sampled or (now-start)%30==0 then
+            sampled=true
+            local doc=read();doc.frame=now;doc.age=now-start;doc.phase="settling"
+            emit(doc)
+            local state=doc.sGlobalScriptContextStatus
+            if not held and type(state)=="table" and state.raw~=2 then
+                held=now;pcall(shot,"first-hold")
+            end
+        end
+        if held and not second and now-held>=300 then
+            second=true;pcall(shot,"hold-300")
+        end
+        return false
+    end,"capture-settle-log")
+    return function()
+        active=false
+        local doc=read();doc.frame=frame();doc.age=doc.frame-start;doc.phase="settle-return"
+        emit(doc)
+    end
 end
 
 local function install_hello_watch(session, parts, journal, extras, emit, limit)
@@ -825,6 +853,16 @@ local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G =
               emerald_engine = EMERALD_ENGINE,
               finished = FINISHED, emulator = emu, enemy_base = profile.ram.ENEMY_BASE }
 ctx.native_candidate = native_candidate
+local capture_raw_structs
+if D.game=="gen3_exp" and D.static_wild_facts and D.static_wild_facts.case=="rock" then
+    capture_raw_structs=read_json("data/games/gen3_exp/28877d73/facts.json").structs
+end
+local function capture_raw_observation()
+    return hello_raw_snapshot(function(a)return memory.read_u8(a,"System Bus")end,
+        function(a)return memory.read_u16_le(a,"System Bus")end,
+        function(a)return memory.read_u32_le(a,"System Bus")end,hello_symbols,capture_raw_structs)
+end
+
 
 function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
 function ctx.follow_path(name, path, from, to, label)
@@ -1844,7 +1882,14 @@ function ctx.catch(label, already_hunted, expected_ball)
         end
         return nil, "capture ended without an inactive battle witness"
     end
+    local stop_settle_watch
+    if capture_raw_structs then
+        stop_settle_watch=install_capture_settle_watch(ctx.watch,capture_raw_observation,
+            function(doc)ctx.jlog("CAPTURE_SETTLE_WATCH",doc)end,
+            function(suffix)G.shot(D.scenario.."_"..D.player.."_"..suffix)end,emu.framecount)
+    end
     local settled, settle_why = play.wait_scene_settled(cp, 1800)
+    if stop_settle_watch then stop_settle_watch() end
     if not settled then return nil, "capture scene did not settle: " .. tostring(settle_why) end
     local outcome = memory.read_u8(S.gBattleOutcome)
     -- B_OUTCOME_LOST (2, pret include/constants/battle.h): the wild foe knocked the lead out

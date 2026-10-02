@@ -208,6 +208,9 @@ def facts(rom, case):
                                (src/"src/wild_encounter.c").read_text(),re.M).group(1))
         repel_var = int(re.search(r"^#define\s+VAR_REPEL_STEP_COUNT\s+(0x[\da-fA-F]+)",
                                  (src/"include/constants/vars.h").read_text(),re.M).group(1),0)
+        fishing["post_capture_probes"]={name:profile.expansion_symbol(context,name)["address"] for name in (
+            "CB2_EndWildBattle","CB2_EndScriptedWildBattle","Task_ReturnToFieldNoScript",
+            "Task_WaitForFadeAndEnableScriptCtx","ScriptContext_Enable")}
         fishing.update(rock_encounter_rate=selected["habitats"][method]["rate"], rock_rng_modulus=modulus, rock_rng_return=random_symbol["address"]+returns[0],
                        repel_var=repel_var, keen_eye_id=abilities["ABILITY_KEEN_EYE"],
                        rock_rng_address=rng["address"], rock_rng_size=rng["size"],

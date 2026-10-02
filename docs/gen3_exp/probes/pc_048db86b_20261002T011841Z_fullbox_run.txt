@@ -1,0 +1,12 @@
+cut=048db86b63258002dda0f099d6c9baeaf0e9f62c
+script=lua/tests/gen3_scripted_play.lua
+fixture=tests\fixtures\gen3\exp_pc_box0_full_synth.sav
+fixture_sha256=79c19313a21d794dbfe1de4e0f0e7da8b23f3d7f445c8b63dca6515b23f4df04
+rom_sha1=28877d733492299599f2b8fff50493109d72653c
+source_script_sha256=5d4959f81edb745cd3b221fbd0602b670b740998110f1c6458d3fd85e2501617
+from=emerald_pc_full_box
+stop_after=emerald_pc_full_box
+state=C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private_20261002T011841Z\states\slink_em_exp_fullbox_stage.State
+result=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_048db86b_20261002T011841Z_fullbox_result.txt
+shadow=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_048db86b_20261002T011841Z_fullbox.shadow.log
+passed=False

@@ -124,6 +124,18 @@ return function(ctx)
             assert(id,"native method probe refused")
         end
     end
+    for name,address in pairs(f.post_capture_probes or {}) do
+        local logged=false
+        for _,delta in ipairs({0,0x02000000}) do
+            assert(event.on_bus_exec(function(callback)
+                if not logged and ctx.sent("capture")>0 then
+                    logged=true
+                    ctx.jlog("POST_CAPTURE_FLOW",{name=name,address=callback,frame=emu.framecount(),
+                        captures=ctx.sent("capture")})
+                end
+            end,address+delta,"exp-post-capture-"..name.."-"..delta,"System Bus"),"post-capture diagnostic refused")
+        end
+    end
     local unexpected_faint = false
     for _, delta in ipairs({0,0x02000000}) do
         assert(event.on_bus_exec(function(callback)
