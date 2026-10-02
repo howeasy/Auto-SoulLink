@@ -1,0 +1,153 @@
+{
+  "schema": "fixture-qualification-v1",
+  "scope": "full",
+  "required_stages": [
+    "qualify",
+    "boot",
+    "resave",
+    "post_oracle"
+  ],
+  "attempt_id": "ovl-silver_battle-a1",
+  "fixtures": [
+    {
+      "name": "silver_battle",
+      "passed": true,
+      "artifacts": {
+        "fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\tests\\fixtures\\gen2\\silver_battle.SaveRAM",
+          "size": 32790,
+          "sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd"
+        },
+        "profile": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\data\\games\\gen2_silver\\profile.json",
+          "size": 74913,
+          "sha256": "c6061f6437f979abe4003f44e3ddf0bc22b02bfe834cac2c269e3fe66d70909e"
+        },
+        "rom": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\silver_overlay.gbc",
+          "size": 2097152,
+          "sha256": "ec51ac94086469062795da1a5df6fbd327e599f70a2b31e3cfd23f62bdec0d15"
+        },
+        "route_facts": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\silver_route_facts.json",
+          "size": 13576,
+          "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d"
+        },
+        "played_receipt": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\silver_battle.clean_qualification_ref.json",
+          "size": 398,
+          "sha256": "5a994fc63ef6df2f694af2fe36846a64f37a8509d5df6cbb8e5e35b4791634f3"
+        },
+        "boot:game_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\boot-de401269a8489bf7\\silver_battle.boot.witness.json",
+          "size": 1963,
+          "sha256": "730963f3d275c67f02e9d8fe8a627a2a5e3abdbdc9bf1520110fb443da800141"
+        },
+        "resave:fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\resave-27f0a70f2b6408a8\\silver_battle.resaved.SaveRAM",
+          "size": 32790,
+          "sha256": "08f1b84d68efb42201937566bd5140e503f02678aee128e535124aeea67a7cd1"
+        },
+        "resave:save_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\resave-27f0a70f2b6408a8\\silver_battle.resave.witness.json",
+          "size": 2087,
+          "sha256": "535fa4e509a78c7ee7632cc747bfeb0802998e830338da17a9477ef72126d21f"
+        },
+        "resave:reload_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\reload-27f0a70f2b6408a8\\silver_battle.reload.witness.json",
+          "size": 1965,
+          "sha256": "5a0da13e4adce8a16e98a681be0b47eb006784bb111c7caf97999ea336580e7a"
+        }
+      },
+      "provenance": {
+        "title": "silver",
+        "rom_sha1": "583d8df4deb1831523521d20065504258cbaba28",
+        "scope": "candidate fixture",
+        "route_facts_sha256": "89c8cdaf7e57fa9ccc700e0e32a99ebb17d439d3bbc41f25ed09f75e0b60324a"
+      },
+      "stages": [
+        {
+          "stage": "qualify",
+          "fingerprint": "f511cc65d054fe4f830dce81266372931ea0351a509c4438e035119aef085872",
+          "status": "PASS",
+          "problems": [],
+          "notes": [
+            "Static bytes do not prove played origin, RTC or GAME qualification."
+          ],
+          "evidence": {
+            "oracle": "independent Gen2 PYDEC",
+            "player_id": "51084",
+            "ball_origin": "O-10 harness injection",
+            "natural_ball_acquisition": "false"
+          }
+        },
+        {
+          "stage": "boot",
+          "fingerprint": "de401269a8489bf709d71d9e4a636a8b1c8abed8636d874486d6ffa0ece3e10e",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME CONTINUE",
+            "location": "[24, 3]",
+            "position": "[53, 12]",
+            "cartram_sha256": "463d6b35dcd3ae97078386c7337a4c890bfb30ed05198a7fabc250abfec9926e"
+          },
+          "outputs": {
+            "boot:game_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\boot-de401269a8489bf7\\silver_battle.boot.witness.json",
+              "size": 1963,
+              "sha256": "730963f3d275c67f02e9d8fe8a627a2a5e3abdbdc9bf1520110fb443da800141"
+            }
+          }
+        },
+        {
+          "stage": "resave",
+          "fingerprint": "27f0a70f2b6408a809a1d3865a766e8091c96cce77bdbcbf736dd71db40cc4c2",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME re-save + reload",
+            "resave_cartram_sha256": "b83eaa0c45256af6228c40d7af1ffcb3854d8d92ad5ad75d31bb16a7edcced28"
+          },
+          "outputs": {
+            "resave:fixture": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\resave-27f0a70f2b6408a8\\silver_battle.resaved.SaveRAM",
+              "size": 32790,
+              "sha256": "08f1b84d68efb42201937566bd5140e503f02678aee128e535124aeea67a7cd1"
+            },
+            "resave:save_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\resave-27f0a70f2b6408a8\\silver_battle.resave.witness.json",
+              "size": 2087,
+              "sha256": "535fa4e509a78c7ee7632cc747bfeb0802998e830338da17a9477ef72126d21f"
+            },
+            "resave:reload_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_battle-a1\\silver_battle\\qualify-overlay\\reload-27f0a70f2b6408a8\\silver_battle.reload.witness.json",
+              "size": 1965,
+              "sha256": "5a0da13e4adce8a16e98a681be0b47eb006784bb111c7caf97999ea336580e7a"
+            }
+          }
+        },
+        {
+          "stage": "post_oracle",
+          "fingerprint": "68a8b7d7a9c829fc5f3d7a6236caf27e6e5e477f5dc28c2abda40ed2de5d3f1d",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "oracle": "independent re-save PYDEC + GAME raw-party witness"
+          }
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "physical_qualification": false,
+  "open_obligations": [
+    "coordinator GAME/RTC/played-origin review",
+    "recorded source/physical gate sign-off"
+  ]
+}
