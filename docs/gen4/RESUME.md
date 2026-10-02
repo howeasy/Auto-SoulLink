@@ -1,5 +1,56 @@
 # Gen 4 resume note
 
+## Checkpoint 8 (2026-10-02 12:25 EDT; owner timebox: stop 13:31 EDT / 17:31Z; final status appended at stop)
+
+### G1 carry-over
+- **Current FROZEN cut: `aa45dd94`.**
+  - It adds the settle-arm probe: an overlay site is armed only when table-active AND its full pin matches, with HG bound 16 = measured 11 + 5. The measurement is the serial DIAGNOSTIC `C:/slink/g4/g1-settle-HG-1144-serial`: table-active at 7325, ready at +10/+11.
+  - It adds the hge `load_arm9_expansion` symbol row.
+  - The previous cut `6290dd3a` added: hge census `internal_loads` (async ids 130/131), publish on every aborted attempt, the Windows replace retry, exact pin-site diagnostics, and the row-o fight recipe.
+- **HG at `aa45dd94`** (`C:/slink/g4/g1cprobeHG-1201/heartgold-a48971929487/combined.txt`, coordinator-verified): a,c,d,e,g,h,i,j,k,l,m,o PASS; b/f/n OPEN; missed=[]; RESULT OPEN.
+  - n's raw per-case case is a coverage FAIL: `static_pc=false/reset=false`, queued-event-at-close not exercised.
+  - b: the wrong-overlay collision was not observed.
+  - f: PERF, blocked by foreign EmuHawks.
+- **Row o at `6290dd3a`:** all 4 PASS (consume_receipt verified): `g1b-hg1-1119`, `g1b-hg2-1122`, `g1b-hge1-1123`, `g1b-hge2-1124`. The HG pair stays current at `aa45dd94`; the hge pair is STALE (hge pack changed) and needs a re-run.
+- **hge at `aa45dd94`:** baseline c PASS (`g1cprobeHGE-1215`). Combined pending at this checkpoint.
+  - b raw FAIL: no own-overlay faint trigger on the indoor fixture.
+  - m/n named OPEN: no battle route; PC withdraw unrouted.
+- **SS a–n:** not yet run. The boxed fixture is ready: `C:/slink/g4/g1inputs-c935-1015/ss_boxed.SaveRAM`.
+- **Historical (do not relabel):**
+  - HG `g1bprobeHG-1125` at 6290: n FAIL from the async-load race;
+  - hge `g1bprobeHGE-1135` at 6290: c FAIL from the missing symbol;
+  - c935: `g1probeHG-1033` and `g1probeHGE-1058`.
+- **Production follow-up:** `lua/nds/hook_binding.lua:105-107` has the same async-load exposure ("resident" = table flag alone). The fix comes with the NDS-3 residency-contract adoption (`may_arm` requires `site_confirmed`). First falsifier: an ov12 site armed during the load window.
+
+### Companion (plan C0-C8)
+- **C0 DONE** (`9b5c7a25`): pret `ad7a3afa` rebuilds HG and SS byte-identical on hgbox.
+- **C1:**
+  - census + canary authored (`82edb0f2`);
+  - span widened to 4 KiB, ITCM 0x01FFEC00..0x01FFFC00, so the shared ABI arena fits unmodified (`29febbf3`); census PASS on HG/SS/hge;
+  - the **live canary run is pending a free lane**. Command in the C1 Sonnet report: `SLINK_LIVE=1 ... pytest tests/live/test_gen4_mailbox.py -m live`. Register a permanent `mailbox` kind in `tools/gen4_evidence.py` (it is currently a setdefault at import).
+- **Decisions recorded in FEATURE_BAR:**
+  - ScrCmd slot = opcode 1, not 486 (486 is executed by scripts); the opcode-1 gate passed by composition;
+  - sound codes: SUCCESS 1501, NOTIFY 1500, BOO 1536 provisional; **FAILURE has no HGSS SE, an owner content choice**;
+  - the trade copies the NPC-trade slot-overwrite shape; the box arm is new behaviour;
+  - service tick = one `mainTaskQueue` SysTask;
+  - C4 panel: HG/SS append an After-main overlay; hge uses the 0x021E5900 slot; the trainer card is a lifecycle template only, its exit is asm;
+  - hge start menu, `start_menu.o`, is identical to HG;
+  - C2 layout direction: shared ABI + ROM-only boot generation + liveness pair.
+- **Owner questions to raise:** the FAILURE sound choice; whether C5 keeps a box arm.
+
+### G3 research
+- **The new-game route is fully sourced** (`docs/gen4/research/new_game_route.md`): legs, warps, mom MAP-INIT, YES defaults; a blind A,A,A picks Chikorita.
+- **PC withdraw:** the box app is ov14 asm; the dirty signal is a per-box mask. Next step: the live Right+A trial from `G2_PRODUCER_PLAN.md` §6b (assert data+0x2C==8, data+0x30==9).
+
+### Shared NDS (Gen 5, `claude/nds-shared-stack`, local only)
+- Commits: 5a7c45f5 (NDS-3), 4cd04812 (NDS-2), 0c680554, e2cb38e4 + 3c252ace (NDS-1), bfafb93b (NDS-4), 5cf43acb (NDS-5). NDS-6 composer in flight.
+- All Gen 4 requirements were sent and accepted.
+- **Adopt in ONE Gen 4 cut next session:** pk4.lua -> `pkm45_crypto`; hook_binding -> the residency contract. Then live receipts on HG/SS/hge.
+
+### Other
+- Spawned chip: the `tests/conftest.py` cross-drive relpath INTERNALERROR (shared file).
+- OMP peers 13112 and 21352 are idle with all outcomes recorded. Codex is running hge/row-o/SS until the 17:05Z launch guard.
+
 ## Checkpoint 7 (2026-10-02 11:30 EDT, owner timebox: stop 13:31 EDT / 17:31Z)
 
 - **Companion C0 is DONE** (`9b5c7a25`).
