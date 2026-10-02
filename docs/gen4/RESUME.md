@@ -12,7 +12,9 @@
   - b: the wrong-overlay collision was not observed.
   - f: PERF, blocked by foreign EmuHawks.
 - **Row o at `6290dd3a`:** all 4 PASS (consume_receipt verified): `g1b-hg1-1119`, `g1b-hg2-1122`, `g1b-hge1-1123`, `g1b-hge2-1124`. The HG pair stays current at `aa45dd94`; the hge pair is STALE (hge pack changed) and needs a re-run.
-- **hge at `aa45dd94`:** baseline c PASS (`g1cprobeHGE-1215`). Combined pending at this checkpoint.
+- **hge at `aa45dd94`** (`C:/slink/g4/g1cprobeHGE-1215/heartgold_hge-08256aad427a/combined.txt`, coordinator-verified): a,c,d,e,g,h,i,j,l PASS; **b FAIL, k FAIL**; f/m/n/o OPEN; missed=[]; RESULT FAIL.
+  - c: 20/20 transitions matched, including 129/131 at lag 1.
+  - **k FAIL: "RTC compared at different frame counts" (977 vs 979).** The bytes are identical, so this is a harness sampling point that drifts with boot length. Codex's note misreported it as PASS. Next cut: a red-first fixed-frame k sample.
   - b raw FAIL: no own-overlay faint trigger on the indoor fixture.
   - m/n named OPEN: no battle route; PC withdraw unrouted.
 - **SS a–n:** not yet run. The boxed fixture is ready: `C:/slink/g4/g1inputs-c935-1015/ss_boxed.SaveRAM`.
