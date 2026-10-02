@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import subprocess
 import sys
 import types
@@ -543,7 +544,7 @@ _0020:
     fl = sc.flow(hit)
     assert [d["label"] for d in fl["dead"]] == ["_0005"] and list(fl["roots"]) == ["scr_seq_T_000"]
     assert len(fl["unresolved"]) == 1 and "GoToIfNoItemSpace" in fl["unresolved"][0]["reason"]
-    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
     assert rec["status"] == "partial" and rec["dead_blocks_ignored"][0]["label"] == "_0005" and rec["gates"] == []
 
 
@@ -551,13 +552,13 @@ def test_reachability_statuses_resolved_partial_unresolved():
     """Revert: make `status` always "resolved"."""
     body = "scr_seq_T_000:\n\tGoToIfSet FLAG_A, _0020\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n_0020:\n\tEnd\n"
     sc, ms, hit = _reach(body)
-    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
     assert rec["status"] == "resolved" and [(g["token"], g["state"], g["cite"]) for g in rec["gates"]] == [("FLAG_A", "unset", "x.s:2")]
     sc, ms, hit = _reach(body, trig=False)
-    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
     assert rec["status"] == "partial" and "trigger of scr_seq_T_000" in rec["unresolved"][0]["what"] and [g["token"] for g in rec["gates"]] == ["FLAG_A"]
     sc, ms, hit = _reach("_0010:\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n")
-    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
     assert rec["status"] == "unresolved" and rec["entries"] == [] and rec["gates"] == [] and rec["unresolved"]
 
 
@@ -1084,7 +1085,7 @@ def test_hge_reachability_is_the_vanilla_one_and_its_sources_are_proved():
     proof = hge["reachability_narc"]
     ev, hdr = proof["events"], proof["header"]
     assert ev["narc"] == "a/0/3/2" and ev["member_count"] == 491 and ev["members_differing_in_hge"] == []
-    assert hdr["narc"] == "a/0/1/2" and hdr["members_differing_in_hge"] == [3] and "3" not in hdr["members"], "member 3 (common scripts) differs and no header lives there"
+    assert hdr["narc"] == "a/0/1/2" and hdr["members_differing_in_hge"] == [3] and "3" not in hdr["members"], "member 3 (common scripts) differs; no header member is 3, so the ENTRY question is settled; the CallStd PATH question is callstd below"
     for key in ("events", "header"):
         want = {str(s["reachability"]["sources"][key]["member"]) for s in van["script_sites"] if s["reachability"]["sources"][key]}
         assert set(proof[key]["members"]) == want and want
@@ -1138,3 +1139,250 @@ def test_real_event_or_header_member_mismatch_fails_generation(hge_inputs, monke
     monkeypatch.setattr(acq, "narc_member_hashes", flipped)
     rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
     assert rc == 1 and f"{narc} member {member}" in err and "differs" in err
+
+
+# ── reachability fixes (OMP cx-1076f5ca): CallStd, empty-gate justification, dead edges ───────────
+# Each control names the revert that must turn it red.
+
+
+class StubStd:
+    """What reachability() needs from StdScripts: resolve(arg) -> call dict | None, writes(member, entry) -> {token: cite}."""
+
+    def __init__(self, writes: dict[str, dict[str, str]] | None = None):
+        self._writes = writes or {}
+
+    def resolve(self, arg: str):
+        return {"std": arg, "id": 2000, "member": 3, "entry": f"scr_seq_0003_{arg[-3:]}", "callee_cite": f"files/fielddata/script/scr_seq/scr_seq_0003.s:{arg[-3:]}"} if arg.startswith("std_") else None
+
+    def writes(self, member: int, entry: str) -> dict[str, str]:
+        return self._writes.get(entry, {})
+
+
+_CALLER = """
+scr_seq_T_000:
+	CallStd std_001
+	GoToIfSet FLAG_C, _0020
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0020:
+	End
+"""
+
+
+def test_callstd_callee_that_writes_a_tested_flag_makes_the_site_partial_and_is_cited():
+    """Revert: delete the callee-writes vs gate-token intersection in reachability() (F1)."""
+    sc, ms, hit = _reach(_CALLER)
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd({"scr_seq_0003_001": {"FLAG_C": "files/fielddata/script/scr_seq/scr_seq_0003.s:99"}}))
+    assert [c["std"] for c in rec["callstd"]["calls"]] == ["std_001"] and rec["callstd"]["calls"][0]["cite"] == "x.s:2"
+    assert rec["status"] == "partial" and [(c["token"], c["write_cite"]) for c in rec["callstd"]["conflicts"]] == [("FLAG_C", "files/fielddata/script/scr_seq/scr_seq_0003.s:99")]
+    assert any("CallStd std_001" in u["what"] and "FLAG_C" in u["what"] and u["cite"] == "x.s:2" for u in rec["unresolved"])
+    clean = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd({"scr_seq_0003_001": {"FLAG_OTHER": "y:1"}}))
+    assert clean["status"] == "resolved" and clean["callstd"]["conflicts"] == [] and len(clean["callstd"]["calls"]) == 1, "the check ran and found nothing"
+
+
+def test_callstd_write_after_the_call_in_the_caller_is_not_a_conflict():
+    """Revert: drop the `via after the call` exemption (the caller redefines the variable itself)."""
+    sc, ms, hit = _reach(
+        """
+scr_seq_T_000:
+	CallStd std_001
+	GetMenuChoice VAR_SPECIAL_RESULT
+	Compare VAR_SPECIAL_RESULT, 0
+	GoToIfEq _0010
+	End
+_0010:
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+"""
+    )
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd({"scr_seq_0003_001": {"VAR_SPECIAL_RESULT": "y:1"}}))
+    assert rec["status"] == "resolved" and rec["callstd"]["conflicts"] == []
+
+
+def test_unresolvable_callstd_target_is_unresolved_not_ignored():
+    """Revert: skip a CallStd whose target does not resolve."""
+    sc, ms, hit = _reach(_CALLER.replace("std_001", "bogus"))
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
+    assert rec["status"] == "partial" and any("CallStd bogus" in u["what"] for u in rec["unresolved"])
+
+
+def test_real_std_resolution_and_callee_closure(clone):
+    """Revert: break the sScriptBankMapping parse (first bank with id >= lo) or the ScrDef entry order."""
+    std = acq.StdScripts(clone)
+    bag = std.resolve("std_bag_is_full")
+    assert (bag["id"], bag["member"], bag["entry"]) == (2009, 3, "scr_seq_0003_009")
+    assert std.resolve("std_in_person_evaluate_dex")["member"] == 148
+    assert std.resolve("std_nonexistent") is None
+    w = std.writes(3, "scr_seq_0003_009")
+    assert isinstance(w, dict) and all(re.fullmatch(r"(FLAG|VAR)_\w+", t) for t in w)
+    cite = next(iter(w.values()), None)
+    if cite:
+        rel, _, n = cite.rpartition(":")
+        assert (clone / rel).read_text(encoding="utf-8").splitlines()[int(n) - 1]
+
+
+def test_committed_callstd_check_covers_every_site_and_matches_the_source(clone):
+    """Every CallStd line on a site's path is listed with a cite; the independent regex over the site files finds
+    no CallStd the records omit when it sits in the same block chain (the whole-file superset must contain them)."""
+    doc = load("acquisition.json")
+    all_lines = {}
+    for s in doc["script_sites"]:
+        rec = s["reachability"]
+        assert "callstd" in rec and set(rec["callstd"]) == {"calls", "conflicts"}, s["id"]
+        text = all_lines.setdefault(s["file"], (clone / "files/fielddata/script/scr_seq" / s["file"]).read_text(encoding="utf-8").splitlines())
+        for c in rec["callstd"]["calls"]:
+            n = int(c["cite"].rpartition(":")[2])
+            assert re.match(rf"\s*CallStd {c['std']}\b", text[n - 1]) and c["member"] >= 0, (s["id"], c)
+        assert rec["status"] == ("resolved" if not rec["unresolved"] else "partial")
+    pichu = next(s for s in doc["script_sites"] if s["id"] == "scr_seq_0092_D36R0101:1910")["reachability"]["callstd"]["calls"]
+    assert {(c["std"], c["member"]) for c in pichu} == {("std_play_pichu_music", 3), ("std_fade_end_pichu_music", 3)}, "the only CallStd on a path to any site"
+    inv = doc["inventory"]
+    assert inv["callstd_conflict_count"] == sum(len(s["reachability"]["callstd"]["conflicts"]) for s in doc["script_sites"])
+    assert inv["callstd_call_count"] == sum(len(s["reachability"]["callstd"]["calls"]) for s in doc["script_sites"]) > 0
+    assert set(inv["callstd_targets"]) == {c["std"] for s in doc["script_sites"] for c in s["reachability"]["callstd"]["calls"]}
+
+
+def test_a_new_callstd_gate_fails_generation(clone, monkeypatch):
+    """Revert: remove the CallStd conflict guard in build_doc. A callee that may write a flag/var a site tests must be
+    modelled (a cited gate) before generation succeeds; the guard fails rather than silently marking `partial`."""
+    tokens = {g["token"] for s in load("acquisition.json")["script_sites"] for g in walk_gates(s["reachability"]) if g["scope"] == "script"}
+    monkeypatch.setattr(acq.StdScripts, "writes", lambda self, member, entry: dict.fromkeys(tokens, "files/fielddata/script/scr_seq/scr_seq_0003.s:1"))
+    with pytest.raises(base.PretMismatch, match="CallStd callee writes a tested flag"):
+        acq.build_doc(clone)
+
+
+def test_resolved_with_empty_gates_must_be_justified(clone):
+    """Revert: delete the `empty_gates` justification (generation fails) or accept `resolved` + [] without one."""
+    doc = load("acquisition.json")
+    empties = [s for s in doc["script_sites"] if s["reachability"]["status"] == "resolved" and s["reachability"]["gates"] == []]
+    assert [s["id"] for s in empties] == ["scr_seq_0092_D36R0101:1910"]
+    just = empties[0]["reachability"]["empty_gates"]
+    assert just["reason"] == "entries_have_disjoint_gate_sets" and {e["entry"] for e in just["entries"]} == {e["entry"] for e in empties[0]["reachability"]["entries"]} and len(just["entries"]) == 2
+    for e in just["entries"]:
+        assert e["gate_count"] > 0 and re.match(r"files/.*:\d+$", e["cite"])
+        rel, _, n = e["cite"].rpartition(":")
+        assert e["entry"] in (clone / rel).read_text(encoding="utf-8").splitlines()[int(n) - 1]
+    sites = copy.deepcopy(doc["script_sites"])
+    assert acq.verify_reachability(clone, sites) == []
+    del next(s for s in sites if s["id"] == "scr_seq_0092_D36R0101:1910")["reachability"]["empty_gates"]
+    assert any("empty gates" in p for p in acq.verify_reachability(clone, sites))
+
+
+def test_missing_empty_gate_justification_fails_generation(clone, monkeypatch):
+    """Revert: drop verify_reachability's empty-gates rule."""
+    real = acq.reachability
+
+    def stripped(*a, **k):
+        rec = real(*a, **k)
+        rec.pop("empty_gates", None)
+        return rec
+
+    monkeypatch.setattr(acq, "reachability", stripped)
+    with pytest.raises(base.PretMismatch, match="empty gates"):
+        acq.build_doc(clone)
+
+
+def test_empty_gates_justification_kinds():
+    """Revert: always report the disjoint reason."""
+    sc, ms, hit = _reach("scr_seq_T_000:\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
+    assert rec["status"] == "resolved" and rec["gates"] == [] and rec["empty_gates"]["reason"] == "no_gate_on_any_route"
+    sc, ms, hit = _reach("scr_seq_T_000:\n\tGoToIfSet FLAG_A, _0020\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n_0020:\n\tEnd\n")
+    assert "empty_gates" not in acq.reachability(sc, ms, hit, 1, "MAP_T", StubStd())
+
+
+def test_flow_ignores_jump_edges_that_follow_an_unconditional_terminator_in_their_block():
+    """F3. Revert: drop the terminator cut-off in Script.__init__/prefix. Dead lines after Return/End/GoTo
+    (here a GoTo after Return) must not make a block a predecessor or contribute gates."""
+    sc, _ms, hit = _reach(
+        """
+scr_seq_T_000:
+	Call _0010
+	End
+_0010:
+	GoToIfSet FLAG_A, _0030
+	Return
+	GoToIfSet FLAG_DEAD, _0030
+	GoTo _0020
+_0020:
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0030:
+	End
+"""
+    )
+    fl = sc.flow(hit)
+    assert fl["roots"] == {}, "the only way into _0020 is a GoTo after a Return: dead code"
+
+
+def test_flow_keeps_live_gates_before_a_mid_block_call():
+    """F3 control: a Call in the middle of a block does not stop the block; gates before it still apply."""
+    sc, _ms, hit = _reach(
+        """
+scr_seq_T_000:
+	GoToIfSet FLAG_A, _0030
+	Call _0030
+	GoTo _0020
+_0020:
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0030:
+	Return
+"""
+    )
+    must, _may = sc.flow(hit)["roots"]["scr_seq_T_000"]
+    assert _keys(must) == {("FLAG_A", "unset", None, None)}
+
+
+def test_successor_graph_is_built_once_per_script():
+    """F5. Revert: rebuild succ inside the per-root loop (the attribute disappears)."""
+    sc, _ms, _hit = _reach("scr_seq_T_000:\n\tGoTo _0010\n_0010:\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n")
+    assert sc.succ[0] == [(1, "jump", 1)]
+
+
+def test_reachability_pin_is_earned_after_the_callstd_check():
+    """The 61/61 pin: derived from the per-site records AFTER the CallStd check, not typed in."""
+    doc = load("acquisition.json")
+    sites = doc["script_sites"]
+    assert doc["inventory"]["callstd_conflict_count"] == 0
+    resolved = [s for s in sites if s["reachability"]["status"] == "resolved" and s["reachability"]["callstd"]["conflicts"] == [] and s["reachability"]["unresolved"] == []]
+    assert len(resolved) == len(sites) == 61 and doc["inventory"]["reachability_status_counts"] == {"resolved": len(resolved)}
+
+
+def test_hge_callstd_paths_prove_or_flag_member_3():
+    """Revert: drop `reachability_narc.callstd` from build_hge. Callees outside member 3 are proved byte-identical;
+    callees in member 3 (which DIFFERS in hge) mark the site as inheriting an unproven path."""
+    van, hge = load("acquisition.json"), load_hge()
+    cs = hge["reachability_narc"]["callstd"]
+    assert cs["member_3_differs"] is True and cs["narc"] == "a/0/1/2"
+    used = {c["member"] for s in van["script_sites"] for c in s["reachability"]["callstd"]["calls"]}
+    assert 3 in used and set(map(int, cs["members"])) == used
+    for m, row in cs["members"].items():
+        assert (row["vanilla_sha256"] == row["hge_sha256"]) == (m != "3") and row["proven_identical"] == (m != "3")
+    crossing = {s["id"] for s in van["script_sites"] if any(c["member"] == 3 for c in s["reachability"]["callstd"]["calls"])}
+    assert crossing and {i for i, v in cs["sites"].items() if v["status"] == "inherits_unproven_callstd_member_3"} == crossing
+    assert {i for i, v in cs["sites"].items() if v["status"] == "proven_identical"} == {s["id"] for s in van["script_sites"]} - crossing
+    assert all(v["members"] for i, v in cs["sites"].items() if i in crossing)
+    assert [s["reachability"] for s in hge["script_sites"]] == [s["reachability"] for s in van["script_sites"]], "records stay vanilla; the inheritance status is a separate section"
+
+
+def test_hge_callstd_proof_is_red_on_a_differing_non_3_member_and_flags_member_3(monkeypatch):
+    """Revert: treat every differing member as acceptable (or none)."""
+
+    def stub(flip: set[int]):
+        monkeypatch.setattr(acq, "narc_member_hashes", lambda rom, narc: tuple(("x" if rom == "hge" and i in flip else "h") + str(i) for i in range(10)))
+
+    sites = [
+        {"id": "a", "reachability": {"callstd": {"calls": [{"member": 3}, {"member": 5}]}}},
+        {"id": "b", "reachability": {"callstd": {"calls": [{"member": 5}]}}},
+        {"id": "c", "reachability": {"callstd": {"calls": []}}},
+    ]
+    stub({3})
+    proof, problems = acq.callstd_member_proof("vanilla", "hge", sites)
+    assert problems == [] and proof["member_3_differs"] and proof["sites"]["a"]["status"] == "inherits_unproven_callstd_member_3" and proof["sites"]["b"]["status"] == "proven_identical" and proof["sites"]["c"]["status"] == "proven_identical"
+    stub({5})
+    _proof, problems = acq.callstd_member_proof("vanilla", "hge", sites)
+    assert len(problems) == 1 and "member 5" in problems[0] and "differs" in problems[0]
+    stub(set())
+    proof, problems = acq.callstd_member_proof("vanilla", "hge", sites)
+    assert problems == [] and not proof["member_3_differs"] and proof["sites"]["a"]["status"] == "proven_identical"

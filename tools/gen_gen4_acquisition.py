@@ -494,6 +494,7 @@ def build_doc(clone: Path) -> dict:
     sites: list[dict] = []
     branch_files: set[str] = set()  # script files holding a site AND a GetGameVersion branch
     map_sources: dict[str, MapSources] = {}
+    std = StdScripts(clone)
     for path in files:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         hits = [(i, SCAN_RE.match(line)) for i, line in enumerate(lines)]
@@ -556,12 +557,14 @@ def build_doc(clone: Path) -> dict:
             elif cmd == "LoadNPCTrade":
                 site |= {"npc_record": int(args[0])}
             site["status"] = status_of(site)
-            site["reachability"] = reachability(script, ms, i, mid, row["const"])
+            site["reachability"] = reachability(script, ms, i, mid, row["const"], std)
             assert_in_own_entry(site, lines, i)
             sites.append(site)
     assert len(sites) == SITE_COUNT, f"script site count {len(sites)} != pinned {SITE_COUNT}"
     if reach_problems := verify_reachability(clone, sites):
         raise base.PretMismatch("reachability: " + "; ".join(reach_problems))
+    if gated := [f"{s['id']}: {c['std']} may write {c['token']} (tested at {c['gate_cite']})" for s in sites for c in s["reachability"]["callstd"]["conflicts"]]:
+        raise base.PretMismatch("reachability: CallStd callee writes a tested flag/var; model the gate before regenerating: " + "; ".join(gated))
     out_of_scope = scan_out_of_scope(files)
 
     # resolve loan species from the NPC record and mark them resolved
@@ -617,6 +620,9 @@ def build_doc(clone: Path) -> dict:
             "npc_distinct_exchange_ids": sorted({s["npc_record"] for s in sites if s["command"] == "LoadNPCTrade"}),
             "status_counts": dict(sorted(Counter(s["status"] for s in sites).items())),
             "reachability_status_counts": dict(sorted(Counter(s["reachability"]["status"] for s in sites).items())),
+            "callstd_call_count": sum(len(s["reachability"]["callstd"]["calls"]) for s in sites),
+            "callstd_conflict_count": sum(len(s["reachability"]["callstd"]["conflicts"]) for s in sites),
+            "callstd_targets": sorted({c["std"] for s in sites for c in s["reachability"]["callstd"]["calls"]}),
             "reachability_by_command": {c: dict(sorted(Counter(s["reachability"]["status"] for s in sites if s["command"] == c).items())) for c in COMMANDS},
             "commands_without_a_c_producer": sorted(set(COMMANDS) - commands_with_c - {"CreateRoamer", "WildBattle"}),
             "scope": "bounded candidate inventory: script sites for the 9 commands plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)",
@@ -713,6 +719,9 @@ NEG_OP = {"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
 TRANSIENT_VARS = ("VAR_TEMP_", "VAR_SPECIAL_", "VAR_OBJ_")
 JUMP_RE = re.compile(r"^\s*((?:GoTo|Call)(?:If\w+)?)\b\s*(.*?)\s*(?:@.*)?$")
 CASE_RE = re.compile(r"^\s*Case\s+([^,\s]+),\s*(\w+)\s*(?:@.*)?$")
+CALLSTD_RE = re.compile(r"^\s*CallStd\s+(\S+)\s*(?:@.*)?$")
+READ_ONLY_RE = re.compile(r"^\s*(?:Compare|GoTo\w*|Call\w*|Switch|Case)\b")
+TOKEN_RE = re.compile(r"\b((?:FLAG|VAR)_\w+)\b")
 COMPARE_RE = re.compile(r"^\s*Compare\s+(\w+),\s*(\S+)\s*$")
 REACHABILITY_SCOPE = "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates) and common scripts reached through CallStd (scr_seq member 3)"
 
@@ -744,15 +753,26 @@ class Script:
         lab = [(i, m[1]) for i, ln in enumerate(lines) if (m := re.match(r"^(\w+):\s*$", ln))]
         self.starts, self.names = [i for i, _ in lab], [n for _, n in lab]
         self.index = {n: k for k, n in enumerate(self.names)}
+        ends = [*self.starts[1:], len(lines)]
+        # first unconditional terminator (End/Return/GoTo/...) of each block: lines after it are dead code
+        self.term = [next((i for i in range(st + 1, en) if BLOCK_END.match(lines[i])), None) for st, en in zip(self.starts, ends, strict=True)]
         self.preds: dict[int, list[tuple[str, int, int]]] = {k: [] for k in range(len(lab))}
         for i, ln in enumerate(lines):
             tgt = (m := CASE_RE.match(ln)) and m[2] or (m := JUMP_RE.match(ln)) and split_args(m[2])[-1:] and split_args(m[2])[-1]
-            if tgt in self.index and (k := self.blk(i)) >= 0:
+            if tgt in self.index and (k := self.blk(i)) >= 0 and self.live(k, i):
                 self.preds[self.index[tgt]].append(("jump", k, i))
         for k in range(1, len(lab)):
             last = next((lines[x] for x in range(self.starts[k] - 1, self.starts[k - 1], -1) if lines[x].strip()), "")
             if not BLOCK_END.match(last):
                 self.preds[k].append(("fall", k - 1, self.starts[k]))
+        self.succ: dict[int, list[tuple[int, str, int]]] = {}  # built once: flow() and the CallStd closure both walk it
+        for k, ps in self.preds.items():
+            for kind, pk, at in ps:
+                self.succ.setdefault(pk, []).append((k, kind, at))
+
+    def live(self, k: int, i: int) -> bool:
+        """Is line i of block k executable (no unconditional terminator earlier in the block)?"""
+        return self.term[k] is None or i <= self.term[k]
 
     def blk(self, i: int) -> int:
         return bisect.bisect_right(self.starts, i) - 1
@@ -801,13 +821,15 @@ class Script:
 
     def prefix(self, k: int, upto: int) -> list[tuple[dict | None, dict | None]]:
         """Conditional jump lines of block k before `upto`: they were NOT taken on the way to the site."""
-        return [self.jump_gate(i, False) for i in range(self.starts[k] + 1, upto) if CASE_RE.match(self.lines[i]) or ((m := JUMP_RE.match(self.lines[i])) and m[1].startswith("GoToIf"))]
+        return [self.jump_gate(i, False) for i in range(self.starts[k] + 1, upto) if self.live(k, i) and (CASE_RE.match(self.lines[i]) or ((m := JUMP_RE.match(self.lines[i])) and m[1].startswith("GoToIf")))]
 
     def flow(self, hit: int) -> dict:
         """Must/may gate sets from every scr_seq_ entry that reaches the site, by dataflow over the label graph (no path
         enumeration: shared subroutines and loops make paths explode). must = on EVERY path entry -> site, may = on SOME.
         Returns {"roots": {entry: (must, may)}, "unresolved": [...], "dead": [...], "reentered": {entry: [lines]}}."""
         hk = self.blk(hit)
+        if not self.live(hk, hit):  # the site sits after an End/Return/GoTo of its own block: nothing executes it
+            return {"roots": {}, "unresolved": [], "dead": [], "reentered": {}, "relevant": {}, "hk": hk}
         back, todo = {hk}, [hk]  # blocks that can reach the site, not walking past an entry label
         while todo:
             k = todo.pop()
@@ -819,7 +841,7 @@ class Script:
                     todo.append(pk)
         roots = sorted(k for k in back if self.names[k].startswith("scr_seq_"))
         dead = sorted(k for k in back if not self.preds[k] and k not in roots)
-        out: dict = {"roots": {}, "unresolved": [], "dead": [{"label": self.names[k], "cite": self.cite(self.starts[k])} for k in dead], "reentered": {}}
+        out: dict = {"roots": {}, "unresolved": [], "dead": [{"label": self.names[k], "cite": self.cite(self.starts[k])} for k in dead], "reentered": {}, "relevant": {}, "hk": hk}
         un: dict[str, dict] = {}
         edge_cache: dict[tuple, list[dict]] = {}
 
@@ -836,12 +858,8 @@ class Script:
             if self.preds[r]:
                 out["reentered"][self.names[r]] = sorted(at + 1 for _k, _pk, at in self.preds[r])
             fwd, todo = {r}, [r]
-            succ: dict[int, list[tuple[int, str, int]]] = {}
-            for k, ps in self.preds.items():
-                for kind, pk, at in ps:
-                    succ.setdefault(pk, []).append((k, kind, at))
             while todo:
-                for k, _kind, _at in succ.get(todo.pop(), []):
+                for k, _kind, _at in self.succ.get(todo.pop(), []):
                     if k not in fwd and k in back and not self.names[k].startswith("scr_seq_"):
                         fwd.add(k)
                         todo.append(k)
@@ -878,7 +896,70 @@ class Script:
             tg = {gate_key(g): g for g, _u in tail if g}
             mh, yh = {**(must[hk] or {}), **tg}, {**may[hk], **tg}
             out["roots"][self.names[r]] = (mh, {k: g for k, g in yh.items() if k not in mh})
+            out["relevant"][self.names[r]] = sorted(fwd)
         out["unresolved"] = [un[c] for c in sorted(un)]
+        return out
+
+
+class StdScripts:
+    """CallStd targets. ScrCmd_CallStd (src/scrcmd_c.c) runs the callee in its own script context while the caller waits,
+    so a callee that sets a flag/var the caller then tests is a gate. Resolved like the engine does: `std_*` id
+    (include/constants/std_script.h) -> the first sScriptBankMapping row (src/fieldmap.c, descending) with id >= scriptIdLo
+    -> scr_seq member + entry (id - scriptIdLo = the ScrDef index). `writes()` = every FLAG_/VAR_ token that a callee closure
+    mentions outside a Compare/GoTo/Call/Switch/Case operand (its entry block, everything it can reach, and its own CallStd
+    callees): a CONSERVATIVE set of possible writers (a read through a Buffer or message command counts too)."""
+
+    def __init__(self, clone: Path):
+        self.clone = clone
+        self.consts = {n: int(v) for n, v in re.findall(r"^#define\s+(\w+)\s+(\d+)\b", base.read(clone, "include/constants/std_script.h"), re.M)}
+        rows = re.findall(r"^\s*\{\s*(\w+),\s*NARC_scr_seq_scr_seq_(\d+)_bin,", base.read(clone, "src/fieldmap.c"), re.M)
+        self.banks = [(int(lo) if lo.isdigit() else self.consts[lo], int(member)) for lo, member in rows]
+        assert len(self.banks) == 30 and [b[0] for b in self.banks] == sorted((b[0] for b in self.banks), reverse=True), "sScriptBankMapping drifted (30 rows, descending)"
+        self._scripts: dict[int, Script] = {}
+        self._writes: dict[tuple[int, str], dict[str, str]] = {}
+
+    def script(self, member: int) -> Script:
+        if member not in self._scripts:
+            (path,) = sorted((self.clone / SCR_DIR).glob(f"scr_seq_{member:04d}*.s"))
+            self._scripts[member] = Script(f"{SCR_DIR}/{path.name}", path.read_text(encoding="utf-8", errors="replace").splitlines())
+        return self._scripts[member]
+
+    def resolve(self, arg: str) -> dict | None:
+        sid = self.consts.get(arg)
+        if sid is None:
+            return None
+        lo, member = next((b for b in self.banks if sid >= b[0]), (None, None))
+        if lo is None:
+            return None
+        sc = self.script(member)
+        defs = [m[1] for ln in sc.lines if (m := re.match(r"^\s*ScrDef\s+(\w+)", ln))]
+        if sid - lo >= len(defs) or defs[sid - lo] not in sc.index:
+            return None
+        return {"std": arg, "id": sid, "member": member, "entry": defs[sid - lo], "callee_cite": sc.cite(sc.starts[sc.index[defs[sid - lo]]])}
+
+    def writes(self, member: int, entry: str, _seen: frozenset = frozenset()) -> dict[str, str]:
+        """token -> cite of its first mention in the callee closure."""
+        if (member, entry) in self._writes:
+            return self._writes[(member, entry)]
+        sc, out = self.script(member), {}
+        todo, seen = [sc.index[entry]], set()
+        me = _seen | {(member, entry)}
+        while todo:
+            k = todo.pop()
+            if k in seen:
+                continue
+            seen.add(k)
+            todo += [n for n, _kind, _at in sc.succ.get(k, [])]
+            stop = len(sc.lines) if k + 1 >= len(sc.starts) else sc.starts[k + 1]
+            for i in range(sc.starts[k] + 1, stop):
+                t = sc.lines[i].split("@", 1)[0]
+                if (m := CALLSTD_RE.match(t)) and (r := self.resolve(m[1])) and (r["member"], r["entry"]) not in me:
+                    for tok, cite in self.writes(r["member"], r["entry"], me).items():
+                        out.setdefault(tok, cite)
+                if t.strip() and not READ_ONLY_RE.match(t):
+                    for tok in TOKEN_RE.findall(t):
+                        out.setdefault(tok, sc.cite(i))
+        self._writes[(member, entry)] = out
         return out
 
 
@@ -944,7 +1025,37 @@ class MapSources:
         return out
 
 
-def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str) -> dict:
+def callstd_check(script: Script, std, fl: dict, hit: int, entries: list[dict]) -> tuple[dict, list[dict]]:
+    """Every CallStd on a path to the site (blocks that can reach it; lines before the site, or before the block's
+    terminator): list it, resolve it, and flag any token its callee closure may write that a script gate of this record
+    tests, unless the caller refills that variable itself after the call. Returns ({calls, conflicts}, unresolved)."""
+    calls: dict[int, dict] = {}
+    un: list[dict] = []
+    for k in sorted({k for ks in fl["relevant"].values() for k in ks}):
+        stop = hit if k == fl["hk"] else (script.starts[k + 1] if k + 1 < len(script.starts) else len(script.lines))
+        for i in range(script.starts[k] + 1, stop):
+            if script.live(k, i) and (m := CALLSTD_RE.match(script.lines[i])):
+                res = std.resolve(m[1])
+                if res is None:
+                    un.append({"what": f"CallStd {m[1]}", "reason": "target is not a std_script.h id that maps to a scr_seq entry, so its callee cannot be checked for gates", "cite": script.cite(i)})
+                else:
+                    calls[i] = {**res, "cite": script.cite(i)}
+    gates = {gate_key(g): g for e in entries for g in (*e["script_gates"], *e["path_dependent_gates"]) if g["scope"] == "script"}
+    conflicts = []
+    for i, c in sorted(calls.items()):
+        for tok, wcite in sorted(std.writes(c["member"], c["entry"]).items()):
+            for g in (g for g in gates.values() if g["token"] == tok):
+                via = int(g["via"]["cite"].rpartition(":")[2]) - 1 if g.get("via") else None
+                if via is not None and via > i and script.blk(via) == script.blk(i):
+                    continue  # the caller refills the variable after the call, so the callee write cannot reach this test
+                conflicts.append({"call": c["cite"], "std": c["std"], "token": tok, "write_cite": wcite, "gate_cite": g["cite"]})
+    conflicts = list({(c["call"], c["token"], c["gate_cite"]): c for c in conflicts}.values())
+    for c in conflicts:
+        un.append({"what": f"CallStd {c['std']} may write {c['token']}", "reason": f"the callee writes {c['token']} (see write_cite) and the caller tests it at {c['gate_cite']}; a gate set inside a CallStd callee is not derived", "cite": c["call"]})
+    return {"calls": [c for _i, c in sorted(calls.items())], "conflicts": sorted(conflicts, key=lambda c: (c["call"], c["token"]))}, un
+
+
+def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str, std) -> dict:
     fl = script.flow(hit)
     un = list(fl["unresolved"])
     rec = {
@@ -959,7 +1070,7 @@ def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str)
         rec["dead_blocks_ignored"] = fl["dead"]  # no jump references them: unreachable, so they carry no path (not a gap)
     if not fl["roots"]:
         un.append({"what": "entry", "reason": "no scr_seq_ entry label reaches the site by Call/GoTo/Case/fall-through", "cite": script.cite(hit)})
-        return rec | {"entries": [], "gates": [], "status": "unresolved", "unresolved": un}
+        return rec | {"entries": [], "gates": [], "callstd": {"calls": [], "conflicts": []}, "status": "unresolved", "unresolved": un}
     entries, combos = [], []
     for r, (must, may) in fl["roots"].items():
         m = re.fullmatch(rf"scr_seq_{re.escape(ms.token)}_(\d{{3}})", r)
@@ -974,8 +1085,14 @@ def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str)
         combos += [{**must, **{gate_key(g): g for g in t["gates"]}} for t in (trig or [{"gates": []}])]
     nec = set.intersection(*(set(c) for c in combos))
     gates = sorted((next(c[k] for c in combos if k in c) for k in nec), key=_gate_order)
-    un = list({(u["what"], u["cite"]): u for u in un}.values())
-    return rec | {"entries": entries, "gates": gates, "status": "partial" if un else "resolved", "unresolved": un}
+    cs, cun = callstd_check(script, std, fl, hit, entries)
+    un = list({(u["what"], u["cite"]): u for u in [*un, *cun]}.values())
+    rec |= {"entries": entries, "gates": gates, "callstd": cs, "status": "partial" if un else "resolved", "unresolved": un}
+    if not gates and not un:  # resolved with nothing to cite: say why, with the entry labels as evidence
+        counts = [(e["entry"], len(e["script_gates"]) + max((len(t["gates"]) for t in e["triggers"]), default=0)) for e in entries]
+        why = "entries_have_disjoint_gate_sets" if any(n for _e, n in counts) else "no_gate_on_any_route"
+        rec["empty_gates"] = {"reason": why, "entries": [{"entry": e, "gate_count": n, "cite": script.cite(script.starts[script.index[e]])} for e, n in counts]}
+    return rec
 
 
 def iter_gates(rec: dict):
@@ -1011,6 +1128,17 @@ def verify_reachability(clone: Path, sites: list[dict]) -> list[str]:
             continue
         if rec["status"] not in ("resolved", "partial", "unresolved") or (rec["status"] == "resolved") != (not rec["unresolved"]):
             problems.append(f"{s['id']}: reachability status {rec['status']!r} does not match its unresolved list")
+        if rec["status"] == "resolved" and not rec["gates"]:
+            ej = rec.get("empty_gates")
+            if not ej or not ej.get("entries"):
+                problems.append(f"{s['id']}: resolved with empty gates and no justification (`empty_gates`)")
+            for e in (ej or {}).get("entries", []):
+                problems += cite_problem(clone, f"{s['id']} empty gates {e.get('entry')}", e.get("cite"), e.get("entry"))
+        if "callstd" not in rec:
+            problems.append(f"{s['id']}: no callstd check recorded")
+        for c in rec.get("callstd", {}).get("calls", []):
+            problems += cite_problem(clone, f"{s['id']} CallStd {c['std']}", c.get("cite"), f"CallStd {c['std']}")
+            problems += cite_problem(clone, f"{s['id']} callee {c['entry']}", c.get("callee_cite"), c["entry"])
         for g in iter_gates(rec):
             problems += cite_problem(clone, f"{s['id']} gate {g.get('token')}", g.get("cite"), g.get("token"))
         for t in (t for e in rec["entries"] for t in e["triggers"]):
@@ -1034,6 +1162,7 @@ def verify_reachability(clone: Path, sites: list[dict]) -> list[str]:
 HGE_SCHEMA = "gen4-hge-acquisition-v1"
 HGE_OUT = base.REPO / "data" / "games" / "gen4_hge"
 SCRIPT_NARC, TRADE_NARC = "a/0/1/2", "a/1/1/2"
+COMMON_SCRIPT_MEMBER = 3  # scr_seq_0003: the common scripts reached through CallStd (std_* ids 2000-2499 and others)
 # "GiveEgg" below is the vanilla C function (shared implementation), NOT the script command of the same name:
 # the command's handler ScrCmd_GiveEgg is the one the fork replaces (see HGE_PRODUCERS and script_dispatch).
 HGE_C_APIS = (
@@ -1343,9 +1472,10 @@ def script_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tuple[dict
 
 
 def reachability_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tuple[dict, list[str]]:
-    """The reachability of a shared site is only shared if the data it was derived from is: the map's zone_event member
-    (a/0/3/2) and its `_hdr` script member (a/0/1/2) must be byte-identical in both ROMs (the site members themselves are
-    proved by script_member_proof). A difference fails generation."""
+    """The ENTRY half of a shared site's reachability: the map's zone_event member (a/0/3/2) and its `_hdr` script member
+    (a/0/1/2) that START the entries must be byte-identical in both ROMs (the site members themselves are proved by
+    script_member_proof). A difference fails generation. The PATH half (CallStd callees, which live in other members,
+    notably member 3 that DIFFERS in hge) is callstd_member_proof."""
     problems, out = [], {}
     for key, narc in (("events", EVENT_NARC), ("header", SCRIPT_NARC)):
         v, h = narc_member_hashes(vanilla, narc), narc_member_hashes(hge, narc)
@@ -1362,6 +1492,36 @@ def reachability_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tupl
                 problems.append(f"{narc} member {n} ({f}) differs between the vanilla and hge ROMs: the reachability derived from it is not shared")
         out[key] = {"narc": narc, "member_count": len(h), "members": rows, "members_differing_in_hge": [n for n in range(min(len(v), len(h))) if v[n] != h[n]]}
     return out, problems
+
+
+def callstd_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tuple[dict, list[str]]:
+    """The PATH half of a shared site's reachability. A site whose path crosses a CallStd runs the callee from another
+    script member. A callee member that is byte-identical in both ROMs is proved; member 3 (the common scripts) DIFFERS
+    in hge, so a site crossing into it inherits the vanilla CallStd check UNPROVEN (`inherits_unproven_callstd_member_3`:
+    the callee bytes of the targets used were not shown identical). Any OTHER differing callee member fails generation."""
+    v, h = narc_member_hashes(vanilla, SCRIPT_NARC), narc_member_hashes(hge, SCRIPT_NARC)
+    problems = [f"{SCRIPT_NARC} has {len(v)} members in the vanilla ROM and {len(h)} in the hge ROM"] if len(v) != len(h) else []
+    used = sorted({c["member"] for s in sites for c in s["reachability"]["callstd"]["calls"]})
+    members = {}
+    for m in used:
+        if m >= min(len(v), len(h)):
+            problems.append(f"{SCRIPT_NARC} member {m} (CallStd callee bank) is missing")
+            continue
+        members[str(m)] = {"vanilla_sha256": v[m], "hge_sha256": h[m], "proven_identical": v[m] == h[m]}
+        if v[m] != h[m] and m != COMMON_SCRIPT_MEMBER:
+            problems.append(f"{SCRIPT_NARC} member {m} (CallStd callee bank) differs between the vanilla and hge ROMs: the CallStd check of the sites that reach it is not shared")
+    per_site = {}
+    for s in sites:
+        ms = sorted({c["member"] for c in s["reachability"]["callstd"]["calls"]})
+        unproven = any(not members.get(str(m), {}).get("proven_identical") for m in ms)
+        per_site[s["id"]] = {"status": "inherits_unproven_callstd_member_3" if unproven else "proven_identical", "members": ms}
+    return {
+        "narc": SCRIPT_NARC,
+        "member_3_differs": v[COMMON_SCRIPT_MEMBER] != h[COMMON_SCRIPT_MEMBER],
+        "members": members,
+        "sites": per_site,
+        "note": "records stay the vanilla ones; `sites` says which of them cross a CallStd into a member that differs in hge",
+    }, problems
 
 
 # ---- fork facts that script resolution relies on
@@ -1508,6 +1668,9 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     script, trade, problems = script_member_proof(str(vanilla_rom), str(hge_rom), sites)
     reach_proof, reach_problems = reachability_member_proof(str(vanilla_rom), str(hge_rom), sites)
     problems += reach_problems
+    callstd_proof, callstd_problems = callstd_member_proof(str(vanilla_rom), str(hge_rom), sites)
+    problems += callstd_problems
+    reach_proof["callstd"] = callstd_proof
     calls, defs, scan_problems = scan_hge_c(src, defined)
     problems += scan_problems
     facts, fact_problems = fact_checks(pret, src)
@@ -1624,7 +1787,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     unresolved.append({"id": "hge_runtime_receipt", "kind": "runtime", "status": "open", "why": "GiveMon, ScrCmd_GiveEgg, ScrCmd_GiveTogepiEgg, _CreateTradeMon and the PC place functions are replaced C: an hge runtime acquisition receipt is still required (this inventory is SOURCE + ROM data only)"})
     inputs = {rel: hashlib.sha256((src / rel).read_bytes()).hexdigest() for rel in sorted({"hooks", "include/config.h", "include/debug.h", *HGE_FACT_FILES} | {r["file"] for r in calls + defs})}
     doc = {
-        "_note": "GENERATED by tools/gen_gen4_acquisition.py hge from the pinned hg-engine fork, the pinned hge ROM and pret/pokeheartgold -- do not edit. Script sites, NPC trade records and runtime branches are the vanilla HGSS ones, valid because script_narc/trade_narc prove the members holding them are byte-identical in both ROMs (BYTECODE only) and script_dispatch checks, at source level, that no command they use reaches a handler the fork hooks without the inventory accounting for it; member 3 (common scripts via CallStd) differs and is not covered; the per-site `reachability` records are shared the same way, valid because reachability_narc proves the zone_event and header members they were derived from are byte-identical too; the C inventory is scanned from the fork (hge replaces engine code).",
+        "_note": "GENERATED by tools/gen_gen4_acquisition.py hge from the pinned hg-engine fork, the pinned hge ROM and pret/pokeheartgold -- do not edit. Script sites, NPC trade records and runtime branches are the vanilla HGSS ones, valid because script_narc/trade_narc prove the members holding them are byte-identical in both ROMs (BYTECODE only) and script_dispatch checks, at source level, that no command they use reaches a handler the fork hooks without the inventory accounting for it; member 3 (common scripts via CallStd) differs and is not covered; the per-site `reachability` records are shared the same way: reachability_narc proves the zone_event and header members that START their entries are byte-identical (the entry question), and reachability_narc.callstd covers the PATH question: callee members outside member 3 are proved identical, while the sites whose path crosses a CallStd into member 3 (which differs) are listed as inheriting an unproven path; the C inventory is scanned from the fork (hge replaces engine code).",
         "_schema": HGE_SCHEMA,
         "rom_sha1": hge_sha1,
         "vanilla_rom_sha1": vanilla_sha1,
@@ -1649,6 +1812,10 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
             "npc_classification": vdoc["inventory"]["npc_classification"],
             "reachability_status_counts": vdoc["inventory"]["reachability_status_counts"],
             "reachability_by_command": vdoc["inventory"]["reachability_by_command"],
+            "callstd_call_count": vdoc["inventory"]["callstd_call_count"],
+            "callstd_conflict_count": vdoc["inventory"]["callstd_conflict_count"],
+            "callstd_targets": vdoc["inventory"]["callstd_targets"],
+            "callstd_sites_inheriting_unproven": sorted(i for i, v in callstd_proof["sites"].items() if v["status"] != "proven_identical"),
             "c_producer_count": len(calls),
             "c_call_site_count": sum(len(r["lines"]) for r in calls),
             "c_inactive_call_site_count": sum(len(r["inactive_lines"]) for r in calls),
