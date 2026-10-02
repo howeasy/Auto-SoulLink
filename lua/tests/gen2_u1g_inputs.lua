@@ -425,7 +425,9 @@ function U.run(F, ctx, SG, g)
             stack_valid=function() return false end},
         authority={kind="PHYSICAL_RUNTIME", capture=function() return {generation=1, operation="u1g"} end,
                    valid=function() return false end},
-        runtime_qualification={schema=g.Signals.RECEIPT_SCHEMA_V2, title=title, runs=runs}}
+        -- an overlay union carries its identity at the top level too (signals.lua kind_mismatch checks both)
+        runtime_qualification={schema=g.Signals.RECEIPT_SCHEMA_V2, title=title, runs=runs,
+                               artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256}}
     if ctx.artifact.kind == "overlay" then options.view = ctx.artifact end   -- the production binder validates the overlay's sites
     local service, why = g.Signals.new(options)
     local registered = service and service:status().registered_sites or {}

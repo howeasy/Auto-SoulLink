@@ -377,6 +377,16 @@ def merge_engine_runs(committed, replacement, identity, replaced):
     return [run for run in kept if run["fixture"] not in replaced] + list(replacement)
 
 
+def engine_union(title, runs, identity):
+    """The v2 engine-site union receipt for one artifact (D4). An overlay union carries the overlay identity at the
+    top level too, because the production validator (lua/gen2/signals.lua kind_mismatch) checks the receipt AND
+    every run; a clean union carries none, so the committed clean receipts keep their shape."""
+    receipt = {"schema": "gen2-engine-site-receipt-v2", "title": title, "runs": runs}
+    if identity["kind"] == "overlay":
+        receipt.update(artifact_kind="overlay", binding_sha256=identity["binding_sha256"])
+    return receipt
+
+
 def cart_ram(raw):
     """The compared CartRAM of an exact-length SaveRAM; the RTC trailer is never compared."""
     _require(isinstance(raw, bytes) and len(raw) == SAVERAM_BYTES,

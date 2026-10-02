@@ -483,3 +483,19 @@ def test_the_overlay_fixture_set_is_the_one_the_overlay_proofs_name():
     assert named == set(gx.OVERLAY_QUALIFIED) and set(gx.OVERLAY_QUALIFIED) <= set(gx.BY_NAME)
     from tests.live import test_gen2_new_gates as live
     assert {s.name for s in live.INSPECT_FIXTURES} >= (set(gx.OVERLAY_QUALIFIED) if live.KIND == "overlay" else set(gx.BY_NAME))
+
+
+def test_an_overlay_engine_union_carries_its_identity_and_a_clean_one_carries_none():
+    """Found by the round-1 Gold u1g PHYSICAL run: the v2 union had overlay identity on each run but not at the top
+    level, so production Signals.new refused it ("v2 receipt belongs to another artifact kind or binding")."""
+    from tools import gen2_fixtures
+
+    overlay = {"kind": "overlay", "rom_sha1": "b" * 40, "base_sha1": "c" * 40, "binding_sha256": "d" * 64}
+    union = gen2_fixtures.engine_union("gold", [{"fixture": "gold_battle"}], overlay)
+    assert union["artifact_kind"] == "overlay" and union["binding_sha256"] == "d" * 64
+    assert union["schema"] == "gen2-engine-site-receipt-v2" and union["title"] == "gold"
+    clean = gen2_fixtures.engine_union("gold", [], {"kind": "clean", "rom_sha1": "c" * 40, "base_sha1": "c" * 40,
+                                                    "binding_sha256": None})
+    assert "artifact_kind" not in clean and "binding_sha256" not in clean
+    text = (Path(__file__).resolve().parents[2] / "lua/tests/gen2_u1g_inputs.lua").read_text(encoding="utf-8")
+    assert "artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256}}" in text

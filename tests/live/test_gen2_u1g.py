@@ -126,7 +126,7 @@ def merge(title, kind=None, identity=None):
     new = [json.loads((RUNS / f"{n}.run.json").read_text(encoding="utf-8")) for n in names]
     runs = gen2_fixtures.merge_engine_runs(committed, new, identity, synth.SYNTH_FIXTURES)
     # the kept non-synthetic runs came from test_gen2_frame_align: stamped only if earned on this same code
-    receipt = live.stamped({"schema": "gen2-engine-site-receipt-v2", "title": title, "runs": runs}, base=committed)
+    receipt = live.stamped(gen2_fixtures.engine_union(title, runs, identity), base=committed)
     path.write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return receipt
 
