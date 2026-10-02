@@ -298,11 +298,14 @@ requires an explicit `SourceBuild.base_arm9_compressed`.
 
 `NativeArena` is declared, never verified, and nothing in this module checks that an
 arena fits anywhere. The facts a title binding must respect: `SLINK_ARENA_SIZE` is
-**0x1000**, a Gen 3 heap carve-out size; the Gen 4 HG/SS and hg-engine ITCM autoload
-block is **0x620** bytes and the Gen 5 Black/White ITCM block is **0x820** (Black 2 /
-White 2 **0x13A0**), so a `NativeArena` window smaller than 0x1000 cannot host the ABI
-arena inside the autoloaded part. The Gen 5 plan hosts the arena in the payload
-overlay's BSS; where Gen 4 hosts it is that title's own design decision. The test
+**0x1000**, a Gen 3 heap carve-out size. The arena may not overlap a title's autoload
+images: the Gen 4 HG/SS and hg-engine ITCM autoload block (**0x620** bytes) and the
+Gen 5 Black/White ITCM block (**0x820**; Black 2 / White 2 **0x13A0**) are code images,
+not hosting space. Hosting is a per-title decision. Gen 4 hosts it in the ITCM arena
+tail after the autoload end (chosen span `0x01FFEC00..0x01FFFC00`, exactly 0x1000, so
+the shared ABI is hosted unmodified; its census W1-W3 passed on HG/SS/hge, the live
+canary watch is still pending, so it is not accepted; Gen 4 coordinator, commit
+`29febbf3`). The Gen 5 plan hosts the arena in the payload overlay's BSS. The test
 receipt `NativeArena('itcm', 0x01FF8620, 0x79E0)` is a schema fixture reproducing an
 earlier candidate string, not a hosting claim, and is not evidence that the space is
 free or large enough.

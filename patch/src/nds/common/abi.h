@@ -38,10 +38,10 @@
 #define SLINK_ABI_VERSION 3u          /* 3 = witness save_status PENDING; Gen 3 is 2 */
 #define SLINK_NDS_STAGE_LAYOUT 1u     /* record-staging layout version (below) */
 #define SLINK_ARENA_SIZE 0x1000u      /* Gen 3 heap carve-out size. An NDS arena hosted in a TCM autoload window
-                                       * must be at least this large; the HGSS/hge ITCM block (0x620) and the Gen 5
-                                       * BW ITCM block (0x820) are smaller, so they cannot host it inside the
-                                       * autoloaded part. Hosting is a per-title decision (Gen 5 plans
-                                       * payload-overlay BSS). */
+                                       * must be at least this large and must not overlap any autoload image
+                                       * (the HGSS/hge ITCM block 0x620 and Gen 5 BW block 0x820 are code images,
+                                       * not hosting space). Hosting is a per-title decision: Gen 4 hosts it in the
+                                       * ITCM arena tail after the autoload end, Gen 5 plans payload-overlay BSS. */
 #define SLINK_MAILBOX_OFFSET 0x000u
 #define SLINK_WITNESS_OFFSET 0x050u
 #define SLINK_BLOB_OFFSET 0x100u      /* holds SlinkRecordStageV1 */
