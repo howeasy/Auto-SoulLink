@@ -220,6 +220,103 @@ def test_run_gate_stages_the_full_overlay_key_not_the_rsplit_form(monkeypatch, t
     assert staged == ["purered_overlay"]
 
 
+# ── the companion cold keys (owner 2026-10-02: the companion is REQUIRED for Red/Blue/pureRGB) ──
+
+COMPANION_COLD = {
+    "red_patched_cold": (None, "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
+    "blue_patched_cold": (None, "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
+    "purered_overlay_cold": (None, None, "gen1 purered overlay.SaveRAM"),
+    "pureblue_overlay_cold": (None, None, "gen1 pureblue overlay.SaveRAM"),
+    "puregreen_overlay_cold": (None, None, "gen1 puregreen overlay.SaveRAM"),
+}
+
+
+def test_every_companion_cartridge_has_a_cold_key_with_its_own_save_name():
+    for key, row in COMPANION_COLD.items():
+        assert ROM_TO_GEN[key] == "gen1"
+        assert GENS["gen1"]["patched"][key] == row
+        # the cold row writes the same file its warm twin seeds: a cold boot that reaches SAVE
+        # must leave the fixture under the name the warm key reads back
+        assert row[2] == GENS["gen1"]["patched"][key.removesuffix("_cold")][2]
+
+
+class _Launched(Exception):
+    pass
+
+
+def _stage_until_launch(monkeypatch, tmp_path, rom_key, staged=None):
+    """run_gate up to the Popen call: the staged ROM path, the SaveRAM dir and the gate env."""
+    import run_gb_gate
+
+    fake_emuhawk = tmp_path / "EmuHawk.exe"
+    fake_emuhawk.write_bytes(b"")
+    saveram = tmp_path / "SaveRAM"
+    saveram.mkdir(exist_ok=True)
+    monkeypatch.setattr(run_gb_gate, "EMUHAWK", str(fake_emuhawk))
+    monkeypatch.setattr(run_gb_gate, "REPO", str(tmp_path))
+    monkeypatch.setattr(run_gb_gate, "BUILD", str(tmp_path / "patch" / "build"))
+    monkeypatch.setattr(run_gb_gate, "SAVERAM_DIR", str(saveram))
+    monkeypatch.setattr(run_gb_gate, "BIZHAWK_CONFIG", str(tmp_path / "no-config.ini"))
+    monkeypatch.delenv("SLINK_GATE_TITLE", raising=False)
+    if staged is not None:
+        def stage(key):
+            staged.append(key)
+            rel = f"patch/build/gen1_{key}.gbc"
+            (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / rel).write_bytes(b"\x00")
+            return rel
+        monkeypatch.setattr(g1, "staged_rom", stage)
+    seen = {}
+
+    def popen(cmd, cwd=None, env=None):
+        seen.update(cmd=cmd, env=env)
+        raise _Launched
+
+    monkeypatch.setattr(run_gb_gate.subprocess, "Popen", popen)
+    with pytest.raises(_Launched):
+        run_gb_gate.run_gate("lua/tests/test_gen1_inspect_gate.lua", rom_key=rom_key, quiet=True)
+    return seen, saveram
+
+
+def test_a_vanilla_companion_cold_key_boots_its_patched_build_with_no_save(monkeypatch, tmp_path):
+    rom = tmp_path / "patch" / "gen1" / "build" / "slink_red.gb"
+    rom.parent.mkdir(parents=True)
+    rom.write_bytes(b"\x00")
+    stale = tmp_path / "SaveRAM" / "slink red.SaveRAM"
+    stale.parent.mkdir()
+    stale.write_bytes(b"stale")   # a previous run's save would put the title on CONTINUE
+    seen, saveram = _stage_until_launch(monkeypatch, tmp_path, "red_patched_cold")
+    assert seen["cmd"][-1] == "patch/gen1/build/slink_red.gb"
+    assert seen["env"]["SLINK_GATE_TITLE"] == "red"       # unadmitted vanilla layout: named
+    assert not (saveram / "slink red.SaveRAM").exists()
+
+
+def test_a_cold_overlay_key_stages_the_overlay_not_the_clean_build(monkeypatch, tmp_path):
+    """`purered_overlay_cold` drops ONLY `_cold`: the cartridge is the overlay, admitted on its own
+    sha1 (never named), with no save seeded."""
+    staged = []
+    seen, saveram = _stage_until_launch(monkeypatch, tmp_path, "purered_overlay_cold", staged)
+    assert staged == ["purered_overlay"]
+    assert seen["cmd"][-1] == "patch/build/gen1_purered_overlay.gbc"
+    assert "SLINK_GATE_TITLE" not in seen["env"]
+    assert list(saveram.iterdir()) == []
+
+
+@pytest.mark.parametrize("key,stage", [("purered_cold", "purered"), ("red_cold", "red"),
+                                       ("yellow_cold", "yellow"), ("purered", "purered"),
+                                       ("purered_overlay", "purered_overlay")])
+def test_every_other_unpathed_row_stages_its_key_without_cold(monkeypatch, tmp_path, key, stage):
+    staged = []
+    if not key.endswith("_cold"):
+        fixture = tmp_path / "fixtures"
+        fixture.mkdir()
+        monkeypatch.setattr(g1, "FIXTURES", str(fixture))
+        base = GENS["gen1"]["patched"][key][0]
+        (fixture / f"{base}_town.SaveRAM").write_bytes(b"\x00")
+    _stage_until_launch(monkeypatch, tmp_path, key, staged)
+    assert staged == [stage]
+
+
 # ── the SaveRAM name rule ───────────────────────────────────────────────────────────────────────
 
 
@@ -265,7 +362,9 @@ def test_the_launcher_only_names_a_title_for_a_build_that_cannot_be_admitted(mon
     assert run_gb_gate.gate_env("red_patched", "red")["SLINK_GATE_TITLE"] == "red"
     assert [run_gb_gate.named_title(k) for k in ("red_patched", "blue_patched", "red_rand_patched")] == \
            ["red", "blue", "red"]
-    for key in PURE + VANILLA + tuple(f"{k}_cold" for k in VANILLA + PURE):
+    # the companion cold keys answer like their warm twins: named for vanilla, admitted for pure
+    assert [run_gb_gate.named_title(k) for k in ("red_patched_cold", "blue_patched_cold")] == ["red", "blue"]
+    for key in PURE + VANILLA + OVERLAY + tuple(f"{k}_cold" for k in VANILLA + PURE + OVERLAY):
         assert run_gb_gate.named_title(key) is None
     assert run_gb_gate.gate_env("red")["SLINK_ROOT"].replace(chr(92), "/") == _REPO.replace(chr(92), "/")
 
