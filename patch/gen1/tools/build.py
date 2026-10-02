@@ -179,7 +179,7 @@ def main():
     ap.add_argument("--verify-only", action="store_true",
                     help="check the base ROMs and hook site, build nothing")
     ap.add_argument("--version", default=DEFAULT_VERSION,
-                    help="shown on the title screen: dev (default) or vX.Y.Z[-dev]")
+                    help="shown on the main menu: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
 
     bank = assemble()

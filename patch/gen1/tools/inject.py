@@ -203,7 +203,7 @@ def main() -> int:
     ap.add_argument("out", nargs="?")
     ap.add_argument("--check", action="store_true", help="report only, write nothing")
     ap.add_argument("--version", default=DEFAULT_VERSION,
-                    help="shown on the title screen: dev (default) or vX.Y.Z[-dev]")
+                    help="shown on the main menu: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
 
     with open(args.rom, "rb") as f:
