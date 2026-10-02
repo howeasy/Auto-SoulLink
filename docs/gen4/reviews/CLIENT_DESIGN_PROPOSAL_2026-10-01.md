@@ -57,3 +57,40 @@ Other cautions from the proposal:
 - **N1:** polling in `frame_hooks` is one frame late and silently loses first-entry coverage.
 - **N3:** a one-valued `box_generation` silently breaks the D11 resend.
 - **N4:** treating the battery modified word as "write pending" never settles.
+
+## N2 research (OMP cx-de3446b7, coordinator-verified against `lua/core/session.lua:173-204`)
+
+**Conclusion: option (a), with no `lua/core` change.** `flush_battle_writes` runs every frame from `frame_end` and calls `battle_write` again for every held entry. That repeated call is the tick a completion latch needs:
+- returning `"done"` retires the entry exactly once;
+- returning `"hold"` keeps it, with its age, for the HUD;
+- returning anything else on the ending frame defers it.
+
+Reject option (b): it would stale the Gen 2 digest and buys nothing.
+
+**Holes the coordinator confirmed: the core can stop consulting the driver while the hook is armed.**
+1. **A party-resolution failure retires the entry** (`:182-184`, `why` → `res = "done"`) without calling `battle_write`.
+2. **The core holds the entry itself, without asking the driver, in three cases:**
+   - writes paused or not yet enabled (`:185-188`);
+   - party unreadable (`:189-190`);
+   - key not in the party (`:191-192`).
+3. **`drop_battle_writes`** (`:166`) empties the set. Its only caller is `tests/unit/test_core_session.py:506`.
+
+In every one of these cases an armed seam hook would still fire and write.
+
+**Required client rule: the armed hook is a one-frame lease.**
+- Each `battle_write` call for the entry renews the lease.
+- A frame without a renewal disarms the hook. Check this in `pre_pump`, before `frame_advance`, so the hook can never fire unrenewed.
+- The latch is keyed by `(entry, key)`, is consumed once, and is disarmed on every exit.
+
+This closes all three holes without touching the core.
+
+**Missed seam on the ending frame:** returning non-`"done"` defers the faint to the checkpoint executor as an overworld write. That is the Gen 3 precedent (`gen3/client.lua:983-989`). It is acceptable only if D12 allows it. D12 says there is no silent fallback, so the deferred write must carry a logged reason.
+
+## c5cca903 review (OMP cx-b86e97a1), reconciled
+
+- **F1 REJECTED:** "the live flag is a u8 read at u32 width". `BOOL` is `typedef int` (`.cache/pret/pokeheartgold/lib/include/nitro/types.h:39`), and `str` is a word store, so the u32 read is the correct width.
+- **F6 accepted as verification:** the boxed-clone identity check is fail-closed (`gen4_codec.py:477-490` re-raises on a bad slot).
+- **F2 OPEN, to be settled by the live boot receipt:** gating on field-allocated plus `unk6C` might stop input before the overworld. A boot that reaches row l's idle at `c5cca903` refutes it; a boot timeout confirms it. The suggested narrower predicate is in `safety.lua:21-22`: field app alive AND no launched app.
+- **F3 / F7 accepted as test follow-ups:**
+  - F3: `live()` true from frame 1 while `idle()` is never reached must return `overworld=false` at the limit.
+  - F7: build the ancestry fake from a real `Decoded`.
