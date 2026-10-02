@@ -81,7 +81,11 @@
 
 - **YES/NO:** exactly one template in `src/` sets `initialCursorPos = 1` (`alph_puzzle.c:1346`), so every prompt on this path defaults to YES.
 - **Open:**
-  - the default starter index (`curSelection` has no visible initialiser; read `msg_0190` and `sSpecies`);
+  - ~~the default starter index~~ CLOSED (OMP cx-973bbf7c, verified).
+    - The work struct is `MI_CpuClear8`-zeroed (`choose_starter_app.c:257-258`), and `curSelection` is written only by the rotates (`:999`, `:1005`).
+    - `sSpecies` is {CHIKORITA, CYNDAQUIL, TOTODILE} (`:307-311`). So **a blind A,A,A picks Chikorita (152)**.
+    - One Left (clockwise, +1) before the A presses gives Cyndaquil; one Right gives Totodile. Rotation is ignored once in CONFIRM.
+    - `ChooseStarterArgs.cursorPos` is output-only (`:545`).
   - the per-warp arrival tiles (from the target maps' entrance data);
   - the bedroom branch condition.
 - Walking legs use the route tooling's map parse, never vision.
