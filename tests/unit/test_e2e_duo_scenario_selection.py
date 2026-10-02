@@ -691,6 +691,69 @@ def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
     assert sorted(mod.SCENARIOS) == sorted(GEN1_NEW_SCENARIOS)
 
 
+class _Launched(Exception):
+    pass
+
+
+def _duo_wrapper(monkeypatch, tmp_path, name, *, companion):
+    """A wrapper module whose every input but the companion artifact is present.
+
+    `companion` False: no vanilla companion build under REPO and the overlay applier raises
+    FileNotFoundError -- absent, the case that used to skip. True: both present, and the wrapper
+    must get as far as launching the runner (the positive control)."""
+    import gen1_playthrough as play
+
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    new = __import__("test_duo_gen1_new")
+    mod = __import__(name)
+    emuhawk = tmp_path / "EmuHawk.exe"
+    emuhawk.write_bytes(b"")
+    monkeypatch.setattr(play, "EMUHAWK", str(emuhawk))
+    roms = {}
+    for key in play.ROMS:
+        roms[key] = str(tmp_path / f"clean_{key}.gb")
+        open(roms[key], "wb").close()
+    monkeypatch.setattr(play, "ROMS", roms)
+    for module in {new, mod}:
+        monkeypatch.setattr(module, "REPO", str(tmp_path))
+    if companion:
+        for rom in ("slink_red.gb", "slink_blue.gb"):
+            (tmp_path / "patch" / "gen1" / "build").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "patch" / "gen1" / "build" / rom).write_bytes(b"")
+        monkeypatch.setattr(play, "staged_rom", lambda key: f"patch/build/gen1_{key}.gbc")
+    else:
+        def absent(key):
+            raise FileNotFoundError(f"pureRGB {key} is not here")
+        monkeypatch.setattr(play, "staged_rom", absent)
+
+    def launched(*_args, **_kwargs):
+        raise _Launched
+
+    monkeypatch.setattr(mod.subprocess, "run", launched)
+    return mod
+
+
+_WRAPPER_CASES = [("test_duo_gen1_new", "test_gen1_new_duo", ("link_new",)),
+                  ("test_duo_gen1_new", "test_gen1_new_duo", ("admit_randomized_new",)),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure", "link_new")),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure_green", "trade_new"))]
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_missing_companion_artifact_fails_the_duo_wrapper_never_skips(monkeypatch, tmp_path,
+                                                                          name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=False)
+    with pytest.raises(pytest.fail.Exception, match="companion"):
+        getattr(mod, test)(*args)
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_present_companion_reaches_the_runner(monkeypatch, tmp_path, name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=True)
+    with pytest.raises(_Launched):
+        getattr(mod, test)(*args)
+
+
 def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
     """S-4/W-3's scenario opts in to `gen1_new` alone.
 
