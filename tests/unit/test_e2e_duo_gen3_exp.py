@@ -84,7 +84,8 @@ def test_the_active_faint_row_uses_the_expansion_perish_geometry():
     cp = json.loads((REPO / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
     assert cp["battle"]["handoff"]["head"][0]["name"] == "perish_status"
     assert cp["battle"]["commit_hold"].startswith("HOLD")
-    assert "natural-play Perish KO pending" in cp["open"]["battle_handoff"]
+    assert "wild linked_faint_active_gen3 PHYSICAL PASS" in cp["open"]["battle_handoff"]
+    assert "pending" not in cp["open"]["battle_handoff"] and "gift_areas" not in cp["open"]
 
 
 def test_the_row_runs_the_core_loop_rows_on_its_own_fixtures():

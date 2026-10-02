@@ -2013,16 +2013,39 @@ function PC.withdraw(label)
     end, 2400)
 end
 
-function PC.release(label)
+function PC.release(label, answer)
+    -- `answer` defaults to the YES path this helper has always driven; "no" is the
+    -- expansion's CANCEL negative (emerald_pc_release_cancel). Both paths take the SAME
+    -- preflight: the confirm window is up, Task_ReleaseMon is at state 1, and the cursor sits on
+    -- NO -- ShowYesNoWindow(cursorPos) is CreateYesNoMenu(&sYesNoWindowTemplate, 11, 14, 0)
+    -- then Menu_MoveCursorNoWrapAround(cursorPos); Task_ReleaseMon state 0 passes 1, so the
+    -- cursor STARTS on NO -- src/pokemon_storage_system.c:4338-4342 (the call itself :2914).
+    -- The cursor is READ, never assumed, before any press.
+    local want_yes = answer ~= "no"
     local storage = pc_storage()
     if not storage or not pc_task(PC_RELEASE_MON) then return pc_fail(label, "release_confirmation_missing") end
     if not pc_wait(label, "release_confirmation_not_ready", function()
         return pc_task(PC_RELEASE_MON) and memory.read_u8(storage) == 1
     end, 900) then return false end
     if memory.read_u8(PC_MENU_CURSOR) ~= 1 then return pc_fail(label, "release_confirmation_not_no") end
-    G.tap("Up", 3, 20)
-    if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "release_confirmation_not_yes") end
+    if want_yes then
+        G.tap("Up", 3, 20)
+        if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "release_confirmation_not_yes") end
+    end
     G.tap("A", 3, 13)
+    if not want_yes then
+        -- NO: Task_ReleaseMon state 1 takes MENU_B_PRESSED or 1, ClearBottomWindow()s and
+        -- SetPokeStorageTask(Task_PokeStorageMain) -- src/pokemon_storage_system.c:2917-2923.
+        -- Storage is back on its input state 0 (MSTATE_HANDLE_INPUT is the FIRST member of the
+        -- MSTATE enum, :2230-2232, so its value is 0; its case in Task_PokeStorageMain is :2250)
+        -- and NO message state is entered: 2 is the can-release loop, 3 the ReleaseMon state, 4/5
+        -- the two release messages, 8..10 the "can't release" sequence -- so a state past 1
+        -- would mean the cancel did not take. Task_PokeStorageMain being live IS the witness.
+        return pc_wait(label, "release_cancel_not_returned", function()
+            return not pc_task(PC_RELEASE_MON) and pc_task(PC_STORAGE_MAIN)
+               and memory.read_u8(storage) == 0
+        end, 900)
+    end
     if not pc_wait(label, "release_not_confirmed", function()
         return pc_task(PC_RELEASE_MON) and memory.read_u8(storage) == 4
     end, 2400) then return false end
@@ -3321,6 +3344,43 @@ local function em_box_key(owned, box, slot)
     end
 end
 
+--- The lowest occupied box-0 slot, or nil: the bypass only needs "some mon to grab".
+local function em_first_occupied_box_slot(owned)
+    for s = 0, 29 do if em_box_key(owned, 0, s) then return s end end
+    return nil
+end
+
+--- The MOVE MONS popup while a mon is held: SHIFT|WITHDRAW, SUMMARY, MARK, RELEASE, CANCEL
+--- (SetMenuTexts_Mon :7776-7815). RELEASE is row 4 in that order. The leg drives the cursor
+--- itself so the row index stays a stated constant rather than a guess inside PC.popup.
+local function em_popup_row(label, row)
+    for _ = 0, 5 do
+        local cur = memory.read_u8(PC_MENU_CURSOR)
+        if cur == row then return true end
+        if cur > row then return pc_fail(label, "release_popup_wrong_row") end
+        G.tap("Down", 3, 20)
+        if not pc_wait(label, "release_popup_cursor_stalled", function()
+            return memory.read_u8(PC_MENU_CURSOR) == cur + 1
+        end, 90) then return false end
+    end
+    return pc_fail(label, "release_popup_cursor_stalled")
+end
+
+--- Bounded wait for that popup instead of a fixed second A: the grab's Task_MoveMon can still be
+--- returning to the input state, and a swallowed press would otherwise be indistinguishable from
+--- an unreachable popup. Retries within the budget, then fails closed by name.
+local function em_wait_release_popup(label)
+    local storage = pc_storage()
+    if not storage then return pc_fail(label, "bypass_storage_unreadable") end
+    local function up() return pc_task(PC_ON_SELECTED) and memory.read_u8(storage) == 2 end
+    for _ = 1, 4 do
+        if up() then return true end
+        G.tap("A", 3, 13)
+        pc_poll(up, 120)
+    end
+    return pc_fail(label, "bypass_popup_never_opened_while_holding")
+end
+
 --- Walk the box cursor (CURSOR_AREA_IN_BOX, IN_BOX_COLUMNS 6) along its row to `pos`, one
 --- witnessed Right/Left at a time (InBoxInput_Normal :7028-7081). Leaving the row is refused.
 local function em_box_cursor(label, pos)
@@ -3344,7 +3404,7 @@ EMH.box_cursor = em_box_cursor   -- E4: duo_gen3_main.lua ctx.pc_withdraw past o
 --- AddMenu starts the cursor on row 0 (:8001-8014), so A opens the popup and A takes row 0.
 local function em_move_popup_row0(label, task)
     local storage = pc_storage()
-    if not storage or memory.read_u8(storage + 1) ~= 2 then return pc_fail(label, "move_mode_not_active") end
+    if not storage or memory.read_u8(storage + 1) ~= PC.OPTION.move_mons then return pc_fail(label, "move_mode_not_active") end
     local function up() return pc_task(PC_ON_SELECTED) and memory.read_u8(storage) == 2 end
     for _ = 1, 4 do
         if up() then break end
@@ -3476,7 +3536,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         if not target or em_box_key(before, 0, 0) then
             return em_fail(L, "precondition: box 0 slot 0 empty and slot 1 occupied (after emerald_pc_withdraw)")
         end
-        -- MOVE POKeMON (row 2): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
+        -- MOVE POKeMON (PC.OPTION.move_mons: 2 on vanilla Emerald, 0 on the expansion): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
         -- Left to slot 0, A, A = PLACE. The carried flag must rise and fall between the two.
         PC.open(cp, L)
         PC.mode(L, PC.OPTION.move_mons)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
@@ -3534,6 +3594,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     end,
 }
 
+
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_save_town",
     exercises = { "save" },
@@ -3553,6 +3614,420 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         emerald_save_via_menu(cp)
     end,
 }
+
+-- ── expansion PC NEGATIVE legs (card XG3-PC-NEG, expansion only) ────────────────────────────
+-- Both legs below run ONLY on the expansion build, and they are registered AFTER
+-- emerald_save_town ON PURPOSE. emerald_stopped_legs (~4785) returns legs[1..stop_after]
+-- INCLUSIVE, so a leg registered before emerald_save_town would run inside the existing
+-- observer command SLINK_GEN3_PLAY_FROM=emerald_enter_pc SLINK_GEN3_PLAY_STOP_AFTER=
+-- emerald_save_town -- and emerald_pc_full_box fails closed by design (its SYNTH fixture
+-- belongs to another lease), so it would kill that run. Registering after save_town keeps
+-- STOP_AFTER=emerald_save_town excluding both, which is what that receipt means. A test pins
+-- the order (tests/unit/test_gen3_exp_pc_negative_legs.py).
+--
+-- WHAT A SINGLE-CART OBSERVER CANNOT PROVE. The observer sees engine hooks; it never sees a
+-- client report. The "the client did not report a release" half of the CANCEL leg is a claim
+-- about lua/gen3/client.lua: settle_pc owes `release` only for keys in `f.release` (:550-553),
+-- and release_done is what fills it -- from a census diff taken against the pc_release_begin
+-- snapshot (:1306-1333). Nothing here can observe that. A duo leg (tools/e2e_duo.py, the
+-- keyed-PC oracle) is required to prove it; this leg proves only the ENGINE side plus the
+-- on-field readback. The observer-ABSENCE assertion (pc_release silent across the cancel
+-- window, with a liveness sibling proving the observer was alive) lives in
+-- tests/unit/test_gen3_exp_pc_negative_legs.py, over the committed shadow log.
+if TITLE == Syms.EXP_TITLE then
+
+    --- The full-box SYNTH fixture this leg needs. Named here, not created: the fixture and its
+    --- manifest entry belong to the acquisition tooling's lease, so the leg FAILS CLOSED with
+    --- this exact message rather than silently depositing into a 2-mon box and proving nothing.
+    local EXP_PC_FULL_BOX_SAV = "tests/fixtures/gen3/exp_pc_full_box_synth.sav"
+
+    -- MOVED-MON BYPASS (card XG3-PC-NEG, third negative). REACHABLE: the popup's RELEASE row is
+    -- gated on boxOption, NOT on the held flag (SetMenuTexts_Mon :7813-7814), and A opens that
+    -- popup from any cursor area (HandleInput_InParty :7501-7513 -> INPUT_IN_MENU ->
+    -- Task_OnSelectedMon :2292-2293). So MOVE MONS + grab + A reaches MENU_RELEASE
+    -- (:2637-2653 -> Task_ReleaseMon) with sIsMonBeingMoved still set, and ReleaseMon takes the
+    -- flag-clear branch (:6552-6580, specifically :6558-6561) and skips the purge.
+    --
+    -- REGISTERED BEFORE emerald_pc_release_cancel, still after emerald_save_town: the cancel leg
+    -- ends with a 1-mon party and this leg needs 2, so a resumed chain that ran it after the
+    -- cancel would trip its own precondition. The order test pins this.
+    --
+    -- EXPECTED OBSERVER SHAPE, the inverse of emerald_pc_release: pc_release_begin MUST NOT fire
+    -- ("no snapshot is emitted for moved-mon flag clear") and pc_release MUST fire UNPAIRED, being
+    -- the common tail both branches join. The client's frame_window pairing then returns with no
+    -- release_key (client.lua:1309), so nothing is owed -- but the CLIENT half is a DUO claim:
+    -- settle_pc owes `release` only for keys in f.release (:550-553), which a single-cart
+    -- observer cannot see. This leg proves the ENGINE side plus the on-field readback only.
+    EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+        name = "emerald_pc_move_release_bypass",
+        exercises = { "pc_release" },
+        source = {
+            "src/pokemon_storage_system.c:7758-7817 (SetMenuTexts_Mon: in MOVE MONS row 0 is "
+            .. "SHIFT/PLACE when a mon is held, and MENU_RELEASE is still set at :7813-7814 because "
+            .. "the gate is boxOption != OPTION_SELECT_MON, not sIsMonBeingMoved), :8112-8127 "
+            .. "(SetMenuText append order == the row index this leg walks)",
+            "src/pokemon_storage_system.c:2292-2293 (case INPUT_IN_MENU -> SetPokeStorageTask("
+            .. "Task_OnSelectedMon), the popup task this leg's second A opens)",
+            "src/pokemon_storage_system.c:7501-7537 (A on a mon: SetSelectionMenuTexts then "
+            .. "INPUT_IN_MENU while auto-action is off), :7510-7513, :5795 (InitCursor clears "
+            .. "sAutoActionOn, so the popup rather than an auto row is taken)",
+            "src/pokemon_storage_system.c:2637-2653 (Task_OnSelectedMon case MENU_RELEASE -> "
+            .. "SetPokeStorageTask(Task_ReleaseMon) -- the ONLY such caller in src/*.c)",
+            "src/pokemon_storage_system.c:6552-6580 (ReleaseMon: the sIsMonBeingMoved branch clears "
+            .. "the flag and returns without PurgeMonOrBoxMon), :6558-6561",
+            "src/pokemon_storage_system.c:6399 (MoveMon sets sIsMonBeingMoved = TRUE on the grab)",
+            "data/games/gen3_exp/28877d73/engine_signals.json pc_release_begin/pc_release pairing "
+            .. "(frame_window, window 0: both mid-body in Task_ReleaseMon, SP equal, so an UNPAIRED "
+            .. "pc_release is the bypass's signature)",
+        },
+        run = function(cp)
+            local L = "emerald_pc_move_release_bypass"
+            G.tap("Up", 2, 13)
+            -- IN-CHAIN, like emerald_pc_release_cancel: no leg here declares a `state` and playlib
+            -- never inherits one (playlib.lua:653-657), so this must be reached after
+            -- emerald_save_town. A bare SLINK_GEN3_PLAY_FROM=%s boots cold and trips the precondition.
+            local before = owned_snapshot(L .. " before")
+            if not before then return end
+            if before.party.n < 2 then
+                return em_fail(L, string.format("precondition: a party of at least 2 (have %d) -- "
+                               .. "this leg runs IN-CHAIN BEFORE emerald_pc_release_cancel, which "
+                               .. "leaves 1 after its own release, and after emerald_save_town, not "
+                               .. "from a cold boot", before.party.n))
+            end
+            local slot = em_first_occupied_box_slot(before)
+            local target = slot and em_box_key(before, 0, slot) or nil
+            if not target then
+                return em_fail(L, "precondition: box 0 has an occupied slot to grab (in-chain after "
+                               .. "emerald_save_town; a cold boot has the fixture's own box)")
+            end
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.move_mons)
+            em_box_cursor(L, slot)
+            em_move_popup_row0(L, em_thumb(ES.Task_MoveMon))   -- row 0 = MOVE -> grab
+            em_wait_carry(L, "grab_not_done", 1)               -- sIsMonBeingMoved == 1
+            -- The second A may be swallowed while Task_MoveMon is still returning to the input
+            -- state, so this WAITS for the popup rather than counting presses.
+            if not em_wait_release_popup(L) then return end
+            if memory.read_u8(ES.sIsMonBeingMoved) ~= 1 then
+                return em_fail(L, "the popup opened with the held flag CLEAR -- that would be an "
+                               .. "ordinary release, not the bypass")
+            end
+            em_popup_row(L, 4)                                 -- SHIFT/WITHDRAW/SUMMARY/MARK/RELEASE/CANCEL
+            if memory.read_u8(PC_MENU_CURSOR) ~= 4 then
+                return em_fail(L, string.format("RELEASE is row %d, not 4 (max_row=%d)",
+                               memory.read_u8(PC_MENU_CURSOR), memory.read_u8(PC_MENU_MAX_CURSOR)))
+            end
+            G.tap("A", 3, 13)                                  -- MENU_RELEASE -> Task_ReleaseMon
+            if not pc_wait(L, "release_confirmation_missing", function()
+                return pc_task(PC_RELEASE_MON) and memory.read_u8(pc_storage()) == 1
+            end, 600) then return end
+            PC.release(L)                                        -- NO -> Up -> YES, unchanged
+            PC.leave(cp, L)
+            local after = owned_snapshot(L .. " after")
+            if not after then return end
+            -- The bypass's whole point: nothing was purged. The mon is still boxed at the SAME
+            -- slot with the SAME 80 bytes, and the party is unchanged.
+            local still = after.boxes[target]
+            if not still or still.box ~= 0 or still.slot ~= slot
+               or still.raw ~= before.boxes[target].raw then
+                return em_fail(L, string.format("bypass_readback: %s is %s, want box 0 slot %d "
+                               .. "byte-identical -- ReleaseMon purged despite the held flag",
+                               target, still and string.format("box %d slot %d", still.box,
+                                                                still.slot) or "gone", slot))
+            end
+            if after.party.n ~= before.party.n or play.departed_key(before.party, after.party) then
+                return em_fail(L, string.format("bypass_readback: party %d -> %d, a bypassed release "
+                               .. "must move nothing", before.party.n, after.party.n))
+            end
+            if not boxes_unchanged(L, before.boxes, after.boxes, nil) then return end
+            G.phase("bypassed", string.format("ReleaseMon took the moved-mon flag-clear branch: %s "
+                    .. "still box 0 slot %d, party unchanged at %d", target, slot, after.party.n))
+            G.phase("note", "the observer must show pc_release_begin ABSENT and pc_release PRESENT "
+                    .. "UNPAIRED across this window (tests/unit/test_gen3_exp_pc_negative_legs.py "
+                    .. "asserts it with a liveness sibling); the client's 'nothing reported' half "
+                    .. "needs a DUO leg")
+        end,
+    }
+
+    EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+        name = "emerald_pc_release_cancel",
+        exercises = { "pc_release_begin", "pc_release" },
+        source = {
+            "src/pokemon_storage_system.c:7758-7817 (SetMenuTexts_Mon: in DEPOSIT mode the party "
+            .. "popup is STORE|SUMMARY|MARK|RELEASE|CANCEL, so RELEASE is row 3; RELEASE is set "
+            .. "for every boxOption but OPTION_SELECT_MON), :8112-8127 (SetMenuText appends one "
+            .. "row per call -- that append order IS the row index this leg presses)",
+            "src/pokemon_storage_system.c:2917-2923 (Task_ReleaseMon state 1: MENU_B_PRESSED and "
+            .. "1 (No) both ClearBottomWindow() and SetPokeStorageTask(Task_PokeStorageMain) -- "
+            .. "no ReleaseMon, no purge)",
+            "src/pokemon_storage_system.c:4338-4342 (ShowYesNoWindow(cursorPos) = "
+            .. "CreateYesNoMenu(&sYesNoWindowTemplate, 11, 14, 0) then "
+            .. "Menu_MoveCursorNoWrapAround(cursorPos): Task_ReleaseMon state 0 passes 1, so the "
+            .. "cursor STARTS on NO -- answering NO is the no-movement path and the YES path is "
+            .. "the single Up the cancel skips)",
+            "src/pokemon_storage_system.c:2230-2232 (the MSTATE enum head: MSTATE_HANDLE_INPUT "
+            .. "is the first member, so its value is 0) and :2250 (its case in "
+            .. "Task_PokeStorageMain) -- the returned-to state this leg witnesses",
+            "src/pokemon_storage_system.c:6552-6580 (ReleaseMon -- the purge this leg proves did "
+            .. "NOT run: state 3 is the ONLY caller)",
+            "src/pokemon_storage_system.c:2327-2343 (INPUT_DEPOSIT: IsRemovingLastPartyMon() "
+            .. "refuses at one party mon with MSTATE_ERROR_LAST_PARTY_MON -- why this leg "
+            .. "withdraws a second mon first)",
+        },
+        run = function(cp)
+            local L = "emerald_pc_release_cancel"
+            G.tap("Up", 2, 13)                     -- face the PC, as every PC leg here does
+            -- IN-CHAIN, LIKE EVERY OTHER EMERALD LEG HERE. No leg in this table declares a
+            -- `state` field; playlib loads one before a leg only if that leg names it, and
+            -- STATE OWNERSHIP (playlib.lua:653-657) says it is never inherited from whatever
+            -- the previous leg left behind. The chain threads itself through the savestates
+            -- run() saves after each leg (save_states = "slink_em_", :4807). So this leg MUST
+            -- be reached in-chain after emerald_save_town; a bare
+            -- SLINK_GEN3_PLAY_FROM=emerald_pc_release_cancel boots the fixture from cold and
+            -- trips the precondition below, which is why that message names the requirement
+            -- rather than just the number it found.
+            --
+            -- Self-contained from there: the chain leaves ONE party mon here (emerald_pc_release
+            -- released the second) and DEPOSIT is refused at one (IsRemovingLastPartyMon, :2327-2343),
+            -- so WITHDRAW a boxed mon first. That keeps the leg off any earlier leg's party size.
+            local pre = owned_snapshot(L .. " pre")
+            if not pre then return end
+            if pre.party.n ~= 1 then
+                return em_fail(L, string.format("precondition: party %d, want 1 -- this leg runs "
+                               .. "IN-CHAIN after emerald_save_town (no leg here declares a "
+                               .. "`state`; playlib never inherits one), so a bare "
+                               .. "SLINK_GEN3_PLAY_FROM=%s boots cold and lands here",
+                               pre.party.n, L))
+            end
+            local staged = em_box_key(pre, 0, 0)
+            if not staged then
+                return em_fail(L, "precondition: box 0 slot 0 occupied (in-chain after "
+                               .. "emerald_save_town; a cold boot has the fixture's own box)")
+            end
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.withdraw)
+            PC.popup(L, 0, 0, 0)                  -- box slot 0, WITHDRAW row 0
+            PC.select(L, PC_WITHDRAW_MON)
+            PC.withdraw(L)
+            PC.leave(cp, L)
+
+            -- ── the CANCEL: answer NO at the confirm ──────────────────────────────────────
+            local before = owned_snapshot(L .. " before")
+            if not before then return end
+            if before.party.n ~= 2 then
+                return em_fail(L, string.format("precondition: a 2-mon party (want %d)",
+                               before.party.n))
+            end
+            local target = before.party.order[2]   -- the withdrawn mon
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.deposit)
+            PC.popup(L, 1, 1, 3)                  -- party slot 1, RELEASE row 3
+            PC.select(L, PC_RELEASE_MON)
+            -- The whole negative: PC.release(L, "no") presses A with the cursor still on NO and
+            -- waits for Task_ReleaseMon to be GONE with Task_PokeStorageMain live at state 0.
+            -- No WAS_RELEASED/BYE_BYE message is entered, so no state 3 runs and ReleaseMon
+            if not PC.release(L, "no") then return end
+            G.phase("release-cancelled", "Task_ReleaseMon returned to Task_PokeStorageMain, "
+                    .. "state 0, no release message")
+            PC.leave(cp, L)
+            local after = owned_snapshot(L .. " after")
+            if not after then return end
+            -- WHAT IS COMPARED, EXACTLY. boxes_unchanged walks the OCCUPIED box records
+            -- owned_snapshot built (it keys a box only where species ~= 0) and requires for each
+            -- one the same box, the same slot and the same 80 raw BoxPokemon bytes, and that
+            -- no record is added or lost (:1030-1046). The PARTY side is weaker: this checks
+            -- the count and which PID departed (play.departed_key), not per-mon bytes --
+            -- owned_snapshot's party side carries decoded fields, not a raw copy. A write into
+            -- an EMPTY slot that left species == 0 is outside the snapshot entirely. So the
+            -- claim is "the cancel moved no mon between party and box and changed no occupied
+            -- box record", not "all 14 boxes are byte-identical".
+            if after.party.n ~= before.party.n or play.departed_key(before.party, after.party)
+               or not before.boxes[target] or after.boxes[target] then
+                return em_fail(L, string.format("cancel_readback: party %d -> %d, %s must still be "
+                               .. "boxed and nothing may leave the party", before.party.n,
+                               after.party.n, target))
+            end
+            if not boxes_unchanged(L, before.boxes, after.boxes, nil) then return end
+
+            -- ── the POSITIVE SIBLING: a real release, same leg, same observer run ──────────
+            -- Without this the run proves only ABSENCE, which a dead observer would also
+            -- produce. The sibling is what makes the absence meaningful: the observer that
+            -- showed begin+release here is the same one the cancel window asserted silence for.
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.deposit)
+            PC.popup(L, 1, 1, 3)
+            PC.select(L, PC_RELEASE_MON)
+            PC.release(L)                         -- the YES path, unchanged
+            PC.leave(cp, L)
+            local done = owned_snapshot(L .. " released")
+            if not done then return end
+            if not verify_pc_transfer(L, "release", after, done, target) then return end
+            G.phase("released", string.format("sibling release: party 2 -> 1, %s gone from party "
+                    .. "and all 14 boxes", target))
+            G.phase("note", "the client's 'no release reported' half needs a DUO leg; the "
+                    .. "single-cart observer cannot see client reports (client.lua:550-553)")
+        end,
+    }
+
+    EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+        name = "emerald_pc_full_box",
+        exercises = { "pc_deposit" },
+        source = {
+            "src/pokemon_storage_system.c:2855-2897 (Task_DepositMenu case 1: "
+            .. "HandleChooseBoxMenuInput, then TryStorePartyMonInBox; FALSE prints "
+            .. "MSG_BOX_IS_FULL and sets sStorage->state = 4 at :2878-2879) and :2898-2904 "
+            .."(case 4: any keypress reprints MSG_DEPOSIT_IN_WHICH_BOX and returns to state 1 "
+            .. "-- the box is NEVER written)",
+            "src/pokemon_storage_system.c:6492-6517 (TryStorePartyMonInBox: GetFirstFreeBoxSpot "
+            .. "== -1 returns FALSE at :6494-6496, BEFORE SetPlacedMonData, so neither pc_deposit "
+            .. "nor pc_box_place can fire)",
+            "src/pokemon_storage_system.c:1778-1801 (HandleChooseBoxMenuInput: B -> "
+            .. "BOXID_CANCELED, A -> sChooseBoxMenu->curBox, LEFT/RIGHT move the chooser -- the "
+            .. "sibling's single Right to leave box 0)",
+            "src/pokemon_storage_system.c:7758-7817 (SetMenuTexts_Mon: in DEPOSIT mode the party "
+            .. "popup's first row is STORE), :8112-8127 (SetMenuText append order == row index)",
+            "include/pokemon_storage_system.h:5-7 (IN_BOX_ROWS 5 x IN_BOX_COLUMNS 6 = 30 slots; "
+            .. "a full box is 30, and emerald_pc.sav's box 0 holds 2)",
+            "data/games/gen3_exp/28877d73/harness_facts.json constants.OPTION_DEPOSIT = 1 (the "
+            .. "expansion's own value; vanilla Emerald's is 1 too, but read per build, never "
+            .. "assumed -- PC.OPTION reads this same file)",
+        },
+        run = function(cp)
+            local L = "emerald_pc_full_box"
+            local f = io.open(WT .. "/" .. EXP_PC_FULL_BOX_SAV, "rb")
+            if not f then
+                return em_fail(L, "missing fixture " .. EXP_PC_FULL_BOX_SAV
+                               .. " -- the SYNTH full-box save (and its manifest entry) belongs "
+                               .. "to the acquisition tooling's lease; this leg fails closed until "
+                               .. "it lands, rather than proving a full box that is not there")
+            end
+            f:close()
+            -- The run itself is started from this fixture by the harness (the same
+            -- SLINK_GEN3_PLAY_FROM resume mechanism every other leg here uses); reaching this
+            -- body means the save carrying a 30-slot box 0 is the one loaded.
+            G.tap("Up", 2, 13)
+            local before = owned_snapshot(L .. " before")
+            if not before then return end
+            if before.current_box ~= 0 then
+                return em_fail(L, string.format("precondition: current box %d (want 0)",
+                               before.current_box))
+            end
+            local occupied = 0
+            for _, m in pairs(before.boxes) do if m.box == 0 then occupied = occupied + 1 end end
+            if occupied < 30 then
+                return em_fail(L, string.format("precondition: box 0 holds %d mons, want a full "
+                               .. "30 (IN_BOX_ROWS*IN_BOX_COLUMNS) -- the fixture is not a full-box "
+                               .. "save", occupied))
+            end
+            if before.party.n < 2 then
+                return em_fail(L, string.format("precondition: a party to deposit (have %d; "
+                               .. "INPUT_DEPOSIT is refused at one mon by "
+                               .. "IsRemovingLastPartyMon, :2327-2343)", before.party.n))
+            end
+            local target = before.party.order[before.party.n]
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.deposit)
+            PC.popup(L, 1, before.party.n - 1, 0)  -- last party slot, STORE row 0
+            PC.select(L, PC_DEPOSIT_MENU)
+            -- PC.box is the witness, not the driver: on this fixture its state-4 branch is the
+            -- EXPECTED outcome, and pc_fail would finish the run -- so the chooser is driven here
+            local storage = pc_storage()
+            if not storage or not pc_task(PC_DEPOSIT_MENU) then
+                return em_fail(L, "chooser missing after STORE: " .. pc_state_dump())
+            end
+            if not pc_wait(L, "chooser_not_ready", function()
+                return pc_task(PC_DEPOSIT_MENU) and memory.read_u8(storage) == 1
+            end, 900) then return end
+            G.tap("A", 3, 13)                      -- the press TryStorePartyMonInBox answers FALSE to
+            if not pc_wait(L, "box_full_not_reached", function()
+                return memory.read_u8(storage) == 4
+            end, 1200) then return end
+            G.phase("box-full", "Task_DepositMenu state 4 (MSG_BOX_IS_FULL), "
+                    .. "TryStorePartyMonInBox returned FALSE; no SetPlacedMonData")
+            -- Back out of state 4 to the chooser (any keypress reprints the box prompt and
+            -- returns to state 1, :2898-2904), then cancel it, so
+            -- the leg leaves storage through the normal path rather than a B-press the driver
+            -- has not proven.
+            G.tap("A", 3, 13)
+            if not pc_wait(L, "chooser_not_reentered", function()
+                return memory.read_u8(storage) == 1
+            end, 600) then return end
+            G.tap("B", 3, 13)                      -- BOXID_CANCELED -> Task_PokeStorageMain
+            if not pc_wait(L, "chooser_cancel_failed", function()
+                return not pc_task(PC_DEPOSIT_MENU) and pc_task(PC_STORAGE_MAIN)
+            end, 600) then return end
+            PC.leave(cp, L)
+            local after = owned_snapshot(L .. " before-sibling")
+            if not after then return end
+            -- Nothing may have moved. Exactly what is compared (same caveat as the cancel leg):
+            -- the party by count and by which PID departed, and every OCCUPIED box record by
+            -- box, slot and its 80 raw bytes (:1030-1046). A deposit that had gone through
+            -- would show here as a party departure plus a changed or vanished box record.
+            if after.party.n ~= before.party.n or play.departed_key(before.party, after.party) then
+                return em_fail(L, string.format("full_box_readback: party %d -> %d, a full box "
+                               .. "must not deposit", before.party.n, after.party.n))
+            end
+            if not boxes_unchanged(L, before.boxes, after.boxes, nil) then return end
+
+            -- ── the POSITIVE SIBLING: deposit into a DIFFERENT, non-full box ────────────────
+            -- Same observer run, so "pc_deposit did not fire for the full box" is a statement
+            -- about an observer that demonstrably fires pc_deposit when the box has room.
+            -- The chooser opens on sDepositBoxId, which the full-box attempt left at box 0, so
+            -- one Right selects box 1 (HandleChooseBoxMenuInput, src/pokemon_storage_system.c:1778-1801).
+            local free_box, free_slot = nil, nil
+            for b = 1, 13 do
+                if not free_box then
+                    local taken = false
+                    for _, m in pairs(after.boxes) do if m.box == b then taken = true break end end
+                    if not taken then free_box = b end
+                end
+            end
+            if not free_box then
+                return em_fail(L, "precondition: no empty box among 1..13 for the sibling deposit")
+            end
+            free_slot = 0
+            PC.open(cp, L)
+            PC.mode(L, PC.OPTION.deposit)
+            PC.popup(L, 1, before.party.n - 1, 0)
+            PC.select(L, PC_DEPOSIT_MENU)
+            local st2 = pc_storage()
+            if not st2 or not pc_task(PC_DEPOSIT_MENU) then
+                return em_fail(L, "sibling chooser missing: " .. pc_state_dump())
+            end
+            if not pc_wait(L, "sibling_chooser_not_ready", function()
+                return pc_task(PC_DEPOSIT_MENU) and memory.read_u8(st2) == 1
+            end, 900) then return end
+            if memory.read_u8(PC_DEPOSIT_BOX_ID) ~= 0 then
+                return em_fail(L, "sibling chooser did not reopen on box 0")
+            end
+            G.tap("Right", 3, 20)                  -- box 0 -> box 1
+            if not pc_wait(L, "sibling_box_not_selected", function()
+                return memory.read_u8(PC_DEPOSIT_BOX_ID) ~= 0
+            end, 300) then return end
+            G.tap("A", 3, 13)                      -- TryStorePartyMonInBox into the empty box
+            if not pc_wait(L, "sibling_deposit_not_committed", function()
+                return pc_task(PC_STORAGE_MAIN)
+            end, 2400) then return end
+            PC.leave(cp, L)
+            local done = owned_snapshot(L .. " after")
+            if not done then return end
+            local moved = done.boxes[target]
+            if not moved or moved.box ~= free_box or moved.slot ~= free_slot then
+                return em_fail(L, string.format("sibling_readback: %s is %s, want box %d slot %d",
+                               target, moved and string.format("box %d slot %d", moved.box,
+                                                                moved.slot) or "absent",
+                               free_box, free_slot))
+            end
+            G.phase("deposited", string.format("sibling deposit into the non-full box %d: "
+                    .. "party %d -> %d, %s now box %d slot %d", free_box, before.party.n,
+                    done.party.n, target, free_box, free_slot))
+            G.phase("note", "the observer must show NO pc_deposit between 'box-full' and "
+                    .. "'deposited', and one pc_deposit after it (tests/unit/"
+                    .. "test_gen3_exp_pc_negative_legs.py asserts the absence with a liveness "
+                    .. "sibling)")
+        end,
+    }
+end -- if TITLE == Syms.EXP_TITLE
 
 -- ── BATTLE group (emerald_battle.sav, Route 102 0.17 (21,16), tall grass) ──────────────────
 

@@ -120,14 +120,19 @@ function P.run()
                     duo={player="a",result=wt.."/patch/build/overhead_"..speed.."_"..label..".txt"}}),"observer missing")
                 assert(observer.admitted_by~="default","observer admission fell back")
                 local bindings={}
+                local hooks=0
                 for name,site in pairs(observer.parts.sites) do
                     bindings[#bindings+1]=name..":"..tostring(site.address)..":"..tostring(site.capture_offset)
+                    -- HOOK count, not site count: one hook per site plus one per mirror alias
+                    -- (expansion only). A site without mirror_offsets contributes exactly one, so
+                    -- the vanilla titles are unchanged.
+                    hooks=hooks+1+#(site.mirror_offsets or {})
                 end
                 table.sort(bindings)
                 local signature=table.concat(bindings,",")
                 canonical=canonical or signature
                 assert(signature==canonical,"observer site set differs from baseline observer")
-                assert(observer.parts.signals:status().registered==#bindings,"incomplete duo site set")
+                assert(observer.parts.signals:status().registered==hooks,"incomplete duo hook set")
                 if label=="G" or label=="H" then observer.parts.signals:close() end
                 if label=="H" then
                     local Signals=dofile(wt.."/lua/gen3/signals.lua")
@@ -162,7 +167,9 @@ function P.run()
             local st=observer and observer.parts.signals:status() or nil
             local live=live_count()-start_live
             local expected=0
-            if observer then for _ in pairs(observer.parts.sites) do expected=expected+1 end end
+            if observer then for _,site in pairs(observer.parts.sites) do
+                expected=expected+1+#(site.mirror_offsets or {})
+            end end
             assert(not callback_error,callback_error)
             assert(not order_error,order_error)
             if label=="C" or label=="D" or label=="E" then assert(standin_calls-start_standin==3000,"stand-in missed frames") end

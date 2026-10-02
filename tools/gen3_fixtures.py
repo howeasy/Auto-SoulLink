@@ -1760,6 +1760,46 @@ def cmd_make_exp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_qualify_exp_acquisition(args: argparse.Namespace) -> int:
+    """A disclosed acquisition seed must CONTINUE and SAVE without receiving/hatching anything."""
+    import uuid
+
+    from tools.gen3_gift_egg_rows import exp_seed_problems, expansion_facts
+
+    rom = Path(args.rom or EXP_ARTIFACTS / "pokeemerald.gba")
+    seed = codec.split_rtc(Path(args.seed).read_bytes())[0]
+    facts = expansion_facts(rom.read_bytes(), args.case, args.side)
+    problems = exp_seed_problems(seed, facts)
+    if problems:
+        print("FAIL seed: " + "; ".join(problems))
+        return 1
+    title = codec.TITLE_EXPANSION
+    before = qualify_one(seed, rr=False, title=title)
+    name = f"exp_acquisition_{args.case}_{args.side}_{uuid.uuid4().hex[:8]}"
+    rom_rel, run_dir, battery = _prepare_run(name, str(rom), seed=seed,
+                                             saveram_name_override=args.saveram_name)
+    print(f"SYNTH_QUALIFY case={args.case} side={args.side} run={run_dir} seed_sha256={sha256_hex(seed)}")
+    passed, text = _launch(EMERALD_BOOT_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                           title=title, extra_env={"SLINK_BOOT_SYM": str(EXP_ARTIFACTS / "pokeemerald.sym")})
+    print(text.rstrip())
+    flushed = _flushed_saveram(run_dir, battery)
+    if not passed or flushed is None:
+        print("FAIL acquisition fixture: native CONTINUE/SAVE did not complete")
+        return 1
+    body = import_savedata(flushed.read_bytes(), rr=False, title=title)
+    after = qualify_one(body, rr=False, title=title)
+    problems = boot_check_verdict(before, after)[1] + exp_seed_problems(body, facts)
+    if codec.parse_flash(body, title=title)["sb2"][9] & 1:
+        problems.append("native save retained continue warp")
+    if problems:
+        print("FAIL acquisition fixture: " + "; ".join(problems))
+        return 1
+    Path(args.out).write_bytes(body)
+    print(f"SYNTH_QUALIFY PASS case={args.case} side={args.side} counter={before['counter']}->{after['counter']} "
+          f"file={args.out} sha256={sha256_hex(body)} acquisition_pending=true")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # FR/LG natural-leg seeds (card NAT-LEGS): DISCLOSED O-33 SYNTH edits of a committed party fixture
 #
@@ -2228,6 +2268,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--saveram-name", default=None)
     p_exp.add_argument("--timeout", type=int, default=600)
     p_exp.set_defaults(func=cmd_make_exp)
+
+    p_acq = sub.add_parser("qualify-exp-acquisition", help="EMULATOR: acquisition seed CONTINUE + SAVE only")
+    p_acq.add_argument("--case", choices=("gift", "hatch", "egg_receive", "choice_gift", "gift_box"), required=True)
+    p_acq.add_argument("--side", choices=("a", "b"), default="a")
+    p_acq.add_argument("--seed", required=True)
+    p_acq.add_argument("--out", required=True)
+    p_acq.add_argument("--rom", default=None)
+    p_acq.add_argument("--saveram-name", default=None)
+    p_acq.add_argument("--timeout", type=int, default=600)
+    p_acq.set_defaults(func=cmd_qualify_exp_acquisition)
 
     p_syn = sub.add_parser("make-frlg-synth", help="NO EMULATOR: SYNTH edit of an FR/LG party "
                                                   "fixture for a natural-leg row (NAT-LEGS)")

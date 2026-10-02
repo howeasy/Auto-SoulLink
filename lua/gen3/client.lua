@@ -1301,14 +1301,23 @@ function Client.new(p)
             return census
         end
         local function release_begin(sig)
-            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp, frame = sig.frame}
         end
         local function release_done(sig)
             local before = st.release_snapshot
             st.release_snapshot = nil
-            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
-            if not before or not before.keys or before.epoch ~= trade_reset_epoch
-               or before.sp ~= sig.sp + 4 then return end
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch then return end
+            -- A pack whose two sites sit mid-body in one task invocation (no push/pop between,
+            -- SP delta 0) declares pairing = frame_window: same-invocation by framecount.
+            -- Otherwise (every vanilla pack: no `pairing` key) ReleaseMon entry SP and its
+            -- pre-pop return SP differ by the saved LR.
+            local site = p.sites and p.sites.pc_release
+            local pairing = site and site.pairing
+            if pairing and pairing.mode == "frame_window" then
+                local dt = sig.frame and before.frame and sig.frame - before.frame
+                if not dt or dt < 0 or dt > (tonumber(pairing.window) or 0) then return end
+            elseif pairing then return        -- declared but unknown mode: refuse, never the SP rule
+            elseif before.sp ~= sig.sp + 4 then return end
             local after, gone = release_census(), nil
             if not after then return end
             for k in pairs(after) do if not before.keys[k] then return end end
@@ -1324,9 +1333,10 @@ function Client.new(p)
             end
         end
         local function capture_hatch(sig)
-            -- All pinned AddHatchedMonToParty returns leave the mon pointer in R5.
+            -- Pinned AddHatchedMonToParty returns leave the mon pointer in R5 (FR/LG/RR/Emerald);
+            -- the expansion build keeps it in R4 (R5 is the species/save pointer): R5 first.
             -- Read AT the completed mutation, before later callbacks can move the party.
-            local base, ptr = call("party_base"), sig.point and sig.point.R5
+            local base, ptr = call("party_base"), sig.point and (sig.point.R5 or sig.point.R4)
             local party = party_read()
             if not base or not ptr or not party then return end
             for _, mon in ipairs(party) do

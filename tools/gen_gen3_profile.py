@@ -1567,6 +1567,19 @@ def build_expansion(context):
         ("SB2_OT_ID_OFFSET", "SaveBlock2", "playerTrainerId"),
     ):
         put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
+    # playerGender is not in facts.json's probe (tools/expansion_offsets.c); the harness probe
+    # compiles it (tools/expansion_harness_offsets.c F(SaveBlock2, playerGender), checked by
+    # gen_expansion_harness_facts.check). reads.lua publishes player_gender only when this key
+    # exists, which is what makes the server's rival-by-gender panel filter live. ROM witness:
+    # ScrCmd_checkplayergender 0x081f9dc0 `ldrb r2, [r2, #8]` off gSaveBlock2Ptr (test_gen3_exp_player_gender.py).
+    harness = json.loads((context["directory"] / "harness_facts.json").read_text(encoding="utf-8"))
+    gender = harness["structs"]["SaveBlock2"]["fields"]["playerGender"]
+    if gender["size"] != 1:
+        raise ValueError("expansion SaveBlock2.playerGender is no longer a u8")
+    derived["SB2_PLAYER_GENDER_OFFSET"] = gender["offset"]
+    src["derived.SB2_PLAYER_GENDER_OFFSET"] = ("harness_facts.json:structs.SaveBlock2.fields.playerGender.offset; "
+        "pin e8bd1cd7:include/global.h:591 playerGender, MALE=0/FEMALE=1 include/constants/global.h:178-179; "
+        "ROM: ScrCmd_checkplayergender 0x081f9dc0 ldrb r2,[r2,#8] off gSaveBlock2Ptr")
     put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
     put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
     volatiles_off = types["BattlePokemon"]["fields"]["volatiles"]["offset"]

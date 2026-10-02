@@ -314,13 +314,23 @@ end
 --- pp +0x24, hp +0x28) and struct BattleMove (effect byte 0, power byte 1) -- CFRU keeps both.
 --- X3: the expansion reference build redesigned both; its geometry is the build's own compiler
 --- facts (facts.json BattlePokemon 140 bytes, MoveInfo.power a 9-bit field). Its effect enum is
---- not CFRU's, so no effect id is trusted there (move_effect -> nil: any_move_slot skips it).
+--- not CFRU's, so no CFRU effect id is trusted there (SELF_DAMAGE_EFFECTS is never consulted); its
+--- any_move_slot fallback reads the build's OWN MoveInfo.effect bitfield (facts.json) and takes only
+--- a plain EFFECT_HIT with power. Pinned source e8bd1cd7, include/constants/battle_move_effects.h:
+--- EFFECT_PLACEHOLDER is :6 (=0), EFFECT_HIT :7 (=1).
+local EXP_EFFECT_HIT = 1
+--- EFFECT_HIT moves that still KO the user: `.explosion = TRUE` on an EFFECT_HIT entry, src/data/
+--- moves_info.h:3268 MOVE_SELF_DESTRUCT (moves.h:135 = 120) and :4182 MOVE_EXPLOSION (moves.h:171 = 153).
+--- The only other .explosion move (MISTY_EXPLOSION :19363) is EFFECT_TERRAIN_BOOST, and no EFFECT_HIT
+--- entry carries a recoil/faint additional effect (swept over all 414 EFFECT_HIT entries). Double-Edge
+--- is EFFECT_RECOIL (:1027) and Struggle EFFECT_STRUGGLE (:4518), so neither is ever EFFECT_HIT.
+local EXP_SELF_KO_HITS = { [120] = true, [153] = true }
 local BM = { size = 0x58, moves = 0x0C, pp = 0x24, hp = 0x28,
              power = { off = 1, width = 1, shift = 0, mask = 0xFF }, effect_off = 0 }
 if title == TITLES.EXP_TITLE then
     BM = guard("expansion battle geometry (facts.json)", function()
         local st = read_json("data/games/gen3_exp/28877d73/facts.json").structs
-        local b, pw = st.BattlePokemon, st.MoveInfo.bitfields.power
+        local b, pw, ef = st.BattlePokemon, st.MoveInfo.bitfields.power, st.MoveInfo.bitfields.effect
         local flag = st.Volatiles.bitfields.perishSong
         assert(flag.width == 1 and flag.bits == 1, "expansion Perish flag compiler lane changed")
         return { size = b.size, moves = b.fields.moves.offset, pp = b.fields.pp.offset,
@@ -329,7 +339,8 @@ if title == TITLES.EXP_TITLE then
                  perish_mask = assert(tonumber(flag.mask)),
                  party = { size = st.Pokemon.size, hp = st.Pokemon.fields.hp.offset,
                            max_hp = st.Pokemon.fields.maxHP.offset },
-                 power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 } }
+                 power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 },
+                 effect = { off = ef.offset, width = ef.width, shift = ef.shift, mask = (1 << ef.bits) - 1 } }
     end)
 end
 --- `move`'s base power from the pack's move table (rom.BATTLE_MOVES_ADDR, derived.BATTLE_MOVE_ENTRY_SIZE).
@@ -1414,6 +1425,11 @@ local SELF_DAMAGE_EFFECTS = {
 --- or nil if the table isn't known -- never pret FR's gBattleMoves on RR (G5-RR-MOVEPICK).
 local function move_effect(move)
     local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
+    if BM.effect and table_at and size and move and move ~= 0 then       -- expansion: the effect bitfield
+        local at = table_at + move * size + BM.effect.off
+        local raw = BM.effect.width == 1 and memory.read_u8(at) or memory.read_u16_le(at)
+        return (raw >> BM.effect.shift) & BM.effect.mask
+    end
     if not (table_at and size and move and move ~= 0 and BM.effect_off) then return nil end
     return memory.read_u8(table_at + move * size + BM.effect_off)
 end
@@ -1427,6 +1443,12 @@ end
 --- Absorb in slot 2 -- healing us would only fight lose_active's whole point). A move whose
 --- effect is unreadable is treated the same as a self-damaging one and skipped: the fallback only
 --- ever picks a move it can PROVE won't KO its own lead.
+--- Known limitation (expansion): some EFFECT_HIT moves still pass the gate above but are not
+--- plain hits. MOVE_EFFECT_THRASH/UPROAR ones (Thrash, Petal Dance, Outrage, Uproar, Raging Fury)
+--- lock the user in, and MOVE_EFFECT_RECHARGE ones (Hyper Beam, Giga Impact, Blast Burn, Hydro
+--- Cannon, Frenzy Plant, Rock Wrecker, Roar of Time, Prismatic Laser, Meteor Assault, Eternabeam)
+--- force a recharge turn. Either fails closed as "battle left the action menu", bounded by
+--- lose_active's 120-turn cap; the live lead is a starter with Tackle/Growl, so it never arises.
 local function any_move_slot()
     local base = S.gBattleMons                            -- battler 0
     for slot = 0, 3 do
@@ -1434,7 +1456,11 @@ local function any_move_slot()
         local pp = memory.read_u8(base + BM.pp + slot)
         if move ~= 0 and pp > 0 then
             local effect = move_effect(move)
-            if effect and not SELF_DAMAGE_EFFECTS[effect] then return slot, effect end
+            if BM.effect then       -- expansion: only a plain damaging EFFECT_HIT that cannot KO the user
+                if effect == EXP_EFFECT_HIT and not EXP_SELF_KO_HITS[move] and move_power(move) > 0 then
+                    return slot, effect
+                end
+            elseif effect and not SELF_DAMAGE_EFFECTS[effect] then return slot, effect end
         end
     end
 end
@@ -1667,6 +1693,8 @@ function ctx.lose_active(key, label)
     -- faint" pass, in case the exclusion above is ever wrong or incomplete.
     local function fainted_or_self_ko()
         if not fainted() then return nil end
+        -- (Expansion: fallback_effect is 1 or "unknown" here, so SELF_DAMAGE_EFFECTS[fallback_effect]
+        -- cannot fire on that path; any_move_slot's EXP_SELF_KO_HITS id exclusion is its only guard.)
         if fallback_effect ~= nil and (fallback_effect == "unknown" or SELF_DAMAGE_EFFECTS[fallback_effect]) then
             return false, fmt("%s: the fallback move self-damaged the lead (effect %s)",
                               label, tostring(fallback_effect))

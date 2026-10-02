@@ -73,13 +73,23 @@ WT_FWD = REPO.replace("\\", "/")
 # they declare and no GB fixture has.
 SCENARIOS = {
     "gift_gen3": {"flags": ["--species-clause", "--gender-clause", "--type-clause"],
-        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr", "gen3_exp"),
         "target": "gift_synth", "frames": 2000000, "explicit_only": True,
         "scenario_module": "gift_egg", "acquisition_kind": "gift", "oracle": "assert_gift_egg_gen3_saved"},
     "egg_hatch_gen3": {"flags": [], "timeout": 1800,
-        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"), "target": "hatch_synth",
+        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr", "gen3_exp"), "target": "hatch_synth",
         "frames": 2500000, "explicit_only": True, "scenario_module": "gift_egg",
         "acquisition_kind": "hatch", "oracle": "assert_gift_egg_gen3_saved"},
+    "egg_receive_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "egg_receive_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "egg_receive", "oracle": "assert_gift_egg_gen3_saved"},
+    "choice_gift_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "choice_gift_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift", "acquisition_case": "choice_gift",
+        "oracle": "assert_gift_egg_gen3_saved"},
+    "gift_box_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "gift_box_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift_box", "oracle": "assert_gift_egg_gen3_saved"},
     # FRLG-R4: clean-derived saves are disclosed SYNTH. Dependency preflight
     # refuses these rows before any server/emulator launch until CR-R1/CR-R2 and
     # server ingest are committed. Exactly one attempt; no borrowed vanilla PASS.
@@ -646,9 +656,9 @@ for _borrow_case in ("menu", "opponent", "battle"):
 
 SCENARIOS["release_gen3"] = {
     "flags": [], "timeout": 2400, "frames": 3000000,
-    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
     "target": {"a": "battle", "b": "town"},
-    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2"},
+    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2", "gen3_exp": "pc"},
     "oracle": "assert_release_gen3_saved",
 }
 SCENARIOS["ball_gate_gen3"] = {
@@ -8439,6 +8449,9 @@ class DuoRun:
         return orchestrate(self)
 
     orchestrate_egg_hatch_gen3 = orchestrate_gift_gen3
+    orchestrate_egg_receive_gen3 = orchestrate_gift_gen3
+    orchestrate_choice_gift_gen3 = orchestrate_gift_gen3
+    orchestrate_gift_box_gen3 = orchestrate_gift_gen3
 
     def assert_gift_egg_gen3_saved(self, results):
         from gen3_gift_egg_rows import saved_oracle

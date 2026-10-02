@@ -8,6 +8,7 @@
     python tools/gen3_final_cut.py --cut <sha> --list              # the row ids
     python tools/gen3_final_cut.py --cut <sha> --title rr          # the G5 (Radical Red) plan
     python tools/gen3_final_cut.py --cut <sha> --title emerald     # the E4b (Emerald) plan
+    python tools/gen3_final_cut.py --cut <sha> --title exp         # test-only expansion plan
 
 docs/gen3/G4_final_cut_runbook.md §0-§11 is the source of every row; §12 names the gaps this closes.
 --title rr (card G5-RUNNER-RR) is a separate, opt-in plan: the RR duo rows (every
@@ -19,6 +20,11 @@ a third, opt-in plan: the SOURCE-lane generator checks, the Emerald states/duo/b
 Emerald-only slice of the probe-gates live suite, the shadow-negatives manifest check, and the
 release zip built, checked and booted on Emerald (emerald_zip_build, emerald_zip_check,
 zip_boot_emerald); its summary is fc_SUMMARY_<cut8>_emerald.txt. §13 of the runbook is its source.
+--title exp is XG3's test-only reference-build plan: source checks, expansion units, every
+applicable duo registry entry, and ZIP build/check/boot. Its summary is
+fc_SUMMARY_<cut8>_exp.txt. Runtime rows must log the server's --test-only-route; ZIP boot also
+logs the existing duo client-admission seam. Source/build rows use no runtime route. This
+plan does not open production admission or replace XG3's separate observer/calc obligations.
 EG4 (ruling 24) landed lua/gen3/entry.lua:108's Entry.ROUTED gen3_emerald admission, so
 zip_boot_emerald now actually boots Emerald like any other title. zip_boot() still checks the
 EXTRACTED zip's own entry.lua before attempting the boot (emerald_admission_blocker) and reports
@@ -79,11 +85,13 @@ PY = sys.executable
 # key (never iterated as a whole), so this is inert for --title frlg/rr.
 STAGED = {"firered": "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba",
           "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba",
-          "emerald": "patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba"}
+          "emerald": "patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba",
+          "exp": "patch/build/gen3_pokeemerald.gba"}
 ROOT_DUMPS = {"firered": "Pokemon - FireRed Version (USA).gba",
               "leafgreen": "Pokemon - LeafGreen Version (USA).gba",
               # tools/gen3_fixtures.py:452 PARTY_TITLES["emerald"]["rom"]
-              "emerald": "Pokemon - Emerald Version (USA, Europe).gba"}
+              "emerald": "Pokemon - Emerald Version (USA, Europe).gba",
+              "exp": ".cache/expansion-output/reference/pokeemerald.gba"}
 EMERALD_SAVERAM = "Pokemon - Emerald Version (USA, Europe).SaveRAM"   # tools/gen3_fixtures.py:918
 # The gitignored inputs a lane needs (runbook §0.3, item 6's inputs per
 # item6_route_diff_{branch,master}_2026-09-24.txt). PINNED ones are verified against the tree's
@@ -119,6 +127,30 @@ EMERALD_PINNED_INPUTS = {
 # the FR/LG lane without it (fc 66184e35). It now lives in the shared UNPINNED_INPUTS below, so the
 # Emerald-only extra is empty (kept as the extension point).
 EMERALD_UNPINNED_INPUTS: list[str] = []
+EXPANSION_TITLE = "emerald_expansion_28877d73"
+EXPANSION_PACK = "data/games/gen3_exp/28877d73"
+EXPANSION_PINNED_INPUTS = {
+    STAGED["exp"]: ("exp", [STAGED["exp"], ROOT_DUMPS["exp"]]),
+    ROOT_DUMPS["exp"]: ("exp", [ROOT_DUMPS["exp"], STAGED["exp"]]),
+}
+# Expansion-only provisioning avoids unrelated FR/RR/Gen1 input requirements. The source
+# remains a junction/symlink; an available compile.json is preserved beside the offline object.
+EXPANSION_UNPINNED_INPUTS = [".cache/expansion-output/", ".cache/pret/pokeemerald/"]
+EXPANSION_ZIP_PACK_FILES = ("profile.json", "engine_signals.json", "write_checkpoint.json",
+                           "area_map.json", "gen3_exp_locations.lua")
+EXPANSION_UNIT_FILES = [
+    "tests/unit/test_build_expansion.py", "tests/unit/test_extract_expansion_data.py",
+    "tests/unit/test_extract_expansion_config.py", "tests/unit/test_gen_expansion_facts.py",
+    "tests/unit/test_gen3_exp_pack.py", "tests/unit/test_gen3_exp_reads.py",
+    "tests/unit/test_gen3_exp_safety.py", "tests/unit/test_gen3_exp_entry.py",
+    "tests/unit/test_gen3_codec_expansion.py", "tests/unit/test_e2e_duo_gen3_exp.py",
+    "tests/unit/test_gen3_expansion_adapter.py", "tests/unit/test_gen3_expansion_calc_names.py",
+    "tests/unit/test_gen3_expansion_faint_oracle.py", "tests/unit/test_gen3_expansion_gifts.py",
+    "tests/unit/test_gen3_expansion_masks.py", "tests/unit/test_gen3_expansion_refusal.py",
+    "tests/unit/test_gen3_expansion_trainer_sets.py", "tests/unit/test_gen3_expansion_wild.py",
+    "tests/unit/test_gen3_expansion_wild_rom.py",
+    "tests/unit/test_gen3_final_cut.py", "tests/unit/test_gen3_final_cut_exp.py",
+]
 # E7-SKIPS: unit_emerald's own tests, selected by FILE, never `-k` (release_lanes.py's own
 # rule, verify_gen3_release.py's _UNIT_FILES). `-k "gen3 and emerald"` over the whole tests/unit
 # tree still IMPORTS every module under the path first -- a `-k` selector filters ITEMS, not
@@ -180,7 +212,7 @@ ALLOWED_SKIPS = [
 ]
 
 ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a",
-          "gen3_emerald": "em_as_a"}   # --title emerald (card E4b-FINALCUT)
+          "gen3_emerald": "em_as_a", "gen3_exp": "exp_as_a"}
 
 
 @dataclass
@@ -491,6 +523,48 @@ def build_plan_emerald(cut, lane, master):
     return rows
 
 
+def expansion_env(lane):
+    return {"SLINK_EXPANSION_SRC": os.path.join(lane, ".cache", "expansion-src"),
+            "SLINK_EXPANSION_ARTIFACTS": os.path.join(lane, ".cache", "expansion-output", "reference"),
+            "SLINK_EXPANSION_PROBE_OBJECT": os.path.join(lane, ".cache", "x1-probe", "probe.o")}
+
+
+def build_plan_exp(cut, lane, master):
+    """XG3's test-only plan. Every applicable registry entry, including explicit-only probes.
+
+    Reuse Emerald's applicable source checks with build-specific flags. Its vanilla state,
+    checkpoint and boot-check tools do not accept this title, so they are not mislabeled as
+    expansion coverage. Future expansion duos automatically join; no unsigned limit vanishes.
+    """
+    del master
+    import e2e_duo
+    names = [s for s in e2e_duo.SCENARIOS if e2e_duo.scenario_applies(s, "gen3_exp")]
+    if not names:
+        raise RuntimeError("expansion registry has no applicable duo rows")
+    limited = [s for s in names if e2e_duo.SCENARIOS[s].get("signed_limit")]
+    if limited:
+        raise RuntimeError(f"new expansion signed limit(s) {limited}: obtain an explicit disposition")
+    build_flags = ["--expansion", "28877d73", "--check"]
+    rows = [Row(f"{name}_exp", "XG3 SOURCE", [PY, f"tools/{tool}", *flags], lane, 300,
+                emulator=False) for name, tool, flags in (
+        ("profile_generated_check", "gen_gen3_profile.py", build_flags),
+        ("write_checkpoint_generated_check", "gen_gen3_write_checkpoint.py", build_flags),
+        ("engine_signals_generated_check", "gen_gen3_engine_signals.py", build_flags),
+        ("area_map_generated_check", "gen_area_map.py", ["--game", "emerald", *build_flags]),
+        ("gift_census_check", "gen_gen3_exp_gifts.py", ["--check"]),
+        ("wild_rom_check", "verify_gen3_exp_wild.py", ["--check"]),
+    )]
+    rows.append(Row("unit_exp", "XG3 MODEL", [PY, "-m", "pytest", *EXPANSION_UNIT_FILES,
+                    "-q", "-p", "no:randomly", "-rs"], lane, 1800, emulator=False))
+    rows += [_duo(s, "gen3_exp", "XG3 TEST-ONLY duo", lane) for s in names]
+    rows += zip_rows(cut, lane, "exp")
+    for row in rows:
+        row.cwd = lane  # even the boot helper must execute the frozen lane's runner
+        row.env.update(expansion_env(lane))
+        row.deps = None  # all expansion rows RUN; no historical qualification is carried
+    return rows
+
+
 def select_rows(rows, spec):
     """--rows: comma list of row-id globs or item tags (e.g. 'item2b'); runbook order kept."""
     if not spec:
@@ -600,13 +674,13 @@ def main_checkout():
     return os.path.dirname(common)
 
 
-def provision_plan(tree, rev, extra_pinned=None, extra_unpinned=None):
+def provision_plan(tree, rev, extra_pinned=None, extra_unpinned=None, base_inputs=True):
     """The commands provision() may run, for --dry-run. `extra_pinned`/`extra_unpinned` (--title
     emerald only: EMERALD_PINNED_INPUTS / EMERALD_UNPINNED_INPUTS) are appended so frlg/rr's
     printed plan is untouched at their default of None -- every existing call site keeps calling
     this with the same two positional arguments it always did."""
-    pinned = {**PINNED_INPUTS, **(extra_pinned or {})}
-    unpinned = UNPINNED_INPUTS + list(extra_unpinned or [])
+    pinned = {**(PINNED_INPUTS if base_inputs else {}), **(extra_pinned or {})}
+    unpinned = (UNPINNED_INPUTS if base_inputs else []) + list(extra_unpinned or [])
     return [f"git worktree add --detach {tree} {rev}   (only if {tree} does not exist)",
             f"git -C {tree} update-index -q --really-refresh && git -C {tree} status --porcelain "
             f"--untracked-files=no   (must be empty, else abort)",
@@ -673,7 +747,7 @@ def file_digest(path, algo="sha256"):
     return _HASHES[key]
 
 
-def rom_pins(tree):
+def rom_pins(tree, include_expansion=False):
     """{pin key: digest} from the tree's OWN pin tables: tools/gen_gen3_write_checkpoint.py ROMS
     (sha1 of the FR/LG clean dumps and the RR companion) and server/patcher.py TARGETS["rr"]
     patched_md5 (the companion's md5). Missing tables raise LaneError (fail closed)."""
@@ -689,7 +763,20 @@ def rom_pins(tree):
     need = {"firered", "leafgreen", "radical_red_companion", "radical_red_companion:md5"}
     if not need <= set(pins):
         raise LaneError(f"{tree}: pin tables incomplete (have {sorted(pins)})")
+    if include_expansion:
+        pins["exp"] = expansion_rom_pin(tree)
     return pins
+
+
+def expansion_rom_pin(tree):
+    try:
+        profile = json.loads(_read(os.path.join(tree, EXPANSION_PACK, "profile.json")))
+        sha = profile["source"]["rom_sha1"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise LaneError("expansion profile ROM pin missing or malformed") from exc
+    if not re.fullmatch(r"[0-9a-f]{40}", sha) or not sha.startswith("28877d73"):
+        raise LaneError("expansion profile has no valid registered ROM pin")
+    return sha
 
 
 def _matches_pin(path, key, pins):
@@ -698,7 +785,7 @@ def _matches_pin(path, key, pins):
 
 
 def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
-                extra_unpinned=None):
+                extra_unpinned=None, base_inputs=True):
     """Bring the tree's gitignored inputs in line (see PINNED_INPUTS / UNPINNED_INPUTS).
     `only`: just these unpinned inputs, no pinned ones (item 6's master tree needs only the
     Gen 1/2 inputs, and an older master may not carry the Gen 3 pin tables at all).
@@ -708,7 +795,8 @@ def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
     repo = repo or REPO
     pins = {} if only is not None else (pins or rom_pins(tree))
     for dst_rel, (key, rels) in ({} if only is not None else
-                                  {**PINNED_INPUTS, **(extra_pinned or {})}).items():
+                                  {**(PINNED_INPUTS if base_inputs else {}),
+                                   **(extra_pinned or {})}).items():
         dst = os.path.join(tree, dst_rel)
         if _matches_pin(dst, key, pins):
             continue
@@ -719,7 +807,8 @@ def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
                             f"checked {', '.join(cands)}")
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copyfile(src, dst)
-    for rel in (UNPINNED_INPUTS + list(extra_unpinned or [])) if only is None else only:
+    for rel in ((UNPINNED_INPUTS if base_inputs else []) + list(extra_unpinned or [])) \
+            if only is None else only:
         dst = os.path.join(tree, rel)
         if os.path.exists(dst):
             continue                     # the lane's own copy is never overwritten
@@ -732,6 +821,59 @@ def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
         else:
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(src, dst)
+
+
+def copy_expansion_inputs(tree, root, repo=None):
+    """Reuse pinned copying; keep source read-only and offline compiler proof explicitly bound."""
+    repo = repo or REPO
+    # Copy the whole artifact bundle BEFORE its pinned ROM creates a partial directory.
+    copy_inputs(tree, root, repo, only=EXPANSION_UNPINNED_INPUTS)
+    copy_inputs(tree, root, repo, pins={"exp": expansion_rom_pin(tree)},
+                extra_pinned=EXPANSION_PINNED_INPUTS, base_inputs=False)
+    destination = os.path.join(tree, ".cache", "expansion-src")
+    supplied = os.environ.get("SLINK_EXPANSION_SRC")
+    source = supplied or (destination if os.path.isdir(destination) else next(
+        (os.path.join(base, ".cache", "expansion-src") for base in (repo, root)
+         if os.path.isdir(os.path.join(base, ".cache", "expansion-src"))), None))
+    lock = json.loads(_read(os.path.join(tree, "data", "gen3_exp_sources.lock.json")))
+    if not source or not os.path.isdir(source):
+        raise LaneError("expansion source missing (SLINK_EXPANSION_SRC or .cache/expansion-src)")
+    if head(source) != lock["source"]["commit"] or not tracked_clean(source):
+        raise LaneError("expansion source must be tracked-clean at its locked commit")
+    for rel, sha in lock["config_headers"].items():
+        if file_digest(os.path.join(source, rel)) != sha:
+            raise LaneError(f"expansion source header differs from lock: {rel}")
+    if os.path.isdir(destination) and os.path.realpath(destination) != os.path.realpath(source):
+        raise LaneError("existing expansion source link differs from SLINK_EXPANSION_SRC")
+    if not os.path.isdir(destination):
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        if os.name == "nt":
+            import _winapi
+            _winapi.CreateJunction(os.path.realpath(source), destination)
+        else:
+            os.symlink(os.path.realpath(source), destination, target_is_directory=True)
+    probe = os.environ.get("SLINK_EXPANSION_PROBE_OBJECT") or next(
+        (os.path.join(base, ".cache", "x1-probe", "probe.o") for base in (repo, root)
+         if os.path.isfile(os.path.join(base, ".cache", "x1-probe", "probe.o"))), None)
+    target = expansion_env(tree)["SLINK_EXPANSION_PROBE_OBJECT"]
+    if not os.path.isfile(target):
+        if not probe or not os.path.isfile(probe):
+            raise LaneError("expansion probe missing (SLINK_EXPANSION_PROBE_OBJECT)")
+        compile_file = os.path.join(os.path.dirname(probe), "compile.json")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(probe, target)
+        if os.path.isfile(compile_file):
+            shutil.copyfile(compile_file, os.path.join(os.path.dirname(target), "compile.json"))
+    facts = json.loads(_read(os.path.join(tree, EXPANSION_PACK, "facts.json")))
+    if probe and file_digest(probe) != facts["provenance"]["compile"]["object_sha256"]:
+        raise LaneError("provided expansion probe object differs from facts")
+    if file_digest(target) != facts["provenance"]["compile"]["object_sha256"]:
+        raise LaneError("expansion probe object differs from facts")
+    for kind in ("pc", "catch"):
+        for suffix in ("", "_b"):
+            rel = f"tests/fixtures/gen3/exp_{kind}{suffix}.sav"
+            if not os.path.isfile(os.path.join(tree, rel)):
+                raise LaneError(f"expansion tracked fixture missing: {rel}")
 
 
 def armgcc_bin(root):
@@ -847,7 +989,20 @@ def run_row(row, cut, lane, deadline):
         a = {"load": load_snapshot(), "start_utc": f"{start:%Y-%m-%dT%H:%M:%SZ}",
              "tracked_before": before}
         print(f"\n[final_cut] === {row.id} attempt {attempt}  $ {row.command()}  (cwd={row.cwd})")
-        rc, out, killed, stopped = run_once(row, deadline)
+        if is_expansion_row(row.id):
+            actual = head(lane)
+            stamp = f"EXPANSION_CUT requested={cut} before={actual}"
+            if actual != cut or not before:
+                rc, out, killed, stopped = 1, "FAIL expansion lane is not clean at exact cut", False, False
+            else:
+                rc, out, killed, stopped = run_once(row, deadline)
+            out = stamp + "\n" + out + f"\nEXPANSION_CUT after={head(lane)}\n"
+            problem = expansion_attempt_problem(row.id, cut, out)
+            if problem:
+                out += "FAIL expansion evidence: " + problem + "\n"
+                rc = 1
+        else:
+            rc, out, killed, stopped = run_once(row, deadline)
         a.update(rc=rc, output=out, end_utc=f"{utcnow():%Y-%m-%dT%H:%M:%SZ}",
                  tracked_after=tracked_clean(lane))
         rewind = rewind_violations(lane, t0 - 2)
@@ -932,7 +1087,59 @@ ZIP_BOOT = {
     "emerald": (STAGED["emerald"], "emerald.gba", "emerald_town.sav", EMERALD_SAVERAM,
                 r"\[SLink-gen3\] gen3_emerald/emerald \(clean by hash\) player a ",
                 "hello rom=emerald "),
+    "exp": (STAGED["exp"], "gen3_pokeemerald.gba", "exp_pc.sav", "gen3 pokeemerald.SaveRAM",
+            r"\[SLink-gen3\] gen3_exp/emerald_expansion_28877d73 \(clean by hash\) player a ",
+            f"hello rom={EXPANSION_TITLE} "),
 }
+
+
+def expansion_zip_blocker(lua_dir):
+    """Validate extracted build identity and pack closure; do not flip shipped admission."""
+    root = os.path.dirname(lua_dir)
+    for name in EXPANSION_ZIP_PACK_FILES:
+        if not os.path.isfile(os.path.join(root, EXPANSION_PACK, name)):
+            return f"expansion ZIP closure missing {name}"
+    try:
+        profile = json.loads(_read(os.path.join(root, EXPANSION_PACK, "profile.json")))
+        if profile["titles"][EXPANSION_TITLE]["admitted"] is not False:
+            return "expansion ZIP profile must remain unadmitted for this test-only plan"
+        expansion_rom_pin(root)
+    except (ValueError, KeyError, TypeError, LaneError):
+        return "expansion ZIP profile identity is malformed"
+    entry = _read(os.path.join(lua_dir, "gen3", "entry.lua"))
+    routed = re.search(r"Entry\.ROUTED\s*=\s*\{(.*?)\}", entry, re.S)
+    if not routed or re.search(r"\bgen3_exp\s*=\s*true|[\"']gen3_exp[\"']\s*\]\s*=\s*true",
+                               routed[1]):
+        return "expansion ZIP must retain the production refusal in Entry.ROUTED"
+    return None
+
+
+def zip_bootstrap(lane, title):
+    if title != "exp":
+        return _BOOT_LUA
+    # Reuse the frozen lane's exact duo seam, rather than inventing another admission policy.
+    source = _read(os.path.join(lane, "lua", "tests", "duo", "duo_gen3_main.lua"))
+    codec = re.search(r"(?ms)^local function test_admission_codec\([^\n]+\).*?^end$", source)
+    if not codec:
+        raise LaneError("frozen lane has no expansion test_admission_codec seam")
+    return codec[0] + r'''
+local function test_log(s)
+    local f = assert(io.open(os.getenv("SLINK_ZIPBOOT_ROUTE_LOG"), "a"))
+    f:write(s, "\n"); f:close()
+end
+local original_dofile = dofile
+dofile = function(path)
+    local value = original_dofile(path)
+    local normalized = tostring(path):gsub("\\", "/")
+    if normalized:match("/lua/json_codec%.lua$") then
+        value = test_admission_codec("gen3_exp", "emerald_expansion_28877d73", value, test_log)
+    elseif normalized:match("/lua/gen3/entry%.lua$") then
+        value.ROUTED.gen3_exp = true
+        test_log("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)")
+    end
+    return value
+end
+''' + _BOOT_LUA
 
 
 def emerald_admission_blocker(lua_dir):
@@ -980,6 +1187,11 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
     if not entry:
         print("RESULT: FAIL the zip has no lua/slink.lua")
         return 1
+    if title == "exp":
+        blocked = expansion_zip_blocker(os.path.dirname(entry))
+        if blocked:
+            print(f"RESULT: FAIL ZIP-DEFECT: {blocked}")
+            return 1
     if title == "emerald":
         blocked = emerald_admission_blocker(os.path.dirname(entry))
         if blocked:
@@ -1012,9 +1224,11 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             return 1
     shutil.copyfile(os.path.join(lane, rom_rel), os.path.join(tmp, rom_name))
     with open(os.path.join(tmp, "boot.lua"), "w", encoding="utf-8") as f:
-        f.write(_BOOT_LUA)
+        f.write(zip_bootstrap(lane, title))
     tcp, http = _free_port(), _free_port()
     server_log = os.path.join(tmp, "server.log")
+    route_log = os.path.join(tmp, "test_route.log")
+    server_routes = ["--test-only-route", EXPANSION_TITLE] if title == "exp" else []
     print(f"zip={zip_path}\nextract={tmp}\\extract entry={entry}\nfixture={fixture}\n"
           f"server: python -m server.server --port {tcp} --http-port {http} (cwd={lane})")
     procs = []
@@ -1022,11 +1236,14 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
         with open(server_log, "w", encoding="utf-8") as log:
             procs.append(subprocess.Popen(
                 [PY, "-m", "server.server", "--host", "127.0.0.1", "--port", str(tcp),
-                 "--http-port", str(http), "--data-dir", os.path.join(tmp, "data")],
+                 "--http-port", str(http), "--data-dir", os.path.join(tmp, "data"), *server_routes],
                 cwd=lane, stdout=log, stderr=subprocess.STDOUT))
         time.sleep(3)
         env = dict(os.environ, SLINK_HOST="127.0.0.1", SLINK_PORT=str(tcp), SLINK_PLAYER="a",
-                   SLINK_ZIPBOOT_ENTRY=entry.replace("\\", "/"))
+                   SLINK_ZIPBOOT_ENTRY=entry.replace("\\", "/"),
+                   SLINK_ZIPBOOT_ROUTE_LOG=route_log.replace("\\", "/"))
+        if title == "exp":
+            env["SLINK_STATE_DIR"] = os.path.join(tmp, "state")
         cmd = [run_gate.EMUHAWK, "--config=config.ini", "--lua=boot.lua", rom_name]
         print(f"[zip-boot] {' '.join(cmd)}  (cwd={tmp})")
         procs.append(subprocess.Popen(cmd, cwd=tmp, env=env, stdout=subprocess.DEVNULL,
@@ -1038,11 +1255,15 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             ltxt = _read(lua_log)
             ok = bool(client_re.search(ltxt)) and "TCP connected" in ltxt and \
                 hello in _read(server_log)
+            if title == "exp":
+                ok = ok and expansion_route_logged(_read(server_log), _read(route_log))
     finally:
         for p in reversed(procs):
             if p.poll() is None:
                 kill_tree(p.pid)
     print(f"--- {lua_log} ---\n{_read(lua_log)}\n--- server log ---\n{_read(server_log)}")
+    if title == "exp":
+        print(f"--- test-only client route ---\n{_read(route_log)}")
     print(f"RESULT: PASS the extracted zip booted {title} on the new client" if ok else
           f"RESULT: FAIL no client/server boot evidence within {timeout}s")
     return 0 if ok else 1
@@ -1054,6 +1275,33 @@ def _read(path):
             return f.read()
     except OSError:
         return ""
+
+
+def is_expansion_row(row_id):
+    return row_id.endswith(("_exp_as_a", "_exp")) or row_id.startswith("exp_zip_")
+
+
+def expansion_route_logged(server_text, client_text=None):
+    expected = (f"TEST-ONLY route of {EXPANSION_TITLE} -> gen3_exp enabled "
+                "(production refuses it by name; production:false)")
+    if expected not in server_text:
+        return False
+    if client_text is None:
+        return True  # duo's own oracle validates its client seam; it logs the server route
+    return ("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)" in client_text
+            and f"TEST-ONLY admission of gen3_exp/{EXPANSION_TITLE}" in client_text)
+
+
+def expansion_attempt_problem(row_id, cut, text):
+    """Actual full lane identity and the route evidence this runtime row requires."""
+    before = re.findall(rf"^EXPANSION_CUT requested=({_SHA}) before=({_SHA})$", text, re.M)
+    after = re.findall(rf"^EXPANSION_CUT after=({_SHA})$", text, re.M)
+    if before != [(cut, cut)] or after != [cut]:
+        return "lane identity is not the exact requested full SHA"
+    if (row_id.endswith("_exp_as_a") or row_id == "zip_boot_exp") and not \
+            expansion_route_logged(text, text if row_id == "zip_boot_exp" else None):
+        return "missing logged test-only server route or client admission"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1210,6 +1458,13 @@ def row_inputs(row, lane, root=None):
     def at(rel):
         return os.path.join(lane, rel)
     rid = row.id
+    if is_expansion_row(rid):
+        return {"rom:exp": at(STAGED["exp"]),
+                "probe:exp": expansion_env(lane)["SLINK_EXPANSION_PROBE_OBJECT"],
+                **{f"artifact:exp:{name}": at(f".cache/expansion-output/reference/{name}")
+                   for name in ("pokeemerald.sym", "pokeemerald.map", "pokeemerald.elf", "receipt.json")},
+                **{f"fixture:exp:{side}:{kind}": at(f"tests/fixtures/gen3/exp_{kind}{side}.sav")
+                   for side in ("", "_b") for kind in ("pc", "catch")}}
     if rid.endswith(("_fr_as_a", "_lg_as_a")):
         return {f"rom:{t}": at(STAGED[t]) for t in ("firered", "leafgreen")}
     m = re.match(r"(states|tutorials|checkpoint|bootcheck)_(firered|leafgreen|emerald)", rid)
@@ -1330,6 +1585,9 @@ def fc_check(name, text, probes, depth=0):
             not hdr["cut"].startswith(m[2]):
         return hdr, False, "header row/cut disagree with the file name"
     v = hdr["verdict"]
+    expansion = is_expansion_row(hdr["row"])
+    if expansion and v.startswith(("CARRIED", "CACHED", "SKIP-ALLOWED")):
+        return hdr, False, "expansion qualification must run at the exact cut"
     c = re.match(rf"CARRIED from (\S+) @({_SHA})", v)
     if c:
         return (hdr, *origin_ok(c[1], hdr["row"], c[2], probes, depth + 1))
@@ -1349,6 +1607,13 @@ def fc_check(name, text, probes, depth=0):
     if v.startswith(("PASS", "SKIP-ALLOWED")) and not (
             cls == "pass" and clean == "True" and (rc == "0" or v.startswith("SKIP-ALLOWED"))):
         return hdr, False, "the last attempt does not support the verdict"
+    if expansion and v.startswith("PASS"):
+        last = re.split(r"^--- attempt \d+ of \d+ ---$", text, flags=re.M)[-1]
+        if not re.search(r"^start_utc=\S+ tracked_clean_before=True$", last, re.M):
+            return hdr, False, "expansion lane was not clean before its final attempt"
+        problem = expansion_attempt_problem(hdr["row"], hdr["cut"], last)
+        if problem:
+            return hdr, False, problem
     return hdr, True, ""
 
 
@@ -1829,16 +2094,19 @@ def run_pass(args):
         if not args.dry_run:
             raise
         cut = args.cut
-    plan_fn = {"rr": build_plan_rr, "emerald": build_plan_emerald}.get(args.title, build_plan)
+    plan_fn = {"rr": build_plan_rr, "emerald": build_plan_emerald,
+               "exp": build_plan_exp}.get(args.title, build_plan)
     rows = select_rows(plan_fn(cut, lane, master), args.rows)
     if args.list:
         for r in rows:
             print(f"{r.id:<48} {r.item}")
         return 0
     # fc_SUMMARY_<cut8>_rr.txt / _emerald.txt: FR's stays put
-    title_sfx = {"rr": "_rr", "emerald": "_emerald"}.get(args.title, "")
-    emerald_pins = EMERALD_PINNED_INPUTS if args.title == "emerald" else None
-    emerald_unpinned = EMERALD_UNPINNED_INPUTS if args.title == "emerald" else None
+    title_sfx = {"rr": "_rr", "emerald": "_emerald", "exp": "_exp"}.get(args.title, "")
+    emerald_pins = {"emerald": EMERALD_PINNED_INPUTS,
+                    "exp": EXPANSION_PINNED_INPUTS}.get(args.title)
+    emerald_unpinned = {"emerald": EMERALD_UNPINNED_INPUTS,
+                       "exp": EXPANSION_UNPINNED_INPUTS}.get(args.title)
     if args.merge_summary:
         return merge_summary(cut, rows, title_sfx)
     decisions, est = plan_decisions(rows, cut, args.carry, lane)
@@ -1857,8 +2125,13 @@ def run_pass(args):
     if args.dry_run:
         print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
               f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
-        for step in provision_plan(lane, cut, emerald_pins, emerald_unpinned):
+        for step in provision_plan(lane, cut, emerald_pins, emerald_unpinned,
+                                   base_inputs=args.title != "exp"):
             print(f"# provision: {step}")
+        if args.title == "exp":
+            print("# provision: link the locked, clean expansion source; copy the offline probe.o "
+                  "(SLINK_EXPANSION_PROBE_OBJECT) plus compile.json when present; verify object hash vs facts")
+            print("# TEST-ONLY expansion qualification; production routing remains refused")
         if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
         for k, r in enumerate(rows, 1):
@@ -1889,7 +2162,10 @@ def run_pass(args):
     try:
         if run_rows or cached_rows:
             provision(lane, cut, root)
-            copy_inputs(lane, root, extra_pinned=emerald_pins, extra_unpinned=emerald_unpinned)
+            if args.title == "exp":
+                copy_expansion_inputs(lane, root)
+            else:
+                copy_inputs(lane, root, extra_pinned=emerald_pins, extra_unpinned=emerald_unpinned)
         if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
             copy_inputs(master, root, only=ITEM6_INPUTS)
@@ -1962,14 +2238,15 @@ def main(argv=None):
     ap.add_argument("--lane", default=os.path.join(wt, "gen3-lane-clean"))
     ap.add_argument("--master", default=os.path.join(wt, "gen3-lane-master"),
                     help="item 6's baseline tree, provisioned at `master`")
-    ap.add_argument("--title", default="frlg", choices=("frlg", "rr", "emerald"),
+    ap.add_argument("--title", default="frlg", choices=("frlg", "rr", "emerald", "exp"),
                     help="frlg (default): the G4 FR/LG plan, unchanged. rr: the G5 Radical Red "
                          "plan (card G5-RUNNER-RR) -- the RR duo rows, the RR opcode gates, and the "
                          "zip build/check/boot on RR -- in place of it. emerald: the E4b plan "
                          "(docs/gen3_emerald/PLAN.md) -- SOURCE-lane generator checks, the "
                          "Emerald states/duo/bootcheck rows, the Emerald slice of probe-gates, "
                          "the shadow-negatives manifest check, and the zip build/check/boot on "
-                         "Emerald (BLOCKED-EG4 until ruling 24 flips ROUTED)")
+                         "Emerald. exp: build-specific source/unit checks, every applicable "
+                         "expansion duo, ZIP build/check and test-only boot; production refused")
     ap.add_argument("--rows", default=None, help="comma list of row-id globs or item tags")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; launch nothing")
     ap.add_argument("--list", action="store_true", help="print the selected row ids")
