@@ -384,12 +384,42 @@ _LICENSE_FILES = ["LICENSE", "NOTICE.md"]
 # playgroup that already owns the base ROM.
 _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
-# The Game Boy companion UPS files bundled with --with-patch: vanilla Red/Blue (patch/gen1) and
-# the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3). No Yellow (no free WRAM).
-# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
+# The Game Boy companion UPS files bundled with --with-patch.
+# Gen 1 vanilla Red/Blue (patch/gen1) and the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3)
+# are always shipped: their launchers admit the companion. No Yellow (no free WRAM).
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
-                     "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
+# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
+# NOT unconditional: lua/gen2/entry.lua admits clean rows only until the overlay row is promoted, so a
+# release that shipped these UPS would hand the user a patch that bricks their cartridge while (see
+# data_game_files) withholding the binding sidecar and proofs that explain why. Gated by overlay_state.
+_GEN2_OVERLAY_UPS = {"crystal": "SLink-Crystal.ups", "gold": "SLink-Gold.ups", "silver": "SLink-Silver.ups"}
+
+
+def overlay_state(pack: str, root: Path | None = None) -> str:
+    """`ADMITTED` or `BUILT` for one Gen 2 pack's overlay row -- the ONE source of truth for whether that
+    title's execution binding, proofs AND companion UPS ship.
+
+    Read once per call from the pack's own catalog; a missing or malformed catalog is an error, never an
+    inactive artifact. Deliberately not memoised: the catalogs are rewritten by --promote-overlays inside
+    the same process that later builds a release.
+    """
+    root = REPO_ROOT if root is None else root
+    catalog = json.loads((Path(root) / f"data/games/{pack}/admission.json").read_text(encoding="utf-8"))
+    rows = [row for row in catalog["artifacts"] if row.get("kind") == "overlay"]
+    if len(rows) != 1 or rows[0].get("status") not in ("BUILT", "ADMITTED"):
+        raise ValueError(f"{pack}: overlay catalog missing or malformed")
+    return rows[0]["status"]
+
+
+def gb_companion_ups(root: Path | None = None) -> tuple[str, ...]:
+    """The Game Boy companion UPS set this release would ship: always Gen 1/pureRGB, plus each Gen 2
+    title's overlay UPS only once that overlay row is ADMITTED (overlay_state)."""
+    root = REPO_ROOT if root is None else root
+    return _GB_COMPANION_UPS + tuple(
+        name for title, name in _GEN2_OVERLAY_UPS.items()
+        if overlay_state(f"gen2_{title}", root) == "ADMITTED")
+
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 _GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json")
 
@@ -590,7 +620,9 @@ def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
 
     The declared manifest is a superset. FUTURE/BUILT overlays need no optional
     files; ADMITTED overlays require every named file in the usual preflight.
-    A missing or malformed catalog is an error, never an inactive artifact.
+    A missing or malformed catalog is an error, never an inactive artifact. The ADMITTED test is
+    overlay_state -- the same one gb_companion_ups uses for the companion UPS, so the two halves of a
+    release can never disagree about which titles are activated.
     """
     root = REPO_ROOT if root is None else root
     manifest = {game: list(names) for game, names in _DATA_GAME_LUA.items()}
@@ -598,11 +630,7 @@ def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
         pack = f"gen2_{title}"
         if pack not in manifest:
             continue
-        catalog = json.loads((root / f"data/games/{pack}/admission.json").read_text(encoding="utf-8"))
-        rows = [row for row in catalog["artifacts"] if row.get("kind") == "overlay"]
-        if len(rows) != 1 or rows[0].get("status") not in ("BUILT", "ADMITTED"):
-            raise ValueError(f"{pack}: overlay catalog missing or malformed")
-        if rows[0]["status"] != "ADMITTED":
+        if overlay_state(pack, root) != "ADMITTED":
             manifest[pack] = [name for name in manifest[pack]
                               if name != "overlay/binding.json" and not name.startswith("receipts/overlay/")]
     return manifest
@@ -751,7 +779,9 @@ def build_release(
             # exists, and shipping one would advertise a capability that cannot be there.
             # pureRGB (PLAN M3): the companion source overlay over each pinned pure build,
             # one UPS per title (PureGreen included -- it is a full pure build of its own).
-            for gb_ups in _GB_COMPANION_UPS + _GEN3_COMPANION_FILES:
+            # Gen 2's per-title UPS comes from gb_companion_ups ONLY for an ADMITTED overlay, so the ZIP
+            # never offers a Gen 2 patch the launcher would refuse (its sidecar/proofs are gated the same way).
+            for gb_ups in gb_companion_ups(REPO_ROOT) + _GEN3_COMPANION_FILES:
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")

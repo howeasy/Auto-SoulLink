@@ -1782,7 +1782,9 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
         return [f"{_OVERLAY_PROVENANCE} missing or malformed"]
     if release_ups is None:
         import make_release
-        release_ups = make_release._GB_COMPANION_UPS
+        # The release's companion set, computed from the SAME catalog test make_release packages with, so
+        # this check and the ZIP can never disagree about which titles are activated.
+        release_ups = make_release.gb_companion_ups(root)
     errors = []
     symbols = provenance.get("symbols") or {}
     for title in TITLES:
@@ -1813,10 +1815,17 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
             errors.append(f"{title}_overlay: admitted-artifact row is not ADMITTED at the published overlay "
                           f"hashes (P4.4 promotion; today status={row.get('status')!r})")
         try:
+            # The SIDECAR-vs-PUBLISHED identity holds in BOTH modes: the binding must name this title's
+            # published overlay sha1 and be a well-formed overlay binding. That is a property of the
+            # artifact, not of the catalog row.
             identity = _execution_identity(root, title, "overlay")
-            if row.get("binding_sha256") != identity["binding_sha256"]:
-                errors.append(f"{title}_overlay: binding pin differs")
+            # The ROW's binding pin and its runtime grant are written BY the promotion, so they are
+            # release-only: with require_admitted=False this is the precondition -- the precondition
+            # checks every other packet item BEFORE the rows it is about to write, and demanding them
+            # here made --promote-overlays unable to ever run.
             if require_admitted:
+                if row.get("binding_sha256") != identity["binding_sha256"]:
+                    errors.append(f"{title}_overlay: binding pin differs")
                 gate = row.get("runtime_gate") or {}
                 grant = _published_grant(root, provenance)
                 if (gate.get("id") != "G4" or gate.get("state") != "ADMITTED"
@@ -1824,7 +1833,10 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
                     errors.append(f"{title}_overlay: runtime G4 grant invalid")
         except (OSError, KeyError, ValueError, TypeError) as exc:
             errors.append(f"{title}_overlay: binding/grant unavailable: {exc}")
-        if Path(ups.get("file") or "?").name not in release_ups:
+        # A release must carry the UPS of a title it admits, and must not be blocked by one it does not:
+        # make_release.gb_companion_ups ships the Gen 2 UPS exactly for ADMITTED overlays, so membership is
+        # only a meaningful question once admission is required.
+        if require_admitted and Path(ups.get("file") or "?").name not in release_ups:
             errors.append(f"{title}: tools/make_release.py does not ship {ups.get('file')}")
     try:
         plan = (root / "docs/gen2/PLAN.md").read_text(encoding="utf-8")

@@ -56,6 +56,52 @@ def test_gen2_overlay_shipping_requirement_follows_its_catalog(tmp_path, monkeyp
             make_release.build_release(version="model", out_dir=tmp_path / "out", skip_generators=True)
         assert not (tmp_path / "out/SLink-player-model.zip").exists()
 
+
+@pytest.mark.parametrize("status", ["BUILT", "ADMITTED"])
+def test_the_companion_ups_set_follows_the_same_catalog_test_as_the_manifest(tmp_path, status):
+    """E1: the two halves of a release must not disagree. data_game_files gated the binding sidecar and
+    the proofs on the catalog, but the companion UPS list was a static tuple, so a BUILT Gen 2 overlay
+    shipped its patch and withheld the evidence explaining why the launcher refuses it."""
+    import json
+    for title in ("crystal", "gold", "silver"):
+        path = tmp_path / f"data/games/gen2_{title}/admission.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"artifacts": [{"kind": "overlay", "status": status,
+                                                  "selection": "SELECTED" if status == "ADMITTED" else "FUTURE"}]}))
+    ups = make_release.gb_companion_ups(tmp_path)
+    manifest = make_release.data_game_files(tmp_path)
+    gen2_ups = {"SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups"}
+    assert (gen2_ups & set(ups)) == (gen2_ups if status == "ADMITTED" else set())
+    # Gen 1 / pureRGB are unaffected by a Gen 2 catalog state.
+    assert {"SLink-RB-Red.ups", "SLink-PureGreen.ups"} <= set(ups)
+    for title in ("crystal", "gold", "silver"):
+        assert ("overlay/binding.json" in manifest[f"gen2_{title}"]) == (status == "ADMITTED")
+
+
+def test_the_gen2_ups_and_the_binding_sidecar_agree_by_construction(tmp_path):
+    """One source of truth: whatever gb_companion_ups and data_game_files decide about a title, they
+    decide the same thing. A future edit that re-gates one and not the other fails here."""
+    import json
+    for title, status in (("crystal", "ADMITTED"), ("gold", "BUILT"), ("silver", "ADMITTED")):
+        path = tmp_path / f"data/games/gen2_{title}/admission.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"artifacts": [{"kind": "overlay", "status": status,
+                                                  "selection": "SELECTED" if status == "ADMITTED" else "FUTURE"}]}))
+    ups, manifest = make_release.gb_companion_ups(tmp_path), make_release.data_game_files(tmp_path)
+    for title in ("crystal", "gold", "silver"):
+        admitted = f"SLink-{title.capitalize()}.ups" in ups
+        assert admitted == ("overlay/binding.json" in manifest[f"gen2_{title}"]), title
+
+
+def test_a_malformed_catalog_is_an_error_not_a_silent_skip(tmp_path):
+    import json
+    path = tmp_path / "data/games/gen2_crystal/admission.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"artifacts": [{"kind": "overlay", "status": "PLANNED"}]}))
+    with pytest.raises(ValueError, match="catalog missing or malformed"):
+        make_release.overlay_state("gen2_crystal", tmp_path)
+
+
 # The scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
 # `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
 # slink.lua's own game_detect dispatch and its lua/games/gen{4,5}_*.lua registry, the
@@ -262,13 +308,20 @@ def test_the_legacy_gen2_runtime_is_neither_derived_nor_shipped(archive):
 
 
 def test_gb_companion_bundle_names_every_pure_overlay_ups():
-    """--with-patch ships one UPS per Game Boy companion build: vanilla Red/Blue and the three
-    pureRGB overlays (PLAN M3). A missing name here is a title whose players get no native trade."""
+    """--with-patch ships one UPS per Game Boy companion build that is ADMITTED: vanilla Red/Blue and
+    the three pureRGB overlays (PLAN M3) always; a Gen 2 title's overlay UPS only once its catalog row
+    is ADMITTED, because until then lua/gen2/entry.lua refuses the cartridge the patch would produce."""
     assert set(make_release._GB_COMPANION_UPS) == {
         "SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
-        "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups"}
-    for name in make_release._GB_COMPANION_UPS:
+        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
+    assert dict(make_release._GEN2_OVERLAY_UPS) == {
+        "crystal": "SLink-Crystal.ups", "gold": "SLink-Gold.ups", "silver": "SLink-Silver.ups"}
+    shipped = set(make_release.gb_companion_ups())
+    assert set(make_release._GB_COMPANION_UPS) <= shipped
+    assert shipped - set(make_release._GB_COMPANION_UPS) == {
+        name for title, name in make_release._GEN2_OVERLAY_UPS.items()
+        if make_release.overlay_state(f"gen2_{title}") == "ADMITTED"}
+    for name in shipped:
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
 
 
@@ -311,6 +364,7 @@ def test_every_emerald_adapter_data_file_is_in_the_release_manifest():
     "statics.json" from the gen3_emerald row of `_DATA_GAME_LUA` and this goes red."""
     import inspect
     import re
+
     from server.adapters import gen3_frlge
     opened = set(re.findall(r'_emerald_json\("([^"]+)"\)', inspect.getsource(gen3_frlge._load_emerald)))
     assert opened >= {"area_map.json", "statics.json", "write_checkpoint.json"}, opened
@@ -326,25 +380,34 @@ def test_the_retired_gen3_modules_are_not_shipped(archive):
     assert "gen3_frlge.lua" not in make_release._LUA_GAMES
 
 
-def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):
-    """RELEASE-EVIDENCE-TOOLING: each UPS named by data/gen2/overlay_provenance.json lands under
-    companion/ with its published bytes, alongside the published vanilla Gen 3 companions."""
+def test_with_patch_ships_a_gen2_overlay_ups_only_once_that_title_is_admitted(tmp_path):
+    """RELEASE-EVIDENCE-TOOLING: a Gen 2 companion UPS lands under companion/ with its published bytes
+    ONLY when that title's overlay row is ADMITTED. Shipping it for a BUILT overlay handed the user a patch
+    whose cartridge lua/gen2/entry.lua refuses, while data_game_files (correctly) withheld the binding
+    sidecar and proofs that would explain it. Gen 1/pure/Gen 3 companions are unaffected."""
     import hashlib
     import json
     from pathlib import Path
 
     outputs = json.loads((Path(_REPO) / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
+    states = {t: make_release.overlay_state(f"gen2_{t}") for t in ("crystal", "gold", "silver")}
+    admitted = {t for t, s in states.items() if s == "ADMITTED"}
     zip_path = make_release.build_release(version="t", out_dir=tmp_path, skip_generators=True, with_patch=True)
     with zipfile.ZipFile(zip_path) as zf:
         companion = {n.split("/", 1)[1]: zf.read(n) for n in zf.namelist() if "/companion/" in n}
     for row in outputs.values():
-        name = Path(row["ups"]["file"]).name
-        assert hashlib.sha256(companion[f"companion/{name}"]).hexdigest() == row["ups"]["sha256"]
-    assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()} == {
+        name, title = Path(row["ups"]["file"]).name, row["slink_title"]
+        if title in admitted:
+            assert hashlib.sha256(companion[f"companion/{name}"]).hexdigest() == row["ups"]["sha256"]
+        else:
+            assert f"companion/{name}" not in companion, \
+                f"{title} overlay is {states[title]}, so its UPS must not ship"
+    assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()
+                              if r["slink_title"] in admitted} == {
         "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
         "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
         "companion/SLink-PureGreen.ups", "companion/SLink-FireRed.ups", "companion/SLink-LeafGreen.ups",
         "companion/SLink-Emerald.ups", "companion/gen3_companions.json"}
-    native=json.loads(companion["companion/gen3_companions.json"])
+    native = json.loads(companion["companion/gen3_companions.json"])
     for row in native["titles"].values():
-        assert hashlib.sha256(companion["companion/"+row["patch"]]).hexdigest()==row["ups_sha256"]
+        assert hashlib.sha256(companion["companion/" + row["patch"]]).hexdigest() == row["ups_sha256"]

@@ -2338,6 +2338,57 @@ def test_g4_packet_red_on_each_missing_piece(tmp_path, mutation):
     assert gate.g4_packet_errors(tmp_path, shipped) != []
 
 
+def _mutate_row(tmp_path, title, **fields):
+    """Rewrite one field of one title's overlay row, leaving every other packet piece intact."""
+    matrix = tmp_path / f"data/games/gen2_{title}/admission.json"
+    doc = json.loads(matrix.read_text())
+    row = next(r for r in doc["artifacts"] if r.get("kind") == "overlay")
+    row.update(fields)
+    matrix.write_text(json.dumps(doc))
+
+
+def _errors_for(tmp_path, title, shipped):
+    return [e for e in gate.g4_packet_errors(tmp_path, shipped) if e.startswith(f"{title}_overlay")]
+
+
+# F1: each admission term is asserted INDEPENDENTLY. Relaxing the status term alone was masked by its
+# sibling (526 tests passed), so nothing proved any one of them bites on its own.
+@pytest.mark.parametrize("fields,fragment", [
+    ({"selection": "FUTURE"}, "admitted-artifact row is not ADMITTED"),
+    ({"status": "BUILT"}, "admitted-artifact row is not ADMITTED"),
+    ({"grant_fingerprint": "0" * 64}, "runtime G4 grant invalid"),
+    ({"runtime_gate": {"id": "G4", "state": "ADMITTED", "grant_fingerprint": "0" * 64}},
+     "runtime G4 grant invalid"),
+    ({"binding_sha256": "0" * 64}, "binding pin differs"),
+])
+def test_each_g4_admission_term_refuses_on_its_own(tmp_path, fields, fragment):
+    shipped = _packet_tree(tmp_path)
+    _mutate_row(tmp_path, "crystal", **fields)
+    errors = _errors_for(tmp_path, "crystal", shipped)
+    assert any(fragment in e for e in errors), (fields, errors)
+
+
+# E1: the release set is catalog-derived now, so a BUILT title is not asked to ship its UPS and an
+# ADMITTED one is. Before this, membership was checked against a static tuple in both modes.
+def test_g4_release_requires_the_ups_exactly_when_the_row_is_admitted(tmp_path):
+    shipped = _packet_tree(tmp_path)
+    assert not any("does not ship" in e for e in gate.g4_packet_errors(tmp_path, shipped))
+    _mutate_row(tmp_path, "crystal", status="BUILT", selection="FUTURE")
+    # not ADMITTED -> make_release drops its UPS -> G4 must NOT then demand it (and the row errors instead)
+    assert not any("does not ship" in e for e in _errors_for(tmp_path, "crystal", shipped))
+
+
+def test_the_activation_precondition_is_not_blocked_by_the_row_it_is_about_to_write(tmp_path):
+    """require_admitted=False is --promote-overlays' own precondition. It checks every OTHER packet item
+    BEFORE writing the row, so demanding the row's binding pin and runtime grant there made activation
+    impossible: on the committed BUILT tree it returned `binding pin differs` for all three titles."""
+    shipped = _packet_tree(tmp_path)
+    for title in gate.TITLES:
+        _mutate_row(tmp_path, title, status="BUILT", selection="FUTURE")
+    errors = gate.g4_packet_errors(tmp_path, shipped, require_admitted=False)
+    assert not any("binding pin differs" in e or "runtime G4 grant invalid" in e for e in errors), errors
+
+
 _PARTS = ("g4_packet_errors", "stale_errors", "fixtures_errors", "inspect_run_errors", "new_gates_errors",
           "live_gates_errors", "trade_gates_errors", "duo_pairs_errors")
 
@@ -2691,8 +2742,9 @@ def test_an_unprovisioned_source_skips_through_the_verifier_instead_of_failing(t
     loader and pytest may catch it -- a defensive `except BaseException`/bare `except:` in a verifier would
     turn an absent clone into a bogus "proof invalid" string (Gen1-Collab2, 2026-09-26). Driven through
     the real active-faint verifier cell, which calls codec.for_foundation -> load_context."""
-    import tools.gen2_source_data as source_data
     from _pytest.outcomes import Skipped
+
+    import tools.gen2_source_data as source_data
 
     proof, axes, lock, text = _trainer_cell(tmp_path, "duo.crystal.crystal")
 
