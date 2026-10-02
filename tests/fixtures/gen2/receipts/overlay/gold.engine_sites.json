@@ -1,0 +1,492 @@
+{
+ "absent": [
+  "capture_box"
+ ],
+ "artifact_kind": "overlay",
+ "attempt_id": "inspect-gold_battle_errand",
+ "bank_check": "live",
+ "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+ "binding_sha256": "3f1f94782aebc773363affe357e397836f788fe3b8226bd0aa1196a2c3052084",
+ "clock_setup": {
+  "base_sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
+  "builder": "tools/gen2_synth_fixtures.py",
+  "cartram_sha256": "44acf2ef55bba944362bf79e04930013b365d5f7dd934a8dc01652c7f98b0d88",
+  "field": "BizHawk gambatte RTC trailer",
+  "game_hour": 11,
+  "host_time": 1790953255,
+  "new_hex": "000000006abfc72700090101050026fd9c0009010105",
+  "old_hex": "000000006ab46dc400000010060026fd9c0000001006",
+  "schema": "gen2-clock-setup-v1",
+  "sha256": "1dde43ce2936722b6256845c3b7e4a99f89b5dd80425f6c2e73bcf4b41ef7cfa",
+  "source_facts": [
+   "home/time.asm FixTime: game time = wStartHour/Minute/Second + RTC",
+   "libgambatte cartridge.cpp:504-580: the 22-byte RTC trailer"
+  ],
+  "start_time": [
+   9,
+   58,
+   55
+  ],
+  "title": "gold"
+ },
+ "code_digest": {
+  "commit": "2d2c37db86d8e72142b05449ab3d920a4de47424",
+  "digest": "fa5bd96b389b489b200f3ee7baacf0fd3bee50d60e3e2a9cd8d01b5e605b6f2e",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "core_mode": "CGB",
+ "decoy": {
+  "accepted": 0,
+  "addr": 26791,
+  "bank": 127,
+  "bank_rejects": 2787,
+  "raw": 2787
+ },
+ "evidence_level": "PHYSICAL",
+ "evolution_alignment": {
+  "a": 11,
+  "armed": 199034,
+  "battle_mode": 1,
+  "callback": 199034,
+  "capture_party_hits": 3,
+  "dvs": 40426,
+  "hl": 55844,
+  "link_mode": 0,
+  "list_addr": 55844,
+  "list_species": 11,
+  "model_event": {
+   "dvs": 40426,
+   "kind": "key_change",
+   "new_key": "9DEA:C4A6:0B",
+   "old_key": "9DEA:C4A6:0A",
+   "reason": "evolution",
+   "site_id": "evolution_species_published",
+   "slot": 1,
+   "species": 11
+  },
+  "old_species": 10,
+  "ot": 50342,
+  "party_count": 2,
+  "passed": true,
+  "pre_list_species": 10,
+  "rule": "evolution_species_published callback frame == armed; wLinkMode 0; wCurPartyMon is a party slot; inside the callback A, the wPartySpecies byte and the party struct species are the published species and HL is that list byte; the list byte read the pack's pre-evolution at the end of the frame before; the production decoder (MODEL instance on the same hook) emitted one key_change (reason evolution) with that mon's old and new keys",
+  "slot": 1,
+  "struct_species": 11
+ },
+ "faint_alignment": {
+  "armed": 10391,
+  "battle_dvs": 44274,
+  "battle_hp": 0,
+  "battle_species": 161,
+  "callback": 10391,
+  "callback_party_hp": 3,
+  "copyback_frames": 0,
+  "hp_zero_frame": 10391,
+  "party_count": 2,
+  "party_dvs": 44274,
+  "party_species": 161,
+  "passed": true,
+  "post_party_hp": 0,
+  "rule": "battle_faint callback frame == armed; wCurBattleMon is a party slot; the battle mon reads HP 0 and the slot's party record is that mon (species, DVs) with HP > 0 inside the callback (before copy-back); the party record reads HP 0 on the callback frame or the next",
+  "slot": 1
+ },
+ "fixture": "gold_battle_errand",
+ "fixture_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+ "frame_alignment": {
+  "aligned_hits": 230,
+  "armed": 5529,
+  "battle_party": 1,
+  "callback": 5529,
+  "callback_party": 2,
+  "effect_to_callback_frames": 1,
+  "misaligned_hits": 0,
+  "party_changed": 5528,
+  "passed": true,
+  "post_party": 2,
+  "pre_party": 2,
+  "rule": "callback emu.framecount() == the frame being emulated (armed); wPartyCount is battle_party at wild_ready, battle_party+1 inside the capture_party callback and to the main loop at armed+1; it first changed at party_changed <= callback"
+ },
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "negatives": {
+  "script_bytecode_arm": "refused",
+  "wrong_bank_hit": "refused",
+  "wrong_pack_byte": "refused"
+ },
+ "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+ "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+ "pc_alignment": {
+  "capture_party_hits": 3,
+  "model_events": {
+   "box_change": 1,
+   "box_to_party": 1,
+   "party_to_box": 2,
+   "pc_release_box": 1,
+   "pc_release_party": 1,
+   "whiteout": 1
+  },
+  "passed": true,
+  "rule": "after the whiteout: a second catch, then Bill's PC deposit, withdraw, CHANGE BOX, deposit, box release, party release, each closed by its RAM effect; the MODEL decoder emitted exactly the listed operation events"
+ },
+ "poison_alignment": {
+  "armed": 7477,
+  "battle_mode": 0,
+  "callback": 7477,
+  "callback_hp": 0,
+  "callback_status": 8,
+  "clear_frames": 0,
+  "dvs": 60515,
+  "model_event": {
+   "cause": "poison",
+   "dvs": 60515,
+   "kind": "faint",
+   "site_id": "poison_faint",
+   "slot": 0,
+   "species": 158
+  },
+  "party_count": 2,
+  "passed": true,
+  "post_status": 0,
+  "pre_hp": 1,
+  "psn_mask": 8,
+  "rule": "poison_faint callback frame == armed; overworld (wBattleMode 0); wCurPartyMon is a party slot whose record reads HP 0 with PSN still set inside the callback, read HP 1 (0 if the frame boundary split the tick) before the armed frame, and reads status 0 on the callback frame or the next; the production faint decoder (MODEL instance on the same hook) emitted one poison faint naming that slot, species and DVs",
+  "slot": 0,
+  "species": 158,
+  "status_zero_frame": 7477
+ },
+ "poison_setup": {
+  "base_fixture": "gold_battle_errand",
+  "base_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+  "builder": "tools/gen2_synth_fixtures.py",
+  "checksums": "restored (primary + backup)",
+  "edits": {
+   "balls": [
+    [
+     "MASTER_BALL",
+     5
+    ]
+   ],
+   "party_status": {
+    "hp": 8,
+    "slot": 0,
+    "status": 8
+   }
+  },
+  "fields": [
+   {
+    "backup": 3319,
+    "new_hex": "0105ff00000000000000000000000000000000000000000000",
+    "offset": 0,
+    "old_hex": "050fff00000000000000000000000000000000000000000000",
+    "primary": 9317,
+    "size": 25,
+    "symbol": "wBalls",
+    "wram": 54781
+   },
+   {
+    "backup": 4336,
+    "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005080000080014000c000c00090009000a",
+    "offset": 0,
+    "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
+    "primary": 10386,
+    "size": 48,
+    "symbol": "wPartyMon1",
+    "wram": 55850
+   },
+   {
+    "cart": 11625,
+    "new_hex": "efe8",
+    "offset": 0,
+    "old_hex": "01e9",
+    "size": 2,
+    "symbol": "sChecksum",
+    "wram": null
+   },
+   {
+    "cart": 32365,
+    "new_hex": "efe8",
+    "offset": 0,
+    "old_hex": "01e9",
+    "size": 2,
+    "symbol": "sBackupChecksum",
+    "wram": null
+   }
+  ],
+  "schema": "gen2-synth-disclosure-v1",
+  "sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
+  "source_facts": [
+   "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct",
+   "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
+  ],
+  "title": "gold"
+ },
+ "proven": [
+  "battle_end",
+  "battle_faint",
+  "capture_party",
+  "capture_party_finalized",
+  "change_box_begin",
+  "change_box_loaded",
+  "evolution_species_published",
+  "pc_deposit_begin",
+  "pc_deposit_complete",
+  "pc_release_box_begin",
+  "pc_release_box_complete",
+  "pc_release_party_begin",
+  "pc_release_party_complete",
+  "pc_withdraw_begin",
+  "pc_withdraw_complete",
+  "poison_faint",
+  "save_completed",
+  "whiteout_before_heal",
+  "wild_ready"
+ ],
+ "qualification_attempt_id": "ovl-gold_battle_errand-a1",
+ "result": "PASS",
+ "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+ "schema": "gen2-engine-site-receipt-v1",
+ "sites": {
+  "battle_end": {
+   "addr": 29782,
+   "bank": 15,
+   "bank_rejects": 0,
+   "expected_hex": "cd307d2005",
+   "first_frame": 5661,
+   "hits": 39,
+   "pc": 29782,
+   "raw": 39,
+   "symbol": "ExitBattle"
+  },
+  "battle_faint": {
+   "addr": 20724,
+   "bank": 15,
+   "bank_rejects": 178,
+   "expected_hex": "fac6cf4f2142cb",
+   "first_frame": 10391,
+   "hits": 1,
+   "pc": 20724,
+   "raw": 179,
+   "symbol": "UpdateFaintedPlayerMon"
+  },
+  "capture_box": {
+   "addr": 27571,
+   "bank": 3,
+   "expected_hex": "3e01",
+   "hits": 0,
+   "raw": 1104,
+   "symbol": "PokeBallEffect.SendToPC"
+  },
+  "capture_party": {
+   "addr": 27472,
+   "bank": 3,
+   "bank_rejects": 0,
+   "expected_hex": "fa02d0",
+   "first_frame": 5529,
+   "hits": 3,
+   "pc": 27472,
+   "raw": 3,
+   "symbol": "PokeBallEffect.skip_pokedex"
+  },
+  "capture_party_finalized": {
+   "addr": 27723,
+   "bank": 3,
+   "bank_rejects": 2,
+   "expected_hex": "fa19d1",
+   "first_frame": 5651,
+   "hits": 3,
+   "pc": 27723,
+   "raw": 5,
+   "symbol": "PokeBallEffect.return_from_capture"
+  },
+  "change_box_begin": {
+   "addr": 19242,
+   "bank": 5,
+   "bank_rejects": 0,
+   "expected_hex": "d5",
+   "first_frame": 16653,
+   "hits": 1,
+   "pc": 19242,
+   "raw": 1,
+   "symbol": "ChangeBoxSaveGame"
+  },
+  "change_box_loaded": {
+   "addr": 19276,
+   "bank": 5,
+   "bank_rejects": 0,
+   "expected_hex": "cd814c",
+   "first_frame": 17049,
+   "hits": 1,
+   "pc": 19276,
+   "raw": 1,
+   "symbol": "ChangeBoxSaveGame"
+  },
+  "evolution_species_published": {
+   "addr": 25582,
+   "bank": 16,
+   "bank_rejects": 0,
+   "expected_hex": "e5",
+   "first_frame": 199034,
+   "hits": 1,
+   "pc": 25582,
+   "raw": 1,
+   "symbol": "EvolveAfterBattle_MasterLoop.skip_unown"
+  },
+  "pc_deposit_begin": {
+   "addr": 30835,
+   "bank": 56,
+   "bank_rejects": 0,
+   "expected_hex": "3e08cd492e",
+   "first_frame": 16239,
+   "hits": 2,
+   "pc": 30835,
+   "raw": 2,
+   "symbol": "DepositPokemon"
+  },
+  "pc_deposit_complete": {
+   "addr": 30852,
+   "bank": 56,
+   "bank_rejects": 0,
+   "expected_hex": "fa04d0",
+   "first_frame": 16240,
+   "hits": 2,
+   "pc": 30852,
+   "raw": 2,
+   "symbol": "DepositPokemon"
+  },
+  "pc_release_box_begin": {
+   "addr": 28407,
+   "bank": 56,
+   "bank_rejects": 28,
+   "expected_hex": "3e03213f60cf",
+   "first_frame": 17747,
+   "hits": 1,
+   "pc": 28407,
+   "raw": 29,
+   "symbol": "BillsPC_Withdraw.release"
+  },
+  "pc_release_box_complete": {
+   "addr": 28413,
+   "bank": 56,
+   "bank_rejects": 28,
+   "expected_hex": "cd5f79",
+   "first_frame": 17748,
+   "hits": 1,
+   "pc": 28413,
+   "raw": 29,
+   "symbol": "BillsPC_Withdraw.release"
+  },
+  "pc_release_party_begin": {
+   "addr": 27938,
+   "bank": 56,
+   "bank_rejects": 56,
+   "expected_hex": "3e03213f60cf",
+   "first_frame": 18081,
+   "hits": 1,
+   "pc": 27938,
+   "raw": 57,
+   "symbol": "BillsPCDepositFuncRelease"
+  },
+  "pc_release_party_complete": {
+   "addr": 27944,
+   "bank": 56,
+   "bank_rejects": 5527,
+   "expected_hex": "cd5f79",
+   "first_frame": 18081,
+   "hits": 1,
+   "pc": 27944,
+   "raw": 5528,
+   "symbol": "BillsPCDepositFuncRelease"
+  },
+  "pc_withdraw_begin": {
+   "addr": 30968,
+   "bank": 56,
+   "bank_rejects": 0,
+   "expected_hex": "3e08cd492e",
+   "first_frame": 16443,
+   "hits": 1,
+   "pc": 30968,
+   "raw": 1,
+   "symbol": "TryWithdrawPokemon"
+  },
+  "pc_withdraw_complete": {
+   "addr": 30986,
+   "bank": 56,
+   "bank_rejects": 0,
+   "expected_hex": "fa04d0",
+   "first_frame": 16447,
+   "hits": 1,
+   "pc": 30986,
+   "raw": 1,
+   "symbol": "TryWithdrawPokemon"
+  },
+  "poison_faint": {
+   "addr": 18047,
+   "bank": 20,
+   "bank_rejects": 2306,
+   "expected_hex": "3e20cd3a3b3600",
+   "first_frame": 7477,
+   "hits": 1,
+   "pc": 18047,
+   "raw": 2307,
+   "symbol": "DoPoisonStep.DamageMonIfPoisoned"
+  },
+  "save_completed": {
+   "addr": 19725,
+   "bank": 5,
+   "bank_rejects": 0,
+   "expected_hex": "c9",
+   "first_frame": 6459,
+   "hits": 3,
+   "pc": 19725,
+   "raw": 3,
+   "symbol": "_SaveGameData"
+  },
+  "whiteout_before_heal": {
+   "addr": 16939,
+   "bank": 3,
+   "bank_rejects": 304,
+   "expected_hex": "213942191919",
+   "first_frame": 10588,
+   "hits": 44,
+   "pc": 16939,
+   "raw": 348,
+   "symbol": "Special"
+  },
+  "wild_ready": {
+   "addr": 29696,
+   "bank": 15,
+   "bank_rejects": 13,
+   "expected_hex": "110090",
+   "first_frame": 3674,
+   "hits": 39,
+   "pc": 29696,
+   "raw": 52,
+   "symbol": "InitEnemyWildmon.skip_unown"
+  }
+ },
+ "title": "gold",
+ "whiteout_alignment": {
+  "armed": 10676,
+  "callback": 10676,
+  "de": 27,
+  "healed_frame": 10676,
+  "party_count": 2,
+  "party_hp": [
+   0,
+   0
+  ],
+  "passed": true,
+  "rule": "the first `Special` hit whose pack guards hold (DE 27 = HealPartySpecial, wScriptBank/wScriptPos at Script_Whiteout's special, the FarCall/Script_special stack words): callback frame == armed, every party record at HP 0 inside it, the heal observed on a later frame, after the closing battle_faint; the MODEL decoder emitted exactly one whiteout",
+  "seq": 12
+ }
+}
