@@ -23,7 +23,7 @@
    - **No rival-name prompt** (fixed default, `oaks_speech.c:645`). **No clock/RTC prompt**; time of day is narration only (`:1795-1799`).
 5. **After Oak.** One more app with no input (`overlay_36.c:117-139`). The trainer ID is set here (`:145`), so trainer ID ≠ 0 means "past Oak".
 6. **Field start.** `MAP_NEW_BARK_PLAYER_HOUSE_2F`, x6 y6 dir1 warpId -1 (`location_backup.c:10-16`).
-   - Bedroom script: `scr_seq_0844_T20R0102.s`. Lab: `scr_seq_0843_T20R0101.s`.
+   - Bedroom script: ~~`scr_seq_0844_T20R0102.s`~~ **`scr_seq_0846_T20R0202.s`**; 0844/T20R0102 is Elm's lab 2F (map 62). See the corrections below. Lab: `scr_seq_0843_T20R0101.s`.
 7. **Starter.** `ChooseStarter` at `scr_seq_0843_T20R0101.s:169`, guarded by `FLAG_GOT_STARTER` (`:167` check, `:170` set).
    - The cursor defaults to the first ball (`choose_starter.c:53`).
    - **A second menu follows** (the nickname question, `:174-186`).
@@ -44,3 +44,22 @@
 - the bedroom → street → Elm's lab trigger chain (forced movement vs input) and the lab map id;
 - the main-menu default row; the initial `lastChosenGender`;
 - hge script equality (the fork checkout lacks the script tree; the C side shows no intro override).
+
+## Corrections and closures (OMP cx-4bc1e15f, coordinator-verified at `ad7a3afa`, 2026-10-02)
+
+- **Maps** (`include/constants/maps.h:64-68`):
+  - New Bark 60;
+  - Elm's lab 1F 61 (`T20R0101`) and 2F 62 (`T20R0102`);
+  - player house 1F 63 (`T20R0201`) and 2F 64 (`T20R0202`, the bedroom; script `scr_seq_0846_T20R0202.s`).
+- **Main menu:** a blank save forces `selectedApp = APPOPTION_NEW_GAME` (`main_menu.c:1429-1431`), so no cursor move is needed. The drawn row is unverified; it matters only to a cursor-polling route.
+- **Gender:** `lastChosenGender = 0` (MALE) at init (`oaks_speech.c:559`; `global.h:12`).
+- **YES/NO:** the default is option 0 unless a template sets `initialCursorPos` (`yes_no_prompt.c:87-89`); the overrides on this path are not enumerated. Confirm and decline both play `SEQ_SE_DP_BUTTON9`, so assert on state, never on sound.
+- **Starter input** (`choose_starter_app.c:1071-1103`):
+  - A advances and confirms (one nav input, then two A presses, `:1077`); B backs out in CONFIRM only;
+  - Left = clockwise, Right = counterclockwise; Left and Right are suppressed in CONFIRM.
+  - The default ball initialiser is unread.
+- **Lab:** stepping onto X 3/4/5 in lab 1F auto-walks the player (`GetPlayerCoords` + `ApplyMovement obj_player`, `scr_seq_0843_T20R0101.s` ~54-67), so the entry column matters.
+- **Still open:**
+  - the warp tiles: bedroom stairs (map 64) and lab door (map 60). Take them from the zone event data via the route tooling, never vision;
+  - the T20R0202 bedroom script trigger chain;
+  - the default ball.
