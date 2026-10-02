@@ -241,7 +241,8 @@ def main() -> int:
         return 2
     touched = update_md5_tables(md5_before, pinned_md5s())
     doc = write_version_file(version, families)
-    print(f"\nstamped {sorted(seen)} as {version}; canonical identities unchanged ({len(before)} records);"
+    identity = "regenerated (--accept-new-identity)" if args.accept_new_identity else "unchanged"
+    print(f"\nstamped {sorted(seen)} as {version}; canonical identities {identity} ({len(before)} records);"
           f" md5 tables updated in {touched or 'no file'}; wrote {VERSION_FILE.relative_to(ROOT)} ({len(doc['files'])} files)")
     return 0
 

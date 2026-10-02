@@ -1,7 +1,7 @@
 {
   "49497bdacb2543d9c2689c450ae50b9026e51dba": {
     "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-    "canonical_sha1": "a3b617a4c9950401b85fd3bd151baa87e6a3d0a1",
+    "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
     "crc32": "F7B5A293",
     "header_crc": "9E24",
     "header_title": "POKEMON GREEN",
@@ -18,7 +18,7 @@
   },
   "a297c93bb26d54105cfc540cd3554ac232c3d00b": {
     "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-    "canonical_sha1": "f51ea2caa207f793f3dfe4e78e2a6641b39c2599",
+    "canonical_sha1": "11138e23a8d3d7339a9200becba920e6b5d143bf",
     "crc32": "23CECE92",
     "header_crc": "A780",
     "header_title": "POKEMON BLUE",
@@ -35,7 +35,7 @@
   },
   "af199b7cc168853cfed6ab1950525b0a434d569a": {
     "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-    "canonical_sha1": "8fa82c1e4f9109bf07f95995f672f125dbb0691d",
+    "canonical_sha1": "e913bef00cc5d05dcfda1ca26af32defe42093f7",
     "crc32": "2354BCD2",
     "header_crc": "7036",
     "header_title": "POKEMON RED",

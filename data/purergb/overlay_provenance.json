@@ -1,6 +1,6 @@
 {
   "schema": "purergb-overlay-provenance-v1",
-  "generated": "2026-10-02T20:43:22Z",
+  "generated": "2026-10-02T21:22:34Z",
   "source": {
     "url": "https://github.com/Vortyne/pureRGB",
     "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
@@ -65,7 +65,7 @@
         "offset": 1036545,
         "length": 20
       },
-      "canonical_sha1": "8fa82c1e4f9109bf07f95995f672f125dbb0691d",
+      "canonical_sha1": "e913bef00cc5d05dcfda1ca26af32defe42093f7",
       "ups": {
         "file": "patch/dist/SLink-PureRed.ups",
         "size": 57718,
@@ -87,7 +87,7 @@
         "offset": 1036545,
         "length": 20
       },
-      "canonical_sha1": "f51ea2caa207f793f3dfe4e78e2a6641b39c2599",
+      "canonical_sha1": "11138e23a8d3d7339a9200becba920e6b5d143bf",
       "ups": {
         "file": "patch/dist/SLink-PureBlue.ups",
         "size": 57922,
@@ -109,7 +109,7 @@
         "offset": 1036545,
         "length": 20
       },
-      "canonical_sha1": "a3b617a4c9950401b85fd3bd151baa87e6a3d0a1",
+      "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
       "ups": {
         "file": "patch/dist/SLink-PureGreen.ups",
         "size": 57835,
