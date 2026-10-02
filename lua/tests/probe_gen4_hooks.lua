@@ -38,11 +38,56 @@ function M.read_register(names,reader,name)
 end
 function M.host_write_control(read_byte,write_byte,address)
     local original=read_byte(address)
-    local ok,why=pcall(write_byte,address,original~1)
+    local complement=(~original)&255
+    local ok,why=pcall(function()
+        write_byte(address,complement)
+        check(read_byte(address)==complement,"host write intermediate readback")
+    end)
     local restored,restore_error=pcall(write_byte,address,original)
     check(restored,"host write restore failed: "..tostring(restore_error))
-    check(ok,"host write control failed: "..tostring(why))
     check(read_byte(address)==original,"host write restore readback")
+    check(ok,"host write control failed: "..tostring(why))
+end
+function M.record_boot_input(audit,buttons)
+    for button,pressed in pairs(buttons) do if pressed then audit[button]=(audit[button] or 0)+1 end end
+end
+function M.other_boot_buttons(audit)
+    local n=0; for button,hits in pairs(audit) do if button~="A" and button~="Start" then n=n+hits end end
+    return n
+end
+function M.rtc_slice(title)
+    local rtc=need(title.profile.rtc,"k:pack profile.rtc (symbol, date/time offsets and sizes, source)")
+    local sym=need(title.symbols[need(rtc.symbol,"k:pack RTC symbol")],"k:RTC symbol descriptor")
+    local source=need(rtc.source,"k:pack RTC source")
+    check(type(source)=="string" and source~="","RTC source empty")
+    local result={}
+    for _,name in ipairs({"date","time"}) do
+        local offset,size=need(rtc[name.."_off"],"k:pack RTC "..name.." offset"),need(rtc[name.."_size"],"k:pack RTC "..name.." size")
+        check(type(offset)=="number" and offset%1==0 and offset>=0 and type(size)=="number" and size%1==0
+            and size>0 and offset+size<=sym.size,"RTC slice outside packed symbol")
+        result[name.."_address"]=sym.address+offset; result[name.."_size"]=size
+    end
+    return result
+end
+function M.save_driver_witness(title,read,read_byte,frame)
+    local p=need(title.profile.probe_field,"save:pack probe_field")
+    local fs=read(need(title.symbols.sFieldSysPtr,"save:FieldSystem symbol").address)
+    if fs==0 then return nil end
+    local driver=read(fs+need(p.save_driver,"save:driver offset")); if driver==0 then return nil end
+    local data=read(driver+need(p.save_driver_data_off,"save:driver data offset")); if data==0 then return nil end
+    return {driver=driver,data=data,state=read_byte(data+need(p.save_state,"save:state offset")),frame=frame}
+end
+function M.save_completed(trace)
+    if type(trace)~="table" or #trace<3 then return false end
+    local first=trace[1]; local active=false; local last_frame=-1
+    if first.state~=1 or type(first.driver)~="number" or first.driver<=0 or type(first.data)~="number" or first.data<=0 then return false end
+    for _,v in ipairs(trace) do
+        if v.driver~=first.driver or v.data~=first.data or type(v.frame)~="number" or v.frame%1~=0 or v.frame<0 or v.frame<last_frame
+            or type(v.state)~="number" or v.state%1~=0 or v.state<1 or v.state>7 then return false end
+        last_frame=v.frame
+        if v.state>=2 and v.state<=7 then active=true end
+    end
+    return active and trace[#trace].state==1 and trace[#trace].frame>first.frame
 end
 function M.predicate(title,read,p)
     local sym=need(title.symbols[p.symbol],"predicate symbol:"..tostring(p.symbol))
@@ -132,6 +177,12 @@ function M.capture(site, addr, val, flags, pc, resident)
     check(u32(pc)==site.address+(site.mode=="thumb" and 4 or 8), "callback PC mismatch")
     check(u32(val)==word(site.fire_hex), "active owner fire pin mismatch")
     return {id=site.id,address=u32(addr),word=u32(val),pc=u32(pc),flags=u32(flags)}
+end
+function M.observe_overlay(b,site,addr,val,flags,pc,bytes,resident)
+    if not resident(site.overlay_id) then b.dropped=b.dropped+1; return end
+    if bytes(site.address,site.extent)~=site.register_hex then b.callback_corrupt=b.callback_corrupt+1; return end
+    local ok,err=pcall(M.capture,site,addr,val,flags,pc,resident)
+    if ok then b.accepted=b.accepted+1 else b.callback_corrupt=b.callback_corrupt+1; b.error=tostring(err) end
 end
 
 -- Probe-only composition over the REAL shared registry. Track external handles, not
@@ -242,7 +293,7 @@ validators.b=function(x)
     if need(x.dropped,"b:wrong-overlay physical collision")==0 then error({open="b:wrong-overlay physical collision unobserved"},0) end
     check(x.inactive_drop==true and x.active_fault==true and x.full_pin_reject==true,
         "residency / active fault / full registration controls")
-    check(x.badpc==0 and x.badword==0,"active callback corruption")
+    check(x.callback_corrupt==0,"active callback address/PC/word corruption")
 end
 function M.census_ok(x)
     local used={}
@@ -290,7 +341,7 @@ validators.f=function(x)
         check(sample.registered_hooks==(name=="one" and 1 or 0),"incorrect sustained hook count")
         check(sample.timing_kind=="wall_frame_interval" and type(sample.clock_source)=="string" and sample.clock_source~="",
             "sustained measurement requires a declared wall-clock frame-interval source")
-        check(need(sample.clock,"f:clock descriptor").monotonic_guaranteed~=false,"nonmonotonic performance clock")
+        check(need(sample.clock,"f:clock descriptor").monotonic_guaranteed==true,"performance clock lacks monotonic guarantee")
         local times=need(sample.frame_times,"f:raw per-frame timings")
         check(#times==sample.frames,"incomplete sustained timing sequence")
         local sorted,total={},0
@@ -301,7 +352,7 @@ validators.f=function(x)
         local native_fps=33513982/560190 -- BizHawk MelonDS.cs DefaultFpsNumerator/Denominator
         check(math.abs((#times/total)/native_fps-1)<=0.001,"mean FPS outside native-cadence 0.1% tolerance")
         local floor=need(sample.floor,"f:same-session bare-floor sample")
-        check(need(floor.clock,"f:floor clock descriptor").monotonic_guaranteed~=false,"nonmonotonic floor clock")
+        check(need(floor.clock,"f:floor clock descriptor").monotonic_guaranteed==true,"floor clock lacks monotonic guarantee")
         check(floor.session_id==sample.session_id and floor.phase==sample.phase and floor.clock_source==sample.clock_source,
             "floor belongs to a different session/phase/clock")
         check(floor.requested_rate==100 and floor.registered_hooks==0 and floor.instrumentation_floor==true,"floor not bare paced zero-hook")
@@ -327,6 +378,7 @@ validators.g=function(x)
         SRAM=524288,["Instruction TCM"]=32768,["Data TCM"]=16384,[BUS]=0}) do check(x.domains[name]==size,"domain:"..name) end
     for i=0,15 do check(x.registers["ARM9 r"..i]~=nil,"register ARM9 r"..i) end
     check(x.bogus_refused==true,"bogus register silently accepted")
+    check(need(x.raw_core_bogus_accepted,"g:raw core bogus-name result")==true,"raw core bogus-name platform behavior changed")
 end
 validators.h=function(x)
     check(need(x.pointer,"h:SaveData pointer")>0 and x.pointer==x.field_save,"SaveData / FieldSystem disagreement")
@@ -341,6 +393,10 @@ validators.i=function(x)
     check(x.no_write==x.original,"no-write control changed")
     check(need(x.box_dirty,"i:PYDEC occupied-box dirty control")==x.box_target and x.box_target~=x.box_original,"dirty box control did not persist")
     check(need(x.box_without_dirty,"i:PYDEC occupied-box without-dirty control")==x.box_original,"box write without modified bit persisted")
+    local cases=need(x.save_driver_cases,"i:save-driver state traces")
+    for _,name in ipairs({"party-write","no-write","box-write","box-no-dirty"}) do
+        check(M.save_completed(need(cases[name],"i:save-driver trace "..name)),"native save-driver completion absent: "..name)
+    end
     check(x.cold_reload==x.target and x.save_completed==true,"cold reload/save boundary absent")
 end
 validators.j=function(x)
@@ -357,7 +413,8 @@ end
 validators.l=function(x)
     check(need(x.overworld,"l:CONTINUE with A/Start")==true,"buttons-only CONTINUE failed")
     check(need(x.no_buttons_overworld,"l:no-button boot")==false,"no-button boot reached overworld")
-    check(x.other_boot_buttons==0,"CONTINUE used non A/Start input")
+    local other=M.other_boot_buttons(need(x.boot_inputs,"l:measured boot input counts"))
+    check(x.other_boot_buttons==other and other==0,"CONTINUE used non A/Start input or input accounting mismatch")
 end
 validators.m=function(x)
     for _,p in ipairs({"overworld","menu","battle","save"}) do
@@ -375,6 +432,12 @@ validators.n=function(x)
         "failed-construction retention")
     check(not m.fifth and m.peak==4,"hook budget control")
     local p=need(x.physical,"n:pack phase predicates + earliest/last producer oracle")
+    local cases=need(p.cases,"n:per-phase case measurements")
+    check(#cases>0,"no measured phase cases")
+    for _,case in ipairs(cases) do
+        check(case.first_expected>0 and case.first_seen==case.first_expected and case.last_expected>0
+            and case.last_seen==case.last_expected,"first/last producer lost in phase case: "..tostring(case.phase))
+    end
     check(p.first_expected>0 and p.first_seen==p.first_expected and p.last_seen==p.last_expected and p.last_expected>0,
         "first/last producer lost")
     check(p.static_pc and p.reset and p.peak<=4 and p.live_after_close==0,"phase coverage/accounting")
@@ -458,11 +521,15 @@ local function run()
         end end
         prior=now
     end
-    local phase_valid
+    local phase_valid,save_driver_trace
     local function step(buttons)
         if phase_monitor then phase_monitor.before() end
         joypad.set(buttons or {}); emu.frameadvance()
         advanced=advanced+1
+        if save_driver_trace then
+            local witness=M.save_driver_witness(title,read,function(a) return memory.read_u8(a,BUS) end,emu.framecount())
+            if witness then save_driver_trace[#save_driver_trace+1]=witness end
+        end
         if phase_monitor then phase_monitor.after() end
         if census_enabled then snapshot() end
         local observed=phase
@@ -602,6 +669,7 @@ local function run()
                 pin_timing="declared-image FILE before boot registration; full RAM pin at every callback"}
         end)
         local stable,boot_ok=0,false
+        local boot_inputs={}
         guarded("l",function()
             for i=1,cfg.boot_frames do
                 local good=idle_field(); if good then stable=stable+1 else stable=0 end
@@ -610,13 +678,13 @@ local function run()
                 if cfg.mode~="no-buttons" then
                     local p=i%40; if p<3 then buttons.A=true elseif p>=20 and p<23 then buttons.Start=true end
                 end
-                step(buttons)
+                M.record_boot_input(boot_inputs,buttons); step(buttons)
             end
-            return {overworld=boot_ok,other_boot_buttons=0,boot_frame=emu.framecount()}
+            return {overworld=boot_ok,boot_inputs=boot_inputs,other_boot_buttons=M.other_boot_buttons(boot_inputs),boot_frame=emu.framecount()}
         end)
-        local rtc=symbol("sRTCWork")
         guarded("k",function()
-            return {first=bytes(rtc+(cfg.rtc_offset or 0x10),cfg.rtc_size or 0x1C),frame_first=emu.framecount()}
+            local rtc=M.rtc_slice(title)
+            return {first=bytes(rtc.date_address,rtc.date_size)..bytes(rtc.time_address,rtc.time_size),frame_first=emu.framecount()}
         end)
         if cfg.mode=="cold-reload" then
             check(boot_ok and idle_field(),"cold readback not at idle overworld")
@@ -656,10 +724,13 @@ local function run()
                 local h=register(s,function(a,v,flags)
                     if M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident) then finished=finished+1 end
                 end,"g4i.native-save")
+                save_driver_trace={need(M.save_driver_witness(title,read,function(a) return memory.read_u8(a,BUS) end,emu.framecount()),"i:save-driver initial state")}
                 play_route(need(cfg.persistence_route,"i:native SAVE normal-button route")); idle(120); remove(h)
                 check(finished>0,"no native save-finish execution")
+                local trace=save_driver_trace; save_driver_trace=nil
+                check(M.save_completed(trace),"native save-driver did not transition active to idle")
                 return {runtime_hex=bytes(addr,#p.before_hex/2),save_finish_hits=finished,operation=p.operation,
-                    modified=modified and read(modified),level="INSTRUMENTATION"}
+                    save_driver_trace=trace,modified=modified and read(modified),level="INSTRUMENTATION"}
             end)
             return
         end
@@ -781,7 +852,7 @@ local function run()
         guarded("n",function() return {model=M.phase_controls(dofile(root.."/lua/hook_registry.lua"))} end)
         -- Battle and save routes are coordinator-supplied normal inputs. Labels alone
         -- are never phase proof: verify the pack's predicate before including a census.
-        local b={accepted=0,dropped=0,badpc=0,badword=0}
+        local b={accepted=0,dropped=0,callback_corrupt=0}
         guarded("b",function()
             if cfg.phase_case then error({open="b:separate phase-budget run; faint observer not armed"},0) end
             need(cfg.route and #cfg.route>0 and true or nil,"b:normal-input battle/faint/collision route")
@@ -792,10 +863,7 @@ local function run()
             local corrupt=clone(s); corrupt.register_hex=corrupt.register_hex:sub(1,-3)..(corrupt.register_hex:sub(-2)=="00" and "01" or "00")
             b.full_pin_reject=not pcall(M.validate_site,title,corrupt,function() return s.register_hex end,function() return true end)
             register(s,function(a,val,flags)
-                if not resident(s.overlay_id) then b.dropped=b.dropped+1; return end
-                if bytes(s.address,s.extent)~=s.register_hex then b.badword=b.badword+1; return end
-                local good,err=pcall(M.capture,s,a,val,flags,emu.getregister("ARM9 r15"),resident)
-                if good then b.accepted=b.accepted+1 else b.badword=b.badword+1; b.error=tostring(err) end
+                M.observe_overlay(b,s,a,val,flags,emu.getregister("ARM9 r15"),bytes,resident)
             end,"g4b.faint")
             return b
         end)
@@ -867,6 +935,7 @@ local function run()
                     live_after_close=composite:live_handles(),max_cost=maxcost,restored_fps=restored,baseline_fps=baseline,
                     pending_at_close=pending_at_close,second_drain=second_drain,
                     oracle_frames=oracle,seen_frames=seen,phase=case.name,predicate_source=case.source}
+                result.physical.cases={clone(result.physical)}
             end}
             return result
         end)
@@ -902,7 +971,7 @@ local function run()
         if status=="FAIL" then overall="FAIL" elseif status=="OPEN" and overall=="PASS" then overall="OPEN" end
         local payload={schema="gen4-probe-row-v1",run_id=cfg.run_id,title=cfg.title,rom_sha1=cfg.rom_sha1,
             level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
-            script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
+            source_head=cfg.source_head,script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
         payload.setup=cfg.setup or "NATIVE"; payload.sidecar_sha256=cfg.sidecar_sha256
         payload.setup_src_sha1=cfg.src_sha1; payload.setup_out_sha1=cfg.out_sha1
         payload.setup_new_pid=cfg.new_pid

@@ -30,6 +30,7 @@ ROWS = tuple("abcdefghijklmn")
 ROW_RE = re.compile(r"^PROBE ([a-o]) (PASS|FAIL|OPEN) (\{.*\})$")
 TITLE_PACK = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
 CORE = "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS"
+MODEL_CUT = {"script_sha256": "1" * 64, "profile_sha256": "2" * 64, "source_head": "cut"}
 
 
 def digest(path: Path, algorithm="sha256") -> str:
@@ -46,9 +47,36 @@ def input_file(path: Path, name: str) -> Path:
     return path
 
 
-def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None) -> dict:
+class StaleReceiptError(AssertionError):
+    """Present evidence from another source/script/profile cut cannot qualify."""
+
+
+def committed_cut(title, *, script=SCRIPT, profile=None, source_head=None):
+    profile = profile or REPO / "data/games" / TITLE_PACK[title] / "profile.json"
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    if source_head is not None and head != source_head:
+        raise StaleReceiptError("STALE source_head: committed cut moved")
+    cut = {"source_head": head}
+    for key, path in (("script_sha256", script), ("profile_sha256", profile)):
+        path = Path(path)
+        relative = path.relative_to(REPO).as_posix()
+        blob = subprocess.check_output(["git", "show", f"{head}:{relative}"], cwd=REPO)
+        if path.read_bytes().replace(b"\r\n", b"\n") != blob.replace(b"\r\n", b"\n"):
+            raise StaleReceiptError(f"STALE {key}: uncommitted file {relative}")
+        cut[key] = digest(path)
+    return cut
+
+
+def bind_cut(payload, expected_cut):
+    for key in ("script_sha256", "profile_sha256", "source_head"):
+        if payload.get(key) != expected_cut[key]:
+            raise StaleReceiptError(f"STALE {key}: receipt differs from committed cut")
+
+
+def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None, expected_cut=None) -> dict:
     """No stale neighbour, duplicate row, wrong artifact, MODEL-as-PHYSICAL or tail accepted."""
     lines = text.splitlines()
+    expected_cut = expected_cut or committed_cut(title)
     assert lines and lines[-1] in {"RESULT: PASS", "RESULT: FAIL", "RESULT: OPEN"}, "missing terminal RESULT"
     assert sum(line.startswith("RESULT:") for line in lines) == 1, "multiple RESULT lines"
     rows = {}
@@ -58,6 +86,7 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
         row, status, raw = match.groups()
         assert row not in rows, f"duplicate row {row}"
         payload = json.loads(raw)
+        bind_cut(payload, expected_cut)
         assert payload["title"] == title and payload["rom_sha1"].lower() == rom_sha1.lower(), "wrong artifact binding"
         assert payload["level"] == "PHYSICAL", "MODEL evidence cannot close physical rows"
         if run_id is not None:
@@ -69,34 +98,44 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
     return rows
 
 
-def row_o(path: Path | None, title: str, sha1: str, source_head: str) -> tuple[str, dict]:
+def row_o(path: Path | None, title: str, sha1: str, source_head: str, *, expected_cut=None) -> tuple[str, dict]:
     """C1-8 owns its mechanism/oracle. Consume its row, never synthesize success."""
     if path is None or not path.is_file():
         return "OPEN", {"reason": f"C1-8 row o receipt absent: {path or 'SLINK_GEN4_ROW_O'}"}
-    rows = parse_receipt(path.read_text(encoding="utf-8"), title=title, rom_sha1=sha1)
+    expected_cut = expected_cut or committed_cut(title, script=REPO / "lua/tests/probe_gen4_battle_faint.lua", source_head=source_head)
+    assert expected_cut["source_head"] == source_head, "row o expected cut mismatch"
+    rows = parse_receipt(path.read_text(encoding="utf-8"), title=title, rom_sha1=sha1, expected_cut=expected_cut)
     assert "o" in rows, "present C1-8 input contains no row o"
     status, payload = rows["o"]
     assert payload.get("source_head") == source_head, "row o belongs to a different source cut"
     assert payload.get("producer") == "C1-8", "row o must identify its producer"
-    assert payload.get("setup", "NATIVE") != "SYNTH", "row o must use non-SYNTH setup"
+    if payload.get("setup") == "SYNTH":
+        sidecar_hash = payload.get("sidecar_sha256") or payload.get("synth", {}).get("sidecar_sha256")
+        assert isinstance(sidecar_hash, str) and re.fullmatch(r"[0-9a-fA-F]{64}", sidecar_hash), "row o SYNTH requires sidecar hash disclosure"
     if status == "PASS":
         assert payload.get("oracle") and payload.get("negative_control"), "row o PASS lacks independent oracle/red control"
     return status, payload
 
 
-def perf_f(path, title, rom_sha1, source_head):
+def perf_f(path, title, rom_sha1, source_head, *, expected_cut=None):
     """Read gen4-PERF's bound observations; Lua f remains the sole pass authority."""
     if path is None or not Path(path).is_file():
         return None, "gen4-PERF bundle absent"
     bundle = json.loads(Path(path).read_text(encoding="utf-8"))
+    if expected_cut is None:
+        committed_cut(title, source_head=source_head)  # The consuming f authority must also be committed.
+        expected_cut = committed_cut(title, script=REPO / "lua/tests/perf_gen4.lua", source_head=source_head)
+    assert expected_cut["source_head"] == source_head, "PERF expected cut mismatch"
     assert bundle["schema"] == "gen4-perf-bundle-v1" and bundle["producer"] == "gen4-PERF", "wrong PERF producer/schema"
     assert bundle["level"] == "PHYSICAL" and bundle["title"] == title and bundle["rom_sha1"] == rom_sha1, "wrong PERF artifact/evidence"
-    assert bundle["source_head"] == source_head, "PERF belongs to a different source cut"
+    if bundle.get("source_head") != source_head:
+        raise StaleReceiptError("STALE source_head: PERF belongs to a different source cut")
     observation = bundle.get("observation")
     if observation is None:
         return None, bundle.get("reason", "gen4-PERF required samples absent")
 
     def bind(sample):
+        bind_cut(sample, expected_cut)
         assert sample["producer"] == "gen4-PERF" and sample["result"] == "PASS" and sample["level"] == "PHYSICAL", "incomplete PERF sample/floor"
         assert sample["title"] == title and sample["rom_sha1"] == rom_sha1 and sample["source_head"] == source_head, "PERF sample/floor binding mismatch"
         assert not sample["concurrent_load"] and sample["ending_registered"] == 0, "PERF sample/floor concurrent load/retained hook"
@@ -167,7 +206,7 @@ def examples():
         "a": {"arm": {"frames": 10, "hits": 10, "badpc": 0, "badword": 0},
               "thumb": {"frames": 10, "hits": 10, "badpc": 0, "badword": 0}, "negative_hits": 0},
         "b": {"accepted": 1, "dropped": 1, "inactive_drop": True, "active_fault": True,
-              "full_pin_reject": True, "badpc": 0, "badword": 0},
+              "full_pin_reject": True, "callback_corrupt": 0},
         "c": {"jit": False, "use_real_time": False, "quiet_changes": 0,
               "table_transitions": [{"frame": 2, "before": "off", "after": "129 active"}],
               "changes": [{"frame": 2, "region": 0, "id": 129, "kind": "load"}],
@@ -192,15 +231,18 @@ def examples():
             for name, hooks in (("zero", 0), ("one", 1), ("overworld_zero", 0))}},
         "g": {"domains": {"Main RAM": 4194304, "Shared WRAM": 32768, "ARM7 WRAM": 65536,
                           "SRAM": 524288, "Instruction TCM": 32768, "Data TCM": 16384, "ARM9 System Bus": 0},
-              "registers": {f"ARM9 r{i}": 0 for i in range(16)}, "bogus_refused": True},
+                          "registers": {f"ARM9 r{i}": 0 for i in range(16)}, "bogus_refused": True, "raw_core_bogus_accepted": True},
         "h": {"pointer": 0x2200000, "field_save": 0x2200000, "signature": "23", "expected_signature": "23",
               "identity": "1234", "expected_identity": "1234", "invalid_rejected": True,
               "signature_rejected": True, "provenance_rejected": True},
         "i": {"written": 9, "target": 9, "original": 10, "no_write": 10, "box_dirty": 2,
-              "box_target": 2, "box_original": 1, "box_without_dirty": 1, "cold_reload": 9, "save_completed": True},
+              "box_target": 2, "box_original": 1, "box_without_dirty": 1, "cold_reload": 9, "save_completed": True,
+              "save_driver_cases": {name: [{"driver": 100, "data": 200, "state": state, "frame": frame}
+                                          for frame, state in enumerate((1, 2, 1))]
+                                    for name in ("party-write", "no-write", "box-write", "box-no-dirty")}},
         "j": {"hash": "1" * 32, "sha1": "2" * 40, "md5": "1" * 32, "patched_hash": "3" * 40},
         "k": {"first": "pinned", "second": "pinned", "unpinned": "wallclock", "frame_first": 1035, "frame_second": 1035},
-        "l": {"overworld": True, "no_buttons_overworld": False, "other_boot_buttons": 0},
+        "l": {"overworld": True, "no_buttons_overworld": False, "other_boot_buttons": 0, "boot_inputs": {"A": 3, "Start": 3}},
         "m": {"histograms": {p: {"123": 10} for p in ("overworld", "menu", "battle", "save")},
               "halt": 0x2001000, "idle_hits": 5, "save_same_as_idle": False},
         "n": {"model": {"last_event": 1, "second_drain": 0, "after_close": 0, "reset_event": 1,
@@ -210,6 +252,8 @@ def examples():
               "physical": {"first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
                            "static_pc": True, "reset": True, "peak": 3, "live_after_close": 0,
                            "pending_at_close": 1, "second_drain": 0,
+                           "cases": [{"phase": name, "first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1}
+                                     for name in ("battle", "pc", "reset")],
                            "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}},
     }
 
@@ -220,7 +264,7 @@ NEGATIVES = {
     "g": ("bogus_refused", False), "h": ("signature_rejected", False),
     "i": ("box_without_dirty", 2), "j": ("patched_hash", "1" * 32),
     "k": ("unpinned", "pinned"), "l": ("no_buttons_overworld", True),
-    "m": ("save_same_as_idle", True), "n": ("physical", {"first_expected": 1, "first_seen": 0}),
+    "m": ("save_same_as_idle", True), "n": ("physical", {"first_expected": 1, "first_seen": 0, "cases": []}),
 }
 
 
@@ -292,12 +336,140 @@ def test_host_write_control_changes_then_restores_and_can_be_red(api):
         reader=function() return VALUE end
         writer=function(_,v) WRITTEN[#WRITTEN+1]=v; VALUE=v end''')
     api.host_write_control(r.globals().reader, r.globals().writer, 100)
-    assert list(r.globals().WRITTEN.values()) == [17, 16] and r.globals().VALUE == 16
+    assert list(r.globals().WRITTEN.values()) == [239, 16] and r.globals().VALUE == 16
     r.execute('''writer=function(_,v) VALUE=v; HOST_HITS=HOST_HITS+1 end''')
     api.host_write_control(r.globals().reader, r.globals().writer, 100)
     obs = examples()["d"]
     obs["host_hits"] = r.globals().HOST_HITS
     assert api.evaluate("d", to_lua(r, obs))[0] == "FAIL"
+
+
+@pytest.mark.parametrize("fault", ["dropped_write", "wrong_readback", "read_error"])
+def test_host_write_intermediate_readback_red_restore_revert(api, fault):
+    r = api._runtime
+    r.execute('''VALUE=16; EVENTS={}; READS=0; WRITES=0; FAULT=nil
+        reader=function()
+            READS=READS+1; EVENTS[#EVENTS+1]="read:"..VALUE
+            if READS==2 and FAULT=="read_error" then error("intermediate read failed") end
+            if READS==2 and FAULT=="wrong_readback" then return 0 end
+            return VALUE
+        end
+        writer=function(_,v)
+            WRITES=WRITES+1; EVENTS[#EVENTS+1]="write:"..v
+            if not (WRITES==1 and FAULT=="dropped_write") then VALUE=v end
+        end''')
+    api.host_write_control(r.globals().reader, r.globals().writer, 100)
+    assert list(r.globals().EVENTS.values()) == ["read:16", "write:239", "read:239", "write:16", "read:16"]
+    r.execute("READS=0; WRITES=0")
+    r.globals().FAULT = fault
+    with pytest.raises(Exception, match="host write control failed"):
+        api.host_write_control(r.globals().reader, r.globals().writer, 100)
+    assert r.globals().VALUE == 16 and r.globals().WRITES == 2
+    r.execute("FAULT=nil; READS=0; WRITES=0")
+    api.host_write_control(r.globals().reader, r.globals().writer, 100)
+    assert r.globals().VALUE == 16
+
+
+def test_overlay_callback_counts_pc_corruption_red_revert(api):
+    r = api._runtime
+    site = {"id": "site", "image": "ov1", "overlay_id": 1, "address": 100, "mode": "thumb",
+            "extent": 4, "register_hex": "01000000", "fire_hex": "00000001"}
+    baseline = examples()["b"]
+    assert api.evaluate("b", to_lua(r, baseline)) == "PASS"
+    b = to_lua(r, baseline)
+    api.observe_overlay(b, to_lua(r, site), 100, 1, 0, 108,
+                        r.eval('function() return "01000000" end'), r.eval("function() return true end"))
+    assert b.callback_corrupt == 1
+    assert api.evaluate("b", b)[0] == "FAIL"
+    b.callback_corrupt = 0
+    api.observe_overlay(b, to_lua(r, site), 100, 1, 0, 104,
+                        r.eval('function() return "01000000" end'), r.eval("function() return true end"))
+    assert api.evaluate("b", b) == "PASS"
+
+
+def test_boot_buttons_measured_red_revert(api):
+    r = api._runtime
+    audit = r.table()
+    api.record_boot_input(audit, to_lua(r, {"A": True, "Start": True, "B": False}))
+    assert api.other_boot_buttons(audit) == 0
+    api.record_boot_input(audit, to_lua(r, {"B": True}))
+    observed = examples()["l"]
+    observed.update(boot_inputs=dict(audit.items()), other_boot_buttons=api.other_boot_buttons(audit))
+    assert observed["other_boot_buttons"] == 1 and api.evaluate("l", to_lua(r, observed))[0] == "FAIL"
+    observed["other_boot_buttons"] = 0  # Falsified aggregate cannot hide the measured B input.
+    assert api.evaluate("l", to_lua(r, observed))[0] == "FAIL"
+    assert api.evaluate("l", to_lua(r, examples()["l"])) == "PASS"
+
+
+def test_core_bogus_register_fact_red_revert(api):
+    original = examples()["g"]
+    assert api.evaluate("g", to_lua(api._runtime, original)) == "PASS"
+    bad = dict(original, raw_core_bogus_accepted=False)
+    assert api.evaluate("g", to_lua(api._runtime, bad))[0] == "FAIL"
+    assert api.evaluate("g", to_lua(api._runtime, original)) == "PASS"
+
+
+def test_rtc_slice_pack_absent_open_wrong_fail_revert(api):
+    r = api._runtime
+    title = {"profile": {}, "symbols": {"sRTCWork": {"address": 100, "size": 88}}}
+    call = r.eval("function(f,t) local ok,v=pcall(f,t); return ok,v end")
+    ok, why = call(api.rtc_slice, to_lua(r, title))
+    assert not ok and "profile.rtc" in why["open"]
+    title["profile"]["rtc"] = {"symbol": "sRTCWork", "date_off": 16, "date_size": 16,
+                               "time_off": 32, "time_size": 12, "source": "MODEL source"}
+    good = from_lua(api.rtc_slice(to_lua(r, title)))
+    assert good == {"date_address": 116, "date_size": 16, "time_address": 132, "time_size": 12}
+    title["profile"]["rtc"]["time_size"] = 89
+    with pytest.raises(Exception, match="RTC slice outside"):
+        api.rtc_slice(to_lua(r, title))
+    title["profile"]["rtc"]["time_size"] = 12
+    assert from_lua(api.rtc_slice(to_lua(r, title))) == good
+
+
+@pytest.mark.parametrize("phase", ["battle", "pc", "reset"])
+def test_phase_zero_expected_cannot_hide_in_sum_red_revert(api, phase):
+    original = examples()["n"]
+    assert api.evaluate("n", to_lua(api._runtime, original)) == "PASS"
+    bad = copy.deepcopy(original)
+    case = next(c for c in bad["physical"]["cases"] if c["phase"] == phase)
+    case.update(first_expected=0, first_seen=0, last_expected=0, last_seen=0)
+    assert api.evaluate("n", to_lua(api._runtime, bad))[0] == "FAIL"
+    assert api.evaluate("n", to_lua(api._runtime, original)) == "PASS"
+
+
+@pytest.mark.parametrize("fault", ["no_active", "still_active", "pointer_changed", "backwards", "invalid_state"])
+def test_save_completion_needs_driver_state_reads_red_revert(api, fault):
+    original = examples()["i"]
+    trace = original["save_driver_cases"]["party-write"]
+    assert save_driver_complete(trace) and api.save_completed(to_lua(api._runtime, trace))
+    bad = copy.deepcopy(original)
+    trace = bad["save_driver_cases"]["party-write"]
+    if fault == "no_active":
+        trace[1]["state"] = 1
+    elif fault == "still_active":
+        trace[-1]["state"] = 2
+    elif fault == "pointer_changed":
+        trace[-1]["data"] = 201
+    elif fault == "backwards":
+        trace[-1]["frame"] = -1
+    else:
+        trace[1]["state"] = 2.5
+    assert not save_driver_complete(trace) and not api.save_completed(to_lua(api._runtime, trace))
+    assert api.evaluate("i", to_lua(api._runtime, bad))[0] == "FAIL"  # save_completed still claims True.
+    assert api.evaluate("i", to_lua(api._runtime, original)) == "PASS"
+
+
+def test_save_driver_witness_reads_packed_chain(api):
+    r = api._runtime
+    title = {"symbols": {"sFieldSysPtr": {"address": 100}},
+             "profile": {"probe_field": {"save_driver": 8, "save_driver_data_off": 4, "save_state": 1}}}
+    r.execute("MEM={[100]=1000,[1008]=2000,[2004]=3000,[3001]=2}; reader=function(a) return MEM[a] or 0 end")
+    actual = from_lua(api.save_driver_witness(to_lua(r, title), r.globals().reader, r.globals().reader, 17))
+    assert actual == {"driver": 2000, "data": 3000, "state": 2, "frame": 17}
+    r.execute("MEM[2004]=0")
+    assert api.save_driver_witness(to_lua(r, title), r.globals().reader, r.globals().reader, 18) is None
+    r.execute("MEM[2004]=3000")
+    assert from_lua(api.save_driver_witness(to_lua(r, title), r.globals().reader, r.globals().reader, 17)) == actual
 
 
 def test_register_name_guard_refuses_before_read_and_masks_signed(api):
@@ -365,7 +537,7 @@ def test_f_owner_native_cadence_floor_red_revert(api, fault):
 
 
 @pytest.mark.parametrize("fault", [
-    "nonmonotonic", "nonmonotonic_floor", "execution_mode", "throttle_config",
+    "nonmonotonic", "nonmonotonic_floor", "monotonic_missing", "monotonic_floor_missing", "execution_mode", "throttle_config",
     "frames_below_3000", "overworld_attempts", "overworld_hp_reads", "overworld_phase",
     "on_demand_removal", "sequence_length", "mean_300fps_fake_throttle",
 ])
@@ -379,6 +551,10 @@ def test_f_contract_clauses_red_revert(api, fault):
         sample["clock"]["monotonic_guaranteed"] = False
     elif fault == "nonmonotonic_floor":
         sample["floor"]["clock"]["monotonic_guaranteed"] = False
+    elif fault == "monotonic_missing":
+        sample["clock"].pop("monotonic_guaranteed")
+    elif fault == "monotonic_floor_missing":
+        sample["floor"]["clock"].pop("monotonic_guaranteed")
     elif fault == "execution_mode":
         sample["requested_execution_mode"] = "script_frameadvance_capacity"
     elif fault == "throttle_config":
@@ -416,6 +592,7 @@ def test_perf_f_binds_floor_red_revert(tmp_path, fault):
                "title": "heartgold", "rom_sha1": "a" * 40, "source_head": "cut",
                "concurrent_load": False, "ending_registered": 0,
                "module_sha256": {"lua/tests/probe_gen4_hooks.lua": digest(SCRIPT), "reads": "bound"}}
+    binding.update(MODEL_CUT)
     for sample in observation["sustained"].values():
         sample.update(copy.deepcopy(binding), frames_requested=3000)
         sample["floor"].update(copy.deepcopy(binding), frames_requested=3000)
@@ -425,7 +602,7 @@ def test_perf_f_binds_floor_red_revert(tmp_path, fault):
 
     def consume(value):
         path.write_text(json.dumps(value), encoding="utf-8")
-        return perf_f(path, "heartgold", "a" * 40, "cut")
+        return perf_f(path, "heartgold", "a" * 40, "cut", expected_cut=MODEL_CUT)
 
     assert consume(bundle)[1] is None
     bad = copy.deepcopy(bundle)
@@ -533,16 +710,19 @@ def test_synth_sidecar_bound_hash_disclosure_and_wrong_revert(tmp_path):
     assert save_setup(save) == disclosed
 
 
-def test_row_o_rejects_synth_setup(tmp_path):
+def test_row_o_requires_synth_disclosure(tmp_path):
     path = tmp_path / "o.txt"
     good = receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red", setup="NATIVE")
     path.write_text(good)
-    assert row_o(path, "heartgold", "2" * 40, "cut")[0] == "PASS"
+    assert row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)[0] == "PASS"
     path.write_text(good.replace('"NATIVE"', '"SYNTH"'))
-    with pytest.raises(AssertionError, match="non-SYNTH"):
-        row_o(path, "heartgold", "2" * 40, "cut")
+    with pytest.raises(AssertionError, match="sidecar hash"):
+        row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)
+    path.write_text(receipt("o", producer="C1-8", oracle="independent", negative_control="red",
+                            setup="SYNTH", synth={"sidecar_sha256": "a" * 64}))
+    assert row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)[0] == "PASS"
     path.write_text(good)
-    assert row_o(path, "heartgold", "2" * 40, "cut")[0] == "PASS"
+    assert row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)[0] == "PASS"
 
 
 def test_probe_fake_io_terminal_receipt_without_console(api):
@@ -550,7 +730,8 @@ def test_probe_fake_io_terminal_receipt_without_console(api):
     r = api._runtime
     json_api = r.execute((REPO / "lua/json_codec.lua").read_text(encoding="utf-8"))
     cfg = {"profile": "pack.json", "title": "heartgold", "mode": "rtc-repeat", "rom_sha1": "2" * 40,
-           "rom_md5": "1" * 32, "run_id": "fake", "boot_frames": 1, "requested_rate": 300}
+           "rom_md5": "1" * 32, "run_id": "fake", "boot_frames": 1, "requested_rate": 300,
+           "code_sha256": MODEL_CUT["script_sha256"], "profile_sha256": MODEL_CUT["profile_sha256"], "source_head": "cut"}
     pack = {"schema": "gen4-profile-v1", "titles": {"heartgold": {"rom": {"sha1": cfg["rom_sha1"], "md5": cfg["rom_md5"]},
             "symbols": {"sRTCWork": {"address": 100}, "sFieldSysPtr": {"address": 200}, "sSaveDataPtr": {"address": 300}},
             "sites": {}, "profile": {}, "overlays": {}, "overlay_table": {}}}}
@@ -578,7 +759,7 @@ def test_probe_fake_io_terminal_receipt_without_console(api):
     r.execute(SCRIPT.read_text(encoding="utf-8"))
     assert list(r.globals().WRITES.values()) == ["receipt.txt"]
     assert r.globals().EXITED
-    rows = parse_receipt(r.globals().TERMINAL, title="heartgold", rom_sha1="2" * 40, run_id="fake")
+    rows = parse_receipt(r.globals().TERMINAL, title="heartgold", rom_sha1="2" * 40, run_id="fake", expected_cut=MODEL_CUT)
     assert set(rows) == set(ROWS) and rows["l"][0] == "OPEN"
 
 
@@ -617,8 +798,82 @@ def test_reverted_semantic_guard_is_detected(api, guard):
 
 
 def receipt(row="a", status="PASS", **overrides):
-    payload = {"title": "heartgold", "rom_sha1": "2" * 40, "level": "PHYSICAL", "run_id": "current", **overrides}
+    payload = {"title": "heartgold", "rom_sha1": "2" * 40, "level": "PHYSICAL", "run_id": "current", **MODEL_CUT, **overrides}
     return f"PROBE {row} {status} {json.dumps(payload)}\nRESULT: {status}\n"
+
+
+@pytest.mark.parametrize("row", tuple("abcdefghijklmno"))
+@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+def test_every_row_stale_cut_red_revert(row, field):
+    def consume(text):
+        return parse_receipt(text, title="heartgold", rom_sha1="2" * 40, expected_cut=MODEL_CUT)
+
+    assert consume(receipt(row))[row][0] == "PASS"
+    with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
+        consume(receipt(row, **{field: "old"}))
+    assert consume(receipt(row))[row][0] == "PASS"
+
+
+@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+def test_external_row_consumers_stale_cut_red_revert(tmp_path, field):
+    path = tmp_path / "external.txt"
+
+    def consume_o(value):
+        path.write_text(value, encoding="utf-8")
+        return row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)
+
+    good = receipt("o", producer="C1-8", oracle="independent", negative_control="red")
+    assert consume_o(good)[0] == "PASS"
+    bad = receipt("o", producer="C1-8", oracle="independent", negative_control="red", **{field: "old"})
+    with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
+        consume_o(bad)
+    assert consume_o(good)[0] == "PASS"
+
+    observation = examples()["f"]
+    for sample in observation["sustained"].values():
+        for record in (sample, sample["floor"]):
+            record.update(MODEL_CUT, producer="gen4-PERF", result="PASS", level="PHYSICAL",
+                          title="heartgold", rom_sha1="2" * 40, concurrent_load=False, ending_registered=0,
+                          module_sha256={"lua/tests/probe_gen4_hooks.lua": digest(SCRIPT)}, frames_requested=3000)
+    bundle = {"schema": "gen4-perf-bundle-v1", "producer": "gen4-PERF", "level": "PHYSICAL",
+              "title": "heartgold", "rom_sha1": "2" * 40, "source_head": "cut", "observation": observation}
+
+    def consume_f(value):
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return perf_f(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)
+
+    assert consume_f(bundle)[1] is None
+    bad = copy.deepcopy(bundle)
+    bad["observation"]["sustained"]["one"][field] = "old"
+    with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
+        consume_f(bad)
+    assert consume_f(bundle)[1] is None
+
+
+def test_committed_cut_refuses_working_file_or_head_drift(monkeypatch, tmp_path):
+    script, profile = tmp_path / "probe.lua", tmp_path / "profile.json"
+    script.write_bytes(b"return 1\r\n")
+    profile.write_bytes(b"{}\n")
+    blobs = {"probe.lua": b"return 1\n", "profile.json": b"{}\n"}
+    monkeypatch.setattr(__import__(__name__, fromlist=["REPO"]), "REPO", tmp_path)
+
+    def output(command, **kwargs):
+        if command[1:3] == ["rev-parse", "HEAD"]:
+            return "committed\n"
+        assert command[:2] == ["git", "show"]
+        assert command[2].startswith("committed:")
+        return blobs[command[2].split(":", 1)[1]]
+
+    monkeypatch.setattr(subprocess, "check_output", output)
+    cut = committed_cut("heartgold", script=script, profile=profile)
+    assert cut == {"source_head": "committed", "script_sha256": digest(script), "profile_sha256": digest(profile)}
+    script.write_bytes(b"return 2\n")
+    with pytest.raises(StaleReceiptError, match="STALE script_sha256"):
+        committed_cut("heartgold", script=script, profile=profile)
+    script.write_bytes(b"return 1\r\n")
+    with pytest.raises(StaleReceiptError, match="STALE source_head"):
+        committed_cut("heartgold", script=script, profile=profile, source_head="older")
+    assert committed_cut("heartgold", script=script, profile=profile) == cut
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "stale", "model", "wrong_rom", "tail", "false_pass"])
@@ -637,8 +892,8 @@ def test_receipt_rejection_controls(mutation):
     else:
         text = receipt(status="OPEN").replace("RESULT: OPEN", "RESULT: PASS")
     with pytest.raises(AssertionError):
-        parse_receipt(text, title="heartgold", rom_sha1="2" * 40, run_id="current")
-    assert "a" in parse_receipt(receipt(), title="heartgold", rom_sha1="2" * 40, run_id="current")
+        parse_receipt(text, title="heartgold", rom_sha1="2" * 40, run_id="current", expected_cut=MODEL_CUT)
+    assert "a" in parse_receipt(receipt(), title="heartgold", rom_sha1="2" * 40, run_id="current", expected_cut=MODEL_CUT)
 
 
 def test_required_row_o_absent_open_present_wrong_fail(api, tmp_path):
@@ -648,10 +903,10 @@ def test_required_row_o_absent_open_present_wrong_fail(api, tmp_path):
     assert overall == "OPEN" and len(rows) == 15
     path = tmp_path / "o.txt"
     path.write_text(receipt("o", source_head="wrong", producer="C1-8", oracle="independent", negative_control="red"))
-    with pytest.raises(AssertionError, match="different source cut"):
-        row_o(path, "heartgold", "2" * 40, "cut")
+    with pytest.raises(StaleReceiptError, match="STALE source_head"):
+        row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT)
     path.write_text(receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red"))
-    assert finish_rows(api, examples(), {}, row_o(path, "heartgold", "2" * 40, "cut"))[0] == "PASS"
+    assert finish_rows(api, examples(), {}, row_o(path, "heartgold", "2" * 40, "cut", expected_cut=MODEL_CUT))[0] == "PASS"
 
 
 def fixture_module():
@@ -792,6 +1047,9 @@ def phase_case_plan(cases, blocked, recipes=None):
 
 
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
+    expected_cut = committed_cut(title, profile=profile, source_head=cfg["source_head"])
+    bind_cut({"script_sha256": cfg["code_sha256"], "profile_sha256": cfg["profile_sha256"],
+              "source_head": cfg["source_head"]}, expected_cut)
     """Fresh private directory; only this Popen's PID is ever stopped. Preserve failures."""
     assert not lane.exists(), f"refusing stale run directory {lane}"
     lane.mkdir(parents=True)
@@ -845,7 +1103,8 @@ def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
             time.sleep(0.25)
         assert out.is_file(), f"no terminal probe receipt in {lane}; exit={proc.poll()}"
         text = out.read_text(encoding="utf-8")
-        rows = parse_receipt(text, title=title, rom_sha1=cfg["rom_sha1"], run_id=cfg["run_id"])
+        committed_cut(title, profile=profile, source_head=cfg["source_head"])
+        rows = parse_receipt(text, title=title, rom_sha1=cfg["rom_sha1"], run_id=cfg["run_id"], expected_cut=expected_cut)
         assert set(rows) == set(ROWS), f"missing a--n rows: {set(ROWS) - set(rows)}"
         for _, payload in rows.values():
             assert payload["script_sha256"] == digest(SCRIPT) and payload["profile_sha256"] == digest(profile), "wrong source/profile receipt"
@@ -952,13 +1211,32 @@ def mutation_specs(codec, decoded, artifact, scenario):
             "box_target": box_target}, None
 
 
+def save_driver_complete(trace):
+    if not isinstance(trace, list) or len(trace) < 3:
+        return False
+    first = trace[0]
+    if first.get("state") != 1 or first.get("driver", 0) <= 0 or first.get("data", 0) <= 0:
+        return False
+    previous, active = -1, False
+    for row in trace:
+        if (row.get("driver") != first["driver"] or row.get("data") != first["data"]
+                or not isinstance(row.get("frame"), int) or isinstance(row["frame"], bool)
+                or row["frame"] < 0 or row["frame"] < previous
+                or not isinstance(row.get("state"), int) or isinstance(row["state"], bool)
+                or not 1 <= row["state"] <= 7):
+            return False
+        previous = row["frame"]
+        active |= 2 <= row["state"] <= 7
+    return active and trace[-1]["state"] == 1 and trace[-1]["frame"] > first["frame"]
+
+
 def persistence_rows(module, codec, decoded, title, source, save, profile, artifact, base, batch, cfg):
     if not cfg.get("persistence_route"):
         return None, "i: native SAVE normal-button route absent"
     specs, reason = mutation_specs(codec, decoded, artifact, cfg)
     if specs is None:
         return None, reason
-    samples, written_battery = {}, None
+    samples, written_battery, save_driver_cases = {}, None, {}
     for case in ("party-write", "no-write", "box-write", "box-no-dirty"):
         if case not in specs:
             continue
@@ -970,6 +1248,11 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
         observation = payload.get("observation")
         if not observation or observation.get("save_finish_hits", 0) < 1:
             return None, payload.get("reason", f"i: {case} native-save evidence absent")
+        trace = observation.get("save_driver_trace")
+        if trace is None:
+            return None, f"i: {case} save-driver state trace absent"
+        assert save_driver_complete(trace), f"{case}: native save-driver active-to-idle transition absent"
+        save_driver_cases[case] = trace
         result = codec.parse_save(battery.read_bytes(), decoded.profile)
         assert codec.counter_newer(result.counter, decoded.counter) > 0, f"{case}: no newer coherent native save bank"
         if case.startswith("box"):
@@ -996,7 +1279,9 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
             "target": specs["target"], "box_dirty": samples.get("box-write"), "box_without_dirty": samples.get("box-no-dirty"),
             "box_original": specs.get("box_original"), "box_target": specs.get("box_target"), "cold_reload": reloaded["hp"],
             "box_open": specs.get("box_open"),
-            "save_completed": True, "oracle": "server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
+            "save_driver_cases": save_driver_cases,
+            "save_completed": len(save_driver_cases) == 4 and all(save_driver_complete(trace) for trace in save_driver_cases.values()),
+            "oracle": "save-driver active-to-idle state reads + server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
 @pytest.mark.live
 @pytest.mark.skipif(os.environ.get("SLINK_LIVE") != "1", reason="OPEN G1 physical probe requires SLINK_LIVE=1; one owned emulator lane")
 @pytest.mark.parametrize("title", TITLE_PACK)
@@ -1016,7 +1301,8 @@ def test_gen4_hook_probe(api, title):
     rom_sha1, rom_md5 = digest(source, "sha1"), digest(source, "md5")
     artifact = pack["titles"][title]
     assert artifact["rom"]["sha1"] == rom_sha1 and artifact["rom"]["md5"] == rom_md5, "present ROM/profile mismatch"
-    source_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    cut = committed_cut(title, profile=profile)
+    source_head = cut["source_head"]
     supplied = scenario_input(title)
     cfg = {"title": title, "rom_sha1": rom_sha1, "rom_md5": rom_md5, "jit": False, "use_real_time": False,
            "requested_rate": 300, "initial_time": "2010-01-01T12:00:00", "sample_frames": 600,
@@ -1025,7 +1311,7 @@ def test_gen4_hook_probe(api, title):
            **supplied}
     assert cfg["requested_rate"] == 300, "development route must request 300%"
     assert cfg["sample_frames"] >= 120 and cfg["boot_frames"] > 0, "invalid sample windows"
-    cfg["code_sha256"], cfg["profile_sha256"] = digest(SCRIPT), digest(profile)
+    cfg["code_sha256"], cfg["profile_sha256"], cfg["source_head"] = cut["script_sha256"], cut["profile_sha256"], source_head
     codec = codec_module()
     decoded = codec.parse_save(save.read_bytes(), "hge" if title == "heartgold_hge" else "hgss")
     cfg["save_witness"] = source_witness(codec, decoded)
@@ -1112,6 +1398,7 @@ def test_gen4_hook_probe(api, title):
         external = os.environ.get("SLINK_GEN4_ROW_O")
         required_o = row_o(Path(external.format(title=title)) if external else None, title, rom_sha1, source_head)
         result, rows = finish_rows(api, observations, errors, required_o)
+        committed_cut(title, profile=profile, source_head=source_head)
         text = []
         for row, (status, payload) in rows.items():
             payload = {**payload, "schema": "gen4-probe-row-v1", "title": title, "rom_sha1": rom_sha1,
