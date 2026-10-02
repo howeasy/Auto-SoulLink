@@ -601,7 +601,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "c445dfc541f7a64b7cf7d628ae79fb4155faccdf",
+   "rom_sha1": "fe62598a6834b0e88d0e879aafcab39876ec988c",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1262,7 +1262,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "4ec8c7359101fe80e51453c1d212b67b52a78d0a",
+   "rom_sha1": "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1923,7 +1923,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "cd7eb8c1cbfba78760f4c973fcf5dcdced94d71a",
+   "rom_sha1": "999a702c4027db9e522486fd6330c86ff6932d4b",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,

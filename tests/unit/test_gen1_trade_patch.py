@@ -229,7 +229,19 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
             ROOT / "patch/gen1/dist/slink_bank3f.bin").read_bytes()
 
 
-def test_panel_payload_is_bit_identical_to_panel_only_link(built):
+def _caps(image: bytes) -> int:
+    """The immediate of the one `ld a, n` / `ld [SLINK_CAPS ($DEEA)], a` pair in the image."""
+    hits = [i for i in range(len(image) - 4)
+            if image[i] == 0x3E and image[i + 2:i + 5] == bytes((0xEA, 0xEA, 0xDE))]
+    assert len(hits) == 1, [hex(i) for i in hits]
+    return image[hits[0] + 1]
+
+
+CAP_PANEL_SFX = 0x07  # SLINK_CAP_SFX | SLINK_CAP_PANEL | SLINK_CAP_SFX_NOTIFY
+CAP_TRADE = 1 << 4    # patch/gb/slink_abi.inc SLINK_CAP_TRADE
+
+
+def test_panel_payload_matches_panel_only_link_except_the_trade_cap(built):
     rgbds, suffix = _rgbds()
     panel_obj = BUILD / "trade_test_panel_only.o"
     panel_image = BUILD / "trade_test_panel_only.gb"
@@ -237,12 +249,35 @@ def test_panel_payload_is_bit_identical_to_panel_only_link(built):
                     str(SOURCE / "slink.asm")], cwd=ROOT, capture_output=True, check=True)
     subprocess.run([str(rgbds / ("rgblink" + suffix)), "-p", "0x00", "-o",
                     str(panel_image), str(panel_obj)], cwd=ROOT, capture_output=True, check=True)
-    panel = panel_image.read_bytes()
+    panel = bytearray(panel_image.read_bytes())
     combined = (BUILD / "slink_stub.gb").read_bytes()
+    # A link without trade.asm must not advertise trade; the shipped link must.
+    assert _caps(panel) == CAP_PANEL_SFX
+    assert _caps(combined) == CAP_PANEL_SFX | CAP_TRADE
+    for key in TARGETS:
+        assert _caps(built[key]) == CAP_PANEL_SFX | CAP_TRADE, key
+    # ...and that immediate is the only panel byte the trade link changes.
+    at = panel.index(bytes((0x3E, CAP_PANEL_SFX, 0xEA, 0xEA, 0xDE))) + 1
+    panel[at] |= CAP_TRADE
     assert panel[0xFC000:0xFC500] == combined[0xFC000:0xFC500]
     assert panel[0xFC500:0xFC600] == bytes(0x100)
     assert built["red"][0xFC000:0xFC500] == combined[0xFC000:0xFC500]
     assert built["red"][0xFC500:0xFC600] == combined[0xFC500:0xFC600]
+
+
+def test_shipped_payload_advertises_trade():
+    """The committed injector payload; needs no ROM or toolchain."""
+    assert _caps((ROOT / "patch/gen1/dist/slink_bank3f.bin").read_bytes()) == CAP_PANEL_SFX | CAP_TRADE
+
+
+@pytest.mark.parametrize("key", TARGETS)
+def test_shipped_ups_reproduces_the_build(built, key):
+    sys.path.insert(0, str(ROOT / "patch/tools"))
+    from make_ups import ups_apply
+    ups = (ROOT / f"patch/dist/SLink-RB-{key.capitalize()}.ups").read_bytes()
+    rom = ups_apply(_clean(key), ups)
+    assert _caps(rom) == CAP_PANEL_SFX | CAP_TRADE
+    assert rom == built[key]
 
 
 def test_red_blue_trade_bank_bytes_identical(built):

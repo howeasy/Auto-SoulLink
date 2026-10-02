@@ -159,7 +159,7 @@ def _absent_gen2_clone(exc):
         if name:
             try:
                 rel = os.path.relpath(os.path.abspath(str(name)), _GEN2_BUILD)
-            except ValueError:                         # a path on another drive is not in the Gen 2 clone
+            except ValueError:   # another drive on Windows: outside the tree, report the failure
                 rel = ".."
             repo = rel.replace("\\", "/").split("/")[0]
             if not rel.startswith("..") and repo and not os.path.isdir(os.path.join(_GEN2_BUILD, repo)):

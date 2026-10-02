@@ -64,7 +64,9 @@ def assemble() -> bytes:
     trade_obj = os.path.join(BUILD, "trade.o")
     out = os.path.join(BUILD, "slink_stub.gb")
 
-    subprocess.run([os.path.join(rgbds, "rgbasm" + exe), "-o", obj, SRC], check=True)
+    # trade.o is always linked below, so slink.asm advertises SLINK_CAP_TRADE.
+    subprocess.run([os.path.join(rgbds, "rgbasm" + exe), "-D", "SLINK_TRADE_ENABLED",
+                    "-o", obj, SRC], check=True)
     subprocess.run([os.path.join(rgbds, "rgbasm" + exe),
                     "-I", os.path.join(REPO, "patch", "gen1", "src") + os.sep,
                     "-o", trade_obj, TRADE_SRC], check=True)

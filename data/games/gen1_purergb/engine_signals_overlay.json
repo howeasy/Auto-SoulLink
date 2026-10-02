@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "01765acb36f798477bb5dd39f86417b5cfc0c24b5d2ffd2d6fcf8d4dd6ba3291",
+ "sha256": "8078701cd5c2681fda25c5d2095e09612f928a4fcf302e26675e23385f4a65a2",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -44,7 +44,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "c445dfc541f7a64b7cf7d628ae79fb4155faccdf",
+   "rom_sha1": "fe62598a6834b0e88d0e879aafcab39876ec988c",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -910,7 +910,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "4ec8c7359101fe80e51453c1d212b67b52a78d0a",
+   "rom_sha1": "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554",
    "sites": {
     "add_party_mon": {
      "address": 13479,
@@ -1776,7 +1776,7 @@
     "wUsedItemOnWhichPokemon": 52998,
     "wWhichPokemon": 53138
    },
-   "rom_sha1": "cd7eb8c1cbfba78760f4c973fcf5dcdced94d71a",
+   "rom_sha1": "999a702c4027db9e522486fd6330c86ff6932d4b",
    "sites": {
     "add_party_mon": {
      "address": 13479,
