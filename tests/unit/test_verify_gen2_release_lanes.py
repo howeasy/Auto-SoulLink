@@ -2529,6 +2529,69 @@ def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
     assert any("new-gates.w6_gate.gold: w6 gate leg panel: clock setup" in e for e in gate.live_gates_errors(tmp_path))
 
 
+def _captured_u1_clock(title):
+    receipt = json.loads((REPO / f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json").read_text())
+    return next(run for run in receipt.get("runs", [receipt]) if run.get("clock_setup"))
+
+
+def test_real_attempt_two_clock_and_legacy_missing_attempt_are_accepted():
+    run = _captured_u1_clock("crystal")
+    assert run["clock_setup"]["game_minute"] == 23
+    run.pop("u1_attempt", None)
+    assert gate._clock_setup_errors(REPO, "crystal", run) == []
+    run["u1_attempt"] = 2
+    assert gate._clock_setup_errors(REPO, "crystal", run) == []
+
+
+def test_clock_rederivation_preserves_nonzero_seconds():
+    import gen2_synth_fixtures as synth
+    raw = (REPO / "tests/fixtures/gen2/crystal_battle.SaveRAM").read_bytes()
+    _, clock = synth.day_clock(raw, title="crystal", hour=11, minute=23, second=17, now=1790952666)
+    assert gate._clock_setup_errors(REPO, "crystal", {"fixture": "crystal_battle", "clock_setup": clock}) == []
+
+
+@pytest.mark.parametrize("mutation", ["game_minute", "new_hex", "u1_attempt", "boolean_minute"])
+def test_u1_clock_refuses_changed_disclosure_or_attempt(mutation):
+    run = _captured_u1_clock("crystal")
+    if mutation == "u1_attempt":
+        run["u1_attempt"] = 1
+    elif mutation == "new_hex":
+        run["clock_setup"]["new_hex"] = "00" * 22
+    else:
+        run["clock_setup"]["game_minute"] = True if mutation == "boolean_minute" else 46
+    assert gate._clock_setup_errors(REPO, "crystal", run)
+
+
+@pytest.mark.parametrize("mutation", [None, "missing", "edited", "other_fixture"])
+def test_gold_clock_rebuilds_its_poison_setup_first(mutation):
+    run = _captured_u1_clock("gold")
+    assert run["clock_setup"]["base_sha256"] == run["poison_setup"]["sha256"]
+    if mutation == "missing":
+        run.pop("poison_setup")
+    elif mutation == "edited":
+        run["poison_setup"]["edits"]["party_status"]["hp"] = 9
+    elif mutation == "other_fixture":
+        run["fixture"] = "gold_battle"
+    errors = gate._clock_setup_errors(REPO, "gold", run)
+    assert bool(errors) == (mutation is not None), errors
+
+
+@pytest.mark.parametrize("mutation", ["game_minute", "new_hex"])
+def test_engine_site_lane_checks_each_runs_clock_disclosure(tmp_path, mutation):
+    doc = _copy_new_gates_tree(tmp_path)
+    row = next(row for row in doc["requirements"] if row["axes"].get("kind") == "engine_sites"
+               and row["axes"]["title"] == "crystal")
+    entry = row["proofs"][0]["receipts"]["receipt"]
+    path = tmp_path / entry["path"]
+    receipt = json.loads(path.read_text())
+    run = next(run for run in receipt["runs"] if run.get("clock_setup"))
+    run["clock_setup"][mutation] = 23 if mutation == "game_minute" else "00" * 22
+    path.write_text(json.dumps(receipt))
+    entry["sha256"] = _lf_sha(path)
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc))
+    assert any("clock setup" in e and row["id"] in e for e in gate.new_gates_errors(tmp_path, artifact_kind="clean"))
+
+
 # DUO-WAVE-D: per-scenario fixture overrides, O-33 synth headers and the npc_trade key change.
 
 def _synth_proof(tmp_path, scenario, axes, headers, pydec):

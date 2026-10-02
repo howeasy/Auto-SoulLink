@@ -31,9 +31,14 @@ def test_retry_clock_is_prespecified_daytime_and_disclosed(crystal_boot, monkeyp
         boot, disclosure = gate.u1_clock_setup(crystal_boot, "crystal", now=1790952666)
     assert boot[:32768] == crystal_boot[:32768]
     assert disclosure["game_hour"] == 11
-    assert disclosure.get("game_minute", 0) == minute
+    assert disclosure.get("game_minute") == minute
     assert disclosure.get("game_second", 0) == 0
     assert boot[-22:].hex() == disclosure["new_hex"]
+    metadata = gate.u1_receipt_metadata(disclosure)
+    assert metadata["u1_attempt"] == int(attempt or "1")
+    assert metadata["clock_setup"] == disclosure
+    from tools.verify_gen2_release import _clock_setup_errors
+    assert _clock_setup_errors(ROOT, "crystal", {"fixture": "crystal_battle", **metadata}) == []
     # Independently decode the staged clock using the recorded save start time.
     dh, dl, hour, minute_rtc, second = boot[-14:-9]
     start_h, start_m, start_s = disclosure["start_time"]

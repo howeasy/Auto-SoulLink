@@ -1378,13 +1378,40 @@ W6_CLOCK_LEGS = {("silver", "u1")}
 
 def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
     """clock-setup-v1: the disclosure re-derives exactly from the committed fixture through
-    tools/gen2_synth_fixtures.day_clock (same hour and host time). That binds the base bytes, the start time,
+    tools/gen2_synth_fixtures.day_clock (same hour/minute/second and host time). That binds the base bytes, the start time,
     both hashes and the trailer, and it proves that only bytes 32768..32790 (the RTC trailer) differ."""
     import gen2_synth_fixtures as synth
     setup = leg.get("clock_setup")
     try:
+        if not isinstance(setup, dict):
+            raise ValueError("clock setup must be an object")
+        minute, second = setup.get("game_minute", 0), setup.get("game_second", 0)
+        for name, value, maximum in (("hour", setup["game_hour"], 23), ("minute", minute, 59), ("second", second, 59)):
+            if type(value) is not int or not 0 <= value <= maximum:
+                raise ValueError(f"invalid clock {name}")
+        if type(setup["host_time"]) is not int or setup["host_time"] < 0:
+            raise ValueError("invalid clock host time")
+        if "u1_attempt" in leg:
+            attempt = leg["u1_attempt"]
+            if (type(attempt) is not int or attempt not in (1, 2, 3) or "game_minute" not in setup
+                    or (setup["game_hour"], minute, second) != (11, (0, 23, 46)[attempt - 1], 0)):
+                raise ValueError("u1_attempt differs from the disclosed clock schedule")
         raw = (root / "tests/fixtures/gen2" / f"{leg['fixture']}.SaveRAM").read_bytes()
-        out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title)
+        if "poison_setup" in leg:
+            if title != "gold" or leg["fixture"] != "gold_battle_errand":
+                raise ValueError("poison setup is only the Gold errand recipe")
+            # Rebuild from THIS root's base bytes using the pinned synthesis rules,
+            # as day_clock does for its source layout; never trust disclosed edits.
+            raw, poison = synth.build(title, raw, synth.PSN_RECIPES["psn"][1], base_name=leg["fixture"])
+            if leg["poison_setup"] != poison:
+                raise ValueError("poison setup differs from its named recipe re-derivation")
+        out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title,
+                                    minute=minute, second=second)
+        # Historical zero-minute disclosures omit these keys. New U1 captures
+        # spell them out; both must describe exactly the same rebuilt bytes.
+        for key, value in (("game_minute", minute), ("game_second", second)):
+            if key in setup:
+                again[key] = value
     except (OSError, KeyError, TypeError, ValueError, AttributeError) as exc:
         return [f"clock setup does not re-derive from the committed fixture: {exc!r}"]
     if setup != again:
@@ -1668,6 +1695,13 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
                                else receipt_validate(kind, axes["title"], receipt))
                 if proven is None:
                     errors.append(f"{rid}: {why}")
+                if kind == "engine_sites":
+                    runs = receipt.get("runs", [receipt])
+                    runs = list(runs.values()) if isinstance(runs, dict) else runs
+                    for index, run in enumerate(runs):
+                        if "clock_setup" in run or "u1_attempt" in run:
+                            errors.extend(f"{rid}: run {index} clock setup: {error}"
+                                          for error in _clock_setup_errors(root, axes["title"], run))
             elif kind == "qualification":
                 errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt, artifact))
             elif kind == "panel_gate":

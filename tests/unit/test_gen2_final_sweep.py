@@ -175,6 +175,44 @@ def test_only_rng_stalls_earn_the_one_retry():
         assert not sweep.RNG_STALL.search(text), text
 
 
+@pytest.mark.parametrize("artifact", ["clean", "overlay"])
+def test_engine_cell_rotates_clock_attempts_and_records_them(tmp_path, monkeypatch, artifact):
+    monkeypatch.setenv("SLINK_GEN2_U1_ATTEMPT", "3")  # ambient state must not select the first attempt
+    monkeypatch.setattr(sweep, "git", lambda *_args: "")
+    calls, codes = [], iter([1, 1, 0, 0])
+    def popen(cmd, cwd, env, stdout, stderr):
+        code = next(codes)
+        calls.append((cmd[-1], dict(env)))
+        stdout.write("poison_faint did not fire\n" if code else "PASS\n")
+        stdout.flush()
+        return type("Process", (), {"wait": lambda self, timeout: code})()
+    monkeypatch.setattr(sweep.subprocess, "Popen", popen)
+    cell = {"id": "gate/engine_sites/crystal", "kind": "gate", "artifact_kind": artifact, "timeout": 30,
+            "commands": [["python", "tests/live/test_gen2_frame_align.py"], ["python", "tests/live/test_gen2_u1g.py"]]}
+    result = sweep.run_cell(cell, tmp_path / "lane", 1, tmp_path / "out", lambda: None)
+    assert result["ok"] and result["attempts"] == 3
+    assert result["u1_attempts"] == [1, 2, 3]
+    assert [env.get("SLINK_GEN2_U1_ATTEMPT") for _, env in calls] == ["1", "2", "3", None]
+    assert all(env["SLINK_GEN2_ARTIFACT"] == artifact for _, env in calls)
+
+
+@pytest.mark.parametrize("engine,reason,attempts", [(False, "poison_faint did not fire", 2),
+                                                   (True, "binding identity refused", 1)])
+def test_non_u1_retry_limit_and_non_rng_refusal_do_not_expand(tmp_path, monkeypatch, engine, reason, attempts):
+    monkeypatch.setattr(sweep, "git", lambda *_args: "")
+    calls = []
+    def popen(cmd, cwd, env, stdout, stderr):
+        calls.append(dict(env))
+        stdout.write(reason + "\n")
+        stdout.flush()
+        return type("Process", (), {"wait": lambda self, timeout: 1})()
+    monkeypatch.setattr(sweep.subprocess, "Popen", popen)
+    test = "test_gen2_frame_align.py" if engine else "test_gen2_write_windows.py"
+    cell = {"id": "gate/test", "kind": "gate", "timeout": 30, "commands": [["python", "tests/live/" + test]]}
+    result = sweep.run_cell(cell, tmp_path / "lane", 1, tmp_path / "out", lambda: None)
+    assert not result["ok"] and result["attempts"] == len(calls) == attempts
+
+
 def test_pin_gives_the_reconnect_initial_phase_the_committed_a_name(tmp_path):
     repo, out = tmp_path / "repo", tmp_path / "out"
     stem = "tests/fixtures/gen2/receipts/duo_reconnect_cc_"

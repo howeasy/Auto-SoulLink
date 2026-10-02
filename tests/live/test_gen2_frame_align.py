@@ -80,8 +80,19 @@ def u1_clock_setup(raw: bytes, title: str, *, now: int):
     attempt = os.environ.get("SLINK_GEN2_U1_ATTEMPT", "1")
     if attempt not in ("1", "2", "3"):
         raise ValueError("SLINK_GEN2_U1_ATTEMPT must be 1, 2 or 3")
-    return gen2_synth_fixtures.day_clock(raw, hour=U1_CLOCK[title], now=now, title=title,
-                                       minute=U1_RETRY_MINUTES[int(attempt) - 1])
+    minute = U1_RETRY_MINUTES[int(attempt) - 1]
+    boot, clock = gen2_synth_fixtures.day_clock(raw, hour=U1_CLOCK[title], now=now, title=title, minute=minute)
+    # New U1 evidence is explicit even for attempt 1; legacy day_clock callers
+    # retain their byte-identical omission of zero minutes/seconds.
+    clock.update(game_minute=minute, game_second=0)
+    return boot, clock
+
+
+def u1_receipt_metadata(clock: dict) -> dict:
+    """Bind the attempt to the clock that actually staged this capture."""
+    if clock.get("game_hour") != 11 or clock.get("game_second") != 0 or clock.get("game_minute") not in U1_RETRY_MINUTES:
+        raise ValueError("U1 clock is outside the prescribed attempt schedule")
+    return {"u1_attempt": U1_RETRY_MINUTES.index(clock["game_minute"]) + 1, "clock_setup": clock}
 
 
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
@@ -686,7 +697,7 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     if clock is not None:
-        receipt["clock_setup"] = clock
+        receipt.update(u1_receipt_metadata(clock))
     if psn_setup is not None:
         receipt["poison_setup"] = psn_setup
     receipt_path = live.receipt_file(f"{title}.engine_sites.json")   # overlay: receipts/overlay/, never a clean path

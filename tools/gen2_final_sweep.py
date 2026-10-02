@@ -16,7 +16,8 @@ Each lane is a detached worktree C:/Users/howar/AppData/Local/Temp/fs<k> at --sh
 (e2e_duo.BIZHAWK_PATH_LIMIT). .cache/gen2-build and .cache/gen2-fixtures are COPIED in, because the ROM must resolve
 inside the repo (run_gb_gate._gen2_plan). .cache/{pret,build-tools,downloads} are junctioned. Before every cell the
 lane must show no tracked change: a gate rewrites tracked receipts, and those are copied out and then reset.
-A cell is retried ONCE, and only on an RNG stall (RNG_STALL). On a timeout only the cell's own process tree is killed
+A cell is retried ONCE, and only on an RNG stall (RNG_STALL), except U1 engine-sites cells: up to three disclosed
+clock attempts (1/2/3), recorded in the summary. On a timeout only the cell's own process tree is killed
 (taskkill /T on its PID).
 
 Output in --out: receipts/<repo-relative path> uses the committed names (duo_<scenario>_<cc|gs|cg>_*, the gates' own
@@ -162,12 +163,17 @@ def lf_sha256(path):
     return hashlib.sha256(raw).hexdigest()
 
 
-def run(cmd, cwd, timeout, log, *, artifact_kind=None):
+def run(cmd, cwd, timeout, log, *, artifact_kind=None, u1_attempt=None):
     env = dict(os.environ, SLINK_LIVE="1", PYTHONUNBUFFERED="1")
+    env.pop("SLINK_GEN2_U1_ATTEMPT", None)  # caller's shell cannot silently select a sweep clock
+    if u1_attempt is not None:
+        env["SLINK_GEN2_U1_ATTEMPT"] = str(u1_attempt)
     if artifact_kind is not None:
         env["SLINK_GEN2_ARTIFACT"] = artifact_kind
     env.pop("SLINK_GEN2_NO_ATTEST", None)   # the sweep's gate/inspect_run cell is the one that attests
     with open(log, "a", encoding="utf-8") as handle:
+        if u1_attempt is not None:
+            handle.write(f"[sweep] SLINK_GEN2_U1_ATTEMPT={u1_attempt}\n")
         handle.write(f"$ {' '.join(cmd)}\n")
         handle.flush()
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=handle, stderr=subprocess.STDOUT)
@@ -294,7 +300,11 @@ def pin(out, root=REPO):
     return sorted(rel for rel in pins if rel not in named and rel.endswith((".txt", ".json")))
 
 
-def run_commands(commands, lane, timeout, log, *, artifact_kind=None):
+def is_u1_command(command):
+    return any(str(arg).replace("\\", "/").rsplit("/", 1)[-1] == "test_gen2_frame_align.py" for arg in command)
+
+
+def run_commands(commands, lane, timeout, log, *, artifact_kind=None, u1_attempt=None):
     """Run a cell's commands in order and stop at the first failure. Every gate result file a command wrote
     (patch/build/*_result.txt) is kept next to the log as <log stem>.cmd<i>.<name>. U1G reuses
     gen2_frame_align_result.txt, so without this copy a failing frame_align trace is overwritten."""
@@ -305,11 +315,14 @@ def run_commands(commands, lane, timeout, log, *, artifact_kind=None):
     codes = []
     for index, cmd in enumerate(commands, 1):
         before = stamps()
-        codes.append(run(cmd, lane, timeout, log, artifact_kind=artifact_kind) if artifact_kind is not None
-                     else run(cmd, lane, timeout, log))
+        options = {"artifact_kind": artifact_kind} if artifact_kind is not None else {}
+        if u1_attempt is not None and is_u1_command(cmd):
+            options["u1_attempt"] = u1_attempt
+        codes.append(run(cmd, lane, timeout, log, **options))
         for result, stamp in stamps().items():
             if before.get(result) != stamp:
-                shutil.copyfile(result, log.with_name(f"{log.stem}.cmd{index}.{result.name}"))
+                attempt_suffix = f".u1-attempt{u1_attempt}" if u1_attempt is not None else ""
+                shutil.copyfile(result, log.with_name(f"{log.stem}{attempt_suffix}.cmd{index}.{result.name}"))
         if codes[-1] != 0:
             break
     return codes
@@ -320,8 +333,12 @@ def run_cell(cell, lane, n, out, stagger):
     log = out / "logs" / (cell["id"].replace("/", "__") + ".log")
     log.parent.mkdir(parents=True, exist_ok=True)
     result = {"id": cell["id"], "lane": lane.name, "attempts": 0, "ok": False}
+    u1 = cell["kind"] == "gate" and any(is_u1_command(cmd) for cmd in cell["commands"])
+    if u1:
+        result["u1_attempts"] = []
+    last_attempt = 3 if u1 else 2
     started = time.time()
-    for attempt in (1, 2):
+    for attempt in range(1, last_attempt + 1):
         dirty = tracked_changes(lane)
         if dirty:
             result["reason"] = f"lane not clean: {dirty[:3]}"
@@ -329,7 +346,11 @@ def run_cell(cell, lane, n, out, stagger):
         stagger()
         result["attempts"] = attempt
         commands = [duo_command(cell, f"{lane_id}{attempt}")] if cell["kind"] == "duo" else cell["commands"]
-        codes = run_commands(commands, lane, cell["timeout"], log, artifact_kind=cell.get("artifact_kind", "clean"))
+        options = {"artifact_kind": cell.get("artifact_kind", "clean")}
+        if u1:
+            result["u1_attempts"].append(attempt)
+            options["u1_attempt"] = attempt
+        codes = run_commands(commands, lane, cell["timeout"], log, **options)
         result["ok"] = all(code == 0 for code in codes)
         if cell["kind"] == "duo":
             result["receipts"] = collect_duo(cell, f"{lane_id}{attempt}", lane, out)
@@ -337,7 +358,7 @@ def run_cell(cell, lane, n, out, stagger):
             result["receipts"] = collect_gate(lane, out)
         text = log.read_text(encoding="utf-8", errors="replace")
         result["reason"] = "PASS" if result["ok"] else f"exit {codes}"
-        if result["ok"] or attempt == 2 or not RNG_STALL.search(text.split(f"$ {' '.join(commands[0])}")[-1]):
+        if result["ok"] or attempt == last_attempt or not RNG_STALL.search(text.split(f"$ {' '.join(commands[0])}")[-1]):
             break
         result["retried"] = RNG_STALL.search(text).group(0)
     result["seconds"] = round(time.time() - started)
