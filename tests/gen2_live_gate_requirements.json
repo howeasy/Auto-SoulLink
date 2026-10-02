@@ -901,7 +901,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_town.qualification.json",
+              "sha256": "93ffee2c43dd9fe7449475597bb9e3812aec8c66db2479f7b818588195d19e1a"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_battle.overlay",
@@ -925,7 +934,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle.qualification.json",
+              "sha256": "ff1f4805c9c5571430640f5c99ed308d3b28b0914acc1ac00681ea2f3270299d"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_town_ot2.overlay",
@@ -939,7 +957,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_town_ot2.qualification.json",
+              "sha256": "d8da1330b851cedbfc8ba88e600210346aa32f2fb5d0a87eb474e0c11327773f"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_battle_ot2.overlay",
@@ -953,7 +980,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_ot2.qualification.json",
+              "sha256": "44e310a8fc2d04bb1abb4c3265991045f9e293a40d9f2eebb2e11ac22e277ed9"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.gold_town.overlay",
@@ -977,7 +1013,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold_town.qualification.json",
+              "sha256": "78d66da68e2765325855e775fdfb0fb2228643939d690ee8cb58a0553815a143"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.gold_battle.overlay",
@@ -1001,7 +1046,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold_battle.qualification.json",
+              "sha256": "8012a36b9cf9ee1cb8472cf4ef313fd61f67d0e7f3db6fafc57cc043b102621b"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.gold_battle_ot2.overlay",
@@ -1015,7 +1069,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold_battle_ot2.qualification.json",
+              "sha256": "232700307b6bf7a1acad9d8bf933cedb0e0bbc4cc07ecf8a98b79e92e9787842"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.gold_battle_errand.overlay",
@@ -1029,7 +1092,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold_battle_errand.qualification.json",
+              "sha256": "6a630b37e1448adc14a66be42b67eb5b5db32c65667302e916f513f9f9261d1c"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.silver_battle_errand.overlay",
@@ -1043,7 +1115,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver_battle_errand.qualification.json",
+              "sha256": "8298fc1fcc09520798cbcc866f5419c5aba873afb8d00912cd68204ba345d46f"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_battle_ot2_errand.overlay",
@@ -1057,7 +1138,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_ot2_errand.qualification.json",
+              "sha256": "6bae6f3648c0ec816e771c1db8113976e82895fb9d6732f7bce4c4a241a1b7aa"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_battle_errand.overlay",
@@ -1071,7 +1161,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_errand.qualification.json",
+              "sha256": "0cfd13920771fef04dce400044c15c5e7ddd7d24ed7ebd8ddc10e060e46673b7"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.silver_town.overlay",
@@ -1095,7 +1194,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver_town.qualification.json",
+              "sha256": "3e97ee000298cda9675ea823cc46b7f82e86bb51b3962f26bad6bd3fcb4d411b"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.silver_battle.overlay",
@@ -1119,7 +1227,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver_battle.qualification.json",
+              "sha256": "9ff773f66fc1792c58950db889f440f2eb7835a02b71c90f3ea68e52b7160306"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.inspect-run.overlay",

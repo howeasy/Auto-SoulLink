@@ -1866,7 +1866,7 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
                 gate = row.get("runtime_gate") or {}
                 grant = _published_grant(root, provenance)
                 if (gate.get("id") != "G4" or gate.get("state") != "ADMITTED"
-                        or gate.get("grant_fingerprint") != grant or row.get("grant_fingerprint") != grant):
+                        or gate.get("grant_fingerprint") != grant):  # the grant lives only in runtime_gate (gen_gen2_admission.overlay_row)
                     errors.append(f"{title}_overlay: runtime G4 grant invalid")
         except (OSError, KeyError, ValueError, TypeError) as exc:
             errors.append(f"{title}_overlay: binding/grant unavailable: {exc}")

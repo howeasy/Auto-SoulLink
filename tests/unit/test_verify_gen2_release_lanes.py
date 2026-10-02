@@ -2356,13 +2356,16 @@ def _errors_for(tmp_path, title, shipped):
 @pytest.mark.parametrize("fields,fragment", [
     ({"selection": "FUTURE"}, "admitted-artifact row is not ADMITTED"),
     ({"status": "BUILT"}, "admitted-artifact row is not ADMITTED"),
-    ({"grant_fingerprint": "0" * 64}, "runtime G4 grant invalid"),
+    ({"runtime_gate": {"id": "G4", "state": "SIGNED", "grant_fingerprint": "PUBLISHED"}}, "runtime G4 grant invalid"),
     ({"runtime_gate": {"id": "G4", "state": "ADMITTED", "grant_fingerprint": "0" * 64}},
      "runtime G4 grant invalid"),
     ({"binding_sha256": "0" * 64}, "binding pin differs"),
 ])
 def test_each_g4_admission_term_refuses_on_its_own(tmp_path, fields, fragment):
     shipped = _packet_tree(tmp_path)
+    if (fields.get("runtime_gate") or {}).get("grant_fingerprint") == "PUBLISHED":   # only the state is wrong
+        fields = {"runtime_gate": {**fields["runtime_gate"], "grant_fingerprint": gate._published_grant(
+            tmp_path, json.loads((tmp_path / "data/gen2/overlay_provenance.json").read_text()))}}
     _mutate_row(tmp_path, "crystal", **fields)
     errors = _errors_for(tmp_path, "crystal", shipped)
     assert any(fragment in e for e in errors), (fields, errors)
@@ -2859,3 +2862,9 @@ def test_the_captured_overlay_inspect_attestation_binds_the_overlay_identity():
     assert gate._inspect_run_row_errors(receipt, "overlay", REPO) == []
     receipt["artifacts"]["gold"]["binding_sha256"] = "0" * 64
     assert any("gold: wrong executed overlay identity" in e for e in gate._inspect_run_row_errors(receipt, "overlay", REPO))
+
+
+def test_the_committed_activated_rows_pass_the_g4_packet():
+    # the real generator rows carry the grant only inside runtime_gate; the verifier also demanded a
+    # top-level row.grant_fingerprint that no producer writes, so every activated row read "invalid" (ROMPatch)
+    assert gate.g4_packet_errors(REPO) == []

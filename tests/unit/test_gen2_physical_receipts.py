@@ -121,21 +121,22 @@ def _view(title, artifact="clean"):
     return {**identity, "sites": binding["sites"], "checkpoint": binding["checkpoint"]}
 
 
-def _with_view(args, view):
-    """The validator's trailing optional view argument (nil = the clean pack, exactly as before)."""
-    return args if view is None else [*args, _module(SIGNALS)[0].table_from(view, recursive=True)]
+def _with_view(args, view, lua):
+    """The validator's trailing optional view argument (nil = the clean pack, exactly as before), built in the
+    validator's OWN runtime: signals and write_safety load in separate Lua states, which cannot share tables."""
+    return args if view is None else [*args, lua.table_from(view, recursive=True)]
 
 
 def _proven_sites(title, receipt, view=None):
     lua, S = _module(SIGNALS)
     return _unwrap(S.qualified_sites(*_with_view([title, _table(SIGNALS, _pack(title, "engine_signals")),
-                                                  lua.table_from(receipt, recursive=True)], view)))
+                                                  lua.table_from(receipt, recursive=True)], view, lua)))
 
 
 def _write_scope(title, receipt, view=None):
     lua, M = _module(WRITE_SAFETY)
     scope, why = _unwrap(M.qualified(*_with_view([_table(WRITE_SAFETY, _pack(title, "write_checkpoint")), title,
-                                                  lua.table_from(receipt, recursive=True)], view)))
+                                                  lua.table_from(receipt, recursive=True)], view, lua)))
     if scope is None:
         return None, why
     return {"kinds": sorted(scope.kinds.keys()), "covered": list(scope.covered.values()),
@@ -170,7 +171,7 @@ def _bind(kind, receipt, view=None, artifact="clean"):
         reports = {receipt["runs"][mode]["fixture"]: _receipt(_qualification(receipt["runs"][mode]["fixture"], artifact))
                    for mode in ("town", "battle")}
     return _unwrap(module.bind_fixture_qualification(*_with_view(
-        [lua.table_from(receipt, recursive=True), lua.table_from(reports, recursive=True)], view)))
+        [lua.table_from(receipt, recursive=True), lua.table_from(reports, recursive=True)], view, lua)))
 
 
 def validate(kind, title, receipt, artifact="clean"):

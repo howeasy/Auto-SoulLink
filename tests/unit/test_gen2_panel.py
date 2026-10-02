@@ -250,7 +250,7 @@ def test_overlay_block_equals_the_pinned_slink_sym_and_admission_row(title):
     out = PROVENANCE["outputs"][ARTIFACT[title]]
     row = next(r for r in json.loads((REPO / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
                if r["kind"] == "overlay")
-    assert row["status"] == "BUILT" and row["selection"] == "FUTURE"
+    assert row["status"] == "ADMITTED" and row["selection"] == "SELECTED"   # activated 2026-10-02
     assert ov["rom_sha1"] == row["sha1"] == out["sha1"] != ov["base_sha1"]
     assert ov["md5"] == row["md5"] == out["md5"]
 
