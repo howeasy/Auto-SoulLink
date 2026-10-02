@@ -1,0 +1,90 @@
+{
+  "card": "gen4-companion-C0",
+  "date": "2026-10-02",
+  "host": "hgbox (ssh alias; Ubuntu 24.04 x86_64, kernel 7.0.0-34-generic, 16 cores)",
+  "build_dir_on_host": "~/git/pokeheartgold-pin",
+  "pret_commit": "ad7a3afa0cfc144fe6837c410cb95b2727217f54",
+  "pret_commit_matches_lock": true,
+  "lock_file": "data/gen4_sources.lock.json (pokeheartgold_citation)",
+  "toolchain": {
+    "mwccarm_archive": {
+      "url": "https://github.com/pret/pokeheartgold/raw/workflows/assets/mwccarm.zip",
+      "sha256": "dc386e37b2176e960954a733de928337d9b7e7620b9e94228008c31774339ace",
+      "bytes": 51684965,
+      "license_dat": "tools/mwccarm/license.dat shipped inside the zip; Makefile exports LM_LICENSE_FILE to it; no interactive step was needed"
+    },
+    "mwccarm_used": "tools/mwccarm/2.0/sp2p2/mwccarm.exe (NitroSDK lib objects use 2.0/sp2p3 per common.mk:176)",
+    "mwccarm_version_string": "Metrowerks C/C++ for Embedded ARM, Copyright (c) 2007 Freescale Semiconductor; Version 3.0 build 137 (build 137); Runtime Built: Jan 26 2008 20:45:07",
+    "mwccarm_exe_sha256": "b1da5a2f191d1cdea3fd078cedc9c504de46609642ae8e44c015014cef5419a7",
+    "mwldarm_exe_sha256": "a41aea5f282041e16dcd6c3570328009cb1eefb32b0cd05f60a8fdb365aec47c",
+    "nitro_sdk_archive": {
+      "name": "NitroSDK-3_2-060901.7z",
+      "url": "https://github.com/pret/pokeheartgold/raw/workflows/assets/NitroSDK-3_2-060901.7z",
+      "sha256": "0ee935e34237cb1954e657083cd80a31ec9de1aeddd9468cceef684cac75b491",
+      "bytes": 31281542,
+      "note": "the pinned INSTALL.md names NitroSDK 4.2; the devcontainer script (used here) names 3.2. The 3.2 archive produced byte-identical ROMs, so no variant was tried. Staged: tools/bin, sub/ARM7-TS.lcf.template, ARM9-TS.lcf.template, mwldarm.response.template"
+    },
+    "wine": "wine-9.0 (Ubuntu 9.0~repack-4build3); private prefix WINEPREFIX=~/git/pokeheartgold-pin/.wineprefix (1.3G), WINEDEBUG=-all",
+    "arm_none_eabi": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009; GNU binutils 2.42 (readelf, nm)",
+    "host_cxx": "g++ 13.3.0 (Ubuntu 24.04); tools/msgenc vendors pugixml, so libpugixml-dev was NOT needed"
+  },
+  "builds": {
+    "HEARTGOLD": {
+      "command": "cd ~/git/pokeheartgold-pin && WINEPREFIX=$PWD/.wineprefix WINEDEBUG=-all make -j16",
+      "wall_time_s": 161.702,
+      "wall_time_human": "2m41.7s (cold: first make, includes building host tools and cold wine prefix)",
+      "rom": "build/heartgold.us/pokeheartgold.us.nds",
+      "rom_sha1": "4fcded0e2713dc03929845de631d0932ea2b5a37",
+      "pin_sha1": "4fcded0e2713dc03929845de631d0932ea2b5a37",
+      "makefile_sha1_check": "OK",
+      "result": "PASS",
+      "main_elf_sha256": "4e7f81b1b6bc0a27275f5a53c49893808262bedd7b99b849a2b67f5e9f9a773b"
+    },
+    "SOULSILVER": {
+      "command": "cd ~/git/pokeheartgold-pin && WINEPREFIX=$PWD/.wineprefix WINEDEBUG=-all make -j16 soulsilver",
+      "wall_time_s": 61.903,
+      "wall_time_human": "1m01.9s (warm: host tools and wine prefix already built)",
+      "rom": "build/soulsilver.us/pokesoulsilver.us.nds",
+      "rom_sha1": "f8dc38ea20c17541a43b58c5e6d18c1732c7e582",
+      "pin_sha1": "f8dc38ea20c17541a43b58c5e6d18c1732c7e582",
+      "makefile_sha1_check": "OK",
+      "result": "PASS",
+      "main_elf_sha256": "17ea3bf2659d1e24d5f4450e6ac2159999569fa38659afa2038ff787643eb4a8"
+    }
+  },
+  "cache": {
+    "dir": "C:/slink-cache/gen4-pret/",
+    "heartgold": {
+      "main_elf": "C:/slink-cache/gen4-pret/heartgold/main.elf",
+      "xmap": "C:/slink-cache/gen4-pret/heartgold/main.elf.xMAP",
+      "readelf_S": "C:/slink-cache/gen4-pret/heartgold/readelf_S.txt",
+      "nm_n": "C:/slink-cache/gen4-pret/heartgold/nm_n.txt",
+      "gap_analysis": "C:/slink-cache/gen4-pret/heartgold/gap_analysis.txt"
+    },
+    "soulsilver": {
+      "main_elf": "C:/slink-cache/gen4-pret/soulsilver/main.elf",
+      "xmap": "C:/slink-cache/gen4-pret/soulsilver/main.elf.xMAP",
+      "readelf_S": "C:/slink-cache/gen4-pret/soulsilver/readelf_S.txt",
+      "nm_n": "C:/slink-cache/gen4-pret/soulsilver/nm_n.txt",
+      "gap_analysis": "C:/slink-cache/gen4-pret/soulsilver/gap_analysis.txt"
+    },
+    "gap_script": "C:/slink-cache/gen4-pret/xmap_gap_analysis.py"
+  },
+  "findings": {
+    "elf_note": "mwld main.elf section headers are zero-size markers for the code/data sections (readelf -S shows 406 headers, almost all size 0; only .symtab/.strtab/.debug_* carry bytes). Layout truth comes from the symbols (nm -n) and the linker map main.elf.xMAP, which carries per-object .data/.bss section extents.",
+    "discarded_bss": {
+      "object": "asm/battle_arcade_game_board_data.o, section .bss, size 0x20 (object-file readelf -S; asm/battle_arcade_game_board_data.s:95-98 '.space 0x20')",
+      "address": "none: the linker discarded it (xMAP '# Unreferenced symbols: .bss (battle_arcade_game_board_data.o)', xMAP line 3); no address in main.elf or the xMAP",
+      "belongs_to": "OVY_84 (main.lsf:1062), an overlay, not the static ARM9 image; its .rodata sits at 0x0223F900 size 0x108 in the same object"
+    },
+    "static_image_end": {
+      "SDK_STATIC_END": "0x02111860 (text+data)",
+      "SDK_STATIC_BSS_END": "0x021E5900 (static bss end, same in HG and SS; equals the OVY_0/field overlay load base)",
+      "SDK_SECTION_ARENA_START": "0x0226EC40 (linker arena.MAIN origin, AFTER the largest main-group overlay, OVY_12 end; same in HG and SS)",
+      "SDK_SECTION_ARENA_EX_START": "0x023E0000",
+      "SDK_SECTION_ARENA_DTCM_START": "0x027E0080",
+      "SDK_SECTION_ARENA_ITCM_START": "0x01FF8620"
+    },
+    "gap_occupancy": "all 15 symbol-only gaps of >=64 B reproduce (HG and SS identical); every one is fully covered by object .data/.bss sections of named objects whose labels have size 0 (nnsys.o, wifi.o, libVCT.o, nitro.o, unk_*.o); 0 gaps are truly empty. Uncovered remainders are alignment padding only (0-0x10 B). See gap_analysis.txt"
+  }
+}

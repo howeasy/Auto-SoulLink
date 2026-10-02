@@ -129,3 +129,21 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   - Repointing #486 does not collide with hge's table edit.
   - Opcode-486 USE in the compiled `scr_seq` NARCs is still unproven (OMP card).
 - **Overlay 1 does differ** (77 bytes: Rock Smash item drop, move tutor, the Togepi egg, object-event gfx). None of it is a companion site.
+
+## C0 result and the mailbox consequence (Sonnet C0 card; coordinator re-hashed both ROMs on hgbox, 2026-10-02)
+
+- **The pinned pret `ad7a3afa` rebuilds byte-identical.**
+  - HG `4fcded0e`, SS `f8dc38ea`.
+  - Toolchain: mwccarm 2.0/sp2p2 + NitroSDK **3.2** (the devcontainer archive; INSTALL.md's 4.2 is not needed) under wine 9.0, in a private prefix.
+  - Wall time 2m42 cold / 1m02 warm.
+  - Provenance is in `data/gen4/pret_build_provenance.json`. The ELF, xMAP, nm and gap analyses are in `C:/slink-cache/gen4-pret/{heartgold,soulsilver}/`.
+- **There is no free static RAM.**
+  - All 15 "gaps" are fully occupied by named objects with size-0 labels (SDK wifi/VCT/nnsys/gx, MSL, `unk_*`). Only 0-0x10 B of alignment pad is left.
+  - The discarded `.bss` belongs to overlay OVY_84 (0x20 B) and is not static.
+  - `SDK_STATIC_BSS_END` = 0x021E5900 (the overlay load base). The linker `SDK_SECTION_ARENA_START` = 0x0226EC40.
+  - **The "proven-free static span" mailbox route is dead.**
+- **C1 must allocate the mailbox; it cannot find one.** Adding a static `.bss` symbol in the HG/SS rebuild would move 0x021E5900, and with it every overlay address and every pinned hook site. So the options for C1 are:
+  - (a) the ITCM/DTCM arena tails (`SDK_SECTION_ARENA_ITCM_START` 0x01FF8620, `_DTCM_START` 0x027E0080), if a live write-watch proves them unused;
+  - (b) a main-arena allocation at companion init, found once per boot by a cookie scan (the Gen 2 cookie + counter pattern);
+  - (c) a companion-overlay `.bss` reachable by a fixed pointer.
+  - The pick goes to the C1 card, decided by measurement.
