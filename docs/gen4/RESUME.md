@@ -31,7 +31,7 @@
 3. n: PC withdraw leg (live Right+A trial, G2_PRODUCER_PLAN §6b) + a queued-event-at-close witness.
 4. PERF on a quiet machine.
 5. C1 live mailbox canary (4 KiB ITCM span), then C2.
-6. Owner questions: the FAILURE sound; whether C5 keeps a box arm.
+6. Owner rulings (2026-10-02 late): the trade is **party-only** (no box arm); the FAILURE sound is **pending** (deferred, not blocking).
 
 ## Checkpoint 9 (2026-10-02, owner: "Do the Gen 4 adoption cut now") - shared NDS adoption cut DONE (SOURCE/MODEL)
 

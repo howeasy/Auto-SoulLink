@@ -256,3 +256,8 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - The cookie answers "is this boot"; the generation answers "which boot". Both are kept.
 - **No GB byte fields are lifted.** Sound is `SLINK_OP_PLAY_SE`; the panel is `SlinkInfoV2`; the trade is `SlinkRecordStageV1` with `SLINK_BIND_GEN4_PK4`, raw-encrypted, `COMMIT_MUTATES_INPUT`.
 - **Single-writer rule per field** (OMP F6 table): the ROM owns signature/version/caps/status/witness/boot/liveness; the host owns opcode/args/stage/info request fields. This goes into the C2 card as the review checklist.
+
+## Owner rulings (2026-10-02 late; record: `docs/gen4/reviews/DECISIONS_2026-10-02_companion.md`)
+- **The trade is party-only** (slot overwrite). The box arm is dropped; this closes the "whether C5 keeps a box arm" question.
+- **The FAILURE sound is pending** (owner deferral). It is not decided and must not be filled with a guess.
+
