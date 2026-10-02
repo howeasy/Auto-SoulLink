@@ -160,8 +160,9 @@ GENS = {
             # pureRGB (P3b-e): the built cartridges take the same treatment as the patched builds
             # — BizHawk has no gamedb entry for them, so the SaveRAM name is filename-derived and
             # the ROM is staged from the pinned lock (g1.PURERGB_KEYS), not from a repo-root dump.
-            # The `_cold` rows are what the fixture builder drives: a previous build's save must
-            # not be seeded into the next one. The bare keys boot FROM a built pure fixture.
+            # A `_cold` row boots with no save, so a previous build's save is not seeded into the
+            # next one; the fixture builder drives the `*_overlay_cold` rows below (the harness
+            # refuses these clean builds). The bare keys boot FROM a built pure fixture.
             "purered": ("purered", None, "gen1 purered.SaveRAM"),
             "pureblue": ("pureblue", None, "gen1 pureblue.SaveRAM"),
             "puregreen": ("puregreen", None, "gen1 puregreen.SaveRAM"),

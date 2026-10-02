@@ -63,8 +63,54 @@ def test_the_fixture_path_is_the_one_the_fixture_builder_writes():
 
 def test_the_fixture_builder_knows_the_pure_titles():
     for key in PURE:
-        assert key in fixtures.SAVERAM_NAME and key in fixtures.DUMP
+        assert key in fixtures.COLD_KEY and key in fixtures.DUMP
         assert fixtures.DUMP[key] == f"patch/build/gen1_{key}.gbc"
+
+
+@pytest.mark.parametrize("title", sorted(fixtures.COLD_KEY))
+def test_the_fixture_builder_never_boots_a_clean_companion_title(title, monkeypatch, tmp_path):
+    """The harness refuses a clean Red/Blue/pureRGB (2026-10-02), so the builder boots each such
+    title's companion cold key, reads the companion's SaveRAM name and qualifies the save against
+    the companion ROM. Yellow has no companion and stays clean. No emulator: run_gate is faked."""
+    import run_gb_gate
+
+    key = fixtures.COLD_KEY[title]
+    assert key in run_gb_gate.PATCHED
+    assert title == "yellow" or key != f"{title}_cold"
+    _, rom_rel, save_name = run_gb_gate.PATCHED[key]
+    monkeypatch.setattr(g1, "staged_rom", lambda k: f"patch/build/gen1_{k}.staged")
+    monkeypatch.setattr(g1, "SAVERAM_DIR", str(tmp_path / "SaveRAM"))
+    monkeypatch.setattr(fixtures, "REPO", str(tmp_path))
+    booted = tmp_path / (rom_rel or f"patch/build/gen1_{key.removesuffix('_cold')}.staged")
+    clean = tmp_path / fixtures.DUMP[title]
+    for path, body in ((clean, b"clean rom"), (booted, b"booted rom")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    (tmp_path / "SaveRAM").mkdir()
+    (tmp_path / "tests" / "fixtures" / "gen1").mkdir(parents=True)
+    sram = bytes(range(256)) * 128
+    # A clean-named save the builder must NOT pick up (the old name for the clean cartridge).
+    (tmp_path / "SaveRAM" / run_gb_gate.PATCHED[f"{title}_cold"][2]).write_bytes(b"\xff" * 0x8000)
+    seen = {}
+
+    def fake_gate(script, rom_key, target, timeout):
+        seen["key"] = rom_key
+        (tmp_path / "SaveRAM" / save_name).write_bytes(sram)
+        return True, "", "terminals reached"
+
+    monkeypatch.setattr(run_gb_gate, "run_gate", fake_gate)
+    monkeypatch.setattr(fixtures, "qualify", lambda s, rom, notes=None: seen.update(sram=s, rom=rom) or [])
+    monkeypatch.setattr(fixtures, "saved_ot", lambda s, t: 0x1234)
+    monkeypatch.setattr(fixtures.codec, "decode_party", lambda block: [])
+    for name in ("SLINK_SCRIPT_CHAIN", "SLINK_SCRIPT_PLAYER", "SLINK_SCRIPT_FLUSH", "SLINK_SCRIPT_TITLE_IDLE"):
+        monkeypatch.setenv(name, "")
+    monkeypatch.setattr(sys, "argv", ["gen1_fixtures.py", title, "town"])
+
+    assert fixtures.main() == 0
+    assert seen["key"] == key
+    assert seen["sram"] == sram, "the builder read a save other than the one the cartridge wrote"
+    assert seen["rom"] == b"booted rom", "the save was qualified against a ROM it was not built on"
+    assert (tmp_path / "tests" / "fixtures" / "gen1" / f"{title}_town.SaveRAM").read_bytes() == sram
 
 
 def test_staging_keeps_the_gbc_extension_and_the_key_in_the_name(monkeypatch, tmp_path):
