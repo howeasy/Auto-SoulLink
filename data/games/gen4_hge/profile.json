@@ -81,6 +81,7 @@
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools), caveat",
     "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
@@ -3314,6 +3315,63 @@
         },
         "probe_wrong_write_offset": 110,
         "probe_wrong_write_offset_evidence": "SOURCE (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54): gSystem+0x6E is compiler padding between softResetDisabled (u8 @0x6C) and unk70 (BOOL @0x70) (include/system.h:50-58). No C writer exists: src/system.c, src/main.c, src/intro_movie.c, src/title_screen.c write only named fields, nothing takes &gSystem or clears the struct. A windowed scan of all 520 `ldr rN,=gSystem` sites in asm/*.s found no access (read or write) at any gSystem offset >= 0x60 except simulatedInputs @0x5C. The scan is heuristic, not an exhaustive dataflow proof; the .bss byte is zero from boot. hg-engine adds no gSystem write (src/save.c:759 is commented out).",
+        "rtc": {
+          "address": 35459144,
+          "async_date_off": 44,
+          "async_time_off": 60,
+          "caveat": "date/time are a CACHE of the host RTC: the game re-reads the RTC every >10 frames into the async pair and the callback overwrites date/time, so a pin written only to date/time is clobbered within ~11 frames; pin the host RTC or rewrite each frame. The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 (photo state), else `time`; the date has no frozen override. Refresh loop: src/gf_rtc.c:45-50",
+          "date_fields": {
+            "day": 8,
+            "month": 4,
+            "week": 12,
+            "year": 0
+          },
+          "date_off": 16,
+          "date_size": 16,
+          "evidence": "SOURCE + FILE",
+          "file_checks": {
+            "GF_RTC_CopyDate": {
+              "address": 33638272,
+              "image": "arm9",
+              "pool_offsets": [
+                0,
+                16
+              ],
+              "proves": "date_off"
+            },
+            "GF_RTC_CopyTime": {
+              "address": 33638220,
+              "image": "arm9",
+              "pool_offsets": [
+                0,
+                32,
+                76
+              ],
+              "proves": "time_off"
+            }
+          },
+          "frozen_state_off": 72,
+          "frozen_time_off": 76,
+          "hge_checks": {
+            "identical_to_vanilla": [
+              "GF_RTC_CopyDate",
+              "GF_RTC_CopyTime",
+              "GF_RTC_GetDateTime_Callback",
+              "GF_RTC_UpdateOnFrame"
+            ],
+            "source": "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/rtc.h:33, include/rtc.h:40 (hg-engine declares the same RTCDate/RTCTime and defines no work struct of its own; the symbol keeps its vanilla address and 88-byte size)"
+          },
+          "source": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/gf_rtc.c:7-20 (GFRtcWork: 4 words, then date src/gf_rtc.c:12, time src/gf_rtc.c:13, date_async, time_async, frozenTimeState, frozenTime), src/gf_rtc.c:22; RTCDate lib/include/nitro/rtc/ARM9/api.h:29 / RTCTime lib/include/nitro/rtc/ARM9/api.h:36; FILE: computed size 0x58 equals the xMAP sRTCWork size, the readers' literal pools address +0x10 and +0x20",
+          "symbol": "sRTCWork",
+          "time_fields": {
+            "hour": 0,
+            "minute": 4,
+            "second": 8
+          },
+          "time_off": 32,
+          "time_size": 12,
+          "work_size": 88
+        },
         "save": {
           "array_addr": "SaveData + dynamic_region_off + u32[SaveData + array_headers_off + id*array_header_size + 8]",
           "array_header_count": 42,

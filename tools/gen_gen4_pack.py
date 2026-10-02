@@ -382,6 +382,7 @@ PT_SYMBOLS = {
     "overlay_load": "Overlay_LoadByID", "overlay_unload": "Overlay_UnloadByID",
     "party_add_mon": "Party_AddPokemon", "irq_wait": "OS_WaitIrq", "idle_halt": "OS_Halt",
     "faint_cmd": "BtlCmd_TryFaintMon", "field_system_ptr": "sFieldSystem", "save_data_get": "SaveData_Ptr",
+    "rtc_work": "sRTCState",
 }
 
 
@@ -2106,6 +2107,103 @@ def lock_provenance(inputs: Inputs) -> dict:
     return {"path": "data/gen4_sources.lock.json", "sha256": hashlib.sha256(inputs.lock.read_bytes()).hexdigest()}
 
 
+# --------------------------------------------------------------------------------------------
+# profile.rtc: the game's cached RTC work struct (card C1-2e)
+# --------------------------------------------------------------------------------------------
+# NitroSDK RTCDate = {u32 year, month, day; RTCWeek week} (16 bytes), RTCTime = {u32 hour, minute, second} (12). The work struct caches
+# the host RTC: every >10 frames it re-reads into date_async/time_async and the callback copies them into date/time.
+S_RTC_API_DATE = _c("lib/include/nitro/rtc/ARM9/api.h", "29", "typedef struct RTCDate")
+S_RTC_API_TIME = _c("lib/include/nitro/rtc/ARM9/api.h", "36", "typedef struct RTCTime")
+S_RTC_WORK = _c("src/gf_rtc.c", "7-20", "struct GFRtcWork {")
+S_RTC_WORK_DATE, S_RTC_WORK_TIME = _c("src/gf_rtc.c", "12", "RTCDate date;"), _c("src/gf_rtc.c", "13", "RTCTime time;")
+S_RTC_WORK_SYM = _c("src/gf_rtc.c", "22", "struct GFRtcWork sRTCWork;")
+S_RTC_UPDATE = _c("src/gf_rtc.c", "45-50", "GF_RTC_UpdateOnFrame")
+H_RTC_DATE = _ch("include/rtc.h", "33", "struct RTCDate {")
+H_RTC_TIME = _ch("include/rtc.h", "40", "struct RTCTime {")
+P_RTC_STATE = _cp("src/rtc.c", "9-18", "typedef struct {")
+P_RTC_STATE_DATE, P_RTC_STATE_TIME = _cp("src/rtc.c", "14", "RTCDate date;"), _cp("src/rtc.c", "15", "RTCTime time;")
+P_RTC_STATE_SYM = _cp("src/rtc.c", "23", "static RTCState sRTCState;")
+P_RTC_UPDATE = _cp("src/rtc.c", "35-47", "void UpdateRTC(void)")
+RTC_DATE_SIZE, RTC_TIME_SIZE = 16, 12
+# (field, size) in declaration order, enums and BOOL are 4 bytes; offsets and the total are derived, then checked against the xMAP size.
+HG_RTC_FIELDS = (("getDateTimeSuccess", 4), ("getDateTimeLock", 4), ("getDateTimeSleep", 4), ("getDateTimeErrorCode", 4),
+                 ("date", RTC_DATE_SIZE), ("time", RTC_TIME_SIZE), ("date_async", RTC_DATE_SIZE), ("time_async", RTC_TIME_SIZE),
+                 ("frozenTimeState", 4), ("frozenTime", RTC_TIME_SIZE))
+PT_RTC_FIELDS = HG_RTC_FIELDS[:8]  # RTCState: valid, readInProgress, framesSinceRead, status, date, time, tempDate, tempTime
+RTC_READERS = {"hgss": ("GF_RTC_CopyDate", "GF_RTC_CopyTime"), "pt": ("GetCurrentDate", "RTC_GetCurrentTime")}
+
+
+def _rtc_offsets(fields: tuple) -> tuple[dict, int]:
+    offs, at = {}, 0
+    for name, size in fields:
+        offs[name], at = at, at + size
+    return offs, at
+
+
+def _pool_offsets(images: Images, fn: Sym, base: int, size: int) -> set[int]:
+    """Offsets into the work struct that a function's literal pool addresses (aligned words inside [base, base + size))."""
+    code = images.read(fn.image, fn.address, fn.size)
+    words = (int.from_bytes(code[k:k + 4], "little") for k in range(0, len(code) - 3, 4))
+    return {w - base for w in words if base <= w < base + size}
+
+
+def rtc_file_checks(xm: XMap, images: Images, build: str, base: int, date_off: int, time_off: int, size: int) -> dict:
+    """FILE: the ROM readers' literal pools address work+date_off (the date copier) and work+time_off (the time copier)."""
+    out = {}
+    for fn_name, field, off in zip(RTC_READERS[build], ("date_off", "time_off"), (date_off, time_off), strict=True):
+        fn = xm.lookup(fn_name)
+        got = _pool_offsets(images, fn, base, size)
+        if off not in got:
+            raise Fail(f"{fn_name} literal pool addresses work offsets {sorted(got)}; {field} {off:#x} is not ROM-proven")
+        out[fn_name] = {"address": fn.address, "image": fn.image, "pool_offsets": sorted(got), "proves": field}
+    return out
+
+
+def rtc_profile(xm: XMap, images: Images, build: str, vanilla: Images | None = None) -> dict:
+    """build = hgss (HG and SS) | hge (vanilla layout, FILE-checked against the hge image) | pt (RTCState, a differently named twin)."""
+    pt = build == "pt"
+    sym_name = "sRTCState" if pt else "sRTCWork"
+    offs, total = _rtc_offsets(PT_RTC_FIELDS if pt else HG_RTC_FIELDS)
+    row = symbol_row(xm, sym_name)
+    if total != row["size"]:
+        raise Fail(f"RTC work layout {total:#x} != xMAP {sym_name} size {row['size']:#x}: the date/time offsets are unproven")
+    checks = rtc_file_checks(xm, images, "pt" if pt else "hgss", row["address"], offs["date"], offs["time"], total)
+    if pt:
+        source = (f"SOURCE {PRET_PT} {P_RTC_STATE} (RTCState: 4 words, then date {P_RTC_STATE_DATE}, time {P_RTC_STATE_TIME}, "
+                  f"tempDate, tempTime); {P_RTC_STATE_SYM}; RTCDate/RTCTime layouts are the NitroSDK structs ({PRET_HG} {S_RTC_API_DATE}, "
+                  f"{S_RTC_API_TIME}; pokeplatinum ships no SDK header); FILE: computed size {total:#x} equals the xMAP {sym_name} size, "
+                  "the readers' literal pools address +0x10 and +0x20")
+    else:
+        source = (f"SOURCE {PRET_HG} {S_RTC_WORK} (GFRtcWork: 4 words, then date {S_RTC_WORK_DATE}, time {S_RTC_WORK_TIME}, date_async, "
+                  f"time_async, frozenTimeState, frozenTime), {S_RTC_WORK_SYM}; RTCDate {S_RTC_API_DATE} / RTCTime {S_RTC_API_TIME}; "
+                  f"FILE: computed size {total:#x} equals the xMAP {sym_name} size, the readers' literal pools address +0x10 and +0x20")
+    out = {
+        "symbol": sym_name, "address": row["address"], "work_size": total,
+        "date_off": offs["date"], "date_size": RTC_DATE_SIZE, "time_off": offs["time"], "time_size": RTC_TIME_SIZE,
+        "date_fields": {"year": 0, "month": 4, "day": 8, "week": 12}, "time_fields": {"hour": 0, "minute": 4, "second": 8},
+        "async_date_off": offs["date_async"], "async_time_off": offs["time_async"],
+        "source": source, "evidence": "SOURCE + FILE", "file_checks": checks,
+        "caveat": "date/time are a CACHE of the host RTC: the game re-reads the RTC every >10 frames into the async pair and the callback "
+                  "overwrites date/time, so a pin written only to date/time is clobbered within ~11 frames; pin the host RTC or rewrite "
+                  "each frame. " + ("" if pt else "The time the game returns is `frozenTime` (+0x4C) while frozenTimeState (+0x48) == 3 "
+                                    "(photo state), else `time`; the date has no frozen override. ") +
+                  f"Refresh loop: {P_RTC_UPDATE if pt else S_RTC_UPDATE}",
+    }
+    if not pt:
+        out.update(frozen_state_off=offs["frozenTimeState"], frozen_time_off=offs["frozenTime"])
+    if build == "hge":
+        if vanilla is None:
+            raise Fail("hge RTC check needs the vanilla image")
+        for fn_name in (*RTC_READERS["hgss"], "GF_RTC_GetDateTime_Callback", "GF_RTC_UpdateOnFrame"):
+            fn = xm.lookup(fn_name)
+            if images.read(fn.image, fn.address, fn.size) != vanilla.read(fn.image, fn.address, fn.size):
+                raise Fail(f"hge changed {fn_name}: the vanilla sRTCWork layout is no longer a projection")
+        out["hge_checks"] = {"identical_to_vanilla": [*RTC_READERS["hgss"], "GF_RTC_GetDateTime_Callback", "GF_RTC_UpdateOnFrame"],
+                             "source": f"{HGE_SRC} {H_RTC_DATE}, {H_RTC_TIME} (hg-engine declares the same RTCDate/RTCTime and defines "
+                                       "no work struct of its own; the symbol keeps its vanilla address and 88-byte size)"}
+    return out
+
+
 def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str, other: Images, other_label: str) -> dict:
     check_xmap_vs_rom(xm, images, label)
     symbols = {}
@@ -2119,6 +2217,7 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str,
     ui = ui_geometry(xm, images, other, other_label)
     profile = hgss_profile(xm)
     profile.update(battle_profile("hgss", label, xm, images))
+    profile["rtc"] = rtc_profile(xm, images, "hgss")
     return {
         "rom": {k: rom[k] for k in ("sha1", "md5", "header_code")},
         "admission": admission,
@@ -2202,6 +2301,10 @@ SCHEMA_NOTES = {
                     "bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), "
               "vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
+    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, "
+           "date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async "
+           "pair the refresh loop writes (async_date_off/async_time_off), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is "
+           "frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools), caveat",
     "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook "
                         "per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by "
                         "the generator and a test)",
@@ -2455,6 +2558,7 @@ def build_hge(inputs: Inputs) -> dict:
     if profile["save"]["slot_specs_off"] != 0x2F2B4:
         raise Fail("derived hge slot_specs_off disagrees with the source constant OFFSET_saveSlotSpecs 0x2F2B4")
     profile["system"]["evidence"] += f"; {HGE_SRC} include/system.h:8-48 declares the identical struct"
+    profile["rtc"] = rtc_profile(xm, hge_img, "hge", hg_img)
     profile["party_off"] = {
         "value": 0x90, "base": "general_block", "count_off": 4, "max_off": 0, "mons_off": 8, "array_id": 2,
         "evidence": {"heartgold_hge": "FILE (owner hge save OOO sha1 13d56589, C:/slink/g4/saves/hge_a_OOO_630.SaveRAM: max=6 @+0x90, "
@@ -2664,6 +2768,7 @@ def build_pt(inputs: Inputs) -> dict:
         raise Fail(f"Platinum overlay table size {table['size']:#x} != 0xC0")
     profile = pt_profile()
     profile["system"] = pt_system(symbols["gSystem"])
+    profile["rtc"] = rtc_profile(xm, images, "pt")
     profile["save_ptr"]["address"] = symbols["sSaveDataPtr"]["address"]
     profile["fieldsys_ptr"]["address"] = symbols["sFieldSystem"]["address"]
     return {

@@ -1191,3 +1191,106 @@ def test_new_cite_needles_are_re_read_from_the_pinned_clones():
         for path, line, needle in needles:
             text = (clone / path).read_text(encoding="utf-8", errors="replace").splitlines()
             assert line <= len(text) and needle in text[line - 1], f"{key} {path}:{line} does not contain {needle!r}: {text[line - 1]!r}"
+
+
+# ---- card C1-2e: profile.rtc (the cached RTC work struct the pinned-RTC determinism probe writes) ---------------------
+_SIZES.update({"RTCResult": 4, "RTCWeek": 4})  # NitroSDK enums are 4 bytes (the work-struct size equals the xMAP symbol size)
+RTC_KEYS = ("date_off", "date_size", "time_off", "time_size", "async_date_off", "async_time_off")
+
+
+def _rtc_source_layout(mode: str) -> dict:
+    """{date_off, date_size, time_off, time_size, ...} re-derived from the pinned C struct, not from the generator."""
+    hg = _clone("pokeheartgold_citation", "src/gf_rtc.c")
+    api = (hg / "lib/include/nitro/rtc/ARM9/api.h").read_text(encoding="utf-8", errors="replace")
+    if mode == "pt":
+        pt = _clone("pokeplatinum_citation", "src/rtc.c")
+        text = (pt / "src/rtc.c").read_text(encoding="utf-8", errors="replace").replace("typedef struct {", "struct RTCState {", 1)
+        work = _layout(api + text, "RTCState")
+    else:
+        text = (hg / "src/gf_rtc.c").read_text(encoding="utf-8", errors="replace")
+        work = _layout(api + text, "GFRtcWork")
+    date, time = _layout(api, "RTCDate"), _layout(api, "RTCTime")
+    first, second, third, fourth = ("valid", "readInProgress", "framesSinceRead", "status") if mode == "pt" else \
+        ("getDateTimeSuccess", "getDateTimeLock", "getDateTimeSleep", "getDateTimeErrorCode")
+    assert (work[first], work[second], work[third], work[fourth]) == (0, 4, 8, 12)
+    d, t, da, ta = ("date", "time", "tempDate", "tempTime") if mode == "pt" else ("date", "time", "date_async", "time_async")
+    return {"date_off": work[d], "date_size": date["_size"], "time_off": work[t], "time_size": time["_size"],
+            "async_date_off": work[da], "async_time_off": work[ta], "work_size": work["_size"]}
+
+
+@pytest.mark.parametrize("mode,title,symbol", [("hgss", "heartgold", "sRTCWork"), ("hgss", "soulsilver", "sRTCWork"),
+                                               ("hge", "heartgold_hge", "sRTCWork"), ("pt", "platinum", "sRTCState")])
+def test_rtc_profile_equals_the_source_struct_layout(mode, title, symbol):
+    rtc = _pack(mode)["titles"][title]["profile"]["rtc"]
+    src = _rtc_source_layout("pt" if mode == "pt" else "hgss")  # hge keeps the vanilla struct (FILE-checked); the fork defines none
+    assert (rtc["symbol"], rtc["date_off"], rtc["date_size"], rtc["time_off"], rtc["time_size"]) == (symbol, 0x10, 16, 0x20, 12)
+    assert {k: rtc[k] for k in src} == src
+    assert rtc["address"] == _pack(mode)["titles"][title]["symbols"][symbol]["address"]
+    assert rtc["work_size"] == _pack(mode)["titles"][title]["symbols"][symbol]["size"] == (72 if mode == "pt" else 88)
+    assert rtc["source"] and rtc["evidence"] == "SOURCE + FILE"
+    # revert-test: a wrong committed offset is a different number from what the struct parser reports
+    for key in RTC_KEYS:
+        assert {**rtc, key: rtc[key] + 4}[key] != src[key]
+    assert src["date_off"] != 0x14 and src["time_off"] != 0x1C
+
+
+def test_rtc_hgss_frozen_time_tail_and_hge_struct_declaration():
+    hg = _pack("hgss")["titles"]["heartgold"]["profile"]["rtc"]
+    assert (hg["frozen_state_off"], hg["frozen_time_off"]) == (0x48, 0x4C) and "frozen_state_off" not in _pack("pt")["titles"]["platinum"]["profile"]["rtc"]
+    fork = _clone("hg_engine_fork", "include/rtc.h")
+    text = (fork / "include/rtc.h").read_text(encoding="utf-8", errors="replace")
+    assert re.search(r"struct RTCDate \{\s*u32 year;\s*u32 month;\s*u32 day;\s*enum RTCWeek week;\s*\};", text)
+    assert re.search(r"struct RTCTime \{\s*u32 hour;\s*u32 minute;\s*u32 second;\s*\};", text)
+    assert "GFRtcWork" not in text  # the fork defines no work struct of its own: the layout is the vanilla one (hge_checks)
+    assert _pack("hge")["titles"]["heartgold_hge"]["profile"]["rtc"]["hge_checks"]["identical_to_vanilla"]
+
+
+class _FakeXMap:
+    def __init__(self, **syms): self.syms = syms
+    def lookup(self, name): return self.syms[name]
+
+
+def _rtc_world(date_lit: int, time_lit: int):
+    base = 0x02000400
+    arm9 = bytearray(0x40)
+    arm9[0:4], arm9[4:8] = struct.pack("<I", base + date_lit), struct.pack("<I", base + time_lit)  # two literal-pool words
+    imgs = g.Images(0x02000000, bytes(0x400) + bytes(arm9), {})
+    mk = lambda n, a: g.Sym(n, a, 4, ".text", "x.o", "arm9")  # noqa: E731
+    return imgs, _FakeXMap(GF_RTC_CopyDate=mk("GF_RTC_CopyDate", 0x02000400), GF_RTC_CopyTime=mk("GF_RTC_CopyTime", 0x02000404)), base
+
+
+def test_rtc_file_check_reads_the_reader_literal_pools_and_a_wrong_offset_goes_red():
+    imgs, xm, base = _rtc_world(0x10, 0x20)
+    out = g.rtc_file_checks(xm, imgs, "hgss", base, 0x10, 0x20, 88)
+    assert out["GF_RTC_CopyDate"]["pool_offsets"] == [0x10] and out["GF_RTC_CopyTime"]["pool_offsets"] == [0x20]
+    for wrong in ((0x14, 0x20), (0x10, 0x1C)):
+        with pytest.raises(g.Fail, match="not ROM-proven"):
+            g.rtc_file_checks(xm, imgs, "hgss", base, *wrong, 88)
+    imgs, xm, base = _rtc_world(0x20, 0x10)  # readers swapped in the ROM
+    with pytest.raises(g.Fail, match="not ROM-proven"):
+        g.rtc_file_checks(xm, imgs, "hgss", base, 0x10, 0x20, 88)
+
+
+def test_rtc_layout_size_mismatch_goes_red(monkeypatch):
+    inputs = _need("heartgold", "heartgold_xmap")
+    xm, img = g.load_xmap(inputs.paths["heartgold_xmap"]), g.load_images(inputs.paths["heartgold"])
+    assert g.rtc_profile(xm, img, "hgss") == _pack("hgss")["titles"]["heartgold"]["profile"]["rtc"]
+    monkeypatch.setattr(g, "HG_RTC_FIELDS", (("a", 4), *g.HG_RTC_FIELDS))  # an extra word shifts everything and breaks the size
+    with pytest.raises(g.Fail, match="unproven"):
+        g.rtc_profile(xm, img, "hgss")
+    monkeypatch.setattr(g, "HG_RTC_FIELDS", (*g.HG_RTC_FIELDS[:4], ("date", 20), *g.HG_RTC_FIELDS[5:]))  # a wrong RTCDate size
+    with pytest.raises(g.Fail, match="unproven"):
+        g.rtc_profile(xm, img, "hgss")
+
+
+def test_rtc_file_checks_hold_in_the_pinned_roms_incl_hge_identity():
+    inputs = _need("heartgold", "heartgold_hge", "heartgold_xmap", "platinum", "platinum_xmap")
+    xm, hg = g.load_xmap(inputs.paths["heartgold_xmap"]), g.load_images(inputs.paths["heartgold"])
+    hge = g.load_images(inputs.paths["heartgold_hge"], raw_arm9=True)
+    assert g.rtc_profile(xm, hge, "hge", hg) == _pack("hge")["titles"]["heartgold_hge"]["profile"]["rtc"]
+    pxm, pt = g.load_xmap(inputs.paths["platinum_xmap"]), g.load_images(inputs.paths["platinum"])
+    assert g.rtc_profile(pxm, pt, "pt") == _pack("pt")["titles"]["platinum"]["profile"]["rtc"]
+    # control: the vanilla image checked with a time offset one word off is not proven
+    row = g.symbol_row(xm, "sRTCWork")
+    with pytest.raises(g.Fail, match="not ROM-proven"):
+        g.rtc_file_checks(xm, hg, "hgss", row["address"], 0x10, 0x24, 88)
