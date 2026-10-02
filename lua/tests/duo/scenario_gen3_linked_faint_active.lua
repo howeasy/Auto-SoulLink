@@ -24,7 +24,9 @@
 --            TX whiteout (O6); the subject never sends `faint` for the key (O7)
 --
 -- D.active_faint_case (tools/e2e_duo.py SCENARIOS):
---   nil/"wild"  A1: B hunts on the Route 1 grass. A loses its linked lead naturally.
+--   nil/"wild"  A1: B hunts on the Route 1 grass. A receives no SLink force command;
+--               the read-only FORCED_HP0 watcher observes in-battle HP0, then the engine faint site.
+--               The HP0 marker alone does not establish the cause.
 --   "whiteout"  B deposits its slot-1 mon at the Viridian PC first (normal inputs), so the linked
 --               lead is its only mon: the Perish KO whites out (ruling 18: P is not held). The run
 --               is over (the only pair died), so B keeps its last mon: memorialize is dropped.
@@ -369,7 +371,13 @@ local function natural(ctx, key)
     if not ctx.hunt("linked_faint_active a") then return false, "no wild encounter" end
     local fainted, why = ctx.lose_active(key, "linked_faint_active a")
     if not fainted then return false, "the linked lead did not faint: " .. tostring(why) end
-    ctx.log("LINKED_FAINTED " .. key)
+    -- Completion stamp after lose_active returns; TX faint can precede this line.
+    -- Only expansion requires the frame; older title receipt formats stay intact.
+    if ctx.D.game == "gen3_exp" then
+        ctx.log(fmt("LINKED_FAINTED %s frame=%d", key, emu.framecount()))
+    else
+        ctx.log("LINKED_FAINTED " .. key)
+    end
     if ctx.in_battle() then
         local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
         if not ok and not (type(err) == "table" and err.whiteout) then

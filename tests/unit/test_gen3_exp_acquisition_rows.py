@@ -1,5 +1,6 @@
 """SEED-PENDING setup: native boot/save only; interaction/R4 hatch are not proved here."""
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,30 @@ ROOT = Path(__file__).resolve().parents[2]
 TITLE = "emerald_expansion_28877d73"
 
 
+@pytest.fixture(scope="module")
+def context():
+    """Missing local artifacts skip; present bytes/source must satisfy their pins."""
+    from tools import gen_gen3_profile as profile
+
+    artifacts = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ROOT / ".cache/expansion-output/reference"))
+    for name in ("pokeemerald.gba", "pokeemerald.sym", "pokeemerald.map"):
+        if not (artifacts / name).is_file():
+            pytest.skip(f"local copyrighted ROMs absent: {artifacts / name}")
+    src = Path(os.environ.get("SLINK_EXPANSION_SRC", ROOT / ".cache/expansion-src"))
+    if not src.exists():
+        pytest.skip(f"expansion source absent: {src}")
+    assert (src / "include/global.h").is_file(), "present expansion source lacks include/global.h"
+    lock = json.loads((ROOT / "data/gen3_exp_sources.lock.json").read_text())
+    assert rows.subprocess_head(src) == lock["source"]["commit"], "expansion source pin mismatch"
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("SLINK_EXPANSION_SRC", str(src))
+        patch.setenv("SLINK_EXPANSION_ARTIFACTS", str(artifacts))
+        yield profile.expansion_inputs(artifacts=artifacts)
+
+
 @pytest.mark.parametrize("case", ["gift", "hatch", "egg_receive", "choice_gift", "gift_box"])
-def test_expansion_setup_has_own_rom_facts_and_qualifies_without_acquisition(case):
-    rom = (ROOT / ".cache/expansion-output/reference/pokeemerald.gba").read_bytes()
+def test_expansion_setup_has_own_rom_facts_and_qualifies_without_acquisition(case, context):
+    rom = context["rom"]
     facts = rows.expansion_facts(rom, case)
     raw, manifest = rows.build_exp_seed((ROOT / "tests/fixtures/gen3/exp_pc.sav").read_bytes(), case, rom)
     assert facts["title"] == TITLE
@@ -25,10 +47,10 @@ def test_expansion_setup_has_own_rom_facts_and_qualifies_without_acquisition(cas
 
 
 @pytest.mark.parametrize("fault", ["rom", "received", "where", "egg"])
-def test_acquisition_seed_refuses_one_fact_drift(fault):
+def test_acquisition_seed_refuses_one_fact_drift(fault, context):
     from tools import gen3_fixtures as f
     c = f.codec
-    rom = (ROOT / ".cache/expansion-output/reference/pokeemerald.gba").read_bytes()
+    rom = context["rom"]
     if fault == "rom":
         changed = bytearray(rom)
         changed[100] ^= 1
@@ -50,8 +72,8 @@ def test_acquisition_seed_refuses_one_fact_drift(fault):
     assert rows.exp_seed_problems(body, facts)
 
 
-def test_choice_side_changes_native_fossil_selector_only():
-    rom = (ROOT / ".cache/expansion-output/reference/pokeemerald.gba").read_bytes()
+def test_choice_side_changes_native_fossil_selector_only(context):
+    rom = context["rom"]
     a = rows.expansion_facts(rom, "choice_gift", "a")
     b = rows.expansion_facts(rom, "choice_gift", "b")
     assert a["species"] != b["species"] and a["area"] == b["area"]
@@ -63,12 +85,12 @@ def test_source_hatch_configuration_is_bound_to_the_recipe():
     assert config["macros"]["P_EGG_CYCLE_LENGTH"]["value"] >= 8
 
 
-def test_native_qualified_fixtures_are_hash_bound_and_still_pending():
+def test_native_qualified_fixtures_are_hash_bound_and_still_pending(context):
     import hashlib
 
     from tools import gen3_fixtures as f
     manifest = json.loads((ROOT / "tests/fixtures/gen3/exp_acquisition_synth_manifest.json").read_text())
-    rom = (ROOT / ".cache/expansion-output/reference/pokeemerald.gba").read_bytes()
+    rom = context["rom"]
     assert manifest["rom_sha1"] == hashlib.sha1(rom).hexdigest()
     assert {(r["case"], r["side"]) for r in manifest["fixtures"]} == {
         (case, side) for case in rows.EXP_CASES for side in ("a", "b")}
@@ -130,10 +152,9 @@ def test_saved_location_projection_uses_the_real_decoder_box_dictionary():
     assert combined[len(party)] is next(iter(boxes.values()))
 
 
-def test_near_hatch_experience_uses_native_level_one_not_vanilla_zero():
+def test_near_hatch_experience_uses_native_level_one_not_vanilla_zero(context):
     from tools import gen3_fixtures as f, gen_gen3_profile as profile
 
-    context = profile.expansion_inputs()
     raw, _ = rows.build_exp_seed((ROOT / "tests/fixtures/gen3/exp_pc.sav").read_bytes(), "hatch", context["rom"])
     party = f.codec.party_from_save(raw, title=TITLE, layout=f._record_layout(TITLE))
     species = json.loads((ROOT / "data/games/gen3_exp/28877d73/data.json").read_text())["species"][party[1]["species"]]
@@ -144,8 +165,8 @@ def test_near_hatch_experience_uses_native_level_one_not_vanilla_zero():
     assert party[1]["experience"] == expected
 
 
-def test_extra_diagnostic_hooks_are_opt_in_and_include_mirror_aliases(monkeypatch):
-    rom = (ROOT / ".cache/expansion-output/reference/pokeemerald.gba").read_bytes()
+def test_extra_diagnostic_hooks_are_opt_in_and_include_mirror_aliases(monkeypatch, context):
+    rom = context["rom"]
     monkeypatch.delenv("SLINK_EXP_ACQ_PROBES", raising=False)
     assert rows.expansion_facts(rom)["probes"] == []
     monkeypatch.setenv("SLINK_EXP_ACQ_PROBES", "1")

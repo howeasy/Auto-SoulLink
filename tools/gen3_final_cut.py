@@ -72,6 +72,7 @@ import threading
 import time
 import zipfile
 from dataclasses import dataclass, field
+from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
@@ -138,19 +139,24 @@ EXPANSION_PINNED_INPUTS = {
 EXPANSION_UNPINNED_INPUTS = [".cache/expansion-output/", ".cache/pret/pokeemerald/"]
 EXPANSION_ZIP_PACK_FILES = ("profile.json", "engine_signals.json", "write_checkpoint.json",
                            "area_map.json", "gen3_exp_locations.lua")
-EXPANSION_UNIT_FILES = [
-    "tests/unit/test_build_expansion.py", "tests/unit/test_extract_expansion_data.py",
-    "tests/unit/test_extract_expansion_config.py", "tests/unit/test_gen_expansion_facts.py",
-    "tests/unit/test_gen3_exp_pack.py", "tests/unit/test_gen3_exp_reads.py",
-    "tests/unit/test_gen3_exp_safety.py", "tests/unit/test_gen3_exp_entry.py",
-    "tests/unit/test_gen3_codec_expansion.py", "tests/unit/test_e2e_duo_gen3_exp.py",
-    "tests/unit/test_gen3_expansion_adapter.py", "tests/unit/test_gen3_expansion_calc_names.py",
-    "tests/unit/test_gen3_expansion_faint_oracle.py", "tests/unit/test_gen3_expansion_gifts.py",
-    "tests/unit/test_gen3_expansion_masks.py", "tests/unit/test_gen3_expansion_refusal.py",
-    "tests/unit/test_gen3_expansion_trainer_sets.py", "tests/unit/test_gen3_expansion_wild.py",
-    "tests/unit/test_gen3_expansion_wild_rom.py",
-    "tests/unit/test_gen3_final_cut.py", "tests/unit/test_gen3_final_cut_exp.py",
-]
+EXPANSION_UNIT_EXTRAS = (
+    "test_build_expansion.py", "test_extract_expansion_data.py",
+    "test_extract_expansion_config.py", "test_gen_expansion_facts.py",
+    "test_gen3_codec_expansion.py", "test_e2e_duo_gen3_exp.py",
+    "test_gen3_fixture_exp.py", "test_gen3_title_syms_exp.py",
+    "test_gen3_final_cut.py", "test_gen3_final_cut_exp.py",
+)
+
+
+def expansion_unit_files(repo=REPO):
+    """Collect expansion modules by filename, so new coverage joins the frozen row."""
+    unit = Path(repo) / "tests/unit"
+    matched = {p.name for pattern in ("test_gen3_exp_*.py", "test_gen3_expansion_*.py")
+               for p in unit.glob(pattern)}
+    return [f"tests/unit/{name}" for name in sorted(matched | set(EXPANSION_UNIT_EXTRAS))]
+
+
+EXPANSION_UNIT_FILES = expansion_unit_files()
 # E7-SKIPS: unit_emerald's own tests, selected by FILE, never `-k` (release_lanes.py's own
 # rule, verify_gen3_release.py's _UNIT_FILES). `-k "gen3 and emerald"` over the whole tests/unit
 # tree still IMPORTS every module under the path first -- a `-k` selector filters ITEMS, not
@@ -550,8 +556,12 @@ def build_plan_exp(cut, lane, master):
         ("profile_generated_check", "gen_gen3_profile.py", build_flags),
         ("write_checkpoint_generated_check", "gen_gen3_write_checkpoint.py", build_flags),
         ("engine_signals_generated_check", "gen_gen3_engine_signals.py", build_flags),
-        ("area_map_generated_check", "gen_area_map.py", ["--game", "emerald", *build_flags]),
-        ("gift_census_check", "gen_gen3_exp_gifts.py", ["--check"]),
+        ("area_map_generated_check", "gen_area_map.py",
+         ["--game", "emerald", *build_flags, "--source", expansion_env(lane)["SLINK_EXPANSION_SRC"]]),
+        ("gift_census_check", "gen_gen3_exp_gifts.py",
+         ["--check", "--src", expansion_env(lane)["SLINK_EXPANSION_SRC"]]),
+        # verify_gen3_exp_wild has no source CLI; its canonical source is the lane's
+        # .cache/expansion-src junction, checked against the lock around every row.
         ("wild_rom_check", "verify_gen3_exp_wild.py", ["--check"]),
     )]
     rows.append(Row("unit_exp", "XG3 MODEL", [PY, "-m", "pytest", *EXPANSION_UNIT_FILES,
@@ -980,6 +990,20 @@ def run_once(row, deadline):
     return proc.returncode, out, killed, stopped
 
 
+def expansion_source_problem(row, lane):
+    """The source junction is outside lane Git status, so check its own locked tree."""
+    source = row.env.get("SLINK_EXPANSION_SRC")
+    if not source:
+        return None  # non-expansion plans and isolated row tests have no source binding
+    try:
+        lock = json.loads(_read(os.path.join(lane, "data/gen3_exp_sources.lock.json")))
+        if head(source) != lock["source"]["commit"] or not tracked_clean(source):
+            return "source checkout is not tracked-clean at its locked commit"
+    except (OSError, ValueError, KeyError, TypeError, LaneError):
+        return "source checkout identity cannot be verified"
+    return None
+
+
 def run_row(row, cut, lane, deadline):
     """Run one row (plus at most one contention retry), write its receipt, return the verdict."""
     attempts, verdict = [], ""
@@ -992,11 +1016,17 @@ def run_row(row, cut, lane, deadline):
         if is_expansion_row(row.id):
             actual = head(lane)
             stamp = f"EXPANSION_CUT requested={cut} before={actual}"
-            if actual != cut or not before:
-                rc, out, killed, stopped = 1, "FAIL expansion lane is not clean at exact cut", False, False
+            source_before = expansion_source_problem(row, lane)
+            if actual != cut or not before or source_before:
+                reason = source_before or "lane is not clean at exact cut"
+                rc, out, killed, stopped = 1, f"FAIL expansion {reason}", False, False
             else:
                 rc, out, killed, stopped = run_once(row, deadline)
             out = stamp + "\n" + out + f"\nEXPANSION_CUT after={head(lane)}\n"
+            source_after = expansion_source_problem(row, lane)
+            if source_after:
+                out += f"FAIL expansion {source_after} after row\n"
+                rc = 1
             problem = expansion_attempt_problem(row.id, cut, out)
             if problem:
                 out += "FAIL expansion evidence: " + problem + "\n"
@@ -1093,6 +1123,86 @@ ZIP_BOOT = {
 }
 
 
+def _lua_tokens(source):
+    """Small Lua lexer for ROUTED inspection; strings/comments cannot become code."""
+    tokens, i = [], 0
+    while i < len(source):
+        if source[i:i + 2] == "--":
+            long = re.match(r"\[(=*)\[", source[i + 2:])
+            if long:
+                end = "]" + long[1] + "]"
+                pos = source.find(end, i + 2 + len(long[0]))
+                i = len(source) if pos < 0 else pos + len(end)
+            else:
+                pos = source.find("\n", i + 2)
+                i = len(source) if pos < 0 else pos + 1
+            continue
+        c = source[i]
+        if c in "\"'":
+            quote, start = c, i + 1
+            i += 1
+            while i < len(source):
+                if source[i] == "\\":
+                    i += 2
+                elif source[i] == quote:
+                    tokens.append(("string", source[start:i]))
+                    i += 1
+                    break
+                else:
+                    i += 1
+            else:
+                return []
+            continue
+        long = re.match(r"\[(=*)\[", source[i:]) if c == "[" else None
+        if long:
+            end = "]" + long[1] + "]"
+            start = i + len(long[0])
+            pos = source.find(end, start)
+            if pos < 0:
+                return []
+            tokens.append(("string", source[start:pos]))
+            i = pos + len(end)
+            continue
+        if c.isspace():
+            i += 1
+            continue
+        word = re.match(r"[A-Za-z_][A-Za-z_0-9]*", source[i:])
+        if word:
+            tokens.append(("name", word[0]))
+            i += len(word[0])
+        else:
+            tokens.append(("punct", c))
+            i += 1
+    return tokens
+
+
+def _expansion_route_admitted(source):
+    tokens = _lua_tokens(source)
+    values = [value for _kind, value in tokens]
+    found = False
+    for i in range(len(tokens) - 4):
+        if values[i:i + 5] != ["Entry", ".", "ROUTED", "=", "{"]:
+            continue
+        found = True
+        depth = 1
+        j = i + 5
+        while j < len(tokens) and depth:
+            key = (values[j] == "gen3_exp" and tokens[j][0] == "name"
+                   and j + 2 < len(tokens) and values[j + 1:j + 3] == ["=", "true"])
+            bracket_key = (values[j:j + 5] == ["[", "gen3_exp", "]", "=", "true"]
+                           and j + 1 < len(tokens) and tokens[j + 1][0] == "string")
+            if depth == 1 and (key or bracket_key):
+                return True, True
+            if tokens[j] == ("punct", "{"):
+                depth += 1
+            elif tokens[j] == ("punct", "}"):
+                depth -= 1
+            j += 1
+        if depth:
+            return False, False
+    return found, False
+
+
 def expansion_zip_blocker(lua_dir):
     """Validate extracted build identity and pack closure; do not flip shipped admission."""
     root = os.path.dirname(lua_dir)
@@ -1107,9 +1217,8 @@ def expansion_zip_blocker(lua_dir):
     except (ValueError, KeyError, TypeError, LaneError):
         return "expansion ZIP profile identity is malformed"
     entry = _read(os.path.join(lua_dir, "gen3", "entry.lua"))
-    routed = re.search(r"Entry\.ROUTED\s*=\s*\{(.*?)\}", entry, re.S)
-    if not routed or re.search(r"\bgen3_exp\s*=\s*true|[\"']gen3_exp[\"']\s*\]\s*=\s*true",
-                               routed[1]):
+    routed, admitted = _expansion_route_admitted(entry)
+    if not routed or admitted:
         return "expansion ZIP must retain the production refusal in Entry.ROUTED"
     return None
 

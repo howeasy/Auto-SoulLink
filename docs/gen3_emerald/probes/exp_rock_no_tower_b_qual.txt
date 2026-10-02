@@ -1,0 +1,12 @@
+SOURCE=41ee8c667679331dda20ba737dc98ed9505b380a; SYNTH prep VAR_MIRAGE_TOWER_STATE3/visibleclear preventsnative re-roll; avoidnonallowlistedpulseTask; nocheckpointchange; pendingCONTINUE/SAVE noencounter
+RAW_SHA256=02e8e620c8ded80d900788554699f46e541a2e494c5ad359709c8cd94b412d1f
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=3
+phase overworld-cb2 frame=516 map=0.26 pos=(18,102)
+phase field frame=598 map=0.26 pos=(18,102) saveFileStatus=1
+phase save-menu frame=598 counter=3
+phase save-dialog frame=658 row=3/6
+phase saved frame=1185 counter=3->4
+phase flushed frame=1605 map=0.26 pos=(18,102)
+RESULT: PASS counter 3 -> 4 map=0.26 pos=(18,102)
+NO_TOWER_PENDING_SAVE_PASS var3/layout392/flagclear raw=02e8e620c8ded80d900788554699f46e541a2e494c5ad359709c8cd94b412d1f saved=d27a56c97a80ca958f862b4510f185183da0427bec9847dc21a796dce8388d81

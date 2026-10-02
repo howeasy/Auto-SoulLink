@@ -322,7 +322,7 @@ def test_the_full_box_leg_fails_closed_on_the_absent_synth_fixture():
     """The fixture belongs to the acquisition tooling's lease; the leg must name it and stop,
     never silently deposit into a 2-mon box and call that a full-box proof."""
     block = _exp_block()
-    assert 'EXP_PC_FULL_BOX_SAV = "tests/fixtures/gen3/exp_pc_full_box_synth.sav"' in block
+    assert 'EXP_PC_FULL_BOX_SAV = "tests/fixtures/gen3/exp_pc_box0_full_synth.sav"' in block
     leg = block[block.find('name = "emerald_pc_full_box"'):]
     assert "EXP_PC_FULL_BOX_SAV" in leg, "the leg must check the named fixture before depositing"
     assert "missing fixture" in leg
@@ -443,3 +443,16 @@ def test_the_bypass_leg_cites_the_source_branches_it_drives():
     assert 'em_wait_carry(L, "grab_not_done", 1)' in leg
     assert "DUO claim" in leg, "the leg must say the client's no-report half needs a duo"
 
+
+
+def test_the_bypass_leg_reads_back_a_grab_purged_mon_and_needs_only_one_party_mon():
+    """Grabbing a boxed mon already purges its slot (MoveMon -> SetMovingMonData ->
+    PurgeMonOrBoxMon, pokemon_storage_system.c:6391-6450), so ReleaseMon's held branch (:6558-6561)
+    only clears the flag: the readback is 'gone from every box, party unchanged', never 'still
+    boxed'. And IsRemovingLastPartyMon (:6878-6884) cannot fire for a held box mon, so the
+    chain's one-mon party is enough."""
+    block = _exp_block()
+    leg = block.split('name = "emerald_pc_move_release_bypass"')[1].split('name = "emerald_pc_release_cancel"')[0]
+    assert "if before.party.n < 1 then" in leg and "at least 2" not in leg
+    assert "if after.boxes[target] then" in leg and "boxes_unchanged(L, before.boxes, after.boxes, target)" in leg
+    assert "still = after.boxes[target]" not in leg and "byte-identical" not in leg.split("run = function")[1]

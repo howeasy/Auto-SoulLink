@@ -147,9 +147,30 @@ if D.native_candidate_manifest then
         return load_or_die("/lua/tests/duo/gen3_trade_candidate.lua","candidate carrier").new(D,JSON,manifest,log,raw)
     end)
 end
+-- Distinct expansion rows may run together; even failed-helper screenshots stay row-owned.
+local function namespace_shots(module, scenario, player)
+    local original = module.shot
+    local prefix = scenario .. "_" .. player .. "_"
+    module.shot = function(name)
+        name = tostring(name)
+        return original(name:sub(1,#prefix)==prefix and name or (prefix..name))
+    end
+    return module
+end
+local helper_dofile = dofile
+if D.game=="gen3_exp" then
+    dofile=function(path)
+        local module=helper_dofile(path)
+        if path==ROOT.."/lua/tests/gen3_boot_check.lua" then
+            return namespace_shots(module,D.scenario,D.player)
+        end
+        return module
+    end
+end
 local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")
 SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
 local SP = load_or_die("/lua/tests/gen3_scripted_play.lua", "gen3_scripted_play.lua")   -- helpers only; never run()
+dofile = helper_dofile
 local Reads = load_or_die("/lua/gen3/reads.lua", "reads.lua")
 local play = SP.play
 
@@ -262,6 +283,7 @@ local function rr_symbols(want, proven, entries, ram, pack)
     end })
 end
 local S = {}
+local hello_symbols = {by_name={}, by_address={}} -- raw names from this title's compiled .sym only
 if title == "radical_red" then
     local want = {}
     for _, n in ipairs(SYMS) do want[n] = true end
@@ -276,7 +298,13 @@ else
     guard("pret symbols in " .. path, function()
         local fh = assert(io.open(path, "r"), "cannot read " .. path)
         for line in fh:lines() do
-            local addr, name = line:match("^(%x+) %a %x+ (%S+)")
+            local addr, size, name = line:match("^(%x+) %a (%x+) (%S+)")
+            if D.game == "gen3_exp" and name then
+                local at = tonumber(addr, 16)
+                if not hello_symbols.by_name[name] then hello_symbols.by_name[name]={address=at,size=tonumber(size,16)} end
+                local names = hello_symbols.by_address[at] or {}
+                names[#names+1] = name; hello_symbols.by_address[at] = names
+            end
             if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
         end
         fh:close()
@@ -351,7 +379,7 @@ local function move_power(move)
 end
 
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
-local seen_tx, seen_rx, tx, rx, latest_tick = {}, {}, {}, {}, nil
+local seen_tx, seen_rx, tx, rx, latest_tick, latest_hello = {}, {}, {}, {}, nil, nil
 local witness_saves, wrong_save_hud = 0, false
 --- The receipt lines one save's witness produces, IN EMISSION ORDER: the DUMP first, then (RR)
 --- the EXT copy bound to the same ordinal -- tools/e2e_duo.py _gen3_final_ext requires the final
@@ -485,6 +513,7 @@ C.send = function(line)
     if name == "tick" then
         latest_tick = msg -- bounded latest actual packet; ticks remain absent from verbose history
     else
+        if name == "hello" then latest_hello = msg end
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
         tx[#tx + 1] = { event = name, key = key, msg = ok and msg or nil }
         log(fmt("TX %s %s %s", name, key, name == "hello" and line:sub(1, 200) or line))
@@ -497,7 +526,7 @@ SLINK_GEN3_CLIENT = nil
 -- Capture the REAL built policy through the harness composition seam; run.lua normally drops
 -- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
 -- Always captured: ctx.center_state asks the client's own safety instance for its CPU verdict.
-local battle_parts
+local battle_parts, hello_journal
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
 --- TEST-ONLY admission of gen3_exp/<title> (X3; the E4 pre-EG4 precedent, be492ee4): the
@@ -542,6 +571,153 @@ local function isolated_journal_module(module, private_path, native_candidate, l
     end
     return module
 end
+
+-- Observe existing production calls only: game_is_live itself updates the reload witness.
+-- This self-contained installer never calls a gate, builds HELLO fields, or advances frames.
+local function hello_raw_snapshot(u8, u16, u32, symbols, structs)
+    local function named(raw)
+        local names, match = symbols.by_address[raw], "exact"
+        if raw == 0 then names,match={},"zero"
+        elseif not names then names,match=symbols.by_address[raw & ~1],"thumb-bit-stripped" end
+        if not names then names,match={},"unresolved" end -- no guessed ROM-bank mirror translation
+        return {raw=raw,names=names,match=match}
+    end
+    local function byte(name)
+        local sym = symbols.by_name[name]
+        return sym and {address=sym.address,size=sym.size,raw=u8(sym.address)} or "unavailable"
+    end
+    local out = {sGlobalScriptContextStatus=byte("sGlobalScriptContextStatus"),
+                 sLockFieldControls=byte("sLockFieldControls"),tasks={}}
+    local main, task, palette = structs.Main, structs.Task, structs.PaletteFadeControl
+    local m, t, p = symbols.by_name.gMain, symbols.by_name.gTasks, symbols.by_name.gPaletteFade
+    if m and main then
+        out.callback1 = named(u32(m.address+main.fields.callback1.offset))
+        out.callback2 = named(u32(m.address+main.fields.callback2.offset))
+    else out.callback1,out.callback2="unavailable","unavailable" end
+    if t and task then
+        for slot=0, math.floor(t.size/task.size)-1 do
+            local base=t.address+slot*task.size
+            local active=u8(base+task.fields.isActive.offset)
+            if active~=0 then
+                local fn=named(u32(base+task.fields.func.offset))
+                local raw=u16(base+task.fields.data.offset)
+                local row={slot=slot,address=base,isActive=active,func=fn,data0_raw=raw,data0_s16=raw>=32768 and raw-65536 or raw}
+                -- Only fishing.c:132 names data[0] tStep; other tasks' aliases are not inferred.
+                for _,name in ipairs(fn.names) do if name=="Task_Fishing" then row.tStep=row.data0_s16 end end
+                out.tasks[#out.tasks+1]=row
+            end
+        end
+    else out.tasks="unavailable" end
+    if p and palette then
+        local bytes={}; for i=0,palette.size-1 do bytes[#bytes+1]=u8(p.address+i) end
+        local active=palette.bitfields.active
+        out.gPaletteFade={address=p.address,bytes=bytes,active_word=u8(p.address+active.offset),
+                          active_offset=active.offset,active_mask=active.mask}
+    else out.gPaletteFade="unavailable" end
+    return out
+end
+
+local function install_hello_watch(session, parts, journal, extras, emit, limit)
+    local drv, policy = session.driver, parts and parts.policy
+    local watch = {armed=false, count=0, changes=0, last={hello_ready="unavailable", hello_why="not called",
+        game_is_live="unavailable", live_why="not called", snapshot="unavailable", snapshot_why="not called",
+        policy_ok="unavailable", policy_why="not called", policy_reason="unavailable", refusal_clauses="unavailable"}}
+    local checking, live, snapshot, snapshot_why, verdict, reason, clauses = false
+    local function value(v) if v == nil then return "unavailable" end; return v end
+    local function copy(t)
+        if type(t) ~= "table" then return value(t) end
+        local out = {}; for k,v in pairs(t) do out[k]=v end; return out
+    end
+    local function publish(phase)
+        local doc = copy(watch.last or {})
+        doc.phase, doc.samples = phase, watch.count
+        doc.start_frame, doc.sample_frame = value(watch.start_frame), value(watch.sample_frame)
+        doc.hello_sent, doc.hello_visible = value(session.hello_sent), value(session.hello_visible)
+        if live then doc.game_is_live, doc.live_why = value(live[1]), value(live[2]) end
+        local state = session.state or {}
+        doc.frozen, doc.baselined = value(state.frozen), value(state.baselined)
+        doc.journal_busy = value(journal and journal.busy)
+        doc.journal_failure = value(journal and journal.failure)
+        doc.party_hidden, doc.in_battle, doc.location = "unavailable", "unavailable", "unavailable"
+        if type(extras) == "function" then
+            local ok, fields = pcall(extras, phase, doc)
+            if ok and type(fields) == "table" then
+                doc.party_hidden, doc.in_battle, doc.location = value(fields.party_hidden), value(fields.in_battle), value(fields.location)
+                doc.wire_event, doc.wire_seq = value(fields.wire_event), value(fields.wire_seq)
+                doc.map_x, doc.map_y, doc.raw = value(fields.map_x), value(fields.map_y), value(fields.raw)
+            else doc.extra_error = tostring(fields) end
+        end
+        pcall(emit, doc) -- receipt failure must not alter the original gate's return/exception
+    end
+    watch.timeout = function() publish("timeout") end
+    watch.arm = function(frame)
+        watch.armed, watch.count, watch.changes, watch.sampled = true, 0, 0, false
+        watch.start_frame, watch.sample_frame = frame, frame
+        publish("await-start")
+    end
+    watch.sample = function(frame)
+        if watch.armed and not watch.sampled and type(watch.start_frame)=="number"
+           and frame>=watch.start_frame+300 then
+            watch.sampled, watch.sample_frame=true,frame; publish("await-300")
+        end
+    end
+    limit = limit or 3
+    if not drv or type(drv.hello_ready) ~= "function" then
+        watch.last = {hello_ready="unavailable", hello_why="driver.hello_ready unavailable"}
+        return watch
+    end
+    if type(drv.game_is_live) == "function" then
+        local original = drv.game_is_live
+        drv.game_is_live = function(...)
+            local out = table.pack(original(...))
+            live = out
+            return table.unpack(out, 1, out.n)
+        end
+    end
+    if policy and type(policy.snapshot) == "function" then
+        local original = policy.snapshot
+        policy.snapshot = function(...)
+            local out = table.pack(original(...))
+            if checking then snapshot, snapshot_why = copy(out[1]), out[2] end
+            return table.unpack(out, 1, out.n)
+        end
+    end
+    if policy and type(policy.check) == "function" then
+        local original = policy.check
+        policy.check = function(self, snap, why, ...)
+            local out = table.pack(original(self, snap, why, ...))
+            if checking then
+                verdict, reason = out, why or "overworld"
+                clauses = copy(parts.safety and parts.safety.last_clauses)
+            end
+            return table.unpack(out, 1, out.n)
+        end
+    end
+    local original = drv.hello_ready
+    drv.hello_ready = function(...)
+        checking, snapshot, snapshot_why, verdict, reason, clauses = true, nil, nil, nil, nil, nil
+        local out = table.pack(original(...)) -- production errors propagate unchanged
+        checking = false
+        if watch.armed then watch.count = watch.count + 1 end
+        watch.last = {hello_ready=value(out[1]), hello_why=value(out[2]),
+            game_is_live=value(live and live[1]), live_why=value(live and live[2]),
+            snapshot=value(snapshot), snapshot_why=value(snapshot_why),
+            policy_ok=value(verdict and verdict[1]), policy_why=value(verdict and verdict[2]),
+            policy_reason=value(reason), refusal_clauses=value(clauses)}
+        local state = session.state or {}
+        local key = table.concat({tostring(out[1]), tostring(out[2]), tostring(live and live[1]),
+            tostring(live and live[2]), tostring(verdict and verdict[1]), tostring(verdict and verdict[2]),
+            tostring(state.frozen), tostring(state.baselined), tostring(journal and journal.busy),
+            tostring(journal and journal.failure)}, "|")
+        if watch.armed and watch.count <= limit then publish("first")
+        elseif watch.armed and key ~= watch.key and watch.changes < limit then
+            watch.changes = watch.changes + 1; publish("change")
+        end
+        watch.key = key
+        return table.unpack(out, 1, out.n)
+    end
+    return watch
+end
 do
     dofile = function(path)
         local value = original_dofile(path)
@@ -560,6 +736,7 @@ do
             local build = value.build
             value.build = function(deps,...)
                 if native_candidate then native_candidate.before_build(deps) end
+                hello_journal = deps.io and deps.io.trade_journal -- exposed composition input, never private upvalues
                 local client, parts = build(deps,...)
                 battle_parts = parts
                 return client, parts
@@ -573,6 +750,24 @@ dofile = original_dofile
 if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
 local session = SLINK_GEN3_CLIENT
 if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
+local hello_watch
+if D.game == "gen3_exp" then
+    local raw_structs = read_json("data/games/gen3_exp/28877d73/facts.json").structs
+    hello_watch = install_hello_watch(session, battle_parts, hello_journal, function(phase)
+        local wire = latest_tick or latest_hello
+        local battle = reader.read_battle()
+        local x,y=G.pos(cp)
+        if (phase=="await-start" or phase=="await-300") and D.player=="b" and not seen_tx.hello then
+            pcall(G.shot,D.scenario.."_b_hello_stuck_"..phase) -- two bounded screenshots, no inputs or gates
+        end
+        return {party_hidden=wire and wire.party_hidden, wire_event=wire and wire.event, wire_seq=wire and wire.seq,
+                in_battle=battle and battle.in_battle,map_x=x,map_y=y,
+                raw=hello_raw_snapshot(function(a)return memory.read_u8(a,"System Bus")end,
+                    function(a)return memory.read_u16_le(a,"System Bus")end,
+                    function(a)return memory.read_u32_le(a,"System Bus")end,hello_symbols,raw_structs),
+                location=reader.read_location()}
+    end, function(doc) log("HELLO_WATCH " .. JSON.encode(doc)) end, 3)
+end
 if native_candidate then native_candidate.attach(session,battle_parts) end
 if D.game == "gen3_exp" and D.scenario == "linked_faint_active_gen3" and battle_parts.boxes then
     local boxes, original = battle_parts.boxes, battle_parts.boxes.memorialize
@@ -1562,7 +1757,7 @@ end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
-function ctx.catch(label, already_hunted)
+function ctx.catch(label, already_hunted, expected_ball)
     if not already_hunted and not ctx.hunt(label) then return nil, "no wild encounter" end
     -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
     -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
@@ -1619,7 +1814,7 @@ function ctx.catch(label, already_hunted)
         if not ok then return nil, why end
         if EMERALD_ENGINE then
             -- E4: Emerald's heap gBagMenu/gBagPosition bag (EMH.throw_ball waits for input itself)
-            if not SP.EMH.throw_ball(cp, label) then return nil, "the Emerald ball throw failed" end
+            if not SP.EMH.throw_ball(cp, label, expected_ball) then return nil, "the Emerald ball throw failed" end
         else
             -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
             -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
@@ -1917,7 +2112,12 @@ for _, m in ipairs(booted) do
 end
 ctx.boot_keys = boot_keys
 log(fmt("booted frame=%d map=%s balls=%d", emu.framecount(), play.where(cp), ctx.balls()))
-if not ctx.wait_until(function() return seen_tx.hello end, 120, "the client's hello") then
+if hello_watch then hello_watch.arm(emu.framecount()) end
+if not ctx.wait_until(function()
+    if hello_watch then hello_watch.sample(emu.framecount()) end
+    return seen_tx.hello
+end, 120, "the client's hello") then
+    if hello_watch then hello_watch.timeout() end
     finish(false, "the client never sent hello from the field")
 end
 

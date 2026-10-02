@@ -1,0 +1,85 @@
+DEV SOURCE=db1ed0736c3a6c6c38b6032ea06559f60b233fe5; OWNERparallelwave3 changedrows/private/test-only; nofinalcutclaim
+
+========== scenario: exp_static_rock_gen3 ==========
+[duo] exp_static_rock_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=ec5846b2bf9b9e4db84413363975190dc6fdb5dfcfc994d953c7c545a02f836a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=d27a56c97a80ca958f862b4510f185183da0427bec9847dc21a796dce8388d81 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=db1ed0736c3a6c6c38b6032ea06559f60b233fe5
+[duo] server up: tcp=52819 http=52820 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 20:31:17,892 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 20:31:17,892 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for exp_static_rock_gen3: e2e_exp_static_rock_gen3_a_attempt1_result.txt, e2e_exp_static_rock_gen3_a_result.txt, e2e_exp_static_rock_gen3_b_attempt1_result.txt, e2e_exp_static_rock_gen3_b_result.txt, e2e_exp_static_rock_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9 path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.6s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9 path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.7s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 9.0s
+[duo] RESULT_LINE a: RESULT: FAIL (native enemy differs from selected compiled slots)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before a: native encounter settled
+[duo] exp_static_rock_gen3: a client finished before 'a: native encounter settled' (a: RESULT: FAIL (native enemy differs from selected compiled slots); b: no RESULT)
+--- exp_static_rock_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] baseline(quiet): boxes ok=true n=0 gen=1 party=0
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"route_111","artifact_kind":"clean","badges":255,"ball_count":1,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_name":"route111","
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=612 map=(0,26)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=258 level=100 hp=225/225
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=261 level=3 hp=15/15
+booted frame=612 map=map=26 at=(18,102) balls=1
+HELLO_WATCH {"baselined":true,"frozen":false,"game_is_live":true,"hello_ready":true,"hello_sent":true,"hello_visible":true,"hello_why":"verified overworld checkpoint","in_battle":false,"journal_busy":"unavailable","journal_failure":"unavailable","live_why":"unavailable","location":{"map_group":0,"map_num":26},"map_x":18,"map_y":102,"party_hidden":"unavailable","phase":"await-start","policy_ok":true,"policy_reason":"overworld","policy_why":"verified overworld checkpoint","raw":{"callback1":{"match":"thumb-bit-stripped","names":["CB1_Overworld"],"raw":135868577},"callback2":{"match":"thumb-bit-stripped","names":["CB2_Overworld"],"raw":135879677},"gPaletteFade":{"active_mask":"0x80","active_offset":15,"active_word":0,"address":33755796,"bytes":[0,0,0,0,140,20,0,3,144,20,0,3,124,0,0,0,0,128,6,32,0,0,0,0]},"sGlobalScriptContextStatus":{"address":50337477,"raw":2,"size":1},"sLockFieldControls":{"address":50337476,"raw":0,"size":1},"tasks":[{"address":50359328,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_WeatherMain"],"raw":135578037},"isActive":1,"slot":0},{"address":50359368,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunPerStepCallback"],"raw":135574237},"isActive":1,"slot":1},{"address":50359408,"data0_raw":26,"data0_s16":26,"func":{"match":"thumb-bit-stripped","names":["Task_MuddySlope"],"raw":135574381},"isActive":1,"slot":2},{"address":50359448,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunTimeBasedEvents"],"raw":135574285},"isActive":1,"slot":3},{"address":50359568,"data0_raw":1,"data0_s16":1,"func":{"match":"thumb-bit-stripped","names":["Task_MapNamePopUpWindow"],"raw":135782349},"isActive":1,"slot":6}]},"refusal_clauses":{},"sample_frame":612,"samples":0,"snapshot":{"gPokemonStoragePtr":33585356,"gSaveBlock1Ptr":33619628,"gSaveBlock2Ptr":33635324},"snapshot_why":"unavailable","start_frame":612,"wire_event":"tick","wire_seq":3}
+JITTER requested=0 applied=0 attempt=1
+STATIC_SELECTOR_BEFORE {"pointer":33619628,"selector":0}
+STATIC_WILD_BEFORE {"balls":1,"captures":0,"no_catch":0}
+SYNTH_ROCK_RNG_PREP {"address":50359140,"before":[116,170,115,104,87,130,216,78,84,80,115,139,166,9,0,0],"callback_address":136550484,"counter":17,"frame":2397,"scope":"SYNTH native SeedRng(0)-equivalent SFC32 state at native RockSmash entry before first Random32; not persisted or a forced result","state_hex":"77d55d46595622f2d29392f511000000"}
+STATIC_METHOD_PROBE {"address":136550484,"frame":2397,"name":"RockSmashWildEncounter","r0":172}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203112,"counter":17,"draw":1,"frame":2397,"phase":"before"}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203144,"counter":18,"draw":1,"frame":2397,"modulus":2880,"phase":"after","result":947923937}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203112,"counter":18,"draw":2,"frame":2397,"phase":"before"}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203144,"counter":19,"draw":2,"frame":2397,"modulus":2880,"phase":"after","result":-1803388442}
+WRITES 0
+RESULT: FAIL (native enemy differs from selected compiled slots)
+--- exp_static_rock_gen3 b result (last 25 lines) ---
+[client] [SLink] TCP connected to 127.0.0.1:52819
+[client] [SLink-gen3] baseline(quiet): boxes ok=true n=0 gen=1 party=0
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"route_111","artifact_kind":"clean","badges":255,"ball_count":1,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_name":"route111","
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=611 map=(0,26)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=100 hp=225/225
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+booted frame=611 map=map=26 at=(18,102) balls=1
+HELLO_WATCH {"baselined":true,"frozen":false,"game_is_live":true,"hello_ready":true,"hello_sent":true,"hello_visible":true,"hello_why":"verified overworld checkpoint","in_battle":false,"journal_busy":"unavailable","journal_failure":"unavailable","live_why":"unavailable","location":{"map_group":0,"map_num":26},"map_x":18,"map_y":102,"party_hidden":"unavailable","phase":"await-start","policy_ok":true,"policy_reason":"overworld","policy_why":"verified overworld checkpoint","raw":{"callback1":{"match":"thumb-bit-stripped","names":["CB1_Overworld"],"raw":135868577},"callback2":{"match":"thumb-bit-stripped","names":["CB2_Overworld"],"raw":135879677},"gPaletteFade":{"active_mask":"0x80","active_offset":15,"active_word":0,"address":33755796,"bytes":[0,0,0,0,140,20,0,3,144,20,0,3,124,0,0,0,0,128,6,32,0,0,0,0]},"sGlobalScriptContextStatus":{"address":50337477,"raw":2,"size":1},"sLockFieldControls":{"address":50337476,"raw":0,"size":1},"tasks":[{"address":50359328,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_WeatherMain"],"raw":135578037},"isActive":1,"slot":0},{"address":50359368,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunPerStepCallback"],"raw":135574237},"isActive":1,"slot":1},{"address":50359408,"data0_raw":26,"data0_s16":26,"func":{"match":"thumb-bit-stripped","names":["Task_MuddySlope"],"raw":135574381},"isActive":1,"slot":2},{"address":50359448,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunTimeBasedEvents"],"raw":135574285},"isActive":1,"slot":3},{"address":50359568,"data0_raw":1,"data0_s16":1,"func":{"match":"thumb-bit-stripped","names":["Task_MapNamePopUpWindow"],"raw":135782349},"isActive":1,"slot":6}]},"refusal_clauses":{},"sample_frame":611,"samples":0,"snapshot":{"gPokemonStoragePtr":33585396,"gSaveBlock1Ptr":33619668,"gSaveBlock2Ptr":33635364},"snapshot_why":"unavailable","start_frame":611,"wire_event":"tick","wire_seq":3}
+JITTER requested=0 applied=0 attempt=1
+STATIC_SELECTOR_BEFORE {"pointer":33619668,"selector":0}
+STATIC_WILD_BEFORE {"balls":1,"captures":0,"no_catch":0}
+SYNTH_ROCK_RNG_PREP {"address":50359140,"before":[27,49,20,39,231,111,111,113,247,41,15,154,255,4,0,0],"callback_address":136550484,"counter":17,"frame":1258,"scope":"SYNTH native SeedRng(0)-equivalent SFC32 state at native RockSmash entry before first Random32; not persisted or a forced result","state_hex":"77d55d46595622f2d29392f511000000"}
+STATIC_METHOD_PROBE {"address":136550484,"frame":1258,"name":"RockSmashWildEncounter","r0":172}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203112,"counter":17,"draw":1,"frame":1258,"phase":"before"}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203144,"counter":18,"draw":1,"frame":1258,"modulus":2880,"phase":"after","result":947923937}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203112,"counter":18,"draw":2,"frame":1258,"phase":"before"}
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203144,"counter":19,"draw":2,"frame":1258,"modulus":2880,"phase":"after","result":-1803388442}
+STATIC_WILD_BATTLE {"field_probe":true,"level":15,"method":"rock_smash_mons","moves":[111,397,205,523],"scope":"set0; nonzero is selection-characterization only","selector":0,"selector_pointer":33619704,"species":74}
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_4f04c4r9
+
+========== summary ==========
+  exp_static_rock_gen3: FAIL (attempt 1 of 1)
+
+EXIT 1

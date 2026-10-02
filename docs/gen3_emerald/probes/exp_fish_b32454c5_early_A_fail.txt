@@ -1,0 +1,84 @@
+DEV SOURCE=b32454c5dd3f46aa7a94d07840703a1532deb8c5; nativeexp test-only; nofinalcutclaim
+
+========== scenario: exp_static_fish_gen3 ==========
+[duo] exp_static_fish_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=683d2d17acc7dee0059cd40f1cc4cf14d48eafc98170167090d9479ac0099c7e b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=3828a12d460c6d0503a6b44e65893d272861341b4e497bbcea5e6e7975311600 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=b32454c5dd3f46aa7a94d07840703a1532deb8c5
+[duo] server up: tcp=58237 http=58238 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 19:01:06,300 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 19:01:06,300 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9 path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9 path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 484.7s
+[duo] RESULT_LINE a: RESULT: FAIL (native encounter did not start (no encounter forced))
+[duo] RESULT_LINE b: RESULT: FAIL (native encounter did not start (no encounter forced))
+[duo] PYDEC: FAIL client RESULT before a: native encounter settled
+[duo] exp_static_fish_gen3: a client finished before 'a: native encounter settled' (a: RESULT: FAIL (native encounter did not start (no encounter forced)); b: RESULT: FAIL (native encounter did not start (no encounter forced)))
+--- exp_static_fish_gen3 a result (last 25 lines) ---
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (native encounter did not start (no encounter forced))
+--- exp_static_fish_gen3 b result (last 25 lines) ---
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+TIMEOUT waiting for mashing A [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=1 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (native encounter did not start (no encounter forced))
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_fish_gen3_1o2p6mt9
+
+========== summary ==========
+  exp_static_fish_gen3: FAIL (attempt 1 of 1)
+
+EXIT 1

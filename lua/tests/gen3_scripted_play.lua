@@ -3639,7 +3639,10 @@ if TITLE == Syms.EXP_TITLE then
     --- The full-box SYNTH fixture this leg needs. Named here, not created: the fixture and its
     --- manifest entry belong to the acquisition tooling's lease, so the leg FAILS CLOSED with
     --- this exact message rather than silently depositing into a 2-mon box and proving nothing.
-    local EXP_PC_FULL_BOX_SAV = "tests/fixtures/gen3/exp_pc_full_box_synth.sav"
+    -- Negative half: box0 has30 occupied slots and refuses STORE.
+    -- Positive sibling: box1 is empty and accepts STORE under the same live observer.
+    -- exp_pc_full_box_synth.sav separately qualifies all420 storage slots; it cannot serve this leg.
+    local EXP_PC_FULL_BOX_SAV = "tests/fixtures/gen3/exp_pc_box0_full_synth.sav"
 
     -- MOVED-MON BYPASS (card XG3-PC-NEG, third negative). REACHABLE: the popup's RELEASE row is
     -- gated on boxOption, NOT on the held flag (SetMenuTexts_Mon :7813-7814), and A opens that
@@ -3648,9 +3651,13 @@ if TITLE == Syms.EXP_TITLE then
     -- (:2637-2653 -> Task_ReleaseMon) with sIsMonBeingMoved still set, and ReleaseMon takes the
     -- flag-clear branch (:6552-6580, specifically :6558-6561) and skips the purge.
     --
-    -- REGISTERED BEFORE emerald_pc_release_cancel, still after emerald_save_town: the cancel leg
-    -- ends with a 1-mon party and this leg needs 2, so a resumed chain that ran it after the
-    -- cancel would trip its own precondition. The order test pins this.
+    -- REGISTERED BEFORE emerald_pc_release_cancel, still after emerald_save_town (the order
+    -- test pins this). The chain reaches here with a ONE-mon party (emerald_pc_release took
+    -- party 2 -> 1 and emerald_save_town leaves it), and one is enough: the leg grabs a BOXED
+    -- mon, and IsRemovingLastPartyMon (src/pokemon_storage_system.c:6878-6884) refuses only when
+    -- the cursor is in the party AND no mon is being moved, so a held box mon with the cursor in
+    -- the box can never trip the last-party-mon gate (:2637-2639). The cancel leg then withdraws
+    -- a second mon itself.
     --
     -- EXPECTED OBSERVER SHAPE, the inverse of emerald_pc_release: pc_release_begin MUST NOT fire
     -- ("no snapshot is emitted for moved-mon flag clear") and pc_release MUST fire UNPAIRED, being
@@ -3688,11 +3695,11 @@ if TITLE == Syms.EXP_TITLE then
             -- emerald_save_town. A bare SLINK_GEN3_PLAY_FROM=%s boots cold and trips the precondition.
             local before = owned_snapshot(L .. " before")
             if not before then return end
-            if before.party.n < 2 then
-                return em_fail(L, string.format("precondition: a party of at least 2 (have %d) -- "
-                               .. "this leg runs IN-CHAIN BEFORE emerald_pc_release_cancel, which "
-                               .. "leaves 1 after its own release, and after emerald_save_town, not "
-                               .. "from a cold boot", before.party.n))
+            if before.party.n < 1 then
+                return em_fail(L, string.format("precondition: a non-empty party (have %d) -- "
+                               .. "this leg runs IN-CHAIN after emerald_save_town (party 1 here), "
+                               .. "before emerald_pc_release_cancel, not from a cold boot",
+                               before.party.n))
             end
             local slot = em_first_occupied_box_slot(before)
             local target = slot and em_box_key(before, 0, slot) or nil
@@ -3725,23 +3732,26 @@ if TITLE == Syms.EXP_TITLE then
             PC.leave(cp, L)
             local after = owned_snapshot(L .. " after")
             if not after then return end
-            -- The bypass's whole point: nothing was purged. The mon is still boxed at the SAME
-            -- slot with the SAME 80 bytes, and the party is unchanged.
-            local still = after.boxes[target]
-            if not still or still.box ~= 0 or still.slot ~= slot
-               or still.raw ~= before.boxes[target].raw then
-                return em_fail(L, string.format("bypass_readback: %s is %s, want box 0 slot %d "
-                               .. "byte-identical -- ReleaseMon purged despite the held flag",
-                               target, still and string.format("box %d slot %d", still.box,
-                                                                still.slot) or "gone", slot))
+            -- What the source says happens (src/pokemon_storage_system.c:6391-6450, :6552-6580):
+            -- the GRAB already took the mon out of its box (MoveMon -> SetMovingMonData copies it
+            -- to sStorage->movingMon and PurgeMonOrBoxMon's the slot), so ReleaseMon's held branch
+            -- only clears the flag and skips ITS purge -- the held mon is simply discarded. The
+            -- readback is therefore: the target is in NO box and NOT in the party (it was lost
+            -- through the held path, with no pc_release_begin), the party is unchanged, and every
+            -- other box byte is identical.
+            if after.boxes[target] then
+                return em_fail(L, string.format("bypass_readback: %s is still present (box or party) "
+                               .. "after releasing the held mon; the grab purges the slot, so the "
+                               .. "held release must leave it gone", target))
             end
             if after.party.n ~= before.party.n or play.departed_key(before.party, after.party) then
-                return em_fail(L, string.format("bypass_readback: party %d -> %d, a bypassed release "
-                               .. "must move nothing", before.party.n, after.party.n))
+                return em_fail(L, string.format("bypass_readback: party %d -> %d, a held release "
+                               .. "must move nothing in the party", before.party.n, after.party.n))
             end
-            if not boxes_unchanged(L, before.boxes, after.boxes, nil) then return end
+            if not boxes_unchanged(L, before.boxes, after.boxes, target) then return end
             G.phase("bypassed", string.format("ReleaseMon took the moved-mon flag-clear branch: %s "
-                    .. "still box 0 slot %d, party unchanged at %d", target, slot, after.party.n))
+                    .. "(grabbed from box 0 slot %d) is gone from every box, party unchanged at %d",
+                    target, slot, after.party.n))
             G.phase("note", "the observer must show pc_release_begin ABSENT and pc_release PRESENT "
                     .. "UNPAIRED across this window (tests/unit/test_gen3_exp_pc_negative_legs.py "
                     .. "asserts it with a liveness sibling); the client's 'nothing reported' half "
@@ -4247,7 +4257,8 @@ end
 --- with "no bag task" on the throw-committed check; every wait below is bounded and a timeout
 --- returns a named failure (via G.finish(false, ...), the same fail-loud shape every leg here
 --- uses).
-local function emerald_throw_ball(cp, label)
+local function emerald_throw_ball(cp, label, expected_ball)
+    expected_ball = expected_ball or ITEM_POKE_BALL
     if not play.in_battle(cp) then
         G.finish(false, label .. ": the battle ended before the bag opened")
         return false
@@ -4336,11 +4347,11 @@ local function emerald_throw_ball(cp, label)
 
     -- The select-A wrote the highlighted slot's item into gSpecialVar_ItemId before opening this
     -- menu (item_menu.c:1266) -- the same check FR's throw_pokeball_from_bag makes.
-    if memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) ~= ITEM_POKE_BALL then
+    local selected_item = memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR)
+    if selected_item ~= expected_ball then
         G.shot("stuck")
-        G.finish(false, string.format("%s: the selected bag item is %d, not ITEM_POKE_BALL(%d) "
-                 .. "(gSpecialVar_ItemId)", label, memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR),
-                 ITEM_POKE_BALL))
+        G.finish(false, string.format("%s: the selected bag item is %d, not expected ball(%d) "
+                 .. "(gSpecialVar_ItemId)", label, selected_item, expected_ball))
         return false
     end
 
@@ -4371,9 +4382,10 @@ local function emerald_throw_ball(cp, label)
             .. "%d, want one fewer) within 600 frames", label, balls_before, EMH.ball_count()))
         return false
     end
-    G.phase("ball-thrown", string.format("gLastUsedItem %d -> %d, balls %d -> %d", last_used_before,
-                                         memory.read_u16_le(LAST_USED_ITEM_ADDR), balls_before,
-                                         EMH.ball_count()))
+    G.phase("ball-thrown", string.format("item=%d expected_item=%d debit=%d, gLastUsedItem %d -> %d, balls %d -> %d",
+                                         selected_item, expected_ball, balls_before - EMH.ball_count(),
+                                         last_used_before, memory.read_u16_le(LAST_USED_ITEM_ADDR),
+                                         balls_before, EMH.ball_count()))
     return true
 end
 EMH.throw_ball = emerald_throw_ball   -- E4: duo_gen3_main.lua ctx.catch on Emerald

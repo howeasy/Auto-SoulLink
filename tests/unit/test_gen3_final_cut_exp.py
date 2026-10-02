@@ -133,9 +133,42 @@ def test_exp_rows_and_zip_chain_never_carry_prior_evidence():
     assert all(not r.emulator and not r.own_verdict for r in source)
     assert all(Path(fc.REPO, f).is_file() for f in fc.EXPANSION_UNIT_FILES)
     area = next(r for r in rows if r.id == "area_map_generated_check_exp")
-    assert area.argv[-5:] == ["--game", "emerald", "--expansion", "28877d73", "--check"]
+    assert area.argv[-7:-2] == ["--game", "emerald", "--expansion", "28877d73", "--check"]
+    assert area.argv[-2:] == ["--source", fc.expansion_env("lane")["SLINK_EXPANSION_SRC"]]
+    gift = next(r for r in rows if r.id == "gift_census_check_exp")
+    assert gift.argv[-2:] == ["--src", fc.expansion_env("lane")["SLINK_EXPANSION_SRC"]]
     assert all(r.env == fc.expansion_env("lane") for r in rows)
     assert all(r.cwd == "lane" for r in rows)
+
+
+def test_exp_unit_collection_includes_new_matching_module(tmp_path):
+    unit = tmp_path / "tests/unit"
+    write(unit / "test_gen3_exp_future.py", "def test_future(): pass\n")
+    assert "tests/unit/test_gen3_exp_future.py" in fc.expansion_unit_files(tmp_path)
+
+
+def test_exp_unit_collection_rejects_adjacent_generations(tmp_path):
+    unit = tmp_path / "tests/unit"
+    for name in ("test_gen1_rival_swap_explode.py", "test_gen2_explode_rival.py",
+                 "test_gen3_explode_bind.py", "test_gen3_export_future.py",
+                 "test_gen4_future_exp.py", "test_purergb_exp.py", "test_crystal_exp.py"):
+        write(unit / name, "def test_adjacent(): pass\n")
+        assert f"tests/unit/{name}" not in fc.expansion_unit_files(tmp_path)
+    assert not hasattr(fc, "EXPANSION_UNIT_EXCLUSIONS")
+
+
+def test_exp_unit_collection_covers_current_expansion_modules():
+    collected = set(fc.EXPANSION_UNIT_FILES)
+    for name in ("test_gen3_exp_sites.py", "test_gen3_fixture_exp.py",
+                 "test_gen3_title_syms_exp.py", "test_gen3_expansion_towns.py",
+                 "test_gen3_expansion_trainer_panel.py", "test_gen3_expansion_gift_policy.py",
+                 "test_gen3_exp_release_row.py", "test_gen3_exp_player_gender.py",
+                 "test_gen3_exp_faint_pin.py", "test_gen3_exp_signal_mirror.py",
+                 "test_gen3_exp_acquisition_rows.py", "test_gen3_exp_static_wild_rows.py"):
+        assert f"tests/unit/{name}" in collected
+    for name in ("test_e2e_duo_gen3_exp.py", "test_gen3_codec_expansion.py",
+                 "test_gen3_fixture_exp.py", "test_gen3_title_syms_exp.py"):
+        assert f"tests/unit/{name}" in collected
 
 
 @pytest.mark.parametrize("dirty,actual", [(False, "d" * 40), (True, CUT)])
@@ -166,6 +199,28 @@ def test_exp_row_zero_exit_without_logged_route_is_a_real_failure(monkeypatch, t
     row = fc._duo("faint_cmd_gen3", "gen3_exp", "XG3", str(tmp_path))
     verdict, attempts, _clean = fc.run_row(row, CUT, str(tmp_path), None)
     assert verdict.startswith("FAIL") and attempts == 1 and calls == [1]
+
+
+def test_exp_row_refuses_source_checkout_dirtied_by_check_generator(monkeypatch, tmp_path):
+    lane, source = tmp_path / "lane", tmp_path / "source"
+    source.mkdir()
+    write(lane / "data/gen3_exp_sources.lock.json", json.dumps({"source": {"commit": "e" * 40}}))
+    monkeypatch.setattr(fc, "PROBES", str(tmp_path))
+    monkeypatch.setattr(fc, "head", lambda path: CUT if str(path) == str(lane) else "e" * 40)
+    dirty = [False]
+    monkeypatch.setattr(fc, "tracked_clean", lambda path: not dirty[0] if str(path) == str(source)
+                        else True)
+    monkeypatch.setattr(fc, "load_snapshot", lambda: "model")
+    monkeypatch.setattr(fc, "rewind_violations", lambda *_: [])
+    def run(*_):
+        dirty[0] = True
+        return 0, "generator --check passed", False, False
+    monkeypatch.setattr(fc, "run_once", run)
+    row = fc.Row("area_map_generated_check_exp", "SOURCE", [], str(lane), 0,
+                 emulator=False, env={"SLINK_EXPANSION_SRC": str(source)})
+    verdict, attempts, _clean = fc.run_row(row, CUT, str(lane), None)
+    assert verdict.startswith("FAIL") and attempts == 1
+    assert "source checkout" in Path(fc.receipt_path(row.id, CUT)).read_text()
 
 
 def write(path, body):
@@ -291,6 +346,25 @@ def test_exp_zip_production_refusal_cannot_be_flipped(tmp_path, bad):
         profile = json.loads(path.read_text())
         profile["titles"][TITLE]["admitted"] = True
         write(path, json.dumps(profile))
+    assert fc.expansion_zip_blocker(str(root / "lua")) is not None
+
+
+@pytest.mark.parametrize("route,blocked", [
+    ('Entry.ROUTED = {gen3_frlg = { nested = true }, gen3_exp = true}', True),
+    ('Entry.ROUTED = {label = "gen3_exp = true", gen3_frlg = true}', False),
+    ('Entry.ROUTED = {-- gen3_exp = true\n gen3_frlg = true}', False),
+    ('Entry.ROUTED = {gen3_frlg = {nested = "}"}, ["gen3_exp"] = true}', True),
+])
+def test_exp_zip_route_scanner_handles_nested_tables_strings_and_comments(tmp_path, route, blocked):
+    root = extracted_pack(tmp_path)
+    write(root / "lua/gen3/entry.lua", route)
+    assert (fc.expansion_zip_blocker(str(root / "lua")) is not None) is blocked
+
+
+def test_exp_zip_route_scanner_rejects_second_admitting_assignment(tmp_path):
+    root = extracted_pack(tmp_path)
+    write(root / "lua/gen3/entry.lua", "Entry.ROUTED = {gen3_frlg = true}\n"
+          "Entry.ROUTED = {gen3_exp = true}\n")
     assert fc.expansion_zip_blocker(str(root / "lua")) is not None
 
 

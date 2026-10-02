@@ -72,6 +72,12 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    **{f"exp_static_{case}_gen3": {
+        "flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": f"static_{case}_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "static_wild", "static_wild_case": case,
+        "oracle": "assert_static_wild_gen3_saved",
+    } for case in ("static", "static_run", "grass", "surf", "rock", "fish", "altering0", "altering1")},
     "gift_gen3": {"flags": ["--species-clause", "--gender-clause", "--type-clause"],
         "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr", "gen3_exp"),
         "target": "gift_synth", "frames": 2000000, "explicit_only": True,
@@ -4422,6 +4428,9 @@ class DuoRun:
             if self.cfg.get("acquisition_kind"):
                 from gen3_gift_egg_rows import own_facts
                 duo.update(acquisition_kind=self.cfg["acquisition_kind"], acquisition_facts=own_facts(self, inst))
+            if self.cfg.get("static_wild_case"):
+                from gen3_static_wild_rows import own_facts
+                duo.update(static_wild_case=self.cfg["static_wild_case"], static_wild_facts=own_facts(self, inst))
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -5113,14 +5122,26 @@ class DuoRun:
         return ka, kb
 
     def wait_connected(self):
+        last_status = None
         def both():
+            nonlocal last_status
             st = self._status()
+            last_status = st
             if not st:
                 return None
             players = st.get("players", {})
             return (players.get("a", {}).get("connected")
                     and players.get("b", {}).get("connected")) or None
-        self.wait_for("both players hello'd", both, 120)
+        try:
+            self.wait_for("both players hello'd", both, 120)
+        except TimeoutError:
+            players = (last_status or {}).get("players", {})
+            diagnostic = {"players": {inst: {
+                "connected": players.get(inst, {}).get("connected", "unavailable"),
+                "last_event": players.get(inst, {}).get("last_event", "unavailable"),
+            } for inst in ("a", "b")}}
+            print("[duo] CONNECT_TIMEOUT " + json.dumps(diagnostic, sort_keys=True))
+            raise
         print("[duo] both players connected")
 
     def inject_link(self, a_key, b_key, area_id="duo"):
@@ -8457,6 +8478,23 @@ class DuoRun:
         from gen3_gift_egg_rows import saved_oracle
         return saved_oracle(self, results)
 
+    def orchestrate_static_wild_gen3(self):
+        from gen3_static_wild_rows import orchestrate
+        return orchestrate(self)
+
+    orchestrate_exp_static_static_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_static_run_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_grass_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_surf_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_rock_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_fish_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_altering0_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_altering1_gen3 = orchestrate_static_wild_gen3
+
+    def assert_static_wild_gen3_saved(self, results):
+        from gen3_static_wild_rows import saved_oracle
+        return saved_oracle(self, results)
+
     orchestrate_gender_clause_gen3 = orchestrate_species_clause_gen3
     orchestrate_type_clause_gen3 = orchestrate_species_clause_gen3
 
@@ -9498,9 +9536,9 @@ class DuoRun:
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         req_a, ord_a, forb_a = marks["a"]
         if self.game == "gen3_exp":
-            # The expansion's natural A faint has a raw frame-end party HP0 witness but does
-            # not hit the pinned Cmd_tryfaintmon completion site. B's P+H path below still
-            # requires that engine site, counter increment and independent save readback.
+            # Expansion natural A faint uses pinned SetValuesOnFaint plus the raw frame-end
+            # party HP0 watcher. B's P+H path also requires that engine site, counter
+            # increment and independent save readback.
             problems += exp_faint_oracle.natural_faint_receipt_problems(results["a"], ka)
             problems += gen3_receipt_problems("a", results["a"],
                                              required=[gen3_tx("faint", ka), *req_a],

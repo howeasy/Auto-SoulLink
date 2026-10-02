@@ -1553,6 +1553,33 @@ EXP_KINDS = {k: EMERALD_KINDS[k] for k in ("town", "battle", "pc", "catch")}
 # Built from the "town" seed with only the position fields moved.
 EXP_ONLY_KINDS = {"center": ("OldaleTown_PokemonCenter_1F", 2, 2, 61, 7, 4)}
 EXP_KINDS |= EXP_ONLY_KINDS
+# The transplant seeds above and the disclosed acquisition recipes have different
+# party/storage semantics. Register their map tuples, but dispatch to their own
+# generators and qualifiers below instead of treating them as town seeds.
+EXP_TRANSPLANT_KINDS = dict(EXP_KINDS)
+EXP_ACQUISITION_KINDS = {
+    "gift_synth": ("MossdeepCity_StevensHouse", 14, 7, 327, 3, 3),
+    "hatch_synth": ("MossdeepCity_StevensHouse", 14, 7, 327, 3, 5),
+    "egg_receive_synth": ("LavaridgeTown", 0, 12, 13, 4, 8),
+    "choice_gift_synth": ("RustboroCity_DevonCorp_2F", 11, 1, 93, 13, 8),
+    "gift_box_synth": ("MossdeepCity_StevensHouse", 14, 7, 327, 3, 3),
+}
+EXP_STATIC_WILD_KINDS = {
+    "static_static_synth": ("AquaHideout_B1F", 24, 24, 144, 17, 9),
+    "static_static_run_synth": ("AquaHideout_B1F", 24, 24, 144, 17, 9),
+    "static_grass_synth": ("Route102", 0, 17, 18, 8, 2),
+    "static_surf_synth": ("Route102", 0, 17, 18, 39, 2),
+    "static_rock_synth": ("Route111", 0, 26, 27, 18, 102),
+    "static_fish_synth": ("Route102", 0, 17, 18, 39, 2),
+    "static_altering0_synth": ("AlteringCave", 24, 106, 420, 4, 12),
+    "static_altering1_synth": ("AlteringCave", 24, 106, 420, 4, 12),
+}
+EXP_FULL_BOX_KIND = "pc_full_box_synth"
+EXP_BOX0_FULL_KIND = "pc_box0_full_synth"
+EXP_MIRAGE_TOWER_VISIBLE_FLAG = 0x14E  # own flags.h; Route111_OnTransition selects the native layout
+EXP_ROUTE111_NO_TOWER_LAYOUT = 392    # own layouts.json LAYOUT_ROUTE111_NO_MIRAGE_TOWER
+EXP_KINDS |= EXP_ACQUISITION_KINDS | EXP_STATIC_WILD_KINDS
+EXP_KINDS[EXP_FULL_BOX_KIND] = EXP_KINDS[EXP_BOX0_FULL_KIND] = EXP_KINDS["pc"]
 # pret pokeemerald species id -> this build's (national-order) id; data.json names checked by test
 EXP_SPECIES = {283: 258, 286: 261, 288: 263, 290: 265}
 EXP_ITEM_POKE_BALL = 1     # include/constants/items.h:13 ITEM_POKE_BALL; pokeball.h:7 BALL_POKE = 1
@@ -1618,8 +1645,23 @@ def exp_write_slot(blocks: dict, *, counter: int) -> bytes:
     return bytes(image)
 
 
-def build_exp_seed(kind: str, flags: list[int]) -> bytes:
+def build_exp_seed(kind: str, flags: list[int], *, side: str = "a") -> bytes:
     """The SYNTH flash image for `kind` on the reference build (section header)."""
+    if side not in ("a", "b"):
+        raise ValueError(f"unknown expansion fixture side {side}")
+    if kind not in EXP_TRANSPLANT_KINDS:
+        seed = (FIXTURES_DIR / f"exp_pc{'_b' if side == 'b' else ''}.sav").read_bytes()
+        if kind in (EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND):
+            from tools.gen3_static_wild_rows import build_box0_full_seed, build_full_box_seed
+            return (build_box0_full_seed if kind == EXP_BOX0_FULL_KIND else build_full_box_seed)(seed)
+        rom = (EXP_ARTIFACTS / "pokeemerald.gba").read_bytes()
+        if kind in EXP_ACQUISITION_KINDS:
+            from tools.gen3_gift_egg_rows import build_exp_seed as build_acquisition
+            return build_acquisition(seed, kind.removesuffix("_synth"), rom, side)[0]
+        if kind in EXP_STATIC_WILD_KINDS:
+            from tools.gen3_static_wild_rows import build_seed
+            return build_seed(seed, kind.removeprefix("static_").removesuffix("_synth"), rom)[0]
+        raise ValueError(f"unknown expansion fixture kind {kind}")
     parsed = codec.parse_flash(build_emerald_seed("town" if kind in EXP_ONLY_KINDS else kind, flags),
                                title=codec.TITLE_EMERALD)
     sb2_size, sb1_size = codec._TITLE_SAVE_SIZES[codec.TITLE_EXPANSION]
@@ -1674,6 +1716,13 @@ def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
     parsed = codec.parse_flash(body, title=codec.TITLE_EXPANSION)
     sb1, sb2 = parsed["sb1"], parsed["sb2"]
     _map, group, num, layout_id, x, y = EXP_KINDS[kind]
+    if kind == "static_rock_synth":
+        # Route111/scripts.inc:43-45,87-89: native CONTINUE randomizes the tower's
+        # visibility, then chooses the no-tower layout when its flag is clear.
+        flags_off = _exp_derived()["SB1_FLAGS_OFFSET"]
+        visible = sb1[flags_off + EXP_MIRAGE_TOWER_VISIBLE_FLAG // 8] & (1 << (EXP_MIRAGE_TOWER_VISIBLE_FLAG % 8))
+        if not visible:
+            layout_id = EXP_ROUTE111_NO_TOWER_LAYOUT
     problems = []
     if sb2[0x09] & 1:
         problems.append("specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save")
@@ -1682,16 +1731,33 @@ def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
         problems.append(f"player at (x,y,group,num)={where}, expected {(x, y, group, num)}")
     if int.from_bytes(sb1[0x32:0x34], "little") != layout_id:
         problems.append(f"mapLayoutId {int.from_bytes(sb1[0x32:0x34], 'little')} != {layout_id}")
+    if kind in EXP_ACQUISITION_KINDS:
+        from tools.gen3_gift_egg_rows import exp_seed_problems, expansion_facts
+        trainer_id = _trainer_identity(sb2)[1]
+        if trainer_id not in (EMERALD_OT[1], EMERALD_OT[1] ^ 0xFFFFFFFF):
+            problems.append("unknown synthetic acquisition trainer identity")
+        side = "b" if trainer_id == EMERALD_OT[1] ^ 0xFFFFFFFF else "a"
+        facts = expansion_facts((EXP_ARTIFACTS / "pokeemerald.gba").read_bytes(),
+                                kind.removesuffix("_synth"), side)
+        return problems + exp_seed_problems(body, facts)
+    if kind in EXP_STATIC_WILD_KINDS:
+        from tools.gen3_static_wild_rows import facts, seed_problems
+        own = facts((EXP_ARTIFACTS / "pokeemerald.gba").read_bytes(),
+                    kind.removeprefix("static_").removesuffix("_synth"))
+        return problems + seed_problems(body, own)
     layout = _record_layout(codec.TITLE_EXPANSION)
     party = codec.party_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
-    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind == "pc" else [(258, STARTER_LEVEL)]
+    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind in ("pc", EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND) else [(258, STARTER_LEVEL)]
     if [(m["species"], m["level"]) for m in party] != want:
         problems.append(f"party {[(m['species'], m['level']) for m in party]} != {want}")
     boxes = codec.boxes_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
     occupied = {(b, s): m["species"] for b, row in enumerate(boxes) for s, m in enumerate(row)
                 if m["personality"] or m["ot_id"]}
     want_box = {(0, 0): 263, (0, 1): 265} if kind == "pc" else {}
-    if occupied != want_box:
+    if kind in (EXP_FULL_BOX_KIND, EXP_BOX0_FULL_KIND):
+        from tools.gen3_static_wild_rows import box0_full_seed_problems, full_box_seed_problems
+        problems.extend((box0_full_seed_problems if kind == EXP_BOX0_FULL_KIND else full_box_seed_problems)(body))
+    elif occupied != want_box:
         problems.append(f"boxes {occupied} != {want_box}")
     records = party + [boxes[b][s] for b, s in occupied]
     if any(not m["checksum_ok"] or m["pokeball"] != EXP_ITEM_POKE_BALL for m in records):

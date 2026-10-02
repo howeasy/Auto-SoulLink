@@ -30,14 +30,31 @@ FIXTURES = ROOT / "tests/fixtures/gen3"
 
 def _src():
     """The expansion checkout at the pin, or skip (absent skips; a wrong checkout fails)."""
-    src = os.environ.get("SLINK_EXPANSION_SRC")
-    if not src or not Path(src, "include/global.h").is_file():
-        pytest.skip("SLINK_EXPANSION_SRC unset/absent")
+    src = Path(os.environ.get("SLINK_EXPANSION_SRC", ROOT / ".cache/expansion-src"))
+    if not src.exists():
+        pytest.skip("expansion source absent")
+    assert (src / "include/global.h").is_file(), "present expansion source lacks include/global.h"
     lock = json.loads((ROOT / "data/gen3_exp_sources.lock.json").read_text(encoding="utf-8"))
-    head = subprocess.run(["git", "-C", src, "rev-parse", "HEAD"], capture_output=True,
+    head = subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"], capture_output=True,
                           text=True, check=True).stdout.strip()
     assert head == lock["source"]["commit"], "SLINK_EXPANSION_SRC is not the pinned commit"
     return Path(src)
+
+
+@pytest.fixture(scope="module")
+def context():
+    from tools import gen_gen3_profile as profile
+
+    artifacts = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ROOT / ".cache/expansion-output/reference"))
+    for name in ("pokeemerald.gba", "pokeemerald.sym", "pokeemerald.map"):
+        if not (artifacts / name).is_file():
+            pytest.skip(f"local copyrighted ROMs absent: {artifacts / name}")
+    src = _src()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("SLINK_EXPANSION_SRC", str(src))
+        patch.setenv("SLINK_EXPANSION_ARTIFACTS", str(artifacts))
+        patch.setattr(fx, "EXP_ARTIFACTS", artifacts)
+        yield profile.expansion_inputs(artifacts=artifacts)
 
 
 def _seed(kind):
@@ -58,6 +75,20 @@ def test_new_game_flags_at_the_pin_equal_the_emerald_seeds():
     assert fx.emerald_new_game_flags(_src()) == fx.emerald_new_game_flags(fx.pret_emerald())
 
 
+def test_rock_fixture_native_layout_tracks_the_source_mirage_tower_switch():
+    import re
+
+    src = _src()
+    flags = (src / "include/constants/flags.h").read_text()
+    match = re.search(r"^#define\s+FLAG_MIRAGE_TOWER_VISIBLE\s+(0x[0-9A-Fa-f]+|\d+)", flags, re.M)
+    assert int(match[1], 0) == fx.EXP_MIRAGE_TOWER_VISIBLE_FLAG
+    layouts = json.loads((src / "data/layouts/layouts.json").read_text())["layouts"]
+    assert layouts[fx.EXP_ROUTE111_NO_TOWER_LAYOUT - 1]["id"] == "LAYOUT_ROUTE111_NO_MIRAGE_TOWER"
+    script = (src / "data/maps/Route111/scripts.inc").read_text()
+    assert "call_if_unset FLAG_MIRAGE_TOWER_VISIBLE, Route111_EventScript_SetLayoutNoMirageTower" in script
+    assert "setmaplayoutindex LAYOUT_ROUTE111_NO_MIRAGE_TOWER" in script
+
+
 def test_species_translation_is_the_builds_own_table():
     names = {283: "Mudkip", 286: "Poochyena", 288: "Zigzagoon", 290: "Wurmple"}
     for vanilla, exp in fx.EXP_SPECIES.items():
@@ -69,7 +100,7 @@ def test_species_translation_is_the_builds_own_table():
     assert items[fx.EXP_ITEM_POKE_BALL] == "Poké Ball"
 
 
-@pytest.mark.parametrize("kind", sorted(fx.EXP_KINDS))
+@pytest.mark.parametrize("kind", sorted(fx.EXP_TRANSPLANT_KINDS))
 def test_exp_seed_is_one_expansion_slot_with_expansion_records(kind):
     seed = _seed(kind)
     assert C.qualify_flash(seed, title=T) == (True, "ok")
@@ -119,10 +150,12 @@ def test_derive_b_rekeys_expansion_records_and_keeps_the_saveblock3_chunk():
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("exp_*.sav")))
-def test_committed_exp_fixtures_are_game_resaves(name):
+def test_committed_exp_fixtures_are_game_resaves(name, request):
     body = (FIXTURES / name).read_bytes()
     kind = fx.exp_kind_of(Path(name))
     assert kind in fx.EXP_KINDS
+    if kind not in fx.EXP_TRANSPLANT_KINDS:
+        request.getfixturevalue("context")
     assert fx.exp_fixture_problems(body, kind) == []
 
 
@@ -130,10 +163,35 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
     import hashlib
     readme = (FIXTURES / "README.md").read_text(encoding="utf-8")
     names = sorted(p.name for p in FIXTURES.glob("exp_*.sav"))
-    assert len(names) == 9
+    singletons = {"center", fx.EXP_FULL_BOX_KIND, fx.EXP_BOX0_FULL_KIND}
+    expected = {f"exp_{kind}{suffix}.sav" for kind in fx.EXP_KINDS
+                for suffix in (("",) if kind in singletons else ("", "_b"))}
+    assert set(names) == expected
     for name in names:
         digest = hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest()
-        assert f"| `{name}` |" in readme and digest in readme, name
+        rows = [line for line in readme.splitlines() if line.startswith(f"| `{name}` |")]
+        assert len(rows) == 1 and f"`{digest}`" in rows[0], name
+
+
+@pytest.mark.parametrize("kind,side,manifest_name,case", [
+    *[(kind, side, "exp_acquisition_synth_manifest.json", kind.removesuffix("_synth"))
+      for kind in fx.EXP_ACQUISITION_KINDS for side in ("a", "b")],
+    *[(kind, side, "exp_static_wild_synth_manifest.json", kind.removeprefix("static_").removesuffix("_synth"))
+      for kind in fx.EXP_STATIC_WILD_KINDS for side in ("a", "b")],
+    (fx.EXP_FULL_BOX_KIND, "a", "exp_pc_full_box_synth_manifest.json", None),
+    (fx.EXP_BOX0_FULL_KIND, "a", "exp_pc_box0_full_synth_manifest.json", None),
+])
+def test_registered_synth_generator_replays_the_published_raw_hash(kind, side, manifest_name, case, context):
+    import hashlib
+
+    manifest = json.loads((FIXTURES / manifest_name).read_text())
+    if case is None:
+        expected = manifest["raw_sha256"]
+    else:
+        entry = next(row for row in manifest["fixtures"] if row["case"] == case and row["side"] == side)
+        expected = entry["synth_seed_sha256"] if kind in fx.EXP_ACQUISITION_KINDS else entry["generator_raw_sha256"]
+    raw = fx.build_exp_seed(kind, [], side=side)
+    assert hashlib.sha256(raw).hexdigest() == expected
 
 
 # --- the offsets the seed and the harness read, bound to the build's own compiler -------------

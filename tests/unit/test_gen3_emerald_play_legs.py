@@ -277,6 +277,70 @@ def _function_body(name):
     return _SCRIPT_SRC[start.start():start.start() + close.end()]
 
 
+def _throw_ball_model(selected, debit):
+    """Execute the actual helper through its select -> USE -> commit boundaries."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().selected, lua.globals().debit = selected, debit
+    lua.execute("""
+        -- Expansion model ids: Poke1/Master4; vanilla uses its own title default.
+        ITEM_POKE_BALL=1; BALLS_POCKET=2; POCKETS_COUNT_EM=5; BAG_INPUT_WAIT_FRAMES=240
+        TASK_BAG_MENU_HANDLE_INPUT=10; TASK_ITEM_CONTEXT_SINGLE_ROW=11
+        LAST_USED_ITEM_ADDR=100; SPECIAL_VAR_ITEM_ID_ADDR=101
+        GMAIN_CALLBACK2_ADDR=102; BATTLE_MAIN_CB2=200
+        stage=0; count=5; taps=0; frames=0; reason=nil; phases={}
+        play={in_battle=function() return true end}
+        em_bag_input_ready=function() return stage==0 end
+        em_bag_pocket=function() return BALLS_POCKET end
+        em_bag_row0=function() return 0 end
+        em_context_menu_num_items=function() return 2 end
+        task_active=function(fn) return (stage==0 and fn==10) or (stage==1 and fn==11) end
+        memory={
+            read_u16_le=function(a)
+                if a==101 then return selected end
+                if a==100 then return stage==2 and selected or 0 end
+                return 0
+            end,
+            read_u32_le=function() return stage==2 and BATTLE_MAIN_CB2 or 0 end,
+        }
+        EMH={ball_count=function() return count end}
+        G={
+            advance=function() frames=frames+1 end, shot=function() end,
+            phase=function(name,detail) phases[#phases+1]=name.." "..detail end,
+            finish=function(_,why) reason=why end,
+            tap=function(key)
+                assert(key=="A"); taps=taps+1; stage=stage+1
+                if stage==2 then count=count-debit end
+            end,
+        }
+    """)
+    throw = lua.execute(_function_body("emerald_throw_ball") + "\nreturn emerald_throw_ball")
+    return lua, throw
+
+
+@pytest.mark.parametrize("selected,expected_ball,debit,passed,taps,frames", [
+    (1, None, 1, True, 2, 0),   # default remains the expansion Poke Ball
+    (4, None, 1, False, 1, 0),  # default refuses a selected Master Ball before USE
+    (4, 4, 1, True, 2, 0),     # explicit Master Ball with an exact one-ball debit
+    (1, 4, 1, False, 1, 0),    # explicit request refuses a different selected ball
+    (4, 4, 0, False, 2, 600),  # matching selection without debit cannot commit
+    (4, 4, 2, False, 2, 600),  # a two-ball debit cannot count as one throw
+])
+def test_throw_ball_expected_item_and_exact_debit(selected, expected_ball, debit, passed, taps, frames):
+    lua, throw = _throw_ball_model(selected, debit)
+    cp = lua.table()
+    result = throw(cp, "selected ball") if expected_ball is None else throw(cp, "selected ball", expected_ball)
+    assert result is passed
+    assert lua.globals().taps == taps and lua.globals().frames == frames
+    assert lua.globals().count == 5 - (debit if taps == 2 else 0)
+    if passed:
+        detail = lua.globals().phases[1]
+        assert f"item={selected}" in detail and "debit=1" in detail
+    elif taps == 1:
+        assert "selected bag item" in lua.globals().reason
+    else:
+        assert "throw never committed" in lua.globals().reason
+
+
 def test_emerald_throw_ball_never_sends_select():
     """Hard rule (card E2-CATCH-LEG, research note): SELECT swaps items in battle -- the helper
     must never send it. A source-level assertion, not an emulator run."""
@@ -549,7 +613,9 @@ def test_throw_ball_returns_a_verdict_and_the_caller_stops_on_false():
 def test_throw_ball_checks_the_selected_item_and_snapshots_last_used_item():
     body = _function_body("emerald_throw_ball")
     select_a = body.index("local last_used_before = memory.read_u16_le(LAST_USED_ITEM_ADDR)")
-    item_check = body.index("memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) ~= ITEM_POKE_BALL")
+    item_check = body.index("if selected_item ~= expected_ball then")
+    assert "expected_ball = expected_ball or ITEM_POKE_BALL" in body
+    assert body.index("local selected_item = memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR)") < item_check
     use_a = body.index('G.tap("A", 3, 30)')
     assert select_a < body.index('G.tap("A", 3, 20)') < item_check < use_a
 

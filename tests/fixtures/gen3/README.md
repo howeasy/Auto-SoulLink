@@ -831,3 +831,69 @@ owned record re-keyed, the SaveBlock3 sector chunks kept) then booted and re-sav
 | `exp_catch.sav` | Route 102 (0.17) | (21,16) | Mudkip Lv5; 20 Poke Balls | `e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a` |
 | `exp_catch_b.sav` | same | same | same, EMERB | `345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0` |
 | `exp_center.sav` | Oldale Pokemon Center 1F (2.2) | (7,4) | Mudkip Lv5; 5 Poke Balls. Expansion-only kind: the "town" seed with only the position moved onto the whiteout respawn tile (harness_facts.json whiteout_respawns), for the frame-end CPU census inside a Center (docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt) | `69dcb62f37f888b5be791cd6683d1894787f1f6583e9171f1f07d91d27dffbd8` |
+
+
+## Expansion SYNTH pending fixtures (27 additional saves)
+
+These files extend the 9 expansion saves listed above to a 36-file inventory.
+They record disclosed SYNTH setup followed by native CONTINUE/SAVE only. Their
+qualification does not prove acquisition, hatch propagation, a wild encounter,
+or a full-box deposit refusal. Acquisition and static/wild checks retain their
+case-specific semantic qualifiers; the full-box qualifier checks 420 distinct,
+valid occupied records. Every file must also have cleared CONTINUE_GAME_WARP and
+retain its registered map/tile and source-selected layout.
+
+The acquisition recipe and qualification evidence are in
+`exp_acquisition_synth_manifest.json`; static/wild evidence is in
+`exp_static_wild_synth_manifest.json`; full-box evidence is in
+`exp_pc_full_box_synth_manifest.json`. Generator hashes bind the pre-CONTINUE
+bytes separately from the hashes below, which bind the native re-save files.
+Native SAVE changes the counter and slot rotation. The `_b` acquisition and
+static/wild files use the distinct trainer identity from `exp_pc_b.sav`.
+The original unresolved rock-smash seeds differed (A layout392/flagclear, B layout27/flagset).
+The current registered A/B seeds both resolve the tower with VAR3/layout392/flagclear. At the pinned source,
+`data/maps/Route111/scripts.inc:43-45,87-89` selects
+`LAYOUT_ROUTE111_NO_MIRAGE_TOWER` (392) when the native tower visibility flag
+(0x14E) is clear. Qualification checks this flag/layout relationship.
+
+| file | recipe | map / tile | sha256 |
+|---|---|---|---|
+| `exp_choice_gift_synth.sav` | choice_gift pending | RustboroCity_DevonCorp_2F (11.1), (13,8), layout 93 | `4abcef42a97d5d1e096453690c16274180d0eb29d9e4424db12a01bac65e8a9b` |
+| `exp_choice_gift_synth_b.sav` | choice_gift pending | RustboroCity_DevonCorp_2F (11.1), (13,8), layout 93 | `fba8d7e6a7c1a3dfac0ad84310c781f352be6dc4535968de3042f85222640168` |
+| `exp_egg_receive_synth.sav` | egg_receive pending | LavaridgeTown (0.12), (4,8), layout 13 | `c501c5a9aec124aeff847ceb3cefba06730e7a5995fbe918fd8db6c379e03e3d` |
+| `exp_egg_receive_synth_b.sav` | egg_receive pending | LavaridgeTown (0.12), (4,8), layout 13 | `3dc315998fdd1954ec4c26c325fb320315799b3b75aaac1c04d5031fe0325f69` |
+| `exp_gift_box_synth.sav` | gift_box pending | MossdeepCity_StevensHouse (14.7), (3,3), layout 327 | `c3284d4e8a97e3190cfd1aab98a83a4f1fd9ffd8dae7a4988abd4b7669f1157e` |
+| `exp_gift_box_synth_b.sav` | gift_box pending | MossdeepCity_StevensHouse (14.7), (3,3), layout 327 | `92516fe3d49618935a6e65df6c9c6bbfda89de4d3b90fdc274f04ff02bf533ba` |
+| `exp_gift_synth.sav` | gift pending | MossdeepCity_StevensHouse (14.7), (3,3), layout 327 | `785ea537dc3437f19790c3e2647e8c39e9cd5ff1eb9e09c48b93b587fe495142` |
+| `exp_gift_synth_b.sav` | gift pending | MossdeepCity_StevensHouse (14.7), (3,3), layout 327 | `489c6a1a341fd8cd813f75ba573f3605f1861951167f1cccc6708cdef26cbc92` |
+| `exp_hatch_synth.sav` | hatch pending | MossdeepCity_StevensHouse (14.7), (3,5), layout 327 | `8e70297f326859746be19723757312dd8544431beba2d33c17a1fafe2a0c75ad` |
+| `exp_hatch_synth_b.sav` | hatch pending | MossdeepCity_StevensHouse (14.7), (3,5), layout 327 | `7dcb2f377d4ffe26e2b0391a67831bfdd5d19af9f4e3d17c4103a39ad22ff86b` |
+| `exp_pc_full_box_synth.sav` | full storage, deposit refusal pending | OldaleTown (0.10), (6,17), layout 11 | `93b7bbde014885ac37c5ed7d05387bd639d71563ce0b8582ba6947fd2b0f92c3` |
+| `exp_static_altering0_synth.sav` | static_altering0 pending | AlteringCave (24.106), (4,12), layout 420 | `1f86ff0b8717554b06306cdafd50775eafa7eb4bf6b2fbf6a9b2f4bf12905f61` |
+| `exp_static_altering0_synth_b.sav` | static_altering0 pending | AlteringCave (24.106), (4,12), layout 420 | `cc02996b9ffdcd5fec3676bb50075319c2e4b038deb777594561de8d1529a94c` |
+| `exp_static_altering1_synth.sav` | static_altering1 pending | AlteringCave (24.106), (4,12), layout 420 | `ddf744f44e6dca2d58520e4c57607240a323a8102a4a2fe9536968920e4dff3b` |
+| `exp_static_altering1_synth_b.sav` | static_altering1 pending | AlteringCave (24.106), (4,12), layout 420 | `74f60b575947beaf38f80212c33a65055ae708ef680dbfa815a2c944420fc1fb` |
+| `exp_static_fish_synth.sav` | static_fish pending | Route102 (0.17), (39,2), layout 18 | `683d2d17acc7dee0059cd40f1cc4cf14d48eafc98170167090d9479ac0099c7e` |
+| `exp_static_fish_synth_b.sav` | static_fish pending | Route102 (0.17), (39,2), layout 18 | `3828a12d460c6d0503a6b44e65893d272861341b4e497bbcea5e6e7975311600` |
+| `exp_static_grass_synth.sav` | static_grass pending | Route102 (0.17), (8,2), layout 18 | `75ccd425860914b1a477070e4ffa792396ae60bc06b34200478281e1da44822a` |
+| `exp_static_grass_synth_b.sav` | static_grass pending | Route102 (0.17), (8,2), layout 18 | `11463c4daae3782458ffa345b87f9a3f7218fc51d981b5b1c52b0d82d373b99f` |
+| `exp_static_rock_synth.sav` | static_rock pending | Route111 (0.26), (18,102), layout 392 | `ec5846b2bf9b9e4db84413363975190dc6fdb5dfcfc994d953c7c545a02f836a` |
+| `exp_static_rock_synth_b.sav` | static_rock pending | Route111 (0.26), (18,102), layout 392 | `d27a56c97a80ca958f862b4510f185183da0427bec9847dc21a796dce8388d81` |
+| `exp_static_static_run_synth.sav` | static_static_run pending | AquaHideout_B1F (24.24), (17,9), layout 144 | `562f028cb75ad3e2dd0ef8f8603a328c1a1d4aa050586d74b20b62fb55fb169c` |
+| `exp_static_static_run_synth_b.sav` | static_static_run pending | AquaHideout_B1F (24.24), (17,9), layout 144 | `4d1f12dfdbd7136a3066381b0a892d8be99b5c782710981d2663722bc518996b` |
+| `exp_static_static_synth.sav` | static_static pending | AquaHideout_B1F (24.24), (17,9), layout 144 | `2e894cfedd2afb58e2a66ad1af8d30bf9ba14ed37b142b0a0e70128e4a301aee` |
+| `exp_static_static_synth_b.sav` | static_static pending | AquaHideout_B1F (24.24), (17,9), layout 144 | `ebcac1aee7e7458a6cb65f37af7a3b96b2e3bad9ffe0475945d3dbd9f3bc5073` |
+| `exp_static_surf_synth.sav` | static_surf pending | Route102 (0.17), (39,2), layout 18 | `2a58b211d0a6df0c7d16be511cd2a356ce36564edf7fd74220e4faa9482df88c` |
+| `exp_static_surf_synth_b.sav` | static_surf pending | Route102 (0.17), (39,2), layout 18 | `725b2b4e836ca90d19aea02b23d4e51642c0fcd24d89329d5364a05cad867681` |
+
+| `exp_pc_box0_full_synth.sav` | PC negative pending: box0 has30; boxes1..13 empty for positive sibling | OldaleTown (0.10), (6,17), layout11; native counter2->3 | `79c19313a21d794dbfe1de4e0f0e7da8b23f3d7f445c8b63dca6515b23f4df04` |
+
+`exp_pc_box0_full_synth` is separate from420-filled `exp_pc_full_box_synth`: native CONTINUE/SAVE qualified, acquisition/deposit not yet executed. The PC leg uses the30-filled seed so its same-observer positive deposit into empty box1 is possible.
+
+The Electrode static/static_run pending seeds disclose a Mudkip hidden Damp (abilityNum2, own id6) prep, round-tripped through the pack ability lane and preserved by native CONTINUE/SAVE. It prevents foe self-KO; grass/water/rock/fishing/Altering leads are unchanged. No ability change is waived by the saved-party oracle.
+
+Only the positive Electrode static seed supplies one own-build Master Ball (item4) in row0 for deterministic native capture. The static_run negative keeps its existing Poké Ball bag. The independent saved oracle requires Master1->0, other Ball counts unchanged, and captured BALL_MASTER.
+
+Surf/Rock Smash/Old Rod/Altering0/1 positive samples now use own Master4qty1, natively CONTINUE/SAVE qualified. They prove method -> native encounter slot/species -> capture publish -> save, not catch-rate behaviour. Grass remains unchanged with its65e Poké Ball PASS; static_run remains its native RUN negative.
+
+Both Rock fixtures now natively read layout392/VAR_MIRAGE_TOWER_STATE3/visibleflagclear (SYNTH resolved-tower prep). NAMED UNSUPPORTED CASE: Route111 with Mirage Tower visible: overworld checkpoint refuses task UpdateMirageTowerPulseBlend (not allow-listed); also true of qualified Emerald; fail-closed. No checkpoint or allow-list change; later purity audit/owner decision may admit palette task in both packs.
