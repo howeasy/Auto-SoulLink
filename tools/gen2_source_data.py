@@ -27,7 +27,8 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = {"crystal": "pokecrystal", "gold": "pokegold", "silver": "pokesilver"}
-__all__ = ["ROOT", "ARTIFACTS", "SourceContext", "Symbol", "load_context", "rom_offset"]
+__all__ = ["ROOT", "ARTIFACTS", "SourceContext", "OverlayContext", "Symbol",
+           "load_context", "load_overlay_context", "rom_offset"]
 
 
 def _json(raw: bytes, label: str) -> dict:
@@ -137,6 +138,100 @@ class SourceContext:
             "map_sha256": spec["map_sha256"], "lock_sha256": self.lock_sha256,
             "build_provenance_sha256": self.provenance_sha256,
         }
+
+
+@dataclass(frozen=True)
+class OverlayContext:
+    """Verified executed bytes/symbols with the unchanged clean fact lineage.
+
+    Consumers use execution_record() for cartridge identity, never source_record().
+    No build, mutable source overlay, or implicit clean fallback occurs here.
+    """
+
+    base: SourceContext
+    rom: bytes
+    symbols: dict[str, Symbol]
+    publication: dict
+    publication_sha256: str
+    ups_sha256: str
+    sym_sha256: str
+    map_sha256: str
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
+
+    def symbol(self, name: str) -> Symbol:
+        try:
+            return self.symbols[name]
+        except KeyError as exc:
+            raise ValueError(f"{self.title}: overlay symbol {name!r} missing") from exc
+
+    def source_record(self) -> dict:
+        return self.base.source_record()
+
+    def execution_record(self) -> dict:
+        out = self.publication["outputs"][self.artifact]
+        return {"kind": "overlay", "title": self.title, "rom_sha1": out["sha1"],
+                "base_sha1": out["base_sha1"], "ups_sha256": self.ups_sha256,
+                "sym_sha256": self.sym_sha256, "map_sha256": self.map_sha256,
+                "overlay_provenance_sha256": self.publication_sha256}
+
+
+def load_overlay_context(title: str, root: Path = ROOT) -> OverlayContext:
+    """Apply the published UPS to the locked base and verify all execution inputs."""
+    from patch.tools.make_ups import ups_apply
+
+    root = Path(root).resolve()
+    base = load_context(title, root=root)
+    raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
+    publication = _json(raw, "overlay provenance")
+    if publication.get("schema") != "gen2-overlay-provenance-v1":
+        raise ValueError("overlay provenance: unsupported schema")
+    if publication.get("sources") != base.lock["sources"]:
+        raise ValueError("overlay provenance source commits differ from clean lock")
+    overlay = publication["overlay"]
+    source_dir = (root / overlay["src_dir"]).resolve()
+    if not source_dir.is_relative_to(root):
+        raise ValueError("overlay assembly input directory escapes the repository")
+    for name, expected in overlay["sources_sha256"].items():
+        source = (root / name if name.startswith("patch/") else source_dir / name).resolve()
+        if not source.is_relative_to(root):
+            raise ValueError("overlay assembly input escapes the repository")
+        _hash(source.read_bytes().replace(b"\r\n", b"\n"), expected, f"overlay source {name}")
+    out = publication["outputs"][base.artifact]
+    if out.get("base_sha1") != base.source_record()["rom_sha1"] or out.get("slink_title") != title:
+        raise ValueError("overlay provenance base/title differs from clean facts")
+    if out.get("identical_to_clean") is not False or out.get("sha1") == out.get("base_sha1"):
+        raise ValueError("null overlay is not an executed overlay artifact")
+    relative = Path(out["ups"]["file"])
+    path = (root / relative).resolve()
+    if relative.is_absolute() or not path.is_relative_to(root):
+        raise ValueError("overlay UPS path escapes the repository")
+    ups = path.read_bytes()
+    _hash(ups, out["ups"]["sha256"], "overlay UPS")
+    rom = ups_apply(base.rom, ups)
+    _hash(rom, out["sha1"], "overlay ROM", "sha1")
+    if len(rom) != len(base.rom):
+        raise ValueError("overlay changed ROM geometry")
+    symbols = None
+    hashes = {}
+    for ext in ("sym", "map"):
+        name = f"{title}_slink.{ext}"
+        text = (root / "data/gen2" / name).read_bytes().replace(b"\r\n", b"\n")
+        _hash(text, publication["symbols"][name], name)
+        hashes[ext] = hashlib.sha256(text).hexdigest()
+        if ext == "sym":
+            symbols = parse_symbols(text.decode("utf-8"))
+    assert symbols is not None
+    for name, old in base.symbols.items():
+        new = symbols.get(name)
+        movable = old.bank == 4 and 0x4000 <= old.address < 0x8000
+        if new is None or (movable and (new.bank != 4 or not 0x4000 <= new.address < 0x8000)):
+            raise ValueError(f"{title}: overlay symbol scope differs: {name}")
+        if not movable and new != old:
+            raise ValueError(f"{title}: overlay moved symbol outside bank 4: {name}")
+    return OverlayContext(base, rom, symbols, publication, hashlib.sha256(raw).hexdigest(),
+                          hashlib.sha256(ups).hexdigest(), hashes["sym"], hashes["map"])
 
 
 _SHARED: dict | None = None   # {(title, root): SourceContext} inside shared_contexts()

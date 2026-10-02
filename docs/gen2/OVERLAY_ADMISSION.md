@@ -7,6 +7,11 @@ PHYSICAL proof recorded on the overlay ROM itself. Clean cartridges stay admitte
 Codex ROMPatch cx-ddc39d87, adopted except where D6 says otherwise. Coordinator: Claude session
 4c3e927b. Branch `claude/mandatory-rom-patch-3fcfda`.
 
+Owner, 2026-10-02: Gen 2 NEEDS its companion. The Soul Link rules run without it, but trade (the only
+Gen 2 trade path), the SLINK panel and native sounds do not. Once admitted, it is non-optional,
+like Red/Blue: Crystal/Gold/Silver rejoin `server/manager.py` `COMPANION_TITLES`. Rule: a title whose
+features need a patch gets it with no opt-out; a title that needs none is not given one.
+
 ## Why the clean facts do not carry over
 
 The overlay is a source rebuild (`tools/build_gen2_companion.py`). Symbol MOVEMENT is confined to
