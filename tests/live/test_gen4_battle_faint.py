@@ -107,6 +107,50 @@ def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = 
     return status, payload
 
 
+class StaleReceiptError(AssertionError):
+    """Cross-receipt rule: present evidence from another source/script/profile cut is STALE, never a PASS."""
+
+
+def head() -> str:
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+
+
+def current_cut(title: str) -> dict:
+    """The cut a receipt must carry to be consumed: this HEAD, this probe script file, this title's pack profile."""
+    profile = REPO / "data/games" / PACK[title] / "profile.json"
+    return {"source_head": head(), "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile)}
+
+
+def bind_cut(payload: dict, expected_cut: dict) -> None:
+    for key in ("script_sha256", "profile_sha256", "source_head"):
+        if payload.get(key) != expected_cut[key]:
+            raise StaleReceiptError(f"STALE {key}: receipt differs from the current cut")
+
+
+def consume_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None,
+                    expected_cut: dict | None = None) -> tuple[str, dict]:
+    """The ONE way this wrapper (and anything that reads a row o file such as SLINK_GEN4_ROW_O) consumes a receipt:
+    refuse source_head != HEAD or script/profile sha256 != the current files BEFORE anything else (STALE outranks
+    PASS), then the grammar checks. Mirrors gates.perf_f in test_gen4_probe_gates.py."""
+    expected_cut = expected_cut or current_cut(title)
+    lines = text.splitlines()
+    assert lines, "empty receipt"
+    match = RECEIPT_RE.fullmatch(lines[0])
+    assert match, f"malformed receipt line: {lines[0][:160]}"
+    bind_cut(json.loads(match.group(2)), expected_cut)
+    return parse_receipt(text, title=title, rom_sha1=rom_sha1, run_id=run_id)
+
+
+def receipt_verdict(path: Path, *, title: str, rom_sha1: str, expected_cut: dict | None = None) -> tuple[str, str]:
+    """A file's verdict as a consumer sees it: ("STALE", why) for another cut, else (PASS|FAIL|OPEN, reason)."""
+    try:
+        status, payload = consume_receipt(path.read_text(encoding="utf-8"), title=title, rom_sha1=rom_sha1,
+                                          expected_cut=expected_cut)
+    except StaleReceiptError as exc:
+        return "STALE", str(exc)
+    return status, payload.get("reason", "")
+
+
 # The end-of-turn command whose entry the S2 seam hooks. HG: command 11 (UpdateFieldConditionExtra). hge replaces
 # command 9 (ServerFieldConditionCheck, `hooks:376`) with C that runs ALL end-of-turn effects, calls
 # CheckIfAnyoneShouldFaint at its loop top (ServerFieldConditionCheck.c:127) and ends in TURN_END (:1944), so hge never
@@ -231,8 +275,8 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
                 break
             time.sleep(0.5)
         assert out.is_file(), f"no terminal receipt in {lane}; exit={proc.poll()}"
-        status, payload = parse_receipt(out.read_text(encoding="utf-8"), title=title, rom_sha1=rom_sha1,
-                                        run_id=cfg["run_id"])
+        status, payload = consume_receipt(out.read_text(encoding="utf-8"), title=title, rom_sha1=rom_sha1,
+                                          run_id=cfg["run_id"])
         assert payload["script_sha256"] == cfg["script_sha256"], "receipt from a different script"
         assert payload["callback_errors"] == 0, f"callback faults in {lane}: {payload.get('callback_error')}"
         if payload["observation"].get("write"):  # a run that wrote has hooks that fired: check their raw registers
@@ -523,4 +567,58 @@ def test_seam_first_registers_of_shipped_p2_receipts_if_present():
         if not path.is_file():
             pytest.skip(f"OPEN shipped receipt absent: {path}")
         payload = json.loads(path.read_text(encoding="utf-8").splitlines()[0].split(" ", 3)[3])
-        check_seam_first(payload["observation"], {"turnend": TURNEND_ADDR, "ufce": ufce})
+        check_seam_first(payload["observation"], {"turnend": TURNEND_ADDR, "ufce": ufce})  # shape holds regardless of cut
+        title = payload["title"]
+        cut = current_cut(title)
+        verdict, why = receipt_verdict(path, title=title, rom_sha1=payload["rom_sha1"])
+        if any(payload.get(k) != cut[k] for k in cut):  # shipped from an older cut: STALE until re-run at landing
+            assert verdict == "STALE", f"{name}: stale cut consumed as {verdict}"
+        else:
+            assert verdict != "STALE"
+
+
+def _cut_receipt(cut, **over):
+    payload = {"level": "PHYSICAL", "producer": "C1-8", "title": "heartgold", "rom_sha1": "ab" * 20, "run_id": "r",
+               "oracle": "o", "negative_control": {"x": 1}, **cut, **over}
+    return "PROBE o PASS " + json.dumps(payload) + "\nRESULT: PASS\n"
+
+
+MODEL_CUT = {"source_head": "cut", "script_sha256": "1" * 64, "profile_sha256": "2" * 64}
+
+
+@pytest.mark.parametrize("field", tuple(MODEL_CUT))
+def test_consume_receipt_stale_cut_red_revert(field):
+    def consume(text):
+        return consume_receipt(text, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)
+
+    assert consume(_cut_receipt(MODEL_CUT))[0] == "PASS"
+    with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
+        consume(_cut_receipt(MODEL_CUT, **{field: "old"}))
+    assert consume(_cut_receipt(MODEL_CUT))[0] == "PASS"  # revert: the fresh receipt is accepted again
+
+
+def test_stale_outranks_every_other_verdict_and_is_never_pass(tmp_path):
+    """A stale receipt is STALE even when it is also malformed in a later check, and a file's verdict is the string
+    STALE (never PASS); the same file with the current cut is PASS."""
+    path = tmp_path / "row_o.txt"
+    path.write_text(_cut_receipt(MODEL_CUT, source_head="old", producer="other"), encoding="utf-8")
+    verdict, why = receipt_verdict(path, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)
+    assert verdict == "STALE" and "source_head" in why
+    path.write_text(_cut_receipt(MODEL_CUT), encoding="utf-8")
+    assert receipt_verdict(path, title="heartgold", rom_sha1="ab" * 20, expected_cut=MODEL_CUT)[0] == "PASS"
+
+
+def test_current_cut_is_this_head_and_these_files(monkeypatch):
+    cut = current_cut("heartgold")
+    assert cut["source_head"] == head() and cut["script_sha256"] == digest(SCRIPT)
+    assert cut["profile_sha256"] == digest(REPO / "data/games/gen4_hgss/profile.json")
+    assert current_cut("heartgold_hge")["profile_sha256"] == digest(REPO / "data/games/gen4_hge/profile.json")
+    # default binding (no injected cut): a receipt from another HEAD or another script file is STALE
+    fresh = _cut_receipt(cut)
+    assert consume_receipt(fresh, title="heartgold", rom_sha1="ab" * 20)[0] == "PASS"
+    for field in cut:
+        with pytest.raises(StaleReceiptError, match=f"STALE {field}"):
+            consume_receipt(_cut_receipt(cut, **{field: "0" * 7}), title="heartgold", rom_sha1="ab" * 20)
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "moved\n")  # HEAD moves: the same receipt is now STALE
+    with pytest.raises(StaleReceiptError, match="STALE source_head"):
+        consume_receipt(fresh, title="heartgold", rom_sha1="ab" * 20)
