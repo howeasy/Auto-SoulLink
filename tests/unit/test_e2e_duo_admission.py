@@ -42,6 +42,11 @@ def runner(tmp_path, monkeypatch):
     source_dir.mkdir(parents=True)
     (source_dir / "gen1_red.gb").write_bytes(b"clean-red")
     (source_dir / "gen1_blue.gb").write_bytes(b"clean-blue")
+    # the companion builds the row's instances boot (GAMES["gen1_new"]["patched_saves"])
+    companion_dir = tmp_path / "patch" / "gen1" / "build"
+    companion_dir.mkdir(parents=True)
+    (companion_dir / "slink_red.gb").write_bytes(b"companion-red")
+    (companion_dir / "slink_blue.gb").write_bytes(b"companion-blue")
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario = "admit_randomized_new"
     run.cfg = dict(duo.SCENARIOS[run.scenario])
@@ -67,7 +72,8 @@ def _fake_pipeline(monkeypatch):
     called = []
     monkeypatch.setattr(upr_pipeline, "find_upr_jar", lambda: "fake.jar")
     mapping = {b"random-red": "a" * 64, b"random-blue": "b" * 64,
-               b"clean-blue": "c" * 64, b"clean-red": "d" * 64}
+               b"clean-blue": "9" * 64, b"clean-red": "d" * 64,
+               b"companion-blue": "c" * 64, b"companion-red": "e" * 64}
     monkeypatch.setattr(scan, "fingerprint_rom", lambda raw: mapping[raw])
 
     def prepare(jar, settings, sources, out_dir):
@@ -103,7 +109,10 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     assert contract["players"]["a"]["seed"] == "1"
     staged = Path(duo.REPO) / runner._admit_roms["a"]
     assert staged.suffix == ".gb" and staged.read_bytes() == b"random-red"
-    assert runner._admit_roms["b"] == runner.gcfg["rom"]["b"]
+    # B boots its companion build (a clean cartridge is refused before any contract check), and
+    # the reported fingerprint ("c") is the one read off THOSE bytes, not the clean source's ("9")
+    assert set(runner._admit_roms) == {"a"}
+    assert runner._rom_for("b") == "patch/gen1/build/slink_blue.gb"
     assert runner._admit_extra_saves == {"a": "slink red randomized.SaveRAM"}
     assert runner._admit_fingerprints == {"expected_b": "b" * 64, "reported_b": "c" * 64}
 
@@ -130,9 +139,12 @@ def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
     runner._seed_instance_save("b")
     a_dir = Path(runner._saveram_dir("a"))
     b_dir = Path(runner._saveram_dir("b"))
-    assert (a_dir / GENS["gen1"]["saveram_names"]["red"]).read_bytes() == b"red-town"
+    # the fixture lands under the COMPANION name only: no clean-named copy is left behind for an
+    # oracle to read by mistake
+    assert (a_dir / "slink red.SaveRAM").read_bytes() == b"red-town"
     assert (a_dir / "slink red randomized.SaveRAM").read_bytes() == b"red-town"
-    assert (b_dir / GENS["gen1"]["saveram_names"]["blue"]).read_bytes() == b"blue-town"
+    assert not (a_dir / GENS["gen1"]["saveram_names"]["red"]).exists()
+    assert (b_dir / "slink blue.SaveRAM").read_bytes() == b"blue-town"
     assert len(list(b_dir.iterdir())) == 1
 
 
@@ -1532,8 +1544,9 @@ def test_explode_oracle_reads_the_markers_and_delegates_the_shared_half(tmp_path
     assert calls[0]["explode"] is True, (
         "the delegate has to be told this is Explode Mode's half, or it demands the markers "
         "the scenario asserts absent")
-    assert calls[0]["saved_state"] == run._patched_saved_state, (
-        "the shared half must read the patched saves, not the clean-title defaults")
+    # no per-scenario save resolver any more: `_saved_gen1_party`'s own default reads the
+    # companion cartridge's save (test_e2e_duo_lane_isolation pins that default)
+    assert "saved_state" not in calls[0]
 
 
 def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_delegate(
@@ -1559,7 +1572,7 @@ def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_dele
     b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
     run._link_keys = {"a": key_a, "b": key_b}
     run._boot_keys = {"a": codec.key(a_party[0]), "b": codec.key(b_party[0])}
-    run._patched_saved_state = lambda inst: (
+    run._saved_gen1_party = lambda inst: (
         bytes(a_image if inst == "a" else b_image),
         a_party if inst == "a" else b_party, [], codec)
     run._links_json = lambda: [{"area_id": "route_1", "status": "memorial", "cause": "battle",
