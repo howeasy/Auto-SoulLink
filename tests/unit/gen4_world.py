@@ -16,8 +16,10 @@ model the client's contracts are tested against (the live proof is the probe's j
 * every line the client sends is parsed and checked against tests/unit/protocol_schema.py (a
   problem raises at send time).
 
-D7_MODEL below is the PACK-GAP block of the D7 seam, labelled MODEL: the values are the live-proven
-ones (docs/gen4/research/battle_faint_seam.md section 6, 10).
+D7_MODEL below is a MODEL of profile.battle.d7 (the pack carries it since b8150e11; the client prefers the
+pack's). It is used only when a test strips the pack block (no_pack_d7) or overrides it with `d7=`. The
+PartyExtra geometry ({stride: 5}, pret include/constants/pokemon.h:132) is still a pack gap: `party_extra`
+supplies it as a MODEL.
 """
 from __future__ import annotations
 
@@ -39,7 +41,7 @@ SD = 0x022D0000
 P0, P1 = 0x022C8000, 0x022C9000          # battle party copies: player, foe
 TRAINER_OTID = 0x30391A5C
 
-D7_MODEL = {  # MODEL: the pack carries none of this yet (profile.battle.d7 gap)
+D7_MODEL = {  # MODEL: used only when a test strips the pack's battle.d7 (no_pack_d7) or overrides it
     "heartgold": {"seam": {"cmd": 11, "overlay_id": 12, "addr": 0x0224A70C, "pin_hex": "f8b582b0"},
                   "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C},
     "heartgold_hge": {"seam": {"cmd": 9, "overlay_id": 12, "table": 0x0226CA90},
@@ -112,8 +114,12 @@ def py(v):
 
 class World:
     def __init__(self, title="heartgold", *, party=None, boxes=None, d7="model", connected=True, rom_hash=None,
-                 start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None):
+                 start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None, order="hook_new",
+                 party_extra="model"):
         self.title_name = title
+        self.order = order          # "hook_new": the hook sees the NEW framecount; "hook_old": the OLD one
+        self.reads = 0              # io read calls (the per-frame read budget)
+        self.read_log = None        # when a list: every read address (which reads a code path makes)
         self.pack_name = PACKS[title]
         doc = json.loads((ROOT / f"data/games/{self.pack_name}/profile.json").read_text(encoding="utf-8"))
         self.title = doc["titles"][title]
@@ -162,6 +168,10 @@ class World:
             cfg["area_of"] = self.lua.eval(area_of)
         if charmap is not None:
             cfg["charmap"] = to_lua(self.lua, charmap)
+        if party_extra == "model":                       # MODEL: the pack carries no PartyExtra geometry yet
+            party_extra = {"stride": 5}
+        if party_extra is not None:
+            cfg["party_extra"] = to_lua(self.lua, party_extra)
         if no_pack_d7:
             cfg["title_profile"] = to_lua(self.lua, self.title)
         res = self.Client.new(self.lua.table_from(cfg))
@@ -253,6 +263,8 @@ class World:
         for i, mon in enumerate(self.party):
             self.put(base + 8 + 0xEC * i, mon.party_raw())
         self.party_base = base
+        for i in range(6):                                  # PartyExtra: 5 aprijuice bytes per slot, distinct per slot
+            self.put(base + self.extra_off + 5 * i, bytes([0xA0 + 0x10 * i + k for k in range(5)]) if i < len(self.party) else bytes(5))
 
     def write_boxes(self):
         pc = self.prof["pc"]
@@ -271,6 +283,11 @@ class World:
         count = self.r(self.party_base + 4, 4)
         return [codec.decrypt_party(self.get(self.party_base + 8 + 0xEC * i, codec.PARTY_MON_SIZE))
                 for i in range(count)]
+
+    extra_off = 8 + 6 * 0xEC                                # PartyCore: max, count, mons[6]; then PartyExtra
+
+    def saved_extra(self, slot):
+        return self.get(self.party_base + self.extra_off + 5 * slot, 5)
 
     def saved_hp(self, slot):
         return struct.unpack_from("<H", self.saved_party()[slot], 0x8E)[0]
@@ -395,12 +412,16 @@ class World:
     def _make_io(self):
         def rd(n):
             def f(a, domain=None):
+                self.reads += 1
+                if self.read_log is not None:
+                    self.read_log.append(a)
                 if a < BASE or a + n > BASE + SIZE:
                     return None
                 return int.from_bytes(self.m[a - BASE:a - BASE + n], "little")
             return f
 
         def read_range(a, n, domain=None):
+            self.reads += 1
             return self.lua.table_from(list(self.m[a - BASE:a - BASE + n]))
 
         def wr(n):
@@ -432,8 +453,7 @@ class World:
         def send(line):
             msg = json.loads(line)
             problems = [x for x in ps.validate_event(msg, strict=True)
-                        if "'writes_enabled'" not in x          # the core stamps it on every hello
-                        and "sync_retrieve_failed: unexpected field 'reason'" not in x]   # core sends it, schema omits it
+                        if "'writes_enabled'" not in x]         # the core stamps it on every hello
             if self.title_name == "heartgold_hge":            # the server does not route the hge rom_type yet
                 problems = [p for p in problems if "not one the server routes" not in p]
             assert not problems, f"{msg}: {problems}"
@@ -480,9 +500,13 @@ class World:
 
     def advance(self, n=1):
         for _ in range(n):
-            self.frame += 1
             self.w(self.sys, self.r(self.sys, 4) + 1)
-            self._fire()
+            if self.order == "hook_old":
+                self._fire()
+                self.frame += 1
+            else:
+                self.frame += 1
+                self._fire()
             self.session.frame_end(self.session)
 
     def run_to(self, frame):

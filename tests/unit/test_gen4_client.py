@@ -10,11 +10,12 @@ behaviour (revert-checked, see the card report):
           renewed by the previous frame -> ZERO bytes; renew then fire -> exactly one write)
   step 3  the 900-frame effect window (+900 satisfied, +901 not)
 """
+import json
 import struct
 
 import pytest
 
-from tests.unit.gen4_world import BS, CTX, Mon, World, key_of
+from tests.unit.gen4_world import BS, CTX, PACKS, ROOT, Mon, World, key_of
 
 A = Mon(0x5A3C91E7, 155, 5, 20, 20)
 B = Mon(0x0BADF00D, 155, 5, 11, 11)
@@ -222,7 +223,7 @@ def test_a_held_hook_is_busy_not_an_error_and_is_never_reregistered():
     assert w.hook_registrations == 1 and len(w.hooks) == 1
     assert set(lines(bw)) == {"hold|D7 seam armed"}
     assert set(lines(req)) == {"nil|busy: d7 already armed"}      # busy = held, every frame, and it renews the lease
-    assert w.state.d7.renewed_frame == w.frame
+    assert w.state.d7.renewed is True                                  # renewed by this frame's flush
 
 
 GUARDS = [   # (name, the one fault, the refusal it must be refused FOR; None = the overlay guard drops the hit silently)
@@ -411,7 +412,7 @@ def test_the_overworld_faint_zeroes_the_party_hp_and_is_never_echoed_as_a_faint(
     w.reply({"cmd": "force_faint", "key": w.party[0].key})
     w.advance(5)
     assert w.saved_hp(0) == 0 and w.saved_hp(1) == 11
-    assert {n for _, _, n in w.writes} == {1} and len(w.writes) == 2     # the u16 HP, nothing else
+    assert [n for _, _, n in w.writes] == [2]                            # ONE aligned u16: the HP, nothing else
     assert w.events("faint") == [] and w.state.fatal is None
 
 
@@ -618,3 +619,292 @@ def test_the_tick_in_battle_names_the_foe_the_battle_kind_and_the_active_mon(bty
     assert t["in_battle"] is True and t["is_trainer_battle"] is trainer and t["is_doubles"] is doubles
     assert [e["species_id"] for e in t["enemy_party"]] == [16] and t["area_id"] == "route_60"
     assert [p["active"] for p in t["party"]] == [True, False]
+
+
+# ── review fixes (OMP cx-558e3f0e, cx-85b55e38) ────────────────────────────────────────────
+ORDERS = ["hook_new", "hook_old"]          # does the hook see the new or the old emu.framecount()?
+
+
+@pytest.mark.parametrize("order", ORDERS)
+def test_f1_the_lease_is_convention_free_renew_then_fire_writes_once(order):
+    w = armed_world(order=order)
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert len(w.writes) == 3 and snapshot_bytes(w) == (0, 0, 1)
+
+
+@pytest.mark.parametrize("order", ORDERS)
+def test_f1_an_unrenewed_frame_writes_zero_bytes_under_either_counter_convention(order):
+    w = armed_world(order=order)
+    w.session.writes_enabled = False                  # the core skips battle_write: no renewal this frame
+    w.advance(1)
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert w.writes == [] and snapshot_bytes(w) == (20, 20, 0)
+    assert any("lease not renewed" in s for s in w.logs)
+
+
+@pytest.mark.parametrize("order", ORDERS)
+def test_f1_a_held_hook_stays_armed_while_renewed_and_one_unrenewed_frame_disarms(order):
+    w = armed_world(order=order)
+    w.advance(10)
+    assert len(w.hooks) == 1 and w.hook_registrations == 1           # renewed every frame: stays armed
+    w.session.writes_enabled = False
+    w.advance(3)
+    assert w.hooks == {} and w.writes == []                          # a single unrenewed frame disarms
+
+
+def test_f10_a_second_fire_inside_one_frameadvance_is_a_zero_byte_noop():
+    w = armed_world()
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert len(w.writes) == 3                                         # the first fire's three spans, nothing more
+    assert any("lease already used" in s for s in w.logs)             # the second fire was refused by the lease itself
+
+
+def test_f4_a_landed_write_never_hands_a_later_command_a_false_done():
+    w = armed_world()
+    w.session.writes_enabled = False                                  # the flush will not consume the landed write
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert len(w.writes) == 3
+    later = w.lua.table_from({"cmd": "force_faint", "key": w.party[0].key})
+    mon = w.state.party[1]
+    res = w.session.driver.battle_write(later, 0, mon, False)         # a DIFFERENT entry for the same mon
+    assert (res[0] if isinstance(res, tuple) else res) != "done"
+
+
+def test_f4_a_noop_fire_retires_only_its_own_entry():
+    w = armed_world()
+    w.set_battle_hp(0, 0)                                              # the game's own faint took both copies to zero
+    w.put(w.battle_party_rec(0), codec_plain(w.party[0], 0))
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w.advance(1)
+    assert w.writes == [] and len(w.session.battle_pending) == 0
+
+
+def codec_plain(mon, hp):
+    from server.adapters import gen4_codec as codec
+    m = Mon(mon.pid, mon.species, mon.level, hp, mon.max_hp, mon.otid)
+    return codec.encrypt_party(m.plain())
+
+
+# F5: the callback re-reads the volatile parts only, the chain comes from the previous snapshot
+def test_f5_the_callback_does_not_walk_the_battle_chain_again():
+    w = armed_world()
+    first_hop = w.prof["fieldsys_ptr"]["address"]                      # [sFieldSysPtr]: where the chain walk starts
+    w.read_log = []
+    w.dispatch_seam(cmd=seam_cmd(w))
+    w._fire()                                                          # the hook callback only (no frame_end)
+    assert len(w.writes) == 3
+    assert first_hop not in w.read_log, "the callback re-walked the chain from sFieldSysPtr"
+
+
+# F6: the per-frame read budget (io read calls), 1x speed rule
+SIX = [Mon(0x20000000 + i, 155, 5, 20, 20) for i in range(6)]
+AREA = "function(map) return 'route_' .. map, 'Route' end"
+BUDGET = {"overworld": 140, "battle": 140}     # measured worst 116 / 101; the full decode every frame was 792 / 777
+
+
+def frame_reads(w, frames=30):
+    worst = 0
+    for _ in range(frames):
+        before = w.reads
+        w.advance(1)
+        worst = max(worst, w.reads - before)
+    return worst
+
+
+@pytest.mark.parametrize("where", ["overworld", "battle"])
+def test_f6_the_per_frame_read_budget_with_a_full_party(where):
+    w = World(party=list(SIX), area_of=AREA, charmap={0x12: "A"})
+    w.boot(100)
+    if where == "battle":
+        w.enter_battle()
+        w.advance(5)
+    worst = frame_reads(w)
+    assert worst <= BUDGET[where], f"{where}: {worst} reads in one frame"
+
+
+def test_f6_a_party_change_is_seen_the_next_frame_including_the_tail_only_hp():
+    w = World(party=list(SIX))
+    w.boot(100)
+    w.party[3].hp = 7                                                  # tail only: outside the box checksum
+    w.write_party()
+    w.advance(1)
+    assert w.state.party[4].hp == 7 and w.state.party[3].hp == 20
+    w.party[2] = Mon(0x30000001, 16, 3, 13, 13)                        # a different record
+    w.write_party()
+    w.advance(1)
+    assert w.state.party[3].key == key_of(0x30000001)
+
+
+# F7: the flags word is part of the box signature
+def test_f7_a_flags_only_change_of_a_boxed_record_is_seen_by_the_signature():
+    w = World(boxes={(0, 0): Mon(0x11111111, 16, 3, 13, 13)})
+    w.boot(80)
+    gen = w.session.driver.box_generation()[0]
+    w.w(w.box_addr(0, 0) + 4, w.r(w.box_addr(0, 0) + 4, 2) | 0x4, 2)  # a non-lock flag bit: pid and checksum unchanged
+    w.field(task=1)
+    w.advance(3)
+    w.field(task=0)
+    w.advance(5)
+    assert w.session.driver.box_generation() == (gen + 1, True)
+
+
+# F8: a pre_pump fault fails closed
+def boom_in_pre_pump(w):
+    """A fault inside pre_pump only (signals:poll() is called there and nowhere else); BOOM is a Lua global."""
+    w.lua.eval("function(sig) sig.poll = function() if BOOM then error('boom') end end end")(w.signals)
+
+
+def test_f8_a_pre_pump_fault_closes_the_checkpoint_and_drops_the_battle_then_recovers_and_logs_again():
+    w = World(party=two_mon())
+    w.boot(80)
+    boom_in_pre_pump(w)
+    assert w.session.driver.checkpoint_ok()[0] is True
+    w.enter_battle()
+    w.advance(3)
+    assert w.state.battle is not None
+    w.lua.globals().BOOM = True
+    w.advance(3)
+    ok, why = w.session.driver.checkpoint_ok()
+    assert ok is False and "pre_pump fault" in why and w.state.battle is None
+    assert sum("pre_pump error" in s for s in w.logs) == 1             # the same recurring error logs once
+    w.lua.globals().BOOM = False
+    w.advance(3)
+    assert w.state.pre_err is None and w.state.battle is not None
+    w.lua.globals().BOOM = True
+    w.advance(2)
+    assert sum("pre_pump error" in s for s in w.logs) == 2             # cleared on success: it logs again
+
+
+def test_f8_a_pre_pump_fault_stops_a_deferred_write():
+    w = World(party=two_mon())
+    w.boot(80)
+    boom_in_pre_pump(w)
+    w.lua.globals().BOOM = True
+    w.advance(2)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(10)
+    assert w.writes == [] and w.saved_hp(0) == 20
+
+
+# F9 / m6: one source for the party HP offset, validated; the pack's d7 matches its file checks
+@pytest.mark.parametrize("bad", [0x20, 0x8F])
+def test_f9_a_bad_party_hp_offset_refuses_the_in_battle_write_and_the_overworld_faint(bad):
+    d7 = {"seam": {"cmd": 11, "overlay_id": 12, "addr": 0x0224A70C, "pin_hex": "f8b582b0"},
+          "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": bad, "repl_flag_off": 0x13C}
+    w = World(party=two_mon(), d7=d7, no_pack_d7=True)
+    w.boot(80)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(8)
+    assert w.writes == [] and w.saved_hp(0) == 20
+    w.enter_battle()
+    w.advance(3)
+    w.reply({"cmd": "force_faint", "key": w.party[1].key})
+    w.advance(3)
+    assert w.hook_registrations == 0 and w.writes == []
+
+
+@pytest.mark.parametrize("title", ["heartgold", "soulsilver", "heartgold_hge"])
+def test_f9_the_pack_battle_d7_matches_its_file_checks(title):
+    doc = json.loads((ROOT / f"data/games/{PACKS[title]}/profile.json").read_text(encoding="utf-8"))
+    prof = doc["titles"][title]["profile"]
+    d7, chk = prof["battle"]["d7"], prof["battle_d7_file_checks"]
+    assert d7["repl_flag_off"] == chk["repl_flag"]["value"]
+    assert d7["seam"]["cmd"] == chk["table"]["cmd"]
+    if "addr" in d7["seam"]:                                           # HG: the pinned entry
+        assert d7["seam"]["addr"] == chk["pin_bytes"]["address"] == chk["table"]["entry_address"]
+        assert d7["seam"]["pin_hex"] == chk["pin_bytes"]["bytes"]
+    else:                                                              # hge: the entry is read from the ROM table
+        assert d7["seam"]["table"] == chk["table"]["address"]
+        assert chk["pin_bytes"]["address"] == chk["table"]["entry_address"]
+    assert d7["party_hp_off"] == 0x88 + 6 and d7["bs_party_off"] == 0x68 and d7["ctx_cmd_off"] == 8
+
+
+# ── review fixes, second pass (OMP cx-39657f69) ────────────────────────────────────────────
+def test_r2_f1_a_deposit_shifts_the_party_extra_and_clears_the_last_entry():
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002), Mon(0x10000003)])
+    e1, e2 = w.saved_extra(1), w.saved_extra(2)
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.advance(5)
+    assert w.saved_keys() == [key_of(0x10000002), key_of(0x10000003)]
+    assert w.saved_extra(0) == e1 and w.saved_extra(1) == e2            # shifted with the mons (Party_RemoveMon)
+    assert w.saved_extra(2) == bytes(5)                                 # the last entry cleared
+
+
+def test_r2_f1_without_a_pinned_extra_geometry_party_shape_changes_refuse_with_a_pack_gap():
+    mon = Mon(0x55555555)
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002)], boxes={(0, 0): mon}, party_extra=None)
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.reply({"cmd": "party_mon", "key": mon.key, "stats": STATS})
+    w.advance(6)
+    assert w.writes == []
+    assert [m["reason"] for m in w.events("box_mon_failed")] == ["pack_gap:party_off.extra"]
+    assert [m["reason"] for m in w.events("sync_retrieve_failed")] == ["pack_gap:party_off.extra"]
+
+
+def test_r2_f1_a_withdraw_clears_the_new_slots_extra():
+    mon = Mon(0x55555555, 155, 7, 3, 30)
+    w = ready(party=[Mon(A.pid)], boxes={(2, 4): mon})
+    w.put(w.party_base + w.extra_off + 5, bytes([9, 9, 9, 9, 9]))        # stale bytes in the slot about to be used
+    w.reply({"cmd": "party_mon", "key": mon.key, "stats": STATS})
+    w.advance(5)
+    assert w.saved_keys() == [key_of(A.pid), mon.key] and w.saved_extra(1) == bytes(5)
+
+
+def test_r2_f5_the_vacated_party_slot_is_zeromondata_not_raw_zeros():
+    from server.adapters import gen4_codec as codec
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002)])
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.advance(5)
+    vacated = w.get(w.party_base + 8 + 0xEC, codec.PARTY_MON_SIZE)
+    assert vacated == bytes(codec.encrypt_party(bytes(codec.PARTY_MON_SIZE))) and any(vacated)
+
+
+def test_r2_f6_spans_are_written_as_aligned_words_not_bytes():
+    w = ready(party=[Mon(0x10000001), Mon(0x10000002), Mon(0x10000003)])
+    w.reply({"cmd": "box_mon", "key": w.party[0].key})
+    w.advance(5)
+    widths = [n for _, _, n in w.writes]
+    assert 4 in widths and len(w.writes) < 300                           # ~700 bytes moved in a few dozen writes
+    assert w.writes and all(a % n == 0 for _, a, n in w.writes)          # every write is naturally aligned
+
+
+def test_r2_f2_a_retrying_command_does_not_rescan_the_boxes_every_frame():
+    pc_lo = ready().pc_base
+    w = ready(party=[Mon(0x10000001)], boxes={(0, 0): Mon(0x44444444), (3, 3): Mon(0x44444445)})
+    w.reply({"cmd": "memorialize", "key": w.party[0].key})               # the last party mon: requeued every frame
+    w.advance(2)
+    w.read_log = []
+    w.advance(20)
+    in_pc = [a for a in w.read_log if w.pc_base <= a < w.pc_base + w.pc_size]
+    assert pc_lo and len(in_pc) < 3 * 18 * 30 * 2, f"{len(in_pc)} box reads in 20 retry frames"   # one signature pass at most
+    assert w.writes == []
+    assert w.session.deferred["items"][1].cmd == "memorialize"
+
+
+def test_r2_f3_a_stale_checkpoint_never_arms_a_write():
+    w = ready()
+    assert w.session.driver.checkpoint_ok()[0] is True
+    w.frame += 1                                                         # a frame that never ran its pre_pump
+    ok, why = w.session.driver.checkpoint_ok()
+    assert ok is False and "stale" in why
+    try:
+        w.session.deferred["exec"].faint_slot(0)
+    except Exception as exc:                                             # the executor throws: nothing written
+        assert "stale" in str(exc)
+    assert w.writes == [] and w.saved_hp(0) == 20
+
+
+def test_r2_f9_the_key_change_queue_is_capped_with_a_logged_drop():
+    w = ready()
+    for i in range(14):                                                  # one unanswered alias, then 13 more NPC trades
+        w.party[0] = Mon(0x40000000 + i, 16, 3, 13, 13, otid=0x0000BEEF)
+        w.write_party()
+        w.advance(6)
+    assert len(w.events("key_change")) == 1                              # only the first went out: the alias is unanswered
+    assert len(w.state.changes) <= 8
+    assert any("key_change queue full" in s for s in w.logs)
