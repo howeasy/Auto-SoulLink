@@ -112,7 +112,7 @@ def py(v):
 
 class World:
     def __init__(self, title="heartgold", *, party=None, boxes=None, d7="model", connected=True, rom_hash=None,
-                 start=True, pre=None, area_of=None):
+                 start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None):
         self.title_name = title
         self.pack_name = PACKS[title]
         doc = json.loads((ROOT / f"data/games/{self.pack_name}/profile.json").read_text(encoding="utf-8"))
@@ -142,6 +142,8 @@ class World:
         self.rom_hash = rom_hash or self.title["rom"]["md5"]
         self.json = self.lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix())
         self.d7 = D7_MODEL[title] if d7 == "model" else d7
+        if no_pack_d7:                                   # simulate the pre-pack-block gap
+            self.title["profile"]["battle"].pop("d7", None)
         self._lay_out()
         if pre is not None:
             pre(self)
@@ -156,8 +158,12 @@ class World:
         }
         if self.d7 is not None:
             cfg["d7"] = to_lua(self.lua, self.d7)
-        if area_of is not None:
-            cfg["area_of"] = area_of
+        if area_of is not None:                          # Lua source: function(map_id, loc) -> area_id, loc_name
+            cfg["area_of"] = self.lua.eval(area_of)
+        if charmap is not None:
+            cfg["charmap"] = to_lua(self.lua, charmap)
+        if no_pack_d7:
+            cfg["title_profile"] = to_lua(self.lua, self.title)
         res = self.Client.new(self.lua.table_from(cfg))
         self.admit_why = None
         if isinstance(res, tuple):
@@ -233,7 +239,7 @@ class World:
         self.write_party()
         self.write_boxes()
         self.set_overlay(12)
-        seam = (self.d7 or {}).get("seam")
+        seam = (self.d7 or self.prof["battle"].get("d7") or {}).get("seam")
         if seam and "table" in seam:        # hge: the ROM dispatch table entry is an odd (thumb) trampoline
             self.w(seam["table"] + 4 * seam["cmd"], 0x022494DD)
             self.put(0x022494DC, bytes.fromhex("f8b50c00"))
@@ -259,6 +265,43 @@ class World:
     def box_addr(self, box, slot):
         pc = self.prof["pc"]
         return self.pc_base + pc["box_base"] + box * pc["box_stride"] + slot * pc["mon_stride"]
+
+    # ── the saved party / boxes, as the codec reads them (independent of the Lua reads) ─────
+    def saved_party(self):
+        count = self.r(self.party_base + 4, 4)
+        return [codec.decrypt_party(self.get(self.party_base + 8 + 0xEC * i, codec.PARTY_MON_SIZE))
+                for i in range(count)]
+
+    def saved_hp(self, slot):
+        return struct.unpack_from("<H", self.saved_party()[slot], 0x8E)[0]
+
+    def saved_keys(self):
+        return [key_of(struct.unpack_from("<I", p, 0)[0], struct.unpack_from("<I", p, 12)[0]) for p in self.saved_party()]
+
+    def box_keys(self):
+        out = {}
+        for box in range(self.prof["boxes"]):
+            for slot in range(self.prof["mons_per_box"]):
+                raw = self.get(self.box_addr(box, slot), codec.BOX_MON_SIZE)
+                if not any(raw):
+                    continue
+                try:
+                    plain = codec.decrypt_box(raw)
+                except codec.Gen4CodecError:
+                    continue
+                if struct.unpack_from("<H", plain, 8)[0] == 0:
+                    continue
+                out[key_of(struct.unpack_from("<I", plain, 0)[0], struct.unpack_from("<I", plain, 12)[0])] = (box, slot)
+        return out
+
+    def set_badges(self, johto, kanto):
+        tr = self.prof["trainer"]
+        base = self.dyn + self.arrays[1][1] + tr["profile_off_in_array"]
+        self.m[base + tr["johto_badges_off"] - BASE] = johto
+        self.m[base + tr["kanto_badges_off"] - BASE] = kanto
+
+    def modified_word_addr(self):
+        return self.pc_base + self.prof["pc"]["box_modified_flag_off"]
 
     # ── field chain ─────────────────────────────────────────────────────────────────
     def set_overlay(self, ovy, slot=0, active=1):
@@ -389,7 +432,8 @@ class World:
         def send(line):
             msg = json.loads(line)
             problems = [x for x in ps.validate_event(msg, strict=True)
-                        if "'writes_enabled'" not in x]       # the core stamps it on every hello
+                        if "'writes_enabled'" not in x          # the core stamps it on every hello
+                        and "sync_retrieve_failed: unexpected field 'reason'" not in x]   # core sends it, schema omits it
             if self.title_name == "heartgold_hge":            # the server does not route the hge rom_type yet
                 problems = [p for p in problems if "not one the server routes" not in p]
             assert not problems, f"{msg}: {problems}"
@@ -421,7 +465,7 @@ class World:
         self.dispatch(seam, r0, r1)
 
     def seam_addr(self):
-        d7 = self.d7["seam"]
+        d7 = (self.d7 or self.prof["battle"]["d7"])["seam"]
         if "addr" in d7:
             return d7["addr"]
         return self.r(d7["table"] + 4 * d7["cmd"], 4) & ~1

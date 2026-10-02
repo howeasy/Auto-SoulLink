@@ -40,24 +40,26 @@
 -- The callback also validates the overlay (binding:context), r0 == battle system, r1 == ctx,
 -- ctx.command == the seam's command, and the key pin (battler key + party slot + both copies).
 -- Missed seam on the ending frame: battle_write(..., true) returns nil, so the core defers the
--- faint to the checkpoint queue; its executor is step 4, so today that is a loud logged refusal.
+-- faint to the checkpoint queue (step 4's overworld faint executor), with a logged reason (D12).
 --
 -- Step 3: after a write the game must show its OWN effect within EFFECT_WINDOW (900) frames: the
 -- replacement flag (u32[ctx + repl_flag_off + 4*b] & 1, 2+ party mons) or the LOSE result byte
 -- (one-mon party). Later is a different, unrelated event and does not satisfy it.
 --
 -- Idle (checkpoint_ok, the deferred-write gate and the reducer's `idle`): lua/gen4/safety.lua's
--- checkpoint, polled ONCE per frame in pre_pump and cached for the frame (it is stateful). It is the
--- settled predicate runningFieldMap (fs+0x6C) != 0 AND taskman (fs+0x10) == 0 AND processManager
--- parent != NULL (field_app) AND child == NULL (launched_app), plus paused / save driver idle /
--- no encounter. encounter_active here = "the battle chain is up"; the encounter task's copy-back
--- is the taskman clause. `pc_active` for the reducer = another app than the battle one is
--- launched (the pack carries no PC-resident predicate: an approximation, absorbed by the
--- reducer's pc_frames window).
+-- checkpoint, polled ONCE per frame in pre_pump and cached for the frame (it is stateful). Its
+-- anchor is the engine's own gate FieldSystem_IsPlayerMovementAllowed (src/field_system.c:199-201):
+-- !isPaused && unk6C (runningFieldMap, fs+0x6C) && !TaskIsRunning (taskman, fs+0x10 == NULL), plus
+-- fs->unk0->unk0 != NULL (the field app) AND fs->unk0->unk4 == NULL (no launched app), save driver
+-- idle and no encounter. (There is no OverlayManager.parent at the pinned tree.) encounter_active
+-- here = "the battle chain is up"; the encounter task's copy-back is the taskman clause.
+-- `pc_active` for the reducer = another app than the battle one is launched (the pack carries no
+-- PC-resident predicate: an approximation, absorbed by the reducer's pc_frames window).
 --
--- Left as seams (OUT of this card): deferred box/party writes (exec.* below refuse loudly, step 4),
--- key_change (step 5), full hello/tick fields (step 6; hello_fields/tick_fields here are the
--- minimum the protocol needs).
+-- Step 4 (storage): the deferred executors below write box/party records at the checkpoint, see
+-- the "storage" section. Step 5 (D11): a reducer slot_replace note becomes a key_change with the
+-- alias and its exact message on identity.pending. Step 6: hello_fields/tick_fields, see "wire
+-- shapes". Still open: the bag read (has_pokeballs) and p.area_of / p.charmap are injections.
 local Client = {}
 
 Client.PHASE = "d7"
@@ -113,6 +115,8 @@ function Client.new(p)
         revoked = nil,            -- reason: a partial D7 write revokes every further D7 write
         watch = nil,              -- step 3: the effect window of the last landed write
         last_notes = "",
+        changes = {},             -- D11: observed NPC-trade key changes waiting for a free alias slot
+        fatal = nil,              -- a storage write that failed its readback: no further checkpoint writes
     }
     local session, pe, signals
     local parts = Entry.build({
@@ -167,7 +171,7 @@ function Client.new(p)
         end
         local sig = table.concat(sigt, ",")
         if B.ok and not force and sig == B.sig then B.dirty = false; return true, "unchanged" end
-        local mons, complete = {}, true
+        local mons, dup, complete = {}, {}, true
         for box = 0, prof.boxes - 1 do
             for slot = 0, per - 1 do
                 local a = slot_addr(box, slot)
@@ -178,6 +182,7 @@ function Client.new(p)
                         local m = R.box_mon(mem, prof, a)
                         if not m then complete = false
                         else
+                            if mons[m.key] then dup[m.key] = true end
                             mons[m.key] = { species_id = m.species, held_item_id = m.held_item, is_egg = m.is_egg,
                                             moves = m.moves, box = box, slot = slot }
                         end
@@ -187,7 +192,7 @@ function Client.new(p)
         end
         B.ok = complete
         if not complete then return false, "incomplete box scan" end
-        B.gen, B.mons, B.sig, B.dirty = B.gen + 1, mons, sig, false
+        B.gen, B.mons, B.dup, B.sig, B.dirty = B.gen + 1, mons, dup, sig, false
         return true
     end
     -- the ONE box-generation accessor: (generation, whether the last scan was complete) -- TWO values
@@ -205,12 +210,37 @@ function Client.new(p)
         return arr(out)
     end
 
-    -- ── wire shapes (step 6 owns the full set) ─────────────────────────────────────
+    -- ── wire shapes (step 6) ─────────────────────────────────────────────────────────
+    -- What Gen 3 sends that Gen 4 can supply from the pack and the save: party entries (key, slot,
+    -- species, level, hp, maxHP, status_cond, moves, pp, held_item_id, active), enemy_party,
+    -- trainer/doubles flags, ot_id, trainer_name (needs p.charmap), player_gender, badges (Johto
+    -- bitmask) + kanto_badges, rom_sha1 (the pinned sha1 of the ADMITTED title), area (p.area_of),
+    -- the census. Not supplied (no Gen 4 source yet): ball_count and the bag read (pack gap),
+    -- trainer_id / opponent_*, stat_stages, blob_hex, pp_bonuses (an int on the wire; Gen 4 holds 4
+    -- bytes), rom_content, battle_identity, trade fields; foundation/artifact_kind are not declared
+    -- (the server derives the foundation from rom_type; hge is not routed there yet).
+    local be = prof.battle_enums
+    local doubles_bit = be.type_bits.BATTLE_TYPE_DOUBLES or be.type_bits.BATTLE_TYPE_DOUBLE
     local function party_wire(party)
+        local active = {}
+        for _, m in ipairs(st.battle and st.battle.mons or {}) do
+            if m.b % 2 == 0 and m.slot then active[m.slot] = true end
+        end
         local out = {}
         for i, m in ipairs(party) do
+            local d = m.decoded
             out[i] = { key = m.key, slot = m.slot, species_id = m.species, level = m.level, hp = m.hp,
-                       maxHP = m.max_hp, held_item_id = m.decoded and m.decoded.held_item, moves = arr(m.moves) }
+                       maxHP = m.max_hp, status_cond = d and d.status, moves = arr(m.moves),
+                       pp = d and arr(d.pp), held_item_id = d and d.held_item, active = active[m.slot] == true }
+        end
+        return arr(out)
+    end
+    local function enemy_wire()
+        local out = {}
+        for _, m in ipairs(st.battle and st.battle.mons or {}) do
+            if m.b % 2 == 1 then
+                out[#out + 1] = { species_id = m.species, level = m.level, hp = m.hp, maxHP = m.max_hp, active = true }
+            end
         end
         return arr(out)
     end
@@ -220,6 +250,17 @@ function Client.new(p)
         local loc = sd and R.location(mem, prof, sd)
         if not loc then return nil, nil end
         return p.area_of(loc.map_id, loc)
+    end
+    local function trainer_fields(f, hello)
+        local t = R.trainer(mem, prof, st.sd)
+        if t then
+            f.player_gender = t.gender
+            if hello then f.ot_id = t.otid end
+            if p.charmap then f.trainer_name = R.decode_name(t.name_raw, p.charmap) end
+        end
+        local b = R.badges(mem, prof, st.sd)
+        -- protocol_schema's hello has no kanto_badges (docs/protocol.md says Gen 2's hello sends it): tick only
+        if b then f.badges = b.johto; if not hello then f.kanto_badges = b.kanto end end
     end
 
     -- ── D7: the seam site, resolved lazily (the pack carries none of it yet) ────────
@@ -364,7 +405,13 @@ function Client.new(p)
     drv.frame = now
     drv.read_party = party_read
     function drv.in_battle() return st.battle ~= nil end
-    function drv.checkpoint_ok() return st.ck, st.ck_why end
+    -- The deferred-write gate is the safety checkpoint, which reads the SAVE DRIVER state byte
+    -- (save_busy). It deliberately does not look at the PC modified word: the battery keeps it at 1
+    -- permanently (f426a76b), so "modified" never means "a save is in flight".
+    function drv.checkpoint_ok()
+        if st.fatal then return false, "write fault: " .. st.fatal end
+        return st.ck, st.ck_why
+    end
     drv.box_generation = box_generation
     drv.rescan_boxes = rescan_boxes
 
@@ -390,10 +437,8 @@ function Client.new(p)
         local party = party_read() or {}
         if not st.boxes.ok then scan_boxes(true) end
         local f = { rom_type = admitted.rom_type, party = party_wire(party),
-                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false }
-        if #admitted.rom_hash == 40 then f.rom_sha1 = admitted.rom_hash end
-        local t = R.trainer(mem, prof, st.sd)
-        if t then f.ot_id = t.otid end
+                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false, rom_sha1 = profile.rom.sha1 }
+        trainer_fields(f, true)
         f.area_id, f.loc_name = area_now()
         local gen, ok = box_generation()
         if ok then f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen end
@@ -402,8 +447,12 @@ function Client.new(p)
     function drv.tick_fields()
         local party = party_read()
         if not party then return nil end
-        local f = { party = party_wire(party), in_battle = drv.in_battle(),
-                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false }
+        local b = st.battle
+        local f = { party = party_wire(party), in_battle = b ~= nil, enemy_party = enemy_wire(),
+                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false,
+                    is_trainer_battle = b ~= nil and (b.btype & be.trainer_mask) ~= 0,
+                    is_doubles = b ~= nil and doubles_bit ~= nil and (b.btype & doubles_bit) ~= 0 }
+        trainer_fields(f)
         f.area_id, f.loc_name = area_now()
         local gen, ok = box_generation()
         if ok then f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen end
@@ -411,7 +460,7 @@ function Client.new(p)
     end
     function drv.on_reset()
         pe:reset()
-        st.d7, st.d7_done, st.watch = nil, {}, nil
+        st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, {}, nil, {}, nil
         st.boxes = { gen = st.boxes.gen, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 }
     end
 
@@ -539,7 +588,26 @@ function Client.new(p)
             st.last_notes = joined
             if joined ~= "" then log("reducer: " .. joined) end
         end
-        -- 5. the effect window
+        -- 5. D11: a record replaced in place with its old one gone (NPC trade) is a key_change
+        for _, n in ipairs(notes) do
+            local old, new = n:match("^slot_replace:([^>]+)>(.+)$")
+            if old then st.changes[#st.changes + 1] = { old = old, new = new } end
+        end
+        while #st.changes > 0 and not session.identity.pending do
+            local c = table.remove(st.changes, 1)
+            local mon
+            for _, m in ipairs(party or {}) do if m.key == c.new then mon = m end end
+            if mon then
+                -- the exact message rides on the alias: the core resends it after a retryable refusal
+                session.identity:begin_alias(c.old, c.new, mon, party, frame)
+                session.identity.pending.msg = { old_key = c.old, new_key = c.new, reason = "npc_trade",
+                                                 new_species = mon.species, new_nickname = mon.nickname }
+                session.send("key_change", session.identity.pending.msg)
+            else
+                log("key_change " .. c.old .. " > " .. c.new .. " dropped: the new record left the party")
+            end
+        end
+        -- 6. the effect window
         watch_step(frame, battle)
     end
     -- the core does not pcall pre_pump: a fault here must not stop the frame loop
@@ -551,16 +619,260 @@ function Client.new(p)
         end
     end
 
-    -- ── the deferred queue: step 4 owns the executors, until then they refuse LOUDLY ──
-    local function not_yet(what)
-        return function() return nil, "gen4 deferred " .. what .. " is not implemented (step 4)" end
+    -- ── step 4: the deferred executors (storage) ─────────────────────────────────────
+    -- Every box/party mutation is ONE plan {{addr, bytes}, ...} (PLAN 4.3 storage): prevalidated as a
+    -- whole (nothing is written unless the permit is open, every span is inside RAM and the storage
+    -- has not moved since the plan was made), written, then READ BACK. A readback that differs is a
+    -- visible FATAL write fault (st.fatal, a console line, and the gate closes): never rolled back,
+    -- never reported as success. The PERMIT is the safety checkpoint of THIS frame (st.ck, polled in
+    -- pre_pump; the deferred queue runs in the same frame_end): it includes the save driver state
+    -- byte (save_busy) and never the battery modified word. Box edits keep the game's own
+    -- representation: records are copied or re-encrypted through pk4 (box checksum recomputed), a
+    -- party-tail-only HP edit is outside that checksum, and the PC's per-box dirty bit
+    -- (pc.box_modified_flag_off, PCStorage_SetBoxModified: flag |= 1 << box) is set with the data.
+    -- Not reproduced (no Gen 4 data source): RestoreBoxMonPP on a deposit and the held-mail refusal.
+    local po = prof.party_off
+    local psize, per = prof.pkm.party_size, prof.mons_per_box
+    local PARTY_HP_OFF = pk4.BOX_MON_SIZE + 6          -- PartyPokemon tail: status u32, level, capsule, hp u16
+    local function layout()
+        local sd, why = R.save_data(mem, prof)
+        if not sd then return nil, why end
+        local party, pw = R.array(mem, prof, sd, po.array_id)
+        if not party then return nil, pw end
+        local pc, cw = R.array(mem, prof, sd, prof.pc.array_id)
+        if not pc then return nil, cw end
+        return { sd = sd, party = party, pc = pc }
+    end
+    local function box_addr(L, box, slot)
+        local pc = prof.pc
+        return L.pc + pc.box_base + box * pc.box_stride + slot * pc.mon_stride
+    end
+    local function party_addr(L, slot) return L.party + po.mons_off + slot * psize end
+    local function zeros(n) local t = {}; for i = 1, n do t[i] = 0 end; return t end
+    local function word_bytes(v, n) local t = {}; for i = 1, n do t[i] = v & 0xFF; v = v >> 8 end; return t end
+    local function slice(t, n) local o = {}; for i = 1, n do o[i] = t[i] end; return o end
+    local function same(a, b)
+        if not a or #a ~= #b then return false end
+        for i = 1, #b do if a[i] ~= b[i] then return false end end
+        return true
+    end
+
+    -- returns true | nil, why [, true when the fault is FATAL (bytes may have moved)]
+    local function write_plan(L, plan)
+        if st.fatal then return nil, "write fault: " .. st.fatal end
+        if not st.ck then return nil, "checkpoint closed: " .. tostring(st.ck_why) end
+        for _, sp in ipairs(plan) do
+            if not R.in_ram(sp[1], #sp[2]) then return nil, "span outside RAM" end
+        end
+        local cur = layout()
+        if not (cur and cur.sd == L.sd and cur.party == L.party and cur.pc == L.pc) then
+            return nil, "storage moved before the write"
+        end
+        local ok, err = pcall(function()
+            for _, sp in ipairs(plan) do
+                for i, b in ipairs(sp[2]) do wr(1, sp[1] + i - 1, b) end
+            end
+        end)
+        local bad = (not ok) and ("write error: " .. tostring(err)) or nil
+        if ok then
+            for _, sp in ipairs(plan) do
+                if not same(R.bytes(mem, sp[1], #sp[2]), sp[2]) then
+                    bad = string.format("readback differs at 0x%08X", sp[1])
+                    break
+                end
+            end
+        end
+        st.party_frame = -1
+        if bad then
+            st.fatal = bad
+            log("STORAGE FATAL (bytes may have moved; checkpoint writes revoked): " .. bad)
+            return nil, "fatal: " .. bad, true
+        end
+        return true
+    end
+
+    local function dirty_span(L, boxes)
+        local off = prof.pc.box_modified_flag_off
+        if not off then return nil, "pack_gap:pc.box_modified_flag_off" end
+        local cur = R.read(mem, L.pc + off, 4)
+        if not cur then return nil, "dirty flag unreadable" end
+        for _, b in ipairs(boxes) do cur = cur | (1 << b) end
+        return { L.pc + off, word_bytes(cur, 4) }
+    end
+
+    local function party_match(key, hint)
+        local party, why = party_read()
+        if not party then return nil, nil, why end
+        local found, hinted, dup
+        for _, m in ipairs(party) do
+            if m.key == key then
+                if found then dup = true end
+                found = m
+                if m.slot == hint then hinted = m end
+            end
+        end
+        if hinted then return party, hinted end              -- a validated locator tells shared keys apart
+        if dup then return nil, nil, "ambiguous duplicate key" end
+        return party, found
+    end
+    local function alive_elsewhere(party, slot)
+        for _, m in ipairs(party) do
+            if m.slot ~= slot and not (m.decoded and m.decoded.is_egg) and m.hp > 0 then return true end
+        end
+        return false
+    end
+    -- a FRESH, complete census; the executor never trusts the cached one
+    local function census()
+        if not scan_boxes(true) then return nil, "box census unavailable" end
+        local occ = {}
+        for _, e in pairs(st.boxes.mons) do occ[e.box * per + e.slot] = true end
+        return st.boxes, occ
+    end
+    local function free_slot(occ, lo, hi)
+        for box = lo, hi do
+            for slot = 0, per - 1 do
+                if not occ[box * per + slot] then return box, slot end
+            end
+        end
+    end
+    local function box_record(L, e)
+        local raw, why = R.record(mem, box_addr(L, e.box, e.slot), pk4.BOX_MON_SIZE)
+        if not raw then return nil, "record: " .. tostring(why) end
+        local _, dwhy = pk4.decrypt_box(raw)                   -- refuses locked / bad checksum
+        if dwhy then return nil, "record: " .. tostring(dwhy) end
+        return raw
+    end
+    local function commit(L, plan, boxes)
+        local flag, fwhy = dirty_span(L, boxes)
+        if not flag then return nil, fwhy end
+        plan[#plan + 1] = flag
+        return write_plan(L, plan)
+    end
+
+    -- deposit (to a regular box) / memorialize (to the memorial box); the source is the party or a box
+    local function move_to_box(key, hint, memorial)
+        local L, why = layout()
+        if not L then return nil, why end
+        local party, mon, pwhy = party_match(key, hint)
+        if not party then return nil, pwhy end
+        local B, occ = census()
+        if not B then return nil, occ end
+        if B.dup[key] then return nil, "ambiguous duplicate boxed key" end
+        local boxed, last = B.mons[key], prof.memorial_box
+        if mon and boxed then return nil, "ambiguous key exists in both party and box" end
+        if not mon and not boxed then return nil, "key not in party" end
+        if boxed and (not memorial or boxed.box == last) then return true end      -- already where it belongs
+        local tb, ts
+        if memorial then tb, ts = free_slot(occ, last, last) else tb, ts = free_slot(occ, 0, last - 1) end
+        if not tb then return nil, memorial and "memorial box full" or "current box full" end
+        local plan, touched = {}, { tb }
+        if mon then
+            if not alive_elsewhere(party, mon.slot) then return nil, "last party mon" end
+            local recs = {}
+            for s = mon.slot, #party - 1 do
+                local raw, rwhy = R.record(mem, party_addr(L, s), psize)
+                if not raw then return nil, "record: " .. tostring(rwhy) end
+                recs[s] = raw
+            end
+            local _, dwhy = pk4.decode_party_mon(recs[mon.slot], pkp)
+            if dwhy then return nil, "record: " .. tostring(dwhy) end
+            plan[1] = { box_addr(L, tb, ts), slice(recs[mon.slot], pk4.BOX_MON_SIZE) }
+            for s = mon.slot, #party - 2 do plan[#plan + 1] = { party_addr(L, s), recs[s + 1] } end
+            plan[#plan + 1] = { party_addr(L, #party - 1), zeros(psize) }
+            plan[#plan + 1] = { L.party + po.count_off, word_bytes(#party - 1, 4) }
+        else
+            local raw, rwhy = box_record(L, boxed)
+            if not raw then return nil, rwhy end
+            plan[1] = { box_addr(L, tb, ts), raw }
+            plan[2] = { box_addr(L, boxed.box, boxed.slot), pk4.encrypt_box(zeros(pk4.BOX_MON_SIZE)) }
+            touched[2] = boxed.box
+        end
+        local ok, cwhy = commit(L, plan, touched)
+        if not ok then return nil, cwhy end
+        if mon then pe:expect("party_to_box", key) end
+        return true
+    end
+
+    local function valid_stat(v, hi) return math.type(v) == "integer" and v >= 1 and v <= hi end
+    local function withdraw(key, stats)
+        local L, why = layout()
+        if not L then return nil, why end
+        local party, mon, pwhy = party_match(key)
+        if not party then return nil, pwhy end
+        local B = census()
+        if not B then return nil, "box census unavailable" end
+        if B.dup[key] then return nil, "ambiguous duplicate boxed key" end
+        local boxed = B.mons[key]
+        if mon then
+            if boxed then return nil, "ambiguous key exists in both party and box" end
+            return true
+        end
+        if #party >= R.PARTY_CAPACITY then return nil, "party full" end
+        if not boxed then return nil, "key not boxed" end
+        if type(stats) ~= "table" or not valid_stat(stats.level, 100) or not valid_stat(stats.maxHP, 999)
+           or not valid_stat(stats.attack, 999) or not valid_stat(stats.defense, 999)
+           or not valid_stat(stats.speed, 999) or not valid_stat(stats.spAtk, 999)
+           or not valid_stat(stats.spDef, 999) then
+            return nil, "missing stats"
+        end
+        local raw, rwhy = box_record(L, boxed)
+        if not raw then return nil, rwhy end
+        local plain = pk4.decrypt_box(raw)
+        local tail = zeros(psize - pk4.BOX_MON_SIZE)
+        tail[5] = stats.level                                  -- BoxMonToMon: status cleared, HP = max
+        for i, v in ipairs({ stats.maxHP, stats.maxHP, stats.attack, stats.defense, stats.speed, stats.spAtk,
+                             stats.spDef }) do
+            tail[7 + 2 * (i - 1)], tail[8 + 2 * (i - 1)] = v & 0xFF, v >> 8
+        end
+        for i = 1, #tail do plain[pk4.BOX_MON_SIZE + i] = tail[i] end
+        local rec = pk4.encrypt_party(plain)
+        local plan = { { party_addr(L, #party), rec }, { L.party + po.count_off, word_bytes(#party + 1, 4) },
+                       { box_addr(L, boxed.box, boxed.slot), pk4.encrypt_box(zeros(pk4.BOX_MON_SIZE)) } }
+        local ok, cwhy = commit(L, plan, { boxed.box })
+        if not ok then return nil, cwhy end
+        pe:expect("box_to_party", key)
+        return true
+    end
+
+    -- the overworld faint: party HP = 0 (u16, PID-stream encrypted; outside the box checksum)
+    local function faint(slot)
+        local L, why = layout()
+        if not L then return nil, why end
+        local party = party_read()
+        if not party or math.type(slot) ~= "integer" or slot < 0 or slot >= #party then return nil, "slot out of range" end
+        local rec = party_addr(L, slot)
+        local raw, rwhy = R.record(mem, rec, psize)
+        if not raw then return nil, "record: " .. tostring(rwhy) end
+        local mon, dwhy = pk4.decode_party_mon(raw, pkp)       -- "locked" is refused, never XORed as plaintext
+        if not mon then return nil, "record: " .. tostring(dwhy) end
+        if mon.hp == 0 then return true end
+        local ks = stream(mon.pid, (PARTY_HP_OFF - pk4.BOX_MON_SIZE) // 2 + 1)
+        local ok, wwhy = write_plan(L, { { rec + PARTY_HP_OFF, { ks & 0xFF, ks >> 8 } } })
+        if not ok then return nil, wwhy end
+        pe:commanded(mon.key)                                  -- our zero is not a faint
+        return true
+    end
+
+    local function stats_of(m)
+        local s, d = { level = m.level, maxHP = m.max_hp }, m.decoded
+        if d and d.stats then
+            s.attack, s.defense, s.speed, s.spAtk, s.spDef = d.stats[1], d.stats[2], d.stats[3], d.stats[4], d.stats[5]
+            for i = 1, 4 do s["pp" .. i] = d.pp and d.pp[i] or 0 end
+        end
+        return s
     end
     local exec = {
-        arm = function() end, disarm = function() end,
-        faint_slot = function() error("gen4 overworld faint is not implemented (step 4)", 0) end,
-        deposit = not_yet("deposit"), withdraw = not_yet("withdraw"), memorialize = not_yet("memorialize"),
+        arm = function() end, disarm = function() end,             -- each plan is its own permit window
+        faint_slot = function(slot)
+            local ok, why = faint(slot)
+            if not ok then error("overworld faint refused: " .. tostring(why), 0) end
+        end,
+        deposit = function(key, hint) return move_to_box(key, hint, false) end,
+        withdraw = withdraw,
+        memorialize = function(key, hint) return move_to_box(key, hint, true) end,
+        stats_of = stats_of,
         write_count = function() return st.attempted end,
-        rescan = function() rescan_boxes() end,
+        rescan = function() rescan_boxes(); st.party_frame = -1 end,
     }
     local core = { Session = L("lua/core/session.lua"), Identity = L("lua/core/identity.lua"),
                    Deferred = L("lua/core/deferred.lua") }
