@@ -130,7 +130,7 @@ Behaviour already observed on HG, SS and hge, but the receipts are NOT signable 
   - a run stopped before SAVE must read OPEN;
   - releasing a party mon is refused.
 
-**Receipts:** keep the existing `route` kind. `RECEIPT_KINDS` `pass` is any-of (`gen4_routes.py:1059`, `status in spec["pass"]`), so appending `PC_WITHDRAW` and `PC_RELEASE` is safe. De-hard-code the `PC_DEPOSIT` literals (`gen4_routes.py:985, 1235, 1397`) into a per-target map.
+**Receipts:** keep the existing `route` kind. `RECEIPT_KINDS` `pass` is any-of (`gen4_routes.py:1040` defines it, applied at `:1088`), so appending `PC_WITHDRAW` and `PC_RELEASE` is safe. De-hard-code the `PC_DEPOSIT` literals (`gen4_routes.py:985, 1235, 1397`) into a per-target map.
 
 **State machine (OMP cx-450724f8).** `PCBox_Main` wraps `ov14_021EAF8C`, which dispatches through the word table `ov14_021F7D9C`: entry N handles state N, and each handler returns the next state. Exit is `cmp r0,#0xb3` (`asm/overlay_14.s:11368-11385`), and the state is the word read at `man+0x14`. The toolbar labels are BG tilemaps, so there are no strings to name the nodes.
 
