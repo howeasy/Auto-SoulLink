@@ -50,8 +50,11 @@ from datetime import UTC, datetime
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" / "tools"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from build_gen2_syms import ROOT, _load_lock, _source_check, _toolchains  # noqa: E402
 from make_ups import ups_apply, ups_create  # noqa: E402
+
+from patch.gen1.tools import title_screen  # noqa: E402
 
 LOCK_PATH = ROOT / "data" / "gen2_sources.lock.json"
 OVERLAY_CACHE = ROOT / ".cache" / "gen2-overlay"
@@ -80,6 +83,12 @@ PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
 PHONE_FILES = ("phone_flags.asm", "phone.asm")
 VERSION_FILE = "version.asm"
+# TITLE: the SoulLink logo and the version on the real title screen. title.asm is shared; the art is per repo and is
+# copied under fixed names. The version tiles are rendered here, per build (title_version.2bpp).
+TITLE_FILE = "title.asm"
+TITLE_ART = {"pokecrystal": ("title_logo_crystal.2bpp", "title_rows_crystal.inc"),
+             "pokegold": ("title_logo_gs.2bpp", "title_rows_gs.inc")}
+TITLE_ANCHOR = "\tcall EnableLCD\n"
 # vX.Y.Z plus an optional lowercase pre-release suffix; "SLINK " + it must fit 18 tiles
 VERSION_RE = re.compile(r"v\d+\.\d+\.\d+(?:-[a-z0-9.]+)?")
 TRADE_FILES = ("trade_frame.asm", "trade_items.asm", "trade_snapshot.asm",
@@ -148,6 +157,23 @@ def _main_menu_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
         raise RuntimeError("main menu requires exactly one `call SetUpMenu`, in MainMenuJoypadLoop")
     return path, text.replace(MAIN_MENU_ANCHOR, "MainMenuJoypadLoop:\n\tcall SlinkMainMenuBridge "
                               "; SLink overlay: same size as call SetUpMenu\n", 1)
+
+
+def _title_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    """TITLE: the one `call EnableLCD` that ends the title screen's setup, same size, to the ROM0 bridge."""
+    path = checkout / "engine/movie/title.asm"
+    text = path.read_text(encoding="utf-8")
+    if text.count(TITLE_ANCHOR) != 1:
+        raise RuntimeError("title screen requires exactly one `call EnableLCD`")
+    return path, text.replace(TITLE_ANCHOR, "\tcall SlinkTitleBridge ; SLink overlay: same size as call EnableLCD\n", 1)
+
+
+def title_version_tiles(repo: str, version: str) -> bytes:
+    """The patch version as 2bpp tiles in the repo's palette. Crystal: white (colour 1) on black, 8 cells, from pixel 2.
+    Gold/Silver: navy (3) on the sky (2), 5 cells, from pixel 2, without a pre-release suffix (it does not fit)."""
+    if repo == "pokecrystal":
+        return title_screen.text_tiles(version, 8, 2, fg=1, bg=0, y0=0)
+    return title_screen.text_tiles(version.split("-")[0], 5, 2, fg=3, bg=2, y0=1)
 
 
 def check_version(version: str | None) -> str:
@@ -296,6 +322,9 @@ def overlay_plan(
     version = (src_dir / VERSION_FILE).is_file()
     if version and not (src_dir / "slink.asm").is_file():
         raise RuntimeError("version overlay requires slink.asm")
+    title = (src_dir / TITLE_FILE).is_file()
+    if title and not (version and all((src_dir / name).is_file() for name in TITLE_ART[repo])):
+        raise RuntimeError("title overlay requires version.asm and its art (title_logo_*.2bpp, title_rows_*.inc)")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -321,6 +350,10 @@ def overlay_plan(
         plan.append(("phone.asm", src_dir / "phone.asm", True))
     if version:
         plan.append((VERSION_FILE, src_dir / VERSION_FILE, True))
+    if title:
+        art, rows = TITLE_ART[repo]
+        plan += [("title_logo.2bpp", src_dir / art, False), ("title_rows.inc", src_dir / rows, False),
+                 (TITLE_FILE, src_dir / TITLE_FILE, True)]
     return plan
 
 
@@ -339,6 +372,7 @@ def apply_overlay(
     trade_edit = _trade_receptionist_text(checkout) if "trade_service.asm" in include_names else None
     phone_edit = _phone_table_text(checkout) if "phone.asm" in include_names else None
     menu_edit = _main_menu_text(checkout) if VERSION_FILE in include_names else None
+    title_edit = _title_text(checkout) if TITLE_FILE in include_names else None
     if menu_edit is not None:
         check_version(version)
     main_path = checkout / "main.asm"
@@ -356,6 +390,8 @@ def apply_overlay(
     for dest_name, source_path, _include in plan:
         (dest_dir / dest_name).write_bytes(source_path.read_bytes())
         applied.append(dest_name)
+    if title_edit is not None:  # the version, rendered for this repo's palette: the one per-release build input
+        (dest_dir / "title_version.2bpp").write_bytes(title_version_tiles(repo, version))
     if include_names:
         block = "\n".join(
             ['; SLink companion overlay (tools/build_gen2_companion.py)']
@@ -378,7 +414,7 @@ def apply_overlay(
         path.write_text(text, encoding="utf-8", newline="\n")
         for path, text in trade_export_text(checkout, repo):
             path.write_text(text, encoding="utf-8", newline="\n")
-    for edit in (phone_edit, menu_edit):
+    for edit in (phone_edit, menu_edit, title_edit):
         if edit is not None:
             path, text = edit
             path.write_text(text, encoding="utf-8", newline="\n")
@@ -532,6 +568,28 @@ def verify_version_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, ov
         raise RuntimeError("main menu changed more than the call SetUpMenu operand")
 
 
+def verify_title_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, overlay_sym: pathlib.Path,
+                      repo: str) -> None:
+    """TITLE: the title setup's `call EnableLCD` changes only its operand, to the ROM0 bridge."""
+    old, new = _symbols(clean_sym), _symbols(overlay_sym)
+    bank, address = old["_TitleScreen" if repo == "pokecrystal" else "TitleScreen"]
+    bridge_bank, bridge = new.get("SlinkTitleBridge", (-1, -1))
+    if bridge_bank != 0 or not 0 <= bridge < 0x4000:
+        raise RuntimeError("title bridge must link in ROM0")
+    # the routine runs to the next global symbol in its bank (local labels are inside it)
+    following = sorted(a for name, (b, a) in old.items() if b == bank and a > address and "." not in name)
+    at = bank * 0x4000 + address - 0x4000
+    end = at + following[0] - address
+    call = b"\xcd" + old["EnableLCD"][1].to_bytes(2, "little")
+    if base[at:end].count(call) != 1:
+        raise RuntimeError("title screen native call EnableLCD differs")
+    expected = bytearray(base[at:end])
+    hook = expected.index(call)
+    expected[hook + 1:hook + 3] = bridge.to_bytes(2, "little")
+    if overlay[at:end] != expected:
+        raise RuntimeError("title screen changed more than the call EnableLCD operand")
+
+
 def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:
     """Gate 6c: panel grows bank 4 only; other existing symbols stay fixed.
 
@@ -608,6 +666,8 @@ def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold
             verify_phone_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym")
         if VERSION_FILE in overlay_applied[repo]:
             verify_version_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym")
+        if TITLE_FILE in overlay_applied[repo]:
+            verify_title_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym", repo)
         ups = ups_create(base, data)
         if ups_apply(base, ups) != data:
             raise RuntimeError(f"{key}: UPS round trip failed")
@@ -628,7 +688,7 @@ def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold
               file=sys.stderr)
 
     sources_sha256 = {p.name: source_sha256(p) for p in sorted(src_dir.iterdir())
-                       if p.suffix in (".asm", ".inc")} if src_dir.is_dir() else {}
+                       if p.suffix in (".asm", ".inc", ".2bpp")} if src_dir.is_dir() else {}
     sources_sha256.update(external_source_hashes(clean_repos, src_dir))
 
     provenance = {

@@ -60,20 +60,24 @@ def check_version(version: str) -> str:
     return version
 
 
-def text_tiles(text: str, cells: int, x: int) -> bytes:
-    """`text` as 2bpp tiles, `cells` wide: 5x7 glyphs from pixel `x`, one pixel below the top of the cell row."""
+def text_tiles(text: str, cells: int, x: int, fg: int = 3, bg: int = 0, y0: int = 1) -> bytes:
+    """`text` as 2bpp tiles, `cells` wide: 5x7 glyphs from pixel `x`, glyph row 0 on cell row `y0`.
+
+    fg / bg are palette indices (Game Boy default: colour 3 on 0); Gen 2 draws on its own palettes."""
     width = cells * 8
     rows = [0] * 8
     for c in text:
         if c != " ":
             for y, bits in enumerate(SMALL[c]):
-                rows[y + 1] |= bits << (width - 5 - x)
+                rows[y + y0] |= bits << (width - 5 - x)
         x += 6
     out = bytearray()
     for t in range(cells):
         for y in range(8):
-            b = (rows[y] >> (width - 8 - 8 * t)) & 0xFF
-            out += bytes((b, b))                                         # both planes: set bit = colour 3
+            g = (rows[y] >> (width - 8 - 8 * t)) & 0xFF
+            lo = (g if fg & 1 else 0) | (~g & 0xFF if bg & 1 else 0)
+            hi = (g if fg & 2 else 0) | (~g & 0xFF if bg & 2 else 0)
+            out += bytes((lo, hi))
     return bytes(out)
 
 

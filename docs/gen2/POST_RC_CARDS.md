@@ -23,7 +23,7 @@ G4 signature and the three overlay rows, which stay BUILT until G4 + `tools/gen_
 | REVIEW-P4-HASH | DONE in the doc sweep | `docs/gen2/reviews/` historical headers |
 | PHONE-NAMES | DONE | `e6d7761d` `0857cbe7`; Opus regression review clean |
 | TITLE-VERSION A (version text) | DONE | `SLINK v0.0.0-dev` on the main menu (`patch/gen2/src/version.asm`) |
-| TITLE-VERSION B (logo) | PARKED | owner 2026-09-25 "Logo can wait" |
+| TITLE-VERSION B (logo) | BUILT IN SOURCE, NOT PROMOTED | owner 2026-10-01 asked for it on every title: `patch/gen2/src/title.asm` (+ art from `tools/gen_gen1_title.py`) puts a SoulLink logo and the version on the real Crystal / Gold / Silver title, and keeps the vanilla subtitle. Crystal: logo + version on rows 10-11 under CRYSTAL VERSION. Gold/Silver: the free rows 7-10 are crossed by Ho-Oh / Lugia, so a stacked "Soul" / "Link" takes the left margin and the version sits left of the subtitle. Built and booted live on all three. The committed UPS / sym / map / provenance are still the previous overlay: regenerating them (`tools/build_gen2_companion.py --version vX.Y.Z`) changes every overlay sha1, so it needs the owner `--promote-overlays` step with G4. Measured ids: `tests/fixtures/gen2/title_*.json` |
 | POISON-DUO-CAP | DECIDED | duo keeps the native Wade fight; the gate's Gold poison leg boots the O-33 `gold_synth_psn` fixture (`75888449`, scoped to the gate by `0f64dd93`) |
 | TRAINER-SEED-A, TRADE-EVOLVE-CATCH | NOT NEEDED | both cells passed in the post-RC and Gen 3-merge sweeps; the fallbacks stay described below |
 | TRAINER-FAINT-LIVE-TURN | DONE | `822d4352` |

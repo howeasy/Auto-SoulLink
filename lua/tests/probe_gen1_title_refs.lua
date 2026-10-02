@@ -1,3 +1,4 @@
+client.speedmode(tonumber(os.getenv("SLINK_SPEED") or "100"))   -- SLINK_SPEED=800 reaches a slow title (Gen 2) in seconds
 -- Which BG tile ids does a title EVER reference, over the whole boot-to-idle sequence? Samples both BG maps
 -- (all 32x32 cells, so off-screen scroll columns count) every 4 frames. A tile id that never appears is safe to
 -- reuse; one that appears once is not. SLINK_FORCE_PURE=<addr> keeps pureRGB's Pure title flag set (see

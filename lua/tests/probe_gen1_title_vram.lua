@@ -1,3 +1,4 @@
+client.speedmode(tonumber(os.getenv("SLINK_SPEED") or "100"))   -- SLINK_SPEED=800 reaches a slow title (Gen 2) in seconds
 -- Dump the settled vanilla title: which BG tile ids hold data, and both BG maps. Output is committed as a test fixture.
 local out = io.open(os.getenv("SLINK_SHOT_DIR") .. "/title_vram.json", "w")
 -- SLINK_FORCE_PURE=<addr>: keep pureRGB's BIT_NEW_TITLE_SCREEN (bit 6 of wSpriteOptions2) set so the opt-in Pure title is the one dumped
