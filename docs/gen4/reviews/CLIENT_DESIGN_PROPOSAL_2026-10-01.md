@@ -124,3 +124,16 @@ This closes all three holes without touching the core.
   - The `runningFieldMap = TRUE` store at the pin is `asm/overlay_01_021F4704.s:1838-1839` (`ov01_021F54AC`, guarded by `[fs+0xA0] >= 2`). This is byte-identical asm to the newer tree's decompiled `fieldmap.c:225`. The field is `BOOL unk6C` at `include/field_system.h:137`.
   - **OPEN:** a second +0x6C TRUE store exists at `asm/overlay_01_021E5900.s:286-292` (`ov01_021E5924`, around the LOAD-state map-script start). That is the line the pack's `probe_field.live` evidence currently cites.
   - The probe's `first_field_live_frame` (`d15438ef`) on the next live boot shows which store fires first. Re-point the pack cite to `:1839` if they differ.
+- **Idle predicate, pinned-tree re-verification (OMP cx-de31f8d3 + cx-181e65e0 F9, 2026-10-02). This SUPERSEDES the vocabulary above.**
+  - **Anchor:** the engine's own gate, `FieldSystem_IsPlayerMovementAllowed`, is `!unk0->isPaused && unk6C && !FieldSystem_TaskIsRunning` (`src/field_system.c:199-201`). `safety.lua` mirrors it clause for clause and adds the app checks.
+  - **There is NO `processManager->parent` field.** `struct OverlayManager` (`include/overlay_manager.h`) has no parent member. The correct pair is `fs->unk0->unk0` (the field app) and `fs->unk0->unk4` (the launched app), as `safety.lua` and pack `probe_field` (field_app 0, launched_app 4) already read. A launched app sets `unk0->unk4` via `FieldSystem_LaunchApplication` (`field_system.c:125-130`).
+  - **`unk6C` (fs+0x6C, `field_system.h:137`):**
+    - It is cleared FALSE in C at `field_system.c:95` (overlay load) and at `:101` (every app launch).
+    - No pinned C sets it TRUE. The TRUE store is asm, at `asm/overlay_01_021F4704.s:1839`.
+  - **Corrected lines:**
+    - `sFieldSysPtr` writes: `field_system.c:53,67`.
+    - Start menu Task: `start_menu.c:331`; `:111-125` are prototypes.
+    - PC launch: `launch_application.c:406`, called from `scrcmd_c.c:1991`.
+    - Pokégear: `start_menu.c:1276/1280`.
+    - WaitApp: `start_menu.c:717`.
+  - **All `safety.lua` offsets verified:** task 0x10, live 0x6C, save 0x0C, paused 8, field_app 0, launched_app 4, save_driver 0xD8.
