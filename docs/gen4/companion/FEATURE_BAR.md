@@ -214,3 +214,18 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - It hooks none of `NitroMain`, `SysTaskQueue_RunTasks`, `Task_RunScripts` or the VBlank callbacks.
   - It ships no `main.c`, `system.c` or `sys_task.c` source, so registration is a `hooks` row or rides hge's own boot path (`load_arm9_expansion`, called from Main at frame 9; profile.json:380).
 - **C2 falsifier:** a per-state tick counter inside the task must advance in field, every START-menu app, battle, SAVE, a fade, an overlay load and after a soft reset.
+
+## C4 panel placement (OMP cx-94fb3ec1 + coordinator ROM overlay-table read, 2026-10-02)
+
+- **Launch chain** (verified):
+  - `start_menu.c:1120-1127` -> `sub_0203D1CC` (`:1104-1112`) -> `TrainerCard_LaunchApp` (`launch_application.c:1143-1150`, a static `OverlayManagerTemplate` with `FS_OVERLAY_ID(trainer_card)`) -> `FieldSystem_LaunchApplication` (`field_system.c:127-133`; the manager is on `HEAP_ID_FIELD2`, and the app makes its own heap, `overlay_trainer_card.c:39`).
+  - Return: `sub_0203D218` -> `FieldSystem_LoadFieldOverlay` -> `HandleLoadOverlay(FS_OVERLAY_ID(field))` (`field_system.c:89-96`).
+- **Correction to OMP F2** ("the field overlay stays resident"): in the HG ROM overlay table, `field` (ov1) and `trainer_card` (ov50) BOTH load at 0x021E5900. Loading the app overlay evicts the field overlay by region conflict, which is why the return path reloads it. While the panel runs, only static ARM9 is resident; that is fine, because `start_menu.o` is static.
+- **HG/SS:** append one `Overlay slink_panel { After main; Object ... }` group to `main.lsf`.
+  - Overlay groups carry no `Address`, and ids are name-keyed (`FS_OVERLAY_ID(<name>)`).
+  - The panel then loads at 0x021E5900, mutually exclusive with field and the trainer card.
+  - Constraint: the largest overlay end equals the linker arena start (ov12 ends at 0x0226EC40 == `SDK_SECTION_ARENA_START`). A panel far smaller than ov1 (0x60280) cannot move the arena.
+- **hge:** a new overlay is a directory drop (`overlays.mk:7,21-26`).
+  - Measured in the hge ROM table: hge's own overlays load in a reserved top-of-RAM window: ov129 0x023D8000, ov130 0x023C4000, ov131 0x023C8000, and most of 133-149 at 0x023C0400. Two load at 0x021E5900.
+  - The panel overlay can take the shared 0x023C0400 app slot (mutually exclusive with the others there) or 0x021E5900 like vanilla. C6 decides, measured against the hge linker scripts.
+- **Clone target:** `src/overlay_trainer_card.c` (124 lines), single-overlay; drop the signature child. The B-exit binding is unverified; trace it at C4.
