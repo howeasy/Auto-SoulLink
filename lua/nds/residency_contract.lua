@@ -6,7 +6,7 @@
 -- own lane; docs/shared-nds-residency.md has the two reference geometries.
 --
 -- Strategy (plain table of plain functions, no `self`):
---   entries(read)  -> array of { id = integer, active = boolean, region = integer|string }, EVERY slot of
+--   entries(read)  -> array of { id = integer, active = boolean, region = integer }, EVERY slot of
 --                     EVERY region (stale slots, active = false, included). `read` is the caller's memory
 --                     reader (opaque here: the strategy and its caller agree on it; this module never
 --                     calls it, only forwards it).
@@ -66,8 +66,8 @@ local function check_entry(e, i)
     if type(e) ~= "table" then return false, "entry " .. i .. " must be a table" end
     if not is_int(e.id) then return false, "entry " .. i .. ".id must be an integer" end
     if type(e.active) ~= "boolean" then return false, "entry " .. i .. ".active must be a boolean" end
-    local rt = type(e.region)
-    if not (is_int(e.region) or rt == "string") then return false, "entry " .. i .. ".region must be an integer or string" end
+    -- integer only: the residency predicate compares region to integer 0, so a string region would be silently vacuous
+    if not is_int(e.region) then return false, "entry " .. i .. ".region must be an integer" end
     return true
 end
 

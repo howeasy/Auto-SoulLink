@@ -27,3 +27,8 @@ lupa==2.8
 # hash). Undeclared until now; tests/unit/test_gen3_rr_generators.py importorskips
 # it so a fresh env without it gets a named skip, not a failure.
 openpyxl
+
+# ndspy — NDS ROM reading and BLZ (tools/nds_image.py, tools/nds_pkm45 ROM cross-check,
+# tests/unit/test_nds_*.py). Undeclared until now, so a clean clone aborted collection of
+# test_nds_image.py.
+ndspy==4.2.0

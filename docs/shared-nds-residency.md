@@ -50,7 +50,7 @@ lane's business (the fakes use `id` at +0, `active` at +4).
 A plain table of plain functions (no `self`):
 
 ```
-entries(read)  -> array of { id = integer, active = boolean, region = integer|string }
+entries(read)  -> array of { id = integer, active = boolean, region = integer }
                   every slot of every region, stale slots included (active = false)
 resident(id)   -> boolean   true iff the MAIN region (region 0) shows `id` active. A HINT, see the stale-flag rule
 epoch()        -> integer   changes whenever the table could have changed; equal epochs = nothing happened between

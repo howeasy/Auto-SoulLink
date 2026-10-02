@@ -320,6 +320,7 @@ def test_malformed_shapes_are_rejected(rt, name, body):
     ("entries not a table", GOOD + " s.entries = function() return 3 end return s", "array"),
     ("entry without id", GOOD + " s.entries = function() return {{active = true, region = 0}} end return s", "id"),
     ("entry active not boolean", GOOD + " s.entries = function() return {{id = 1, active = 1, region = 0}} end return s", "active"),
+    ("entry with string region", GOOD + " s.entries = function() return {{id = 1, active = true, region = 'main'}} end return s", "integer"),
     ("entry without region", GOOD + " s.entries = function() return {{id = 1, active = true}} end return s", "region"),
     ("resident not boolean", GOOD + " s.resident = function(id) return id == 1 and 1 or false end return s", "boolean"),
     ("resident disagrees", GOOD + " s.resident = function() return false end return s", "disagrees"),
