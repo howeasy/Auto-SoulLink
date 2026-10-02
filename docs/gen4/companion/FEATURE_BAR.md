@@ -126,7 +126,7 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   So one site serves both. The HG/SS edit lands in the source rebuild, which recompresses the ARM9; on hge it is a `hooks` line.
 - **`gScriptCmdTable` @0x020FAD00:** exactly one of 853 entries differs in hge, #208.
   - #486 is `0x02040895` in both, the same function as #1 (`ScrCmd_Dummy`).
-  - Repointing #486 does not collide with hge's table edit.
+  - ~~Repointing #486 does not collide~~ SUPERSEDED: #486 is USED by scripts (see the next section). Use #1.
   - Opcode-486 USE in the compiled `scr_seq` NARCs is still unproven (OMP card).
 - **Overlay 1 does differ** (77 bytes: Rock Smash item drop, move tutor, the Togepi egg, object-event gfx). None of it is a companion site.
 
@@ -147,3 +147,17 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   - (b) a main-arena allocation at companion init, found once per boot by a cookie scan (the Gen 2 cookie + counter pattern);
   - (c) a companion-overlay `.bss` reachable by a fixed pointer.
   - The pick goes to the C1 card, decided by measurement.
+
+## Script command slot: use opcode 1, NOT 486 (OMP cx-00760b09, coordinator-verified at pinned pret `ad7a3afa`)
+
+- **Opcode 486 is executed by vanilla scripts.** Its only emitter is the `Dummy486` macro (`asm/macros/script.inc:2776-2778`). It is used at three sites:
+  - `scr_seq_0938_T29.s:439-440`, inside the straight-line entry `_0597` (`:426-442`; no branch can skip it);
+  - `scr_seq_0748_T02R0302.s:32`, on the `FLAG_UNK_176`-clear fall-through.
+  - hge rebuilds only `scr_seq_00003_commonscript.s` and `scr_seq_00953_trainerscript.s`, so it inherits these sites from the base ROM.
+  - Repointing #486 would run companion code in those map scripts. **Rejected.**
+- **Opcode 1 (`Dummy`, `script.inc:22-24`; table entry #1 == #486 == `ScrCmd_Dummy` in both HG and hge) is emitted by NO script:**
+  - zero `Dummy` macro uses in `files/fielddata/script`;
+  - zero `dummy` uses in hge's `armips/scr_seq`.
+  - It is the companion slot.
+- **Gate before C5 ships:** a bytecode walker over the extracted `scr_seq` NARC (argument sizes from pret `tools/py_scripts/scrcmd.json`) must count zero opcode-1 occurrences on HG, SS and hge. This replaces the macro-grep inference.
+- **hge nurse route is a source edit.** hge rebuilds the common-script bank (`armips/scr_seq/scr_seq_00003_commonscript.s:17-26` declares `scr_seq_0003_000..006`, including the nurse entry 002). On hge the trade branch is a fork source edit, not a bytecode patch.
