@@ -1,0 +1,44 @@
+# gen3_final_cut row=zip_boot_exp item=§9_item5_EXP cut=bf015f02aaf69271b10e7e387e05012405182788
+# lane=C:/slink-wt/exp-fc-bf015f02-s1
+# command: python tools/gen3_final_cut.py zip-boot --zip C:/slink-wt/exp-fc-bf015f02-s1/dist/SLink-player-g4-bf015f02.zip --lane C:/slink-wt/exp-fc-bf015f02-s1 --title exp   (cwd=C:/slink-wt/exp-fc-bf015f02-s1)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-bf015f02-s1\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-bf015f02-s1\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-bf015f02-s1\.cache\x1-probe\probe.o
+# verdict: PASS
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T14:50:29 cpu=69% emuhawk=0 python=10
+start_utc=2026-10-02T18:50:28Z tracked_clean_before=True
+EXPANSION_CUT requested=bf015f02aaf69271b10e7e387e05012405182788 before=bf015f02aaf69271b10e7e387e05012405182788
+zip=C:/slink-wt/exp-fc-bf015f02-s1/dist/SLink-player-g4-bf015f02.zip
+extract=C:\slink-wt\exp-fc-bf015f02-state\s1\slink_zipboot_jfqzh9bl\extract entry=C:\slink-wt\exp-fc-bf015f02-state\s1\slink_zipboot_jfqzh9bl\extract\SLink-player-g4-bf015f02\lua\slink.lua
+fixture=C:/slink-wt/exp-fc-bf015f02-s1\tests\fixtures\gen3\exp_pc.sav
+server: python -m server.server --port 53709 --http-port 53710 (cwd=C:/slink-wt/exp-fc-bf015f02-s1)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua gen3_pokeemerald.gba  (cwd=C:\slink-wt\exp-fc-bf015f02-state\s1\slink_zipboot_jfqzh9bl)
+--- C:\slink-wt\exp-fc-bf015f02-state\s1\slink_zipboot_jfqzh9bl\extract\SLink-player-g4-bf015f02\slink_lua.log ---
+=== SLink Lua boot Fri Oct  2 14:50:36 2026 ===
+[SLink] Console tee -> C:/slink-wt/exp-fc-bf015f02-state/s1/slink_zipboot_jfqzh9bl/extract/SLink-player-g4-bf015f02/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:53709 (non-blocking)…
+[SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player a -> 127.0.0.1:53709 (rom 28877d73)
+[SLink] TCP connected to 127.0.0.1:53709
+[SLink-gen3] baseline(hello): boxes ok=true n=2 gen=1 party=2
+[SLink-gen3] unhandled command dead_keys
+[SLink-gen3] writes ENABLED
+
+--- server log ---
+2026-10-02 14:50:31,105 [INFO] Logging to C:\slink-wt\exp-fc-bf015f02-state\s1\slink_zipboot_jfqzh9bl\data\slink.log
+2026-10-02 14:50:31,105 [INFO] SLink TCP server listening on ('127.0.0.1', 53709)
+2026-10-02 14:50:31,114 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-10-02 14:50:31,114 [INFO] SLink status page at http://127.0.0.1:53710/
+2026-10-02 14:50:36,960 [INFO] Client connected: ('127.0.0.1', 60212)
+2026-10-02 14:50:37,071 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-10-02 14:50:37,071 [INFO] [a] hello rom=emerald_expansion_28877d73 area='oldale_town' party=2
+2026-10-02 14:50:37,071 [INFO] [a] Identity locked: EMER (OT 53929808)
+2026-10-02 14:50:37,075 [INFO] Adapter switched to gen3_exp (rom_type=emerald_expansion_28877d73)
+2026-10-02 14:50:37,075 [INFO] [a] route emerald_expansion_28877d73 -> gen3_exp (production)
+2026-10-02 14:50:37,075 [INFO] Committed ROM type 'emerald_expansion_28877d73' for this run
+2026-10-02 14:50:37,075 [INFO] Committed trainer name 'EMER' for player a
+2026-10-02 14:50:37,992 [INFO] Client disconnected: ('127.0.0.1', 60212)
+
+RESULT: PASS the extracted zip booted exp on the new client
+
+EXPANSION_CUT after=bf015f02aaf69271b10e7e387e05012405182788
+exit=0 end_utc=2026-10-02T18:50:38Z tracked_clean_after=True classification=pass
