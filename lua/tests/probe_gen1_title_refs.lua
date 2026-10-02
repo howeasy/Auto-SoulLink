@@ -11,7 +11,7 @@ local function scan(base)
   for y = 0, 17 do for x = 0, 19 do seen[memory.read_u8(base + y * 32 + x, "VRAM")] = true end end
 end
 for f = 1, last do
-  if force and f >= 12 then memory.write_u8(force, bit.bor(memory.read_u8(force, "System Bus"), 0x40), "System Bus") end
+  if force and f >= 12 then if memory.read_u8(force, "System Bus") & 0x40 == 0 then memory.write_u8(force, memory.read_u8(force, "System Bus") | 0x40, "System Bus") end end
   emu.frameadvance()
   if f >= from and f % 4 == 0 then scan(0x1800); scan(0x1C00) end
 end

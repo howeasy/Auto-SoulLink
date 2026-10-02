@@ -4,7 +4,7 @@ local out = io.open(os.getenv("SLINK_SHOT_DIR") .. "/title_vram.json", "w")
 -- SLINK_FORCE_PURE=<addr>: keep pureRGB's BIT_NEW_TITLE_SCREEN (bit 6 of wSpriteOptions2) set so the opt-in Pure title is the one dumped
 local force = tonumber(os.getenv("SLINK_FORCE_PURE") or "")
 for f = 1, tonumber(os.getenv("SLINK_PROBE_FRAME") or "1900") do
-  if force and f >= 12 then memory.write_u8(force, bit.bor(memory.read_u8(force, "System Bus"), 0x40), "System Bus") end
+  if force and f >= 12 then if memory.read_u8(force, "System Bus") & 0x40 == 0 then memory.write_u8(force, memory.read_u8(force, "System Bus") | 0x40, "System Bus") end end
   emu.frameadvance()
 end
 local function nonzero(base)           -- 128 tiles, "1" when any of the 16 bytes is non-zero
