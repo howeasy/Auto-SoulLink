@@ -36,3 +36,18 @@ Coordinated with the Gen 5 session (`DECISIONS_2026-10-01.md`): `patch/src/nds/c
 2. Distribution: UPS against the pinned vanilla HG/SS dumps, plus a post-build patch on the pinned hge build. Two artifacts, or one?
 3. Do the existing peer-ghost / native-messages deferrals carry over to Gen 4?
 4. **Another lane's issue, flagged:** the Gen 1 build never advertises `CAP_TRADE` (`patch/gen1/src/slink.asm:163-164`) although it links and ships the trade. That is a contract inconsistency Gen 4 must not copy.
+
+## Feasibility research, items 1-2 (OMP cx-408e065e, coordinator-reconciled)
+
+**Sound (item 2): feasible from source.**
+- Entry: `PlaySE(u16)` (`include/unk_02005D10.h:6`); the SE ids are flat `#define`s from 1500 (`include/constants/sndseq.h:498`).
+- Four dedicated SE handles exist (`include/sound.h:19-25`, in `sSoundWork` @0x02111958). The companion reserves one and polls it with `NNS_SndPlayerReadDriverTrackInfo`, the game's own pattern at `src/sound.c:123`.
+- Service tick: the field task frame (FieldSystem.taskman +0x10), which is PHYSICAL-proven to run.
+- Carry over the GB hold and reset-latch discipline.
+- Open: which SEQ_SE ids map to success/failure/boo/notify (a content choice).
+
+**Mailbox (item 1): candidates only, nothing is proven.**
+- **Candidates:** 15 linker gaps of 64+ bytes in the ARM9 static `.bss/.data` (largest 0x021d43b8..0x021e1618, 53856 B), plus a whole discarded `.bss` input section (`battle_arcade_game_board_data.o`, address/size only in the pinned ELF).
+- **Coordinator correction:** the heaps bump-allocate from the MAIN arena low pointer (`src/heap.c:46-80`). That arena starts AFTER the static image, so gaps between static `.bss` symbols are not heap. The real risk is unlisted, symbol-less statics occupying a "gap" (a 53 KB gap before the SDK's `os_irq` data is suspicious), plus hge's heap and BSS changes.
+- **Rule:** no mailbox address is accepted without (a) the pinned ELF section headers or the arena-Lo value, AND (b) a live write-watch over boot, field, battle, menus and SAVE on HG, SS AND hge proving zero foreign writes.
+- **Companion code:** it lives in an overlay or the hge armips build. The HG/SS ARM9 is LZ-compressed (`rom.rsf:4`), so adding ARM9 code means recompression; this goes to the shared writer card.
