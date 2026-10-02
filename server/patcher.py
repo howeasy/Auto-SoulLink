@@ -28,6 +28,7 @@ from server.templating import resolve_theme
 # ── Paths ───────────────────────────────────────────────────────────────────
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
+_COMPANION_PINS = os.path.join(_DIST, "companion_pins.json")
 _PURE_ADMISSION = os.path.normpath(os.path.join(
     _SERVER_DIR, "..", "data", "games", "gen1_purergb", "admission_overlay.json"))
 
@@ -79,6 +80,15 @@ def gen2_overlay_admitted(title: str) -> bool:
             and gate.get("id") == "G4" and gate.get("state") == "ADMITTED"
             and is_hex64(gate.get("grant_fingerprint")) and is_hex64(row.get("binding_sha256")))
 
+
+def _companion_md5(slug: str) -> str:
+    """The patched ROM md5 of a companion whose build manifest is patch/dist/companion_pins.json (Radical Red and the
+    vanilla Red/Blue patches). Data, not a literal: the stamp tool rewrites it for a release (tools/stamp_release.py)."""
+    import json
+
+    with open(_COMPANION_PINS, encoding="utf-8") as fh:
+        return json.load(fh)["pins"][slug]["patched_md5"]
+
 # ── Targets ─────────────────────────────────────────────────────────────────
 # A REGISTRY, not a single file. There are three companion patches now and they are not
 # interchangeable: a UPS carries the CRC32 of the exact source it was diffed against, so
@@ -100,7 +110,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Radical Red",
         "patch":       "SLink-RR.ups",
         "base_md5":    "8529f3a45d32bce4da637976fcf269d4",
-        "patched_md5": "70e7e746e573a2d00df5d3ef41d19d61",
+        "patched_md5": _companion_md5("rr"),
         "accept":      ".gba,application/octet-stream",
         "out_name":    "Pokemon - Radical Red (SLink companion).gba",
         "base_hint":   "a clean Radical Red 4.1 ROM",
@@ -110,7 +120,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Pokemon Red",
         "patch":       "SLink-RB-Red.ups",
         "base_md5":    "3d45c1ee9abd5738df46d2bdda8b57dc",
-        "patched_md5": "a9a70f99008559734ba01a9a80d78d5c",
+        "patched_md5": _companion_md5("rb-red"),
         "accept":      ".gb,.gbc,application/octet-stream",
         "out_name":    "Pokemon Red (SLink companion).gb",
         "base_hint":   "a clean US/English Pokemon Red dump",
@@ -120,7 +130,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Pokemon Blue",
         "patch":       "SLink-RB-Blue.ups",
         "base_md5":    "50927e843568814f7ed45ec4f944bd8b",
-        "patched_md5": "fa47b8ba0c10e82f2545791abd157ad3",
+        "patched_md5": _companion_md5("rb-blue"),
         "accept":      ".gb,.gbc,application/octet-stream",
         "out_name":    "Pokemon Blue (SLink companion).gb",
         "base_hint":   "a clean US/English Pokemon Blue dump",
