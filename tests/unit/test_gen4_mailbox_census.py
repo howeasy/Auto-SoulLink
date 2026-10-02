@@ -221,10 +221,10 @@ def test_real_map_is_empty_over_the_span_and_the_instrument_sees_a_planted_symbo
 def test_real_source_tree_scans_clean_and_a_planted_allocation_is_caught():
     files = c.read_tree(c.PRET)
     assert len(files) > 1500, "pinned pret tree scan is implausibly small"
-    assert c.w2_source(files, SPAN)["status"] == c.PASS
+    assert c.w2_source(files, SPAN, alias_allow=c.DATA_ALIASES)["status"] == c.PASS
     bad = mutated(files, **{"src/planted.c": "void *p = OS_AllocFromArenaLo(OS_ARENA_ITCM, 0x400, 4);\n"})
-    assert c.w2_source(bad, SPAN)["status"] == c.FAIL
-    assert c.w2_source(files, SPAN)["status"] == c.PASS
+    assert c.w2_source(bad, SPAN, alias_allow=c.DATA_ALIASES)["status"] == c.FAIL
+    assert c.w2_source(files, SPAN, alias_allow=c.DATA_ALIASES)["status"] == c.PASS
 
 
 @pytest.fixture(scope="module")
@@ -261,3 +261,15 @@ def test_cli_exit_codes(monkeypatch, capsys):
     monkeypatch.setattr(c, "census", lambda span: {"result": c.PASS, "span": [], "artifacts": {}})
     assert c.main([]) == 0
     capsys.readouterr()
+
+
+def test_data_alias_allowlist_is_exact_and_red_capable():
+    """A listed data literal is cleared only at its exact path:line; the same value elsewhere stays UNPROVEN."""
+    import tools.gen4_mailbox_census as c
+    span = (0x01FFEC00, 0x01FFFC00)
+    text = "\n" * 59 + "\tldr r1, _x ; =0x01A56E1F\n"
+    listed = {"lib/MSL_C/asm/MSL_DPMath_s_ldexp.s": text}
+    assert c.w2_source(listed, span, alias_allow=c.DATA_ALIASES)["status"] != c.UNPROVEN
+    assert c.w2_source(listed, span)["status"] == c.UNPROVEN
+    moved = {"lib/MSL_C/asm/MSL_DPMath_s_ldexp.s": "\n" + text}
+    assert c.w2_source(moved, span, alias_allow=c.DATA_ALIASES)["status"] == c.UNPROVEN

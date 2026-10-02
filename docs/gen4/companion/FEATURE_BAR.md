@@ -244,3 +244,15 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - **Decision: the hge panel overlay takes the vanilla-style slot 0x021E5900** (an app slot exclusive with field, as hge's own ov142/147 do), not the unproven top window.
 - **0x02000CD0:** hge's `bl load_arm9_expansion` from Main. Our pack already uses it as the hge-discriminating admission anchor (`hge_differs`, profile.json:65), so it is not a collision. The companion's hge registration must NOT hook this site; use a `hooks` row or ride `load_arm9_expansion`.
 
+## C2 beacon layout direction (OMP cx-7fd901a6, coordinator-reconciled; shared ABI @ Gen 5 `4cd04812`)
+
+- **The shared ABI arena is 4 KiB (`abi.h` `SLINK_ARENA_SIZE 0x1000`). Gen 4 takes a 4 KiB span and uses the ABI UNMODIFIED.** No per-title arena fork.
+  - The C1 census default span is now 0x01FFEC00..0x01FFFC00 (ITCM offset 0x6C00, 4 KiB).
+  - All W rows PASS on HG, SS and hge after classifying the nine MSL `0x01A56E1F` mirror-alias hits. They are the high word of the double 0x01A56E1FC2F8F359, loaded as r0:r1 for `_dmul` (`MSL_DPMath_s_ldexp.s:59-61`): data, in an exact path:line table (`DATA_ALIASES`), so a moved literal goes red again.
+- **OMP's "the span is inside the ITCM arena, nothing proves it free": SOURCE half already closed.** C1 W2 finds no `OS_ARENA_ITCM` allocation in pret or hge. The PHYSICAL half (computed-pointer writes) is the live canary, still pending a free lane.
+- **Gen 4 additions over the ABI, ROM-only:**
+  - a boot generation (map it to `SlinkMailboxV2.reserved` @0x4C, ROM-owned, zero bytes added);
+  - a liveness pair: a private per-boot cookie plus an engine-clock delta. This is the Gen 2 rule (`patch/gen2/src/slink.asm:88-110`) and is MORE necessary here, because ITCM survives soft reset.
+  - The cookie answers "is this boot"; the generation answers "which boot". Both are kept.
+- **No GB byte fields are lifted.** Sound is `SLINK_OP_PLAY_SE`; the panel is `SlinkInfoV2`; the trade is `SlinkRecordStageV1` with `SLINK_BIND_GEN4_PK4`, raw-encrypted, `COMMIT_MUTATES_INPUT`.
+- **Single-writer rule per field** (OMP F6 table): the ROM owns signature/version/caps/status/witness/boot/liveness; the host owns opcode/args/stage/info request fields. This goes into the C2 card as the review checklist.

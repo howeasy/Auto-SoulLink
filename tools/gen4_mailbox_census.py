@@ -41,7 +41,7 @@ ARENA = (0x01FF8620, 0x02000000)  # SDK_SECTION_ARENA_ITCM_START .. HW_ITCM_AREN
 ITCM_PAGE = (0x01FF8000, 0x02000000)  # HW_ITCM .. HW_ITCM_END (lib/include/nitro/hw/ARM9/mmap.h:10-12)
 # 1 KiB, 0x400 above the arena start and 0x400 below HW_ITCM_END, which OSi_ExceptionHandler uses as a
 # crash-path stack (os_exception.c:45). End exclusive.
-DEFAULT_SPAN = (0x01FFF800, 0x01FFFC00)
+DEFAULT_SPAN = (0x01FFEC00, 0x01FFFC00)  # 4 KiB = the shared NDS ABI arena (abi.h SLINK_ARENA_SIZE 0x1000)
 PRET_PIN = "ad7a3afa0cfc144fe6837c410cb95b2727217f54"
 HGE_PIN = "fc517576498305ecb5f5e1de44681c6e3822361b"
 PRET = Path(os.environ.get("SLINK_GEN4_PRET", "E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold"))
@@ -51,6 +51,13 @@ TITLES = ("heartgold", "soulsilver", "heartgold_hge")
 PRET_BUILD = {"heartgold": "heartgold", "soulsilver": "soulsilver"}
 PROVENANCE = REPO / "data" / "gen4" / "pret_build_provenance.json"
 CRT0 = (0x02000800, 0x02000BA0)  # lib/asm/crt0.s _start .. _start_ModuleParams
+
+# Mirror-alias literals proven to be data, keyed by the exact "path:line value" the scan reports, so a moved or
+# changed literal goes back to UNPROVEN (pret ad7a3afa).
+_DPM = ("high word of the IEEE-754 double 0x01A56E1FC2F8F359 (~1e-300), loaded as r1 of the r0:r1 pair passed to "
+        "_dmul (MSL_DPMath_s_ldexp.s:59-61); data, not an address")
+DATA_ALIASES = {f"lib/MSL_C/asm/MSL_DPMath_e_pow.s:{n} 0x01A56E1F": _DPM for n in (459, 932, 939, 956, 963)}
+DATA_ALIASES.update({f"lib/MSL_C/asm/MSL_DPMath_s_ldexp.s:{n} 0x01A56E1F": _DPM for n in (60, 130, 135, 158)})
 
 # Files that may mention ITCM at all, and the role that makes each harmless (pret ad7a3afa).
 KNOWN_ITCM_USES = {
@@ -487,14 +494,14 @@ def census(span=DEFAULT_SPAN, *, pret=PRET, cache=CACHE, hge=HGE, roms=None, tit
         if title == "heartgold_hge":
             fork = hge_files if hge_files is not None else read_tree(hge, dirs=("src", "include", "asm", "armips", "hooks", "armhooks"), extra=("rom.ld", "Makefile"))
             fhead = git_head(hge) if hge_files is None else HGE_PIN
-            a = w2_source(src, span)
+            a = w2_source(src, span, alias_allow=DATA_ALIASES)
             b = w2_source({"hge:" + k: v for k, v in fork.items()}, span) if fork else _row(UNPROVEN, "hge fork source absent")
             # fork paths are not in KNOWN_ITCM_USES: any ITCM token there is a new use, which is what the scan reports.
             note = "" if fhead == HGE_PIN else f" (fork HEAD {fhead} != pin {HGE_PIN})"
             rows["W2"] = _row(worst([a["status"], b["status"]] + ([UNPROVEN] if note else [])),
                               f"pret base: {a['detail']} | hge fork: {b['detail']}{note}", a["cites"] + b["cites"])
         else:
-            rows["W2"] = w2_source(src, span)
+            rows["W2"] = w2_source(src, span, alias_allow=DATA_ALIASES)
         rows["W2b"] = w2_rom(facts, span) if facts else absent
         if title in PRET_BUILD:
             rows["W3"] = w3_reset(src, {n: a for a, _, n in parse_nm(nm or "")}, span, facts)
