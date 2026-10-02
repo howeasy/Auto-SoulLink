@@ -69,6 +69,10 @@ def runner(tmp_path, monkeypatch):
 
 
 def _fake_pipeline(monkeypatch):
+    """server.cartridges.provision, faked: the companion composition itself is
+    test_cartridges.py's; here only what the scenario asks for and does with the result."""
+    from server import cartridges
+
     called = []
     monkeypatch.setattr(upr_pipeline, "find_upr_jar", lambda: "fake.jar")
     mapping = {b"random-red": "a" * 64, b"random-blue": "b" * 64,
@@ -76,20 +80,26 @@ def _fake_pipeline(monkeypatch):
                b"companion-blue": "c" * 64, b"companion-red": "e" * 64}
     monkeypatch.setattr(scan, "fingerprint_rom", lambda raw: mapping[raw])
 
-    def prepare(jar, settings, sources, out_dir):
-        called.append((jar, settings, sources, out_dir))
-        Path(out_dir).mkdir(parents=True)
-        players = {}
-        for player, raw in (("a", b"random-red"), ("b", b"random-blue")):
-            output = Path(out_dir) / f"{player}_randomized.gbc"
+    def provision(run_dir, sources, *, companion, randomize, jar=""):
+        called.append((run_dir, sources, companion, randomize, jar))
+        roms = Path(run_dir) / "roms"
+        roms.mkdir(parents=True)
+        players, contract_players = {}, {}
+        for player, raw, seed in (("a", b"random-red", "1"), ("b", b"random-blue", "2")):
+            output = roms / f"{player}.gb"
             output.write_bytes(raw)
             players[player] = {"output": str(output), "fingerprint": mapping[raw],
-                               "seed": 1 if player == "a" else 2,
-                               "sha1": hashlib.sha1(raw).hexdigest()}
-        return {"upr_version": "4.6.1", "settings_sha256": "f" * 64,
-                "categories": ["wild"], "spec": {"wild": "random"}, "players": players}
+                               "rom_sha1": hashlib.sha1(raw).hexdigest(), "kind": "rand_companion"}
+            contract_players[player] = {"fingerprint": mapping[raw], "seed": seed,
+                                        "rom_sha1": hashlib.sha1(raw).hexdigest()}
+        contract = {"upr_version": "4.6.1", "settings_sha256": "f" * 64, "categories": ["wild"],
+                    "players": contract_players}
+        (Path(run_dir) / "rom_contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        return {"family": "vanilla", "companion": companion, "randomizer": {}, "players": players}
 
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", prepare)
+    monkeypatch.setattr(cartridges, "provision", provision)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair",
+                        lambda *args: pytest.fail("randomized outside the companion composition"))
     return called
 
 
@@ -97,11 +107,11 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     called = _fake_pipeline(monkeypatch)
     contract = runner.prepare_admit_randomized_new()
     assert len(called) == 1
-    jar, settings, sources, out_dir = called[0]
-    assert jar == "fake.jar"
-    assert Path(settings).read_bytes() == build_categories({"wild"})
+    run_dir, sources, companion, randomize, jar = called[0]
+    # the cartridges a randomized companion run hands out: companion ON, from the clean sources
+    assert companion is True and jar == "fake.jar" and run_dir == runner.data_dir
+    assert Path(randomize["settings_path"]).read_bytes() == build_categories({"wild"})
     assert sources == {p: os.path.join(duo.REPO, runner.gcfg["rom"][p]) for p in ("a", "b")}
-    assert out_dir == os.path.join(runner.data_dir, "roms")
     path = Path(runner.data_dir) / "rom_contract.json"
     assert json.loads(path.read_text(encoding="utf-8")) == contract
     assert set(contract) == {"upr_version", "settings_sha256", "categories", "players"}

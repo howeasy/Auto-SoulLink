@@ -4088,8 +4088,9 @@ class DuoRun:
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from server import cartridges
         from server.adapters.gen1_rom_scan import fingerprint_rom
-        from server.upr_pipeline import find_upr_jar, prepare_pair
+        from server.upr_pipeline import find_upr_jar
         from server.upr_settings import build_categories
 
         jar = find_upr_jar()  # upr_pipeline.py:101-123 searches the main checkout's .cache/upr
@@ -4105,24 +4106,24 @@ class DuoRun:
         fastest = not is_pure_pairing(getattr(self, "game", ""))
         with open(settings, "wb") as handle:
             handle.write(build_categories({"wild"}, fastest_text=fastest))  # upr_settings.py:483-491
-        # prepare_pair requires BOTH players, writes .gbc outputs and verifies distinct seeds
-        # and rule-bearing data (upr_pipeline.py:254-335). One invocation, no retry.
-        result = prepare_pair(jar, settings, sources, os.path.join(self.data_dir, "roms"))
-        players = result["players"]
-        contract = {
-            "upr_version": result["upr_version"],
-            "settings_sha256": result["settings_sha256"],
-            "categories": result["categories"],
-            "players": {p: {"fingerprint": players[p]["fingerprint"], "seed": str(players[p]["seed"]),
-                            "rom_sha1": players[p]["sha1"]} for p in ("a", "b")},
-        }  # Manager-shaped: manager.py:954-964; spec belongs to the registry, not this file.
+        # Companion required: the cartridges are what the Manager hands out for a randomized
+        # companion run -- server.cartridges.provision, the production composition (vanilla
+        # randomizes the clean bytes, THEN injects the companion; pureRGB randomizes the overlay
+        # after its UPS). A randomized CLEAN cartridge is refused by the harness like any clean
+        # one. provision runs prepare_pair once (both players, distinct seeds, rule-bearing data)
+        # and writes the Manager-shaped contract to <run_dir>/rom_contract.json, which is the path
+        # server.py reads from --data-dir.
+        result = cartridges.provision(self.data_dir, sources, companion=True,
+                                      randomize={"settings_path": settings}, jar=jar)
+        with open(os.path.join(self.data_dir, "rom_contract.json"), encoding="utf-8") as handle:
+            contract = json.load(handle)
         # BizHawk opens a .gbc as a Color title and misses the DMG battery save
-        # (tools/make_randomized_patched.py:30-34). Stage unchanged bytes under a known
-        # space-free .gb basename; never apply UPS or the structural injector in this gate.
+        # (tools/make_randomized_patched.py:30-34). Stage the final bytes unchanged under a known
+        # space-free .gb basename.
         stage_dir = os.path.join(BUILD, "e2e_admit_randomized_new")
         os.makedirs(stage_dir, exist_ok=True)
         stage = os.path.join(stage_dir, "slink_red_randomized.gb")
-        shutil.copyfile(players["a"]["output"], stage)
+        shutil.copyfile(result["players"]["a"]["output"], stage)
         with open(stage, "rb") as handle:
             staged = handle.read()
         if hashlib.sha1(staged).hexdigest() != contract["players"]["a"]["rom_sha1"]:
@@ -4147,9 +4148,6 @@ class DuoRun:
         }
         self._admit_fingerprints = {"expected_b": contract["players"]["b"]["fingerprint"],
                                     "reported_b": b_fingerprint}
-        # server.py:468-505 reads this exact path from --data-dir, including on hello refresh.
-        with open(os.path.join(self.data_dir, "rom_contract.json"), "w", encoding="utf-8") as handle:
-            json.dump(contract, handle, indent=2)
         print(f"[duo] admission contract staged: A={contract['players']['a']['fingerprint'][:12]} "
               f"B expected={contract['players']['b']['fingerprint'][:12]} "
               f"B companion={b_fingerprint[:12]}")
