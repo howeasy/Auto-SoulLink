@@ -1072,17 +1072,17 @@ def run_row(row, cut, lane, deadline):
 
 def write_summary(cut, results, suffix=""):
     counts = {k: sum(status_of(v) == k for _r, v, _n, _p in results)
-              for k in ("RUN", "CARRIED", "CACHED", "FROZEN", "FAIL")}
+              for k in ("RUN", "CARRIED", "CACHED", "FAIL")}
     lines = [f"# G4 final cut {cut} -- tools/gen3_final_cut.py summary "
              f"(written {utcnow():%Y-%m-%dT%H:%M:%SZ})",
              f"# RUN {counts['RUN']} / CARRIED {counts['CARRIED']} / CACHED {counts['CACHED']} "
-             f"/ FROZEN {counts['FROZEN']} / FAIL {counts['FAIL']}", "",
+             f"/ FAIL {counts['FAIL']}", "",
              "| # | row | runbook | verdict | attempts | receipt |", "|---|---|---|---|---|---|"]
     for i, (row, verdict, n, rec) in enumerate(results, 1):
         lines.append(f"| {i} | {row.id} | {row.item} | {verdict} | {n} | {rec} |")
     passed = counts["FAIL"] == 0
     lines += ["", f"OVERALL: {'PASS' if passed and results else 'FAIL'} "
-                  f"({sum(counts[k] for k in ('RUN', 'CARRIED', 'CACHED', 'FROZEN'))}/{len(results)} rows)"]
+                  f"({counts['RUN'] + counts['CARRIED'] + counts['CACHED']}/{len(results)} rows)"]
     path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -1504,8 +1504,6 @@ def item6(branch, master):
 #     client closure, the packs it loads, the harness and carriers, the server, the fixtures, the
 #     pret syms -- when in doubt the path is in; `**` crosses directories, `*` does not);
 #   - the non-git inputs (staged ROMs, ...) hash the same in this lane as the receipt recorded.
-# A row whose receipt recorded only pinned CLEAN cartridges is FROZEN instead, whatever the diff
-# touches (frozen_decision, below row_deps).
 # ---------------------------------------------------------------------------
 
 GEN3_CLIENT = ["lua/*.lua", "lua/x64/**", "lua/gen3/**", "lua/core/**", "lua/games/**",
@@ -1573,61 +1571,6 @@ def row_deps(row):
     if row.id == "probe_gates":
         return PROBE_GATES_DEPS
     return None
-
-
-# ---------------------------------------------------------------------------
-# FROZEN history (owner 2026-10-02, "Refuse clean, keep proofs"): the companion patch is required,
-# so the launcher and server will refuse clean FR/LG/Emerald/RR cartridges and a clean-cartridge
-# row can no longer be re-run. Its citable PASS is frozen history: reused at any later cut
-# whatever the glob-bound carry says about lua/gen3/** (the refusal itself edits it). Whether a
-# receipt ran on a clean cartridge is read ONLY from the ROM identity the receipt records (e2e_duo
-# IDENTITY lines / the runner's `# inputs: rom:<title>=<sha256>`), matched against the pinned
-# clean dumps below; a receipt with no identity, a patched one or an unknown one stays RUN/glob-
-# bound. Expansion rows are never frozen (is_expansion_row; fc_check refuses them).
-# ---------------------------------------------------------------------------
-
-# sha256 of the pinned clean dumps (the hash e2e_duo records). Each is tied to its pin by
-# test_clean_pins_match_the_dumps_when_present: sha1 == patch/dist/gen3_companions.json base_sha1
-# (FR/LG/Emerald), md5 == server/patcher.py TARGETS["rr"]["base_md5"] (Radical Red).
-CLEAN_ROM_SHA256 = {
-    "firered": "3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac",
-    "leafgreen": "78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc",
-    "emerald": "a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af",
-    "radical_red": "679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f",
-}
-FROZEN_REASON = "clean cartridge; owner 2026-10-02 'Refuse clean, keep proofs'"
-
-
-def frozen_titles(row_id):
-    """The cartridges a frozen receipt must have recorded, or None when the row is not a
-    cartridge run (zips, gates, item 6 and expansion rows are never frozen). The §1 build rows
-    qualify too, but frozen_decision also demands their cached outputs be intact."""
-    if is_expansion_row(row_id):
-        return None
-    if build_kind(row_id):
-        return {build_kind(row_id)[1]}
-    if row_id.endswith(("_fr_as_a", "_lg_as_a")):
-        return {"firered", "leafgreen"}
-    if row_id.endswith("_rr_as_a"):
-        return {"radical_red"}
-    if row_id.endswith("_em_as_a"):
-        return {"emerald"}
-    m = re.match(r"(?:checkpoint|bootcheck)_(firered|leafgreen|emerald)", row_id)
-    return {m[1]} if m else None
-
-
-def frozen_problem(row_id, inputs):
-    """Why a receipt's recorded ROM identity does not prove a clean run of this row, else None."""
-    need = frozen_titles(row_id)
-    if not need:
-        return "not a cartridge row"
-    roms = {k[4:]: v for k, v in inputs.items() if k.startswith("rom:")}
-    if not roms:
-        return "records no ROM identity"
-    if not need <= set(roms):
-        return f"ROM identity not recorded for {', '.join(sorted(need - set(roms)))}"
-    bad = sorted(t for t, h in roms.items() if CLEAN_ROM_SHA256.get(t) != h)
-    return f"not a pinned clean dump: {', '.join(bad)}" if bad else None
 
 
 def row_inputs(row, lane, root=None):
@@ -1738,16 +1681,6 @@ def _identity_roms(text):
     return {f"rom:{t}": h for t, h in seen.pop()}
 
 
-def recorded_inputs(text):
-    """The runner's `# inputs:` hashes plus the ROMs the duo's IDENTITY lines name (RR and
-    Emerald rows hash no input, but their output still records which ROM ran); a ROM the two
-    disagree on is CONFLICT, which is never a pinned dump."""
-    got = parse_inputs(text)
-    for k, v in _identity_roms(text).items():
-        got[k] = v if got.get(k, v) == v else "CONFLICT"
-    return got
-
-
 def duo_verdict_ok(text, scenario, orient):
     """One unambiguous final PASS for this scenario and orientation: every summary line for the
     scenario says PASS (a later FAIL/SKIP anywhere in the file makes it not citable), every
@@ -1763,8 +1696,7 @@ def duo_verdict_ok(text, scenario, orient):
 def fc_check(name, text, probes, depth=0):
     """(header, ok, why) for a runner receipt: the file name, header row and cut agree; a PASS,
     SKIP-ALLOWED or FAIL has well-formed attempt blocks whose last one supports the verdict; a
-    CARRIED one cites an origin that is itself a citable PASS for the same row at the cited cut;
-    a FROZEN one quotes the ruling and cites such an origin whose recorded ROMs are all clean."""
+    CARRIED one cites an origin that is itself a citable PASS for the same row at the cited cut."""
     m = re.fullmatch(r"fc_(.+)_([0-9a-f]{8})\.txt", name)
     hdr = receipts.parse_run_receipt(text)
     if not (m and hdr):
@@ -1774,19 +1706,11 @@ def fc_check(name, text, probes, depth=0):
         return hdr, False, "header row/cut disagree with the file name"
     v = hdr["verdict"]
     expansion = is_expansion_row(hdr["row"])
-    if expansion and v.startswith(("CARRIED", "CACHED", "SKIP-ALLOWED", "FROZEN")):
+    if expansion and v.startswith(("CARRIED", "CACHED", "SKIP-ALLOWED")):
         return hdr, False, "expansion qualification must run at the exact cut"
     c = re.match(rf"CARRIED from (\S+) @({_SHA})", v)
     if c:
         return (hdr, *origin_ok(c[1], hdr["row"], c[2], probes, depth + 1))
-    if v.startswith("FROZEN"):
-        c = re.fullmatch(rf"FROZEN from (\S+) @({_SHA}) \({re.escape(FROZEN_REASON)}\)", v)
-        if not c:
-            return hdr, False, "FROZEN verdict must cite its origin and quote the owner ruling"
-        ok, why = origin_ok(c[1], hdr["row"], c[2], probes, depth + 1, frozen=True)
-        if ok and build_kind(hdr["row"]) and not frozen_cache_entry(hdr["row"], c[1], c[2]):
-            ok, why = False, "its cached states are missing or changed"
-        return hdr, ok, why
     c = re.match(rf"CACHED key=([0-9a-f]{{64}}) from (\S+) @({_SHA})$", v)
     if c:
         meta = cache_lookup(c[1])
@@ -1813,9 +1737,8 @@ def fc_check(name, text, probes, depth=0):
     return hdr, True, ""
 
 
-def origin_ok(name, row, x, probes, depth, frozen=False):
-    """A carry's origin must exist, be a citable PASS for the same row at the cited cut X; a
-    frozen one must also have recorded only pinned clean ROMs (frozen_problem)."""
+def origin_ok(name, row, x, probes, depth):
+    """A carry's origin must exist, be a citable PASS for the same row at the cited cut X."""
     if depth > 8:
         return False, "carry chain too deep"
     path = os.path.join(probes, name)
@@ -1824,9 +1747,6 @@ def origin_ok(name, row, x, probes, depth, frozen=False):
     ev = receipt_evidence(name, _read(path), probes, depth)
     if not ev or ev.row != row or ev.cut != x or not ev.passed:
         return False, f"origin {name} is not a citable PASS for {row} @{x[:8]}"
-    problem = frozen_problem(row, ev.inputs) if frozen else None
-    if problem:
-        return False, f"origin {name} is not frozen history: {problem}"
     return True, ""
 
 
@@ -1843,12 +1763,12 @@ def receipt_evidence(name, text, probes=None, depth=0):
         if not ok:
             return Evidence(m[1], name, None, False)
         v = hdr["verdict"]
-        c = re.match(rf"(?:CARRIED|FROZEN) from (\S+) @({_SHA})", v)
-        if c:   # a carry or a frozen row cites its (validated) origin, never itself
-            return Evidence(hdr["row"], c[1], c[2], True, inputs=recorded_inputs(text))
+        c = re.match(rf"CARRIED from (\S+) @({_SHA})", v)
+        if c:   # a carry cites its (validated) origin, never itself
+            return Evidence(hdr["row"], c[1], c[2], True, inputs=parse_inputs(text))
         mm = re.search(r"on master \(([0-9a-f]{8})\)", text)
         return Evidence(hdr["row"], name, hdr["cut"], v.startswith("PASS"), _seconds(text),
-                        mm[1] if mm else None, recorded_inputs(text))
+                        mm[1] if mm else None, parse_inputs(text))
     m = re.fullmatch(r"ph_(.+)_(fr|lg)_as_a_[0-9a-f]{8}\.txt", name)
     if m:
         scen, o = m[1], m[2]
@@ -1891,7 +1811,7 @@ def collect_evidence(probes=None):
 
 @dataclass
 class Decision:
-    kind: str                       # "CARRY", "FROZEN", "CACHED" or "RUN"
+    kind: str                       # "CARRY" or "RUN"
     reason: str
     evidence: Evidence | None = None
     checked: list = field(default_factory=list)   # the diff X..cut that was checked
@@ -1946,45 +1866,6 @@ def carry_decision(row, cut, evidence, diff_names, master_sha=None, ancestor=Non
     return Decision("RUN", "cannot carry -- " + "; ".join(blocked))
 
 
-def frozen_decision(row, cut, evidence, ancestor=None):
-    """FROZEN when some citable PASS receipt at another cut X, an ancestor of `cut`, recorded only
-    pinned clean ROMs for this row (frozen_problem); None otherwise (the caller falls back to
-    carry_decision). Deliberately independent of the row's dependency globs, the git diff and the
-    lane's non-git inputs: clean cartridges are refused from now on, so the receipt is history."""
-    ancestor = ancestor or git_is_ancestor
-    if frozen_titles(row.id) is None:
-        return None
-    for e in evidence:
-        if e.passed and e.cut and e.cut != cut and not frozen_problem(row.id, e.inputs) \
-                and ancestor(e.cut, cut):
-            meta = frozen_cache_entry(row.id, e.receipt, e.cut)
-            if build_kind(row.id) and not meta:
-                continue    # its states are gone or changed: downstream rows could not use them
-            return Decision("FROZEN", f"FROZEN from {e.receipt} @{e.cut} ({FROZEN_REASON})",
-                            e, inputs=e.inputs,
-                            cache=(meta["key"], meta.get("manifest"), meta) if meta else None)
-    return None
-
-
-def frozen_cache_entry(row_id, receipt, cut):
-    """The §1 cache entry that `receipt` (the build row's PASS at `cut`) populated, when it holds
-    every output of the build and each stored file still hashes as recorded (cache_lookup's
-    rule); None otherwise, or for a row that is not a build row."""
-    kind = build_kind(row_id)
-    root = state_cache_root()
-    for key in (sorted(os.listdir(root)) if kind and os.path.isdir(root) else []):
-        try:
-            with open(os.path.join(root, key, "meta.json"), encoding="utf-8") as f:
-                m = json.load(f)
-        except (OSError, ValueError):
-            continue
-        if (m.get("row"), m.get("receipt"), m.get("cut")) == (row_id, receipt, cut):
-            meta = cache_lookup(key)
-            if meta and set(meta["files"]) == set(BUILD_OUTPUTS[kind[0]]):
-                return meta
-    return None
-
-
 _DIFFS = {}
 
 
@@ -2012,20 +1893,6 @@ def carried_receipt(row, cut, lane, d):
             f"dependencies checked ({len(deps)}): {' '.join(deps)}\n"
             f"diff {x[:8]}..{cut[:8]} ({len(d.checked)} paths, none a dependency): "
             f"{' '.join(d.checked) or '(empty)'}\n" + inputs_note(d.inputs))
-    return receipts.run_receipt_text(row=row.id, item=row.item.replace(" ", "_"), cut=cut,
-                                     lane=lane, command=row.command(), cwd=row.cwd, env=row.env,
-                                     attempts=[], verdict=d.reason, note=note)
-
-
-def frozen_receipt(row, cut, lane, d):
-    """The FROZEN row's fc receipt: the verdict cites the origin and quotes the ruling; the note
-    records the origin's ROM identities (what made it clean) so later cuts can read them back."""
-    note = (f"{d.reason}\nfrozen history: the cited receipt recorded only pinned clean dump(s) "
-            f"({', '.join(sorted(frozen_titles(row.id)))}); clean cartridges are refused, so it "
-            f"cannot be re-run. Not checked against dependency globs or the git diff.\n"
-            + (f"outputs: {' '.join(f'{n}={h}' for n, h in sorted(d.cache[2]['files'].items()))}\n"
-               if d.cache else "")
-            + inputs_note({k: v for k, v in d.inputs.items() if k.startswith("rom:")}))
     return receipts.run_receipt_text(row=row.id, item=row.item.replace(" ", "_"), cut=cut,
                                      lane=lane, command=row.command(), cwd=row.cwd, env=row.env,
                                      attempts=[], verdict=d.reason, note=note)
@@ -2273,8 +2140,6 @@ def status_of(verdict):
         return "CARRIED"
     if verdict.startswith("CACHED"):
         return "CACHED"
-    if verdict.startswith("FROZEN"):
-        return "FROZEN"
     return "RUN" if verdict.startswith(("PASS", "SKIP-ALLOWED")) else "FAIL"
 
 
@@ -2295,13 +2160,10 @@ def plan_decisions(rows, cut, carry, lane):
             meta = cache_lookup(key) if key else None
             out[r.id] = (Decision("CACHED", f"cache hit key={key[:12]} (built by {meta['receipt']})",
                                   cache=(key, manifest, meta)) if meta else
-                         (carry and frozen_decision(r, cut, ev.get(r.id, ()))) or
                          Decision("RUN", f"cache miss ({f'key={key[:12]}' if key else manifest}): "
                                          f"build live, then cache", cache=(key, manifest, None)))
         elif not carry:
             out[r.id] = Decision("RUN", "no --carry")
-        elif frozen := frozen_decision(r, cut, ev.get(r.id, [])):
-            out[r.id] = frozen     # clean-cartridge history: no glob, diff or input check
         elif r.id.startswith("checkpoint_"):
             inputs = predicted_checkpoint_inputs(r, cut, lane)
             out[r.id] = (Decision("RUN", "its states are rebuilt live this pass (a build missed "
@@ -2380,7 +2242,6 @@ def run_pass(args):
     run_rows = [r for r in rows_here if decisions[r.id].kind == "RUN"]
     carry_rows = [r for r in rows_here if decisions[r.id].kind == "CARRY"]
     cached_rows = [r for r in rows_here if decisions[r.id].kind == "CACHED"]
-    frozen_rows = [r for r in rows_here if decisions[r.id].kind == "FROZEN"]
     if args.dry_run:
         print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
               f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
@@ -2404,7 +2265,7 @@ def run_pass(args):
         known = [est[r.id] for r in run_rows if est[r.id]]
         unknown = [r for r in run_rows if not est[r.id]]
         print(f"# {len(rows)} rows: RUN {len(run_rows)} / CACHED {len(cached_rows)} / "
-              f"CARRY {len(carry_rows)} / FROZEN {len(frozen_rows)} (this shard)"
+              f"CARRY {len(carry_rows)} (this shard)"
               f" -- lane time: {_mins(sum(known))} from {len(known)} rows' receipts + "
               f"{len(unknown)} rows with no history (budget ceiling "
               f"{_mins(sum(r.budget for r in unknown))})")
@@ -2438,13 +2299,12 @@ def run_pass(args):
         if prior and prior.startswith("FAIL"):
             # never re-run an unchanged failed row automatically, and never paper over it
             results.append((row, f"{prior} (prior receipt at this cut; not re-run)", 0, rec))
-        elif prior and (args.resume or decisions[row.id].kind in ("CARRY", "CACHED", "FROZEN")) and \
-                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED", "CACHED", "FROZEN")):
+        elif prior and (args.resume or decisions[row.id].kind in ("CARRY", "CACHED")) and \
+                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED", "CACHED")):
             results.append((row, f"{prior} (resumed)", 0, rec))
-        elif decisions[row.id].kind in ("CARRY", "FROZEN"):
-            make = carried_receipt if decisions[row.id].kind == "CARRY" else frozen_receipt
+        elif decisions[row.id].kind == "CARRY":
             with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:
-                f.write(make(row, cut, lane, decisions[row.id]))
+                f.write(carried_receipt(row, cut, lane, decisions[row.id]))
             results.append((row, decisions[row.id].reason, 0, rec))
         elif decisions[row.id].kind == "CACHED" and \
                 cache_restore(decisions[row.id].cache[2], row.outputs_dir):
