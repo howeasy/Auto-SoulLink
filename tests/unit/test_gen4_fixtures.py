@@ -285,3 +285,8 @@ def test_pace_1x_pins_real_time_pacing_and_refuses_missing_keys(tmp_path):
         assert {k: cfg[k] for k in want} == want
     with pytest.raises(g4.FixtureError, match="pacing keys"):
         _cfg(tmp_path, _base(), pace_1x=True)
+    for key in want:  # each pinned key participates in the refusal, not just some subset (OMP cx-6632cac3 F5)
+        partial = dict(base)
+        partial.pop(key)
+        with pytest.raises(g4.FixtureError, match=key):
+            _cfg(tmp_path, partial, pace_1x=True)

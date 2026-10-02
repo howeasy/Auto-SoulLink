@@ -294,7 +294,8 @@ def launch_trial(title_name, source, save, state, profile, base, trial, lane, mo
         "state_sha256": sha(copied_state),
         "config_sha256": sha(lane / "config.ini"),
         "throttle_config": {
-            key: settings[key]
+            # .get: unpaced (rate 300) trials do not require the pacing keys (OMP cx-6632cac3 F4)
+            key: settings.get(key, "<absent>")
             for key in (
                 "Unthrottled",
                 "ClockThrottle",
