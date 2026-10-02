@@ -1,9 +1,17 @@
 # Gen 2 overlay admission — next session
 
 Snapshot: 2026-10-02, branch `claude/mandatory-rom-patch-3fcfda`; initial handoff `b7d3f2b4`, refreshed through `499a2948`. This is an execution runbook, not a release verdict. The coordinator owns the sole guide/register and emulator allocation.
-- Committed: R/A/B/C and review fixes; seven overlay qualifications (`79c6ac8a`); Gold frame-align attempt 1 and Crystal attempt 2 / 11:23 (`b7d3f2b4`). Receipts are under `tests/fixtures/gen2/receipts/overlay/`.
-- `499a2948` fixes overlay identity on BOTH U1G union producers (`lua/tests/gen2_u1g_inputs.lua:430`, `tests/live/test_gen2_u1g.py:129`). Gold U1G failed on the previous cut; the runner restarted at 12:06 to redo Gold/Crystal U1G. Treat that old failure as superseded, not PASS.
-- Still to establish: Gold/Crystal U1G; Silver frame-align + U1G; U2 for C/G/S; inspect. Check the live journal before running anything twice. Rows remain FUTURE/BUILT; `server/cartridges.py:28` excludes Gen 2.
+- Committed: R/A/B/C and review fixes; seven overlay qualifications (`79c6ac8a`); the overlay U1 union is COMPLETE
+  for all three titles (frame_align + u1g grass/kyle/bill, production registration PASS): Crystal `db2fe12c`
+  (frame_align at attempt 2 / 11:23), Gold `078738e9`, Silver `205d87ed`. Receipts are under
+  `tests/fixtures/gen2/receipts/overlay/`.
+- `499a2948` fixed overlay identity on BOTH U1G union producers (`lua/tests/gen2_u1g_inputs.lua:430`,
+  `tests/live/test_gen2_u1g.py:129`), found by the Gold u1g PHYSICAL run; all three unions were captured on it.
+- Still to establish in round 1: U2 for Crystal, Gold and Silver, then inspect. The first overlay U2 run (Crystal)
+  failed in 75 s on a harness defect, now FIXED: reload/reset candidates were copied into the CLEAN lane's
+  non-existent `.cache/gen2-fixtures/u2-write-windows/` (all U2 scratch paths now go through `work_root()` in
+  `tests/live/test_gen2_write_windows.py`). Gold U2 was interrupted at wrap-up; Silver U2 and inspect never ran.
+  Expect the `crystal_hello` step to keep failing until activation (it needs production overlay admission). Rows remain FUTURE/BUILT; `server/cartridges.py:28` excludes Gen 2.
 
 ## 1. Recover ownership and finish round 1
 

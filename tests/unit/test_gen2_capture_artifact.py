@@ -499,3 +499,19 @@ def test_an_overlay_engine_union_carries_its_identity_and_a_clean_one_carries_no
     assert "artifact_kind" not in clean and "binding_sha256" not in clean
     text = (Path(__file__).resolve().parents[2] / "lua/tests/gen2_u1g_inputs.lua").read_text(encoding="utf-8")
     assert "artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256}}" in text
+
+
+def test_u2_scratch_paths_are_per_artifact_and_exist(tmp_path, monkeypatch):
+    """Found by the round-1 overlay U2 run: reload/reset candidates were copied into the CLEAN lane's directory,
+    which a fresh worktree does not even have. Every U2 scratch path now comes from one per-kind root."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "u2live", Path(__file__).resolve().parents[2] / "tests/live/test_gen2_write_windows.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "REPO", tmp_path)
+    overlay, clean = module.work_root("overlay"), module.work_root("clean")
+    assert overlay.is_dir() and clean.is_dir() and overlay != clean
+    assert overlay.name == "u2-write-windows-overlay" and clean.name == "u2-write-windows"
+    text = (Path(__file__).resolve().parents[2] / "tests/live/test_gen2_write_windows.py").read_text(encoding="utf-8")
+    assert '".cache/gen2-fixtures/u2-write-windows" /' not in text, "a U2 scratch path bypasses work_root()"

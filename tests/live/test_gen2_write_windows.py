@@ -119,6 +119,16 @@ def offsets(symbols, current_box: int) -> dict:
             "backing": sram_flat(backing.bank, backing.address)}
 
 
+def work_root(kind=None):
+    """This artifact's U2 scratch root (D4: an overlay run never writes into the clean lane's paths). Created on
+    demand: a fresh worktree has no .cache/gen2-fixtures/u2-write-windows*, and the round-1 overlay U2 run failed
+    copying its reload candidate into the CLEAN, non-existent directory."""
+    kind = kind or KIND
+    root = REPO / ".cache/gen2-fixtures" / ("u2-write-windows-overlay" if kind == "overlay" else "u2-write-windows")
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def saved_image(directory: Path, fixture: str) -> Path:
     """The post-save SaveRAM image the town gate flushed, digest-checked and kept (lua/tests/
     gen2_write_windows.lua U.saved_path). Never the lane's SaveRAM file: the gate keeps playing after the
@@ -264,7 +274,7 @@ def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification
     case["attempt_id"] = f"u2-{lane}"   # one attempt id per run (M.qualified requires them distinct)
     env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
     env["SLINK_GEN2_U2"] = json.dumps({"mode": mode, "qualification_attempt_id": qualification_attempt_id})
-    directory = REPO / ".cache/gen2-fixtures" / ("u2-write-windows-overlay" if KIND == "overlay" else "u2-write-windows") / lane
+    directory = work_root() / lane
     passed, path, text = run_gate(GATE, rom_key=live.rom_key(spec.title), target=spec.target, timeout=1500,
                                   saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=speed_percent,
                                   env_overrides=env)
@@ -297,7 +307,7 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
     saved = saved_image(directory, town_spec.name)
     town = verify_town(text, primary, symbols, saved.read_bytes(), staged[town_spec.name])
 
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_town.reload_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_town.reload_candidate.SaveRAM"
     shutil.copyfile(saved, candidate)
     _, text = _run(town_spec, candidate, candidate.read_bytes(), "reload", f"{title}_town_reload", town_q)
     reload = verify_reload(text, primary, symbols, town, candidate.read_bytes())
@@ -454,14 +464,14 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     directory, text = _run(spec, fixture, staged, "boxes", f"{title}_boxes", q, facts)
     boxes = verify_boxes(text, primary, ctx.symbols, saved_image(directory, spec.name).read_bytes(),
                          reset_image(directory, spec.name).read_bytes())
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.reset_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_battle.reset_candidate.SaveRAM"
     shutil.copyfile(reset_image(directory, spec.name), candidate)
     directory, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reset", f"{title}_boxes_reset", q)
     reset = verify_boxes_reset(text, primary, ctx.symbols, boxes, candidate.read_bytes(),
                                saved_image(directory, spec.name).read_bytes(),
                                saved2_image(directory, spec.name).read_bytes(),
                                reset_image(directory, spec.name).read_bytes())
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.box_reload_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_battle.box_reload_candidate.SaveRAM"
     shutil.copyfile(reset_image(directory, spec.name), candidate)
     _, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reload", f"{title}_boxes_reload", q)
     reload = verify_boxes_reload(text, primary, ctx.symbols, reset, candidate.read_bytes())
