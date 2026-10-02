@@ -77,7 +77,9 @@ explicit claim, copied verbatim), `refused`. A PC-relative instruction whose ori
 inside the displaced span is re-pointed to the same offset in the moved copy (a literal or loop
 head that travels with the code); if that relocated target does not fit the encoding the step is
 refused. A `pic_offsets` entry that is not the start of a decoded instruction (mid-instruction or
-past the span) makes `plan_replay` raise `ReplayRefusedError` instead of being ignored. `plan.ok` / `plan.refusals`; `plan.replay_bytes()` raises
+past the span) makes `plan_replay` raise `ReplayRefusedError` instead of being ignored; so does an
+entry naming a PC-relative instruction (B/BL/BLX, B<cond>, literal load, ADR), which is always
+re-encoded and can never be asserted position independent. `plan.ok` / `plan.refusals`; `plan.replay_bytes()` raises
 `ReplayRefusedError` unless every step is safe. Refused: a re-encode that does not fit (the Gen 3
 Emerald CallCallbacks case, where a Thumb literal load cannot reach backwards), instructions that
 read PC through a register (Thumb `add rd,pc`, ARM `add rd,pc,#n`, `ldr` pc-relative with writeback),

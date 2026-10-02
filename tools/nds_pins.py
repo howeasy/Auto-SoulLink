@@ -9,8 +9,12 @@ output and optional reference build; container raw/decoded hashes, RAM size and
 overlay geometry; site before/after bytes in the DECODED container; no-touch
 spans; declared-diff completeness; DSi payload preservation; distribution
 artifact application via an injected callable.
-RECORDED ONLY (schema-checked, never proven here): title, ISA and evidence_class
-labels, receipt/evidence refs, continuation (alignment only), generator/source
+Also checked at construction: a changed or new CODE site's `after` must decode, under
+its declared ISA, as a recognised first instruction (not 'unknown'/'split'; `data=True`
+opts a pointer/table/literal site out) and its `continuation` must be an in-extent RAM
+address outside the site's own bytes.
+RECORDED ONLY (schema-checked, never proven here): title, evidence_class labels,
+receipt/evidence refs, the ISA label beyond the first-instruction decode, generator/source
 hashes, SourceBuild fields (repo, commit, toolchain, patch_set, vanilla
 reproduction, tracked inputs), native_abi, capabilities, native_arena,
 roundtrip_verified, dsi_preserved_reason.
@@ -24,7 +28,15 @@ from dataclasses import MISSING, asdict, dataclass, fields
 from types import UnionType
 from typing import get_args, get_origin, get_type_hints
 
-from tools.nds_image import ChangedSpan, ImageError, NdsImage, digest, verify_only_declared_changes
+from tools.nds_image import (
+    AutoloadBlock,
+    ChangedSpan,
+    ImageError,
+    NdsImage,
+    digest,
+    verify_only_declared_changes,
+)
+from tools.nds_isa import ARM, NdsIsaError, decode_arm, decode_thumb
 
 SCHEMA_VERSION = 1
 EVIDENCE = {"SOURCE", "FILE", "PHYSICAL", "REPORTED", "UNKNOWN"}
@@ -243,6 +255,7 @@ class SitePin:
     offset: int | None = None
     receipt_ref: str | None = None
     evidence_ref: str | None = None
+    data: bool = False
 
     def __post_init__(self):
         _text(self.id, "site id")
@@ -267,6 +280,18 @@ class SitePin:
             raise PinError("unaligned site/continuation/instruction extent")
         _opt_text(self.receipt_ref, "receipt_ref")
         _opt_text(self.evidence_ref, "evidence_ref")
+        _bool(self.data, "site data")
+        after = bytes.fromhex(self.after)
+        if not self.data and (self.expected_before is None or bytes.fromhex(self.expected_before) != after):
+            # A changed/new CODE site: its first instruction must exist under the declared ISA.
+            # Only the entry instruction is checked (veneers carry a literal word after it).
+            try:
+                kind = (decode_arm if self.isa == ARM else decode_thumb)(after, 0, coordinate).kind
+            except NdsIsaError as exc:
+                raise PinError(f"site {self.id}: after does not decode under {self.isa}: {exc}") from exc
+            if kind in ("unknown", "split"):
+                raise PinError(f"site {self.id}: after bytes are not a {self.isa} instruction ({kind}); "
+                               "set data=True for a pointer/table/literal site")
         if self.evidence_class == "PHYSICAL" and self.receipt_ref is None:
             raise PinError("PHYSICAL evidence requires a receipt_ref")
 
@@ -421,9 +446,14 @@ class CompanionPin:
                 raise PinError("only sites in source-provided containers may omit preimage")
             if site.expected_before is not None and c.source_provided and self.source_kind == "byte_patched":
                 raise PinError("byte_patched sites inside a source-provided (parent-absent) container have no preimage")
-            if (self.source_kind == "source_built" and site.container == "arm9"
+            if (self.source_kind == "source_built" and site.container in _NO_FILE_ID
                     and site.expected_before is not None and self.source_build.base_arm9_compressed is None):
-                raise PinError("source-built ARM9 preimages require explicit base compression")
+                raise PinError("source-built ARM9/autoload preimages require explicit base compression")
+            start, stop = c.ram_base + off, c.ram_base + end
+            if start <= site.continuation < stop or not any(
+                    k.ram_base <= site.continuation <= k.ram_base + k.ram_size for k in self.containers):
+                raise PinError(f"site {site.id}: continuation must be a RAM address inside a pinned container "
+                               "and outside the site's own bytes")
             intervals.setdefault(site.container, []).append((off, end))
         for spans in intervals.values():
             _nonoverlap(spans, "site")
@@ -526,7 +556,8 @@ def _rows(manifest):
 def _autoload(image, name, arm9_compressed):
     """Autoload block bytes via the image's `autoload_block(kind, *, arm9_compressed)`.
 
-    A returned object with `ram_address` (nds_image.AutoloadBlock) also pins the base.
+    The accessor must return an `nds_image.AutoloadBlock`: it carries the RAM base that
+    ContainerPin/SitePin assert, so plain bytes (no base to bind) are refused.
     """
     accessor = getattr(image, "autoload_block", None)
     if accessor is None:
@@ -534,8 +565,8 @@ def _autoload(image, name, arm9_compressed):
     block = accessor(name, arm9_compressed=arm9_compressed)
     if block is None:
         raise PinError(f"image has no {name} autoload block")
-    if not isinstance(block, bytes):
-        raise PinError("autoload accessor must return bytes")
+    if not isinstance(block, AutoloadBlock):
+        raise PinError("autoload accessor must return an AutoloadBlock carrying ram_address")
     return block
 
 
@@ -577,7 +608,7 @@ def _site_bytes(cache, image, table, site, length, *, before=False):
         if site.container == "arm9":
             actual = image.arm9_ram_base
         elif site.container in AUTOLOAD:
-            actual = getattr(data, "ram_address", pin.ram_base)  # AutoloadBlock exposes its base
+            actual = data.ram_address  # _autoload guarantees an AutoloadBlock
         else:
             actual = image.overlays[site.container].ram_base
         if actual != pin.ram_base:
@@ -665,7 +696,7 @@ def verify_output(image: NdsImage, table: CompanionPin, manifest, *, parent: Nds
                 raise PinError(f"container absent from parent must be source_provided: {c.name}")
         if c.name in AUTOLOAD:
             raw = decoded = _decoded(cache, image, c.name, table.output_arm9_compressed)
-            if getattr(decoded, "ram_address", c.ram_base) != c.ram_base:
+            if decoded.ram_address != c.ram_base:
                 raise PinError(f"autoload RAM base mismatch: {c.name}")
         else:
             if c.name != "arm9" and c.name not in image.overlays:
@@ -685,6 +716,9 @@ def verify_output(image: NdsImage, table: CompanionPin, manifest, *, parent: Nds
         if _site_bytes(cache, image, table, site, len(after)) != after:
             raise PinError(f"site after mismatch: {site.id}")
     base_ref = parent if parent is not None else reference
+    if table.no_touch_spans and base_ref is None:
+        raise PinError("no-touch spans need a comparison base (parent or reference bytes); "
+                       "the output cannot vouch for itself")
     for p in table.no_touch_spans:
         if p.offset + p.length > len(image.data) or digest(image.data, start=p.offset, length=p.length) != p.sha256:
             raise PinError("no-touch span output differs")

@@ -139,8 +139,21 @@ validator failure, including image-layer errors, is a `PinError`.
 - `SitePin`: a **container name** (never a bare RAM range; a name such as
   `ram:0x021E5900` is refused at the schema level) plus exactly one decoded
   offset or RAM address, ARM/Thumb, expected-before (omitted only inside a
-  source-provided container) and after hex, an aligned continuation, evidence
-  class, and optional `receipt_ref` / `evidence_ref`. `receipt_ref` is **required**
+  source-provided container) and after hex, a continuation, evidence class, an
+  optional `data` flag, and optional `receipt_ref` / `evidence_ref`. Two construction
+  checks go beyond schema shape. (1) For a CODE site whose `after` differs from its
+  `expected_before` (or has none), the first instruction of `after` is decoded with
+  `tools.nds_isa` under the declared ISA and must not be `unknown` or a `split` Thumb BL
+  half; only the entry instruction is decoded because veneers carry a literal word after
+  it. A site that patches a pointer/table/literal sets `data=True` to skip the decode
+  (alignment still applies); an identity site (`after == expected_before`) pins existing
+  bytes and is not decoded. This is a first-instruction plausibility gate, not a proof
+  that the bytes are the intended instruction. (2) `continuation` is an absolute RAM
+  address where execution resumes: it must be aligned, lie inside (inclusive end) some
+  pinned container's RAM extent, and not fall inside the site's own `[start, start+len)`
+  bytes (resuming mid-patch or at the patch itself); a replay trampoline may legitimately
+  continue back in the original code. Its exact value is otherwise a title-binding
+  claim, not resolved here. `receipt_ref` is **required**
   for `PHYSICAL`; for `FILE` a named `evidence_ref` is optional. Sites verify
   against the DECODED container (compressed overlays included) while the
   container records its flag.
@@ -152,7 +165,7 @@ validator failure, including image-layer errors, is a `PinError`.
 - `NativeArena` (`native_arena`): informational `{image, address, size}` naming
   where the companion arena/mailbox lives (for example the ITCM tail candidate
   `itcm 0x01FF8620..0x02000000`, a Gen 4 coordinator candidate, not measured here).
-  Never verified.
+  Never verified, and see "Arena reality" below before treating a value as a hosting claim.
 - Full output hashes, named generator/source SHA256s, native ABI and capability
   bits, `dsi_preserved` (plus `dsi_preserved_reason`), `sites_reason`.
 
@@ -175,9 +188,10 @@ per address-form overlay site); declared-diff completeness (`verify_output` with
 a parent); no-touch spans; DSi preservation; and, via `verify_distribution`, that
 an injected apply callable turns the base into the pinned output.
 
-Recorded only (schema-checked, never proven by this module): `title`, `isa`,
-`evidence_class` and the refs, `continuation` (alignment-checked only, never
-resolved), generator/source hashes, every `SourceBuild` field (repo, commit,
+Recorded only (schema-checked, never proven by this module): `title`, `isa` beyond
+the first-instruction decode, `evidence_class` and the refs, `continuation` (alignment,
+in-extent and not-inside-the-site checked, never resolved to an instruction),
+generator/source hashes, every `SourceBuild` field (repo, commit,
 toolchain, patch set, vanilla reproduction, tracked inputs, dirty-tree flag),
 `native_abi`, `capabilities`, `native_arena`, `roundtrip_verified`, and any
 `*_reason` text. Capability bits and the ABI integer stay opaque to
@@ -190,7 +204,11 @@ sites in source-provided containers have no preimage and are listed as omitted,
 so `verified == ()` means "nothing was checked", never a before-byte pass.
 
 `verify_output(output_image, table, manifest, parent=parent_image,
-reference=reference_image)` checks the above. **Byte-patched output requires the
+reference=reference_image)` checks the above. A table with `no_touch_spans` needs a
+comparison base (`parent=` or `reference=`); with neither, the output would be checked
+against itself, so it is a `PinError`. A no-touch span inside a container that the edit
+recompresses is unsatisfiable by construction: the container re-encodes as one declared
+manifest row, which the span would overlap. **Byte-patched output requires the
 actual parent bytes**: parent hashes alone cannot prove absence of undeclared
 changes. Manifest rows may be `ChangedSpan` or its dict form; anything else is a
 `PinError`. DSi preservation checks the extended header and the original DSi
@@ -269,8 +287,25 @@ nonempty `sites_reason`.
 ITCM/DTCM containers (ARM9 autoload blocks, for example ITCM at 0x01FF8000) are
 accepted in the schema. Verification asks the image object for
 `autoload_block(kind, *, arm9_compressed)`; without that accessor it raises
-`PinError("autoload blocks unsupported by this image object")`, and a block that
-carries `ram_address` is checked against the pinned base.
+`PinError("autoload blocks unsupported by this image object")`. The accessor must
+return an `nds_image.AutoloadBlock` (it carries `ram_address`); plain bytes cannot bind
+the RAM base that the container and any address-form site assert, so they are refused
+by name, and an `AutoloadBlock` at a different base is refused too. For a `source_built`
+table, a site with a preimage in `arm9`, `itcm` or `dtcm` (all live in the decoded ARM9)
+requires an explicit `SourceBuild.base_arm9_compressed`.
+
+### Arena reality (what `NativeArena` does and does not say)
+
+`NativeArena` is declared, never verified, and nothing in this module checks that an
+arena fits anywhere. The facts a title binding must respect: `SLINK_ARENA_SIZE` is
+**0x1000**, a Gen 3 heap carve-out size; the Gen 4 HG/SS and hg-engine ITCM autoload
+block is **0x620** bytes and the Gen 5 Black/White ITCM block is **0x820** (Black 2 /
+White 2 **0x13A0**), so a `NativeArena` window smaller than 0x1000 cannot host the ABI
+arena inside the autoloaded part. The Gen 5 plan hosts the arena in the payload
+overlay's BSS; where Gen 4 hosts it is that title's own design decision. The test
+receipt `NativeArena('itcm', 0x01FF8620, 0x79E0)` is a schema fixture reproducing an
+earlier candidate string, not a hosting claim, and is not evidence that the space is
+free or large enough.
 
 ### Worked pin examples (synthetic, labelled)
 
@@ -282,7 +317,14 @@ none of these are real pins) and run each through the validators:
 |---|---|
 | `test_worked_example_hgss` | `source_built`, compressed ARM9 and overlays, vanilla reproduction receipt, two overlays sharing one load address, address-form sites by container name, ITCM `native_arena` |
 | `test_worked_example_hge_two_named_parents` | `source_built`, raw ARM9, dirty tree with tracked inputs, vanilla waiver, `distribution_base` + `reference_build`, xdelta `Distribution`, source-provided overlay site, no byte parent |
-| `test_worked_example_b2w2_appended_overlay` | `byte_patched`, appended overlay absent from the parent (`source_provided`, after-only sites), declared header-table diff |
+| `test_worked_example_b2w2_appended_overlay` | `byte_patched`, overlay9:1 absent from the parent's extent map (`source_provided`, after-only sites), declared y9-table/header diff. **This is a y9 table-visibility flip, not a real append:** the payload bytes already exist in the parent as `file:1` and only the parent's y9 length differs. |
+
+The B2W2 example therefore models only the container-naming rule, not payload appending.
+Container names (including those in a manifest row's `container` label) resolve against
+the PARENT extent map, so a genuinely new payload, whose bytes occupy a parent gap, must be
+labelled with that gap's synthesized extent name (`padding_ff@<offset>` or
+`unmapped@<offset>`); only the output pin then calls it `overlay9:<id>`. A real append
+(new payload plus y9/FAT growth) remains a later card and is not exercised here.
 
 Measured facts (FILE, from NDS-1): only SoulSilver (129 overlays, compressed ARM9)
 and the local hg-engine image (150 overlays, raw ARM9) were parsed. HeartGold was

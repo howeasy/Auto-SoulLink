@@ -108,7 +108,8 @@ params are absent, the kind is unknown, or two entries claim one kind.
 for non-TCM blocks). Autoload data runs contiguously from `autoload_start` in list order.
 
 - Classification by RAM base: ITCM `0x01FF8000..0x02000000`; DTCM
-  `0x027E0000`(Gen 4) or `0x02FE0000`(Gen 5), 16 KiB.
+  `0x027E0000`(Gen 4) or `0x02FE0000`(Gen 5), 16 KiB. Both DTCM bases and the 12-byte
+  row width are exercised by synthetic fixtures (`test_gen4_12_byte_rows_...`).
 - **Row width is not fixed.** FILE: the Gen 4 SDK (SoulSilver, hg-engine) uses 12-byte
   rows `{ram, size, bss}`; the Gen 5 SDK uses **16-byte** rows `{ram, size, ram-again,
   bss}` (the third word equals the RAM base in all four ROMs, meaning unknown). The
@@ -117,9 +118,17 @@ for non-TCM blocks). Autoload data runs contiguously from `autoload_start` in li
 - Row sanity (refused, `ImageError`): a row with RAM address 0 or size 0, and a 16-byte
   row whose third word is not equal to its RAM address (the measured Gen 5 invariant). The
   12/16 width ambiguity refusal is unchanged; an explicit `entry_size=` is held to the same rules.
-- `arm9_compressed=None` infers from `compressed_static_end` (0 means raw, RAM base +
-  stored length means compressed, anything else is refused). Pass it explicitly when
-  the module params are not in the stored bytes.
+- **`arm9_compressed=None` has a precondition: the NitroSDK module-params magic must be in
+  the STORED ARM9 bytes.** Inference reads `compressed_static_end` (0 means raw, RAM base +
+  stored length means compressed, anything else is refused) from the stored bytes, so on a
+  BLZ ARM9 it only works while the struct sits in the uncompressed literal prefix (retail
+  ROMs measured: it does, at decoded 0xFCC). When the magic is not found there (compressed
+  past the prefix, or no module params at all) it raises the named `ImageError` "ARM9 module
+  parameters absent or not in the stored bytes; pass arm9_compressed explicitly". Every
+  caller that cannot guarantee the prefix (any new title) must pass `arm9_compressed=`
+  explicitly; the explicit path then needs the magic in the DECODED ARM9 instead. Tests:
+  `test_compression_inference_needs_module_params_in_the_stored_bytes` (magic past the
+  literal prefix, and 12-byte rows with module params absent).
 - Read path only; writes to an autoload go through the normal decoded-ARM9 edit machinery.
 
 FILE (decoded ARM9 offsets), all four ROMs share the DTCM/other rows:

@@ -392,6 +392,8 @@ class NdsImage:
         The table is located by the NitroSDK module-params magic inside the DECODED
         ARM9; data runs contiguously from autoload_start, so entry size (12 on the Gen 4
         SDK, 16 on Gen 5) is chosen by the contiguity check unless supplied.
+        `arm9_compressed=None` infers compression from the module params in the STORED
+        bytes (see docs/shared-nds-image.md); pass it explicitly when the magic is not there.
         """
         self._open()
         if arm9_compressed is None:

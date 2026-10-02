@@ -641,3 +641,19 @@ def test_replay_refuses_stray_pic_offsets():
     assert isa.plan_replay(nop, old, old + 8, "thumb", pic_offsets=[2]).ok
     with pytest.raises(isa.ReplayRefusedError):
         isa.plan_replay(w(0xE1A00000), old, old + 8, "arm", pic_offsets=[2])
+
+
+def test_replay_refuses_pic_offsets_naming_a_pc_relative_instruction():
+    old = 0x02010000
+    cases = [("thumb", isa.thumb_b(old, old + 0x40), "b"),
+             ("thumb", isa.thumb_bcond(old, old + 0x40, 0), "bcond"),
+             ("thumb", isa.thumb_bl(old, old + 0x1000), "bl"),
+             ("thumb", isa.thumb_ldr_literal(old, 1, old + 0x40), "ldr_lit"),
+             ("thumb", isa.thumb_adr(old, 1, old + 0x40), "adr"),
+             ("arm", isa.arm_branch(old, old + 0x40), "b"),
+             ("arm", isa.arm_ldr_literal(old, 1, old + 0x40), "ldr_lit")]
+    for which, code, kind in cases:
+        assert isa.plan_replay(code, old, old + 0x10, which).ok  # control: planned fine without the claim
+        with pytest.raises(isa.ReplayRefusedError) as info:
+            isa.plan_replay(code, old, old + 0x10, which, pic_offsets=[0])
+        assert f"PC-relative {kind}" in str(info.value)

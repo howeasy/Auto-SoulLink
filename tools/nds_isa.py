@@ -651,8 +651,9 @@ def plan_replay(displaced, old_addr, new_addr, isa, pic_offsets=()):
     Instructions that read PC through a register field, unclassified instructions and a span that
     cuts a Thumb BL pair are refused unless their byte offset is listed in `pic_offsets`, which is
     the caller's explicit assertion that the instruction is position independent (it is then copied
-    verbatim). A pic_offsets entry that is not the start of a decoded instruction raises
-    ReplayRefusedError, never ignored. Replay does not re-create LR: a replayed call returns to
+    verbatim). A pic_offsets entry that is not the start of a decoded instruction, or that
+    names a PC-relative instruction (B/BL/BLX, B<cond>, literal load, ADR: those are always
+    re-encoded, never asserted position independent), raises ReplayRefusedError, never ignored. Replay does not re-create LR: a replayed call returns to
     whatever follows it at the NEW address, which the caller's continuation must account for.
     """
     if isa not in (THUMB, ARM):
@@ -663,11 +664,13 @@ def plan_replay(displaced, old_addr, new_addr, isa, pic_offsets=()):
     displaced = bytes(displaced)
     if not displaced or len(displaced) % align:
         raise IsaEncodingError(f"displaced span must be a non-empty multiple of {align} bytes")
-    pic, steps, off = set(pic_offsets), [], 0
+    pic, steps, off, pcrel_pic = set(pic_offsets), [], 0, []
     while off < len(displaced):
         ins = (decode_thumb if isa == THUMB else decode_arm)(displaced, off, old_addr + off)
         here, step = new_addr + off, None
         size = ins.size
+        if off in pic and ins.kind in _PCREL_KINDS:
+            pcrel_pic.append(f"pic_offsets +0x{off:X} names a PC-relative {ins.kind}; it cannot be asserted position independent")
         raw = displaced[off:off + size]
         if ins.kind in _PCREL_KINDS and old_addr <= ins.target < old_addr + len(displaced):
             # a target inside the displaced span moves with it
@@ -691,9 +694,9 @@ def plan_replay(displaced, old_addr, new_addr, isa, pic_offsets=()):
         steps.append(step)
         off += size
     stray = pic - {s.offset for s in steps}
-    if stray:
+    if stray or pcrel_pic:
         raise ReplayRefusedError(
-            [f"pic_offsets +0x{o:X} matches no decoded instruction" for o in sorted(stray)])
+            [f"pic_offsets +0x{o:X} matches no decoded instruction" for o in sorted(stray)] + pcrel_pic)
     return ReplayPlan(isa, old_addr, new_addr, tuple(steps))
 
 

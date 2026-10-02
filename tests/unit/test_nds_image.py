@@ -20,25 +20,27 @@ from tools.nds_image import (
 
 
 def synthetic(*, compressed=True, dsi=True, arm9_slack=512, overlay_slack=128,
-              module_params=True, autoloads=None, arm9_noise=False):
+              module_params=True, autoloads=None, arm9_noise=False, magic=0x1000,
+              dtcm_ram=0x02FE0000):
     """Build all bytes in memory: real header fields, FNT/FAT, y9/y7 and BLZ.
 
     module_params=False omits the NitroSDK magic; autoloads=12|16 adds an ITCM+DTCM autoload
-    table of that entry width; arm9_noise makes the compressed tail incompressible so a later
-    edit can shrink the encoded ARM9.
+    table of that entry width (DTCM row at `dtcm_ram`: Gen 5 0x02FE0000 by default, Gen 4
+    0x027E0000); arm9_noise makes the compressed tail incompressible so a later edit can
+    shrink the encoded ARM9; `magic` is the module-params offset (0x4200 with autoloads lies past the BLZ
+    literal prefix, so the stored bytes of a compressed ARM9 do not contain it).
     """
     ram = 0x02004000
     arm9 = bytearray(bytes(range(256)) * 72)  # 0x4800 bytes
     if arm9_noise:
         arm9[0x4000:0x4400] = random.Random(7).randbytes(0x400)
-    magic = 0x1000
     end = ram + len(arm9)
     list_start = list_end = auto = end
     if autoloads:
         auto = ram + 0x4600
         list_start = ram + 0x4660
         list_end = list_start + 2 * autoloads
-        rows = ((0x01FF8000, 0x40, 0x01FF8000, 0), (0x02FE0000, 0x20, 0x02FE0000, 0x10))
+        rows = ((0x01FF8000, 0x40, 0x01FF8000, 0), (dtcm_ram, 0x20, dtcm_ram, 0x10))
         for i, row in enumerate(rows):
             fields = row[:2] + ((row[2],) if autoloads == 16 else ()) + (row[3],)
             struct.pack_into(f"<{autoloads // 4}I", arm9, 0x4660 + i * autoloads, *fields)
@@ -422,6 +424,39 @@ def test_autoload_blocks_synthetic(width, compressed):
         image.autoload_block("vram")
     with pytest.raises(ImageError, match="undecidable|tile"):
         image.autoload_blocks(arm9_compressed=compressed, entry_size=8)
+
+
+def test_gen4_12_byte_rows_classify_itcm_and_dtcm_at_the_gen4_bases():
+    """The Gen 4 DTCM branch of _autoload_kind (0x027E0000) was otherwise never executed."""
+    image = NdsImage.load(synthetic(compressed=False, autoloads=12, dtcm_ram=0x027E0000))
+    assert [b.kind for b in image.autoload_blocks(arm9_compressed=False)] == ["itcm", "dtcm"]
+    assert image.autoload_block("itcm", arm9_compressed=False).ram_address == 0x01FF8000
+    dtcm = image.autoload_block("dtcm", arm9_compressed=False)
+    assert dtcm.ram_address == 0x027E0000 and bytes(dtcm) == b"D" * 0x20
+    # Neighbouring RAM that is not a TCM base stays unclassified (and so absent by kind).
+    other = NdsImage.load(synthetic(compressed=False, autoloads=12, dtcm_ram=0x027E4000))
+    assert other.autoload_block("dtcm", arm9_compressed=False) is None
+
+
+def test_compression_inference_needs_module_params_in_the_stored_bytes():
+    """arm9_compressed=None reads the module params from the STORED ARM9, which for a BLZ
+    stream only works while the struct sits in the uncompressed literal prefix."""
+    deep = NdsImage.load(synthetic(compressed=True, autoloads=12, magic=0x4200))
+    assert deep.read("arm9").find(struct.pack("<I", 0xDEC00621)) < 0  # the control: magic is not stored raw
+    with pytest.raises(ImageError, match="pass arm9_compressed explicitly"):
+        deep.autoload_blocks()
+    with pytest.raises(ImageError, match="pass arm9_compressed explicitly"):
+        deep.autoload_block("itcm")
+    assert len(deep.autoload_blocks(arm9_compressed=True)) == 2  # explicit compression is fine
+    shallow = NdsImage.load(synthetic(compressed=True, autoloads=12))
+    assert len(shallow.autoload_blocks()) == 2  # magic inside the literal prefix: inference works
+    # 12-byte rows but no module params at all: inference names the requirement, and an
+    # explicit flag then fails on the absent params instead.
+    bare = NdsImage.load(synthetic(compressed=False, autoloads=12, module_params=False))
+    with pytest.raises(ImageError, match="pass arm9_compressed explicitly"):
+        bare.autoload_blocks()
+    with pytest.raises(ImageError, match="module parameters absent"):
+        bare.autoload_blocks(arm9_compressed=False)
 
 
 def _bad_autoload(mutate, width=16):

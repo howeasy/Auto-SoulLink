@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit.test_nds_image import synthetic
-from tools.nds_image import ChangedSpan, NdsImage, digest
+from tools.nds_image import AutoloadBlock, AutoloadInfo, ChangedSpan, NdsImage, digest
 from tools.nds_pins import (
     CAPABILITY_BITS,
     NATIVE_ABI_VERSION,
@@ -61,7 +61,7 @@ def container_pin(image, name="arm9", *, source_provided=False, compressed=True)
 
 def noop_site(image, *, compressed=True, sid="noop"):
     before = image.decoded("arm9", arm9_compressed=compressed)[0x4400:0x4404].hex()
-    return SitePin(sid, "arm9", "thumb", before, before, 4, "FILE", offset=0x4400)
+    return SitePin(sid, "arm9", "thumb", before, before, image.arm9_ram_base + 0x4404, "FILE", offset=0x4400)
 
 
 def build(base, **over):
@@ -105,7 +105,13 @@ def patched(cls=NdsImage):
 
 
 def appended_overlay_case():
-    """B2W2 shape: the parent lacks overlay9:1 (it is an unowned file there)."""
+    """B2W2 NAMING shape: the parent's y9 lacks overlay9:1 (it is an unowned file there).
+
+    This models a y9 table-visibility flip, NOT a real append: the payload already exists in
+    the parent as file:1. Container names resolve against the PARENT extent map, so a genuinely
+    new payload would have to be labelled with a synthesized gap name (padding_ff@<off> /
+    unmapped@<off>) in the manifest.
+    """
     out_bytes = synthetic(dsi=False)
     output = NdsImage.load(out_bytes)
     raw = bytearray(out_bytes)
@@ -118,7 +124,7 @@ def appended_overlay_case():
                      for off, n in ((0x54, 4), (0x15E, 2)))
     ov = output.overlays["overlay9:1"]
     new_site = SitePin("new-ov", "overlay9:1", "thumb", None, output.decoded("overlay9:1")[:4].hex(),
-                       4, "FILE", address=ov.ram_base)
+                       ov.ram_base + 4, "FILE", address=ov.ram_base)
     table = make_table(parent, output, (noop_site(output), new_site),
                        containers=(container_pin(output), container_pin(output, "overlay9:1", source_provided=True)))
     return parent, output, manifest, table
@@ -173,7 +179,7 @@ def test_no_touch_span_cannot_even_overlap_broad_declared_edit():
 
 def test_after_bytes_and_container_hashes_are_verified():
     parent, output, manifest, table = patched()
-    wrong = replace(table, sites=(replace(table.sites[0], after="ff" * 8),))
+    wrong = replace(table, sites=(replace(table.sites[0], after=b"PATCHED?".hex()),))
     with pytest.raises(PinError, match="site after"):
         verify_output(output, wrong, manifest, parent=parent)
     wrong = replace(table, containers=(replace(table.containers[0], raw_sha256="0" * 64),))
@@ -306,7 +312,8 @@ def test_source_build_before_sites_use_explicit_base_compression():
     base = NdsImage.load(synthetic(compressed=True, dsi=False))
     output = NdsImage.load(synthetic(compressed=False, dsi=False))
     before = base.decoded("arm9", arm9_compressed=True)[0x4400:0x4404]
-    site = SitePin("existing", "arm9", "thumb", before.hex(), before.hex(), 4, "FILE", offset=0x4400)
+    site = SitePin("existing", "arm9", "thumb", before.hex(), before.hex(), base.arm9_ram_base + 0x4404, "FILE",
+                   offset=0x4400)
     table = make_table(base, output, (site,), source_built=True, output_arm9_compressed=False,
                        parent=ParentPin.of(base), source_build=build(base, base_arm9_compressed=True),
                        containers=(container_pin(output, compressed=False),))
@@ -336,14 +343,45 @@ def test_site_bounds_alignment_and_duplicate_ids():
         replace(table, sites=(table.sites[0], table.sites[0]))
 
 
+ARM_BX_LR = bytes.fromhex("1eff2fe1") * 2  # two ARM `bx lr`: 0xFF1E is an invalid first Thumb halfword
+
+
+def test_site_after_must_decode_under_its_declared_isa():
+    *_, table = patched()
+    site = table.sites[0]  # thumb, 8 bytes, address-form
+    with pytest.raises(PinError, match="not a thumb instruction"):
+        replace(site, after=ARM_BX_LR.hex())
+    assert replace(site, isa="arm", after=ARM_BX_LR.hex())  # the same word is fine under its own ISA
+    assert replace(site, after=ARM_BX_LR.hex(), data=True)  # explicit data site opts out of the decode
+    # An unchanged (before == after) site pins existing bytes and is not decoded.
+    assert replace(site, expected_before=ARM_BX_LR.hex(), after=ARM_BX_LR.hex())
+    # A new site (no preimage) is decoded; a half Thumb BL pair is not an instruction.
+    with pytest.raises(PinError, match="split"):
+        replace(site, expected_before=None, after="00f0")
+    assert replace(site, expected_before=None, after="00f000f8")  # a complete BL pair
+    with pytest.raises(PinError, match="bool"):
+        replace(site, data=1)
+
+
+def test_site_continuation_must_be_in_extent_and_outside_the_site():
+    *_, table = patched()
+    site = table.sites[0]  # address base+0x4400, 8 bytes, continuation base+0x4408
+    for bad in (site.address, site.address + 4, 0x10, 0x01000000, 0x02004000 + table.containers[0].ram_size + 4):
+        with pytest.raises(PinError, match="continuation"):
+            replace(table, sites=(replace(site, continuation=bad),))
+    assert replace(table, sites=(replace(site, continuation=site.address - 4),))  # resuming earlier is legal
+    assert replace(table, sites=(replace(site, continuation=site.address + 12),))
+
+
 def test_per_container_site_overlap_but_not_cross_container_overlap():
     image = NdsImage.load(synthetic(dsi=False))
     a = noop_site(image, sid="a")
-    overlapping = replace(a, id="b", offset=0x4402)
+    overlapping = replace(a, id="b", offset=0x4402, continuation=a.continuation + 2)
     with pytest.raises(PinError, match="overlapping site"):
         make_table(image, image, (a, overlapping))
     ov_before = image.decoded("overlay9:0")[0:4].hex()
-    other = SitePin("ov", "overlay9:0", "thumb", ov_before, ov_before, 4, "FILE", offset=0)
+    other = SitePin("ov", "overlay9:0", "thumb", ov_before, ov_before, image.overlays["overlay9:0"].ram_base + 4,
+                    "FILE", offset=0)
     make_table(image, image, (a, other),
                containers=(container_pin(image), container_pin(image, "overlay9:0")))
 
@@ -355,7 +393,8 @@ def test_overlay_sites_use_decompressed_container_not_aliased_address_alone():
     parent.edit_overlay(0, ov.ram_base + 32, before, b"\x00\xb5\x00\xbd", reason="overlay instruction")
     output, manifest = parent.apply()
     output = NdsImage.load(output)
-    site = SitePin("overlay", ov.name, "thumb", before.hex(), "00b500bd", 4, "FILE", address=ov.ram_base + 32)
+    site = SitePin("overlay", ov.name, "thumb", before.hex(), "00b500bd", ov.ram_base + 36, "FILE",
+                   address=ov.ram_base + 32)
     table = make_table(parent, output, (site,), containers=(container_pin(output), container_pin(output, ov.name)))
     assert table.containers[1].compressed is True and output.overlays["overlay9:1"].compressed is False
     assert verify_sites_before(parent, table) == (("overlay",), ())
@@ -368,8 +407,8 @@ def test_two_overlays_sharing_one_load_address_are_distinct_by_name():
     sites = []
     for name in ("overlay9:0", "overlay9:1"):
         before = image.decoded(name)[16:20].hex()
-        sites.append(SitePin(f"hook-{name}", name, "thumb", before, before, 4, "FILE",
-                             address=image.overlays[name].ram_base + 16))
+        sites.append(SitePin(f"hook-{name}", name, "thumb", before, before,
+                             image.overlays[name].ram_base + 20, "FILE", address=image.overlays[name].ram_base + 16))
     table = make_table(image, image, sites, source_built=True, parent=ParentPin.of(image),
                        containers=(container_pin(image), container_pin(image, "overlay9:0"),
                                    container_pin(image, "overlay9:1")))
@@ -449,7 +488,7 @@ def test_overlay_address_sites_require_matching_overlay_bases():
     y9 = struct.unpack_from("<I", parent.data, 0x50)[0]
     bad = NdsImage.load(with_u32(parent.data, y9 + 4, ov.ram_base + 0x1000))
     before = parent.decoded(ov.name)[32:36].hex()
-    site = SitePin("overlay", ov.name, "thumb", before, before, 4, "FILE", address=ov.ram_base + 32)
+    site = SitePin("overlay", ov.name, "thumb", before, before, ov.ram_base + 36, "FILE", address=ov.ram_base + 32)
     table = make_table(parent, parent, (site,), containers=(container_pin(parent), container_pin(parent, ov.name)))
     assert verify_sites_before(parent, table) == (("overlay",), ())
     with pytest.raises(PinError, match="RAM base differs"):
@@ -591,7 +630,7 @@ def test_patch_set_identity_and_dirty_tree_inputs():
 
 def itcm_table(image, block):
     itcm = ContainerPin("itcm", digest(block), digest(block), None, 0x01FF8000, len(block), False, True)
-    site = SitePin("mailbox-init", "itcm", "arm", None, block[:4].hex(), 4, "SOURCE", address=0x01FF8000)
+    site = SitePin("mailbox-init", "itcm", "arm", None, block[:4].hex(), 0x01FF8004, "SOURCE", address=0x01FF8000)
     return make_table(image, image, (site,), source_built=True,
                       containers=(container_pin(image), itcm))
 
@@ -610,14 +649,35 @@ def test_autoload_blocks_need_an_image_accessor():
     with pytest.raises(PinError):  # the real accessor refuses the synthetic image (no valid autoload table)
         verify_output(image, table, ())
 
-    class WithAutoload(NdsImage):
-        def autoload_block(self, kind, *, arm9_compressed=None):
-            assert kind == "itcm" and arm9_compressed is True
-            return block
+    def stub(returned):
+        class WithAutoload(NdsImage):
+            def autoload_block(self, kind, *, arm9_compressed=None):
+                assert kind == "itcm" and arm9_compressed is True
+                return returned
+        return WithAutoload.load(bytes(image.data))
 
-    assert verify_output(WithAutoload.load(bytes(image.data)), table, ())
+    def info(ram):
+        return AutoloadInfo(ram, len(block), 0, 0)
 
-    class Absent(WithAutoload):
+    good = AutoloadBlock(block, info(0x01FF8000), "itcm", 0)
+    assert verify_output(stub(good), table, ())
+    # Plain bytes cannot bind the RAM base the container/site asserts: refused by name.
+    with pytest.raises(PinError, match="must return an AutoloadBlock"):
+        verify_output(stub(block), table, ())
+    # An AutoloadBlock at the wrong base is refused too (container base, then the address-form site).
+    wrong_base = AutoloadBlock(block, info(0x01FF8100), "itcm", 0)
+    with pytest.raises(PinError, match="autoload RAM base mismatch"):
+        verify_output(stub(wrong_base), table, ())
+    preimage = replace(table.sites[0], expected_before=block[:4].hex(), after=block[:4].hex())
+    # F3: an ITCM preimage lives in the decoded ARM9 too, so base compression must be explicit.
+    with pytest.raises(PinError, match="explicit base compression"):
+        replace(table, sites=(preimage,))
+    explicit = replace(table, sites=(preimage,), source_build=replace(table.source_build, base_arm9_compressed=True))
+    assert verify_sites_before(stub(good), explicit) == (("mailbox-init",), ())
+    with pytest.raises(PinError, match="image RAM base differs"):
+        verify_sites_before(stub(wrong_base), explicit)
+
+    class Absent(NdsImage):
         def autoload_block(self, kind, *, arm9_compressed=None):
             return None
 
@@ -712,8 +772,8 @@ def hgss_example():
     sites = []
     for name in ("overlay9:0", "overlay9:1"):
         before = image.decoded(name)[16:20].hex()
-        sites.append(SitePin(f"hook-{name}", name, "thumb", before, before, 4, "FILE",
-                             address=image.overlays[name].ram_base + 16))
+        sites.append(SitePin(f"hook-{name}", name, "thumb", before, before,
+                             image.overlays[name].ram_base + 20, "FILE", address=image.overlays[name].ram_base + 16))
     table = make_table(
         image, image, sites, source_built=True, parent=ParentPin.of(image),
         source_build=build(image, base_arm9_compressed=True, vanilla_reproduction=repro,
@@ -729,8 +789,8 @@ def hge_example():
     reference = NdsImage.load(synthetic(compressed=False, dsi=False, overlay_slack=64))
     output = NdsImage.load(synthetic(compressed=False, dsi=False))
     ov = output.overlays["overlay9:1"]
-    site = SitePin("new-hook", "overlay9:1", "thumb", None, output.decoded("overlay9:1")[:4].hex(), 4, "SOURCE",
-                   offset=0)
+    site = SitePin("new-hook", "overlay9:1", "thumb", None, output.decoded("overlay9:1")[:4].hex(),
+                   ov.ram_base + 4, "SOURCE", offset=0)
     artifact = b"hge artifact"
     table = make_table(
         base, output, (site,), source_built=True,
@@ -764,6 +824,9 @@ def test_worked_example_hge_two_named_parents():
         verify_output(output, replace(table, reference_build=None), (), reference=reference)
     with pytest.raises(PinError, match="reference_build needs actual reference"):
         verify_output(output, table, ())  # declared reference_build, no reference bytes supplied
+    # No reference and no parent: a no-touch span would be self-checked against the output.
+    with pytest.raises(PinError, match="comparison base"):
+        verify_output(output, replace(table, reference_build=None), ())
     tampered = bytearray(reference.data)
     tampered[:12] = b"XXXXXXXXXXXX"
     with pytest.raises(PinError, match="reference_build identity"):
