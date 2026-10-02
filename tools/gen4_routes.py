@@ -786,6 +786,7 @@ def pack_ram(game: str) -> dict:
         "hdr_off": sv["array_headers_off"],
         "hdr_size": sv["array_header_size"],
         "hdr_offset_field": sv["array_header_fields"]["offset"],
+        "hdr_size_field": sv["array_header_fields"]["size"],
         "dyn_off": sv["dynamic_region_off"],
         "id_party": sv["array_ids"]["party"],
         "id_pc": sv["array_ids"]["pcstorage"],
@@ -888,6 +889,55 @@ def parse_result(log: str) -> dict:
         m = re.search(r"RESULT (\w+)\s*(.*)$", ln)
         if m:
             res["status"], res["detail"] = m.group(1), m.group(2)
+    return res
+
+
+def _cold_reload(rom_staged, ld, tag, leg, game, route, pc_extra, timeout, history) -> dict:
+    """One more EmuHawk on the lane's own battery (no savestate): boot, CONTINUE, then the Lua
+    `reload` leg confirms by RAM that the party and the boxed clone persisted."""
+    rroute = {
+        "version": 1,
+        "game": game,
+        "kind": "reload",
+        "phase": "reload",
+        "start": route["start"],
+        "steps": [],
+        "tiles": 0,
+        "ram": pc_extra["ram"],
+        "synth": pc_extra["synth"],
+    }
+    rpath = ld / f"{tag}_reload.json"
+    rpath.write_text(json.dumps(rroute, indent=1), encoding="utf-8")
+    log = ld / f"{tag}_reload.log"
+    log.unlink(missing_ok=True)
+    env = dict(
+        os.environ,
+        G4_REPO=str(REPO).replace("\\", "/"),
+        G4_ROUTE=str(rpath).replace("\\", "/"),
+        G4_OUT=str(log).replace("\\", "/"),
+        G4_LANE=str(ld).replace("\\", "/"),
+        G4_TAG=f"{tag}_reload",
+        G4_LOAD_STATE="",
+    )
+    cmd = [str(EMUHAWK), f"--config={ld / 'bizhawk.ini'}", f"--lua={LUA}", str(rom_staged)]
+    t0 = time.time()
+    try:
+        proc = subprocess.Popen(cmd, cwd=str(ld), env=env)
+    except FileNotFoundError as exc:
+        raise RomAbsent(f"emulator absent: {cmd[0]}") from exc
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        pass
+    finally:
+        if proc.poll() is None:
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+        kill_our_emuhawk(ld)
+    res = parse_result(log.read_text(encoding="utf-8") if log.exists() else "")
+    res.update(
+        leg=leg + 1, kind="reload", phase="reload", wall=round(time.time() - t0, 1), log=str(log)
+    )
+    history.append(res)
     return res
 
 
@@ -997,9 +1047,15 @@ def run_lane(
         result.update(leg=leg, wall=round(time.time() - t0, 1), route=route, log=str(log))
         history.append({**result, "kind": route.get("kind"), "phase": route.get("phase")})
         if pc and result["status"] == "PC_DEPOSIT":
-            # cold reload: the lane's battery file, decoded by the independent PYDEC oracle
+            # the lane's battery file, decoded by the independent PYDEC oracle, then a COLD RELOAD:
+            # a fresh boot from that battery must still show the deposit (G2: boot -> SAVE -> reload)
             try:
                 result["saved"] = verify_saved(saved_path, game, synth)
+                result["reload"] = _cold_reload(
+                    rom_staged, ld, tag, leg, game, route, pc_extra, timeout, history
+                )
+                if result["reload"]["status"] != "RELOAD_OK":
+                    result.update(status="RELOAD_FAIL", detail=result["reload"]["detail"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
         if pc:

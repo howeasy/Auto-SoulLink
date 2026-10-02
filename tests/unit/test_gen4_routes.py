@@ -673,6 +673,7 @@ class FakeDS:
         0x02303300,
     )
     MAN, APPD, SAVE = 0x02304000, 0x02305000, 0x02310000
+    AV, MO = 0x02304800, 0x02304900
     PARTY_OFF, PC_OFF = 0x90, 0x10000
 
     def __init__(self, ram_layout, stand, new_pid, *, wake_first=False, party=2):
@@ -680,7 +681,7 @@ class FakeDS:
         self.R = ram_layout
         self.stand, self.new_pid, self.wake_first = stand, new_pid, wake_first
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
-        self.x, self.y, self.dir = stand[0], stand[1], 1
+        self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
         w = self.w32
         w(0x021D4158, self.FS)
@@ -688,6 +689,8 @@ class FakeDS:
         w(self.FS, self.SUB0)
         w(self.FS + 0x6C, 1)
         w(self.FS + 0x20, self.LOC)
+        w(self.FS + 0x40, self.AV)  # PlayerAvatar -> LocalMapObject -> currentFacing
+        w(self.AV + 0x30, self.MO)
         w(self.FS + 216, self.DRV)
         w(self.DRV + 16, self.DATA)
         w(self.DATA + 4, self.P3)
@@ -715,14 +718,16 @@ class FakeDS:
         return int.from_bytes(self.ram[o : o + n], "little") if 0 <= o < len(self.ram) - 4 else 0
 
     def sync(self):
-        struct.pack_into("<5i", self.ram, self.LOC - self.BASE, 8, -1, self.x, self.y, self.dir)
+        # Location.direction is NOT the live facing (it stays 0): the leg must read the map object
+        struct.pack_into("<5i", self.ram, self.LOC - self.BASE, 8, -1, self.x, self.y, 0)
+        self.w32(self.MO + 0x28, self.dir)
 
     def task(self, v):
         self.w32(self.FS + 16, v)
 
     def app_state(self, s):
         self.st, self.t = s, 0
-        self.w32(self.APPD + 0x30, s)
+        self.w32(self.MAN + 0x14, s)
 
     # --- the game
     def step(self, held):
@@ -990,6 +995,11 @@ def test_run_lane_replans_an_interrupted_enter_leg_then_deposits(real, tmp_path,
         if leg == 2:  # re-planned from the logged tile, resumed from the state, reaches the door
             assert route["start"]["x"] == 640 and route["phase"] == "enter"
             return "[f2] RESULT RESYNC map=69 x=8 y=19 dir=0 done=1 state=C:/s2.State\n"
+        if route["kind"] == "reload":  # the cold reload boots the saved battery fresh
+            assert (
+                leg == 4 and not route["steps"] and route["synth"]["new_pid"] == _SYNTH["new_pid"]
+            )
+            return "[f4] RESULT RELOAD_OK party=1 box=0/0\n"
         assert route["kind"] == "pc" and route["start"]["map"] == 69
         assert route["synth"]["new_pid"] == _SYNTH["new_pid"] and route["persistence"]
         assert route["ram"]["id_pc"] == 41
@@ -999,10 +1009,15 @@ def test_run_lane_replans_an_interrupted_enter_leg_then_deposits(real, tmp_path,
     save = tmp_path / "party2.SaveRAM"
     res = gr.run_lane(ROM, save, PRET, target="pc", lane="L", tag="t")
     assert res["status"] == "PC_DEPOSIT"
-    assert [c["load_state"] for c in calls] == ["", "C:/s1.State", "C:/s2.State"]
+    assert [c["load_state"] for c in calls] == [
+        "",
+        "C:/s1.State",
+        "C:/s2.State",
+        "",
+    ]  # the cold reload boots fresh
     rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
     assert rec["setup"] == "SYNTH" and rec["sidecar_sha256"] == _SYNTH["sidecar_sha256"]
-    assert [leg["status"] for leg in rec["legs"]] == ["RESYNC", "RESYNC", "PC_DEPOSIT"]
+    assert [leg["status"] for leg in rec["legs"]] == ["RESYNC", "RESYNC", "PC_DEPOSIT", "RELOAD_OK"]
 
 
 def test_run_lane_stops_a_cutscene_that_puts_the_player_back(real, tmp_path, monkeypatch):

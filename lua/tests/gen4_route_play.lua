@@ -64,6 +64,13 @@ local function loc()
   local p = r32(f + 0x20); if not inram(p) then return nil end
   return {map = s32(p), x = s32(p + 8), y = s32(p + 12), dir = s32(p + 16)}
 end
+-- live facing of the player (see pc_deposit): 0 north, 1 south, 2 west, 3 east
+local function facing()
+  local f = fsys(); if not f then return nil end
+  local av = r32(f + 0x40); if not inram(av) then return nil end
+  local mo = r32(av + 0x30); if not inram(mo) then return nil end
+  return r32(mo + 0x28)
+end
 local function idle_now()
   local f = fsys(); if not f then return false end
   return r32(f + 0x10) == 0 and r32(f + 0x6C) ~= 0
@@ -142,7 +149,7 @@ local f0 = emu.framecount()
 local start = loc()
 say("overworld frame", f0, "pos", pos_s(start), "route start m" .. route.start.map ..
   " (" .. route.start.x .. "," .. route.start.y .. ")")
-if not (lst and lst ~= "") and (not start or start.map ~= route.start.map or start.x ~= route.start.x
+if not (lst and lst ~= "") and route.kind ~= "reload" and (not start or start.map ~= route.start.map or start.x ~= route.start.x
     or start.y ~= route.start.y) then
   finish("FAIL", "start_mismatch", pos_s(start))
 end
@@ -329,7 +336,7 @@ local function array_addr(id)
   if not inram(save) then return nil end
   local h = save + RAM.hdr_off + id * RAM.hdr_size
   if r32(h) ~= id then return nil end
-  return save + RAM.dyn_off + r32(h + RAM.hdr_offset_field)
+  return save + RAM.dyn_off + r32(h + RAM.hdr_offset_field), r32(h + RAM.hdr_size_field)
 end
 local function party_state()
   local base = array_addr(RAM.id_party)
@@ -356,6 +363,30 @@ local function box_census()
     cur = c.cur_box_off ~= J.null and r32(base + c.cur_box_off) or nil,
     mod = c.mod_off ~= J.null and r32(base + c.mod_off) or nil}
 end
+-- whole SaveArray snapshot (the PC array: size from its runtime header) + word diff that skips the
+-- deposited box slot: locates a dirty flag the pack does not record (hge, PCStorage+0x1E004 by source)
+local function pc_snapshot()
+  local base, size = array_addr(RAM.id_pc)
+  if not base or size == 0 or size > 0x40000 then return nil end
+  local w = {}
+  for i = 0, size // 4 - 1 do w[i + 1] = r32(base + i * 4) end
+  return w
+end
+local function pc_diff(a, b, label, slot_lo, slot_hi)
+  if not a or not b then say("PCDIFF", label, "snapshot unreadable"); return end
+  local out, total, inside = {}, 0, 0
+  for i = 1, math.min(#a, #b) do
+    if a[i] ~= b[i] then
+      local off = (i - 1) * 4
+      if off + 4 > slot_lo and off < slot_hi then inside = inside + 1
+      else
+        total = total + 1
+        if #out < 80 then out[#out + 1] = string.format("%#x:%08x->%08x", off, a[i], b[i]) end
+      end
+    end
+  end
+  say("PCDIFF", label, "words", #a, "changed outside the deposited slot:", total, "inside:", inside, table.concat(out, " "))
+end
 local function save_driver_idle()
   local f = fsys(); if not f then return false end
   local F = RAM.field
@@ -372,7 +403,7 @@ end
 --   the PC" (A) -> "Which PC?" cursor on the first item, SOMEONE or BILL PC (A) -> "Storage System
 --   accessed" (A) -> sub-menu cursor on DEPOSIT POKEMON (A) -> ScrCmd_158 0 -> PCBox_LaunchApp
 --   (OVY_14, mode 0).
---   OVY_14 (asm/overlay_14.s; overlay manager data = man+0x1C, state int at +0x30, selected cell byte
+--   OVY_14 (asm/overlay_14.s; overlay manager data = man+0x1C, state int = man->proc_state at man+0x14 (data+0x30 is only the NEXT state), selected cell byte
 --   at +0x21): mode 0 starts at state 0x5B (party list, cursor on slot 0: dpad table ov14_021F8A40,
 --   Right from node 0 = node 1). A on a party slot selects it (ov14_021F0794 -> [data+0x21] = 0x1E +
 --   slot) and parks the cursor on the toolbar's first button (STORE); A there -> state 0xA9 -> 0x5C
@@ -389,7 +420,8 @@ local function app_info()
   local man = r32(sub0 + 4); if not inram(man) then return nil end
   local data = r32(man + 0x1C)
   local a = {ovy = r32(man + 0x0C)}
-  if a.ovy == APP_OVY and inram(data) then a.state = r32(data + 0x30); a.sel = r8(data + 0x21) end
+  if a.ovy == APP_OVY then a.state = r32(man + 0x14) end -- PCBox_Main dispatches on *state (man->proc_state)
+  if a.ovy == APP_OVY and inram(data) then a.sel = r8(data + 0x21) end
   return a
 end
 local function watch()
@@ -423,15 +455,18 @@ local function pc_deposit()
   local pcr = route.pc
   local l = loc()
   if not l or l.x ~= pcr.stand[1] or l.y ~= pcr.stand[2] then finish("FAIL", "not_at_pc_stand", pos_s(l)) end
-  for _ = 1, 60 do -- turn north in place: the PC tile is a collision tile, so Up only turns
-    l = loc()
-    if l and l.dir == 0 then break end
+  -- turn north in place: the PC tile is a collision tile, so Up only turns. The LIVE facing is the
+  -- player's map object (fs+0x40 PlayerAvatar -> +0x30 LocalMapObject -> +0x28 currentFacing, 0 =
+  -- north); Location.direction (fs->location) is the last warp/save direction and does NOT follow
+  -- movement (the first live run showed d0 after walking Right, so the turn was skipped).
+  for _ = 1, 90 do
+    if facing() == 0 then break end
     joypad.set({Up = true}); emu.frameadvance()
   end
   joypad.set({})
   if not wait_stable(30) then finish("FAIL", "pc_stand_not_stable", pos_s(loc())) end
   l = loc()
-  if l.dir ~= 0 then finish("FAIL", "not_facing_pc", pos_s(l)) end
+  if facing() ~= 0 then finish("FAIL", "not_facing_pc", pos_s(l), "facing", tostring(facing())) end
   local p0, b0 = party_state(), box_census()
   if not p0 or not b0 then finish("FAIL", "ram_unreadable", "party", tostring(p0), "boxes", tostring(b0)) end
   local pid = route.synth.new_pid
@@ -441,6 +476,8 @@ local function pc_deposit()
   if p0.pids[2] ~= pid then finish("FAIL", "setup_not_synth", "slot1 pid", hx(p0.pids[2]), "want", hx(pid)) end
   if b0.where[pid] then finish("FAIL", "clone_already_boxed") end
   shot("pc_facing")
+  local snap0 = pc_snapshot()
+  say("PC array words", snap0 and #snap0 or "unreadable")
 
   -- 1. A-mash through the PC script until the OVY_14 manager is up (every A lands on a menu whose
   --    cursor starts on the item we want, see above)
@@ -499,6 +536,9 @@ local function pc_deposit()
   end
   if b1.mod ~= nil and (b1.mod & (1 << at[1])) == 0 then finish("FAIL", "box_modified_flag_not_set", hx(b1.mod), "box", at[1]) end
   local mod_after_deposit = b1.mod
+  local slot_lo = RAM.pc.box_base + at[1] * RAM.pc.box_stride + at[2] * RAM.pc.mon_stride
+  local snap1 = pc_snapshot()
+  pc_diff(snap0, snap1, "before->in_app_after_deposit", slot_lo, slot_lo + RAM.pc.mon_stride)
   save_state("deposited"); shot("deposited")
 
   -- 5. leave the PC: B (Continue Box operations?) then B (= No) closes the app
@@ -516,6 +556,8 @@ local function pc_deposit()
   end
   if not idle then finish("FAIL", "pc_script_not_closed", "taskman", hex(taskman() or 0)) end
   shot("pc_off")
+  local snap2 = pc_snapshot()
+  pc_diff(snap1, snap2, "in_app->after_pc_closed_before_save", slot_lo, slot_lo + RAM.pc.mon_stride)
 
   -- 6. native SAVE through the pack's persistence legs, then the save driver must be idle again
   for _, name in ipairs({"open_start_menu", "start_menu_cursor_to_save", "start_menu_select_save",
@@ -529,9 +571,28 @@ local function pc_deposit()
   local p2, b2 = party_state(), box_census()
   if not (p2 and p2.n == 1 and b2 and b2.total == b0.total + 1 and b2.where[pid]) then finish("FAIL", "state_after_save_wrong") end
   if b2.mod ~= nil and b2.mod ~= 0 then finish("FAIL", "box_modified_flag_not_cleared", hx(b2.mod)) end
+  local snap3 = pc_snapshot()
+  pc_diff(snap2, snap3, "before_save->after_save", slot_lo, slot_lo + RAM.pc.mon_stride)
+  pc_diff(snap0, snap3, "before_deposit->after_save", slot_lo, slot_lo + RAM.pc.mon_stride)
   save_state("saved"); shot("saved")
   finish("PC_DEPOSIT", string.format("party=2->1 box=%d/%d pid=%s modified=%s->%s save_driver=idle %s",
     at[1], at[2], hx(pid), hx(mod_after_deposit), hx(b2.mod), pos_s(loc())))
+end
+
+-- ----- cold reload (route.kind == "reload"): a FRESH boot from the battery the PC leg saved ------------
+-- No savestate: CONTINUE through the title as in leg 1, then confirm by RAM that the deposit persisted.
+local function reload_check()
+  local p, b = party_state(), box_census()
+  if not p or not b then finish("FAIL", "reload_ram_unreadable") end
+  local pid = route.synth.new_pid
+  local at = b.where[pid]
+  say("reloaded: party", p.n, "pids", table.concat(p.pids, ","), "boxed", b.total, "clone at",
+    at and (at[1] .. "/" .. at[2]) or "none", "curBox", tostring(b.cur), "modified", b.mod and string.format("%#x", b.mod) or "nil")
+  if p.n ~= 1 then finish("FAIL", "reload_party_count", p.n) end
+  if not at then finish("FAIL", "reload_clone_not_boxed") end
+  if p.pids[1] == pid then finish("FAIL", "reload_clone_in_party") end
+  if b.mod ~= nil and b.mod ~= 0 then finish("FAIL", "reload_modified_flag_set", b.mod) end
+  finish("RELOAD_OK", string.format("party=1 box=%d/%d pid=%#x boxed=%d", at[1], at[2], pid, b.total))
 end
 
 local total, edge_done = 0, false
@@ -604,6 +665,7 @@ for i = 1, #steps do
   end
   cur = loc()
 end
+if route.kind == "reload" then reload_check() end
 if route.kind == "pc" then pc_deposit() end -- ends in finish(): PC_DEPOSIT or FAIL
 if route.kind == "errand" then -- only `talk` reaches here: face the NPC, A through the dialogue
   local want = {Up = 0, Down = 1, Left = 2, Right = 3}
