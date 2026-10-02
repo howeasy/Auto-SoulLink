@@ -163,6 +163,33 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
         assert normal(python(to_python(json_codec, text))) == normal(json.loads(text)), rel
 
 
+def _without_digest(path):
+    return {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if k != "code_digest"}
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_shipped_overlay_receipts_equal_the_captured_ones(title):
+    """D6 step 3, the analogue of the clean check above: qualifications and O-33 disclosures are byte-equal,
+    engine_sites / write_window equal modulo the top-level code_digest (the shipped copy is digest-free)."""
+    if not (ROOT / f"data/games/gen2_{title}/receipts/overlay").is_dir():
+        pytest.skip(f"gen2_{title} overlay receipts not shipped yet (tools/gen2_ship_overlay_receipts.py --write)")
+    entry = LuaRuntime(unpack_returned_tuples=True).eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
+    overlay = entry.RECEIPT_FILES[f"gen2_{title}"].overlay
+    paths = [overlay.engine_sites, overlay.write_window, *dict(overlay.qualifications.items()).values()]
+    assert len(paths) in (7, 8)
+    for rel in paths:
+        shipped = ROOT / rel
+        name = shipped.name
+        captured = ROOT / "tests/fixtures/gen2" / ("" if name.endswith(".synth.json") else "receipts/overlay") / name
+        assert shipped.is_file(), f"{rel}: overlay namespace present but this receipt is not shipped"
+        assert captured.is_file(), f"{rel}: captured source {captured.relative_to(ROOT).as_posix()} missing"
+        if name.endswith((".engine_sites.json", ".write_window.json")):
+            assert "code_digest" not in json.loads(shipped.read_text(encoding="utf-8")), rel
+            assert _without_digest(shipped) == _without_digest(captured), rel
+        else:
+            assert shipped.read_bytes() == captured.read_bytes(), rel
+
+
 def test_crystal_revision11_remains_build_only():
     world = World("crystal", "pokecrystal11")
     decision, reason = world.entry.admit(world.args())
