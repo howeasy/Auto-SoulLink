@@ -1,0 +1,33 @@
+{
+  "schema": "slink-companion-pins-v1",
+  "pins": {
+    "rr": {
+      "patched_md5": "567eaeeae74f0e8ea412097cf9fda42f",
+      "canonical_sha1": "65c68918913697df559c079ea06a8ed9cb68d339",
+      "version": "dev",
+      "version_slot": {
+        "offset": 3653128,
+        "length": 20
+      },
+      "rom_sha1": "e87a6a7e4fc98a8840ef9ea0511e443ef4659219"
+    },
+    "rb-red": {
+      "patched_md5": "a9a70f99008559734ba01a9a80d78d5c",
+      "version": "dev",
+      "canonical_sha1": "36faab5d0a5f0181d27786e2b957c1d21382ea1c",
+      "version_slot": {
+        "offset": 16354,
+        "length": 20
+      }
+    },
+    "rb-blue": {
+      "patched_md5": "fa47b8ba0c10e82f2545791abd157ad3",
+      "version": "dev",
+      "canonical_sha1": "f04dc21894d418602f344d4964772a0f98125229",
+      "version_slot": {
+        "offset": 16354,
+        "length": 20
+      }
+    }
+  }
+}
