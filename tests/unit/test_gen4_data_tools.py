@@ -10,9 +10,12 @@ revert-tested once: the mutation that must turn it red is named in the test.
 
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 import sys
+import types
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -330,6 +333,232 @@ def test_unclassified_c_producer_fails_generation(clone, tmp_path, monkeypatch):
 def test_npc_narc_parse_matches_record_count(clone):
     recs = acq.parse_npc_narc((clone / "files/a/1/1/2").read_bytes())
     assert len(recs) == 13 and recs[0]["give_species"] == 95 and recs[4]["give_species"] == 78
+
+
+# ── reachability: story gates per script site (CARD gen4-G2-acq-reachability) ───────────────────
+# Every control names the revert that must turn it red (all revert-tested in a scratch copy).
+
+REQUIRED_KINDS = {"gift", "loan", "npc_exchange", "static", "egg", "starter"}
+
+
+def walk_gates(obj):
+    """Independent of the generator: every dict carrying both `token` and `cite` anywhere in a record."""
+    if isinstance(obj, dict):
+        if "token" in obj and "cite" in obj:
+            yield obj
+        for v in obj.values():
+            yield from walk_gates(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from walk_gates(v)
+
+
+def test_every_required_site_has_a_reachability_record():
+    """Revert: drop the `site["reachability"] = ...` line in build_doc (or any record in the committed JSON)."""
+    doc = load("acquisition.json")
+    sites = doc["script_sites"]
+    assert len(sites) == 61 and {s["kind"] for s in sites if s["kind"] in REQUIRED_KINDS} == REQUIRED_KINDS
+    for s in sites:
+        rec = s.get("reachability")
+        assert rec, f"{s['id']}: no reachability record"
+        assert rec["map"]["id"] == s["map_id"] and rec["map"]["const"] == s["map_const"] and rec["map"]["token"] == s["map_token"]
+        assert rec["status"] in {"resolved", "partial", "unresolved"}
+        assert (rec["status"] == "resolved") == (rec["unresolved"] == []), f"{s['id']}: status {rec['status']} vs unresolved list"
+        assert rec["sources"]["script"].endswith(s["file"])
+        assert rec["status"] == "unresolved" or rec["entries"], s["id"]
+    # the producer plan's named sites (docs/gen4/G2_PRODUCER_PLAN.md V4-V10) are all covered with at least one entry
+    by_id = {s["id"]: s for s in sites}
+    for sid in ("scr_seq_0843_T20R0101:169", "scr_seq_0892_T25R0401:34", "scr_seq_0098_D38R0104:37", "scr_seq_0241_R35R0101:61", "scr_seq_0880_T24R0201:47", "scr_seq_0864_T22R0601:40", "scr_seq_0092_D36R0101:1910", "scr_seq_0243_R36:100", "scr_seq_0860_T22PC0101:79", "scr_seq_0858_T22FS0101:53"):
+        assert by_id[sid]["reachability"]["entries"], sid
+    inv = doc["inventory"]
+    assert inv["reachability_status_counts"] == dict(sorted(Counter(s["reachability"]["status"] for s in sites).items()))
+    assert sum(sum(v.values()) for v in inv["reachability_by_command"].values()) == 61
+    assert "NOT derived" in doc["reachability_scope"]
+
+
+def test_reachability_statuses_are_pinned_per_command():
+    """All 61 sites derive fully at the pin (the 9 dead label blocks, referenced by no jump, are recorded as `dead_blocks_ignored`, not gaps). A new unmodelled
+    condition or an entry without a trigger turns a site `partial` and fails here until it is looked at."""
+    inv = load("acquisition.json")["inventory"]
+    assert inv["reachability_status_counts"] == {"resolved": 61}
+    assert {c: sum(v.values()) for c, v in inv["reachability_by_command"].items()} == inv["script_command_counts"]
+
+
+def test_reachability_gate_cites_exist_in_the_pinned_clone_and_hold_the_token(clone):
+    """Revert: break a cite in a scratch copy (see the mutation test below) or delete the cite_problem check."""
+    n = 0
+    for s in load("acquisition.json")["script_sites"]:
+        for g in walk_gates(s["reachability"]):
+            rel, _, line = g["cite"].rpartition(":")
+            text = (clone / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+            assert 1 <= int(line) <= len(text) and g["token"] in text[int(line) - 1], f"{s['id']}: {g['cite']} does not hold {g['token']}"
+            n += 1
+        for e in s["reachability"]["entries"]:
+            for t in e["triggers"]:
+                rel, _, line = t["cite"].rpartition(":")
+                assert "_EV_scr_seq_" in (clone / rel).read_text(encoding="utf-8", errors="replace").splitlines()[int(line) - 1], f"{s['id']}: trigger {t['cite']}"
+    assert n > 300
+
+
+def test_reachability_spot_checks_read_the_source_not_the_generator(clone):
+    """Hand-checked gates (read from the pinned .s / zone_event json): starter, Bill's Eevee, version-split roamers."""
+    by_id = {s["id"]: s["reachability"] for s in load("acquisition.json")["script_sites"]}
+    assert {(g["token"], g["state"]) for g in by_id["scr_seq_0843_T20R0101:169"]["gates"]} == {("FLAG_GOT_STARTER", "unset")}
+    eevee = by_id["scr_seq_0892_T25R0401:34"]
+    assert {(g["token"], g.get("state"), g.get("op"), g.get("value")) for g in eevee["gates"]} >= {
+        ("FLAG_HIDE_GOLDENROD_BILL", "unset", None, None),
+        ("FLAG_GOT_EEVEE_FROM_BILL", "unset", None, None),
+        ("VAR_SPECIAL_RESULT", None, "==", "0"),
+        ("VAR_SPECIAL_x8005", None, "!=", "6"),
+    }
+    assert next(g for g in eevee["gates"] if g["scope"] == "npc_visibility")["cite"].startswith("files/fielddata/eventdata/zone_event/196_T25R0401.json:")
+    latias = next(g for g in by_id["scr_seq_0776_T06:70"]["gates"] if g["class"] == "version")
+    latios = next(g for g in by_id["scr_seq_0776_T06:87"]["gates"] if g["class"] == "version")
+    assert latias["versions"] == ["heartgold"] and latios["versions"] == ["soulsilver"], "Latias is the HG roamer, Latios the SS one"
+    src = (clone / "files/fielddata/script/scr_seq/scr_seq_0776_T06.s").read_text(encoding="utf-8").splitlines()
+    assert src[69].strip() == "CreateRoamer 2" and src[86].strip() == "CreateRoamer 3"
+
+
+def test_reachability_verifier_is_red_on_a_missing_record_an_uncited_gate_and_a_wrong_cite(clone):
+    """Revert-tested: deleting a record, a cite, or pointing a cite at a line without the token each turns
+    verify_reachability red; the unmutated doc is clean."""
+    sites = copy.deepcopy(load("acquisition.json")["script_sites"])
+    assert acq.verify_reachability(clone, sites) == []
+    missing = copy.deepcopy(sites)
+    del missing[0]["reachability"]
+    assert any("no reachability record" in p for p in acq.verify_reachability(clone, missing))
+    uncited = copy.deepcopy(sites)
+    del next(walk_gates(uncited[0]["reachability"]))["cite"]
+    assert any("uncited" in p for p in acq.verify_reachability(clone, uncited))
+    wrong = copy.deepcopy(sites)
+    gate = next(walk_gates(wrong[0]["reachability"]))
+    gate["cite"] = gate["cite"].rpartition(":")[0] + ":1"
+    assert any("does not hold" in p for p in acq.verify_reachability(clone, wrong))
+    bad_status = copy.deepcopy(sites)
+    bad_status[0]["reachability"]["status"] = "partial"
+    assert any("does not match" in p for p in acq.verify_reachability(clone, bad_status))
+    bad_trigger = copy.deepcopy(sites)
+    next(t for e in bad_trigger[0]["reachability"]["entries"] for t in e["triggers"])["cite"] = "files/fielddata/script/scr_seq/nope.s:1"
+    assert any("names no file" in p for p in acq.verify_reachability(clone, bad_trigger))
+
+
+def test_a_gate_without_a_cite_fails_generation(clone, monkeypatch):
+    """Revert: delete the verify_reachability call in build_doc."""
+    real = acq._gate
+    monkeypatch.setattr(acq, "_gate", lambda *a, **k: {**real(*a, **k), "cite": ""})
+    with pytest.raises(base.PretMismatch, match="uncited"):
+        acq.build_doc(clone)
+
+
+def test_reachability_regeneration_is_byte_identical(clone):
+    """Revert: iterate a set (unordered) instead of sorted() in reachability()/flow()."""
+    a, b = acq.build(clone), acq.build(clone)
+    assert a == b and a["acquisition.json"] + "\n" == (DATA / "acquisition.json").read_bytes().replace(b"\r\n", b"\n").decode("utf-8")
+
+
+def _reach(text: str, *, trig: bool = True):
+    lines = text.strip("\n").splitlines()
+    hit = next(i for i, ln in enumerate(lines) if "GiveMon" in ln)
+    ms = types.SimpleNamespace(token="T", event_rel="ev.json", hdr_rel=None, event_member=1, hdr_member=None, triggers=lambda _n: [{"kind": "npc", "cite": "ev.json:1", "gates": []}] if trig else [])
+    return acq.Script("x.s", lines), ms, hit
+
+
+def _keys(gates: dict) -> set[tuple]:
+    return {(g["token"], g.get("state"), g.get("op"), g.get("value")) for g in gates.values()}
+
+
+def test_flow_reports_the_polarity_that_reaches_the_site():
+    """Revert: swap NEG_OP / the not-taken state in jump_gate."""
+    sc, _ms, hit = _reach(
+        """
+scr_seq_T_000:
+	Compare VAR_C, 5
+	GoToIfEq _0020
+	GoToIfSet FLAG_A, _0020
+	Compare VAR_B, 3
+	GoToIfEq _0010
+	End
+_0010:
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0020:
+	End
+"""
+    )
+    must, may = sc.flow(hit)["roots"]["scr_seq_T_000"]
+    assert _keys(must) == {("VAR_C", None, "!=", "5"), ("FLAG_A", "unset", None, None), ("VAR_B", None, "==", "3")} and may == {}
+
+
+def test_flow_handles_shared_subroutines_loops_and_switch_cases():
+    """Revert: stop walking at the first predecessor / drop the Case edge (the T07R0501 prize corner is only reachable through Case)."""
+    sc, _ms, hit = _reach(
+        """
+scr_seq_T_000:
+	GoToIfSet FLAG_X, _0040
+	Call _0010
+	End
+scr_seq_T_001:
+	Call _0010
+	End
+_0010:
+	Switch VAR_S
+	Case 1, _0020
+	Case 2, _0020
+	GoTo _0030
+_0020:
+	GoToIfSet FLAG_L, _0030
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0030:
+	GoTo _0020
+_0040:
+	End
+"""
+    )
+    fl = sc.flow(hit)
+    assert sorted(fl["roots"]) == ["scr_seq_T_000", "scr_seq_T_001"] and fl["unresolved"] == []
+    m0, may0 = fl["roots"]["scr_seq_T_000"]
+    m1, _may1 = fl["roots"]["scr_seq_T_001"]
+    assert _keys(m0) == {("FLAG_X", "unset", None, None), ("FLAG_L", "unset", None, None)}, "the walk terminates on the _0020/_0030 loop and the loop-only gate is not necessary"
+    assert _keys(m1) == {("FLAG_L", "unset", None, None)}
+    assert {("VAR_S", None, "==", "1"), ("VAR_S", None, "!=", "1")} <= _keys(may0)
+
+
+def test_flow_records_dead_blocks_and_flags_unmodelled_conditions():
+    """Revert: treat a no-predecessor block as a root, or drop the `unresolved` entry for an unrecognised GoToIf."""
+    sc, ms, hit = _reach(
+        """
+scr_seq_T_000:
+	GoTo _0010
+_0005:
+	GoTo _0010
+_0010:
+	GoToIfNoItemSpace ITEM_X, 1, _0020
+	GiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT
+	End
+_0020:
+	End
+"""
+    )
+    fl = sc.flow(hit)
+    assert [d["label"] for d in fl["dead"]] == ["_0005"] and list(fl["roots"]) == ["scr_seq_T_000"]
+    assert len(fl["unresolved"]) == 1 and "GoToIfNoItemSpace" in fl["unresolved"][0]["reason"]
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    assert rec["status"] == "partial" and rec["dead_blocks_ignored"][0]["label"] == "_0005" and rec["gates"] == []
+
+
+def test_reachability_statuses_resolved_partial_unresolved():
+    """Revert: make `status` always "resolved"."""
+    body = "scr_seq_T_000:\n\tGoToIfSet FLAG_A, _0020\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n_0020:\n\tEnd\n"
+    sc, ms, hit = _reach(body)
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    assert rec["status"] == "resolved" and [(g["token"], g["state"], g["cite"]) for g in rec["gates"]] == [("FLAG_A", "unset", "x.s:2")]
+    sc, ms, hit = _reach(body, trig=False)
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    assert rec["status"] == "partial" and "trigger of scr_seq_T_000" in rec["unresolved"][0]["what"] and [g["token"] for g in rec["gates"]] == ["FLAG_A"]
+    sc, ms, hit = _reach("_0010:\n\tGiveMon SPECIES_A, 5, 0, 0, 0, VAR_SPECIAL_RESULT\n\tEnd\n")
+    rec = acq.reachability(sc, ms, hit, 1, "MAP_T")
+    assert rec["status"] == "unresolved" and rec["entries"] == [] and rec["gates"] == [] and rec["unresolved"]
 
 
 # ── hge mode: tools/gen_gen4_acquisition.py hge -> data/games/gen4_hge/acquisition.json ──────────
@@ -842,3 +1071,70 @@ def test_header_macro_set_is_exactly_the_empty_opcode_macros(hge_inputs):
     """Pin: the macros of script.inc that parse to no opcode are exactly HEADER_MACROS (14)."""
     ops = acq.macro_opcodes(base.read(hge_inputs["pret"], "asm/macros/script.inc"))
     assert {n for n, o in ops.items() if not o} == set(acq.HEADER_MACROS) and len(acq.HEADER_MACROS) == 14
+
+
+# ── hge reachability: shared with HG only because the event + header members are byte-identical ──
+
+
+def test_hge_reachability_is_the_vanilla_one_and_its_sources_are_proved():
+    """Revert: drop `reachability_narc` from build_hge or the member comparison in reachability_member_proof."""
+    van, hge = load("acquisition.json"), load_hge()
+    assert [s["reachability"] for s in hge["script_sites"]] == [s["reachability"] for s in van["script_sites"]]
+    assert hge["inventory"]["reachability_status_counts"] == van["inventory"]["reachability_status_counts"] and hge["reachability_scope"] == van["reachability_scope"]
+    proof = hge["reachability_narc"]
+    ev, hdr = proof["events"], proof["header"]
+    assert ev["narc"] == "a/0/3/2" and ev["member_count"] == 491 and ev["members_differing_in_hge"] == []
+    assert hdr["narc"] == "a/0/1/2" and hdr["members_differing_in_hge"] == [3] and "3" not in hdr["members"], "member 3 (common scripts) differs and no header lives there"
+    for key in ("events", "header"):
+        want = {str(s["reachability"]["sources"][key]["member"]) for s in van["script_sites"] if s["reachability"]["sources"][key]}
+        assert set(proof[key]["members"]) == want and want
+        assert all(m["vanilla_sha256"] == m["hge_sha256"] and len(m["hge_sha256"]) == 64 for m in proof[key]["members"].values())
+    assert ev["members"]["58"]["file"].endswith("058_T20R0101.json") and hdr["members"]["616"]["file"].endswith("scr_seq_0616_T20R0101_hdr.s")
+
+
+def _reach_site(ev: int, hdr: int | None) -> dict:
+    src = {"script": "x.s", "events": {"file": f"{ev:03d}_T.json", "narc": acq.EVENT_NARC, "member": ev}, "header": {"file": f"scr_seq_{hdr:04d}_T_hdr.s", "narc": acq.SCRIPT_NARC, "member": hdr} if hdr is not None else None}
+    return {"reachability": {"sources": src}}
+
+
+def test_reachability_member_proof_is_red_on_one_differing_event_or_header_member(monkeypatch):
+    """Revert: delete the `v[n] != h[n]` problem in reachability_member_proof."""
+
+    def stub(flip: set[tuple[str, int]] = frozenset(), cut: bool = False):
+        def fake(rom: str, narc: str) -> tuple[str, ...]:
+            n = 8 if cut and rom == "hge" else 10
+            return tuple(("x" if rom == "hge" and (narc, i) in flip else "h") + f"{narc}{i}" for i in range(n))
+
+        monkeypatch.setattr(acq, "narc_member_hashes", fake)
+
+    sites = [_reach_site(4, 6), _reach_site(5, None)]
+    stub()
+    proof, problems = acq.reachability_member_proof("vanilla", "hge", sites)
+    assert problems == [] and sorted(proof["events"]["members"]) == ["4", "5"] and list(proof["header"]["members"]) == ["6"]
+    stub({(acq.EVENT_NARC, 5)})
+    assert any("a/0/3/2 member 5" in p and "differs" in p for p in acq.reachability_member_proof("vanilla", "hge", sites)[1])
+    stub({(acq.SCRIPT_NARC, 6)})
+    assert any("a/0/1/2 member 6" in p and "differs" in p for p in acq.reachability_member_proof("vanilla", "hge", sites)[1])
+    stub({(acq.SCRIPT_NARC, 3), (acq.EVENT_NARC, 0)})  # members holding no reachability source may differ
+    proof, problems = acq.reachability_member_proof("vanilla", "hge", sites)
+    assert problems == [] and proof["header"]["members_differing_in_hge"] == [3]
+    stub(cut=True)
+    assert any("members in" in p for p in acq.reachability_member_proof("vanilla", "hge", sites)[1])
+
+
+@pytest.mark.parametrize(("narc", "member"), [(acq.EVENT_NARC, 58), (acq.SCRIPT_NARC, 616)])
+def test_real_event_or_header_member_mismatch_fails_generation(hge_inputs, monkeypatch, capsys, narc, member):
+    """Control on the real ROMs (monkeypatched hash): the Elm lab zone_event member (58) or its header script (616)
+    flipped in the hge ROM turns generation red."""
+    real = acq.narc_member_hashes
+    hge_rom = str(hge_inputs["hge_rom"])
+
+    def flipped(rom: str, name: str) -> tuple[str, ...]:
+        h = list(real(rom, name))
+        if name == narc and rom == hge_rom:
+            h[member] = "f" * 64
+        return tuple(h)
+
+    monkeypatch.setattr(acq, "narc_member_hashes", flipped)
+    rc, err = run_tool(acq, [*hge_args(hge_inputs), "--check"], monkeypatch, capsys)
+    assert rc == 1 and f"{narc} member {member}" in err and "differs" in err
