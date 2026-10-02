@@ -71,6 +71,19 @@ U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver
 # un-pinned RTC leaves them exposed to the exact same real-clock coin-flip: fsw-postrc 2026-09-25,
 # gate/engine_sites/crystal ran its whole ~880-battle Route 30 hunt at hour 23/0/1/2 and never saw a Caterpie.
 U1_CLOCK = {"crystal": 11, "gold": 11, "silver": 11}
+# Fixed attempts, shared by clean/overlay. Repeating 11:00 can replay the same RNG
+# sequence; use the duo's 23-minute spacing, with no search for a favourable seed.
+U1_RETRY_MINUTES = (0, 23, 46)
+
+
+def u1_clock_setup(raw: bytes, title: str, *, now: int):
+    attempt = os.environ.get("SLINK_GEN2_U1_ATTEMPT", "1")
+    if attempt not in ("1", "2", "3"):
+        raise ValueError("SLINK_GEN2_U1_ATTEMPT must be 1, 2 or 3")
+    return gen2_synth_fixtures.day_clock(raw, hour=U1_CLOCK[title], now=now, title=title,
+                                       minute=U1_RETRY_MINUTES[int(attempt) - 1])
+
+
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
 # Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
 # parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361). This is the
@@ -476,6 +489,52 @@ def tag_json(text: str, tag: str):
     return live.tag_json(text, tag)
 
 
+def parse_poison_hunt(text: str) -> dict | None:
+    """Read diagnostic evidence on PASS or FAIL; older logs have neither marker.
+
+    A mismatch count remains visible rather than being reinterpreted as bad luck.
+    These observations are not a substitute for the poison_faint site proof.
+    """
+    encounters = [json.loads(line.removeprefix("POISON_ENCOUNTER ")) for line in text.splitlines()
+                  if line.startswith("POISON_ENCOUNTER ")]
+    summaries = [json.loads(line.removeprefix("POISON_HUNT ")) for line in text.splitlines()
+                 if line.startswith("POISON_HUNT ")]
+    if not summaries and not encounters:
+        return None
+    if len(summaries) != 1 or not isinstance(summaries[0], dict):
+        raise ValueError("poison hunt needs exactly one summary")
+    summary = summaries[0]
+    fields = ("encounters", "candidates", "unreadable", "foe_sting_mismatches")
+    if summary.get("schema") != "gen2-poison-hunt-summary-v1" or any(
+            type(summary.get(key)) is not int or summary[key] < 0 for key in fields):
+        raise ValueError("poison hunt summary malformed")
+    counts = dict.fromkeys(fields, 0)
+    for index, row in enumerate(encounters, 1):
+        if (not isinstance(row, dict) or row.get("schema") != "gen2-poison-hunt-encounter-v1"
+                or type(row.get("encounter")) is not int or row["encounter"] != index
+                or any(type(row.get(key)) is not bool for key in ("readable", "candidate", "foe_sting"))):
+            raise ValueError("poison hunt encounter malformed or out of order")
+        moves = row.get("moves")
+        if (not isinstance(moves, list) or any(type(move) is not int or not 0 <= move <= 255 for move in moves)
+                or type(row.get("species_id")) is not int or type(row.get("level")) is not int):
+            raise ValueError("poison hunt foe data malformed")
+        if row["readable"]:
+            if len(moves) != 4 or not 1 <= row["species_id"] <= 251 or not 1 <= row["level"] <= 100:
+                raise ValueError("poison hunt foe data outside Gen 2 bounds")
+        elif moves or row["species_id"] != 0 or row["level"] != 0:
+            raise ValueError("unreadable poison hunt foe carries invented data")
+        candidate = row["readable"] and 0x28 in moves  # POISON_STING, pinned GSC move constant
+        if row["candidate"] != candidate:
+            raise ValueError("poison hunt candidate disagrees with raw move IDs")
+        counts["encounters"] += 1
+        counts["candidates"] += candidate
+        counts["unreadable"] += not row["readable"]
+        counts["foe_sting_mismatches"] += row["readable"] and candidate != row["foe_sting"]
+    if any(summary[key] != counts[key] for key in fields):
+        raise ValueError("poison hunt summary disagrees with encounter records")
+    return summary
+
+
 def verify(text: str, pack: dict, title: str, identity: dict | None = None) -> dict:
     """Independent re-check of the gate output; returns the receipt the gate printed.
 
@@ -577,6 +636,9 @@ def verify(text: str, pack: dict, title: str, identity: dict | None = None) -> d
         assert (e["kind"], e["cause"], e["site_id"]) == ("faint", "poison", "poison_faint"), e
         assert (e["slot"], e["species"], e["dvs"]) == (p["slot"], p["species"], p["dvs"]), (e, p)
         assert {k: v for k, v in receipt["poison_alignment"].items() if k in p} == p, receipt["poison_alignment"]
+    hunt = parse_poison_hunt(text)
+    if hunt is not None:
+        receipt["poison_hunt"] = hunt
     return receipt
 
 
@@ -606,7 +668,7 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
         # base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
         boot, psn_setup = gen2_synth_fixtures.build_named("gold_synth_psn", root=REPO)
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-        boot, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()), title=title)
+        boot, clock = u1_clock_setup(boot, title, now=int(time.time()))
     if boot != staged:
         source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}{'-overlay' if kind == 'overlay' else ''}-boot.SaveRAM"
         source_path.parent.mkdir(parents=True, exist_ok=True)

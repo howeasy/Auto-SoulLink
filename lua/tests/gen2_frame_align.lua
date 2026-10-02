@@ -67,7 +67,12 @@ F.FAINT_INPUTS = "lua/tests/duo/gen2_faint_inputs.lua"
 -- faint leg (lua/tests/gen2_poison_inputs.lua), poison_faint joins the expected sites before battle_faint, and
 -- the faint leg runs on the poison leg's hunt map (the catch, last mon standing, faints there).
 F.POISON_INPUTS = "lua/tests/gen2_poison_inputs.lua"
-F.POISON_BUDGET = {max_frames=150000, max_phase_frames=60000}
+-- Crystal day Route 30: Weedle is 5%; 1 - 0.95^59 = 95.15% candidate coverage
+-- under independent rolls (poisoning still needs its own successful hit).
+-- Observed ~20 encounters/60000 hunt frames -> 59*3000=177000, plus 33000
+-- for travel/healing/poison ticks. Equal phase/total caps remove the old
+-- 60000-frame hunt cutoff; this estimates coverage, not an RNG guarantee.
+F.POISON_BUDGET = {max_frames=210000, max_phase_frames=210000}
 F.POISON_FAINT_BATTLES = 12   -- ponytail: the catch fights to its faint; damage carries between battles
 -- card gen2-u1f-pc: with SLINK_GEN2_U1_FACTS.pc, after the chain's closing whiteout a second catch and Bill's PC
 -- (lua/tests/gen2_pc_inputs.lua) prove the PC sites, in this order; whiteout_before_heal is proven by its own
@@ -1068,6 +1073,9 @@ function F.main(api, getenv, SG)
             fainted=function() return probe.record.sites.poison_faint.hits >= 1 end,
             max_frames=F.POISON_BUDGET.max_frames, max_phase_frames=F.POISON_BUDGET.max_phase_frames})
         played, outcome = F.play(host, pspec, pdriver, pobserve, diag)
+        probe.record.poison_hunt = pdriver.hunt_summary()
+        -- Emit even when the hunt timed out; later sites/receipt may never exist.
+        log("POISON_HUNT " .. json.encode(probe.record.poison_hunt))
         model.close()
         probe.record.poison_model, probe.record.psn_mask = model, ctx.u1.poison.psn_mask
         fopts.map, fopts.max_battles = ctx.u1.poison.maps[ctx.u1.poison.hunt_map], F.POISON_FAINT_BATTLES
