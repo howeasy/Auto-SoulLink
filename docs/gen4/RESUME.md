@@ -1,5 +1,28 @@
 # Gen 4 resume note
 
+## Checkpoint 7 (2026-10-02 11:30 EDT, owner timebox: stop 13:31 EDT / 17:31Z)
+
+- **Companion C0 is DONE** (`9b5c7a25`).
+  - The pinned pret `ad7a3afa` rebuilds HG `4fcded0e` and SS `f8dc38ea` byte-identical on hgbox; the coordinator re-hashed both.
+  - The dumps are in `C:/slink-cache/gen4-pret/`.
+  - Consequence: no free static RAM. C1 must ALLOCATE the mailbox; the lead is the ITCM arena tail 0x01FF8620..0x02000000 (FEATURE_BAR, last section).
+- **hge identity** (`4b2d4144`):
+  - `start_menu.o` is static ARM9 and byte-identical in HG and hge.
+  - `gScriptCmdTable` differs only at #208; #486 is Dummy in both.
+- **In flight:**
+  - Codex: FROZEN `c935530b` G1 runs. The HG aggregate is offline-recovered (`g1probeHG-1033`): a,c,d,e,g,h,i,j,k,l,o PASS; b/f OPEN; m/n FAIL.
+  - Sonnet: C1 offline authoring (census + canary live watch).
+  - OMP 21352: cx-00760b09 (opcode-486 usage).
+  - OMP 13112: cx-23a2453d (sound id mapping).
+- **The next FROZEN cut bundles five items:**
+  1. hge census `internal_loads` wiring (a harness gap: nothing sets it; PLAN:272);
+  2. publish-before-assert, `test_gen4_probe_gates.py:1578`;
+  3. a bounded retry for `Path.replace` WinError 5 (`:1274`, `:1280`);
+  4. the fight recipe (a Codex diff, landed by the coordinator in the pack);
+  5. the HG reset-phase pin mismatch (path requested).
+  Then the a–n re-run, and PERF last.
+- **Gen 5 shared NDS:** cards 2-3 were reviewed and answered. Adoption waits for committed shas and for the end of the FROZEN runs.
+
 ## Checkpoint 6 (2026-10-02 08:50 EDT, recovery after a machine crash, unrelated to the work)
 
 **Owner instruction:** "Stop at the next milestone." The milestone is the **G2 signature package**.
