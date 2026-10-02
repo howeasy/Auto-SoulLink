@@ -161,3 +161,22 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   - It is the companion slot.
 - **Gate before C5 ships:** a bytecode walker over the extracted `scr_seq` NARC (argument sizes from pret `tools/py_scripts/scrcmd.json`) must count zero opcode-1 occurrences on HG, SS and hge. This replaces the macro-grep inference.
 - **hge nurse route is a source edit.** hge rebuilds the common-script bank (`armips/scr_seq/scr_seq_00003_commonscript.s:17-26` declares `scr_seq_0003_000..006`, including the nurse entry 002). On hge the trade branch is a fork source edit, not a bytecode patch.
+
+## Sound code mapping (OMP cx-23a2453d, coordinator-verified; pinned pret `ad7a3afa`)
+
+The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `patch/gen2/src/sfx.asm:96`) are all SE, with no jingle:
+
+| Code | Gen 2 | HGSS pick | Status |
+|---|---|---|---|
+| 1 SUCCESS | `SFX_ITEM` | `SEQ_SE_DP_DECIDE` 1501 (`sndseq.h:499`; called at `view_photo.c:209`, `view_rankings.c:779`) | accepted |
+| 2 FAILURE | `SFX_WRONG` | **none.** HGSS has no error-buzzer SE with a call site | OPEN: an owner content choice, or reuse a shape (e.g. `SEQ_SE_DP_DECIDE2` 1694) as a recorded substitution |
+| 3 BOO | `SFX_BUMP` | `SEQ_SE_DP_WALL_HIT` 1536 (`sndseq.h:534`; no C caller) | provisional, needs a listen test at C3 PHYSICAL |
+| 4 NOTIFY | `SFX_READ_TEXT_2` | `SEQ_SE_DP_SELECT` 1500 (`yes_no_prompt.c:156`, `main_menu.c:229`) | accepted |
+
+- **Host behaviours to carry over:**
+  - FAILURE ranks above BOO in the drop-oldest queue (`lua/gen2/panel.lua:47`);
+  - NOTIFY is capability-gated (`:155`).
+- **hge is sound-compatible. OMP's "hge replaces the sound module" is REJECTED.**
+  - hge hooks only `GF_Snd_LoadSeq` and `GF_Snd_LoadSeqEx` (`hooks:290-291`).
+  - Its own `include/sound.h:46-50` declares the same `SND_WORK` with the `unk_BEB78` handle array, which its `src/sound.c` uses.
+  - The SE id table is value-identical across 1373 shared ids. So the vanilla handle poll plan stands for all three artifacts.
