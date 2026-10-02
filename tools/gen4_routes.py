@@ -690,6 +690,56 @@ def plan_pc(errand: Errand, start: dict, game: str = "HG") -> dict:
     }
 
 
+PACE_NEIGHBOURS = ("Left", "Right", "Down", "Up")
+
+
+def plan_hatch(world: World, start: dict, game: str = "HG", max_steps: int = 700) -> dict:
+    """Walk back and forth between the start tile and a neighbour until the egg hatches (a step
+    counter reaches an egg-cycle boundary every 255 steps, src/get_egg.c:763-809). Both tiles must be
+    plain floor: walkable, not encounter grass, not a coord-event tile, not a warp, and not Surf
+    water -- so no encounter or cutscene can interrupt the count. The neighbour is the first of
+    PACE_NEIGHBOURS that qualifies."""
+    sx, sy = start["x"], start["y"]
+    actual = world.map_at(sx, sy)
+    if actual != start["map"]:
+        raise RouteError(
+            "map_mismatch", f"save says map {start['map']} but ({sx},{sy}) is in map {actual}"
+        )
+
+    def plain(t):
+        return (
+            world.attr(*t) is not None
+            and (world.walkable(*t) or t == (sx, sy))
+            and not world.is_grass(*t)
+            and t not in world.soft
+            and t not in world.warps
+            and not world.is_water(*t)
+        )
+
+    if not plain((sx, sy)):
+        raise RouteError("start_not_plain", f"({sx},{sy}) is grass, a coord tile or a warp")
+    for d in PACE_NEIGHBOURS:
+        n = (sx + DIRS[d][0], sy + DIRS[d][1])
+        if plain(n):
+            return {
+                "version": 1,
+                "game": game,
+                "kind": "hatch",
+                "phase": "hatch",
+                "start": {**_loc(world, (sx, sy)), "dir": start.get("dir")},
+                "steps": [],
+                "tiles": 0,
+                "pace": {
+                    "a": [sx, sy],
+                    "b": list(n),
+                    "dir_ab": d,
+                    "dir_ba": _dir_of(n, (sx, sy)),
+                    "max_steps": max_steps,
+                },
+            }
+    raise RouteError("no_pace_tile", f"no plain neighbour of ({sx},{sy})")
+
+
 def plan_pc_stop(rom, pret, world: World, start: dict, game: str = "HG") -> dict:
     """The whole PC stop planned offline: the outdoor walk to the Pokemon Center door, and the
     interior walk to the PC tile assuming the player arrives ON the interior warp tile facing up
@@ -814,10 +864,17 @@ def pack_ram(game: str) -> dict:
     }
 
 
+def pack_profile_slice(game: str) -> dict:
+    """The pack profile sections lua/gen4/reads.lua party() needs (a trimmed copy: the full
+    profile carries long evidence tables the harness never reads)."""
+    pr = _pack_title(game)["profile"]
+    return {k: pr[k] for k in ("save", "save_ptr", "party_off", "pkm")}
+
+
 SYNTH_SCHEMA = "gen4-synth-v1"
 
 
-def synth_setup(save) -> dict:
+def synth_setup(save, kind: str = "party2") -> dict:
     """The disclosed SYNTH setup behind a party-2 save (tools/gen4_synth_save.py): its sidecar
     `<save>.synth.json` must exist and describe THIS file. Every receipt carries `setup: SYNTH` and
     the sidecar hash; a one-mon save cannot deposit (Gen 4 refuses the last party mon), so a
@@ -830,7 +887,7 @@ def synth_setup(save) -> dict:
         )
     raw = sidecar.read_bytes()
     row = json.loads(raw)
-    if row.get("schema") != SYNTH_SCHEMA or row.get("kind") != "party2":
+    if row.get("schema") != SYNTH_SCHEMA or row.get("kind") != kind:
         raise RouteError(
             "setup_mismatch", f"{sidecar.name}: schema/kind {row.get('schema')}/{row.get('kind')}"
         )
@@ -843,12 +900,41 @@ def synth_setup(save) -> dict:
         "new_pid": row["new_pid"],
         "otid": row["otid"],
         "out_sha1": row["out_sha1"],
+        "kind": kind,
+        "species": row.get("species"),
     }
 
 
+def verify_saved_hatch(path, game: str, synth: dict) -> dict:
+    """The battery after the hatch + SAVE: the SYNTH egg's key is party slot 1, no longer an egg."""
+    save = parse_save(Path(path).read_bytes(), GAMES[game][2])
+    party = save.party()
+    key = mon_key(synth["new_pid"], synth["otid"])
+    mon = party[1] if len(party) > 1 else None
+    if mon is None or mon["key"] != key or mon["is_egg"] or mon["species"] != synth["species"]:
+        raise RouteError(
+            "saved_mismatch",
+            f"saved party slot 1 is {mon and (mon['key'], mon['is_egg'])}, want {key} hatched",
+        )
+    keep = (
+        "species",
+        "level",
+        "is_egg",
+        "met_level",
+        "met_location",
+        "egg_location",
+        "friendship",
+        "has_nickname",
+    )
+    return {"party": len(party), "key": key, **{k: mon[k] for k in keep if k in mon}}
+
+
 def verify_saved(path, game: str, synth: dict) -> dict:
-    """The battery file the run left (BizHawk flushes it on exit), decoded by the codec: the party
-    is back to one mon and the SYNTH clone sits in a box (key PID:OTID). Anything else is named."""
+    """The battery file the run left (BizHawk flushes it on exit), decoded by the codec. The exact
+    claim of the PC run: party of ONE mon, the SYNTH clone (key PID:OTID) in box 0 slot 0 and nowhere
+    else, and the PCStorage's current box 0 (when the profile records it). Records the battery's own
+    boxModifiedFlag word: the saved FILE keeps it set (1) while RAM reads 0 after SAVE and after load,
+    so a receipt must not say that SAVE clears the file. Anything else is a named refusal."""
     save = parse_save(Path(path).read_bytes(), GAMES[game][2])
     party = save.party()
     key = mon_key(synth["new_pid"], synth["otid"])
@@ -858,11 +944,21 @@ def verify_saved(path, game: str, synth: dict) -> dict:
         for slot, mon in box["mons"].items()
         if mon["key"] == key
     ]
-    if len(party) != 1 or len(boxed) != 1:
+    meta = save.pc_meta()
+    if len(party) != 1 or boxed != [(0, 0)] or meta.get("cur_box", 0) != 0:
         raise RouteError(
-            "saved_mismatch", f"saved file: party {len(party)} mons, clone {key} boxed at {boxed}"
+            "saved_mismatch",
+            f"saved file: party {len(party)} mons, clone {key} boxed at {boxed} (want [(0, 0)]), "
+            f"cur_box {meta.get('cur_box')}",
         )
-    return {"party": len(party), "clone_key": key, "box": boxed[0][0], "slot": boxed[0][1]}
+    return {
+        "party": len(party),
+        "clone_key": key,
+        "box": boxed[0][0],
+        "slot": boxed[0][1],
+        "cur_box": meta.get("cur_box"),
+        "battery_modified": meta.get("modified"),
+    }
 
 
 def build_receipt(game, save, synth: dict, legs: list[dict], final: dict) -> dict:
@@ -880,6 +976,23 @@ def build_receipt(game, save, synth: dict, legs: list[dict], final: dict) -> dic
         ],
         "final_status": final["status"],
         "final_detail": final["detail"],
+        # the battery as the run left it, decoded by the codec (verify_saved / verify_saved_hatch)
+        "battery_sha1": final.get("battery_sha1"),
+        "battery": final.get("saved"),
+        # the reload leg's own status line, wall time and log (the fresh boot from that battery)
+        "reload": {
+            k: v
+            for k, v in (final.get("reload") or {}).items()
+            if k in ("leg", "status", "detail", "wall", "log")
+        }
+        or None,
+        # R2: RAM and the file differ -- say each, claim neither for the other
+        "modified_flag": {
+            "ram": "set by the deposit; 0 after the native SAVE and after the cold reload (Lua log)",
+            "battery": (final.get("saved") or {}).get("battery_modified"),
+        }
+        if (final.get("saved") or {}).get("clone_key")
+        else None,
     }
 
 
@@ -911,6 +1024,7 @@ def _cold_reload(rom_staged, ld, tag, leg, game, route, pc_extra, timeout, histo
         "tiles": 0,
         "ram": pc_extra["ram"],
         "synth": pc_extra["synth"],
+        "profile": pc_extra["profile"],
     }
     rpath = ld / f"{tag}_reload.json"
     rpath.write_text(json.dumps(rroute, indent=1), encoding="utf-8")
@@ -972,9 +1086,10 @@ def run_lane(
     Cherrygrove Pokemon Center PC, deposit party slot 1 from a SYNTH party-2 save, native SAVE).
     A leg that ends in a RESYNC with `done=0` was interrupted mid-walk: the same phase is
     re-planned from where it stopped. Returns the last leg's parsed result."""
-    if target not in ("grass", "pc"):
-        raise RouteError("unknown_target", f"{target!r} is not grass or pc")
-    synth = synth_setup(save) if target == "pc" else None  # refuse before touching the lane
+    if target not in ("grass", "pc", "hatch"):
+        raise RouteError("unknown_target", f"{target!r} is not grass, pc or hatch")
+    kind = {"pc": "party2", "hatch": "egg1"}.get(target)
+    synth = synth_setup(save, kind) if kind else None  # refuse before touching the lane
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
@@ -992,17 +1107,26 @@ def run_lane(
     queue = [("pokegear", p) for p in ERRAND_PHASES] if err else []
     if pc:
         queue += [("cherrygrove_pc", "enter"), ("cherrygrove_pc", "deposit")]
+    if target == "hatch":
+        queue += [("hatch", "hatch")]
     max_legs += len(queue) + (4 if pc else 0)  # a cutscene resync re-plans the same phase
     pc_extra = (
         {
             "run_from_wild": pack_legs(game, PC_LEGS)["run_from_wild"],
             "persistence": pack_legs(game, SAVE_LEGS),
             "ram": pack_ram(game),
-            "synth": {"new_pid": synth["new_pid"], "otid": synth["otid"]},
+            "synth": {
+                "new_pid": synth["new_pid"],
+                "otid": synth["otid"],
+                "species": synth["species"],
+                "kind": synth["kind"],
+            },
+            "profile": pack_profile_slice(game),
         }
-        if pc
+        if kind
         else {}
     )
+    final_ok = "PC_DEPOSIT" if target == "pc" else "HATCH_OK"
     load_state = ""
     result: dict = {}
     history: list[dict] = []
@@ -1011,11 +1135,13 @@ def run_lane(
         if queue:
             who, phase = queue[0]
             e = err if who == "pokegear" else pc
-            if phase == "deposit":
+            if who == "hatch":
+                route = plan_hatch(world, start, game)
+            elif phase == "deposit":
                 route = plan_pc(e, start, game)
             else:
                 route = plan_errand(world, e, phase, start, game)
-            if who == "cherrygrove_pc":
+            if who in ("cherrygrove_pc", "hatch"):
                 route.update(pc_extra)
         else:
             route = plan_route(world, start, wild_land_day(Path(pret)), game)
@@ -1052,11 +1178,14 @@ def run_lane(
         result = parse_result(log.read_text(encoding="utf-8") if log.exists() else "")
         result.update(leg=leg, wall=round(time.time() - t0, 1), route=route, log=str(log))
         history.append({**result, "kind": route.get("kind"), "phase": route.get("phase")})
-        if pc and result["status"] == "PC_DEPOSIT":
+        if kind and result["status"] == final_ok:
             # the lane's battery file, decoded by the independent PYDEC oracle, then a COLD RELOAD:
             # a fresh boot from that battery must still show the deposit (G2: boot -> SAVE -> reload)
             try:
-                result["saved"] = verify_saved(saved_path, game, synth)
+                result["saved"] = (verify_saved_hatch if target == "hatch" else verify_saved)(
+                    saved_path, game, synth
+                )
+                result["battery_sha1"] = sha1_of(saved_path)
                 result["reload"] = _cold_reload(
                     rom_staged, ld, tag, leg, game, route, pc_extra, timeout, history
                 )
@@ -1064,7 +1193,7 @@ def run_lane(
                     result.update(status="RELOAD_FAIL", detail=result["reload"]["detail"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
-        if pc:
+        if kind:
             result["receipt"] = build_receipt(game, save, synth, history, result)
             (ld / f"{tag}_receipt.json").write_text(
                 json.dumps(result["receipt"], indent=1), encoding="utf-8"
@@ -1121,16 +1250,17 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--rom")
         q.add_argument("--pret")
     p.add_argument("--out")
-    p.add_argument("--target", choices=["grass", "pc"], default="grass")
+    p.add_argument("--target", choices=["grass", "pc", "hatch"], default="grass")
     r.add_argument("--lane")
     r.add_argument("--tag", help="state/log name prefix (default: the lane name)")
     r.add_argument("--errand", choices=["pokegear"], help="house visit before the route")
     r.add_argument(
         "--target",
-        choices=["grass", "pc"],
+        choices=["grass", "pc", "hatch"],
         default="grass",
         help="grass: walk to a wild battle; pc: Cherrygrove PC deposit + native SAVE (needs a "
-        "SYNTH party-2 --save, see tools/gen4_synth_save.py)",
+        "SYNTH party-2 --save); hatch: pace on plain floor until the SYNTH egg1 hatches, "
+        "native SAVE + cold reload (see tools/gen4_synth_save.py)",
     )
     r.add_argument("--timeout", type=int, default=900)
     r.add_argument("--pace-max", type=int)
@@ -1158,7 +1288,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("\n".join(res["lines"]))
         print(f"leg {res['leg']} wall {res['wall']}s status {res['status']} {res['detail']}")
-        return 0 if res["status"] == ("PC_DEPOSIT" if a.target == "pc" else "BATTLE") else 1
+        ok = {"pc": "PC_DEPOSIT", "hatch": "HATCH_OK"}.get(a.target, "BATTLE")
+        return 0 if res["status"] == ok else 1
     try:
         start = save_position(a.save, a.game)
         world = load_world(a.rom, a.pret)

@@ -10,7 +10,9 @@
 -- Route kinds (route.kind): absent = walk to wild grass and fight; "errand" = enter/talk/exit a house
 -- (a door step ends the leg with RESYNC done=1); "pc" = the Cherrygrove Pokemon Center PC: walk to the tile
 -- south of the PC, face it, deposit party slot 1 (a SYNTH party-2 save) through the PC UI by BUTTONS ONLY,
--- native SAVE, verify by RAM (tools/gen4_routes.py plan_pc; docs in that file and tests/TESTING.md).
+-- native SAVE, verify by RAM (tools/gen4_routes.py plan_pc; docs in that file and tests/TESTING.md);
+-- "hatch" = pace on plain floor until the SYNTH egg1 hatches (plan_hatch), decode the party before/after/after
+-- SAVE; "reload" = a fresh boot from the saved battery, confirmed by RAM.
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
 -- same phase), done=1 = the phase finished (the next phase starts from the state).
 local BUS = "ARM9 System Bus"
@@ -64,7 +66,11 @@ local function loc()
   local p = r32(f + 0x20); if not inram(p) then return nil end
   return {map = s32(p), x = s32(p + 8), y = s32(p + 12), dir = s32(p + 16)}
 end
--- live facing of the player (see pc_deposit): 0 north, 1 south, 2 west, 3 east
+-- live facing of the player (see pc_deposit): 0 north, 1 south, 2 west, 3 east.
+-- fs+0x40 IS FieldSystem.playerAvatar (include/field_system.h:128; mapObjectManager is at +0x3C, line 127,
+-- and unk_44 at +0x44), asm GetInteractedMetatileScript loads it the same way (overlay_01_021E6880.s:1470,
+-- `ldr r0, [r5, #0x40]` before PlayerAvatar_GetFacingDirection). PlayerAvatar.mapObject is at +0x30
+-- (include/player_avatar.h:39) and LocalMapObject.currentFacing at +0x28 (include/map_object.h:59).
 local function facing()
   local f = fsys(); if not f then return nil end
   local av = r32(f + 0x40); if not inram(av) then return nil end
@@ -331,6 +337,8 @@ local function run_from_battle(b, where)
 end
 
 local RAM = route.ram
+-- NOTE: returns TWO values, (array address, array size from its runtime header); a caller that only
+-- needs the address may ignore the size, one that snapshots the whole array (pc_snapshot) uses both.
 local function array_addr(id)
   local save = r32(RAM.save_ptr)
   if not inram(save) then return nil end
@@ -579,9 +587,114 @@ local function pc_deposit()
     at[1], at[2], hx(pid), hx(mod_after_deposit), hx(b2.mod), pos_s(loc())))
 end
 
+-- ----- egg hatch (route.kind == "hatch": SYNTH egg1 in party slot 1) -------------------------------
+-- The game does everything: tools/gen4_routes.py plan_hatch picks a plain-floor neighbour (no grass, no
+-- coord event, no warp); this leg paces between the two tiles with the D-pad. Every 255 steps
+-- HandleDaycareStep (src/get_egg.c:763-809) subtracts egg cycles; an egg at 0 cycles hatches at the next
+-- boundary: a field task runs HatchEggInParty -> sub_0206D328 (hge: replaced) -> the OVY_95 hatch app ->
+-- (nickname Yes/No, B = No) -> overworld. Oracle: the party decoded by lua/gen4/reads.lua + pk4.lua.
+local function denull(t)
+  if type(t) ~= "table" then return t end
+  local out = {}
+  for k, v in pairs(t) do if v ~= J.null then out[k] = denull(v) end end
+  return out
+end
+local Reads
+local function party_mons()
+  if not Reads then
+    Reads = dofile(REPO .. "/lua/gen4/reads.lua")
+    Reads.pk4 = dofile(REPO .. "/lua/gen4/pk4.lua")
+    route.profile = denull(route.profile) -- JSON null decodes to a table: pk4_profile would read it as present
+  end
+  return Reads.party({u8 = r8, u16 = r16, u32 = r32}, route.profile)
+end
+local function mon_s(m)
+  local d = m.decoded
+  return string.format("slot%d key=%s species=%d egg=%s level=%s friendship=%d has_nick=%s ability=%s hidden=%s " ..
+    "met_level=%d met_loc=%d egg_loc=%d origin=%s ball=%s ivs=%s", m.slot, m.key, d.species, tostring(d.is_egg),
+    tostring(d.level), d.friendship, tostring(d.has_nickname), tostring(d.ability), tostring(d.hidden_ability),
+    d.met_level, d.met_location, d.egg_location, tostring(d.origin_game), tostring(d.ball), table.concat(d.ivs, "/"))
+end
+local function egg_key() return string.format("%08X:%08X", route.synth.new_pid, route.synth.otid) end
+local function hatch_oracle(label, want_egg)
+  local mons, why = party_mons()
+  if not mons then finish("FAIL", "party_unreadable", label, tostring(why)) end
+  local m = mons[2]
+  say("ORACLE", label, "party", #mons, m and mon_s(m) or "no slot 1")
+  if #mons ~= 2 or not m or m.key ~= egg_key() then finish("FAIL", "hatch_party_wrong", label, #mons) end
+  if m.decoded.is_egg ~= want_egg then finish("FAIL", "hatch_egg_flag_wrong", label, tostring(m.decoded.is_egg)) end
+  if m.decoded.species ~= route.synth.species then finish("FAIL", "hatch_species_changed", label, m.decoded.species) end
+  return m
+end
+
+local function hatch_leg()
+  local pc = route.pace
+  local egg = hatch_oracle("before", true)
+  if egg.decoded.friendship ~= 0 then finish("FAIL", "egg_cycles_not_zero", egg.decoded.friendship) end
+  local l = loc()
+  if not l or l.x ~= pc.a[1] or l.y ~= pc.a[2] then finish("FAIL", "not_on_pace_tile", pos_s(l)) end
+  shot("hatch_start")
+  local n, at_a, scene, f0 = 0, true, false, emu.framecount()
+  while n < pc.max_steps do
+    local tgt = at_a and pc.b or pc.a
+    local fr, why = step(at_a and pc.dir_ab or pc.dir_ba, tgt[1], tgt[2])
+    if not fr then
+      if why == "task" then scene = true; break end
+      finish("FAIL", "pace_step_failed", tostring(why), pos_s(loc()))
+    end
+    n = n + 1; at_a = not at_a
+  end
+  if not scene then finish("FAIL", "no_hatch", n, "steps", pos_s(loc())) end
+  say("HATCH scene started after", n, "completed steps, frames", emu.framecount() - f0, "pos", pos_s(loc()),
+    "taskman", hex(taskman() or 0))
+  shot("hatch_scene")
+  -- advance the dialogue with normal input: B first (it also answers the nickname prompt No); if the
+  -- scene is still up after 1800 frames, A-mash
+  local mode, idle_run, ovy_trace, last_ovy = "B", 0, {}, "x"
+  for f = 1, 9000 do
+    local a = app_info()
+    local ov = a and a.ovy or -1
+    if ov ~= last_ovy then
+      last_ovy = ov
+      if #ovy_trace < 60 then ovy_trace[#ovy_trace + 1] = string.format("f%d:ovy%d", f, ov) end
+    end
+    if f % 24 < 3 then joypad.set({[mode] = true}) else joypad.set({}) end
+    emu.frameadvance()
+    if idle_now() then idle_run = idle_run + 1 else idle_run = 0 end
+    if idle_run >= 120 then break end
+    if f == 1800 then mode = "A"; say("B did not finish the scene; A-mash from frame", emu.framecount()) end
+    if f % 600 == 0 then shot("hatch_f" .. f); say("hatch scene f+" .. f, "ovy", ov, "taskman", hex(taskman() or 0)) end
+  end
+  joypad.set({})
+  say("hatch scene ended; overlays:", table.concat(ovy_trace, " "), "mode", mode)
+  if not idle_now() then finish("FAIL", "hatch_scene_not_finished", table.concat(ovy_trace, " ")) end
+  wait_stable(30)
+  local m = hatch_oracle("after_hatch", false)
+  save_state("hatched"); shot("hatched")
+  -- native SAVE, then the oracle again
+  for _, name in ipairs({"open_start_menu", "start_menu_cursor_to_save", "start_menu_select_save",
+      "save_confirm_until_saved", "close_start_menu"}) do
+    local used = play_leg(route.persistence[name], name)
+    if not used then finish("FAIL", "save_leg_not_reached", name, pos_s(loc())) end
+    say("save leg", name, used, "frames")
+  end
+  if not wait_idle(60, 900) then finish("FAIL", "save_not_idle", "taskman", hex(taskman() or 0)) end
+  if not save_driver_idle() then finish("FAIL", "save_driver_not_idle") end
+  hatch_oracle("after_save", false)
+  save_state("saved"); shot("saved")
+  finish("HATCH_OK", string.format("steps=%d key=%s species=%d level=%s met_level=%d met_loc=%d hidden=%s ability=%s save_driver=idle %s",
+    n, m.key, m.decoded.species, tostring(m.decoded.level), m.decoded.met_level, m.decoded.met_location,
+    tostring(m.decoded.hidden_ability), tostring(m.decoded.ability), pos_s(loc())))
+end
+
 -- ----- cold reload (route.kind == "reload"): a FRESH boot from the battery the PC leg saved ------------
 -- No savestate: CONTINUE through the title as in leg 1, then confirm by RAM that the deposit persisted.
 local function reload_check()
+  if route.synth.kind == "egg1" then -- the hatched mon must have persisted through SAVE + a fresh boot
+    local m = hatch_oracle("cold_reload", false)
+    finish("RELOAD_OK", string.format("party=2 key=%s species=%d level=%s hidden=%s", m.key, m.decoded.species,
+      tostring(m.decoded.level), tostring(m.decoded.hidden_ability)))
+  end
   local p, b = party_state(), box_census()
   if not p or not b then finish("FAIL", "reload_ram_unreadable") end
   local pid = route.synth.new_pid
@@ -666,6 +779,7 @@ for i = 1, #steps do
   cur = loc()
 end
 if route.kind == "reload" then reload_check() end
+if route.kind == "hatch" then hatch_leg() end
 if route.kind == "pc" then pc_deposit() end -- ends in finish(): PC_DEPOSIT or FAIL
 if route.kind == "errand" then -- only `talk` reaches here: face the NPC, A through the dialogue
   local want = {Up = 0, Down = 1, Left = 2, Right = 3}

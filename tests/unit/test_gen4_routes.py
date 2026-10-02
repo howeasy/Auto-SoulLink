@@ -947,6 +947,8 @@ _SYNTH = {
     "new_pid": 0xABCD1234,
     "otid": 0x00010002,
     "out_sha1": "x",
+    "kind": "party2",
+    "species": None,
 }
 
 
@@ -974,7 +976,7 @@ def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
         "stage_rom": lambda rom, ld: Path(ld) / "rom.nds",
         "stage_save": lambda save, ld, *a, **k: Path(ld) / "x.SaveRAM",
         "sha1_of": lambda p: "0" * 40,
-        "synth_setup": lambda save: _SYNTH,
+        "synth_setup": lambda save, kind="party2": _SYNTH,
         "save_position": lambda save, game="HG": pos,
         "verify_saved": lambda *a: {"party": 1, "box": 0, "slot": 0},
     }.items():
@@ -1076,3 +1078,114 @@ def test_real_ss_save_position_is_new_bark():
         pytest.skip(f"SS save absent: {SS_SAVE}")
     pos = gr.save_position(SS_SAVE, "SS")
     assert (pos["map"], pos["x"], pos["y"]) == (60, 687, 397)
+
+
+# --- verify_saved: the exact claim (clone at box 0 slot 0, party 1, cur_box 0), battery flag recorded ---
+class _FakeBattery:
+    def __init__(self, *, party=1, boxes=None, meta=None):
+        self._party, self._meta = (
+            [{}] * party,
+            meta or {"box_count": 18, "cur_box": 0, "modified": 1},
+        )
+        self._boxes = boxes if boxes is not None else {(0, 0): "AAAA0001:BBBB0002"}
+
+    def party(self):
+        return self._party
+
+    def boxes(self):
+        out = [{"mons": {}} for _ in range(18)]
+        for (b, s), key in self._boxes.items():
+            out[b]["mons"][s] = {"key": key}
+        return out
+
+    def pc_meta(self):
+        return self._meta
+
+
+def _verify(monkeypatch, tmp_path, **kw):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeBattery(**kw))
+    return gr.verify_saved(f, "HG", {"new_pid": 0xAAAA0001, "otid": 0xBBBB0002})
+
+
+def test_verify_saved_asserts_box0_slot0_party1_cur_box0_and_records_the_battery_flag(
+    monkeypatch, tmp_path
+):
+    ok = _verify(monkeypatch, tmp_path)
+    assert (ok["party"], ok["box"], ok["slot"], ok["cur_box"], ok["battery_modified"]) == (
+        1,
+        0,
+        0,
+        0,
+        1,
+    )
+    for bad in (
+        {"boxes": {(0, 1): "AAAA0001:BBBB0002"}},  # wrong slot
+        {"boxes": {(1, 0): "AAAA0001:BBBB0002"}},  # wrong box
+        {"boxes": {}},  # clone not boxed
+        {"party": 2},  # still two party mons
+        {"meta": {"box_count": 18, "cur_box": 3, "modified": 1}},  # active box moved
+        {"boxes": {(0, 0): "AAAA0001:BBBB0002", (2, 5): "AAAA0001:BBBB0002"}},  # boxed twice
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            _verify(monkeypatch, tmp_path, **bad)
+        assert e.value.reason == "saved_mismatch", bad
+
+
+def test_the_receipt_carries_the_battery_the_reload_leg_and_the_ram_vs_file_flag_split():
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    final = {
+        "status": "PC_DEPOSIT",
+        "detail": "d",
+        "battery_sha1": "ab" * 20,
+        "saved": {"clone_key": "K", "box": 0, "slot": 0, "battery_modified": 1},
+        "reload": {
+            "leg": 5,
+            "status": "RELOAD_OK",
+            "detail": "party=1",
+            "wall": 9.9,
+            "log": "L",
+            "lines": ["x"],
+        },
+    }
+    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], final)
+    assert rec["battery_sha1"] == "ab" * 20 and rec["battery"]["slot"] == 0
+    assert rec["reload"] == {
+        "leg": 5,
+        "status": "RELOAD_OK",
+        "detail": "party=1",
+        "wall": 9.9,
+        "log": "L",
+    }
+    assert (
+        rec["modified_flag"]["battery"] == 1
+        and "0 after the native SAVE" in rec["modified_flag"]["ram"]
+    )
+    assert "clears" not in json.dumps(rec["modified_flag"])  # SAVE does not clear the file's word
+
+
+# --- the egg-hatch pace (plan_hatch) ------------------------------------------------------------
+def test_plan_hatch_paces_between_two_plain_tiles_and_skips_grass_coord_and_warp_neighbours():
+    # west neighbour is grass, east is a coord-event tile, south is a warp: only north is plain floor
+    w = _world(
+        ["#####", "#...#", "#.g.#", "#...#", "#####"],
+        soft={(3, 2)},
+        warps=[(2, 3)],
+        blocked={(2, 3)},
+    )
+    start = {"map": 7, "x": 2, "y": 1, "dir": 1}
+    r = gr.plan_hatch(w, start)
+    assert r["kind"] == "hatch" and r["pace"]["a"] == [2, 1]
+    assert r["pace"]["b"] in ([1, 1], [3, 1]) and r["pace"]["dir_ab"] in ("Left", "Right")
+    # a start on grass or a wrong map is refused by name
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(w, {"map": 7, "x": 2, "y": 2, "dir": 1})
+    assert e.value.reason == "start_not_plain"
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(w, {**start, "map": 8})
+    assert e.value.reason == "map_mismatch"
+    boxed_in = _world(["###", "#.#", "###"])
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(boxed_in, {"map": 7, "x": 1, "y": 1, "dir": 1})
+    assert e.value.reason == "no_pace_tile"
