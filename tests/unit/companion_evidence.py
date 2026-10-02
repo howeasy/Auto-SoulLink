@@ -11,6 +11,7 @@ from __future__ import annotations
 _RBY = {"red", "blue"}
 _PURE = {"purered", "pureblue", "puregreen"}
 _GEN3 = {"firered", "leafgreen", "emerald", "firered_rr"}
+_GEN2 = {"crystal", "gold", "silver"}
 
 
 def companion(rom_type: str) -> dict:
@@ -21,6 +22,8 @@ def companion(rom_type: str) -> dict:
         return {"artifact_kind": "overlay"}
     if name in _GEN3:
         return {"artifact_kind": "companion"}
+    if name in _GEN2:
+        return {"artifact_kind": "overlay"}
     return {}
 
 

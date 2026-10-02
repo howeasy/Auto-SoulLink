@@ -69,28 +69,16 @@ def test_all_current_generated_pack_files_are_literal_entry_dependencies():
         assert paths == {f"data/games/gen2_{title}/{name}" for name in PACK_FILES}
 
 
-@pytest.mark.parametrize("title", ["gold", "silver"])
-def test_gold_and_silver_admit_behind_their_own_receipts(title):
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_clean_cartridge_is_never_admitted_the_companion_is_required(title):
+    """Patch-first (owner 2026-10-02). Every clean row is SELECTED/BUILT under an ADMITTED G1 with shipped
+    PHYSICAL receipts, and the launcher still refuses it: only an activated overlay row (G4) is admitted.
+    This replaces the O-22 tests that pinned Crystal/Gold/Silver admitting behind their clean receipts."""
     world = World(title)
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.title, decision.pack, decision.rom_sha1) == (title, f"gen2_{title}", world.profile["rom_sha1"])
-    assert world.writes == []
-
-
-def test_crystal_is_admitted_only_behind_its_shipped_receipts():
-    world = World()
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.title, decision.pack, decision.kind, decision.rom_sha1) == (
-        "crystal", "gen2_crystal", "clean", "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133")
-    world.lua.execute("""local original = io.open
-        io.open=function(path,mode)
-            if path:match('/receipts/crystal%.write_window%.json$') then return nil, 'missing receipt' end
-            return original(path,mode)
-        end""")
     decision, reason = world.entry.admit(world.args())
-    assert decision is None and "write_window" in reason
+    assert decision is None and world.writes == []
+    assert "needs the SLink companion patch" in reason and "Manager or /patcher" in reason
+    assert title in reason
     assert set(dict(world.entry.RECEIPT_FILES.items())) == {"gen2_crystal", "gen2_gold", "gen2_silver"}
 
 

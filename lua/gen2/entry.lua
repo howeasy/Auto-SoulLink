@@ -2,11 +2,12 @@
 -- No emulator global. build_candidate requires explicit candidate_only=true and injected
 -- IO/policies; with deps.net it also composes the Gen 2 client (lua/gen2/client.lua) over
 -- the same MODEL graph (model_only IO, MODEL_PROBE signals, an injected checkpoint).
--- build is production: admit() passes only (a) a CLEAN row (SELECTED, BUILT, matrix.gate G1 ADMITTED, owner ruling
--- O-22) or (b) an ACTIVATED OVERLAY row (SELECTED, ADMITTED, runtime_gate G4 ADMITTED, binding_sha256 pin; OVERLAY_ADMISSION
--- D1), AND whose own shipped PHYSICAL receipts re-validate now (U1 engine sites, U2 write windows, each bound to its
--- committed fixture-qualification report, per RECEIPT_FILES[pack][kind]): Crystal 1.0, Gold and Silver (clean: Silver's
--- U2 is Gold's receipt, O-23; an overlay has its own). Crystal 1.1 stays BUILD_ONLY. What executes is the admission
+-- build is production: admit() passes only an ACTIVATED OVERLAY row (SELECTED, ADMITTED, runtime_gate G4 ADMITTED,
+-- binding_sha256 pin; OVERLAY_ADMISSION D1), AND whose own shipped PHYSICAL receipts re-validate now (U1 engine sites,
+-- U2 write windows, each bound to its committed fixture-qualification report, per RECEIPT_FILES[pack][kind]).
+-- A CLEAN cartridge is never admitted, whatever its G1 row says: the SLink companion is REQUIRED for Crystal, Gold and
+-- Silver (patch-first, owner 2026-10-02); the clean rows and receipts remain only as the overlay's base and evidence
+-- (Silver's clean U2 was Gold's receipt, O-23; an overlay has its own). Crystal 1.1 stays BUILD_ONLY. What executes is the admission
 -- decision's (kind + the ACTUAL rehashed sha1, D5), read through lua/gen2/artifact.lua's view; never a caller's claim.
 -- Either graph stays runtime_started=false until client:start().
 local Entry = {}
@@ -316,32 +317,27 @@ function Entry.admit(args)
             end,
             hashes=function(candidate) return candidate.row.sha1 and {candidate.row.sha1} or {} end,
             eligible=function(candidate)
-                local row, matrix = candidate.row, candidate.data.admission
+                local row = candidate.row
                 if row.kind ~= "clean" and row.kind ~= "overlay" then
                     return false, "Gen 2 artifact kind " .. tostring(row.kind) .. " is not admitted"
                 end
                 if row.selection ~= "SELECTED" then return false, "artifact selection " .. tostring(row.selection) .. " is not admitted" end
-                local grant
+                -- Patch-first (owner 2026-10-02): the companion is REQUIRED for every Gen 2 title, so
+                -- a clean cartridge is never admitted, whatever its row and gate say.
                 if row.kind == "clean" then
-                    -- D1: the clean grant is matrix.gate (G1); it never grants an overlay.
-                    if row.status ~= "BUILT" or matrix.gate.state ~= "ADMITTED" then
-                        return false, "Gen 2 catalog status " .. tostring(row.status) .. "; G1 " .. tostring(matrix.gate.state)
-                                      .. "; source catalog grants no runtime admission"
-                    end
-                    grant = "G1"
-                else
-                    -- D1: an activated overlay row carries its own G4 grant and its binding pin.
-                    local gate = row.runtime_gate
-                    if row.status ~= "ADMITTED" then
-                        return false, "Gen 2 catalog status " .. tostring(row.status) .. " for the overlay; source catalog grants no runtime admission"
-                    end
-                    if type(gate) ~= "table" or gate.id ~= "G4" or gate.state ~= "ADMITTED" then
-                        return false, "overlay runtime gate G4 is not ADMITTED"
-                    end
-                    if not hex(gate.grant_fingerprint, 64) then return false, "overlay G4 grant fingerprint missing or malformed" end
-                    if not hex(row.binding_sha256, 64) then return false, "overlay execution binding pin missing or malformed" end
-                    grant = "G4"
+                    return false, "this " .. candidate.title .. " cartridge needs the SLink companion patch; "
+                                  .. "prepare it through the Manager or /patcher"
                 end
+                -- D1: an activated overlay row carries its own G4 grant and its binding pin.
+                local grant, gate = "G4", row.runtime_gate
+                if row.status ~= "ADMITTED" then
+                    return false, "Gen 2 catalog status " .. tostring(row.status) .. " for the overlay; source catalog grants no runtime admission"
+                end
+                if type(gate) ~= "table" or gate.id ~= "G4" or gate.state ~= "ADMITTED" then
+                    return false, "overlay runtime gate G4 is not ADMITTED"
+                end
+                if not hex(gate.grant_fingerprint, 64) then return false, "overlay G4 grant fingerprint missing or malformed" end
+                if not hex(row.binding_sha256, 64) then return false, "overlay execution binding pin missing or malformed" end
                 local view, why = view_of(root, json, candidate.data, candidate.title, row)
                 if not view then return false, row.kind .. " execution view refused: " .. tostring(why) end
                 if view.kind ~= row.kind or view.rom_sha1 ~= row.sha1 then

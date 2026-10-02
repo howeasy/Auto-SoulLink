@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 from . import gen2_codec
-from .base import GameAdapter, gb_status_token, humanize_area_id
+from .base import GameAdapter, companion_required_reason, gb_status_token, humanize_area_id
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games"
 _ARTIFACT = {"crystal": "pokecrystal", "gold": "pokegold", "silver": "pokesilver"}
@@ -603,6 +603,14 @@ class Gen2GSCAdapter(GameAdapter):
     @staticmethod
     def pairing_kind(kind):
         return kind  # Do not inherit named -> clean artifact equivalence.
+
+    @staticmethod
+    def companion_refusal(hello):
+        # Owner 2026-10-02: Crystal, Gold and Silver all require the companion overlay.
+        rom_type = hello.get("rom_type")
+        if rom_type in _TITLE_FOR_ROM_TYPE and hello.get("artifact_kind") != "overlay":
+            return companion_required_reason(rom_type)
+        return None
 
     def supports_abilities(self):
         return False

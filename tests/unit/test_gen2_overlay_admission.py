@@ -188,18 +188,15 @@ def test_a_caller_forged_artifact_kind_cannot_choose_the_composition(forged):
                                              player="a", log=log, rom_size=len(clean.image),
                                              read_rom_u8=clean.lua.eval("function(io) return function(a) return io.read_u8(a, 'ROM') end end")(io),
                                              artifact_kind=forged))
-    assert not isinstance(prod, tuple), prod
-    assert (prod.client.artifact_kind, prod.artifact_kind, prod.runtime_rom_sha1) == (
-        "clean", "clean", clean.profile["rom_sha1"])
-    assert prod.client.trade_live(prod.client) is False
+    # patch-first (owner 2026-10-02): a clean cartridge no longer composes at all, whatever kind the caller forges
+    refused(prod, "needs the SLink companion patch")
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
-def test_clean_still_admits_with_kind_and_sha1(title):
+def test_clean_is_refused_even_with_its_known_sha1_and_a_granted_g1(title):
+    """Patch-first (owner 2026-10-02): replaces the test that pinned clean admitting with kind and sha1."""
     world = World(title)
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.kind, decision.rom_sha1) == ("clean", world.profile["rom_sha1"])
+    refused(world.entry.admit(world.args()), "needs the SLink companion patch", "Manager or /patcher", title)
 
 
 def test_clean_receipt_files_keep_their_paths_and_the_overlay_namespace_is_separate():
@@ -245,8 +242,8 @@ def test_a_missing_overlay_binding_never_falls_back_to_clean(title):
     world = Overlay(title, no_binding=True)
     refused(world.admit(), "binding")
     refused(world.build(), "binding")
-    clean = World(title)                       # the clean cartridge is unaffected
-    assert not isinstance(clean.entry.admit(clean.args()), tuple)
+    clean = World(title)                       # the clean cartridge is no fallback either: it is refused outright
+    refused(clean.entry.admit(clean.args()), "needs the SLink companion patch")
 
 
 def test_an_unknown_hash_and_crystal_11_stay_refused_beside_an_activated_overlay():
@@ -292,7 +289,9 @@ def test_an_overlay_receipt_attached_to_the_clean_cartridge_is_refused(stamped_f
     overlay = overlay_receipts("crystal", sha)      # the clean_sha1 variant: only the kind and binding mark it overlay
     served = {path.replace("receipts/overlay/", "receipts/"): text for path, text in overlay.items()}
     world.lua.execute(OPEN)(world.lua.table_from(served))
-    refused(world.entry.admit(world.args()), "U1")
+    # patch-first (owner 2026-10-02): the clean cartridge is refused before any proof is read, so the U1 binding
+    # guard below is no longer what stops it (it still stops the overlay: test_a_clean_receipt_attached_to_the_overlay_is_refused)
+    refused(world.entry.admit(world.args()), "needs the SLink companion patch")
 
 
 def test_a_wrong_binding_on_the_receipts_is_refused():
@@ -583,7 +582,7 @@ def test_production_build_refuses_a_requested_title_the_admission_decision_does_
     emu, io, net, hud, logs, log = clean.lua.execute(EMULATOR)(clean.image, clean.profile["ram"]["hROMBank"])
     io.model_only = False
     args.io, args.log, args.net, args.hud = io, log, net, hud
-    refused(clean.entry.build(args), "differs from the requested")
+    refused(clean.entry.build(args), "needs the SLink companion patch")   # patch-first: refused before the title check
 
 
 # --- D5: each validator holds its own guards (the two validators back each other up in compose, so every guard is

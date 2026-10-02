@@ -29,7 +29,7 @@ class CartridgeError(Exception):
 # of it); it is listed so the list is exactly the patcher's targets, test_cartridges.py pins that.
 COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
                     "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald", "Radical Red")
-_GEN2_TITLES = ("Crystal", "Gold", "Silver")
+_GEN2_TITLES = ("Crystal", "Gold", "Silver")   # the title the launcher and the adapter refuse clean for as well
 
 
 def companion_admitted(info: dict) -> bool:
@@ -112,7 +112,12 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     # companion title, so one that cannot be given its companion is refused here, never handed out.
     for pid, info in infos.items():
         variant = info.get("variant")
-        if variant in COMPANION_TITLES and variant not in _GEN2_TITLES and not want[pid]:
+        if variant in COMPANION_TITLES and not want[pid]:
+            if variant in _GEN2_TITLES and companion:
+                # an unactivated overlay row: the Gen 2 launcher admits no clean cartridge either
+                raise CartridgeError(
+                    f"player {pid}: the Gen 2 companion is not admitted yet for {variant}; "
+                    "a clean cartridge is refused by the launcher, so none is prepared")
             raise CartridgeError(
                 f"player {pid}: {variant} needs the SLink companion patch, so a clean cartridge "
                 "is not prepared (companion cannot be turned off)")

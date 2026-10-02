@@ -254,18 +254,17 @@ def test_gen2_companion_follows_admission(tmp_path):
             assert player["kind"] == "companion" and player["rom_sha1"] == _overlay_sha1(dirname)
 
 
-def test_gen2_rolled_back_row_hands_out_the_clean_cartridge(tmp_path, monkeypatch):
-    """Fail closed (review cx-f18ac278 F1): COMPANION_TITLES alone never composes a Gen 2 overlay the
-    launcher refuses; an overlay row that is not activated means the clean cartridge, as picked."""
+def test_gen2_rolled_back_row_refuses_the_provision(tmp_path, monkeypatch):
+    """Fail closed (review cx-f18ac278 F1, patch-first owner 2026-10-02): COMPANION_TITLES alone never
+    composes a Gen 2 overlay the launcher refuses, and the launcher refuses every clean Gen 2 cartridge
+    too, so an overlay row that is not activated means NO cartridge is prepared (it used to hand out
+    the clean one as picked)."""
     from server import cartridges
 
-    sources = _gen2()
     monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: False)
-    result = cartridges.provision(str(tmp_path), sources, companion=True, randomize=None)
-    for pid in ("a", "b"):
-        player = result["players"][pid]
-        assert player["kind"] == "clean"
-        assert Path(player["output"]).read_bytes() == Path(sources[pid]).read_bytes()
+    with pytest.raises(cartridges.CartridgeError, match="Gen 2 companion is not admitted yet"):
+        cartridges.provision(str(tmp_path), _gen2(), companion=True, randomize=None)
+    assert not (tmp_path / "roms").exists(), "a refused provision must not write any cartridge"
 
 
 def test_gen2_overlay_admitted_reads_the_activated_row(monkeypatch):
@@ -288,9 +287,11 @@ def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
     from server import cartridges, upr_pipeline
 
     sources = _gen2()
+    # a Gen 2 pick is refused outright without its companion (patch-first), so activate the overlay row
+    monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: True)
     monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on Gen 2 randomize"))
     with pytest.raises(cartridges.CartridgeError, match="Gen 2 has no randomizer support"):
-        cartridges.provision(str(tmp_path), sources, companion=False,
+        cartridges.provision(str(tmp_path), sources, companion=True,
                              randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
 
 

@@ -124,7 +124,7 @@ async def test_supported_rand_overlay_requires_verified_content(tmp_path, title,
 # Patch-first (owner 2026-10-02): a CLEAN FR/LG/RR/Red/Blue hello is refused before this admission is asked, so
 # the cartridges that reach it declare the companion (Gen 3 "companion", Red "named" + its mailbox `panel`).
 @pytest.mark.parametrize("rom_type,kind", (
-    ("red", "named"), ("red", "rand"), ("yellow", "clean"), ("crystal", "clean"), ("crystal", "overlay"),
+    ("red", "named"), ("red", "rand"), ("yellow", "clean"), ("crystal", "overlay"),
     ("firered", "companion"), ("leafgreen", "companion"), ("firered_rr", "companion"),
 ))
 @pytest.mark.parametrize("fields", ({}, {"rom_content": {}}, {"rom_content": {"bad": True}}))

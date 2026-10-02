@@ -474,7 +474,7 @@ def _hello_extra(player: str) -> dict:
         return {"ot_id": ot, **_companion_fields(_rom_type(player))}
     if GAME == "gen2":
         # lua/gen2/client.lua send_hello; the Gen 2 wire's ot_id is the integer.
-        return {"foundation": "gen2_gsc", "artifact_kind": "clean", "ot_id": int(ot, 16),
+        return {"foundation": "gen2_gsc", "artifact_kind": "overlay", "ot_id": int(ot, 16),
                 "rom_sha1": _gen2_rom_sha1(), "party": []}
     return _companion_fields(_rom_type(player))
 

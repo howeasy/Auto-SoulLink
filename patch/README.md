@@ -67,9 +67,8 @@ FireRed/LeafGreen/Emerald and Radical Red. The Manager patches it into every car
 with no opt-out (`server/cartridges.py` `COMPANION_TITLES`), and it **refuses** a pick it cannot
 patch instead of handing out a clean one. A clean (unpatched) cartridge of those titles is refused
 twice more, so it cannot be used by bypassing the Manager: by the launcher (`lua/gen1/entry.lua`
-`admit_routed`, `lua/gen3/entry.lua` `admit_routed`; Gen 2's launcher and adapter refusal land with its
-overlay re-admission) and by the server at the hello (`GameRulesAdapter.companion_refusal`, overridden
-per adapter). A randomized
+`admit_routed`, `lua/gen2/entry.lua` `Entry.admit`, `lua/gen3/entry.lua` `admit_routed`) and by the
+server at the hello (`GameRulesAdapter.companion_refusal`, overridden per adapter). A randomized
 cartridge is randomized and then patched; a randomized-clean one is refused like any clean one. The
 player-facing reason: this cartridge needs the SLink companion patch, so prepare it through the Manager
 or `/patcher`.

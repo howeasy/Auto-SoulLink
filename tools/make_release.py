@@ -390,9 +390,10 @@ _COMPANION_README = "patch/README.md"
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
                      "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
 # Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
-# NOT unconditional: lua/gen2/entry.lua admits clean rows only until the overlay row is promoted, so a
-# release that shipped these UPS would hand the user a patch that bricks their cartridge while (see
-# data_game_files) withholding the binding sidecar and proofs that explain why. Gated by overlay_state.
+# NOT unconditional: lua/gen2/entry.lua admits ONLY an activated overlay row (a clean cartridge is refused,
+# owner 2026-10-02), so until the overlay row is promoted a release that shipped these UPS would hand the
+# user a patch that bricks their cartridge while (see data_game_files) withholding the binding sidecar and
+# proofs that explain why. Gated by overlay_state.
 _GEN2_OVERLAY_UPS = {"crystal": "SLink-Crystal.ups", "gold": "SLink-Gold.ups", "silver": "SLink-Silver.ups"}
 
 
