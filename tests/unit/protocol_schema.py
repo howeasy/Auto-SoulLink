@@ -66,7 +66,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "rival_team_replaced": ({"trainer_id": "int", "species_ids": "list"}, {"error": "str"}),
     "stats_cache": ({"key": "key", "stats": "dict"}, {}),
     "sync_retrieve_done": ({"key": "key"}, {}),
-    "sync_retrieve_failed": ({"key": "key"}, {}),
+    "sync_retrieve_failed": ({"key": "key"}, {"reason": "str"}),  # core/deferred.lua:190, gen1/gen2 send it
     "box_mon_failed": ({"key": "key"}, {"reason": "str"}),
     "memorialize_done": ({"key": "key"}, {"box": "int"}),
     "memorialize_failed": ({"key": "key"}, {"reason": "str"}),
