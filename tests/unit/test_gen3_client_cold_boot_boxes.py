@@ -124,3 +124,15 @@ def test_settle_window_two_quiet_frames_after_the_load(monkeypatch, pack, title)
     assert len(run(0)) == len(FULL)                  # no settle: the six loaded mons are published
     caps = run(2)
     assert [c["key"] for c in caps] == [key_of(GIFT, OT)]
+
+
+def test_a_settle_scans_the_boxes_exactly_once():
+    """observe_known's first settle used to scan twice in one frame (the baseline branch and the
+    unconditional re-learn): 2 x 14 boxes x 30 records decrypted for nothing on every title, and
+    a stale generation in the baseline log. The unit World baselines at hello and never reaches
+    that branch, so the invariant is pinned on the function body: ONE rescan_boxes() call."""
+    src = (ROOT / "lua/gen3/client.lua").read_text(encoding="utf-8")
+    start = src.index("local function observe_known()")
+    body = src[start:src.index("drv.frame_hooks", start)]
+    body = body[:body.index("seed_known(party)")]            # the part that scans before re-seeding
+    assert body.count("rescan_boxes()") == 1, body.count("rescan_boxes()")

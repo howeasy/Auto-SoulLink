@@ -1505,16 +1505,18 @@ function Client.new(p)
         if not party then return end
         update_frozen(party)
         if st.frozen or recovery_hidden() then return end      -- withheld RAM is never a baseline
-        if not st.baselined then
-            rescan_boxes(); st.baselined = true
-            log(string.format("baseline(quiet): boxes ok=%s n=%d gen=%d party=%d",
-                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #party))
-        end
         -- A settled quiet count-change re-baselines the boxes with the party. A cold boot
         -- baselines at party=0 / boxes n=0 before CONTINUE loads the save; without this rescan
         -- the pre-existing boxed keys stay unknown and the next boxed gift reads as ambiguous.
         -- Quiet frames only (st.flags empty above): a new boxed mon signals on its own frame.
+        -- ONE scan per settle: the first baseline logs after it (it used to scan twice).
+        local first = not st.baselined
         rescan_boxes()
+        if first then
+            st.baselined = true
+            log(string.format("baseline(quiet): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #party))
+        end
         seed_known(party)
         st.seen_count = count
     end
