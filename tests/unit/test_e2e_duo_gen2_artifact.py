@@ -55,7 +55,9 @@ def test_overlay_preparation_keeps_refused_b_cartridge_and_launch_identity(tmp_p
                       "qualification_attempt_id": "MODEL", "rom": wrong if side == "b" else build / "a.gbc",
                       "rom_sha1": wrong_sha if side == "b" else "a" * 40}
     rows["b"]["expect_admission"] = "refused"
+    planned = []
     def plan(key, directory, fixture, speed):
+        planned.append(key)
         own = key.removesuffix("_overlay")
         stage = b"MODEL overlay " + own.encode() if key.endswith("_overlay") else None
         sha = hashlib.sha1(stage).hexdigest() if stage else "c" * 40
@@ -81,6 +83,8 @@ def test_overlay_preparation_keeps_refused_b_cartridge_and_launch_identity(tmp_p
     run._check_bizhawk_paths = lambda: None
     run._prepare_gen2_lane()
     refused = run._gen2_plans["b"]
+    assert planned == [f"{title}_overlay", "crystal"]  # the refused side is never planned (or staged) as an overlay
+    assert (rows["b"]["artifact_kind"], rows["b"]["binding_sha256"]) == ("clean", None)
     assert rows["b"]["rom"] == refused["rom"] == wrong
     assert rows["b"]["rom_sha1"] == refused["rom_sha1"] == refused["launch_sha1"] == wrong_sha
     assert refused["stage"] is None and refused["overlay"] is False and refused["kind"] == "clean"

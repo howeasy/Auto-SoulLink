@@ -4595,8 +4595,9 @@ class DuoRun:
             plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_BASE_SHA1=row["rom_sha1"],
                                SLINK_GEN2_EXEC_SHA1=row["rom_sha1"], SLINK_GEN2_ARTIFACT_KIND="clean",
                                SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
-            for key in ("SLINK_GEN2_OVERLAY_SHA1", "SLINK_GEN2_BINDING_SHA256"):
+            for key in ("SLINK_GEN2_OVERLAY_SHA1", "SLINK_GEN2_BINDING_SHA256"):  # defence: the clean plan has none
                 plan["env"].pop(key, None)
+            row.update(artifact_kind="clean", binding_sha256=None)  # the row, too, names what B boots
         self._check_bizhawk_paths()
         self._stage_gen2_roms()
         if self.scenario in GEN2_TRADE_SCENARIOS:

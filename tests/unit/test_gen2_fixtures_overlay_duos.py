@@ -24,4 +24,4 @@ def test_duo_capture_choices_do_not_expand_the_production_inspect_set():
     assert set(fixtures.OVERLAY_QUALIFIED) == {
         "crystal_battle", "crystal_town", "gold_battle", "gold_battle_errand", "gold_town",
         "silver_battle", "silver_town"}
-    assert set(fixtures.OVERLAY_QUALIFIABLE) == set(fixtures.OVERLAY_QUALIFIED) | set(DUO_ADDITIONS)
+    assert set(fixtures.OVERLAY_QUALIFIABLE) == set(fixtures.BY_NAME)  # every declared fixture, now and later
