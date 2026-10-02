@@ -29,13 +29,13 @@
 | Item | HG | SS | hge | Commit / receipts |
 |---|---|---|---|---|
 | Row o, in-battle linked faint, one-mon whiteout | PASS | n/a | PASS | `a15b7d74`, `0f75c938`, regression `ae0995dc` |
-| Row o, 2-mon replacement path (SYNTH party2) | PASS | n/a | PASS | `de7fc1b2`, hardening `7a234174`; `C:/slink/g4/faint2/*_p2_*` |
+| Row o, 2-mon replacement path (SYNTH party2) | PASS | n/a | PASS | `de7fc1b2`, hardening `7a234174`; PASS runs `C:/slink/g4/faint2/heartgold_seam_turnend_p2_201327`, `heartgold_seam_ufce_bit_p2_201242`, `_201440`, `heartgold_hge_seam_turnend_p2_201400`, `heartgold_hge_seam_ufce_bit_p2_201513` (`_201013`/`_201104` were OPEN pre-fix attempts) |
 | PC deposit, native SAVE, cold reload (row i box leg, G2 fixtures) | PASS | PASS | PASS | `02705ce5`, `01dd2bb3`, hardening `8db9c26f` |
 | Dirty-flag offset (HG 0x12004, hge 0x1E004) | measured | measured | measured | RAM: set by deposit, 0 after SAVE and load. The saved battery keeps 1 (`f426a76b`). |
 | Wild capture (SYNTH bag) | PASS | PASS | PASS | `6676a13b`, `2a43bfb6`, `76ec3bac`; `C:/slink/g4/catch/catch_203302`, `catch_hge/catch_203823`, `catch_ss/catch_204123` |
 | Egg hatch (SYNTH egg1) | PASS | PASS | PASS | `8db9c26f`, `76ec3bac`; `C:/slink/g4/hatch`, `hatch_hge`, `hatch_ss` |
 | 1x performance | 0-hook rows met the rule. The 1-hook row had p99 +2.2 ms, accepted under the G1 signature. | n/a | same | These receipts are refused by the hardened validator (`8b5047c2`), so they need a re-run at the current cut. |
-| G1 rows a, c–e, g, h, j–l | PASS on an earlier probe cut | | | These need a re-run on the frozen probe cut, on HG and hge. |
+| G1 rows a, c–e, g, h | PASS in the `baseline` case of `C:/slink/g4/probe/shakedown-hg-ac0d70aa43` (cut `abf2b72c`); j–l passed only on the earlier cut `C:/slink/g4/probe/heartgold-0cc5b0ee2c21` | | | All of a–n need a re-run at the landing cut, on HG and hge. |
 
 ### Committed G2 client modules
 
@@ -64,9 +64,18 @@ Supporting tools and data:
    - Set `SLINK_GEN4_<TITLE>_SAVE` and the `_STATE` env vars.
    - Run on a quiet machine, so the run is not concurrent with Gen 3 duo runs.
    - Row f stays OPEN until a bundle binds the current HEAD.
-3. **G1 rows a–n.** The HG shakedown at `abf2b72c` (`C:/slink/g4/probe/shakedown-hg-ac0d70aa43`) PASSed a, c, d, e, g and h with no FAIL, and `profile.rtc` has landed (`5e232930`). Two gaps in the C1-1 gate wrapper (`tests/live/test_gen4_probe_gates.py`) block a full pass:
+3. **G1 rows a–n.** The HG shakedown at `abf2b72c` (`C:/slink/g4/probe/shakedown-hg-ac0d70aa43`) PASSed a, c, d, e, g and h in its `baseline` case. `patched-rom` (j: ROM hash differs) and `rtc-unpinned` (c: unpinned core settings) are targeted control reds (OMP cx-9265e740). `no-buttons` l FAILs with "buttons-only CONTINUE failed". `party-write` FAILs every row because its CONTINUE never reached the overworld: that is the PC-facing boot defect fixed in `c5cca903`, NOT a control. The wrapper does not yet assert expected control reds. g PASSes in every case. and `profile.rtc` has landed (`5e232930`). Two gaps in the C1-1 gate wrapper (`tests/live/test_gen4_probe_gates.py`) block a full pass:
    - It does not bridge the route tool's legs (`gen4_routes:battle_settled` and the PC legs). Without that, rows b, m and n cannot run.
    - FIXED in `c5cca903` (Codex): the SYNTH identity check now accepts the clone in the party OR the boxes. The same commit stops the probe boot pulsing A/Start once the field is live; a PC-facing save used to open the PC.
+
+   - **Boxed persistence retry at `bf58a7c8`** (Codex, `C:/slink/g4/probe/shakedown-hg-ac0d70aa43/boxed-fix/observation.json` plus a per-case `receipt.txt`):
+     - **Boot fix PHYSICAL:** HG reached the overworld (`overworld=true`, boot_frame 1024) in all 5 cases: party-write, no-write, box-write, box-no-dirty and cold-reload.
+     - **All four native SAVE traces** ran idle → active 2..7 → idle, with `Save_WriteManFinish` hit once; the newer banks decode coherently.
+     - **Row i is a measured FAIL of its oracle premise.** A box write persists across SAVE and reload **even without the dirty flag**: original 70, target 71, with dirty 71, without dirty also 71. The party leg behaves as expected (written 19, no-write 20, cold reload 19).
+       - Decide next session whether row i should require the dirty flag at all. A native SAVE appears to write the whole PC regardless.
+       - No rerun of the unchanged row i, and no threshold relaxation.
+     - **Row c, measured discrepancy:** on PC-derived input, the first residency changes land 2 frames after the pinned `HandleLoadOverlay` causes (id0 at f222 vs 220, id38 at f231 vs 229). `census_ok` allows 0..1. Native-stock baseline c PASSes. Decide whether the tolerance should be 2, from this measurement, not by guess.
+   - HG only so far. SS and hge are UNRUN under the HG-only lane grant.
 
    After the route-leg bridge, run a–n on HG and hge at the landing cut.
 4. G2 remainder, per `docs/gen4/G2_PRODUCER_PLAN.md`:
@@ -78,7 +87,7 @@ Supporting tools and data:
    - Re-run the lanes at the landing HEAD.
    - **Refinement (OMP cx-50ff7abe):** bind the *evidence surface*, not the repository position. Hash the probe's full dependency set, mirroring `committed_modules()` in `tests/live/test_gen4_perf.py`: `lua/json_codec.lua`, `lua/hook_registry.lua`, `lua/gen4/*`, `lua/nds/*` and the packs it reads. Refuse when any of those changed. `source_head` becomes informational, so a docs-only commit no longer stales receipts while a dependency edit does. Apply this to every consumer: `committed_cut` in `test_gen4_probe_gates.py`, `consume_receipt` in `test_gen4_battle_faint.py`, and `verify_receipt` in `tools/gen4_routes.py`.
    - Catch judge branch tests are done (`abf2b72c`).
-   - Receipts on disk from before `1bbc1f88` / `b2784f1b` now read STALE by design: they lack title, rom_sha1 and the module sets. That covers `C:/slink/g4/route_pc*`, `catch*`, `hatch*` and `faint*`. Treat them as superseded behaviour evidence until the landing re-run.
+   - Receipts on disk from before `1bbc1f88` / `b2784f1b` now read STALE by design: they lack the module sets and the kind binding (some, such as `catch_203302`, already carry title and rom_sha1). That covers `C:/slink/g4/route_pc*`, `catch*`, `hatch*` and `faint*`. Treat them as superseded behaviour evidence until the landing re-run.
    - Tidy-up: hoist `from tools import gen4_pins` to module scope in `tools/gen4_routes.py` (two module identities coexist; OMP cx-421a1f56 N1).
 6. **Small pack fixes:** DONE in `49ca5e35`: Pt has its own rtc caveat, the ARM9 byte provenance is labelled and the battle evidence cites its owning structs. Follow-up (OMP cx-b6e028df P5): also pin `VSyncThrottle`/`SuperHawkThrottle` false in `PACE_1X`, if receipts are to claim "clock throttled" exactly.
 7. Owner items:

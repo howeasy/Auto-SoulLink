@@ -92,7 +92,7 @@ Commit hashes from `git log --oneline` on this branch; receipt paths under `C:/s
 | Independent codec/save-layout controls: counter wrap, coherent banks, CRC, torn/ambiguous | `073cddd4` codec, `663c5f3d` (Pt + SS + hge geometry); `tests/unit/test_gen4_save_layout.py:87-112` (wrap, equal counters ambiguous, torn newest falls back, torn only bank refused) | DONE | None |
 | HG fixtures boot, native SAVE, cold reload with counter/keys | PC deposit + native SAVE + cold reload PHYSICAL on HG/SS/hge (`02705ce5`, `01dd2bb3`, hardening `8db9c26f`; `C:/slink/g4/route_pc*/`); row-o save/reload `a15b7d74`, `0f75c938` | PHYSICAL PASS (receipts pre-`1bbc1f88` read STALE by binding) | Re-run at the landing HEAD |
 | hge `party_off`, dirty flag, ability offset: source/FILE + populated mon decode | `party_off` `5514d94d`; ability 9-bit FILE-confirmed (`5514d94d`); hidden-ability bit 6 `d52cc4c7`; dirty flag MEASURED HG +0x12004 / hge +0x1E004 (RAM set by deposit, 0 after SAVE and load; battery keeps 1, `f426a76b`) | DONE | None |
-| SS fixture cells | SS PC deposit/SAVE/reload, capture (`catch_ss/catch_204123`) and hatch (`hatch_ss/hatch_ss_receipt.json`, HATCH_OK) PHYSICAL | PHYSICAL PASS (re-run at landing HEAD) | None beyond the landing re-run |
+| SS fixture cells | SS PC deposit/SAVE/reload, capture (`catch_ss/catch_204123/verdict.json` PASS; the `CATCH OPEN` header in `receipt.txt` is the probe's raw observation, the Python judge writes the verdict) and hatch (`hatch_ss/hatch_ss_receipt.json`, HATCH_OK) PHYSICAL | PHYSICAL PASS (re-run at landing HEAD) | None beyond the landing re-run |
 | Pt profile generation SOURCE; Pt decode (D3) | Pt profile + geometry `663c5f3d`; owner Pt save decoded (TTT TID 44361, Turtwig) | DONE (emulator-free, non-shipping) | None |
 | Every required producer has an independent oracle + physical receipt plan | This document: V1-V12, H1-H9, tooling in section 4, flags F1-F8 | IN PROGRESS | Owner/coordinator accepts the plan; build the section 4 tools in order bag, egg1, species, place (each unblocks the most rows); client card for F2/F3 before V8/V10 |
 
@@ -106,3 +106,44 @@ Commit hashes from `git log --oneline` on this branch; receipt paths under `C:/s
 6. F3: the `key_change` client wiring. This depends on the client card, see `reviews/CLIENT_DESIGN_PROPOSAL_2026-10-01.md`, and N2 must be settled first.
 
 Already PHYSICAL on HG, SS and hge, needing only the landing-HEAD re-run: PC deposit/SAVE/reload, wild capture and egg hatch. Row o is PHYSICAL on HG and hge, both one-mon and 2-mon.
+
+### 6b. Withdraw / release leg design (OMP cx-44f63aff, coordinator-reconciled)
+
+**Withdraw**
+- **Inputs:** reuse the `pc_deposit()` prologue (`lua/tests/gen4_route_play.lua:462-497`). Then, where deposit taps A on toolbar node 6 (STORE), tap Right then A.
+  - The toolbar is a four-node ring (`ov14_021F8A40`, pinned pokeheartgold `asm/overlay_14.s:37480-37485`).
+  - Node 7 = WITHDRAW is INFERRED from the ring order. Confirm it once with the manager-state readback before writing the leg.
+  - The box-side selection state after node 7 is UNKNOWN. That is the largest gap.
+- **Oracle:**
+  - party +1 with the box PID;
+  - `box_census` shows the slot empty and the total −1;
+  - the box-1 modified bit is set;
+  - all of the above hold after SAVE and a cold reload (template: the `RELOAD_OK` block at `:698-708`).
+- **Falsifiers:**
+  - no Right tap (presses STORE) must FAIL `withdraw_not_committed`;
+  - Right×2 (MOVE) must FAIL, not hang.
+
+**Release**
+- **Inputs:** the box slot action menu and its confirm states are unnamed in the ov14 asm. Read them from source before coding. Build release after withdraw is green.
+- **Oracle:** the PID is absent from party and boxes, the modified bit is set, and the PID is **still absent after SAVE and a cold reload**. Only the reload half separates a real release from a RAM-only zeroing.
+- **Falsifiers:**
+  - a run stopped before SAVE must read OPEN;
+  - releasing a party mon is refused.
+
+**Receipts:** keep the existing `route` kind. `RECEIPT_KINDS` `pass` is any-of (`gen4_routes.py:1059`, `status in spec["pass"]`), so appending `PC_WITHDRAW` and `PC_RELEASE` is safe. De-hard-code the `PC_DEPOSIT` literals (`gen4_routes.py:985, 1235, 1397`) into a per-target map.
+
+**State machine (OMP cx-450724f8).** `PCBox_Main` wraps `ov14_021EAF8C`, which dispatches through the word table `ov14_021F7D9C`: entry N handles state N, and each handler returns the next state. Exit is `cmp r0,#0xb3` (`asm/overlay_14.s:11368-11385`), and the state is the word read at `man+0x14`. The toolbar labels are BG tilemaps, so there are no strings to name the nodes.
+
+**Next step:** find the handler for the toolbar-select state (`ST_LIST` 0x5B), follow its branch for cursor node 7, and check which storage call it reaches. Note that the toolbar node index is NOT the state index; the OMP's "read entry 7" conflates the two.
+
+**ST_LIST handler (OMP cx-c0eda9f7).**
+- State 0x5B is handled by `ov14_021EDFA0` (pinned `asm/overlay_14.s:17200-17519`; table entry at `:37057`).
+- The cursor node is `[data+0x21] - 0x1E` (handler-relative lines 60-65 and 201-206), so toolbar nodes 6-9 are bytes 0x24-0x27. This is usable as a probe assertion now.
+- Successors are set by `bl ov14_021F2270` with the state in r2. The 0x94 state appears there, which agrees with the deposit leg.
+- **Toolbar SETTLED (OMP cx-903f44a7). This SUPERSEDES the node 6/7 assumption above.**
+  - The A branch is a 12-case jump table (`asm/overlay_14.s:17313-17342`).
+  - Node 7 → state 0xA9 (`:17367`). That is the deposit leg's documented first-button path, so the deposit's bare A is on **node 7 = STORE**.
+  - Node 8 → state 0x97 (`:17377`), after writing 8 to `data+0x2C` (`:17374`). This is a free in-RAM witness that the branch was taken.
+  - **WITHDRAW is most likely node 8**, i.e. one Right from where the deposit presses A.
+  - **Confirm before coding:** read state 0x97's handler (table entry at `:37117`) for a box→party call.
+  - The toolbar spans nodes 6..11 plus three negative-coded nodes; their meaning is UNKNOWN.

@@ -90,7 +90,33 @@ This closes all three holes without touching the core.
 
 - **F1 REJECTED:** "the live flag is a u8 read at u32 width". `BOOL` is `typedef int` (`.cache/pret/pokeheartgold/lib/include/nitro/types.h:39`), and `str` is a word store, so the u32 read is the correct width.
 - **F6 accepted as verification:** the boxed-clone identity check is fail-closed (`gen4_codec.py:477-490` re-raises on a bad slot).
-- **F2 OPEN, to be settled by the live boot receipt:** gating on field-allocated plus `unk6C` might stop input before the overworld. A boot that reaches row l's idle at `c5cca903` refutes it; a boot timeout confirms it. The suggested narrower predicate is in `safety.lua:21-22`: field app alive AND no launched app.
+- **F2 stall risk REFUTED from source** (OMP cx-eb45b481): `sFieldSysPtr` is written only in the field overlay init (`pokeheartgold src/field_system.c:57,71`), and `unk6C` = `runningFieldMap` is set TRUE only at `FIELD_MAP_INIT_STATE_DONE` (`src/field/fieldmap.c:225`). So the gate cannot close at the title or CONTINUE screens. Residual risk: an input buffered before the gate closes could open a menu, but `idle()` then stays false and the boot fails cleanly at its bound. For player-in-control, the engine's own predicate is `FieldSystem_IsPlayerMovementAllowed` (`field_system.c:203-205`: not paused AND runningFieldMap AND no field task); prefer it for the client's idle. Original wording follows: gating on field-allocated plus `unk6C` might stop input before the overworld. A boot that reaches row l's idle at `c5cca903` refutes it; a boot timeout confirms it. The suggested narrower predicate is in `safety.lua:21-22`: field app alive AND no launched app.
 - **F3 / F7 accepted as test follow-ups:**
   - F3: `live()` true from frame 1 while `idle()` is never reached must return `overworld=false` at the limit.
   - F7: build the ancestry fake from a real `Decoded`.
+
+### Lease mechanics (OMP cx-28909757, coordinator-corrected)
+
+- **The API is sufficient.** `signals:request(PHASE)` renews the lease. While armed it returns `nil, "busy: <phase> already armed"` (`phase_signals.lua:158`) before any cap test or registration, so a per-frame renew is free; treat that "busy" as held. `signals:disarm(PHASE)` releases it. The D7 phase must declare **no `active` predicate**, otherwise `poll()` (`:167-179`) re-arms it every frame and the lease never expires.
+- **Frame order, CORRECTED.** The OMP placed `pre_pump` before `frameadvance`; the actual order is:
+  1. `emu.frameadvance`, where the hook fires;
+  2. then `frame_end`: `pre_pump` (`session.lua:409`) → drain (`:422`) → `frame_hooks` (`:435`) → `flush_battle_writes` (`:472`, last).
+
+  So no driver code runs after the flush and before the next `frameadvance`. If the core skips `battle_write` on frame N (writes paused, party unreadable, key not in the party, or retired), the hook stays armed through frameadvance N+1. A `pre_pump` disarm on N+1 is one frame too late.
+- **The guard is in the callback.** The hook callback writes only if the lease was renewed by the `flush_battle_writes` of the immediately preceding `frame_end` (`lease.renewed_frame == current_frame - 1`). Otherwise it writes nothing and disarms. The `pre_pump` disarm is then just cleanup.
+- **Renew only on the frame_end write path.** Never call `request` from inside a bus callback, because that re-arms mid-frame.
+- **Test:** the lupa test (text in the cx-28909757 reply) covers arm → no renew → fire → `hits == 0`, plus the reciprocal leg renew → fire → `hits == 1`. Its fire must happen *before* the `pre_pump` of the following frame, to model the real order.
+- **Frame counter (OMP cx-3d691308, coordinator-reconciled).** Use `emu.framecount()` on both sides: as the Gen 4 `game.frame()`, the same as `gen3/client.lua:1057`, and read directly in the callback, never via `session.frame`.
+  - **Supporting evidence:** `gen1/client.lua:1506` requires the frame stamped in a hook during frame X to equal the frame read in frame X's `frame_end`. So a renew in the `frame_end` of N stores N, and the callback during the next advance reads N+1. That gives `renewed_frame == current_frame - 1`.
+  - **The OMP proposed `==`. That is rejected:** it inverts its own evidence.
+  - **Confirm once, live, before relying on it:** append `emu.framecount()` in the hook (`probe_gen4_hooks.lua:899` already does) and around `emu.frameadvance()` in `step()` (`:540`), then compare.
+- **Idle predicate data (OMP cx-3d2ee951).**
+  - `FieldSystem_TaskIsRunning` is `taskman != NULL` (`pokeheartgold src/task.c:70-72`), and `taskman` = fs+0x10 is already in the pack as `probe_field.task`.
+  - A launched application occupies `processManager->parent`/`child` (`task.c:74-76`, `field_system.c:118-128`), not a task.
+  - OPEN: which mechanism the start menu, the PC and the Pokégear each use, and whether `safety.lua:21-22` excludes them. Note `sub_0203DF8C` = `parent != NULL && runningFieldMap`, so `parent` may be non-NULL in normal field play. Do not require `parent == NULL` until the source is read.
+- **Idle predicate SETTLED (OMP cx-1a0f85d9, coordinator-composed).**
+  - The start menu is a FieldTask (`pokeheartgold src/start_menu.c:111-125`), so `taskman != NULL` while it is open.
+  - The PC is a launched app (`launch_application.c:406`, from `scrcmd_c.c:1995`), so it occupies the processManager child slot.
+  - `processManager->parent` IS the field overlay (`field_system.c:95,101,147`) and is non-NULL in all normal play.
+  - So: client idle = `runningFieldMap (fs+0x6C) != 0 AND taskman (fs+0x10) == 0 AND parent != NULL AND child == NULL`. This is `safety.lua:21-22`'s field_app/launched_app pair plus `probe_field.task`, with no new pack data.
+  - The Pokégear is a launched app reached from the start menu (`start_menu.c` `Task_StartMenu_Pokegear` → `PokegearPhone_LaunchApp`). `Task_StartMenu_WaitApp` parks until no app is running, so `child == NULL` is the load-bearing term for the PC and the Pokégear, while `taskman == 0` covers only the menu itself (OMP cx-03006359). `child` as the launch slot is inferred; cite its writer when building the client.
