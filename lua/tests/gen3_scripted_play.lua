@@ -3964,6 +3964,13 @@ if TITLE == Syms.EXP_TITLE then
                                .. "IsRemovingLastPartyMon, :2327-2343)", before.party.n))
             end
             local target = before.party.order[before.party.n]
+            -- NO-INPUT WARM-UP (live finding pc_048db86b): the observer's INITIAL status row has no
+            -- frame_control field (shadow_run.lua omits it until the first fire), so a window that
+            -- starts right at the leg start has no measured STATUS pair. Idle 600 frames on the
+            -- field first, then mark the start of the refusal attempt; the liveness and absence
+            -- windows bind from box-refusal-start to box-full. No input, no gate change.
+            for _ = 1, 600 do G.advance() end
+            G.phase("box-refusal-start", "no-input warm-up done; starting the full-box deposit attempt")
             PC.open(cp, L)
             PC.mode(L, PC.OPTION.deposit)
             PC.popup(L, 1, before.party.n - 1, 0)  -- last party slot, STORE row 0
@@ -4039,10 +4046,17 @@ if TITLE == Syms.EXP_TITLE then
             if memory.read_u8(PC_DEPOSIT_BOX_ID) ~= 0 then
                 return em_fail(L, "sibling chooser did not reopen on box 0")
             end
+            -- sDepositBoxId only changes when A returns the chooser's box (pokemon_storage_system.c:
+            -- 2862-2870); Right moves sChooseBoxMenu->curBox (:1790-1801), which this driver has no
+            -- symbol for. So a Right press cannot be witnessed through PC_DEPOSIT_BOX_ID (live
+            -- finding pc_048db86b: that wait never fired). Press Right, let the chooser animation
+            -- finish (bounded frames), press A, and let the sibling_readback below prove the
+            -- deposit landed in free_box.
             G.tap("Right", 3, 20)                  -- box 0 -> box 1
-            if not pc_wait(L, "sibling_box_not_selected", function()
-                return memory.read_u8(PC_DEPOSIT_BOX_ID) ~= 0
-            end, 300) then return end
+            for _ = 1, 30 do G.advance() end
+            if not pc_task(PC_DEPOSIT_MENU) or memory.read_u8(st2) ~= 1 then
+                return em_fail(L, "sibling chooser left state 1 after Right: " .. pc_state_dump())
+            end
             G.tap("A", 3, 13)                      -- TryStorePartyMonInBox into the empty box
             if not pc_wait(L, "sibling_deposit_not_committed", function()
                 return pc_task(PC_STORAGE_MAIN)
@@ -4060,10 +4074,10 @@ if TITLE == Syms.EXP_TITLE then
             G.phase("deposited", string.format("sibling deposit into the non-full box %d: "
                     .. "party %d -> %d, %s now box %d slot %d", free_box, before.party.n,
                     done.party.n, target, free_box, free_slot))
-            G.phase("note", "the observer must show NO pc_deposit between 'box-full' and "
-                    .. "'deposited', and one pc_deposit after it (tests/unit/"
-                    .. "test_gen3_exp_pc_negative_legs.py asserts the absence with a liveness "
-                    .. "sibling)")
+            G.phase("note", "the observer must show NO pc_deposit between 'box-refusal-start' "
+                    .. "and 'box-full' (the refused attempt), and ONE pc_deposit after 'box-full' "
+                    .. "(the sibling deposit, inside the span up to 'deposited'); "
+                    .. "docs/gen3_exp/negatives_manifest.json binds exactly that window")
         end,
     }
 end -- if TITLE == Syms.EXP_TITLE

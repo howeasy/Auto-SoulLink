@@ -488,3 +488,26 @@ def test_the_cancel_readback_keeps_the_withdrawn_target_in_the_party_not_in_a_bo
     rb = leg.split("-- The target is the mon this leg WITHDREW")[1].split("boxes_unchanged(L, before.boxes")[0]
     assert "or before.boxes[target] or after.boxes[target] then" in rb
     assert "not before.boxes[target]" not in rb and "must still be boxed" not in rb
+
+
+def test_the_full_box_sibling_does_not_wait_for_sdepositboxid_after_right():
+    """Live PHYSICAL finding (pc_048db86b): sDepositBoxId only changes when A returns the
+    chooser's box (pokemon_storage_system.c:2862-2870); Right moves sChooseBoxMenu->curBox
+    (:1778-1801). The old 'wait for PC_DEPOSIT_BOX_ID ~= 0 after Right' could never fire."""
+    block = _exp_block()
+    leg = block.split('name = "emerald_pc_full_box"')[1]
+    sib = leg.split('G.tap("Right", 3, 20)')[1].split('G.tap("A", 3, 13)')[0]
+    assert "sibling_box_not_selected" not in sib and "PC_DEPOSIT_BOX_ID" not in sib
+    assert "for _ = 1, 30 do G.advance() end" in sib and "memory.read_u8(st2) ~= 1" in sib
+    assert "sibling_readback" in leg          # the deposit landing in free_box is still verified
+
+
+def test_the_full_box_leg_warms_up_without_input_and_marks_box_refusal_start():
+    """The observer's initial STATUS row has no frame_control field until the first fire, so the
+    leg idles 600 frames and emits box-refusal-start before the attempt (liveness window anchor)."""
+    block = _exp_block()
+    leg = block.split('name = "emerald_pc_full_box"')[1]
+    head = leg.split("PC.open(cp, L)")[0]
+    assert "for _ = 1, 600 do G.advance() end" in head
+    assert 'G.phase("box-refusal-start"' in head
+    assert "G.tap" not in head.split("for _ = 1, 600 do G.advance() end")[1]

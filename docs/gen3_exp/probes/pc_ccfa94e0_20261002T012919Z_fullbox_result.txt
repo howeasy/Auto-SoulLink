@@ -1,0 +1,22 @@
+phase start frame=1 title=emerald_expansion_28877d73
+phase resume frame=1 from=emerald_pc_full_box
+phase shadow frame=613 observer started admitted_by=hash
+phase leg-state frame=987 emerald_pc_full_box <- C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private_20261002T012919Z\states\slink_em_exp_fullbox_stage.State
+phase leg-start frame=987 emerald_pc_full_box
+phase box-refusal-start frame=1602 no-input warm-up done; starting the full-box deposit attempt
+phase box-full frame=2168 Task_DepositMenu state 4 (MSG_BOX_IS_FULL), TryStorePartyMonInBox returned FALSE; no SetPlacedMonData
+phase pc-exit frame=2200 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2306 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2412 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=2518 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=2550 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase pc-exit frame=3169 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3275 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3381 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=3487 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=3519 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase deposited frame=3519 sibling deposit into the non-full box 1: party 2 -> 1, 504F4F4D:20250925 now box 1 slot 0
+phase note frame=3519 the observer must show NO pc_deposit between 'box-full' and 'deposited', and one pc_deposit after it (tests/unit/test_gen3_exp_pc_negative_legs.py asserts the absence with a liveness sibling)
+phase leg-state-saved frame=3519 emerald_pc_full_box -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private_20261002T012919Z\states/slink_em_emerald_pc_full_box.State
+phase leg-done frame=3519 emerald_pc_full_box
+RESULT: PASS reached: emerald_pc_full_box | open (skipped): 

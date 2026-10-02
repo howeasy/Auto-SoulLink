@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import zipfile
@@ -458,3 +459,44 @@ def test_exp_plan_requires_cited_shadow_negatives_before_duos_and_zip():
     assert names.index(row.id)<names.index("unit_exp")
     duo_count=sum(e2e_duo.scenario_applies(n,"gen3_exp")for n in e2e_duo.SCENARIOS)
     assert len(plan)==duo_count+11
+
+
+def test_exp_pc_negative_manifest_binds_real_windows_and_positive_siblings():
+    from tests.unit.test_gen3_exp_pc_negative_legs import (
+        check_absent_over_window,
+        check_bypass_window,
+        check_fired_outside_window,
+        statuses,
+    )
+    root=Path(fc.REPO)
+    manifest=json.loads((root/"docs/gen3_exp/negatives_manifest.json").read_text())
+    assert {r['artifact']for r in manifest['receipts']}=={'pc_release_bypass','pc_release_cancel','pc_full_box'}
+    for row in manifest['receipts']:
+        proof=row['pc_window']
+        raw=(root/row['file']).read_text(encoding='utf-8')
+        source=(root/proof['full_shadow']).read_text(encoding='utf-8')
+        assert raw==source and hashlib.sha256(source.encode()).hexdigest()==proof['shadow_text_sha256']
+        assert len(proof['source_head'])==40
+        result=(root/proof['result']).read_text(encoding='utf-8')
+        assert hashlib.sha256(result.encode()).hexdigest()==proof['result_text_sha256']
+        assert 'RESULT: PASS' in result
+        shadow=raw
+        assert all(s['rejected']=='0' and s['dropped']=='0' and s['failed']=='nil'
+                   and s['handler_error']=='nil' for s in statuses(shadow))
+        lo,hi=proof['frames']
+        markers={'pc_release_bypass':('leg-start', 'bypassed', 'emerald_pc_move_release_bypass'),
+                 'pc_release_cancel':('leg-start','release-cancelled','emerald_pc_release_cancel'),
+                 'pc_full_box':('box-refusal-start','box-full',None)}
+        start,end,leg=markers[row['artifact']]
+        suffix=' '+re.escape(leg)+'$'if leg else r'(?:\s|$)'
+        actual_lo=re.findall(rf'(?m)^phase {start} frame=(\d+)'+suffix,result)
+        actual_hi=re.findall(rf'(?m)^phase {end} frame=(\d+)(?:\s|$)',result)
+        assert actual_lo==[str(lo)] and actual_hi==[str(hi)]
+        if row['artifact']=='pc_release_bypass':
+            check_bypass_window(shadow,lo,hi)
+        else:
+            kind='pc_release'if row['artifact']=='pc_release_cancel'else'pc_deposit'
+            check_absent_over_window(shadow,kind,lo,hi)
+            check_fired_outside_window(shadow,kind,lo,hi)
+        assert proof['claim']=='raw observer window only; client reporting remains unqualified'
+        assert 'pc_move'not in {r['kind']for r in row['must_not']}
