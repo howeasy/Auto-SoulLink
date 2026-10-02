@@ -770,10 +770,17 @@ def rom_pins(tree, include_expansion=False):
     for title, kind, sha in re.findall(
             r'\("gen3_\w+", "(\w+)", "(\w+)"\):\s*\(.*?"([0-9a-f]{40})"\)', src, re.S):
         pins[title if kind == "clean" and title in STAGED else f"{title}_{kind}"] = sha
-    md5 = re.search(r'"rr":\s*\{.*?"patched_md5":\s*"([0-9a-f]{32})"',
-                    _read(os.path.join(tree, "server", "patcher.py")), re.S)
-    if md5:
-        pins["radical_red_companion:md5"] = md5[1]
+    # The RR companion md5 moved into data (patch/dist/companion_pins.json, 77f2bdbb); an older tree
+    # still carries it as a literal in server/patcher.py TARGETS["rr"].
+    try:
+        doc = json.loads(_read(os.path.join(tree, "patch", "dist", "companion_pins.json")))
+        md5 = doc["pins"]["rr"]["patched_md5"]
+    except (OSError, ValueError, KeyError, TypeError):
+        found = re.search(r'"rr":\s*\{.*?"patched_md5":\s*"([0-9a-f]{32})"',
+                          _read(os.path.join(tree, "server", "patcher.py")), re.S)
+        md5 = found[1] if found else None
+    if isinstance(md5, str) and re.fullmatch(r"[0-9a-f]{32}", md5):
+        pins["radical_red_companion:md5"] = md5
     need = {"firered", "leafgreen", "radical_red_companion", "radical_red_companion:md5"}
     if not need <= set(pins):
         raise LaneError(f"{tree}: pin tables incomplete (have {sorted(pins)})")
