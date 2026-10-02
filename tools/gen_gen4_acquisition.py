@@ -906,9 +906,13 @@ class Vanilla:
             if f[3] in self.region:
                 by_region.setdefault(self.region[f[3]], []).append(f)
         for reg, fs in by_region.items():  # containing() takes the first hit: overlapping ranges would misclassify silently
-            for a, b in zip(fs, fs[1:], strict=False):
+            far = fs[0]  # the entry with the greatest end so far: every entry is compared against it, not just its neighbour
+            for b in fs[1:]:
+                a = far
                 if a[0] + a[1] > b[0]:
                     raise names.Mismatch(f"xMAP functions overlap in region {reg}: {a[2]} ({a[3]}.o {a[0]:08X}+{a[1]:X}) and {b[2]} ({b[3]}.o {b[0]:08X}+{b[1]:X})")
+                if b[0] + b[1] > far[0] + far[1]:
+                    far = b
         lines = hooks_text.splitlines()
         self.hooks, self.skipped = [], 0
         for ln, act in zip(lines, active_map(lines, defined), strict=True):
@@ -1040,6 +1044,14 @@ TABLE_RE = re.compile(r"gScriptCmdTable\[\] = \{(.*?)\};", re.S)
 HGE_DISPATCH_OK: dict[str, str] = {}
 
 
+# script.inc macros that parse to NO opcode: the script-header / entry-table macros (data words, `.if` blocks, the
+# hex terminator `.short 0xFD13`). They emit table data, never a command, so no handler runs for them. Pinned: a new
+# empty-opcode macro is not in this set, so using it fails script_dispatch instead of silently skipping the check.
+HEADER_MACROS = frozenset(
+    ["ScrDef", "ScrDefEnd", "MapScript", "MapScript2", "ScriptEntry", "ScriptEntryEnd", "InitScriptEntry_Fixed", "InitScriptEntry_OnFrameTable", "InitScriptEntry_OnTransition", "InitScriptEntry_OnResume", "InitScriptEntry_OnLoad", "InitScriptEntryEnd", "InitScriptGoToIfEqual", "InitScriptEnd"]
+)
+
+
 def macro_opcodes(inc_text: str) -> dict[str, set[int]]:
     """asm/macros/script.inc: macro -> the script opcodes it can emit. A macro whose first emitting line is
     `.short N` IS opcode N; a composite macro (Compare, GoToIfEq, ItemVars ...) emits whatever the macros in its body emit."""
@@ -1099,6 +1111,8 @@ def script_dispatch(pret: Path, files: list[str], van: Vanilla, accounted: dict[
     problems = [f"script dispatch: mnemonic {w!r} in {fs[0]} is not a script.inc macro; cannot decode it" for w, fs in sorted(unknown.items())]
     used: dict[str, set[str]] = {}
     for cmd in used_cmds:
+        if not ops[cmd] and cmd not in HEADER_MACROS:  # e.g. hex `.short 0xFD13` or .if-only bodies: the parser cannot see the opcode, so the check would be blind
+            problems.append(f"script dispatch: command {cmd} (used in {sorted(used_cmds[cmd])[0]}) resolves to no opcode in script.inc; cannot check its handler")
         for op in ops[cmd]:
             if op >= len(handlers):
                 problems.append(f"script dispatch: command {cmd} opcode {op} is outside the {len(handlers)}-entry command table")

@@ -800,3 +800,45 @@ def test_overlapping_xmap_ranges_fail_instead_of_misclassifying(tmp_path):
     with pytest.raises(names.Mismatch, match="overlap"):
         synthetic_vanilla(tmp_path, ["  02000000 00000020 .text   foo\t(x.o)", "  02000010 00000010 .text   bar\t(x.o)"], "", {})
     synthetic_vanilla(tmp_path, ["  02000000 00000010 .text   foo\t(x.o)", "  02000010 00000010 .text   bar\t(x.o)"], "", {})  # adjacent is fine
+
+
+def test_xmap_overlap_is_checked_against_the_running_max_end(tmp_path):
+    """A(0x100,+0x40) B(0x120,+0x10) C(0x130,+0x20): B and C both sit inside A's span."""
+    lines = ["  02000100 00000040 .text   fa\t(x.o)", "  02000120 00000010 .text   fb\t(x.o)", "  02000130 00000020 .text   fc\t(x.o)"]
+    with pytest.raises(names.Mismatch, match=r"overlap in region arm9: fa .* and fb"):
+        synthetic_vanilla(tmp_path, lines, "", {})
+
+
+class NoHooks:
+    """Vanilla stand-in for script_dispatch: no function is hooked."""
+
+    hooks: list = []
+
+    def find(self, name, obj=None):
+        return []
+
+
+def test_dispatch_flags_a_used_command_that_resolves_to_no_opcode(tmp_path):
+    """Control (revert-tested by deleting the `not ops[cmd]` problem in script_dispatch): a used command whose macro
+    parses to an empty opcode set (hex .short, .if-only body) would make the handler check silently blind."""
+    (tmp_path / "src/data/fieldmap").mkdir(parents=True)
+    (tmp_path / "asm/macros").mkdir(parents=True)
+    (tmp_path / "files/fielddata/script/scr_seq").mkdir(parents=True)
+    (tmp_path / "src/data/fieldmap/script_cmd_table.h").write_text("const ScrCmdFunc gScriptCmdTable[] = {\n    ScrCmd_Nop,\n    ScrCmd_Wait,\n};\n", encoding="utf-8")
+    (tmp_path / "asm/macros/script.inc").write_text(".macro Wait\n\t.short 1\n.endm\n.macro HexOp\n\t.short 0xFD13\n.endm\n", encoding="utf-8")
+    (tmp_path / "asm/macros/movement.inc").write_text("", encoding="utf-8")
+    (tmp_path / "files/fielddata/script/scr_seq/a.s").write_text("scr_seq_0001_A:\n\tWait\n", encoding="utf-8")
+    (tmp_path / "files/fielddata/script/scr_seq/b.s").write_text("scr_seq_0002_B:\n\tWait\n\tHexOp\n", encoding="utf-8")
+    doc, problems = acq.script_dispatch(tmp_path, ["a.s"], NoHooks(), {})
+    assert problems == [] and doc["handlers_used"] == 1
+    (tmp_path / "asm/macros/script.inc").write_text(".macro Wait\n\t.short 1\n.endm\n.macro HexOp\n\t.short 0xFD13\n.endm\n.macro ScrDef\n\t.word 0\n.endm\n", encoding="utf-8")
+    (tmp_path / "files/fielddata/script/scr_seq/c.s").write_text("scr_seq_0003_C:\n\tScrDef _x\n\tWait\n", encoding="utf-8")
+    assert acq.script_dispatch(tmp_path, ["c.s"], NoHooks(), {})[1] == [], "a header/data macro has no handler and is accepted"
+    _doc, problems = acq.script_dispatch(tmp_path, ["a.s", "b.s"], NoHooks(), {})
+    assert len(problems) == 1 and "HexOp" in problems[0] and "no opcode" in problems[0] and "b.s" in problems[0]
+
+
+def test_header_macro_set_is_exactly_the_empty_opcode_macros(hge_inputs):
+    """Pin: the macros of script.inc that parse to no opcode are exactly HEADER_MACROS (14)."""
+    ops = acq.macro_opcodes(base.read(hge_inputs["pret"], "asm/macros/script.inc"))
+    assert {n for n, o in ops.items() if not o} == set(acq.HEADER_MACROS) and len(acq.HEADER_MACROS) == 14

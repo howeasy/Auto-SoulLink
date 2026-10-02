@@ -325,7 +325,10 @@ def check_bag_layout(general: bytes, profile, lay: dict) -> int:
     A swapped or shifted pocket model reads another pocket's items here, which are outside the
     class (a Potion is not a ball), so it refuses instead of writing at a wrong offset."""
     anchors = 0
-    for name, ranges in POCKET_CLASS[profile.name].items():
+    classes = POCKET_CLASS.get(profile.name)
+    if classes is None:
+        raise Refusal("bag_layout_unknown", f"no source-derived pocket classes for profile {profile.name!r}")
+    for name, ranges in classes.items():
         off, n = lay["pockets"][name]
         gap = None
         for i in range(n):
