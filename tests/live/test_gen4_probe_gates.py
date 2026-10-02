@@ -401,6 +401,23 @@ def test_boot_buttons_measured_red_revert(api):
     assert api.evaluate("l", to_lua(r, examples()["l"])) == "PASS"
 
 
+def test_pc_facing_boot_stops_title_inputs_when_field_live(api):
+    r = api._runtime
+    r.execute('''FRAME=0; BUSY=0; IDLE_INPUTS=0
+        live=function() return FRAME>=120 end
+        idle=function() return live() and BUSY==0 end
+        step=function(buttons)
+            if live() and (buttons.A or buttons.Start) then BUSY=80; IDLE_INPUTS=IDLE_INPUTS+1 end
+            if BUSY>0 then BUSY=BUSY-1 end
+            FRAME=FRAME+1
+        end
+        frame=function() return FRAME end''')
+    result = api.boot("persistence", 500, r.globals().idle, r.globals().live, r.globals().step, r.globals().frame)
+    assert result.overworld and r.globals().IDLE_INPUTS == 0
+    assert result.boot_inputs.A > 0 and result.boot_inputs.Start > 0
+    assert result.boot_frame < 500
+
+
 def test_core_bogus_register_fact_red_revert(api):
     original = examples()["g"]
     assert api.evaluate("g", to_lua(api._runtime, original)) == "PASS"
@@ -693,6 +710,19 @@ def test_recipe_predicate_chain_null_is_not_success(api):
     assert not api.predicate(title, r.globals().read, to_lua(r, {**predicate, "value": None, "zero": True}))
 
 
+def test_synth_identity_survives_native_party_to_box_deposit():
+    from types import SimpleNamespace
+
+    party, boxed = [{"pid": 1}, {"pid": 2}], []
+    decoded = SimpleNamespace(party=lambda: party, boxes=lambda: [{"mons": dict(enumerate(boxed))}])
+    assert synth_identity_present(decoded, 2)
+    boxed.append(party.pop())
+    assert synth_identity_present(decoded, 2)
+    assert not synth_identity_present(decoded, 99)
+    party.append(boxed.pop())
+    assert synth_identity_present(decoded, 2)
+
+
 def test_synth_sidecar_bound_hash_disclosure_and_wrong_revert(tmp_path):
     save = tmp_path / "copy.SaveRAM"
     save.write_bytes(b"model save")
@@ -933,6 +963,11 @@ def save_setup(save):
     assert isinstance(pid, int) and not isinstance(pid, bool) and 0 <= pid <= 0xFFFFFFFF, "SYNTH invalid new_pid"
     return {"setup": "SYNTH", "sidecar_sha256": hashlib.sha256(raw).hexdigest(),
             "src_sha1": meta["src_sha1"].lower(), "out_sha1": meta["out_sha1"].lower(), "new_pid": pid}
+
+
+def synth_identity_present(decoded, new_pid):
+    return (any(mon["pid"] == new_pid for mon in decoded.party())
+            or any(mon["pid"] == new_pid for box in decoded.boxes() for mon in box["mons"].values()))
 
 
 def scenario_input(title):
@@ -1328,7 +1363,7 @@ def test_gen4_hook_probe(api, title):
         cfg["route_open_reasons"][key] = why
     cfg.update(save_setup(save))
     if cfg["setup"] == "SYNTH":
-        assert cfg["new_pid"] in {mon["pid"] for mon in decoded.party()}, "SYNTH sidecar new_pid absent from decoded party"
+        assert synth_identity_present(decoded, cfg["new_pid"]), "SYNTH sidecar new_pid absent from decoded party/boxes"
     if os.environ.get("SLINK_GEN4_PROBE_SKIP_PERF_REASON"):
         cfg["skip_perf_reason"] = os.environ["SLINK_GEN4_PROBE_SKIP_PERF_REASON"]
     root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", "C:/slink/g4/probe-gates"))
