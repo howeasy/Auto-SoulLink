@@ -638,6 +638,9 @@ function G.observer(ctx)
         end
         local battle = reads.read_battle()
         if battle then point.battle_mode = battle.mode end
+        -- a call is an overworld script: a battle ends it, so CLEAR the latch (masking it let a post-battle
+        -- text before the next OWPlayerInput be answered as a call; review cx-158f3337 F3)
+        if point.battle_mode ~= 0 then state.phone_call = false end
         point.phone_call = state.phone_call == true and point.battle_mode == 0
         -- OWPlayerInput ran within the window, no UI context is newer, and no battle is starting.
         point.overworld_ready = point.ui == nil and state.tick ~= nil and point.battle_mode == 0

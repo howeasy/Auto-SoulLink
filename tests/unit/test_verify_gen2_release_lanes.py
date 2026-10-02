@@ -468,6 +468,9 @@ def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     errors = gate.duo_matrix_errors()
     for row in doc["requirements"]:
+        if row["axes"].get("artifact_kind") != "overlay":
+            assert row["superseded_by_overlay"] is True
+            continue
         mine = [error for error in errors if error.startswith(row["id"] + "/")]
         for proof in row["proofs"]:
             cell = row["id"] + "/" + proof["scenario"] + ":"
@@ -660,7 +663,7 @@ def test_every_matrix_gap_is_red(tmp_path, mutation):
     elif mutation == "f5_malformed_row_no_axes":
         del gs["axes"]
     _write_doc(tmp_path, doc)
-    errors = gate.duo_matrix_errors(tmp_path, duo)
+    errors = gate.duo_matrix_errors(tmp_path, duo, artifact_kind=None)  # explicit historical semantic controls
     assert any(_GAPS[mutation] in error for error in errors), (mutation, errors)
 
 
@@ -743,11 +746,12 @@ def test_new_gates_lane_is_the_implemented_receipt_lane():
     assert "tests/fixtures/gen2/receipts" in gate.PREREQUISITES["live-new-gates"]
 
 
-def test_committed_new_gates_tree_is_fully_green():
-    """Clean proof integrity is retained; new overlay proof gaps remain explicit."""
-    assert gate.new_gates_errors(artifact_kind="clean") == []
-    errors = gate.new_gates_errors(artifact_kind="overlay")
-    assert errors and all("no receipt registered" in error for error in errors)
+def test_committed_new_gates_history_is_not_a_release_gate():
+    doc = json.loads((REPO / gate.NEW_GATES).read_text())
+    history = [r for r in doc["requirements"] if r["axes"].get("artifact_kind", "clean") == "clean"]
+    assert history and all(r["superseded_by_overlay"] is True for r in history)
+    errors = gate.new_gates_errors()
+    assert not any(e.startswith(r["id"] + ":") for r in history for e in errors)
 
 
 def test_copied_new_gates_tree_is_also_green(tmp_path):
@@ -940,7 +944,7 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
         _repin(tmp_path, entry)
 
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
-    errors = gate.new_gates_errors(tmp_path)
+    errors = gate.new_gates_errors(tmp_path, artifact_kind=None)  # historical clean validator controls
     assert any(_NEW_GATE_GAPS[mutation] in error for error in errors), (mutation, errors)
 
 
@@ -1957,10 +1961,10 @@ def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
                                             ("--duo-pairs", "duo_pairs_errors"),
                                             ("--release-evidence", "release_evidence_errors")])
 def test_receipt_cli_exit_follows_the_gaps(monkeypatch, capsys, flag, func):
-    monkeypatch.setattr(gate, func, lambda: ["x: stale"])
+    monkeypatch.setattr(gate, func, lambda **_kwargs: ["x: stale"])
     assert gate.main([flag]) == 1
     assert "RED  x: stale" in capsys.readouterr().out
-    monkeypatch.setattr(gate, func, lambda: [])
+    monkeypatch.setattr(gate, func, lambda **_kwargs: [])
     assert gate.main([flag]) == 0
 
 
@@ -2133,7 +2137,7 @@ def test_trade_gates_green_only_when_every_case_is_receipted(tmp_path):
     doc = _trade_tree(tmp_path)
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
     # The lane is narrowed to trade cells: a missing link proof is a duo-link gap, not a trade gap.
-    row = _row(doc, "duo.gold.silver")
+    row = _row(doc, "duo.gold.silver.overlay")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "link"]
     _write_doc(tmp_path, doc)
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
@@ -2218,22 +2222,19 @@ def test_duo_pairs_green_only_with_every_p3b7_and_trade_cell(tmp_path, monkeypat
         row["axes"]["scenarios"], row["proofs"] = ["link"], [{"scenario": "link", "receipts": {}}]
     _write_doc(tmp_path, doc)
     errors = {e.split(":")[0]: e for e in gate.duo_pairs_errors(tmp_path, duo)}
-    assert sorted(errors) == ["duo.crystal.crystal", "duo.crystal.crystal.overlay",
-                              "duo.crystal.gold.overlay",
-                              "duo.gold.silver", "duo.gold.silver.overlay"]
+    assert sorted(errors) == ["duo.crystal.crystal.overlay", "duo.crystal.gold.overlay", "duo.gold.silver.overlay"]
     assert all("gen2_trade_new" in e for row, e in errors.items() if row.endswith(".overlay"))
-    assert "gen2_trade_new" not in errors["duo.gold.silver"]
     # C-G owes the trade cases (O-34) but not the P3b.7 list.
     assert "gen2_ball_gate" in errors["duo.gold.silver.overlay"] and "gen2_ball_gate" not in errors["duo.crystal.gold.overlay"]
 
 
 def test_duo_pairs_red_on_an_unreceipted_cell(tmp_path, monkeypatch):
     doc, duo = _pairs_tree(tmp_path, monkeypatch)
-    row = _row(doc, "duo.gold.silver")
+    row = _row(doc, "duo.gold.silver.overlay")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_egg_hatch"]
     _write_doc(tmp_path, doc)
     assert gate.duo_pairs_errors(tmp_path, duo) == [
-        "duo.gold.silver/gen2_egg_hatch: no receipt registered (an empty proof is a release blocker)"]
+        "duo.gold.silver.overlay/gen2_egg_hatch: no receipt registered (an empty proof is a release blocker)"]
 
 
 def test_shiny_bonus_is_the_recorded_limit_not_a_duo_pairs_cell():
@@ -2461,10 +2462,10 @@ def test_contest_refusal_is_model_only_and_its_named_tests_exist():
 
 def test_a_model_only_case_declared_as_a_cell_is_red(tmp_path):
     doc = _trade_tree(tmp_path)
-    _row(doc, "duo.gold.silver")["axes"]["scenarios"].append("gen2_trade_refuse_contest")
+    _row(doc, "duo.gold.silver.overlay")["axes"]["scenarios"].append("gen2_trade_refuse_contest")
     _write_doc(tmp_path, doc)
     for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
-        assert any("duo.gold.silver: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)
+        assert any("duo.gold.silver.overlay: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)
 
 
 # clock-setup-v1: a W6 leg's O-33 clock setup must re-derive from the committed fixture (day_clock).
@@ -2533,7 +2534,12 @@ def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
 
 
 def _captured_u1_clock(title):
-    receipt = json.loads((REPO / f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json").read_text())
+    # Frozen historical clock input, not release evidence for the newly titled ROM.
+    # Keep the original attempt-2 11:23 control even when the live lane recaptures U1.
+    import subprocess
+    rel = f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json"
+    receipt = json.loads(subprocess.run(["git", "show", "ca9b564f:" + rel], cwd=REPO,
+                                       capture_output=True, text=True, encoding="utf-8", check=True).stdout)
     return next(run for run in receipt.get("runs", [receipt]) if run.get("clock_setup"))
 
 
@@ -2740,19 +2746,20 @@ def test_the_inspect_run_attestation_must_be_a_clean_physical_pass(changes):
     assert gate._inspect_run_row_errors(_attestation(**changes)) != []
 
 
-def test_release_evidence_needs_a_committed_inspect_run_row(tmp_path):
+def test_release_evidence_needs_a_committed_overlay_inspect_run_row(tmp_path):
     (tmp_path / "tests").mkdir()
-    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": []}), encoding="utf-8")
-    assert "no committed clean live-new-gates run attestation" in gate.inspect_run_errors(tmp_path)[0]
-    path = tmp_path / "attest.json"
-    path.write_text(json.dumps(_attestation()), encoding="utf-8")
-    row = {"id": "new-gates.inspect-run", "axes": {"kind": "inspect_run"},
-           "proofs": [{"receipts": {"receipt": {"path": "attest.json", "sha256": _lf_sha(path)}}}]}
-    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": [row]}), encoding="utf-8")
-    assert len(gate.inspect_run_errors(tmp_path)) == 1 and "overlay" in gate.inspect_run_errors(tmp_path)[0]
+    path = tmp_path / gate.NEW_GATES
+    path.write_text(json.dumps({"requirements": []}))
+    assert "no committed overlay live-new-gates run attestation" in gate.inspect_run_errors(tmp_path)[0]
+    row = {"id": "new-gates.inspect-run", "axes": {"kind": "inspect_run", "artifact_kind": "clean"},
+           "proofs": [{"receipts": {"receipt": {"path": "missing-history.json"}}}]}
+    path.write_text(json.dumps({"requirements": [row]}))
+    assert len(gate.inspect_run_errors(tmp_path)) == 1
     assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) == []
-    path.write_text(json.dumps(_attestation(result="FAIL")), encoding="utf-8")
-    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) != []   # the pin, then the content
+    row["axes"]["artifact_kind"] = "overlay"
+    path.write_text(json.dumps({"requirements": [row]}))
+    assert gate.inspect_run_errors(tmp_path) == []  # presence; content belongs to new_gates_errors
+    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) != []
 
 
 def test_the_promotion_verdict_includes_fixtures_and_the_inspect_run():
@@ -2858,16 +2865,27 @@ def test_trainer_active_faint_refuses_wild_or_unbound_evidence(tmp_path, mutatio
 def test_the_captured_overlay_inspect_attestation_binds_the_overlay_identity():
     # the real round-1 receipt records {kind, rom_sha1, binding_sha256}; comparing it to the whole execution
     # identity (which also carries base_sha1) refused a genuine PASS (ROMPatch, pre-freeze)
-    receipt = json.loads((REPO / "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json").read_text())
+    path = REPO / "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json"
+    if not path.is_file():
+        pytest.skip("current overlay inspect recapture is absent")
+    receipt = json.loads(path.read_text())
     assert gate._inspect_run_row_errors(receipt, "overlay", REPO) == []
     receipt["artifacts"]["gold"]["binding_sha256"] = "0" * 64
     assert any("gold: wrong executed overlay identity" in e for e in gate._inspect_run_row_errors(receipt, "overlay", REPO))
 
 
-def test_the_committed_activated_rows_pass_the_g4_packet():
-    # the real generator rows carry the grant only inside runtime_gate; the verifier also demanded a
-    # top-level row.grant_fingerprint that no producer writes, so every activated row read "invalid" (ROMPatch)
-    assert gate.g4_packet_errors(REPO) == []
+def test_the_committed_g4_packet_reflects_activation_state():
+    pending = []
+    for title in gate.TITLES:
+        rows = json.loads((REPO / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
+        if next(r for r in rows if r["kind"] == "overlay")["status"] != "ADMITTED":
+            pending.append(title)
+    errors = gate.g4_packet_errors(REPO)
+    if pending:  # titled-ROM recapture deliberately demotes the rows
+        for title in pending:
+            assert any(e.startswith(f"{title}_overlay: admitted-artifact row is not ADMITTED") for e in errors)
+    else:
+        assert errors == []  # real producer puts the grant only in runtime_gate
 
 
 # ---- version-masked identity (owner ruling 2026-10-02): a receipt bound to a version-equivalent build stays valid ----

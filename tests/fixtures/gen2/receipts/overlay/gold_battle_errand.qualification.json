@@ -7,7 +7,7 @@
     "resave",
     "post_oracle"
   ],
-  "attempt_id": "ovl-gold_battle_errand-a1",
+  "attempt_id": "r2q4",
   "fixtures": [
     {
       "name": "gold_battle_errand",
@@ -24,51 +24,51 @@
           "sha256": "61412f7e3653dce7f424be3d7108222c4343a46783c2b4941a5859002b2ee546"
         },
         "rom": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\gold_overlay.gbc",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\gold_overlay.gbc",
           "size": 2097152,
-          "sha256": "aa7fabc77031a40c6bd8cbd554503c7b0092ffcb8d1bbc22f6af62e146a4c0bf"
+          "sha256": "86fef504784186966c7699339d891da02deeb4e82d6700aeced2e83956057527"
         },
         "route_facts": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\gold_route_facts.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\gold_route_facts.json",
           "size": 22381,
           "sha256": "c5e82bafb00e5b6b6a899cf98c1f9824d88f502126cba1191971913e8fc090bc"
         },
         "played_receipt": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\gold_battle_errand.clean_qualification_ref.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\gold_battle_errand.clean_qualification_ref.json",
           "size": 406,
           "sha256": "cca44ac8b4af34444a0ef0b754e2ff11a1bcd2372419f35543a9343f46154b5a"
         },
         "boot:game_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\boot-4ec687fd18ae2ef7\\gold_battle_errand.boot.witness.json",
-          "size": 1971,
-          "sha256": "673a1fec1a44bfadf5f3cbb6c35734271e860a091acce8d7949aae7e653cc6bb"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\boot-93b10d8a10a438d1\\gold_battle_errand.boot.witness.json",
+          "size": 1950,
+          "sha256": "3d29f7cd538bc9d7fcf4d161bb6bb815821dbdc4ae66eafd86c5ba340520eb20"
         },
         "resave:fixture": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\resave-7fee092e6c7fef32\\gold_battle_errand.resaved.SaveRAM",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\resave-64de3268926a850d\\gold_battle_errand.resaved.SaveRAM",
           "size": 32790,
-          "sha256": "dbfc24b111443913977073be67aa2fd6a29819a22f957f984263e51b31cdd595"
+          "sha256": "f74b2b04c1092f3c0d5180c47d3916b11582f2750fc6c99f7c7f8b4c099db939"
         },
         "resave:save_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\resave-7fee092e6c7fef32\\gold_battle_errand.resave.witness.json",
-          "size": 2095,
-          "sha256": "0fd160342c09ccf854e6f0d3ddb945ee044142c39d8e3a92b9d8cde1b0d57817"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\resave-64de3268926a850d\\gold_battle_errand.resave.witness.json",
+          "size": 2074,
+          "sha256": "038ac13452abd536aa69c21920e0ffac826f791ab767186df73eecb7fdfa324a"
         },
         "resave:reload_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\reload-7fee092e6c7fef32\\gold_battle_errand.reload.witness.json",
-          "size": 1973,
-          "sha256": "b9964d084a93ba8e599fe3e33c39d8dd56054581451f7972f610c2c05bb61717"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\reload-64de3268926a850d\\gold_battle_errand.reload.witness.json",
+          "size": 1952,
+          "sha256": "4443476a31cc310946eea7d6b6dbc805a413b52f277df6ed2899f262ae171a6d"
         }
       },
       "provenance": {
         "title": "gold",
-        "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+        "rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
         "scope": "candidate fixture",
         "route_facts_sha256": "c9a9772a61a40a49a8ce99dbf6ce18ffa5a773d26e1a97e6a1d44e88910cc928"
       },
       "stages": [
         {
           "stage": "qualify",
-          "fingerprint": "6a3bb09c42ff8d23a13d31e39b43dad376051538c5494167a48e361a216a8d25",
+          "fingerprint": "fcf125a5a20eb9d36bd2b3a28a337b531a1c72e4ae37069517bac68a3cbaed7f",
           "status": "PASS",
           "problems": [],
           "notes": [
@@ -83,7 +83,7 @@
         },
         {
           "stage": "boot",
-          "fingerprint": "4ec687fd18ae2ef72e27d94354a107ffd5792980cb8693d4a2756d7c76a448da",
+          "fingerprint": "93b10d8a10a438d104b19e1f24e89a9870a472e37353d12d1bf4771daf794e11",
           "status": "PASS",
           "problems": [],
           "notes": [],
@@ -95,43 +95,43 @@
           },
           "outputs": {
             "boot:game_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\boot-4ec687fd18ae2ef7\\gold_battle_errand.boot.witness.json",
-              "size": 1971,
-              "sha256": "673a1fec1a44bfadf5f3cbb6c35734271e860a091acce8d7949aae7e653cc6bb"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\boot-93b10d8a10a438d1\\gold_battle_errand.boot.witness.json",
+              "size": 1950,
+              "sha256": "3d29f7cd538bc9d7fcf4d161bb6bb815821dbdc4ae66eafd86c5ba340520eb20"
             }
           }
         },
         {
           "stage": "resave",
-          "fingerprint": "7fee092e6c7fef32aed5a60cdb39eb99bbd4af663300b9c253b7a7def8979594",
+          "fingerprint": "64de3268926a850d1a0905a2c490e4c8fbc69bbf0d3bb1b9788f62e65bdca72f",
           "status": "PASS",
           "problems": [],
           "notes": [],
           "evidence": {
             "observer": "independent_GAME re-save + reload",
-            "resave_cartram_sha256": "2af0c1a4f6ab230ec2a93844aa4c271db40325ae40023e8857bdc5df9e9fe3fa"
+            "resave_cartram_sha256": "1ea05e247319b08738646e673ed45c7e1d9c4496142220e57bcee3524d354aa2"
           },
           "outputs": {
             "resave:fixture": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\resave-7fee092e6c7fef32\\gold_battle_errand.resaved.SaveRAM",
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\resave-64de3268926a850d\\gold_battle_errand.resaved.SaveRAM",
               "size": 32790,
-              "sha256": "dbfc24b111443913977073be67aa2fd6a29819a22f957f984263e51b31cdd595"
+              "sha256": "f74b2b04c1092f3c0d5180c47d3916b11582f2750fc6c99f7c7f8b4c099db939"
             },
             "resave:save_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\resave-7fee092e6c7fef32\\gold_battle_errand.resave.witness.json",
-              "size": 2095,
-              "sha256": "0fd160342c09ccf854e6f0d3ddb945ee044142c39d8e3a92b9d8cde1b0d57817"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\resave-64de3268926a850d\\gold_battle_errand.resave.witness.json",
+              "size": 2074,
+              "sha256": "038ac13452abd536aa69c21920e0ffac826f791ab767186df73eecb7fdfa324a"
             },
             "resave:reload_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-gold_battle_errand-a1\\gold_battle_errand\\qualify-overlay\\reload-7fee092e6c7fef32\\gold_battle_errand.reload.witness.json",
-              "size": 1973,
-              "sha256": "b9964d084a93ba8e599fe3e33c39d8dd56054581451f7972f610c2c05bb61717"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q4\\gold_battle_errand\\qualify-overlay\\reload-64de3268926a850d\\gold_battle_errand.reload.witness.json",
+              "size": 1952,
+              "sha256": "4443476a31cc310946eea7d6b6dbc805a413b52f277df6ed2899f262ae171a6d"
             }
           }
         },
         {
           "stage": "post_oracle",
-          "fingerprint": "f1fa2623ca32dae3d2c93f47ece2a17ed8bbefff1c95fcadbe8c091908b034b9",
+          "fingerprint": "4af245416521c51ac6f2d69a506fc14a8e826c8c06c1abe269dfa3ba45e86946",
           "status": "PASS",
           "problems": [],
           "notes": [],

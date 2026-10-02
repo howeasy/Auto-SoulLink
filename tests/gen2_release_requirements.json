@@ -12,6 +12,8 @@
   "requirements": [
     {
       "id": "duo.crystal.crystal",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Crystal A against Crystal B (second OT) through the real server",
       "axes": {
@@ -487,6 +489,8 @@
     },
     {
       "id": "duo.gold.silver",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Gold A against Silver B through the real server",
       "axes": {
@@ -966,6 +970,8 @@
     },
     {
       "id": "duo.crystal.gold",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trades allowed and tested on this pair (owner O-34, 8a42b7f7)",
       "axes": {

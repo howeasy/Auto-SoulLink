@@ -9,7 +9,7 @@
       "symbol": "DelayFrame"
     },
     {
-      "after_hex": "cd9100",
+      "after_hex": "cd9a00",
       "before_hex": "cdda1c",
       "reason": "pinned SetUpMenu call operand -> SlinkMainMenuBridge",
       "source": "tools/build_gen2_companion.py:140-150",
@@ -2477,8 +2477,8 @@
     }
   ],
   "kind": "overlay",
-  "map_sha256": "e6b34d337c60f23caf06930cd3628ff17461de4c7db6f829cb76e1da55e75f44",
-  "overlay_provenance_sha256": "2b0feabdc157cde3ebc9cce8ecc37462b4ec0ab924125147677d0dabbf6c0f43",
+  "map_sha256": "5e807c01aabe8afd464f316ede0aa9af1df716cd08f6b3a692d784bd2a1cce82",
+  "overlay_provenance_sha256": "10898a960d0001672f686ee038499e1cbb26924cf6883ffa33adf002d9127f28",
   "profile_rom": {
     "BaseData": {
       "addr": 23307,
@@ -2591,7 +2591,7 @@
       "flat": 173877
     }
   },
-  "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+  "rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
   "schema": "gen2-overlay-binding-v1",
   "sites": {
     "bag_ball_received": {
@@ -5983,7 +5983,7 @@
     "header_anchors": 368,
     "sites": 43
   },
-  "sym_sha256": "d7d80bfb45403458f17d9746b499512eecf88178e1f319a19ec531631d682ea1",
+  "sym_sha256": "40fbe6bd49bea5d1f4f0565b7b18abb6bbf97561fb833f40bd525005d84f6223",
   "title": "gold",
-  "ups_sha256": "a40ba8e2b3881d829aa5ed84791d7d88c263a750b4391a071c28fb4b5565ca1a"
+  "ups_sha256": "7f56020d196fe03ab715c311274b3136968fdf3470b03e15bdad6ef68e3891ee"
 }

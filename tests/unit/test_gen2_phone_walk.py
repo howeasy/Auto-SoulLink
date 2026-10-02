@@ -86,6 +86,8 @@ def test_only_real_ring_site_arms_phone_and_close_or_overworld_clears_it(tmp_pat
     sim.put("wBattleMode", [1])
     assert observe().phone_call is False
     sim.put("wBattleMode", [0])
+    sim.fire("prompt_button")  # post-battle text BEFORE any OW tick (review cx-158f3337 F3)
+    assert observe().phone_call is False  # a battle ends any call: the latch must not survive it
     sim.fire("overworld_tick")
     sim.fire("prompt_button")
     assert observe().phone_call is False  # a later unrelated text must fail again

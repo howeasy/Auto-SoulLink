@@ -1,26 +1,53 @@
 {
  "artifacts": {
   "crystal": {
-   "binding_sha256": "c3837ed1107c1fed3c31f8abc172727b72ca8654f1b11519342d5959257f4f88",
+   "binding_sha256": "6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450",
    "kind": "overlay",
-   "rom_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057"
+   "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00"
   },
   "gold": {
-   "binding_sha256": "3f1f94782aebc773363affe357e397836f788fe3b8226bd0aa1196a2c3052084",
+   "binding_sha256": "1f9b89bc1be2fe9fc62f502365131eac5dac3495d4b2c91e8c3e8d271844403b",
    "kind": "overlay",
-   "rom_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a"
+   "rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd"
   },
   "silver": {
-   "binding_sha256": "cc145315c9ea18b68f7494da5e2fb96ce9e2b0d338bfd27207d25d67aa956e9f",
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
    "kind": "overlay",
-   "rom_sha1": "583d8df4deb1831523521d20065504258cbaba28"
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d"
   }
  },
  "code_digest": {
-  "commit": "07388de906dd74111985c467896fa4e019b4974f",
-  "digest": "37bb6e82e38a753f5c93d4d4df87a08c8f4f2443b59b0d510a703aaf1bcff215",
+  "commit": "fe70cc3a36aedda0f6c2d4bce2842fb47bd72ad1",
+  "digest": "e916da7b63e903c9219f24a786a903bb1d39de9ad39457a7c82a4299d35bad64",
   "dirty": [
-   "server/cartridges.py"
+   "data/games/gen2_crystal/admission.json",
+   "data/games/gen2_crystal/overlay/binding.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal.engine_sites.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal.write_window.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_battle.qualification.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_bill.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_grass.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_kyle.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_town.qualification.json",
+   "data/games/gen2_gold/admission.json",
+   "data/games/gen2_gold/overlay/binding.json",
+   "data/games/gen2_gold/receipts/overlay/gold.engine_sites.json",
+   "data/games/gen2_gold/receipts/overlay/gold.write_window.json",
+   "data/games/gen2_gold/receipts/overlay/gold_battle.qualification.json",
+   "data/games/gen2_gold/receipts/overlay/gold_battle_errand.qualification.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_bill.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_grass.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_kyle.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_town.qualification.json",
+   "data/games/gen2_silver/admission.json",
+   "data/games/gen2_silver/overlay/binding.json",
+   "data/games/gen2_silver/receipts/overlay/silver.engine_sites.json",
+   "data/games/gen2_silver/receipts/overlay/silver.write_window.json",
+   "data/games/gen2_silver/receipts/overlay/silver_battle.qualification.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_bill.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_grass.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_kyle.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_town.qualification.json"
   ],
   "schema": "gen2-code-digest-v1",
   "scope": [

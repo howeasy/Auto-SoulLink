@@ -85,21 +85,15 @@
       "id": "crystal_overlay",
       "kind": "overlay",
       "revision": "1.0",
-      "selection": "SELECTED",
-      "status": "ADMITTED",
-      "sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
-      "md5": "b31474971179ffeb015a6e80fb335b64",
+      "selection": "FUTURE",
+      "status": "BUILT",
+      "sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
+      "md5": "0477a77b6383862615dc0c45a9fb9592",
       "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
       "ups": {
         "file": "patch/dist/SLink-Crystal.ups",
-        "sha256": "88ca93d1d64879f98fe309f262d2884aa003177636c03344e0c4e1b9300ec7ea"
-      },
-      "runtime_gate": {
-        "id": "G4",
-        "state": "ADMITTED",
-        "grant_fingerprint": "077a1872d3e84034fe83fbe02eb2fd661af4c29dbac2e885d21a091016a67080"
-      },
-      "binding_sha256": "c3837ed1107c1fed3c31f8abc172727b72ca8654f1b11519342d5959257f4f88"
+        "sha256": "473cf2ba869442c52a472ac2c6d620d5cab2f8270c9a5bff72e79355dc5cb6ca"
+      }
     },
     {
       "id": "crystal_ghost",

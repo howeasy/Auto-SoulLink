@@ -11,13 +11,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import gen2_final_sweep as sweep  # noqa: E402
 
 
+def test_release_sweep_is_only_overlay_and_keeps_refusal_cells():
+    cells = sweep.cells()
+    assert len(cells) == 86  # 64 duos + 3*(U1,U2,5 feature gates) + inspect
+    assert all(c.get("artifact_kind") == "overlay" for c in cells)
+    assert {c["id"] for c in cells if c.get("scenario") == "gen2_admit_wrong_rom"} == {
+        "overlay/gen2_new/gen2_admit_wrong_rom", "overlay/gen2_gold_silver/gen2_admit_wrong_rom"}
+
+
+def test_overlay_sweep_exactly_covers_active_duo_manifest():
+    doc = json.loads((sweep.REPO / sweep.PIN_FILES[0]).read_text())
+    expected = {(r["axes"]["pairing"], s) for r in doc["requirements"]
+                if r["axes"].get("artifact_kind") == "overlay" for s in r["axes"]["scenarios"]}
+    actual = {(c["game"], c["scenario"]) for c in sweep.cells() if c["kind"] == "duo"}
+    assert actual == expected and len(actual) == 64
+
+
 def test_every_release_cell_is_listed_once():
     ids = [c["id"] for c in sweep.cells()]
     assert len(ids) == len(set(ids))
     assert sum("/gen2_trade_" in i for i in ids) == 21
-    assert sum(i.startswith("gate/") for i in ids) == 3 + 2 + 15 + 1
-    assert {"gen2_new/gen2_faint_active_trainer", "gen2_gold_silver/gen2_faint_active_trainer", "gate/w6/silver",
-            "gate/inspect_run"} <= set(ids)
+    assert sum(i.startswith("gate/") for i in ids) == 15
+    assert {"overlay/gen2_new/gen2_faint_active_trainer", "overlay/gen2_gold_silver/gen2_faint_active_trainer", "gate/w6/silver",
+            "overlay/gate/inspect_run"} <= set(ids)
     assert "gen2_crystal_gold/gen2_faint_active_trainer" not in ids
 
 
@@ -28,7 +44,7 @@ def test_overlay_sweep_covers_gameplay_and_its_own_silver_write_proof():
     assert rows["overlay/gen2_crystal_gold/link"]["artifact_kind"] == "overlay"
     assert rows["overlay/gate/write_window/silver"]["artifact_kind"] == "overlay"
     assert "--gen2-artifact" in sweep.duo_command(rows["overlay/gen2_new/gen2_pc_ops"], "model")
-    assert len(rows) == 148
+    assert len(rows) == 86
 
 
 def test_pin_populates_new_overlay_proofs_without_borrowing_clean_paths(tmp_path):
@@ -167,11 +183,14 @@ def test_a_cell_stops_at_its_first_failing_command_and_keeps_each_gate_result(tm
 
 def test_only_rng_stalls_earn_the_one_retry():
     for text in ("RESULT: FAIL (hunt ended out-of-balls)",
+                 "RESULT: FAIL (catch route failed: no Poke Ball left in the pocket)",
                  "RESULT: FAIL (poison route failed: the trainer battle ended without a poisoned party mon)",
                  "[FAIL] poison_faint did not fire after the previous expected site"):
         assert sweep.RNG_STALL.search(text), text
     for text in ("trade: stack canary is not a real push", "no memorialize ack for the released partner X",
-                 "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)"):
+                 "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)",
+                 "O-10 only permits the empty Ball pocket at the settled lab checkpoint",
+                 "the fixture starts with no Poke Balls", "out of balls, then the escape failed"):
         assert not sweep.RNG_STALL.search(text), text
 
 

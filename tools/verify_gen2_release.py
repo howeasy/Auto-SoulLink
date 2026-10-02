@@ -5,6 +5,10 @@
 source/MODEL frontier; --lane runs only the named obligations. Neither is a release
 verdict.
 
+Owner 2026-10-02: the Gen 2 release is OVERLAY ONLY. Clean manifest rows/receipts
+remain history; no fresh clean gameplay proof or code stamp is required. Source
+builds and shared fixture/O-33 byte checks remain prerequisites.
+
 --fixtures (the fixtures lane, BINDING P3b.2) judges every Gen 2 fixture the release lanes reference,
 with no emulator. Each SaveRAM must pass the strict checksum witness and be either PLAYED or SYNTH.
 PLAYED means a sha256-pinned full-chain qualification receipt (GAME/PYDEC boot, re-save and reload
@@ -25,7 +29,7 @@ A missing pair, scenario, oracle or receipt is RED, never green. Enabling them r
 implementation and prerequisite/receipt contracts, not removing a missing-input check.
 
 --new-gates (a live-new-gates precondition) checks the committed U1 engine-site, U2 write-window
-(Silver via O-23) and fixture-qualification receipts of tests/gen2_live_gate_requirements.json against
+(each overlay has its own proof) and overlay fixture-qualification receipts against
 their pinned sha256 and their production Lua validators (reusing tests/unit/test_gen2_physical_receipts.py's
 `validate()`, never re-deriving PASS). It runs with no emulator; a gap there fails live-new-gates before
 the lane spawns EmuHawk. R-1/R-2/R-3/R-4/R-5g still need a fresh SLINK_LIVE=1 run of the live inspect
@@ -55,6 +59,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 _PY = sys.executable
 TITLES = ("crystal", "gold", "silver")
+# Owner 2026-10-02: these played fixtures underpin the overlay gates/duos.
+# Pin the census independently of the manifest so deleting a row cannot waive it.
+OVERLAY_QUALIFICATIONS = (
+    "crystal_town", "crystal_battle", "crystal_town_ot2", "crystal_battle_ot2",
+    "crystal_battle_errand", "crystal_battle_ot2_errand", "gold_town", "gold_battle",
+    "gold_battle_ot2", "gold_battle_errand", "silver_town", "silver_battle", "silver_battle_errand",
+)
 REQUIREMENT_IDS = (
     "F-1", "F-2", "F-3", "F-4", "F-5", "F-6", "F-7g",
     "R-1", "R-2", "R-3", "R-4", "R-5g",
@@ -164,8 +175,8 @@ LANES = [
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
          # a lane run re-proves; only the final sweep's gate/inspect_run cell writes the pinned attestation
          # (tests/live/conftest.py), else every lane run would unpin it
-         env={"SLINK_LIVE": "1", "SLINK_GEN2_NO_ATTEST": "1"},
-         why="PHYSICAL receipts: the U1 engine-site, U2 write-window (Silver via O-23) and fixture"
+         env={"SLINK_LIVE": "1", "SLINK_GEN2_NO_ATTEST": "1", "SLINK_GEN2_ARTIFACT": "overlay"},
+         why="PHYSICAL overlay receipts: U1 engine-site, per-title U2 write-window and fixture"
              " qualification rows of tests/gen2_live_gate_requirements.json are bound and pinned by"
              " sha256 (new_gates_errors, no emulator); a gap there fails the lane before it spawns"
              " EmuHawk. R-1/R-2/R-3/R-4/R-5g have no committed receipt and still need a fresh"
@@ -175,7 +186,7 @@ LANES = [
          why="PHYSICAL receipts (BINDING P4.3; T-1..T-4): every native trade case of TRADE_END_STATUS"
              " declared and receipted on C-C, G-S and C-G (owner O-34)"
              " in the release duo matrix, judged by the"
-             " HARNESS_ONLY_OVERLAY trade oracle against the published overlay; runner is"
+             " production overlay trade oracle against the published overlay; runner is"
              " tools/e2e_duo.py's gen2_trade_* cases (tests/e2e/test_duo_gen2_new.py)"),
     Lane("duo-link", [_PY, "tools/verify_gen2_release.py", "--duo-matrix"],
          why="PHYSICAL receipts: the C-C, G-S and C-G link matrix of tests/gen2_release_requirements.json;"
@@ -1141,8 +1152,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
 
 
 def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | None = None,
-                      only: frozenset | None = None) -> list[str]:
-    """Every gap in the release duo matrix, one message per gap; [] only when fully receipted.
+                      only: frozenset | None = None, artifact_kind="overlay") -> list[str]:
+    """Every gap in the overlay release matrix; artifact_kind=None explicitly audits both histories.
 
     Registry side (tools/e2e_duo.py): every Gen 2 pairing is declared, every scenario it
     registers is in the matrix, and each has a post-result oracle under a require_oracle
@@ -1156,13 +1167,15 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
         import e2e_duo as duo
     doc = json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))
     lock = json.loads((root / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
-    rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"]
+    rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"
+            and (artifact_kind is None or (row.get("axes") or {}).get("artifact_kind", "clean") == artifact_kind)]
     errors = []
     # .get(): a malformed row (missing "axes"/"initiator"/etc.) surfaces as a pairs mismatch here,
     # never a crash -- the per-row loop below gives it its own dedicated "malformed row" message too.
     pairs = sorted((((row.get("axes") or {}).get("artifact_kind", "clean"), (row.get("axes") or {}).get("initiator"), (row.get("axes") or {}).get("partner"))
                    for row in rows), key=str)  # str key: a malformed row's None must not crash the sort
-    expected_pairs = sorted((kind, *pair) for kind in ("clean", "overlay") for pair in DUO_PAIRS)
+    expected_pairs = sorted((kind, *pair) for kind in ((artifact_kind,) if artifact_kind else ("clean", "overlay"))
+                            for pair in DUO_PAIRS)
     if pairs != expected_pairs:
         errors.append(f"release matrix pairs {pairs} != required {expected_pairs}")
     declared = {row.get("axes", {}).get("pairing") for row in rows}
@@ -1645,9 +1658,9 @@ def _stack_bounds(root: Path, title: str) -> tuple[tuple[int, int] | None, str |
     return (found["wStackBottom"], found["wStackTop"]), None
 
 
-def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None, artifact_kind=None) -> list[str]:
-    """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
-    (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
+def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None, artifact_kind="overlay") -> list[str]:
+    """Overlay U1/U2 and fixture-qualification receipts, each pinned by sha256.
+    Explicit artifact_kind="clean"/None retains historical diagnostic checks. An empty proof is a
     release blocker. R-1/R-2/R-3/R-4/R-5g are NOT covered here -- they have no committed receipt and
     still need a fresh live run (see tests/gen2_live_gate_requirements.json's scope=).
 
@@ -1668,7 +1681,7 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
     declared = {(row.get("axes", {}).get("artifact_kind", "clean"),
                  row.get("axes", {}).get("kind"), row.get("axes", {}).get("title"))
                 for row in doc.get("requirements", [])}
-    required = {(artifact, kind, title) for artifact in ("clean", "overlay") for title in TITLES
+    required = {(artifact, kind, title) for artifact in ((artifact_kind,) if artifact_kind else ("clean", "overlay")) for title in TITLES
                 for kind in ("engine_sites", "write_window")}
     required |= {("overlay", kind, title) for title in TITLES
                  for kind in ("panel_gate", "sfx_gate", "w6_gate", "phone_gate", "sp_lowwater_gate")}
@@ -1676,11 +1689,17 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
         if ((kinds is None or kind in kinds) and (artifact_kind is None or artifact == artifact_kind)
                 and (artifact, kind, title) not in declared):
             errors.append(f"missing required {artifact}/{kind}/{title} receipt row")
+    if artifact_kind in (None, "overlay") and (kinds is None or "qualification" in kinds):
+        fixtures = {row.get("axes", {}).get("fixture") for row in doc.get("requirements", [])
+                    if row.get("axes", {}).get("artifact_kind") == "overlay"
+                    and row.get("axes", {}).get("kind") == "qualification"}
+        errors.extend(f"missing required overlay qualification {name} receipt row"
+                      for name in OVERLAY_QUALIFICATIONS if name not in fixtures)
     for row in doc.get("requirements", []):
-        rid, axes, kind = row["id"], row["axes"], row["axes"]["kind"]
-        artifact = axes.get("artifact_kind", "clean")
+        artifact = (row.get("axes") or {}).get("artifact_kind", "clean")
         if artifact_kind is not None and artifact != artifact_kind:
             continue
+        rid, axes, kind = row["id"], row["axes"], row["axes"]["kind"]
         if artifact not in ("clean", "overlay"):
             errors.append(f"{rid}: unknown artifact kind")
             continue
@@ -1755,11 +1774,12 @@ def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[s
     root = ROOT if root is None else root
     try:
         rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
-        have = {(row["axes"]["kind"], row["axes"].get("title")) for row in rows}
+        have = {(row["axes"].get("artifact_kind", "clean"), row["axes"]["kind"], row["axes"].get("title"))
+                for row in rows if (row.get("axes") or {}).get("artifact_kind", "clean") == "overlay"}
     except (OSError, ValueError, KeyError, TypeError):
         return [f"{NEW_GATES} missing or malformed"]
-    errors = [f"{kind} {title}: no row in {NEW_GATES}"
-              for kind in LIVE_GATE_KINDS for title in TITLES if (kind, title) not in have]
+    errors = [f"{kind} {title}: no overlay row in {NEW_GATES}"
+              for kind in LIVE_GATE_KINDS for title in TITLES if ("overlay", kind, title) not in have]
     return errors + new_gates_errors(root, receipt_validate, kinds=LIVE_GATE_KINDS)
 
 
@@ -1785,7 +1805,7 @@ def duo_pairs_errors(root: Path | None = None, duo=None) -> list[str]:
     """duo-pairs: the whole matrix, every P3b.7 scenario on C-C and G-S, every trade case on all three (O-34)."""
     trades = frozenset(TRADE_END_STATUS)
     required = dict.fromkeys((("overlay", *pair) for pair in DUO_PAIRS), trades)
-    for kind in ("clean", "overlay"):
+    for kind in ("overlay",):
         required.update(dict.fromkeys(((kind, "crystal", "crystal"), (kind, "gold", "silver")), DUO_PAIRS_SCENARIOS | (trades if kind == "overlay" else frozenset())))
     return duo_matrix_errors(root, duo, required=required)
 
@@ -1967,7 +1987,7 @@ def inspect_run_errors(root: Path | None = None) -> list[str]:
     except (OSError, ValueError, KeyError, TypeError):
         return [f"{NEW_GATES} missing or malformed"]
     errors = []
-    for kind in ("clean", "overlay"):
+    for kind in ("overlay",):
         found = [row for row in rows if (row.get("axes") or {}).get("kind") == "inspect_run"
                  and (row.get("axes") or {}).get("artifact_kind", "clean") == kind]
         if len(found) != 1 or not found[0].get("proofs"):
@@ -1982,8 +2002,9 @@ CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gat
                           "sp_lowwater_gate", "inspect_run")
 
 
-def code_staleness(root: Path | None = None, head: str | None = None) -> list[tuple[str, str]]:
-    """(cell, verdict) for each registered duo proof (the pydec receipt's CODE_DIGEST line) and each
+def code_staleness(root: Path | None = None, head: str | None = None, *, artifact_kind=None) -> list[tuple[str, str]]:
+    """Diagnostic (cell, verdict) for registered proofs; release callers select artifact_kind="overlay".
+    Inspect each duo proof (the pydec receipt's CODE_DIGEST line) and each
     client-path gate receipt (its "code_digest" object) that does not bind HEAD's production code.
     STALE: earned on other code or on a dirty tree. STALE-UNKNOWN: no stamp."""
     root = ROOT if root is None else root
@@ -1995,6 +2016,8 @@ def code_staleness(root: Path | None = None, head: str | None = None) -> list[tu
         except (OSError, ValueError):
             continue
         for row in rows:
+            if artifact_kind is not None and (row.get("axes") or {}).get("artifact_kind", "clean") != artifact_kind:
+                continue
             if kinds is not None and (row.get("axes") or {}).get("kind") not in kinds:
                 continue
             for proof in row.get("proofs") or []:
@@ -2019,7 +2042,7 @@ def code_staleness(root: Path | None = None, head: str | None = None) -> list[tu
 
 def stale_errors(root: Path | None = None, head: str | None = None) -> list[str]:
     try:
-        return [f"{cell}: {verdict}" for cell, verdict in code_staleness(root, head)]
+        return [f"{cell}: {verdict}" for cell, verdict in code_staleness(root, head, artifact_kind="overlay")]
     except (OSError, subprocess.CalledProcessError) as exc:
         return [f"cannot compute the HEAD production code digest: {exc}"]
 
@@ -2037,7 +2060,7 @@ def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate
     A receipt that does not bind HEAD's production code (STALE / STALE-UNKNOWN) is RED here."""
     parts = (("packet", g4_packet_errors(root, release_ups, require_admitted)),
              ("code", stale_errors(root, head)),
-             ("fixtures", fixtures_errors(root)),
+             ("fixtures", fixtures_errors(root, artifact_kind="overlay")),
              ("live-new-gates-run", inspect_run_errors(root)),
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
@@ -2064,6 +2087,8 @@ def _fixture_names(root: Path) -> tuple[set[str], list[str]]:
     names |= {path.stem for path in (root / FIXTURES_DIR).glob("*.SaveRAM")}
     try:
         for row in json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]:
+            if (row.get("axes") or {}).get("artifact_kind", "clean") != "overlay":
+                continue
             for key in ("fixtures", "trade_fixtures"):
                 names |= set((row["axes"].get(key) or {}).values())
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
@@ -2075,16 +2100,18 @@ def _played_pins(root: Path, artifact_kind="clean") -> dict:
     try:
         rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
         return {row["axes"]["fixture"]: ((row.get("proofs") or [{}])[0].get("receipts") or {}).get("receipt")
-                for row in rows if row["axes"]["kind"] == "qualification" and row["axes"].get("artifact_kind", "clean") == artifact_kind}
+                for row in rows if (row.get("axes") or {}).get("artifact_kind", "clean") == artifact_kind
+                and row["axes"]["kind"] == "qualification"}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return {}
 
 
-def _played_errors(root: Path, name: str, raw: bytes, pins: dict, identity) -> list[str]:
+def _played_errors(root: Path, name: str, raw: bytes, pins: dict, identity, artifact_kind="clean") -> list[str]:
     """The pinned receipt, then tests/live/test_gen2_new_gates.py's qualified_identity(): a passed full chain
     (PYDEC qualify, GAME CONTINUE boot, native re-save + reload, post oracle) whose fixture sha256 is THESE bytes."""
     entry = pins.get(name)
-    if not entry or entry.get("path") != f"{FIXTURES_DIR}/receipts/{name}.qualification.json":
+    namespace = "/overlay" if artifact_kind == "overlay" else ""
+    if not entry or entry.get("path") != f"{FIXTURES_DIR}/receipts{namespace}/{name}.qualification.json":
         return [f"no sha256-pinned qualification receipt in {NEW_GATES}"]
     _receipt, why = _new_gate_receipt(root, entry)
     if why:
@@ -2150,8 +2177,10 @@ def _checksum_witness(root: Path, title: str, raw: bytes) -> str | None:
 
 
 def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witness=None,
-                    rebuild=None) -> list[str]:
-    """Every gap in the fixtures lane. Each referenced fixture exists, passes the checksum witness and is
+                    rebuild=None, artifact_kind="clean") -> list[str]:
+    """Validate fixture bytes with qualifications for artifact_kind.
+    Release/CLI callers explicitly select overlay; the clean default preserves historical diagnostics.
+    Each referenced fixture exists, passes the checksum witness and is
     PLAYED (a pinned, passed full-chain receipt binding these bytes) or SYNTH (a valid O-33 disclosure over a
     PLAYED base). There is no third way in: a missing, stale or undisclosed fixture is RED."""
     root = ROOT if root is None else root
@@ -2163,11 +2192,13 @@ def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witn
     if identity is None:
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
-        from tests.live.test_gen2_new_gates import qualified_identity as identity
+        from tests.live.test_gen2_new_gates import qualified_identity
+        def identity(name, raw, *, repo):
+            return qualified_identity(name, raw, repo=repo, kind=artifact_kind)
     if rebuild is None:
         from tools.gen2_synth_fixtures import build as rebuild
     witness = witness or _checksum_witness
-    pins = _played_pins(root)
+    pins = _played_pins(root, artifact_kind)
     verdicts: dict[str, list[str]] = {}
 
     def played(name: str) -> list[str]:
@@ -2177,7 +2208,7 @@ def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witn
             except OSError:
                 verdicts[name] = ["SaveRAM missing"]
             else:
-                verdicts[name] = _played_errors(root, name, raw, pins, identity)
+                verdicts[name] = _played_errors(root, name, raw, pins, identity, artifact_kind)
         return verdicts[name]
 
     for name in sorted(names):
@@ -2216,7 +2247,7 @@ _RECEIPT_CLIS = {
 
 def _receipt_cli(flag: str) -> int:
     label, check = _RECEIPT_CLIS[flag]
-    errors = globals()[check]()
+    errors = globals()[check](**({"artifact_kind": "overlay"} if flag == "--fixtures" else {}))
     for error in errors:
         print(f"RED  {error}")
     prefix = {"--live-gates": "new-gates.", "--trade-gates": "duo.", "--duo-pairs": "duo."}.get(flag)

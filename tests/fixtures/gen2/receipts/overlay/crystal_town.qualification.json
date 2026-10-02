@@ -7,7 +7,7 @@
     "resave",
     "post_oracle"
   ],
-  "attempt_id": "ovl-crystal_town-a1",
+  "attempt_id": "r2q2",
   "fixtures": [
     {
       "name": "crystal_town",
@@ -24,51 +24,51 @@
           "sha256": "8dbb170b3162566606df833a6edd85d3d39501fd71d9fd77d4da47344d7e6e47"
         },
         "rom": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\crystal_overlay.gbc",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\crystal_overlay.gbc",
           "size": 2097152,
-          "sha256": "cb075ce7be23bffeab87d16ec41675d25ca63566952a9696cb0cf97b468a8ec7"
+          "sha256": "e8967d0a3d9d3a095d19c2f0f8ac31cb3321c9d32788be72467c9cd06448c7e0"
         },
         "route_facts": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\crystal_route_facts.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\crystal_route_facts.json",
           "size": 13930,
           "sha256": "0b27d2f2c98e8bc108919bdab016ed536f0bdf0f77d332c5f7a3cfb544fffcc4"
         },
         "played_receipt": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\crystal_town.clean_qualification_ref.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\crystal_town.clean_qualification_ref.json",
           "size": 396,
           "sha256": "2cf7e864726e8e1ffd390554d79345103e733613c537813cce2e76402167157b"
         },
         "boot:game_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\boot-a3d1e5090713055a\\crystal_town.boot.witness.json",
-          "size": 1960,
-          "sha256": "ab7dab1f7db132bb3d9cb22dd3ac821ec3b23d99d016a886a1624469e0ad8060"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\boot-0e69ac5885578912\\crystal_town.boot.witness.json",
+          "size": 1945,
+          "sha256": "5343034be269959c272080468798497fc8fc4b9f9b0848942d28efc356fe836f"
         },
         "resave:fixture": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\resave-30c19a346d300632\\crystal_town.resaved.SaveRAM",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\resave-331419f7e38f4fff\\crystal_town.resaved.SaveRAM",
           "size": 32790,
-          "sha256": "e525462e92e8b86ce50f1274053a97bf23e6919145a27fe1d44b82caa090787f"
+          "sha256": "da7bf30bd8728e95423d28e9bf3b4d1e96c83c68f8936582b1901b2414007516"
         },
         "resave:save_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\resave-30c19a346d300632\\crystal_town.resave.witness.json",
-          "size": 2084,
-          "sha256": "7d2e38da870f4547267ab9e2be8ae39fb248bfb24675a7037b909275d537bb9f"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\resave-331419f7e38f4fff\\crystal_town.resave.witness.json",
+          "size": 2069,
+          "sha256": "98e3419a46bff9a55db50d5dd662c160059f4a6b797896b1739e5b7ab948f8bd"
         },
         "resave:reload_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\reload-30c19a346d300632\\crystal_town.reload.witness.json",
-          "size": 1962,
-          "sha256": "d29352143e02c0077b892e346c665aa9cad9071eaf6987875e3f10b7080d4ad3"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\reload-331419f7e38f4fff\\crystal_town.reload.witness.json",
+          "size": 1947,
+          "sha256": "c354358ebea9e8ef90742e068db7456c29c4c81bb4132c59c50d874061a6ac1b"
         }
       },
       "provenance": {
         "title": "crystal",
-        "rom_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+        "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
         "scope": "candidate fixture",
         "route_facts_sha256": "eee720532d0481d51f0a8cb3d8ab0cff8d2dc21a5cb3ac03fb4f6847dcd6b7a5"
       },
       "stages": [
         {
           "stage": "qualify",
-          "fingerprint": "a8396d734b029cb9e9add29d1bec8149c4ec6eb79c52a665521f8df1be416ce0",
+          "fingerprint": "9c23f2af339293499ec080e7b2e33689cb1abf9c01676b3528c7c0f99183cd76",
           "status": "PASS",
           "problems": [],
           "notes": [
@@ -83,7 +83,7 @@
         },
         {
           "stage": "boot",
-          "fingerprint": "a3d1e5090713055ae3287c7d9a867ca64081564567a373953dab47e211443a46",
+          "fingerprint": "0e69ac5885578912b15dea49aab2d59c3df92e1863b6329adb313efd8f51510a",
           "status": "PASS",
           "problems": [],
           "notes": [],
@@ -95,43 +95,43 @@
           },
           "outputs": {
             "boot:game_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\boot-a3d1e5090713055a\\crystal_town.boot.witness.json",
-              "size": 1960,
-              "sha256": "ab7dab1f7db132bb3d9cb22dd3ac821ec3b23d99d016a886a1624469e0ad8060"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\boot-0e69ac5885578912\\crystal_town.boot.witness.json",
+              "size": 1945,
+              "sha256": "5343034be269959c272080468798497fc8fc4b9f9b0848942d28efc356fe836f"
             }
           }
         },
         {
           "stage": "resave",
-          "fingerprint": "30c19a346d3006329b8f96bef3163bb10d99292ac9802422d38e22b9734524a7",
+          "fingerprint": "331419f7e38f4fff419005f4fba1d5e9857699113b732d5b24ca0b48a8bbe928",
           "status": "PASS",
           "problems": [],
           "notes": [],
           "evidence": {
             "observer": "independent_GAME re-save + reload",
-            "resave_cartram_sha256": "16b4e96210ef10e5eb61a3ace000f292338334b3c12c242d22078de5ccb5d8a1"
+            "resave_cartram_sha256": "4f7e50aa1eb84e098f46117acc7f6c4bb623c93bf48b7b2e7024afe7d1e0202e"
           },
           "outputs": {
             "resave:fixture": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\resave-30c19a346d300632\\crystal_town.resaved.SaveRAM",
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\resave-331419f7e38f4fff\\crystal_town.resaved.SaveRAM",
               "size": 32790,
-              "sha256": "e525462e92e8b86ce50f1274053a97bf23e6919145a27fe1d44b82caa090787f"
+              "sha256": "da7bf30bd8728e95423d28e9bf3b4d1e96c83c68f8936582b1901b2414007516"
             },
             "resave:save_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\resave-30c19a346d300632\\crystal_town.resave.witness.json",
-              "size": 2084,
-              "sha256": "7d2e38da870f4547267ab9e2be8ae39fb248bfb24675a7037b909275d537bb9f"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\resave-331419f7e38f4fff\\crystal_town.resave.witness.json",
+              "size": 2069,
+              "sha256": "98e3419a46bff9a55db50d5dd662c160059f4a6b797896b1739e5b7ab948f8bd"
             },
             "resave:reload_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_town-a1\\crystal_town\\qualify-overlay\\reload-30c19a346d300632\\crystal_town.reload.witness.json",
-              "size": 1962,
-              "sha256": "d29352143e02c0077b892e346c665aa9cad9071eaf6987875e3f10b7080d4ad3"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q2\\crystal_town\\qualify-overlay\\reload-331419f7e38f4fff\\crystal_town.reload.witness.json",
+              "size": 1947,
+              "sha256": "c354358ebea9e8ef90742e068db7456c29c4c81bb4132c59c50d874061a6ac1b"
             }
           }
         },
         {
           "stage": "post_oracle",
-          "fingerprint": "a1a9074122d55fbd517b367e3c1e59903a00e4927efae72a8132323c81e5c2f7",
+          "fingerprint": "f41deb123890a8385a505dff21aa8bb288cdb9f3424cacc986565f99ee3a233d",
           "status": "PASS",
           "problems": [],
           "notes": [],

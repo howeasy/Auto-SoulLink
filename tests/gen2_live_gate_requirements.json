@@ -12,6 +12,8 @@
   "requirements": [
     {
       "id": "new-gates.engine-sites.crystal",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "U1 Crystal engine-hook proof (wild_ready, capture_party, capture_party_finalized, battle_end, save_completed); U1G v2 runs on the O-33 synthetic fixtures: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {
@@ -36,6 +38,8 @@
     },
     {
       "id": "new-gates.engine-sites.gold",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "U1-GS Gold engine-hook proof (its own capture sites, 2 bytes above Silver's); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {
@@ -60,6 +64,8 @@
     },
     {
       "id": "new-gates.engine-sites.silver",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "U1-GS Silver engine-hook proof (its own capture sites; not shared with Gold, see O-23); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {
@@ -84,6 +90,8 @@
     },
     {
       "id": "new-gates.write-window.crystal",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "U2 Crystal write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes; card BOX box runs with the reset-before-save control: party_collection, box_withdraw, backing_box); O-30 battle_faint run; O-32 battle_bench run (a bench death on receipt, at a battle frame end)",
       "axes": {
@@ -111,6 +119,8 @@
     },
     {
       "id": "new-gates.write-window.gold",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "U2 Gold write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes; card BOX box runs with the reset-before-save control: party_collection, box_withdraw, backing_box); O-30 battle_faint run; O-32 battle_bench run (a bench death on receipt, at a battle frame end)",
       "axes": {
@@ -138,6 +148,8 @@
     },
     {
       "id": "new-gates.write-window.silver",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Owner ruling O-23: Silver's U2 requirement is satisfied by Gold's receipt while their checkpoint rows stay byte-identical (docs/gen2/REVIEW_RECORD.md O-23); lua/gen2_write_safety.lua M.qualified refuses this row the moment the two packs diverge.; Silver's own battle_bench run is recorded in Gold's receipt as confirmations.silver (evidence, not authority)",
       "axes": {
@@ -166,6 +178,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_town",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal town fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -199,6 +213,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_battle",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -232,6 +248,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_town_ot2",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal town fixture played under a second OT (C<->C pairing, wrong-save control)",
       "axes": {
@@ -255,6 +273,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_battle_ot2",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal battle fixture played under a second OT (C<->C pairing, wrong-save control)",
       "axes": {
@@ -278,6 +298,8 @@
     },
     {
       "id": "new-gates.qualification.gold_town",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Gold town fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -311,6 +333,8 @@
     },
     {
       "id": "new-gates.qualification.gold_battle",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Gold battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -344,6 +368,8 @@
     },
     {
       "id": "new-gates.qualification.gold_battle_ot2",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Gold battle fixture played under a second OT (G<->S reconnect wrong-save control)",
       "axes": {
@@ -367,6 +393,8 @@
     },
     {
       "id": "new-gates.qualification.gold_battle_errand",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Gold battle fixture after the Mr. Pokemon errand (the Gold U1 fixture: Route 31 Wade, U1e poison_faint)",
       "axes": {
@@ -390,6 +418,8 @@
     },
     {
       "id": "new-gates.qualification.silver_battle_errand",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Silver battle fixture after the Mr. Pokemon errand (G<->S trade seed partner)",
       "axes": {
@@ -413,6 +443,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_battle_ot2_errand",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal OT2 battle fixture after the Mr. Pokemon errand (C<->C trade seed partner)",
       "axes": {
@@ -436,6 +468,8 @@
     },
     {
       "id": "new-gates.qualification.crystal_battle_errand",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Crystal battle fixture after the Mr. Pokemon errand (Cable Club open: the P4.3e trade seed)",
       "axes": {
@@ -459,6 +493,8 @@
     },
     {
       "id": "new-gates.qualification.silver_town",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Silver town fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -492,6 +528,8 @@
     },
     {
       "id": "new-gates.qualification.silver_battle",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "Silver battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
       "axes": {
@@ -756,6 +794,8 @@
     },
     {
       "id": "new-gates.inspect-run",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "physical-live",
       "description": "R-1/R-2/R-3/R-4/R-5g live-new-gates run attestation (gen2-live-new-gates-attestation-v1): SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py over every fixture, every title PASS, passes only (re-run: tools/gen2_final_sweep.py cell gate/inspect_run)",
       "axes": {

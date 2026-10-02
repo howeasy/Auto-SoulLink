@@ -1,16 +1,15 @@
-"""Gen 2 FINAL EVIDENCE SWEEP: every release-required PHYSICAL cell, N lanes at a time, at one frozen sha.
+"""Gen 2 FINAL EVIDENCE SWEEP: 86 overlay-only release-required PHYSICAL cells, N lanes at a time, at one frozen sha.
 
     python tools/gen2_final_sweep.py --list                      # the cells and their exact commands
     python tools/gen2_final_sweep.py --lanes 4                   # everything (run only after "freeze")
-    python tools/gen2_final_sweep.py --lanes 2 --only gen2_new/link gen2_new/gen2_admit_wrong_rom   # a dry run
+    python tools/gen2_final_sweep.py --lanes 2 --only overlay/gen2_new/link overlay/gen2_new/gen2_admit_wrong_rom   # a dry run
     python tools/gen2_final_sweep.py --pin <out>                 # after review: install the PASS receipts + repin
 
-Cells: every scenario tools/e2e_duo.py registers for C-C (gen2_new), G-S (gen2_gold_silver) and C-G
-(gen2_crystal_gold): the duo matrix, the wave-C/D duos and the native trades. Then the client-path live gates:
-engine_sites (frame_align, then U1G) and write_window per title, panel/sfx/w6/phone/sp_lowwater per title, and the
-live-new-gates run attestation (tests/live/test_gen2_new_gates.py over every fixture; tests/live/conftest.py writes it). The
-qualification receipts bind fixture bytes, not code, so they are not rerun (tools/gen2_code_digest.py: not client-path).
-A scenario newly registered in tools/e2e_duo.py (e.g. gen2_evolution) is a cell automatically.
+Cells: 64 overlay duos (C-C/G-S gameplay including wrong-ROM refusal, C-G link,
+plus seven native trades on each pair) and 22 overlay gates (U1/U2 and five feature gates per title,
+plus inspect). Historical clean cells and receipts are retained in the ledgers but never rerun.
+The 13 overlay qualification receipts bind fixture bytes, not code, and are captured before the sweep.
+A scenario newly registered for C-C/G-S in tools/e2e_duo.py becomes an overlay cell automatically.
 
 Each lane is a detached worktree C:/Users/howar/AppData/Local/Temp/fs<k> at --sha, short enough for BizHawk's MAX_PATH
 (e2e_duo.BIZHAWK_PATH_LIMIT). .cache/gen2-build and .cache/gen2-fixtures are COPIED in, because the ROM must resolve
@@ -56,7 +55,7 @@ TITLES = ("crystal", "gold", "silver")
 # ponytail: the stall phrases seen in lane logs; widen here if a new RNG stall class shows up
 # The trainer poison leg (Bug Catcher Wade, G-S poison and Gold's U1 chain) is capped near 83% a fight by the
 # 15-HP target (coordinator, re-run pass): a fight that ends unpoisoned retries once like out-of-balls.
-RNG_STALL = re.compile(r"out-of-balls|survived \d+ battles|duplicates-only hunt|clause unobserved"
+RNG_STALL = re.compile(r"out-of-balls|no Poke Ball left in the pocket|survived \d+ battles|duplicates-only hunt|clause unobserved"
                        r"|the trainer battle ended without a poisoned party mon|poison_faint did not fire")
 GATE_TIMEOUT = 3600
 PIN_FILES = ("tests/gen2_release_requirements.json", "tests/gen2_live_gate_requirements.json")
@@ -81,19 +80,14 @@ def cells():
     out = []
     for game, pair in PAIRS.items():
         for scenario in e2e_duo.scenarios_for(game):
-            out.append({"id": f"{game}/{scenario}", "kind": "duo", "game": game, "scenario": scenario, "pair": pair,
-                        "artifact_kind": "overlay" if scenario in e2e_duo.GEN2_TRADE_SCENARIOS else "clean",
-                        "timeout": e2e_duo.SCENARIOS[scenario]["timeout"] + 600})
+            if scenario in e2e_duo.GEN2_TRADE_SCENARIOS:
+                out.append({"id": f"{game}/{scenario}", "kind": "duo", "game": game, "scenario": scenario, "pair": pair,
+                            "artifact_kind": "overlay", "timeout": e2e_duo.SCENARIOS[scenario]["timeout"] + 600})
             if scenario not in e2e_duo.GEN2_TRADE_SCENARIOS and (pair != "cg" or scenario == "link"):
                 out.append({"id": f"overlay/{game}/{scenario}", "kind": "duo", "game": game,
                             "scenario": scenario, "pair": pair, "artifact_kind": "overlay",
                             "timeout": e2e_duo.SCENARIOS[scenario]["timeout"] + 600})
     for title in TITLES:
-        out.append({"id": f"gate/engine_sites/{title}", "kind": "gate", "timeout": 2 * GATE_TIMEOUT,
-                    "commands": [live("test_gen2_frame_align.py", title), live("test_gen2_u1g.py", title)]})
-        if title != "silver":   # Silver's write window is Gold's receipt (O-23)
-            out.append({"id": f"gate/write_window/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
-                        "commands": [live("test_gen2_write_windows.py", title)]})
         for kind in ("panel", "sfx", "w6", "phone", "sp_lowwater"):
             out.append({"id": f"gate/{kind}/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
                         "artifact_kind": "overlay",
@@ -103,8 +97,6 @@ def cells():
                     "commands": [live("test_gen2_frame_align.py", title), live("test_gen2_u1g.py", title)]})
         out.append({"id": f"overlay/gate/write_window/{title}", "kind": "gate", "artifact_kind": "overlay",
                     "timeout": GATE_TIMEOUT, "commands": [live("test_gen2_write_windows.py", title)]})
-    out.append({"id": "gate/inspect_run", "kind": "gate", "timeout": 13 * 900,   # every fixture, one inspect gate each
-                "commands": [[sys.executable, "-m", "pytest", "tests/live/test_gen2_new_gates.py", "-q", "-p", "no:randomly"]]})
     out.append({"id": "overlay/gate/inspect_run", "kind": "gate", "artifact_kind": "overlay", "timeout": 13 * 900,
                 "commands": [[sys.executable, "-m", "pytest", "tests/live/test_gen2_new_gates.py", "-q", "-p", "no:randomly"]]})
     return sorted(out, key=lambda c: -c["timeout"])   # longest first

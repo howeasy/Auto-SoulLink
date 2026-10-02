@@ -610,7 +610,9 @@ def verify(text: str, pack: dict, title: str, identity: dict | None = None) -> d
         assert w["callback"] == w["armed"] and w["de"] == 27 and w["party_hp"] and not any(w["party_hp"]), w
         assert w["healed_frame"] >= w["callback"], w
         faints = [hit["seq"] for hit in summary["battle_faint"]["log"]]
-        assert w["seq"] > max(faints), (w, faints)
+        # the CLOSING faint is the last one before the whiteout; a later leg (the evolution grind) may faint
+        # again after it (round-2 Gold: faints [9, 72] around whiteout 12), so never compare to max(faints)
+        assert any(seq < w["seq"] for seq in faints), (w, faints)
         captures = [hit["seq"] for hit in summary["capture_party"]["log"]]
         assert captures[0] < w["seq"] < captures[1] < summary["pc_deposit_begin"]["log"][0]["seq"], (captures, w)
         counts = {}

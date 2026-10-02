@@ -421,8 +421,7 @@ function F.verdict(record, expect, pc)
              "capture_party must fire once before the closing whiteout and once after it"
              .. (evolution and " (and once for the evolution leg)" or ""))
         local faint_log = sites.battle_faint and sites.battle_faint.log or {}
-        local last_faint = faint_log[#faint_log]
-        local why = F.whiteout_problem(w, last_faint and last_faint.seq)
+        local why = F.whiteout_problem(w, F.closing_faint_seq(faint_log, w and w.seq))
         need(why == nil, tostring(why))
         local deposit = sites.pc_deposit_begin and sites.pc_deposit_begin.log[1]
         need(deposit and w and deposit.seq > (w.seq or math.huge), "the PC operations did not follow the whiteout")
@@ -585,6 +584,17 @@ function F.whiteout_snapshot(ctx, armed, callback, seq)
     for slot = 0, math.min(ctx.sym("wPartyCount")[1], 6) - 1 do hp[#hp + 1] = F.party_hp(ctx, slot) end
     return {armed=armed, callback=callback, seq=seq, de=ctx.api.register("D") * 256 + ctx.api.register("E"),
             party_count=ctx.sym("wPartyCount")[1], party_hp=hp}
+end
+
+-- Pure: the closing battle faint is the LAST battle_faint hit BEFORE the whiteout, not the run's last one: a
+-- later leg (the evolution grind) may faint again after the whiteout (overlay sweep ca9b564f: faints 157/207/241
+-- around whiteout 158 read as "the whiteout did not follow the closing battle faint"). nil when none precedes it.
+function F.closing_faint_seq(faint_log, whiteout_seq)
+    local found
+    for _, hit in ipairs(faint_log or {}) do
+        if integer(hit.seq, 1, 2^53) and integer(whiteout_seq, 1, 2^53) and hit.seq < whiteout_seq then found = hit.seq end
+    end
+    return found
 end
 
 -- Pure: the whiteout record's rule (nil = holds, else why). faint_seq: the battle_faint hit it must follow.

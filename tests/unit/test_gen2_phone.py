@@ -247,6 +247,7 @@ def test_phone_calls_are_their_own_switch_default_on(config, rings):
     world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
     world.frames(5)
     assert bool([v for a, v, d in world.written() if a == mb + REQ]) is rings
+    assert "prompt:A and B linked!" in world.shown()   # the BizHawk HUD pop-up always shows (owner ruling)
 
 
 # -- PHONE-NAMES: the staged record (docs/gen2/POST_RC_CARDS.md) --------------------------------

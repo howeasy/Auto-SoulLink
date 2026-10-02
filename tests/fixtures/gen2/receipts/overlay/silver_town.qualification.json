@@ -7,7 +7,7 @@
     "resave",
     "post_oracle"
   ],
-  "attempt_id": "ovl-silver_town-a1",
+  "attempt_id": "r2q7",
   "fixtures": [
     {
       "name": "silver_town",
@@ -24,51 +24,51 @@
           "sha256": "c6061f6437f979abe4003f44e3ddf0bc22b02bfe834cac2c269e3fe66d70909e"
         },
         "rom": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\silver_overlay.gbc",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_overlay.gbc",
           "size": 2097152,
-          "sha256": "ec51ac94086469062795da1a5df6fbd327e599f70a2b31e3cfd23f62bdec0d15"
+          "sha256": "e50f8542344fbfddae046cc4344019f793879cfc906b176efab5f0a604697ef5"
         },
         "route_facts": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\silver_route_facts.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_route_facts.json",
           "size": 13576,
           "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d"
         },
         "played_receipt": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\silver_town.clean_qualification_ref.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_town.clean_qualification_ref.json",
           "size": 394,
           "sha256": "dca233831d0ca72d6d5465827057bbd76c1012f497487e9d97f87c6e805a82cd"
         },
         "boot:game_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\boot-3da3f70192d73959\\silver_town.boot.witness.json",
-          "size": 1957,
-          "sha256": "5d6f1e595d45350307c883107a28d50f188aa2b3207905330e233565ea4c4ba0"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\boot-e39636bc1ec1a5ee\\silver_town.boot.witness.json",
+          "size": 1943,
+          "sha256": "fe1947655561cecc8f148494f468d60a5a91ba623b79961dfaf3004e266b04b6"
         },
         "resave:fixture": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\resave-22dcfb296e70091a\\silver_town.resaved.SaveRAM",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resaved.SaveRAM",
           "size": 32790,
-          "sha256": "5d176e74c2ba8ad9a1da22b2cec4240e4d56b3693645a149c4fd7f01c6a8a82d"
+          "sha256": "3a7d800e4fc7569b5217e1df462d505150060cb26ccaac26d9abe7a113f9dc59"
         },
         "resave:save_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\resave-22dcfb296e70091a\\silver_town.resave.witness.json",
-          "size": 2081,
-          "sha256": "81b2ff852a9f470c807d920406d0a1ef0c9496e306c24e325c5015a63b487943"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resave.witness.json",
+          "size": 2067,
+          "sha256": "48bfcedf31935fd80d75743789ab94d06899b1fa3e9b6d5a48c1a2e4c602e3a9"
         },
         "resave:reload_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\reload-22dcfb296e70091a\\silver_town.reload.witness.json",
-          "size": 1959,
-          "sha256": "7eb4a25495410f87e7c65e4b95f6159b3641dff1b0a0517a0f9cfd95673f99df"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\reload-bba5692f64c959ee\\silver_town.reload.witness.json",
+          "size": 1945,
+          "sha256": "26f61df1ebb9c39eab9f2202ccc57e3c0ad8a78aee103dc274ce6162794eefbf"
         }
       },
       "provenance": {
         "title": "silver",
-        "rom_sha1": "583d8df4deb1831523521d20065504258cbaba28",
+        "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
         "scope": "candidate fixture",
         "route_facts_sha256": "89c8cdaf7e57fa9ccc700e0e32a99ebb17d439d3bbc41f25ed09f75e0b60324a"
       },
       "stages": [
         {
           "stage": "qualify",
-          "fingerprint": "56c85562852cc6a674be1fd2e3561a1af2109c1cf13c8ed21c9a11ebb828b0de",
+          "fingerprint": "96267531888d3791dee821bc23941a2d6214a433f06b37fe31c7ce7ff5196ec7",
           "status": "PASS",
           "problems": [],
           "notes": [
@@ -83,7 +83,7 @@
         },
         {
           "stage": "boot",
-          "fingerprint": "3da3f70192d739590ab2e5772ec1e45ba458c28bf6b0a4011f9fc193da7d438d",
+          "fingerprint": "e39636bc1ec1a5eedcf278124b11475479520daf0d850060cd43e4aadca50eb6",
           "status": "PASS",
           "problems": [],
           "notes": [],
@@ -95,43 +95,43 @@
           },
           "outputs": {
             "boot:game_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\boot-3da3f70192d73959\\silver_town.boot.witness.json",
-              "size": 1957,
-              "sha256": "5d6f1e595d45350307c883107a28d50f188aa2b3207905330e233565ea4c4ba0"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\boot-e39636bc1ec1a5ee\\silver_town.boot.witness.json",
+              "size": 1943,
+              "sha256": "fe1947655561cecc8f148494f468d60a5a91ba623b79961dfaf3004e266b04b6"
             }
           }
         },
         {
           "stage": "resave",
-          "fingerprint": "22dcfb296e70091a1373397d7bae11eeba6671b82efa7e818f2a08aedaec91ef",
+          "fingerprint": "bba5692f64c959eebfb104e55dc55029995db056a43774cf7d9f7eb1d724a656",
           "status": "PASS",
           "problems": [],
           "notes": [],
           "evidence": {
             "observer": "independent_GAME re-save + reload",
-            "resave_cartram_sha256": "15479a37be8d41402f5da91139bccf875dcb744ceda77509e25a6628d93b6725"
+            "resave_cartram_sha256": "65287fea47adaad2cd7f1ae950b11e5f2ab545db93e11c50c8b9ff07d7679f70"
           },
           "outputs": {
             "resave:fixture": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\resave-22dcfb296e70091a\\silver_town.resaved.SaveRAM",
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resaved.SaveRAM",
               "size": 32790,
-              "sha256": "5d176e74c2ba8ad9a1da22b2cec4240e4d56b3693645a149c4fd7f01c6a8a82d"
+              "sha256": "3a7d800e4fc7569b5217e1df462d505150060cb26ccaac26d9abe7a113f9dc59"
             },
             "resave:save_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\resave-22dcfb296e70091a\\silver_town.resave.witness.json",
-              "size": 2081,
-              "sha256": "81b2ff852a9f470c807d920406d0a1ef0c9496e306c24e325c5015a63b487943"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resave.witness.json",
+              "size": 2067,
+              "sha256": "48bfcedf31935fd80d75743789ab94d06899b1fa3e9b6d5a48c1a2e4c602e3a9"
             },
             "resave:reload_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-silver_town-a1\\silver_town\\qualify-overlay\\reload-22dcfb296e70091a\\silver_town.reload.witness.json",
-              "size": 1959,
-              "sha256": "7eb4a25495410f87e7c65e4b95f6159b3641dff1b0a0517a0f9cfd95673f99df"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\reload-bba5692f64c959ee\\silver_town.reload.witness.json",
+              "size": 1945,
+              "sha256": "26f61df1ebb9c39eab9f2202ccc57e3c0ad8a78aee103dc274ce6162794eefbf"
             }
           }
         },
         {
           "stage": "post_oracle",
-          "fingerprint": "5d0be0a0d42f4e76374292421011fa9d2b009ef7b290a878ded25751c312ed76",
+          "fingerprint": "b34c27429dd07048975bcdd1efc8a0a35d659b4057cffae0740f90f7a40accfb",
           "status": "PASS",
           "problems": [],
           "notes": [],

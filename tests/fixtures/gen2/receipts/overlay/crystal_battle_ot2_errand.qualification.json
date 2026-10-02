@@ -7,7 +7,7 @@
     "resave",
     "post_oracle"
   ],
-  "attempt_id": "ovl-crystal_battle_ot2_errand-a1",
+  "attempt_id": "r2q10",
   "fixtures": [
     {
       "name": "crystal_battle_ot2_errand",
@@ -24,51 +24,51 @@
           "sha256": "8dbb170b3162566606df833a6edd85d3d39501fd71d9fd77d4da47344d7e6e47"
         },
         "rom": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_overlay.gbc",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_overlay.gbc",
           "size": 2097152,
-          "sha256": "cb075ce7be23bffeab87d16ec41675d25ca63566952a9696cb0cf97b468a8ec7"
+          "sha256": "e8967d0a3d9d3a095d19c2f0f8ac31cb3321c9d32788be72467c9cd06448c7e0"
         },
         "route_facts": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_route_facts.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_route_facts.json",
           "size": 22777,
           "sha256": "d6fa5225e959d58fe85236828d579b686573db7c8dff7c25d0dcd49220b95fb1"
         },
         "played_receipt": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_battle_ot2_errand.clean_qualification_ref.json",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\crystal_battle_ot2_errand.clean_qualification_ref.json",
           "size": 420,
           "sha256": "ff547d25c77908cff4ed1e51949bc861574136a112cc7ea01d7d78dc1bc140ce"
         },
         "boot:game_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\boot-5e791827a37b7bed\\crystal_battle_ot2_errand.boot.witness.json",
-          "size": 1988,
-          "sha256": "9a81f30388cb6dc0b8315de50bd49c76fdfec87e312e4723f22f072551566ba2"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\boot-160894c760582d83\\crystal_battle_ot2_errand.boot.witness.json",
+          "size": 1961,
+          "sha256": "5bf084506b5b81683f39cbf7af2ac921d14a0744bc040803814dfed30a53a94e"
         },
         "resave:fixture": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\resave-617ab69e13bd2577\\crystal_battle_ot2_errand.resaved.SaveRAM",
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\resave-83bdeb46c691ab25\\crystal_battle_ot2_errand.resaved.SaveRAM",
           "size": 32790,
-          "sha256": "b5a26f8b9b68b212fd0ed23ee39164998d05be11d30f0d7ac1bdad9d298391ea"
+          "sha256": "fbe54163e7a742c103a84c8866a59c5a6d901d645215bf3358fe04c045208218"
         },
         "resave:save_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\resave-617ab69e13bd2577\\crystal_battle_ot2_errand.resave.witness.json",
-          "size": 2112,
-          "sha256": "dcb9abcb00f739fa74a14ad723e2415f3d90844c971135824077196b2f855b9e"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\resave-83bdeb46c691ab25\\crystal_battle_ot2_errand.resave.witness.json",
+          "size": 2085,
+          "sha256": "d4099be4bfb133afd0b335fc095d78e77285e7b7ca1481fd692edd84ff65627a"
         },
         "resave:reload_witness": {
-          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\reload-617ab69e13bd2577\\crystal_battle_ot2_errand.reload.witness.json",
-          "size": 1990,
-          "sha256": "01009bc513cce438470e829efff10b639baa71468b4125e981ca286b07d254ff"
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\reload-83bdeb46c691ab25\\crystal_battle_ot2_errand.reload.witness.json",
+          "size": 1963,
+          "sha256": "6684cc6c9bf9d055f456e3ff0edeed89cb654d552e5d1292987e817cfcfbdb58"
         }
       },
       "provenance": {
         "title": "crystal",
-        "rom_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+        "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
         "scope": "candidate fixture",
         "route_facts_sha256": "1b88045c521ac91fd2893926926e67009ca5e45f2fa5c60019c33ad93cdd60d9"
       },
       "stages": [
         {
           "stage": "qualify",
-          "fingerprint": "9d9593f1be1bad93cdfe86b7981366ad7dfb36019935bb290a6eac940bfd7c5d",
+          "fingerprint": "849abc368ed2bd5d3a0c287321aed3b5b2ea66ad13b07a76e8d773d513fcc828",
           "status": "PASS",
           "problems": [],
           "notes": [
@@ -83,7 +83,7 @@
         },
         {
           "stage": "boot",
-          "fingerprint": "5e791827a37b7bed5d598841a5932836e132ade1c78fd25601ff34536d5415dd",
+          "fingerprint": "160894c760582d8317cf95ffbd64e875d0a93fea90452d32d8fda66044502f64",
           "status": "PASS",
           "problems": [],
           "notes": [],
@@ -95,43 +95,43 @@
           },
           "outputs": {
             "boot:game_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\boot-5e791827a37b7bed\\crystal_battle_ot2_errand.boot.witness.json",
-              "size": 1988,
-              "sha256": "9a81f30388cb6dc0b8315de50bd49c76fdfec87e312e4723f22f072551566ba2"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\boot-160894c760582d83\\crystal_battle_ot2_errand.boot.witness.json",
+              "size": 1961,
+              "sha256": "5bf084506b5b81683f39cbf7af2ac921d14a0744bc040803814dfed30a53a94e"
             }
           }
         },
         {
           "stage": "resave",
-          "fingerprint": "617ab69e13bd257771e2824854e30da4cc4c1900ed316d7d56827dc6dbc1216e",
+          "fingerprint": "83bdeb46c691ab2567da49b705b057c865cc6743b2adce8934133e22ae511794",
           "status": "PASS",
           "problems": [],
           "notes": [],
           "evidence": {
             "observer": "independent_GAME re-save + reload",
-            "resave_cartram_sha256": "cd14bf4bf9ad0983ba693d9eb633304591e880cec04a5a49f46499f1cc7590c4"
+            "resave_cartram_sha256": "9e3facc0cb786f6f412d759321702842a07c71d8a860872bdbf7d99ece1900ec"
           },
           "outputs": {
             "resave:fixture": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\resave-617ab69e13bd2577\\crystal_battle_ot2_errand.resaved.SaveRAM",
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\resave-83bdeb46c691ab25\\crystal_battle_ot2_errand.resaved.SaveRAM",
               "size": 32790,
-              "sha256": "b5a26f8b9b68b212fd0ed23ee39164998d05be11d30f0d7ac1bdad9d298391ea"
+              "sha256": "fbe54163e7a742c103a84c8866a59c5a6d901d645215bf3358fe04c045208218"
             },
             "resave:save_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\resave-617ab69e13bd2577\\crystal_battle_ot2_errand.resave.witness.json",
-              "size": 2112,
-              "sha256": "dcb9abcb00f739fa74a14ad723e2415f3d90844c971135824077196b2f855b9e"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\resave-83bdeb46c691ab25\\crystal_battle_ot2_errand.resave.witness.json",
+              "size": 2085,
+              "sha256": "d4099be4bfb133afd0b335fc095d78e77285e7b7ca1481fd692edd84ff65627a"
             },
             "resave:reload_witness": {
-              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\ovl-crystal_battle_ot2_errand-a1\\crystal_battle_ot2_errand\\qualify-overlay\\reload-617ab69e13bd2577\\crystal_battle_ot2_errand.reload.witness.json",
-              "size": 1990,
-              "sha256": "01009bc513cce438470e829efff10b639baa71468b4125e981ca286b07d254ff"
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q10\\crystal_battle_ot2_errand\\qualify-overlay\\reload-83bdeb46c691ab25\\crystal_battle_ot2_errand.reload.witness.json",
+              "size": 1963,
+              "sha256": "6684cc6c9bf9d055f456e3ff0edeed89cb654d552e5d1292987e817cfcfbdb58"
             }
           }
         },
         {
           "stage": "post_oracle",
-          "fingerprint": "850aead97fac775f5fe5569769e09286381442d69c503be212e19947791be8c6",
+          "fingerprint": "b999dd4cf30e311b224fddada9aa9be229e07c394a9880ef4edb3afd3130653f",
           "status": "PASS",
           "problems": [],
           "notes": [],

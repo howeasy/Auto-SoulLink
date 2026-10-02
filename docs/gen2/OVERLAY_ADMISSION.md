@@ -83,6 +83,19 @@ labelled as such.
 **D8 Server.** No change: `gen2_gsc` already pairs overlay with overlay only and refuses mixed kinds.
 Model tests prove it.
 
+**D9 Overlay-only release (owner, 2026-10-02 ~21:00Z).** The companion is required for companion
+titles: launcher and server refuse clean cartridges (Yellow and Archipelago exempt; `gen3_exp`
+later). This supersedes the clean-admission/re-sweep portions of the earlier D1/D6/D7 decisions.
+Gen 2 release evidence is 64 overlay duo cells (including 21 trades and both wrong-ROM refusals),
+22 overlay gate cells (U1/U2/inspect plus 15 feature gates), and 13 overlay fixture qualifications.
+The frozen sweep therefore runs **86 cells**, with qualifications captured before the freeze.
+Clean manifest rows carry `superseded_by_overlay: true` and retain their receipts as history;
+clean U1/U2/inspect/duo proofs and code stamps never block this release and are not recaptured.
+Clean ROM builds, source lineage, shared fixture bytes/checksums and O-33 rebuild/disclosure checks
+remain prerequisites for deriving the overlay; they do not require fresh clean gameplay evidence.
+Release fixture qualification uses the overlay namespace. D6's production-digest scope and
+activation-before-freeze ordering remain unchanged; no post-freeze production-proof copying.
+
 ## Streams (exclusive files; workers do not commit, the coordinator reviews and commits)
 
 | Stream | Owner | Files |

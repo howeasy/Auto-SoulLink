@@ -150,3 +150,16 @@ def test_phone_calls_is_a_gen2_checkbox_default_on():
     support = manager.OPTION_SUPPORT["phone_calls"]
     assert support["all"] is False and support["gen2_gsc"]["ok"] is True
     assert ("phone_calls", "--no-phone-calls", True) in manager.RUN_FLAGS
+
+
+def test_the_new_run_form_seeds_every_default_on_option_checked():
+    """A default-ON run flag must render checked on a fresh New-run form (review cx-158f3337 F1: phone_calls
+    rendered unchecked while the run was ON, so the box read the opposite of what the run did)."""
+    import re
+    from pathlib import Path
+    from server import manager
+    html = (Path(__file__).resolve().parents[2] / "server/templates/manager.html").read_text(encoding="utf-8")
+    seed = re.search(r"draft: \{ name: '', game: '', opts: \{([^}]*)\}", html)[1]
+    seeded = {k for k, v in re.findall(r"(\w+): (true|false)", seed) if v == "true"}
+    want = {key for key, _flag, default in manager.RUN_FLAGS if default is True}
+    assert seeded == want
