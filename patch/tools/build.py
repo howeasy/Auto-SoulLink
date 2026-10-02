@@ -129,7 +129,7 @@ def validate_frame_replay(spec, facts, clean):
             "gmain":spec["GMAIN"],"original_tail":tail["bytes"]}
 
 
-def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False):
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False, version=None):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
@@ -244,6 +244,12 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
             data[offset:offset+8] = thumb_entry_jump(spec[key],destination)
             trade_detours.append({"address":spec[key],"original":spec[key+"_BYTES"],
                                   "replacement":data[offset:offset+8].hex(),"symbol":symbol})
+    title_spans = []
+    if production:
+        # The SoulLink title band: static graphics in the ROM's free tail past the payload's linker bound
+        if gen3_title.TARGETS[title]["base"] < spec["CODE_CANDIDATE"] + 0x14000:
+            raise ValueError("title assets overlap the payload's linker region")
+        title_spans = gen3_title.apply_title(data, title, version or gen3_title.DEFAULT_VERSION)
     rom = out / "probe.gba"
     rom.write_bytes(data)
     receipt = {"status": "PRODUCTION_COMPANION" if production else "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
@@ -261,6 +267,7 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
                "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
                "frame_detour": frame_receipt,
                "trade_detours": trade_detours,
+               "title": {"version": version or gen3_title.DEFAULT_VERSION, "spans": title_spans} if production else None,
                "compiler": run([GCC, "--version"])}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(f"{'PRODUCTION' if production else 'DIAGNOSTIC ONLY'}: {rom}")
@@ -270,9 +277,9 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
 PUBLISHED_TARGETS = {"firered":"FireRed", "leafgreen":"LeafGreen", "emerald":"Emerald"}
 
 
-def publish_native(title, rom_path, *, check=False):
+def publish_native(title, rom_path, *, check=False, version=None):
     """Build, round-trip and pin one vanilla ABI2 UPS; RR keeps its ABI1 pipeline."""
-    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True)
+    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True, version=version)
     clean, patched = Path(rom_path).read_bytes(), (out/"probe.gba").read_bytes()
     patch = make_ups.ups_create(clean, patched)
     if make_ups.ups_apply(clean, patch) != patched:
@@ -286,7 +293,9 @@ def publish_native(title, rom_path, *, check=False):
            "payload_sha256":receipt["payload_sha256"],
            "protected_spans":[{"offset":require_ready(title)["CODE_CANDIDATE"]-ROM_BASE,"size":receipt["payload_bytes"]}]
                + [{"offset":item.get("address",item.get("detour"))-ROM_BASE,"size":len(bytes.fromhex(item["original"]))}
-                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]}
+                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]
+               + [{"offset":span["offset"],"size":span["size"]} for span in receipt["title"]["spans"]],
+           "title_version":receipt["title"]["version"]}
     manifest = Path(DIST)/"gen3_companions.json"
     data = json.loads(manifest.read_text()) if manifest.exists() else {"schema":"slink-gen3-companions-v1","titles":{}}
     if check:
@@ -368,6 +377,7 @@ DEFAULT_RR = r"E:/Google Drive/SLink/Pokemon - Radical Red.gba"
 BATTLE_CALC_UPS = os.path.join(SRC, "rr41_battle_calc.ups")
 
 sys.path.insert(0, HERE)
+import gen3_title  # noqa: E402
 import make_ups  # noqa: E402
 
 CFLAGS = ["-mthumb", "-mcpu=arm7tdmi", "-mtune=arm7tdmi", "-Os", "-ffreestanding",
@@ -412,6 +422,8 @@ def main():
     ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
+    ap.add_argument("--version", default=None,
+                    help="SoulLink version drawn on the title screen: 'dev' (default) or vX.Y.Z; a release re-stamps it")
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
                     help="skip folding in the RR4.1_Custom Battle Calc delta "
@@ -442,7 +454,7 @@ def main():
         if args.no_verify_md5:
             ap.error("base verification bypass is not supported for pinned companion targets")
         try:
-            publish_native(args.target,args.rom,check=args.check)
+            publish_native(args.target,args.rom,check=args.check,version=args.version)
         except (ValueError,OSError) as error:
             ap.error(str(error))
         return 0
@@ -584,6 +596,9 @@ def main():
                      "— Battle Calc layout changed; re-RE before re-pointing")
         data[bt_off:bt_off + 4] = thumb_bl(BT_DETOUR, bt_hook_addr)
         print(f"      re-pointed BattlePutTextOnWindow detour @ {BT_DETOUR:#x} -> shim {bt_hook_addr:#x}")
+    # The SoulLink title band, in the 1.6 MB 0xFF run at 0x08B71D04 (no payload or Battle Calc byte lives there)
+    title_spans = gen3_title.apply_title(data, "radical_red", args.version or gen3_title.DEFAULT_VERSION)
+    print(f"      title band: {len(title_spans)} spans, version {args.version or gen3_title.DEFAULT_VERSION}")
     with open(out_rom, "wb") as f:
         f.write(data)
 
