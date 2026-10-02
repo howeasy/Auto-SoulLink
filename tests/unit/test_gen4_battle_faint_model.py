@@ -495,7 +495,7 @@ class Sim:
         pass
 
     def tick_replace(self):
-        if not self.deaf and self.down_edges >= 1 and self.a_edges >= 2:
+        if not self.deaf and self.down_edges >= 1 and self.a_edges >= 4:  # 2 prompt As, then Down + A + A on the party screen
             self.w.m[CTX + 0x219C - BASE] = 1  # selectedMonIndex[0] = slot 1
             second = codec.decrypt_party(self.w.get(self.w.party_ptr[0] + 8 + 0xEC, codec.PARTY_MON_SIZE))
             mon = CTX + 0x2D40

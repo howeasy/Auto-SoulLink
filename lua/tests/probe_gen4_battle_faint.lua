@@ -628,7 +628,15 @@ local function run()
         if lose_frame or chain_gone_frame then break end
         if repl_frame then -- the party screen is (or is about to be) up: slot 0 is fainted, move to slot 1 and confirm
           p2.cycles = p2.cycles + 1
-          tap("Down", 3, 15); tap("A", 3, 40); tap("A", 3, 80)
+          if p2.cycles == 1 then step(30); shot("p2_prompt") end
+          if p2.cycles <= (cfg.p2_prefix or 2) then
+            -- live findings (runs 201013, 201104): the replacement PROMPT is "Use next Pokemon? / Flee", cursor on
+            -- "Use next Pokemon" (Down would pick Flee, outcome 5). The first A only completes the typing of the text,
+            -- the second accepts "Use next Pokemon" and opens the party screen.
+            tap("A", 3, 120)
+          else -- the party screen: slot 0 is fainted, move to slot 1 and confirm
+            tap("Down", 3, 15); tap("A", 3, 40); tap("A", 3, 80)
+          end
           shot("p2_c" .. p2.cycles)
         else
           step(40); tap("A", 2, 0)

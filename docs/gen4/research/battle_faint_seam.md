@@ -400,3 +400,43 @@ reports "ALL seam hits classified stale" if the read is ever suspect, and `cfg.r
 2. `SLINK_LIVE=1 pytest tests/live/test_gen4_battle_faint.py -m live -k "p2 and heartgold and not hge"`, then hge; then the hardened controls and
    one regression of the two secondary one-mon scenarios per title.
 3. Estimate (not measured): route 5-10 min per title, each p2 run 1-3 min (more if the party-screen sequence needs a second attempt).
+
+## 12. Card C1-8D live, HG (lane faint2) - STOPPED after two navigation failures (2026-10-01)
+
+SYNTH party2 route states made with the C1-9 route tool: `C:/slink/g4/faint2/p2hg_leg2_battle_settled.State` (HG, Pidgey L2, Cyndaquil
+slot 0 + SYNTH clone slot 1) and `p2hge_leg5_battle_settled.State` (hge, Pidgey L3). Runs `heartgold_seam_ufce_bit_p2_201013` and `_201104`
+(both OPEN, setup SYNTH, callback_errors 0):
+
+- **The production path is reached.** Write at cmd 11 (FAINTED bit): both copies read back 0; the faint script ran one frame later (command
+  22); the D540 replacement flag `ctx+0x13C` bit0 was set 155 frames after the write; no LOSE byte, no `HealParty`, no whiteout. The
+  game's own replacement prompt appeared: **"Use next Pokemon?" with the buttons "Use next Pokemon" / "Flee"**
+  (`seam_ufce_bit_p2_p2_c1.png`, run 201104; also `..._201013/..._p2_c1.png`).
+- **Navigation failed twice (my input script, not the mechanism):** run 201013 pressed Down at the prompt and picked Flee ("Got away safely!",
+  outcome 5); run 201104's first A only finished the typing of the prompt text and the next Down again picked Flee. Fix applied offline (not
+  run): the replacement phase is now A (finish text), A (accept "Use next Pokemon", opens the party screen), then Down/A/A cycles for
+  slot 1 (`cfg.p2_prefix`, default 2). Per the card rule the live run stopped here.
+- **Poll measurement (HG, 2 turns):** cmd 11 dispatches 2, seen by the boundary poll 2; TurnEnd (cmd 12) dispatches 2, seen by the poll 0.
+- Foreign EmuHawk PIDs seen (Gen 3 duo runs): 6912, 22596, 7716, 3824; untouched.
+
+## 13. Card C1-8D live, 2026-10-01 (lane faint2, re-granted after the p2_prefix fix): PASS on HG and hge
+
+All receipts `C:/slink/g4/faint2/<dir>/receipt.txt`; setup SYNTH (party2 saves + sidecar sha256) for the p2 rows; 0 callback errors.
+
+| Row | Receipt dir | Status | write -> LOSE/WIN byte | repl flag after write | slot 1 in (frame) | Final saved party |
+|---|---|---|---|---|---|---|
+| HG `seam_ufce_bit_p2` (cmd 11 + bit) | heartgold_seam_ufce_bit_p2_201242 | PASS | WIN (1) at +2392 | +155 | 7176 | slot 0 = 0, slot 1 = 17 |
+| HG `seam_turnend_p2` | heartgold_seam_turnend_p2_201327 | PASS | WIN (1) at +2266 | +1 | 7050 | 0 / 17 |
+| hge `seam_turnend_p2` | heartgold_hge_seam_turnend_p2_201400 | PASS | WIN (1) at +3007 | +1 | 11127 | 0 / 14 |
+| hge `seam_ufce_bit_p2` (cmd 9 + bit) | heartgold_hge_seam_ufce_bit_p2_201513 | PASS | WIN (1) at +3219 | +193 | 11337 | 0 / 14 |
+
+- No LOSE byte, no `HealParty`, no `Task_Blackout`, map unchanged, in all four. The party screen showed `FUCM FNT 0/20` beside `SYNTH 20/20`, then "Go! SYNTH!"
+  (`seam_ufce_bit_p2_p2_c3.png`, `..._p2_c5.png`, run 201242). The game's own prompt "Use next Pokemon? / Flee" is `..._p2_c1.png` / `p2_prompt.png`.
+- With the S2 (FAINTED bit) seam the faint animation plays first, then the prompt (repl flag +155 HG / +193 hge frames); with S1 the replacement branch is
+  entered one frame after the write and the faint animation is skipped as before.
+- Controls (hardened: liveness + the specific wrong outcome) PASS on both titles: `battle_only` (repl flag set with the party copy alive, game alive:
+  vblank 1587/1602 frames, A seen 74 times) and `party_only` (the game restored the party-copy HP). Receipts: heartgold_battle_only_201936,
+  heartgold_hge_battle_only_201958, heartgold_party_only_202021, heartgold_hge_party_only_202044.
+- One-mon secondaries (regression of the current source) PASS on both titles: heartgold_seam_turnend_201610, heartgold_hge_seam_turnend_201700,
+  heartgold_seam_ufce_bit_201750, heartgold_hge_seam_ufce_bit_201841 (write -> LOSE 1/1/157/188 frames; heal at save HP 0 then 20).
+- Navigation: the first run of the new cut (prefix A, A, then Down/A/A) passed on HG; no navigation failure in this grant.
+- Still OPEN: doubles/TAG/multi, NPC follower, trainer battles, win/status-turn as separate rows, Future Sight/Perish/switch/run as live paths. The 2-mon setup is SYNTH, disclosed.
