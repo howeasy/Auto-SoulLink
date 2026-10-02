@@ -71,10 +71,10 @@ console.log(JSON.stringify({ label: rf.familyLabel(rf.family), good: rf.usable(r
 
 def test_the_companion_goes_in_wherever_one_exists_with_no_opt_out(tmp_path):
     """Patch-first (owner 2026-10-01): no draft field turns the companion off."""
-    from server import manager
+    from server import cartridges
 
     out = _run_node(tmp_path, """
-form.companion_titles = """ + json.dumps(list(manager.COMPANION_TITLES)) + """;
+form.companion_titles = """ + json.dumps(list(cartridges.COMPANION_TITLES)) + """;
 const rf = mod.randomizerFields(form);
 rf.roms = [{ path: 'r.gb', variant: 'Red' }, { path: 'b.gb', variant: 'Blue' }, { path: 'y.gbc', variant: 'Yellow' },
            { path: 'c.gbc', variant: 'Crystal', family: 'gen2_gsc' }];
@@ -87,11 +87,11 @@ rf.rdraft.rom_a = rf.rdraft.rom_b = 'c.gbc';
 const crystal = rf.cartridgesBody(), gen2why = rf.companionOk().why;
 console.log(JSON.stringify({ red: red.companion, yellow: yellow.companion, why, crystal: crystal.companion, gen2why }));
 """)
-    assert out["red"] is True
-    assert out["yellow"] is False and "handed out as picked" in out["why"]
-    # Gen 2's overlay is built but the launcher admits clean rows only (lua/gen2/entry.lua:245-258):
-    # handing it out would make a run neither player can launch.
-    assert out["crystal"] is False and "does not admit it yet" in out["gen2why"]
+    # The browser always sends patch-first intent; server/cartridges.py decides per player.
+    assert out["red"] is True and out["yellow"] is True and out["crystal"] is True
+    # It only explains the per-pick exceptions.
+    assert "handed out as picked" in out["why"]
+    assert "does not admit it yet" in out["gen2why"]
 
 
 def test_carts_why_blocks_an_untrusted_jar_with_the_servers_own_message(tmp_path):

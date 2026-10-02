@@ -232,24 +232,27 @@ def test_refuses_mixed_families_before_spending(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def test_gen2_companion_applies_the_admitted_overlay(tmp_path):
-    """companion=True on a clean Gold/Silver pair must apply each title's own SLink-<Title>.ups
-    and produce exactly the sha1 admitted in data/games/gen2_<title>/admission.json's overlay
-    row -- the same proof test_pure_modes_and_overlay_before_randomizer runs for pureRGB."""
+def test_gen2_companion_follows_admission(tmp_path):
+    """Patch-first: a Gold/Silver pair gets each title's own SLink-<Title>.ups, producing exactly the
+    admitted overlay sha1, once Gen 2 is in COMPANION_TITLES (its overlay rows activated). Until then
+    the server hands out the clean cartridges even when asked for the companion: a patched Gen 2
+    cartridge the launcher does not admit would make a run nobody can launch (review cx-7847d499 A2)."""
     from server import cartridges
 
     sources = _gen2()
     result = cartridges.provision(str(tmp_path), sources, companion=True, randomize=None)
     assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
-    admission = {}
-    for title, dirname in (("a", "gold"), ("b", "silver")):
-        with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
-            admission[title] = next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")
-    for pid in ("a", "b"):
+    admitted = {"a": "Gold", "b": "Silver"}
+    for pid, dirname in (("a", "gold"), ("b", "silver")):
         player = result["players"][pid]
-        assert player["kind"] == "companion"
-        assert player["rom_sha1"] == admission[pid]["sha1"]
         assert Path(player["output"]).suffix == ".gbc"
+        if admitted[pid] in cartridges.COMPANION_TITLES:
+            with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
+                row = next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")
+            assert player["kind"] == "companion" and player["rom_sha1"] == row["sha1"]
+        else:
+            assert player["kind"] == "clean"
+            assert Path(player["output"]).read_bytes() == Path(sources[pid]).read_bytes()
 
 
 def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
@@ -264,20 +267,32 @@ def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
                              randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
 
 
-def test_yellow_companion_refuses_before_spending(tmp_path, monkeypatch):
-    from server.cartridges import CartridgeError, provision
+def test_yellow_goes_clean_and_its_red_partner_keeps_the_companion(tmp_path, monkeypatch):
+    """Per player (review cx-7847d499 A1): Yellow has no companion, so it is handed out as picked,
+    but its Red partner is an admitted title and must still get its companion."""
+    from server.cartridges import provision
 
     yellow = REPO / "Pokemon - Yellow Version (USA, Europe).gbc"
     if not yellow.is_file():
         pytest.skip("clean Yellow dump absent")
     sources = _vanilla()
     sources["b"] = str(yellow)
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *args: pytest.fail("spent on Yellow"))
-    with pytest.raises(CartridgeError, match="Yellow has zero free WRAM"):
-        provision(str(tmp_path / "run"), sources, companion=True,
-                  randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
-    result = provision(str(tmp_path / "run"), sources, companion=False, randomize=None)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *args: pytest.fail("no randomizer asked for"))
+    result = provision(str(tmp_path / "run"), sources, companion=True, randomize=None)
+    assert result["players"]["a"]["kind"] == "companion"
+    assert Path(result["players"]["a"]["output"]).read_bytes() != Path(sources["a"]).read_bytes()
+    assert result["players"]["b"]["kind"] == "clean"
     assert Path(result["players"]["b"]["output"]).read_bytes() == yellow.read_bytes()
+    assert result["companion"] is True
+
+
+def test_the_companion_decision_is_server_side_per_player():
+    """No browser input can grant a title the companion: only COMPANION_TITLES can."""
+    from server.cartridges import COMPANION_TITLES, companion_admitted
+
+    assert companion_admitted({"variant": "Red"}) and "Red" in COMPANION_TITLES
+    for variant in ("Yellow", "Crystal", "Gold", "Silver", "", None):
+        assert not companion_admitted({"variant": variant}), variant
 
 
 def test_pure_stock_jar_refuses_before_patching_or_randomizing(tmp_path, monkeypatch):

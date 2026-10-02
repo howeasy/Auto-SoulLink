@@ -371,12 +371,13 @@ function randomizerFields(form) {
           && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
       }
-      if (this.rdraft.randomize && this.companionOk().ok && this.family === 'gen1_purergb'
+      if (this.rdraft.randomize && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
         // pure + companion + randomize is the overlay path: UPR needs an entry for the
         // overlay build of each pick ("PureRed overlay (U)"; the fork's naming).
         var entries = this.pre.jar_entries, missing = [];
-        [ra, rb].forEach(function (r) { if (r && r.variant && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
+        var titles = this.rform.companion_titles || [];
+        [ra, rb].forEach(function (r) { if (r && r.variant && titles.indexOf(r.variant) >= 0 && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
         if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, or turn Randomize off.';
       }
       return '';
@@ -388,7 +389,9 @@ function randomizerFields(form) {
     },
     cartridgesBody() {
       var body = { rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b,
-                   companion: this.companionOk().ok, randomize: !!this.rdraft.randomize };
+                   // patch-first: the server decides per player (server/cartridges.py); a pick
+                   // without an admitted companion goes out as picked, its partner still patched
+                   companion: true, randomize: !!this.rdraft.randomize };
       if (this.rdraft.randomize) { body.jar = this.rdraft.jar; body.spec = this.rdraft.spec; }
       return body;
     },

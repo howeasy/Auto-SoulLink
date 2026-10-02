@@ -144,12 +144,6 @@ def _legacy_cartridges(run: dict) -> dict | None:
                         for p, v in (rnd.get("players") or {}).items()}}
 
 
-# The titles whose SLink companion the launcher ADMITS (a UPS in patch/dist, a target in
-# server/patcher.py, and an admission route). Yellow is absent on purpose: it has no free WRAM
-# for the mailbox. Crystal/Gold/Silver are built but not admitted yet: lua/gen2/entry.lua admits
-# clean rows only, so handing out their companion would make an unlaunchable run.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
-                    "FireRed", "LeafGreen", "Emerald")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -315,6 +309,11 @@ def new_run_form() -> dict:
         # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
         "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY],
     }
+
+
+def _companion_titles() -> tuple:
+    from server.cartridges import COMPANION_TITLES   # lazy: provisioning pulls the patch tools
+    return COMPANION_TITLES
 
 
 def _json_for_script(obj) -> str:
@@ -1154,9 +1153,9 @@ class RunManager:
             "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
             "cartridges": (run.get("cartridges") or _legacy_cartridges(run)) if run else None,
-            # The SLink companion exists for these titles (server/patcher.py TARGETS): the
-            # form greys the checkbox, with the reason, for a pick outside them.
-            "companion_titles": COMPANION_TITLES,
+            # The titles that get the SLink companion (server/cartridges.py decides per player);
+            # the form only explains why a pick outside them is handed out as picked.
+            "companion_titles": _companion_titles(),
         }
 
     @staticmethod
@@ -1474,7 +1473,7 @@ class RunManager:
         spec, categories = body.get("spec"), body.get("categories")
         randomize = bool(body.get("randomize", implied_randomize or spec is not None
                                       or categories is not None or bool(settings)))
-        companion = bool(body.get("companion", False))
+        companion = bool(body.get("companion", True))  # patch-first; per player in cartridges.py
         missing = [n for n, v in (("rom_a", rom_a), ("rom_b", rom_b)) if not v]
         if randomize:
             missing += [n for n, v in (("jar", jar),) if not v]
