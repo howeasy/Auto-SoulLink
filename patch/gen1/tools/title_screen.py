@@ -7,8 +7,12 @@ here in a small pixel font so nothing at patch time needs Pillow or a toolchain.
 
 PrintGameVersionOnTitleScreen (9 bytes) is redirected to a routine in bank $3F that loads the logo
 into 18 BG tile ids and the version line into 8 more, all ids the title leaves free (measured on a
-running Red: $6A-$7E and $4F-$5F), then places the strings and the version cells. It runs twice per boot, like the
-original, and draws the same thing.
+running Red and Blue: tests/fixtures/gen1/title_vram_*.json), then places the strings and the
+version cells. It runs twice per boot, like the original, and draws the same thing.
+
+The title's mon swap raster-scrolls everything below scanline $48 (tile row 9), which is where the
+band's second row lives, so the scroll's start line is moved to $50 (tile row 10, where the mon
+starts). Without that the bottom half of the logo shears on every swap.
 
 The title screen's graphics and the credits are untouched. Toolchain-free, like manifest.py:
 build.py and inject.py both call title_spans().
@@ -24,7 +28,7 @@ except ImportError:
 
 BANK = 0x3F
 CODE_OFFSET, RV_OFFSET, ROW0_OFFSET, ROW1_OFFSET, TILES_OFFSET, VTILES_OFFSET = (
-    0xFE000, 0xFE080, 0xFE090, 0xFE0A0, 0xFE100, 0xFE300)       # bank $3F $6000 ...
+    0xFE000, 0xFE080, 0xFE090, 0xFE0A0, 0xFE100, 0xFE300)               # bank $3F $6000 ...
 FREE_FROM = CODE_OFFSET                                                  # the payload must end below this
 END = 0x50
 
@@ -32,6 +36,8 @@ END = 0x50
 SITE, SITE_BEFORE = 0x4598, bytes.fromhex("2147c411a145c35519")
 VERSION_TEXT_SITE = 0x45A1               # "Red Version" / "Blue Version" as tile ids, the one thing Red and Blue differ in
 VERSION_TEXT_LEN = 9
+# bank $0D, _TitleScroll: `ld h, d / ld l, $48 / call .ScrollBetween`; the immediate is the first scanline scrolled
+SCROLL_SITE, SCROLL_BEFORE, SCROLL_AFTER = 0x3727B, bytes((0x48,)), bytes((0x50,))
 
 # home-bank routines and RAM (pret pokered.sym; identical in Red and Blue)
 COPY_VIDEO_DATA, PLACE_STRING, BANKSWITCH, WTILEMAP = 0x1848, 0x1955, 0x35D6, 0xC3A0
@@ -39,6 +45,9 @@ COPY_VIDEO_DATA, PLACE_STRING, BANKSWITCH, WTILEMAP = 0x1848, 0x1955, 0x35D6, 0x
 # the 9x2-tile logo at x=1 on rows 8-9, the 8-tile line at x=11 on row 8, the version under it on row 9
 LOGO_X, LINE_X, VER_X, VER_CELLS = 1, 11, 11, 8
 VER_FIRST_ID = 0x4F
+# "Red Version" / "Blue Version" ink spans columns 0..59 of its 64 pixel field (measured on both), so the
+# version is centred on that, not on the field's own centre
+STRIP_INK_LAST = 59
 assert FIRST_ID + TILE_COUNT <= 0x7F and VER_FIRST_ID + VER_CELLS <= 0x60   # the free id runs on the title
 
 DEFAULT_VERSION = "dev"
@@ -46,16 +55,16 @@ _VERSION_RE = re.compile(r"dev|v\d+\.\d+\.\d+(-dev)?")
 
 
 def check_version(version: str) -> str:
-    if not _VERSION_RE.fullmatch(version) or len(version) * 6 - 1 > VER_CELLS * 8:
-        raise ValueError(f"title version must be 'dev' or vX.Y.Z[-dev] and fit {VER_CELLS * 8} pixels, got {version!r}")
+    if not _VERSION_RE.fullmatch(version) or len(version) * 6 - 1 > STRIP_INK_LAST + 1:
+        raise ValueError(f"title version must be 'dev' or vX.Y.Z[-dev] and fit {STRIP_INK_LAST + 1} pixels, got {version!r}")
     return version
 
 
 def _version_tiles(version: str) -> bytes:
-    """The version line as 2bpp tiles: 5x7 glyphs, centred, one pixel below the top of the band row."""
+    """The version line as 2bpp tiles: 5x7 glyphs, centred under the strip's ink, one pixel below the band row's top."""
     width = VER_CELLS * 8
     rows = [0] * 8
-    x = (width - (len(version) * 6 - 1)) // 2
+    x = (STRIP_INK_LAST - (len(version) * 6 - 1)) // 2
     for c in version:
         for y, bits in enumerate(SMALL[c]):
             rows[y + 1] |= bits << (width - 5 - x)
@@ -85,7 +94,9 @@ def _code() -> bytes:
         return (bytes((0x21,)) + _w(WTILEMAP + row * 20 + x) + bytes((0x11,)) + _w(_addr(text_off))
                 + bytes((0xCD,)) + _w(PLACE_STRING))
 
-    # the version cells are written straight into wTileMap: ids $4F-$56 are PlaceString control codes
+    # The version cells are written straight into wTileMap: ids $4F-$56 are PlaceString control codes, so they are
+    # safe ONLY because this loop bypasses PlaceString. Routing that row through PlaceString would turn $4F into
+    # <LINE> and $50 into a terminator. (The ids that are not control codes, $6A-$7E, are all taken by the logo.)
     cells = (bytes((0x21,)) + _w(WTILEMAP + 9 * 20 + VER_X) + bytes((0x3E, VER_FIRST_ID, 0x06, VER_CELLS))
              + bytes((0x22, 0x3C, 0x05, 0x20, 0xFB, 0xC9)))                # ld hl / ld a / ld b / loop: ld [hli],a; inc a; dec b; jr nz / ret
     return (copy(TILES_OFFSET, 0x9000 + FIRST_ID * 16, TILE_COUNT)
@@ -94,11 +105,16 @@ def _code() -> bytes:
 
 
 def title_spans(rom: bytes, version: str = DEFAULT_VERSION) -> list[tuple[int, bytes, bytes, str]]:
-    """(offset, expected original, replacement, why) -- the same shape as manifest.MENU_PATCHES."""
+    """(offset, expected original, replacement, why) -- the same shape as manifest.MENU_PATCHES.
+
+    Raises ValueError for a bad version or a ROM whose title line is not tile ids PlaceString can print."""
     code, vtiles = _code(), _version_tiles(check_version(version))
     line = rom[VERSION_TEXT_SITE:VERSION_TEXT_SITE + VERSION_TEXT_LEN]
-    assert len(code) <= RV_OFFSET - CODE_OFFSET and line[-1] == END
-    assert TILES_OFFSET + len(TILES) <= VTILES_OFFSET and VTILES_OFFSET + len(vtiles) <= 0x100000
+    # PlaceString treats every byte below $60 as a command, so the copied line must be plain tile ids plus its terminator
+    if len(line) != VERSION_TEXT_LEN or line[-1] != END or any(b < 0x60 for b in line[:-1]):
+        raise ValueError(f"the title's version line at {VERSION_TEXT_SITE:#x} is not the game's own tile ids: {line.hex()}")
+    if len(code) > RV_OFFSET - CODE_OFFSET or TILES_OFFSET + len(TILES) > VTILES_OFFSET:
+        raise ValueError("the title band does not fit its bank $3F layout")
     hook = bytes((0x06, BANK, 0x21)) + _w(_addr(CODE_OFFSET)) + bytes((0xC3,)) + _w(BANKSWITCH) + bytes((0x00,))
     return [
         (CODE_OFFSET, bytes(len(code)), code, "title band routine, end of bank $3F"),
@@ -108,4 +124,5 @@ def title_spans(rom: bytes, version: str = DEFAULT_VERSION) -> list[tuple[int, b
         (TILES_OFFSET, bytes(len(TILES)), TILES, "SoulLink logo tiles"),
         (VTILES_OFFSET, bytes(len(vtiles)), vtiles, "version line tiles"),
         (SITE, SITE_BEFORE, hook, "PrintGameVersionOnTitleScreen -> the band routine"),
+        (SCROLL_SITE, SCROLL_BEFORE, SCROLL_AFTER, "title mon swap scrolls from tile row 10, so band row 9 stays put"),
     ]

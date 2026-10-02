@@ -82,7 +82,7 @@ def dilate(mask):
 
 def draw() -> Image.Image:
     img = Image.new("L", (COLS * 8, ROWS * 8), WHITE)
-    m = word_mask(img.size, 5, 2)
+    m = word_mask(img.size, 5, 3)
     paint(img, ImageChops.offset(dilate(m), 1, 1), DARK)             # extrusion, down-right
     paint(img, dilate(m), BLACK)                                      # outline
     paint(img, m, LIGHT)

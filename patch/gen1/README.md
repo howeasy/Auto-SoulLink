@@ -26,7 +26,9 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
   SoulLink logo in the Pokemon logo's style on its left and the patch version under the line. One routine in
   bank `$3F` (`tools/title_screen.py`) replaces `PrintGameVersionOnTitleScreen`. The art comes from
   `tools/gen_gen1_title.py`; build with `build.py --version vX.Y.Z` (default `dev`). The title graphics and
-  the credits' copyright text are untouched.
+  the credits' copyright text are untouched. The title's mon swap used to scroll from tile row 9, so its start line
+  is moved to row 10 (one byte) and the band stays still. `inject.py --version` stamps randomized builds the same way;
+  the Manager's randomized runs are stamped `dev` until it passes a release version.
 * **The SLINK TRADE receptionist.** The Cable Club receptionist in every Pokémon Center now
   opens a `SLINK TRADE` menu (`trade_receptionist.asm`), fed by a foreground service that runs
   from the `DelayFrame` bridge in the reserved RST padding (`trade_service.asm`). Three
@@ -104,8 +106,8 @@ the bridge (never from an interrupt), and the fade case is held rather than drop
 
 | | Base ROM md5 | Patched md5 (current build) |
 |---|---|---|
-| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `70ab71e6f14d19846c11f5de4f73574e` |
-| Blue | `50927e843568814f7ed45ec4f944bd8b` | `29d32d44ab86b25fc923c6f29aaf456e` |
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `dc0e20603a888178f9115849b9e9009e` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `0837809990650c9ef29532ba052ff0b4` |
 
 `patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
 

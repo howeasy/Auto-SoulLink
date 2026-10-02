@@ -202,6 +202,8 @@ def main() -> int:
     ap.add_argument("rom")
     ap.add_argument("out", nargs="?")
     ap.add_argument("--check", action="store_true", help="report only, write nothing")
+    ap.add_argument("--version", default=DEFAULT_VERSION,
+                    help="shown on the title screen: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
 
     with open(args.rom, "rb") as f:
@@ -219,7 +221,7 @@ def main() -> int:
     if not args.out:
         ap.error("an output path is required unless --check is given")
     try:
-        out = inject(rom)
+        out = inject(rom, version=args.version)
     except InjectError as exc:
         print(f"[gen1-inject] {exc}", file=sys.stderr)
         return 1

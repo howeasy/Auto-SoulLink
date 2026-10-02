@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -14,8 +15,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # the copyright/GAME FREAK tiles the title's bottom line draws from, and LoadCopyrightTiles +
 # CopyrightTextString (the credits' copyright text): all must stay byte-identical
 VANILLA_RANGES = ((0x4538, 0x4588), (0x120C8, 0x12288))
-# BG tile ids the vanilla title leaves free, measured on a running Red (VRAM dump of the settled title)
-FREE_IDS = set(range(0x4F, 0x60)) | set(range(0x6A, 0x7F))
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +30,12 @@ def clean(request):
     data = path.read_bytes()
     assert hashlib.sha1(data).hexdigest() == manifest.ROMS[request.param][1]
     return data
+
+
+@pytest.fixture(params=("red", "blue"))
+def vram(request):
+    """The settled vanilla title as measured on a running emulator (lua/tests/probe_gen1_title_vram.lua, run on the clean dump)."""
+    return json.loads((ROOT / f"tests/fixtures/gen1/title_vram_{request.param}.json").read_text())
 
 
 def _bitmap(tiles: bytes) -> list[str]:
@@ -53,7 +58,7 @@ def test_version_line_draws_the_text(version):
     # glyph rows land one pixel down, so row 0 is blank; a one pixel gap separates glyphs
     expect = [".".join(g[y - 1] if y else "." * 5 for g in glyphs) for y in range(8)]
     width = len(version) * 6 - 1
-    x = (64 - width) // 2
+    x = (ts.STRIP_INK_LAST - width) // 2                                # centred under the strip's ink
     assert [r[x:x + width] for r in rows] == expect
     assert all(set(r[:x] + r[x + width:]) <= {"."} for r in rows)       # nothing else drawn
 
@@ -64,12 +69,93 @@ def test_bad_versions_are_refused(bad):
         ts.check_version(bad)
 
 
-def test_art_ids_are_free_and_not_control_codes():
-    assert len(art.TILES) == art.TILE_COUNT * 16 and art.ROW0 and len(art.ROW0) == len(art.ROW1) == 9
-    used = set(art.ROW0) | set(art.ROW1)
-    assert used <= set(range(art.FIRST_ID, art.FIRST_ID + art.TILE_COUNT))
-    assert used <= FREE_IDS and set(range(ts.VER_FIRST_ID, ts.VER_FIRST_ID + ts.VER_CELLS)) <= FREE_IDS
-    assert min(used) >= 0x60                    # PlaceString treats everything below $60 as a control code
+def test_ids_are_free_on_the_measured_vanilla_title(vram):
+    """Derived from the committed measurement, not restated: a free id has no tile data and is on neither BG map."""
+    nonzero = {i for i, c in enumerate(vram["ids_00_7f_nonzero"]) if c == "1"}
+    nonzero |= {0x80 + i for i, c in enumerate(vram["ids_80_ff_nonzero"]) if c == "1"}
+    referenced = {i for m in ("map0", "map1") for row in vram[m] for i in row}
+    taken = nonzero | referenced
+    logo = set(art.ROW0) | set(art.ROW1)
+    version = set(range(ts.VER_FIRST_ID, ts.VER_FIRST_ID + ts.VER_CELLS))
+    assert not (logo & taken) and not (version & taken)
+    # the band's cells themselves are blank on the vanilla title, outside the game's own line
+    row8, row9 = vram["map0"][8], vram["map0"][9]
+    assert set(row9) == {0x7F} and set(row8[:7]) == {0x7F} and set(row8[15:]) == {0x7F}
+
+
+def test_art_is_self_consistent():
+    assert len(art.TILES) == art.TILE_COUNT * 16 and len(art.ROW0) == len(art.ROW1) == 9
+    assert set(art.ROW0) | set(art.ROW1) <= set(range(art.FIRST_ID, art.FIRST_ID + art.TILE_COUNT))
+    assert min(art.ROW0 + art.ROW1) >= 0x60                  # PlaceString treats everything below $60 as a command
+
+
+class _Sm83:
+    """Just the opcodes title_screen._code() uses; anything else is a test failure."""
+
+    def __init__(self, code: bytes, base: int):
+        self.code, self.base = code, base
+        self.r = {"a": 0, "b": 0, "c": 0, "d": 0, "e": 0, "h": 0, "l": 0}
+        self.calls, self.writes, self.z = [], {}, False
+
+    def pair(self, hi, lo):
+        return self.r[hi] << 8 | self.r[lo]
+
+    def run(self):
+        pc = 0
+        while True:
+            op = self.code[pc]
+            if op in (0x01, 0x11, 0x21):                       # ld bc/de/hl, nn
+                hi, lo = {0x01: "bc", 0x11: "de", 0x21: "hl"}[op]
+                self.r[lo], self.r[hi] = self.code[pc + 1], self.code[pc + 2]
+                pc += 3
+            elif op in (0x3E, 0x06):                           # ld a/b, n
+                self.r["a" if op == 0x3E else "b"] = self.code[pc + 1]
+                pc += 2
+            elif op == 0xCD:                                   # call nn: record the register state
+                target = self.code[pc + 1] | self.code[pc + 2] << 8
+                self.calls.append((target, self.pair("h", "l"), self.pair("d", "e"), self.pair("b", "c")))
+                pc += 3
+            elif op == 0x22:                                   # ld [hli], a
+                hl = self.pair("h", "l")
+                self.writes[hl] = self.r["a"]
+                hl += 1
+                self.r["h"], self.r["l"] = hl >> 8, hl & 0xFF
+                pc += 1
+            elif op == 0x3C:                                   # inc a
+                self.r["a"] = (self.r["a"] + 1) & 0xFF
+                pc += 1
+            elif op == 0x05:                                   # dec b (zero flag for the jr below)
+                self.r["b"] = (self.r["b"] - 1) & 0xFF
+                self.z = self.r["b"] == 0
+                pc += 1
+            elif op == 0x20:                                   # jr nz, e
+                off = self.code[pc + 1] - 256 if self.code[pc + 1] > 127 else self.code[pc + 1]
+                pc += 2 + (0 if self.z else off)
+            elif op == 0xC9:                                   # ret
+                return
+            elif op == 0xC3:                                   # jp nn: a tail call, same record as a call
+                self.calls.append((self.code[pc + 1] | self.code[pc + 2] << 8, self.pair("h", "l"),
+                                   self.pair("d", "e"), self.pair("b", "c")))
+                return
+            else:
+                raise AssertionError(f"unexpected opcode {op:#04x} at {pc}")
+
+
+def test_routine_does_what_the_band_needs():
+    """Executes the hand-assembled bytes and checks every call and write, not just the ends."""
+    cpu = _Sm83(ts._code(), ts._addr(ts.CODE_OFFSET))
+    cpu.run()
+    a = ts._addr
+    n = art.TILE_COUNT
+    assert cpu.calls == [
+        (ts.COPY_VIDEO_DATA, 0x9000 + art.FIRST_ID * 16, a(ts.TILES_OFFSET), 0x3F00 | n),
+        (ts.COPY_VIDEO_DATA, 0x9000 + ts.VER_FIRST_ID * 16, a(ts.VTILES_OFFSET), 0x3F00 | ts.VER_CELLS),
+        (ts.PLACE_STRING, ts.WTILEMAP + 8 * 20 + ts.LINE_X, a(ts.RV_OFFSET), cpu.calls[2][3]),
+        (ts.PLACE_STRING, ts.WTILEMAP + 8 * 20 + ts.LOGO_X, a(ts.ROW0_OFFSET), cpu.calls[3][3]),
+        (ts.PLACE_STRING, ts.WTILEMAP + 9 * 20 + ts.LOGO_X, a(ts.ROW1_OFFSET), cpu.calls[4][3]),
+    ]
+    start = ts.WTILEMAP + 9 * 20 + ts.VER_X
+    assert cpu.writes == {start + i: ts.VER_FIRST_ID + i for i in range(ts.VER_CELLS)}
 
 
 def test_routine_calls_the_pret_addresses():
@@ -82,6 +168,8 @@ def test_routine_calls_the_pret_addresses():
         ts.COPY_VIDEO_DATA, ts.PLACE_STRING, ts.BANKSWITCH, ts.WTILEMAP)
     assert addr("PrintGameVersionOnTitleScreen", "01") == ts.SITE
     assert addr("VersionOnTitleScreenText", "01") == ts.VERSION_TEXT_SITE
+    # _TitleScroll: ld h, d / ld l, $48 (the immediate is SCROLL_SITE)
+    assert 0x4000 * 0x0D + (addr("_TitleScroll", "0d") - 0x4000) + 0x11 == ts.SCROLL_SITE
     code = ts._code()
     assert len(code) <= ts.RV_OFFSET - ts.CODE_OFFSET and code[-1] == 0xC9
 
@@ -97,5 +185,14 @@ def test_injected_rom_keeps_the_games_own_line_and_vanilla_graphics(clean):
     line = clean[ts.VERSION_TEXT_SITE:ts.VERSION_TEXT_SITE + ts.VERSION_TEXT_LEN]
     assert out[ts.RV_OFFSET:ts.RV_OFFSET + len(line)] == line               # Red and Blue keep their own words
     assert _bitmap(out[ts.VTILES_OFFSET:ts.VTILES_OFFSET + ts.VER_CELLS * 16]) == _bitmap(ts._version_tiles("v1.2.3"))
+    assert out[ts.SCROLL_SITE] == 0x50                                      # the swap no longer scrolls band row 9
     for lo, hi in VANILLA_RANGES:
         assert out[lo:hi] == clean[lo:hi]
+
+
+def test_a_rom_whose_title_line_is_not_plain_tile_ids_is_refused_cleanly(clean):
+    for bad in (0x4F, 0x50, 0x00):                  # <LINE>, an early terminator, a zero: PlaceString would run commands
+        rom = bytearray(clean)
+        rom[ts.VERSION_TEXT_SITE + 2] = bad
+        with pytest.raises(inject.InjectError):
+            inject.inject(bytes(rom))
