@@ -123,7 +123,7 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     # the reported fingerprint ("c") is the one read off THOSE bytes, not the clean source's ("9")
     assert set(runner._admit_roms) == {"a"}
     assert runner._rom_for("b") == "patch/gen1/build/slink_blue.gb"
-    assert runner._admit_extra_saves == {"a": "slink red randomized.SaveRAM"}
+    assert runner._gen1_save_name("a") == "slink red randomized.SaveRAM"
     assert runner._admit_fingerprints == {"expected_b": "b" * 64, "reported_b": "c" * 64}
 
 
@@ -134,8 +134,8 @@ def test_missing_jar_fails_before_any_contract_is_written(runner, monkeypatch):
     assert not (Path(runner.data_dir) / "rom_contract.json").exists()
 
 
-def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
-    runner._admit_extra_saves = {"a": GENS["gen1"]["patched"]["red_rand_patched"][2]}
+def test_each_save_is_seeded_under_the_one_name_its_cartridge_boots(runner, monkeypatch):
+    runner._admit_roms = {"a": "build/e2e_admit_randomized_new/slink_red_randomized.gb"}
 
     def seed(rom, target, dest_dir):
         assert target == "town"
@@ -149,11 +149,11 @@ def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
     runner._seed_instance_save("b")
     a_dir = Path(runner._saveram_dir("a"))
     b_dir = Path(runner._saveram_dir("b"))
-    # the fixture lands under the COMPANION name only: no clean-named copy is left behind for an
-    # oracle to read by mistake
-    assert (a_dir / "slink red.SaveRAM").read_bytes() == b"red-town"
+    # A boots the staged randomized cartridge, B its companion: each fixture lands under that
+    # cartridge's name only -- no clean-named or companion-named copy is left beside A's save
+    # for an oracle to read by mistake
     assert (a_dir / "slink red randomized.SaveRAM").read_bytes() == b"red-town"
-    assert not (a_dir / GENS["gen1"]["saveram_names"]["red"]).exists()
+    assert len(list(a_dir.iterdir())) == 1
     assert (b_dir / "slink blue.SaveRAM").read_bytes() == b"blue-town"
     assert len(list(b_dir.iterdir())) == 1
 

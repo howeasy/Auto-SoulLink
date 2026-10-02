@@ -162,15 +162,15 @@ def test_a_logged_path_the_harness_did_not_expect_fails(tmp_path, monkeypatch):
 
 def test_the_flush_comes_from_the_oracles_own_default_read(tmp_path, monkeypatch):
     """The witness is compared with exactly what `_saved_gen1_party` reads by default (the
-    launched companion cartridge's save, see test_e2e_duo_lane_isolation), never a hardcoded
-    name: no save_name is passed unless the scenario staged a cartridge of its own."""
+    launched cartridge's save, see test_e2e_duo_lane_isolation), never a hardcoded name: no
+    save_name is passed at all -- a scenario-staged cartridge is resolved by that default too."""
     run, results, _notes, _build = _stub(tmp_path, monkeypatch)
     seen = []
     flushed = _image()
     monkeypatch.setattr(run, "_saved_gen1_party",
                         lambda inst, **kw: seen.append(kw) or (flushed, [], [], codec))
     run.check_save_witness(results)
-    assert seen and all(kw == {"save_name": None} for kw in seen), seen
+    assert seen and all(kw == {} for kw in seen), seen
 
 
 def test_stale_witnesses_are_cleared_at_attempt_start(tmp_path, monkeypatch):

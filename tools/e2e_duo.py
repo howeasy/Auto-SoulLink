@@ -4139,13 +4139,8 @@ class DuoRun:
             b_fingerprint = fingerprint_rom(handle.read())
         if b_fingerprint == contract["players"]["b"]["fingerprint"]:
             raise RuntimeError("un-randomized B equals randomized Blue fingerprint; negative control is invalid")
-        # run_gb_gate.py:47-80: patched/unknown-hash ROMs use the filename-derived SaveRAM
-        # name. Seed both that fallback and the clean gamedb name into the same isolated dir.
-        from run_gb_gate import GENS
-
-        self._admit_extra_saves = {
-            "a": GENS["gen1"]["patched"]["red_rand_patched"][2],
-        }
+        # A's save is seeded under the filename-derived name of the staged cartridge alone
+        # (`_gen1_save_name`, which `_seed_instance_save` and the oracles share).
         self._admit_fingerprints = {"expected_b": contract["players"]["b"]["fingerprint"],
                                     "reported_b": b_fingerprint}
         print(f"[duo] admission contract staged: A={contract['players']['a']['fingerprint'][:12]} "
@@ -4284,21 +4279,17 @@ class DuoRun:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(raw)
             return str(destination)
-        from run_gb_gate import GENS, seed_saveram
+        from run_gb_gate import seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
                               dest_dir=self._saveram_dir(inst))
-        patch_key = self._patch_key(inst)
-        if patch_key:
-            # MOVED, not copied: the companion cartridge reads and writes only its own
-            # filename-derived name, and a clean-named copy left beside it is a stale file an
+        if self._patch_key(inst) or inst in (getattr(self, "_admit_roms", None) or {}):
+            # MOVED, not copied, to the one name the booted cartridge (companion, or a staged
+            # randomized one) reads and writes: any other name left beside it is a stale file an
             # oracle could read and pass on (the fixture's bytes, never touched by the run).
-            patched = os.path.join(self._saveram_dir(inst), GENS["gen1"]["patched"][patch_key][2])
-            os.replace(seeded, patched)
-            seeded = patched
-        extra_name = getattr(self, "_admit_extra_saves", {}).get(inst)
-        if extra_name:
-            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
+            booted = os.path.join(self._saveram_dir(inst), self._gen1_save_name(inst))
+            os.replace(seeded, booted)
+            seeded = booted
         return seeded
 
     @property
@@ -5874,6 +5865,11 @@ class DuoRun:
         (Yellow)."""
         from run_gb_gate import GENS
 
+        staged = (getattr(self, "_admit_roms", None) or {}).get(inst)
+        if staged:
+            # a scenario-staged cartridge (admit_randomized_new's A) is unknown to the gamedb
+            import gen1_playthrough as g1
+            return g1.save_name_for(staged)
         patch_key = self._patch_key(inst)
         if patch_key:
             return GENS["gen1"]["patched"][patch_key][2]
@@ -7364,7 +7360,7 @@ class DuoRun:
             process.wait(timeout=30)  # client.exit flushes CartRAM
 
         a_rom = self._admit_roms["a"]
-        a_save = self._admit_extra_saves["a"]
+        a_save = self._gen1_save_name("a")
         a_path = Path(self._saveram_dir("a")) / a_save
         launched = self._launch_times.get("a")
         if not launched or a_path.stat().st_mtime < launched:
@@ -7754,14 +7750,12 @@ class DuoRun:
     def _witness_flush(self, inst):
         """The flushed SaveRAM the scenario's OWN oracle reads.
 
-        The scenario's resolver, not a hardcoded name: a randomized cartridge (admit_randomized_new)
-        saves under BizHawk's filename-derived name while the gamedb name still holds the fixture
-        it was seeded from, and a companion cartridge saves under its own filename-derived name
-        (`_saved_gen1_party`'s default, keyed off `_patch_key`). Comparing a witness against a
-        fixture would fail for a reason that is not the cartridge's.
+        The scenario's resolver, not a hardcoded name: a staged randomized cartridge
+        (admit_randomized_new) and a companion cartridge each save under their own
+        filename-derived name (`_gen1_save_name`, `_saved_gen1_party`'s default). Comparing a
+        witness against a fixture would fail for a reason that is not the cartridge's.
         """
-        return self._saved_gen1_party(inst, save_name=getattr(self, "_admit_extra_saves",
-                                                              {}).get(inst))[0]
+        return self._saved_gen1_party(inst)[0]
 
     def check_save_witness(self, results):
         """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.
