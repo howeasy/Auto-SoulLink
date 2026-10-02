@@ -1,5 +1,52 @@
 # Gen 4 resume note
 
+## Checkpoint 6 (2026-10-02 08:50 EDT, recovery after a machine crash, unrelated to the work)
+
+**Owner instruction:** "Stop at the next milestone." The milestone is the **G2 signature package**.
+
+**Post-crash recovery check (coordinator):**
+- HEAD is `c6977960`. `git rev-list --objects c8b7a99f..HEAD` shows no missing objects.
+- The owner saves and the SYNTH saves in `C:/slink/g4/saves` are intact.
+- The guide JSON parses.
+- No EmuHawk is running.
+- The pre-existing `.git/refs/heads/master (1)` (Drive conflict copy, dated Sep 23) is NOT ours and was left alone. The real master is `735dea38`.
+
+**Committed today (all verified: tests + ruff + `--check`; independent OMP reviews reconciled, each finding fixed or rejected with evidence):**
+
+| Commit | What |
+|---|---|
+| `997c4977` | Owner rulings: row i persistence-only; row c 0..2 frames |
+| `211b1625` + `9d6c8fbf` | SYNTH `party6` / `species` (hge forme ids refused, MAX_MON_NUM 1075) |
+| `a11831be` | Pace test fixes |
+| `20b03aea` + `3745647c` + `391b7df2` | Acquisition reachability: 61/61 sites `resolved` with cited story gates; CallStd modelled; hge member-3 paths flagged `inherits_unproven` |
+| `7dbc1cfc` | hge box dirty flag `0x1E004` (PHYSICAL PCDIFF) |
+| `b8150e11` | Pack `battle.d7` |
+| `3f5f447d` | SYNTH `place` + pack `field_save` offsets + d7/probe_field review fixes. **Packs FROZEN here.** |
+| `12a05f6e` | Receipts bind the evidence surface (`tools/gen4_evidence.py`), not HEAD; PC/hatch receipts carry counter + keys |
+| `5dba81b9` | PERF producer bound to the evidence surface |
+| `dbec8e7c`, `056dcf71`, `c6977960` | Client `lua/gen4/client.lua` steps 0-6 + review fixes: boolean D7 lease, party signature (792 to 116 reads/frame), fail-closed pre_pump, PartyExtra shift. **Client FROZEN here.** |
+| `970b2736` | `protocol_schema` `sync_retrieve_failed.reason` (shared test file; core/gen1/gen2 all send it) |
+| docs | `synth_place_save_layout.md` (its SavedMapObject offsets are superseded by `3f5f447d`); `new_game_route.md` (the waitButtonMode note is INVERTED: mode 0 waits for A, mode 1 auto-advances, per OMP cx-fa2be506; starter = 3×A, OVY_61 in the field child slot, trigger tile (8,4)) |
+
+**In flight at the crash: Codex "Gen4 Worker", card cx-42ec6089 Part 3. UNCOMMITTED in the worktree, intact; 315 offline tests green; ruff clean.**
+- Files: `tools/gen4_evidence.py`, `tools/gen4_routes.py`, `lua/tests/gen4_route_play.lua`, `lua/tests/probe_gen4_hooks.lua`, `tests/live/test_gen4_probe_gates.py`, `tests/unit/test_gen4_routes.py`.
+- Contains:
+  - row i persistence and row c 0..2 lag;
+  - control publish-before-assert (`control-reds.json`, `combined.txt`);
+  - the CONTROL_REDS set assert;
+  - the 7-key throttle model;
+  - `first_field_live_frame == 1`;
+  - a partial route-leg bridge.
+- Safety copy: the session scratchpad `codex_part3_wip_postcrash.patch`.
+
+**Next, to reach the milestone:**
+1. Codex finishes Part 3 and reports hashes; the coordinator commits. That commit is the FROZEN cut.
+2. Codex runs the bound landing re-runs, at most 2 lanes: PC deposit/SAVE/reload, catch and hatch on HG/SS/hge, plus faint on HG/hge (one-mon and 2-mon).
+3. The coordinator presents the G2 cell table (`G2_PRODUCER_PLAN.md` §6) for the owner signature, then STOPS.
+
+**Open owner items:** ruling 35 at G2. Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
+
+
 ## Checkpoint 5 (2026-10-01, end of the owner-timeboxed session)
 
 - **Worktree/branch:** `.claude/worktrees/gen4-support-framework-dfd5e2` on `claude/gen4-support-framework-dfd5e2`. It merged master `ea9c8a07` at `9033a7be`, and nothing has gone to master or been pushed. A master landing needs its own owner yes. `server/adapters/gen4_codec.py` is `server/**`, so ping Gen 2 at landing.
