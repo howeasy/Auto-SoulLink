@@ -135,6 +135,7 @@ from test_gen3_rr_save_layout import _compressed  # noqa: E402
 from test_gen3_scripted_play import _in_battle_cp, bag_stubbed  # noqa: E402,F401
 
 from server.adapters import gen3_codec as codec  # noqa: E402
+from tools import rr_companion  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
@@ -4904,7 +4905,7 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
+    rr_companion.rom_sha1(): REPO / "patch" / "build" / "slink_RR.gba",     # patch/dist/companion_pins.json, written by the build
 }
 
 

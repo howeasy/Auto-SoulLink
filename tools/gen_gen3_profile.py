@@ -46,6 +46,10 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from tools import rr_companion  # noqa: E402
+
 SRC = "lua/games/gen3_frlge.lua"
 HANDLERS_SRC = "patch/src/handlers.c"
 PRET_PIN = "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788"
@@ -204,10 +208,11 @@ RR_DERIVED = {
 }
 
 # RR-P5 binary witnesses: file offsets, NOT GBA virtual addresses. These bytes
-# were read from the admitted companion SHA1 below and checked against clean RR.
-# Keep complete reader bodies + literal pools, so a pointer alone is not evidence
+# were read from the admitted companion build and checked against clean RR. The build is named by its CANONICAL sha1 (the ROM with
+# its fixed-width version field zeroed, patch/tools/rom_identity.py; patch/dist/companion_pins.json), so a release stamp does not
+# rewrite every citation. Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
+RR_WITNESS_CANONICAL = rr_companion.canonical_sha1()
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
@@ -429,7 +434,7 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
             "intro_store_begin:LDR@0x123CC/0x123CE pools@0x123DC/0x123E0 STR@0x123D0 (the tail of "
             "BeginBattleIntro); the data-request phase is the intro_getmons_body anchor (0x12FAC)"),
     }
-    return {key: (value, f"rom:patch/build/slink_RR.gba sha1={RR_WITNESS_SHA1} {where}")
+    return {key: (value, f"rom:patch/build/slink_RR.gba canonical-sha1={RR_WITNESS_CANONICAL} {where}")
             for key, (value, where) in facts.items()}
 
 SCHEMA = "gen3-profile-v1"

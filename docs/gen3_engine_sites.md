@@ -23,7 +23,7 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | fr | 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc |
 | lg | 574fa542ffebb14be69902d1d36f1ec0a4afd71e |
 | rr | 964f951a0fdaf209e4ea1344883ef0d557bb3a80 |
-| rr_companion | da579690db7d6933a0952a1f490312842793f71a |
+| rr_companion | e87a6a7e4fc98a8840ef9ea0511e443ef4659219 |
 
 ## PINNED / UNVERIFIED matrix
 
@@ -369,7 +369,7 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | rr | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 1 matches, aligned=none; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379b7c; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379b80; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
 
 ### nature_change — RR nature-changer special
 

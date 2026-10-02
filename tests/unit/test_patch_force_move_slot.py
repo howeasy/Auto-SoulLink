@@ -200,23 +200,32 @@ def test_rr_controller_detours_match_the_pins():
 
 # Every CODE/DATA pin of the companion ROM hash. A rebuild must re-pin them together (docs listed in
 # ADDRESSES.md's rebuild note are records, not checked here). The reference pair is engine_signals.json.
-COMPANION_PINS = (
+# The Radical Red companion's identity has ONE data source, the "rr" row of patch/dist/companion_pins.json (written by
+# patch/tools/build.py; a release stamp changes the exact hash every time). These files used to carry its md5/sha1 as text; they now
+# read the row (or cite its canonical sha1), so a stamp rewrites one file.
+COMPANION_READERS = (
     "server/patcher.py",
-    "data/games/gen3_rr/profile.json",
-    "data/games/gen3_rr/write_checkpoint.json",
     "tools/gen_gen3_profile.py",
     "tools/gen_gen3_write_checkpoint.py",
     "tools/pin_gen3_site.py",
     "tools/research/rr_save_callers.py",
     "tests/unit/test_gen3_profile.py",
 )
+COMPANION_CITERS = ("data/games/gen3_rr/profile.json", "data/games/gen3_rr/write_checkpoint.json")
 
 
 def test_companion_hash_pins_agree():
     import json
+    row = json.loads((REPO / "patch/dist/companion_pins.json").read_text(encoding="utf-8"))["pins"]["rr"]
     sig = json.loads((REPO / "data/games/gen3_rr/engine_signals.json").read_text(encoding="utf-8"))
     comp = sig["titles"]["radical_red"]["artifacts"]["companion"]
-    md5, sha1 = comp["rom_md5"], comp["rom_sha1"]
-    stale = [f for f in COMPANION_PINS if md5 not in (REPO / f).read_text(encoding="utf-8")
-             and sha1 not in (REPO / f).read_text(encoding="utf-8")]
-    assert not stale, f"companion md5 {md5} / sha1 {sha1} missing from {stale}"
+    # the generated admission row names the cartridge exactly as the row does
+    assert (comp["rom_md5"], comp["rom_sha1"]) == (row["patched_md5"], row["rom_sha1"])
+    # the generated citations name its canonical identity (the version field zeroed), which a stamp does not move
+    stale = [f for f in COMPANION_CITERS if row["canonical_sha1"] not in (REPO / f).read_text(encoding="utf-8")]
+    assert not stale, f"canonical sha1 {row['canonical_sha1']} missing from {stale}"
+    # and nothing else carries the exact hashes as text
+    literal = [f for f in COMPANION_READERS
+               if row["patched_md5"] in (REPO / f).read_text(encoding="utf-8")
+               or row["rom_sha1"] in (REPO / f).read_text(encoding="utf-8")]
+    assert not literal, f"companion md5/sha1 hard-coded in {literal}; read patch/dist/companion_pins.json (tools/rr_companion.py)"

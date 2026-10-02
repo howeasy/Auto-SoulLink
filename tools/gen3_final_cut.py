@@ -763,17 +763,41 @@ def file_digest(path, algo="sha256"):
 
 def rom_pins(tree, include_expansion=False):
     """{pin key: digest} from the tree's OWN pin tables: tools/gen_gen3_write_checkpoint.py ROMS
-    (sha1 of the FR/LG clean dumps and the RR companion) and server/patcher.py TARGETS["rr"]
-    patched_md5 (the companion's md5). Missing tables raise LaneError (fail closed)."""
+    (sha1 of the clean dumps) and patch/dist/companion_pins.json ("rr"): the companion's exact sha1 and md5, its canonical sha1 and
+    the earlier builds it lists as canonical-equal (version-masked identity, patch/tools/rom_identity.py).
+    Missing tables raise LaneError (fail closed)."""
     src = _read(os.path.join(tree, "tools", "gen_gen3_write_checkpoint.py"))
     pins = {}
+    # each entry reads up to the next key only: an entry whose sha1 is not text (the RR companion's, taken from
+    # patch/dist/companion_pins.json below) must not borrow the next entry's
     for title, kind, sha in re.findall(
-            r'\("gen3_\w+", "(\w+)", "(\w+)"\):\s*\(.*?"([0-9a-f]{40})"\)', src, re.S):
+            r'\("gen3_\w+", "(\w+)", "(\w+)"\):\s*\((?:(?!\("gen3_).)*?"([0-9a-f]{40})"\)', src, re.S):
         pins[title if kind == "clean" and title in STAGED else f"{title}_{kind}"] = sha
-    md5 = re.search(r'"rr":\s*\{.*?"patched_md5":\s*"([0-9a-f]{32})"',
-                    _read(os.path.join(tree, "server", "patcher.py")), re.S)
-    if md5:
-        pins["radical_red_companion:md5"] = md5[1]
+    # the companion's md5: patch/dist/companion_pins.json (server/patcher.py reads the same file); trees that predate it
+    # still carry the literal in patcher.py TARGETS["rr"]
+    pins_path = os.path.join(tree, "patch", "dist", "companion_pins.json")
+    if os.path.exists(pins_path):
+        try:
+            row = (json.loads(_read(pins_path)).get("pins") or {}).get("rr") or {}
+        except ValueError as exc:
+            raise LaneError(f"{pins_path}: not JSON ({exc})") from exc
+        if re.fullmatch(r"[0-9a-f]{32}", str(row.get("patched_md5", ""))):
+            pins["radical_red_companion:md5"] = row["patched_md5"]
+        # the exact cartridge: the one data source (tools/gen_gen3_write_checkpoint.py ROMS reads this same row, so its table no
+        # longer carries the sha1 as text for the regex above to find)
+        if re.fullmatch(r"[0-9a-f]{40}", str(row.get("rom_sha1", ""))):
+            pins["radical_red_companion"] = row["rom_sha1"]
+        # Version-masked identity (patch/tools/rom_identity.py): the canonical sibling of the exact pin, and the exact hashes of
+        # earlier builds proven canonical-equal to it (a version stamp only). A listed hash is the same qualified build.
+        if re.fullmatch(r"[0-9a-f]{40}", str(row.get("canonical_sha1", ""))):
+            pins["radical_red_companion:canonical"] = row["canonical_sha1"]
+        pins["radical_red_companion:equivalent_sha1s"] = tuple(
+            h for h in row.get("equivalent_sha1s") or () if re.fullmatch(r"[0-9a-f]{40}", str(h)))
+    else:
+        md5 = re.search(r'"rr":\s*\{.*?"patched_md5":\s*"([0-9a-f]{32})"',
+                        _read(os.path.join(tree, "server", "patcher.py")), re.S)
+        if md5:
+            pins["radical_red_companion:md5"] = md5[1]
     need = {"firered", "leafgreen", "radical_red_companion", "radical_red_companion:md5"}
     if not need <= set(pins):
         raise LaneError(f"{tree}: pin tables incomplete (have {sorted(pins)})")
@@ -794,7 +818,10 @@ def expansion_rom_pin(tree):
 
 
 def _matches_pin(path, key, pins):
-    return file_digest(path, "sha1") == pins[key] and \
+    sha1 = file_digest(path, "sha1")
+    if sha1 in pins.get(f"{key}:equivalent_sha1s", ()):      # an earlier exact build proven canonical-equal: same qualified build
+        return True
+    return sha1 == pins[key] and \
         (f"{key}:md5" not in pins or file_digest(path, "md5") == pins[f"{key}:md5"])
 
 

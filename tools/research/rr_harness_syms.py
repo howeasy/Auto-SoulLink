@@ -21,9 +21,12 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+from tools import rr_companion  # noqa: E402
+
 FR_SHA1 = "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
 RR_ARTIFACTS = {"964f951a0fdaf209e4ea1344883ef0d557bb3a80": "Pokemon - Radical Red.gba",
-                "da579690db7d6933a0952a1f490312842793f71a": "patch/build/slink_RR.gba"}
+                rr_companion.rom_sha1(): "patch/build/slink_RR.gba"}
 NOTE = "docs/gen3/research/rr_harness_syms_2026-09-24.md"
 
 

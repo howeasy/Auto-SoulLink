@@ -13,10 +13,12 @@ import json
 import struct
 from pathlib import Path
 
+from tools import rr_companion
 from tools.rr_ingame_trades import ROM_BASE, decode_text, parse_map_object_events
 
 CLEAN_SHA1 = "964f951a0fdaf209e4ea1344883ef0d557bb3a80"
-COMPANION_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
+COMPANION_SHA1 = rr_companion.rom_sha1()               # the exact companion; patch/dist/companion_pins.json, written by the build
+COMPANIONS = rr_companion.accepted_sha1s()             # ... and the earlier builds that row lists as canonical-equal
 from tools.pin_gen3_site import ROM_SPECS
 
 DEFAULT_ROM = ROM_SPECS["rr"][3]
@@ -41,8 +43,26 @@ def u32(rom: bytes, address: int) -> int:
     return struct.unpack("<I", take(rom, address, 4))[0]
 
 
-def borrowed_contract(rom: bytes) -> dict:
-    """Bounded script/body checks; caller verifies cartridge identity first."""
+# build.py BACKUP_BL_SITES redirects ONE call in the backup body: the memcpy `bl` at 0804C212 (body +0x22) becomes a `bl` to
+# slink_backup_wrap in the payload. Clean RR has `bl 081E5E78` there.
+BACKUP_BL_AT = 0x22
+CLEAN_BACKUP_BL = bytes.fromhex("99f131fe")
+PAYLOAD = (0x08378F70, 0x08378F70 + 0x14000)           # build.py CODE_BASE .. + slink.ld MAX_CODE_SIZE
+
+
+def bl_target(address: int, raw: bytes) -> int:
+    """Target of the Thumb `bl` pair at `address`."""
+    hi, lo = int.from_bytes(raw[:2], "little"), int.from_bytes(raw[2:4], "little")
+    if hi >> 11 != 0b11110 or lo >> 11 != 0b11111:
+        raise ValueError("not a Thumb bl pair")
+    offset = ((hi & 0x7FF) << 12) | ((lo & 0x7FF) << 1)
+    return address + 4 + (offset - 0x800000 if offset & 0x400000 else offset)
+
+
+def borrowed_contract(rom: bytes, companion: bool | None = None) -> dict:
+    """Bounded script/body checks; caller verifies cartridge identity first (`companion`: that identity is a companion build)."""
+    if companion is None:
+        companion = hashlib.sha1(rom).hexdigest() in COMPANIONS
     objects, _ = parse_map_object_events(rom, 5, 2)
     npc = next((o for o in objects if o["local_id"] == 1), None)
     if not npc or npc["script"] != 0x09051ABF or (npc["x"], npc["y"]) != (6, 2):
@@ -66,11 +86,20 @@ def borrowed_contract(rom: bytes) -> dict:
     bodies = {}
     for name, (address, size, sha256) in reviewed.items():
         body = take(rom, address, size)
-        if name == "backup" and hashlib.sha1(rom).hexdigest() == COMPANION_SHA1:
-            # Reviewed patch/tools/build.py BACKUP_BL_SITES redirects only the memcpy BL
-            # at0804C212 to slink_backup_wrap08379B44. No guessed backup RAM is adopted.
-            sha256 = "76d1b088005e475ea87255e4a338a4bdf292cb0540fb59abdaef33a0305f7372"
-        if hashlib.sha256(body).hexdigest() != sha256 or rom.count(body) != 1:
+        shown = body
+        if name == "backup" and companion:
+            # Reviewed patch/tools/build.py BACKUP_BL_SITES redirects only the memcpy BL at 0804C212 to slink_backup_wrap. No
+            # guessed backup RAM is adopted. Checked structurally, not by a digest of the redirected bytes (that moves with where
+            # the payload linked, so with every code change): the call must land inside the payload, and with the clean call put
+            # back the body must be the reviewed clean one.
+            try:
+                call = bl_target(address + BACKUP_BL_AT, body[BACKUP_BL_AT:BACKUP_BL_AT + 4])
+            except ValueError:
+                call = None
+            if call is None or not PAYLOAD[0] <= call < PAYLOAD[1]:
+                raise ValueError(f"borrowed {name} body changed or ambiguous")
+            shown = body[:BACKUP_BL_AT] + CLEAN_BACKUP_BL + body[BACKUP_BL_AT + 4:]
+        if hashlib.sha256(shown).hexdigest() != sha256 or rom.count(body) != 1:
             raise ValueError(f"borrowed {name} body changed or ambiguous")
         bodies[name] = {"address": address, "size": size, "sha256": sha256,
                         "anchor_occurrences": 1, "expected_hex": body.hex().upper()}
@@ -92,7 +121,7 @@ def borrowed_contract(rom: bytes) -> dict:
 def school_fixture_flags(rom: bytes, image: bytes) -> dict:
     """Read existing save evidence, never alter flags or provision a fixture."""
     from server.adapters import gen3_codec as codec
-    if hashlib.sha1(rom).hexdigest() not in (CLEAN_SHA1, COMPANION_SHA1):
+    if hashlib.sha1(rom).hexdigest() not in (CLEAN_SHA1, *COMPANIONS):
         raise ValueError("unrecognized RR identity")
     # FlagGet0806E6D8 -> flag-pointer detour09042DEC -> extended helper090B8FB0.
     # That helper computes (flag-0x900)/8 + parasite base for flags0900..18FF.
@@ -132,7 +161,7 @@ def instructions(rom: bytes, start: int, end: int) -> list[dict]:
 
 def census(rom: bytes) -> dict:
     sha1 = hashlib.sha1(rom).hexdigest()
-    if sha1 not in (CLEAN_SHA1, COMPANION_SHA1):
+    if sha1 not in (CLEAN_SHA1, *COMPANIONS):
         raise ValueError(f"unrecognized RR identity: {sha1}")
     commands = instructions(rom, SERVICE, NATURE_END)
     objects, warps = parse_map_object_events(rom, 5, 4)

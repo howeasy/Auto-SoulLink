@@ -91,7 +91,7 @@
           "expect": 1,
           "name": "battle_exec_flags_input",
           "offset": 0,
-          "source": "profile.ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR; rom:patch/build/slink_RR.gba sha1=da579690db7d6933a0952a1f490312842793f71a controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
+          "source": "profile.ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR; rom:patch/build/slink_RR.gba canonical-sha1=65c68918913697df559c079ea06a8ed9cb68d339 controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
           "symbol": "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR",
           "width": 4
         },

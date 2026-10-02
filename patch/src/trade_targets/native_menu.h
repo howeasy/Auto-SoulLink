@@ -34,13 +34,19 @@
 #define SLM_COPYWIN_FULL 3u            /* tiles and tilemap */
 #define SLM_FAILED 0xFFu
 
-static const uint8_t slm_text[] = { SLINK_MENU_TEXT };
+#define SLM_FIELD 20u                  /* patch/tools/rom_identity.py FIELD: the version field is this wide for EVERY version */
+/* A FIXED-WIDTH field (owner ruling 2026-10-02, version-masked identity): the text, its 0xFF terminator, then zero padding the
+ * compiler adds at build time, so stamping a release changes only these bytes and not one address or the payload size. */
+static const uint8_t slm_text[SLM_FIELD] = { SLINK_MENU_TEXT };
 /* {background, text, shadow} palette-15 indices; 10/11/12 are the menu's own white / dark ink / light grey and 14 is black.
  * boxed: the menu's own label style. plain (no box behind it): FireRed's backdrop is a dark lavender the menu dims, so white
  * text with a black shadow; Emerald's is bright and only BG0 dims, so the menu's own dark ink with its light-grey shadow. */
 static const uint8_t slm_plain[] = { 0, SLM_PLAIN_TEXT, SLM_PLAIN_SHADOW };
 static const uint8_t slm_boxed[] = { 10, 11, 12 };
-_Static_assert(sizeof(slm_text) >= 2 && sizeof(slm_text) <= 20, "menu line: 'SoulLink ' plus at most ten characters and the terminator");
+/* the text plus its terminator must fit the field: 'SoulLink ' plus at most ten characters, then 0xFF */
+#define SLM_TEXT_LEN sizeof((const uint8_t[]){ SLINK_MENU_TEXT })
+_Static_assert(SLM_TEXT_LEN >= 2 && SLM_TEXT_LEN <= SLM_FIELD, "menu line: 'SoulLink ' plus at most ten characters and the terminator");
+_Static_assert(sizeof(slm_text) == SLM_FIELD, "the version field is a fixed width");
 
 /* SLM_STATE: 0 = nothing drawn, 1.. = our window id + 1, SLM_FAILED = AddWindow had no room (do not retry this entry). */
 static void slm_draw(volatile uint8_t *state)

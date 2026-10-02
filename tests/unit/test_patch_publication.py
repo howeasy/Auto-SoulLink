@@ -31,6 +31,20 @@ def test_published_companion_is_crc_bound_and_admitted(title,file,cap):
     assert hashlib.sha1(clean).hexdigest()==row["base_sha1"]
     assert hashlib.sha1(patched).hexdigest()==row["rom_sha1"]
     assert hashlib.md5(patched).hexdigest()==patcher.TARGETS[title]["patched_md5"]
+    # version-masked identity: the fixed-width field holds the published version; the canonical sha1 is the ROM without it
+    from patch.tools import gen3_title, rom_identity
+    from tools.gen3_companions import canonical_problems
+    slot = row["version_slot"]
+    field_end = slot["offset"] + slot["length"]
+    assert patched[slot["offset"]:field_end] == gen3_title.menu_field(row["menu_version"])
+    assert canonical_problems(row, rom=patched) == []
+    stamped = bytearray(patched)
+    stamped[slot["offset"]:field_end] = gen3_title.menu_field("v0.3.0")
+    assert hashlib.sha1(stamped).hexdigest() != row["rom_sha1"]                            # a stamp moves the exact hash ...
+    assert rom_identity.canonical_sha1(bytes(stamped), [slot]) == row["canonical_sha1"]    # ... and nothing the canonical one sees
+    elsewhere = bytearray(patched)
+    elsewhere[0x1000] ^= 1
+    assert rom_identity.canonical_sha1(bytes(elsewhere),[slot])!=row["canonical_sha1"]     # a change outside the field is seen
     bad=bytearray(clean);bad[0x100]^=1
     with pytest.raises((ValueError,AssertionError)):
         ups_apply(bytes(bad),patch)

@@ -3,7 +3,10 @@ import hashlib
 import json
 import zlib
 from pathlib import Path
+
+from patch.tools import rom_identity
 from patch.tools.make_ups import _ups_decode
+from tools.gen3_companions import accepts, ups_region
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -14,20 +17,19 @@ def test_frlg_published_payloads_match_the_native_receipts():
         row=manifest["titles"][title]
         patch=(ROOT/"patch/dist"/row["patch"]).read_bytes()
         assert patch[:4]==b"UPS1" and zlib.crc32(patch[:-4])==int.from_bytes(patch[-4:],"little")
-        source_size,pos=_ups_decode(patch,4);target_size,pos=_ups_decode(patch,pos)
+        source_size,pos=_ups_decode(patch,4)
+        target_size,pos=_ups_decode(patch,pos)
         assert source_size==target_size==0x1000000
         # The builder proves this entire injection region is FF in the exact
         # base ROM. Reconstruct ONLY that payload from the shipped XOR delta.
         offset,size=want["offset"],want["size"]
-        payload=bytearray(b"\xff"*size)
-        address=0
-        while pos<len(patch)-12:
-            delta,pos=_ups_decode(patch,pos);address+=delta
-            while pos<len(patch)-12:
-                value=patch[pos];pos+=1
-                if offset<=address<offset+size:payload[address-offset]^=value
-                address+=1
-                if value==0:break
-        assert hashlib.sha256(payload).hexdigest()==want["payload_sha256"],title
-        assert row["payload_sha256"]==want["payload_sha256"]
+        payload=ups_region(patch,offset,size)
+        # the shipped bytes are the manifest's published build; the receipt's retained digest is that exact build or an earlier
+        # one the record lists as canonical-equal (a version stamp only)
+        assert hashlib.sha256(payload).hexdigest()==row["payload_sha256"],title
+        assert accepts(row,"payload_sha256",want["payload_sha256"]),title
         assert row["protected_spans"][0]=={"offset":offset,"size":size}
+        # version-masked identity: the receipt's canonical digest is the payload with its fixed-width version field zeroed
+        assert want["payload_version_slot"]==row["payload_version_slot"]
+        canonical=rom_identity.canonical_sha256(payload,[want["payload_version_slot"]])
+        assert canonical==want["canonical_payload_sha256"]==row["canonical_payload_sha256"],title
