@@ -123,3 +123,17 @@ The owner wrote "ROM Patch is now required", then answered via AskUserQuestion:
 - **Receipts:** every PHYSICAL receipt bound to the vanilla ROM sha1s must be re-run on the patched ROMs before G4/G6. G0-G2 stay valid as platform/source evidence on the pinned vanilla images.
 - **hg-engine:** the companion must compose with the fork's own build (tools/gen4_hge_build.py), not overwrite it.
 - **Shared design:** coordinate with the Gen 5 planning session, which is designing a shared NDS companion stack (ABI header, producers, byte-preserving ROM writer, pins).
+
+## Coordination: shared NDS companion stack with Gen 5 (2026-10-02, proposal agreed between coordinators; owner go-ahead still needed before shared writes)
+
+- **Shared paths:** `patch/src/nds/common/` (ABI header, producers, a byte-preserving ROM span writer, pin/receipt schema) and `tools/nds_*`. Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/gen5/`.
+- **Ownership:** Gen 5 leads, with one writer lease per card. Gen 4 reviews each card, supplies the HGSS/hge constraints, and co-owns.
+- **Card order:**
+  1. writer + pin/receipt schema + the ndspy no-op counterexample;
+  2. ABI/producer extraction with record bindings;
+  3. PK45 cipher (lifted from `lua/gen4/pk4.lua`) + residency strategy injection (`lua/nds/hook_binding.lua`).
+- **FILE facts from Gen 4 (header reads):**
+  - HG (IPKE) and SS (IPGE) are NOT DSi-enhanced: unitcode 0, no arm9i/arm7i, NTR size 0x78C763C in a 0x8000000 file.
+  - hge test.nds is IPKE, unitcode 0, NTR 0xB7483E0 == file size.
+  - HG/SS ARM9 is BLZ-compressed; hge's ARM9 is raw.
+  - hge is post-patchable, keyed on the pinned sha1 cb2dc435.
