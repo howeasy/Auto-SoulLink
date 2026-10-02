@@ -4572,9 +4572,31 @@ class DuoRun:
         suffix = "_overlay" if self._gen2_artifact == "overlay" else ""
         with self._timed("plans"):
             self._gen2_plans = {
-                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
+                inst: GENS["gen2"]["plan"](row["title"] + ("" if row.get("expect_admission") == "refused" else suffix),
+                                           self._saveram_dir(inst), row["fixture"],
                                            self.gen2_speed())
                 for inst, row in self._gen2_inputs.items()}
+        # The negative side deliberately boots clean Crystal 1.1. Resolve its
+        # complete launch identity BEFORE path checks/staging can replace it.
+        for inst, row in self._gen2_inputs.items():
+            if row.get("expect_admission") != "refused":
+                continue
+            plan = self._gen2_plans[inst]
+            database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
+            names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
+                     if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
+            if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
+                raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
+            if hashlib.sha1(Path(row["rom"]).read_bytes()).hexdigest() != row["rom_sha1"]:
+                raise RuntimeError("refused Crystal 1.1 ROM changed after preflight")
+            plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], base_sha1=row["rom_sha1"],
+                        launch_sha1=row["rom_sha1"], artifact="pokecrystal11", kind="clean", overlay=False,
+                        stage=None, saveram_name=names[0][2] + ".SaveRAM")
+            plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_BASE_SHA1=row["rom_sha1"],
+                               SLINK_GEN2_EXEC_SHA1=row["rom_sha1"], SLINK_GEN2_ARTIFACT_KIND="clean",
+                               SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
+            for key in ("SLINK_GEN2_OVERLAY_SHA1", "SLINK_GEN2_BINDING_SHA256"):
+                plan["env"].pop(key, None)
         self._check_bizhawk_paths()
         self._stage_gen2_roms()
         if self.scenario in GEN2_TRADE_SCENARIOS:
@@ -4583,14 +4605,6 @@ class DuoRun:
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
             if row.get("expect_admission") == "refused":
-                plan = self._gen2_plans[inst]
-                database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
-                names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
-                         if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
-                if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
-                    raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
-                plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], saveram_name=names[0][2] + ".SaveRAM")
-                plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
                 self._gen2_env[inst] = {}
                 continue
             timer = self._timed(f"env_{inst}")
@@ -4685,6 +4699,8 @@ class DuoRun:
     def _stage_gen2_roms(self):
         """Materialize every overlay before launch, not only native trade's cartridges."""
         for side, plan in self._gen2_plans.items():
+            if self._gen2_inputs[side].get("expect_admission") == "refused":
+                continue
             stage = plan.get("stage")
             if stage is None:
                 continue

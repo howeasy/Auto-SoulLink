@@ -261,6 +261,11 @@ RECEIPTS_REL = "tests/fixtures/gen2/receipts"
 # pinned by tests/unit/test_gen2_capture_artifact.py): Silver overlay has only silver_battle/silver_town (no gold_*).
 OVERLAY_QUALIFIED = ("crystal_battle", "crystal_town", "gold_battle", "gold_battle_errand", "gold_town",
                      "silver_battle", "silver_town")
+# The production/inspect set above is deliberately narrower than capture support:
+# duos also use other-OT and errand bases. Every declared played fixture can be
+# freshly qualified on the overlay; deriving the CLI choices prevents a new
+# FixtureSpec from silently lacking a capture route. This adds no shipping paths.
+OVERLAY_QUALIFIABLE = tuple(BY_NAME)
 
 
 def artifact_kind(environ=None) -> str:
@@ -1305,7 +1310,7 @@ def main(argv=None):
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--qualify", type=Path, help="read-only candidate inventory")
     parser.add_argument("--scope", choices=("static", "full"), default="static")
-    parser.add_argument("--qualify-overlay", metavar="FIXTURE", choices=OVERLAY_QUALIFIED,
+    parser.add_argument("--qualify-overlay", metavar="FIXTURE", choices=OVERLAY_QUALIFIABLE,
                         help="fresh boot/re-save/reload qualification of one committed fixture on the OVERLAY (launches "
                              "EmuHawk three times); a PASS report lands in tests/fixtures/gen2/receipts/overlay/")
     parser.add_argument("--attempt", help="bounded attempt id for --qualify-overlay (new per run)")
