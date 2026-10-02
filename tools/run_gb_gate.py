@@ -459,6 +459,14 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
         if plan.get("stage") is not None:
             plan["rom"].parent.mkdir(parents=True, exist_ok=True)
             plan["rom"].write_bytes(plan["stage"])
+            # B4: the staged image is what BizHawk boots and what every receipt describes, so the bytes ON
+            # DISK are re-hashed, not just the ones in memory. A short write, a sync conflict or a
+            # concurrent capture of the same title would otherwise boot something other than the
+            # provenance-verified image while launch_sha1 and the env still name the intended one.
+            staged_sha1 = hashlib.sha1(plan["rom"].read_bytes()).hexdigest()
+            if staged_sha1 != plan["launch_sha1"]:
+                raise ValueError(f"staged ROM {plan['rom']} reads back as {staged_sha1}, not the "
+                                 f"provenance-verified {plan['launch_sha1']}")
         plan["directory"].mkdir(parents=True, exist_ok=True)
         destination = plan["directory"] / plan["saveram_name"]
         if plan["cold"]:

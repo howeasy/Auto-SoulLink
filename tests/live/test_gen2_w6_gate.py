@@ -257,11 +257,21 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         for key, count in record["writers"].items():
             writers[key] = writers.get(key, 0) + count
     first = legs["panel"]
+    # B2: the executed identity, OBSERVED in the emulator (gameinfo.getromhash) in EVERY leg and
+    # cross-checked against the independently hashed staged bytes.
+    identity = live.identity(title, "overlay")
+    for leg, record in legs.items():
+        assert record["observed_rom_sha1"] == identity["rom_sha1"], \
+            f"{leg}: the gate ran other bytes than the staged overlay"
     receipt = {"schema": SCHEMA, "title": title, "evidence_level": "PHYSICAL", "result": "PASS",
-               "overlay_sha1": facts["overlay_sha1"], "fixture": first["fixture"], "fixture_sha256": first["fixture_sha256"],
+               "overlay_sha1": facts["overlay_sha1"], "observed_rom_sha1": first["observed_rom_sha1"],
+               "artifact_kind": identity["kind"], "rom_sha1": identity["rom_sha1"],
+               "base_sha1": identity["base_sha1"], "binding_sha256": identity["binding_sha256"],
+               "fixture": first["fixture"], "fixture_sha256": first["fixture_sha256"],
                "facts": facts, "legs": legs, "corpus_frames": sum(r["corpus_frames"] for r in legs.values()),
                "writers": dict(sorted(writers.items())), "violation_count": 0,
                "input_mode": "normal_buttons", "harness_write_scopes": []}
-    (REPO / live.RECEIPTS / f"{title}_overlay.w6_gate.json").write_text(
+    # B1: overlay evidence lands in the overlay namespace, never beside the clean receipts.
+    live.receipt_file(f"{title}.w6_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
 

@@ -200,6 +200,33 @@ def validate(kind, title, receipt, artifact="clean"):
     raise AssertionError(f"no PHYSICAL receipt validator for receipt type {kind!r}")
 
 
+def validate_gate(title: str, receipt: dict, artifact: str = "clean"):
+    """(ok, None) or (False, why) for a live-GATE receipt's ARTIFACT IDENTITY (B2).
+
+    The five gate kinds (panel/sfx/phone/w6/sp_lowwater) are excluded from `discovered()` because the release
+    verifier owns their physics, but nothing there recorded WHICH ARTIFACT produced them: the kind was inferred
+    from the receipt's own type and `overlay_sha1` is a value both the writer and the reader take from provenance,
+    so a relabelled or hand-written PASS satisfied every check. They now stamp the same identity triple the
+    qualification and engine-site receipts carry, and this refuses any receipt whose identity is absent or does
+    not match the manifest-resolved view -- including a receipt that claims to be clean in the overlay namespace.
+    """
+    view = _view(title, artifact)
+    if artifact == "clean":
+        if receipt.get("artifact_kind", "clean") != "clean" or "binding_sha256" in receipt:
+            return False, "a clean gate receipt carries no overlay identity"
+        return True, None
+    for field, want in (("artifact_kind", "overlay"), ("rom_sha1", view["rom_sha1"]),
+                        ("base_sha1", view["base_sha1"]), ("binding_sha256", view["binding_sha256"])):
+        if receipt.get(field) != want:
+            return False, f"gate receipt {field} is {receipt.get(field)!r}, not the published overlay {want!r}"
+    if receipt["rom_sha1"] == view["base_sha1"]:
+        return False, "gate receipt names the clean base as the executed artifact"
+    observed = receipt.get("observed_rom_sha1")
+    if observed is not None and observed != view["rom_sha1"]:
+        return False, f"gate receipt observed_rom_sha1 {observed} is not the executed artifact"
+    return True, None
+
+
 def _owner(kind, title):
     """The receipt title this module lets authorize `title` (None when there is no receipt path).
 
@@ -501,3 +528,75 @@ def test_the_uncovered_receipt_is_owned_by_its_sibling_suite():
     path = RECEIPTS / next(iter(COVERED_ELSEWHERE))
     title, kind = _split(path.name)
     assert path.is_file() and kind in VALIDATORS and title == "crystal"
+
+
+GATE_KINDS = ("panel_gate", "sfx_gate", "phone_gate", "w6_gate", "sp_lowwater_gate")
+
+
+def _overlay_gate_receipt(title="crystal", **overrides):
+    """A well-formed overlay gate receipt: the identity every gate now stamps, plus the fields a gate carries."""
+    view = _view(title, "overlay")
+    receipt = {"schema": "gen2-panel-gate-v1", "title": title, "fixture": f"{title}_battle",
+               "result": "PASS", "evidence_level": "PHYSICAL", "overlay_sha1": view["rom_sha1"],
+               "observed_rom_sha1": view["rom_sha1"], "artifact_kind": "overlay",
+               "rom_sha1": view["rom_sha1"], "base_sha1": view["base_sha1"],
+               "binding_sha256": view["binding_sha256"]}
+    receipt.update(overrides)
+    return receipt
+
+
+def test_a_gate_receipt_that_records_no_artifact_identity_is_refused():
+    """B2, the negative the old gate receipts would have failed: nothing recorded WHICH artifact ran.
+
+    Before the fix a gate receipt carried `base_sha1` and `overlay_sha1` only, the kind was inferred from the
+    receipt's own type, and any PASS with the published overlay sha1 satisfied every check. The identity is now
+    required, so an unlabelled receipt in the overlay namespace is refused rather than assumed to be overlay.
+    """
+    view = _view("crystal", "overlay")
+    unlabelled = {"schema": "gen2-panel-gate-v1", "title": "crystal", "result": "PASS",
+                  "evidence_level": "PHYSICAL", "overlay_sha1": view["rom_sha1"]}
+    ok, why = validate_gate("crystal", unlabelled, "overlay")
+    assert not ok and "artifact_kind" in why
+    # the pre-fix shape judged as a clean receipt would have been accepted; it must not be either
+    assert not validate_gate("crystal", dict(unlabelled, artifact_kind="overlay", binding_sha256="0" * 64),
+                             "overlay")[0], "a wrong binding pin was accepted"
+
+
+@pytest.mark.parametrize("change,fragment", [
+    ("drop_kind", "artifact_kind"),
+    ("clean_sha", "rom_sha1"),
+    ("wrong_binding", "binding_sha256"),
+    ("wrong_base", "base_sha1"),
+    ("wrong_observed", "observed_rom_sha1"),
+])
+def test_an_overlay_gate_receipt_with_a_borrowed_identity_is_refused(change, fragment):
+    """Every field of the stamped identity is load-bearing, including the in-emulator observation."""
+    view = _view("crystal", "overlay")
+    receipt = _overlay_gate_receipt()
+    if change == "drop_kind":
+        receipt.pop("artifact_kind")
+    elif change == "clean_sha":
+        receipt["rom_sha1"] = view["base_sha1"]
+    elif change == "wrong_binding":
+        receipt["binding_sha256"] = "0" * 64
+    elif change == "wrong_base":
+        receipt["base_sha1"] = "0" * 40
+    else:
+        receipt["observed_rom_sha1"] = view["base_sha1"]
+    ok, why = validate_gate("crystal", receipt, "overlay")
+    assert not ok and fragment in why, (change, why)
+
+
+def test_a_clean_gate_receipt_cannot_wear_overlay_identity_and_an_overlay_one_cannot_pose_clean():
+    """Both directions of the namespace rule: the two receipt kinds may not borrow each other's identity."""
+    assert validate_gate("crystal", _overlay_gate_receipt(), "clean")[0] is False
+    assert validate_gate("crystal", {"schema": "gen2-panel-gate-v1", "title": "crystal"}, "clean")[0] is True
+
+
+@pytest.mark.parametrize("kind", GATE_KINDS)
+def test_every_gate_receipt_kind_is_covered_by_the_identity_validator(kind):
+    """The five gate kinds are excluded from discovery() (the release verifier owns their physics); this
+    asserts none of them is excluded from the IDENTITY check, which is what used to be missing."""
+    assert kind.endswith("_gate")
+    ok, why = validate_gate("crystal", _overlay_gate_receipt(), "overlay")
+    assert ok is True, why

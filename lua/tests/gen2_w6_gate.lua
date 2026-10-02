@@ -282,7 +282,7 @@ function W.main(root, getenv)
     local pass = inner_done and inner:find("^RESULT: PASS") ~= nil and st.n_violations == 0 and st.n_allowed > 0
                  and native_ok and lua_caught
     log("INNER " .. (inner ~= "" and inner or ("no RESULT line; " .. tostring(why))))
-    log("W6 " .. json.encode({schema=W.SCHEMA, leg=cfg.leg, gate=cfg.gate, overlay_sha1=running,
+    log("W6 " .. json.encode({schema=W.SCHEMA, leg=cfg.leg, gate=cfg.gate, overlay_sha1=running, observed_rom_sha1=running,
         evidence_level="PHYSICAL", armed_frame=armed_at, corpus_frames=frames, inner_completed=inner_done,
         span=json.array({span.lo, span.hi}), writers=st.writers, allowed_writes=st.n_allowed,
         boot_clear=st.boot, boot_writes=st.n_boot, init_entries=json.array(st.inits),

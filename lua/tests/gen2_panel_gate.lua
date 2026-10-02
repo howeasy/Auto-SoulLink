@@ -179,7 +179,8 @@ function P.main(real, getenv, SG, F)
         local ov = wrapper.titles[getenv("SLINK_GEN2_TITLE")].overlay
         assert(type(ov) == "table" and ov.rom_sha1 == overlay_sha1 and ov.base_sha1 == getenv("SLINK_GEN2_ROM_SHA1"),
                "profile overlay block differs from the staged overlay")
-        assert(real.romhash():lower() == overlay_sha1, "running ROM is not the staged overlay")
+        local observed = assert(real.romhash()):lower()   -- what the CARTRIDGE reports, carried into the receipt
+        assert(observed == overlay_sha1, "running ROM is not the staged overlay")
         -- The honest context: the scripted gate binds the overlay's own sha1 (SLINK_GEN2_OVERLAY_SHA1, hashed by the
         -- launcher) against the RUNNING ROM and keeps the clean build only as the facts' base. No clean-hash alias.
         local c = SG.context(api, getenv)
@@ -189,7 +190,7 @@ function P.main(real, getenv, SG, F)
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.panel_facts = assert(c.json.decode(assert(getenv("SLINK_GEN2_PANEL_FACTS"), "SLINK_GEN2_PANEL_FACTS missing")))
         assert(c.panel_facts.overlay_sha1 == overlay_sha1, "panel facts belong to another overlay")
-        c.overlay, c.overlay_sha1 = ov, overlay_sha1
+        c.overlay, c.overlay_sha1, c.observed_rom_sha1 = ov, overlay_sha1, observed
         return c
     end)
     if not check("environment, clean facts and the running overlay ROM bound", ok, not ok and ctx or nil) then
@@ -677,7 +678,8 @@ function P.main(real, getenv, SG, F)
     local q_attempt = getenv("SLINK_GEN2_QUALIFICATION_ATTEMPT")
     if failures == 0 then
         log("RECEIPT " .. J({schema=P.SCHEMA, title=title, evidence_level=evidence, result="PASS",
-            overlay_sha1=ctx.overlay_sha1, base_sha1=ov.base_sha1, fixture=case.name, fixture_sha256=q.stage_fingerprint,
+            overlay_sha1=ctx.overlay_sha1, observed_rom_sha1=ctx.observed_rom_sha1, base_sha1=ov.base_sha1,
+            fixture=case.name, fixture_sha256=q.stage_fingerprint,
             qualification_attempt_id=q_attempt or json.null, core_mode="CGB", input_mode="normal_buttons",
             harness_write_scopes=json.array({}), client_write_scope="panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
             checks={menu=true, panel=true, fallback=true, fade_stress=true}, minimum_sp=stack_out}))

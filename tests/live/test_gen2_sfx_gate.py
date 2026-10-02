@@ -92,6 +92,10 @@ def verify(text: str, facts: dict, title: str, staged: bytes) -> dict:
     receipt = live.tag_json(text, "RECEIPT")
     assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
     assert receipt["overlay_sha1"] == facts["overlay_sha1"] and receipt["evidence_level"] == "PHYSICAL", receipt
+    # B2: the executed identity, OBSERVED in the emulator (real.romhash) and cross-checked against the
+    # independently hashed staged bytes.
+    assert receipt["observed_rom_sha1"] == live.identity(title, "overlay")["rom_sha1"], \
+        "the gate ran other bytes than the staged overlay"
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["harness_write_scopes"] == [] and receipt["reset"] == reset
     assert {int(k): v for k, v in receipt["sounds"].items()} == ids
@@ -122,7 +126,11 @@ def test_native_sound_on_the_patched_rom(emuhawk, title):  # noqa: F811
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
     receipt = verify(text, facts, title, staged)
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
-    (REPO / live.RECEIPTS / f"{title}_overlay.sfx_gate.json").write_text(
+    # B1: overlay evidence lands in the overlay namespace, never beside the clean receipts.
+    identity = live.identity(title, "overlay")
+    receipt.update(artifact_kind=identity["kind"], rom_sha1=identity["rom_sha1"],
+                   base_sha1=identity["base_sha1"], binding_sha256=identity["binding_sha256"])
+    live.receipt_file(f"{title}.sfx_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 

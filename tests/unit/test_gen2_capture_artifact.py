@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -221,13 +222,51 @@ def test_a_clean_run_cannot_carry_overlay_variables(tmp_path):
         context_of(root, env, CLEAN_SHA)
 
 
-@pytest.mark.parametrize("gate", ["panel", "sfx", "phone"])
-def test_the_overlay_gates_no_longer_fake_a_clean_romhash(gate):
-    """gen2_{panel,sfx,phone}_gate.lua wrapped the running ROM in a view whose romhash returned the clean base; the
-    honest context binds the overlay itself."""
+GATE_KINDS = ("panel_gate", "sfx_gate", "phone_gate", "w6_gate", "sp_lowwater_gate")
+
+
+@pytest.mark.parametrize("gate", ["panel", "sfx", "phone", "w6"])
+def test_each_overlay_gate_binds_the_running_rom_and_records_what_it_observed(gate):
+    """B5, replacing a string-absence check with the property it stood in for.
+
+    gen2_{panel,sfx,phone,w6}_gate.lua used to wrap the running ROM in a view whose romhash returned the
+    clean base. The gates now READ the cartridge hash, refuse when it is not the staged overlay, and carry
+    that observed value into the receipt, so a receipt names the bytes that ran rather than a claim about
+    them. This is still a structural check (no emulator here), but it asserts the positive binding -- the
+    read, the refusal and the record -- rather than the absence of one known spelling, and it runs over all
+    four gates instead of three.
+    """
     text = (ROOT / f"lua/tests/gen2_{gate}_gate.lua").read_text(encoding="utf-8")
-    assert "romhash=function() return ov.base_sha1 end" not in text and "SG.context(api, getenv)" in text
-    assert "getromhash = function() return cfg.base_sha1" not in (ROOT / "lua/tests/gen2_w6_gate.lua").read_text(encoding="utf-8")
+    # the observed hash is READ from the cartridge, never derived from the clean base
+    assert "real.romhash()" in text or "gameinfo.getromhash()" in text, \
+        f"{gate} no longer reads the running ROM hash"
+    # ... and it is BOUND to the staged overlay, so a clean cartridge cannot satisfy the gate
+    assert re.search(r"assert\((observed|running) == (overlay_sha1|cfg\.overlay_sha1),", text), \
+        f"{gate} does not bind the observed ROM hash to the staged overlay"
+    # ... and it is RECORDED, so the receipt names the bytes that ran instead of claiming them
+    assert "observed_rom_sha1=" in text, f"{gate} does not record the observed ROM hash"
+    # the two historical aliases, kept so a re-introduction is caught by name
+    assert "romhash=function() return ov.base_sha1 end" not in text
+    assert "getromhash = function() return cfg.base_sha1" not in text
+
+
+@pytest.mark.parametrize("kind", GATE_KINDS)
+def test_every_overlay_gate_receipt_lands_in_the_overlay_namespace(kind):
+    """B1/B3: the five gate kinds were the receipts left behind in the CLEAN namespace, which the directory
+    judgement in tests/unit/test_gen2_physical_receipts.py (_kind_of) therefore called clean. Each gate test
+    must now write into receipts/overlay/ under the new <title>.<gate>.json name."""
+    from tests.live import test_gen2_new_gates as live
+
+    stem = kind[: -len("_gate")] if kind != "sp_lowwater_gate" else "sp_lowwater"
+    module = (ROOT / f"tests/live/test_gen2_{stem}_gate.py").read_text(encoding="utf-8")
+    assert 'live.receipt_file(f"{title}.' + kind + '.json", "overlay")' in module, \
+        f"the {kind} gate does not write through receipts_dir('overlay')"
+    assert f'live.RECEIPTS / f"{{title}}_overlay.{kind}.json"' not in module, \
+        f"the {kind} gate still writes into the clean receipts namespace"
+    name = f"crystal.{kind}.json"
+    assert live.receipt_file(name, "overlay") == ROOT / live.RECEIPTS / "overlay" / name
+    assert live.receipt_file(name, "overlay") != live.receipt_file(name, "clean")
+
 
 
 # --- overlay receipts live in the overlay namespace -----------------------------------------------------------------
