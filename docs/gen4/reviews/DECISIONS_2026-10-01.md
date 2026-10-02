@@ -109,3 +109,17 @@ Owner: "Synth tests ARE allowed."
   - Evidence: same receipt. On PC-derived input, id0 was caused at frame 220 and resident at 222; id38 caused at 229, resident at 231. Stock-save baseline measured 0..1.
   - The receipt must cite the measured lag.
 - **ROM companion patch:** answered by the owner's 2026-10-01 patch-first policy (from another lane). There is no hard ROM-patch requirement. Gen 4 ships with no companion until one is admitted.
+
+## Owner ruling: ROM companion patch REQUIRED for the first Gen 4 RC (2026-10-02)
+
+The owner wrote "ROM Patch is now required", then answered via AskUserQuestion:
+- **Timing:** "Required for the first RC".
+- **Bar:** "Gen 1/2 feature set".
+
+**Supersedes:** the 2026-10-01 patch-first policy ("no hard ROM-patch requirement") for Gen 4, and PLAN.md's "no companion in the first release".
+
+**Consequences, to plan before the next gate:**
+- A Gen 4 companion patch for HG/SS and hg-engine is a required deliverable before G4. Its feature bar is what the Gen 1/2 companions provide.
+- **Receipts:** every PHYSICAL receipt bound to the vanilla ROM sha1s must be re-run on the patched ROMs before G4/G6. G0-G2 stay valid as platform/source evidence on the pinned vanilla images.
+- **hg-engine:** the companion must compose with the fork's own build (tools/gen4_hge_build.py), not overwrite it.
+- **Shared design:** coordinate with the Gen 5 planning session, which is designing a shared NDS companion stack (ABI header, producers, byte-preserving ROM writer, pins).
