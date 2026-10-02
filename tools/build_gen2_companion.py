@@ -159,13 +159,51 @@ def _main_menu_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
                               "; SLink overlay: same size as call SetUpMenu\n", 1)
 
 
-def _title_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
-    """TITLE: the one `call EnableLCD` that ends the title screen's setup, same size, to the ROM0 bridge."""
+# Crystal's logo entrance shears map rows 1-10 (80 lines: the BG is scrolled up 8 pixels) and the band lives on rows 10-11,
+# so its top half would shear with the logo and its bottom half would not. The shear is widened to 88 lines (rows 1-11)
+# by five immediate operands, same size, in two routines: (original line, replacement line), each exactly once.
+SHEAR_LINES = 88
+TITLE_SHEAR_EDITS = {
+    "engine/movie/title.asm": (
+        ("\tld b, 80 / 2 ; alternate for 80 lines\n", "\tld b, 88 / 2 ; alternate for 88 lines (SLink: + the title band)\n"),
+        ("\tld hl, wLYOverrides + 80\n", "\tld hl, wLYOverrides + 88\n"),
+        ("\tld bc, wLYOverridesEnd - (wLYOverrides + 80)\n", "\tld bc, wLYOverridesEnd - (wLYOverrides + 88)\n"),
+    ),
+    "engine/menus/intro_menu.asm": (
+        ("\tld bc, 8 * 10 ; logo height\n", "\tld bc, 8 * 11 ; logo height (SLink: + the title band)\n"),
+        ("\tld b, 8 * 10 / 2 ; logo height / 2\n", "\tld b, 8 * 11 / 2 ; logo height / 2\n"),
+    ),
+}
+
+
+def _replace_once(text: str, old: str, new: str, what: str) -> str:
+    if text.count(old) != 1:
+        raise RuntimeError(f"{what}: expected `{old.strip()}` exactly once, found {text.count(old)}")
+    return text.replace(old, new, 1)
+
+
+def _title_text(checkout: pathlib.Path, repo: str = "pokegold") -> tuple[pathlib.Path, str]:
+    """TITLE: the one `call EnableLCD` that ends the title screen's setup, same size, to the ROM0 bridge.
+
+    Crystal's title.asm also carries the widened entrance shear (the initial LYOverrides)."""
     path = checkout / "engine/movie/title.asm"
     text = path.read_text(encoding="utf-8")
     if text.count(TITLE_ANCHOR) != 1:
         raise RuntimeError("title screen requires exactly one `call EnableLCD`")
-    return path, text.replace(TITLE_ANCHOR, "\tcall SlinkTitleBridge ; SLink overlay: same size as call EnableLCD\n", 1)
+    text = text.replace(TITLE_ANCHOR, "\tcall SlinkTitleBridge ; SLink overlay: same size as call EnableLCD\n", 1)
+    if repo == "pokecrystal":
+        for old, new in TITLE_SHEAR_EDITS["engine/movie/title.asm"]:
+            text = _replace_once(text, old, new, "Crystal title shear")
+    return path, text
+
+
+def _title_entrance_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    """TITLE (Crystal only): TitleScreenEntrance shears the band's two rows with the logo."""
+    path = checkout / "engine/menus/intro_menu.asm"
+    text = path.read_text(encoding="utf-8")
+    for old, new in TITLE_SHEAR_EDITS["engine/menus/intro_menu.asm"]:
+        text = _replace_once(text, old, new, "Crystal title entrance")
+    return path, text
 
 
 def title_version_tiles(repo: str, version: str) -> bytes:
@@ -372,7 +410,8 @@ def apply_overlay(
     trade_edit = _trade_receptionist_text(checkout) if "trade_service.asm" in include_names else None
     phone_edit = _phone_table_text(checkout) if "phone.asm" in include_names else None
     menu_edit = _main_menu_text(checkout) if VERSION_FILE in include_names else None
-    title_edit = _title_text(checkout) if TITLE_FILE in include_names else None
+    title_edit = _title_text(checkout, repo) if TITLE_FILE in include_names else None
+    entrance_edit = _title_entrance_text(checkout) if title_edit is not None and repo == "pokecrystal" else None
     if menu_edit is not None:
         check_version(version)
     main_path = checkout / "main.asm"
@@ -414,7 +453,7 @@ def apply_overlay(
         path.write_text(text, encoding="utf-8", newline="\n")
         for path, text in trade_export_text(checkout, repo):
             path.write_text(text, encoding="utf-8", newline="\n")
-    for edit in (phone_edit, menu_edit, title_edit):
+    for edit in (phone_edit, menu_edit, title_edit, entrance_edit):
         if edit is not None:
             path, text = edit
             path.write_text(text, encoding="utf-8", newline="\n")
@@ -586,8 +625,45 @@ def verify_title_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, over
     expected = bytearray(base[at:end])
     hook = expected.index(call)
     expected[hook + 1:hook + 3] = bridge.to_bytes(2, "little")
+    if repo == "pokecrystal":                      # plus the five shear operands, nothing else (see TITLE_SHEAR_EDITS)
+        ly, ly_end = old["wLYOverrides"][1], old["wLYOverridesEnd"][1]
+        # as compiled: `ld b, 80/2 / ld hl, wLYOverrides / .loop: ld [hl], +112 / inc hl / ld [hl], -112 / inc hl / dec b / jr nz`
+        # and `ld hl, wLYOverrides+80 / xor a / ld bc, wLYOverridesEnd-(wLYOverrides+80) / call ByteFill`
+        at_ly = ly.to_bytes(2, "little")
+        _patch_once(expected, b"\x06\x28\x21" + at_ly + bytes.fromhex("36702336902305" "20"),
+                    b"\x06" + bytes((SHEAR_LINES // 2,)) + b"\x21" + at_ly + bytes.fromhex("36702336902305" "20"),
+                    "title shear loop")
+        _patch_once(expected, b"\x21" + (ly + 80).to_bytes(2, "little") + b"\xaf\x01" + (ly_end - ly - 80).to_bytes(2, "little") + b"\xcd",
+                    b"\x21" + (ly + SHEAR_LINES).to_bytes(2, "little") + b"\xaf\x01"
+                    + (ly_end - ly - SHEAR_LINES).to_bytes(2, "little") + b"\xcd", "title shear buffer tail")
     if overlay[at:end] != expected:
-        raise RuntimeError("title screen changed more than the call EnableLCD operand")
+        raise RuntimeError("title screen changed more than the call EnableLCD operand" +
+                           (" and the entrance shear operands" if repo == "pokecrystal" else ""))
+    if repo == "pokecrystal":
+        verify_title_entrance(base, overlay, old)
+
+
+def _patch_once(routine: bytearray, old: bytes, new: bytes, what: str) -> None:
+    if routine.count(old) != 1:
+        raise RuntimeError(f"{what}: the native bytes {old.hex()} are not in the routine exactly once")
+    at = routine.index(old)
+    routine[at:at + len(old)] = new
+
+
+def verify_title_entrance(base: bytes, overlay: bytes, old: dict[str, tuple[int, int]]) -> None:
+    """TITLE (Crystal): TitleScreenEntrance changes only its two shear-height immediates, 80 -> 88 lines."""
+    bank, address = old["TitleScreenEntrance"]
+    following = sorted(a for name, (b, a) in old.items() if b == bank and a > address and "." not in name)
+    at = bank * 0x4000 + address - 0x4000
+    end = at + following[0] - address
+    expected = bytearray(base[at:end])
+    ly = old["wLYOverrides"][1]
+    _patch_once(expected, b"\x01\x50\x00", b"\x01" + (SHEAR_LINES).to_bytes(2, "little"), "title entrance shear height")
+    _patch_once(expected, b"\x06\x28\x21" + (ly + 1).to_bytes(2, "little") + b"\x22\x23\x05\x20",
+                b"\x06" + bytes((SHEAR_LINES // 2,)) + b"\x21" + (ly + 1).to_bytes(2, "little") + b"\x22\x23\x05\x20",
+                "title entrance interlace count")
+    if overlay[at:end] != expected:
+        raise RuntimeError("TitleScreenEntrance changed more than its two shear-height operands")
 
 
 def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:

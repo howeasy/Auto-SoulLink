@@ -43,16 +43,29 @@ def test_crystal_ids_are_never_drawn_on_the_title():
 def test_gold_silver_ids_are_never_drawn_on_the_title(title):
     inc = (SRC / "title_rows_gs.inc").read_text()
     assert (SRC / "title_logo_gs.2bpp").stat().st_size == 16 * 16
-    logo = {i for row in _row_ids(inc, 4) for i in row}
+    logo = {i for row in _row_ids(inc, 2) for i in row}
     version = {0x60, 0x61, 0x62, 0x63, 0x51}                                    # SlinkTitleVersionRow in title.asm
     assert logo == set(range(0x70, 0x80)) and not ((logo | version) & _refs(title))
+    assert all(len(row) == 8 for row in _row_ids(inc, 2))                      # the same wordmark as Crystal's, 8 tiles wide
+
+
+@pytest.mark.parametrize("title", ["gold", "silver"])
+def test_gold_silver_band_cells_are_plain_sky_on_the_measured_title(title):
+    """The band takes rows 7-8 (tiles 3-15), directly under the subtitle on row 6; nothing is drawn there but flat sky."""
+    m = json.loads((ROOT / f"tests/fixtures/gen2/title_vram_{title}.json").read_text())["map0"]
+    cells = {m[row][col] for row in (7, 8) for col in range(3, 16)}
+    assert len(cells) == 1, cells
+    subtitle = {m[6][col] for col in range(20)}
+    assert len(subtitle) == 20                                                  # row 6 is the logo's last row and the subtitle
 
 
 def test_title_asm_agrees_with_the_art_and_the_measured_ids():
     asm = (SRC / "title.asm").read_text()
     assert "db $60, $61, $62, $63, $51" in asm                                  # the Gold/Silver version ids
     assert "vTiles2 tile $60" in asm and "vTiles2 tile $51" in asm and "decoord 3, 10" in asm
-    assert "ld a, 6" in asm and asm.count("ld a, 1 ;") + asm.count("ld a, 1\n") >= 4   # palette 6 (Crystal), palette 1 (G/S)
+    for gs in ("debgcoord 3, 7", "debgcoord 3, 8", "debgcoord 11, 8", "hlbgcoord 3, 7", "hlbgcoord 3, 8", "ld a, 1 ; the Pokemon logo"):
+        assert gs in asm, gs                                                    # the Gold/Silver band: rows 7-8, palette 1
+    assert "ld a, 6" in asm and asm.count("ld a, 1\n\tldh [rVBK], a") == 2   # palette 6 (Crystal); both bank-1 switches
 
 
 def test_version_tiles_are_drawn_in_each_games_palette():
@@ -80,3 +93,75 @@ def test_the_overlay_plan_carries_the_title_with_its_repo_art():
     assert crystal["title_logo.2bpp"] == "title_logo_crystal.2bpp" and gold["title_logo.2bpp"] == "title_logo_gs.2bpp"
     assert crystal["title_rows.inc"] == "title_rows_crystal.inc" and gold["title_rows.inc"] == "title_rows_gs.inc"
     assert list(crystal)[-1] == "title.asm" == list(gold)[-1]
+
+
+# ---- Crystal's entrance shear ---------------------------------------------------------------------------------------------------
+
+def test_the_shear_widening_covers_the_whole_band():
+    """The title scrolls the BG up 8 pixels, so 80 sheared lines are map rows 1-10; the band is rows 10-11."""
+    lines_per_row, scroll = 8, 8
+    old_last_row = (80 + scroll) // lines_per_row - 1
+    new_last_row = (builder.SHEAR_LINES + scroll) // lines_per_row - 1
+    assert old_last_row == 10 and new_last_row == 11                            # the band's second row joins the entrance
+    assert builder.SHEAR_LINES % 2 == 0                                          # the effect alternates lines
+
+
+def test_shear_edits_are_exact_single_replacements_on_the_pinned_crystal_source():
+    checkout = ROOT / ".cache/gen2-build/pokecrystal"
+    if not (checkout / "engine/menus/intro_menu.asm").is_file():
+        pytest.skip("pinned pokecrystal checkout absent")
+    for name, edits in builder.TITLE_SHEAR_EDITS.items():
+        text = (checkout / name).read_text(encoding="utf-8")
+        for old, new in edits:
+            assert text.count(old) == 1 and old != new, (name, old)
+    title = builder._title_text(checkout, "pokecrystal")[1]
+    assert "ld b, 88 / 2" in title and "wLYOverrides + 88" in title and "wLYOverrides + 80" not in title
+    assert "call SlinkTitleBridge" in title
+    entrance = builder._title_entrance_text(checkout)[1]
+    assert "ld bc, 8 * 11" in entrance and "ld b, 8 * 11 / 2" in entrance and "8 * 10" not in entrance.split("TitleScreenEntrance:")[1][:900]
+
+
+def test_gold_and_silver_get_no_shear_edit():
+    checkout = ROOT / ".cache/gen2-build/pokegold"
+    if not (checkout / "engine/movie/title.asm").is_file():
+        pytest.skip("pinned pokegold checkout absent")
+    text = builder._title_text(checkout, "pokegold")[1]
+    assert "wLYOverrides + 88" not in text and "call SlinkTitleBridge" in text
+
+
+def test_a_source_that_is_not_the_pinned_one_is_refused(tmp_path):
+    (tmp_path / "engine/movie").mkdir(parents=True)
+    (tmp_path / "engine/movie/title.asm").write_text("\tcall EnableLCD\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="exactly once"):
+        builder._title_text(tmp_path, "pokecrystal")
+
+
+def _entrance_routine(ly: int, height: int, count: int) -> bytes:
+    """TitleScreenEntrance's two operands in context: `ld bc, height` and `ld b, count / ld hl, wLYOverrides + 1 / ld [hli], a ...`."""
+    return (bytes((0xFA, 0x00, 0xFF, 0xD6, 0x04, 0x01)) + height.to_bytes(2, "little") + bytes((0xCD, 0x12, 0x34))
+            + bytes((0x06, count, 0x21)) + (ly + 1).to_bytes(2, "little") + bytes((0x22, 0x23, 0x05, 0x20, 0xFB, 0xC9)))
+
+
+def test_the_entrance_verifier_accepts_exactly_the_two_operand_changes():
+    ly = 0xD000
+    old = {"TitleScreenEntrance": (5, 0x4100), "TitleScreenTimer": (5, 0x4140), "wLYOverrides": (1, ly)}
+    base_routine = _entrance_routine(ly, 80, 40)
+    new_routine = _entrance_routine(ly, builder.SHEAR_LINES, builder.SHEAR_LINES // 2)
+    at = 5 * 0x4000 + 0x4100 - 0x4000
+    size = 0x40
+
+    def rom(routine: bytes) -> bytearray:
+        data = bytearray(6 * 0x4000)
+        data[at:at + len(routine)] = routine
+        return data
+
+    builder.verify_title_entrance(bytes(rom(base_routine)), bytes(rom(new_routine)), old)
+    assert len(base_routine) < size
+    stray = rom(new_routine)
+    stray[at + len(new_routine) - 1] ^= 1
+    with pytest.raises(RuntimeError, match="changed more than"):
+        builder.verify_title_entrance(bytes(rom(base_routine)), bytes(stray), old)
+    with pytest.raises(RuntimeError, match="changed more than"):
+        builder.verify_title_entrance(bytes(rom(base_routine)), bytes(rom(base_routine)), old)   # the widening is required
+    with pytest.raises(RuntimeError, match="exactly once"):
+        builder.verify_title_entrance(bytes(rom(new_routine)), bytes(rom(new_routine)), old)      # not the native routine
