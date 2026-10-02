@@ -1600,9 +1600,12 @@ FROZEN_REASON = "clean cartridge; owner 2026-10-02 'Refuse clean, keep proofs'"
 
 def frozen_titles(row_id):
     """The cartridges a frozen receipt must have recorded, or None when the row is not a
-    cartridge run (builds, zips, gates, item 6 and expansion rows are never frozen)."""
+    cartridge run (zips, gates, item 6 and expansion rows are never frozen). The §1 build rows
+    qualify too, but frozen_decision also demands their cached outputs be intact."""
     if is_expansion_row(row_id):
         return None
+    if build_kind(row_id):
+        return {build_kind(row_id)[1]}
     if row_id.endswith(("_fr_as_a", "_lg_as_a")):
         return {"firered", "leafgreen"}
     if row_id.endswith("_rr_as_a"):
@@ -1780,7 +1783,10 @@ def fc_check(name, text, probes, depth=0):
         c = re.fullmatch(rf"FROZEN from (\S+) @({_SHA}) \({re.escape(FROZEN_REASON)}\)", v)
         if not c:
             return hdr, False, "FROZEN verdict must cite its origin and quote the owner ruling"
-        return (hdr, *origin_ok(c[1], hdr["row"], c[2], probes, depth + 1, frozen=True))
+        ok, why = origin_ok(c[1], hdr["row"], c[2], probes, depth + 1, frozen=True)
+        if ok and build_kind(hdr["row"]) and not frozen_cache_entry(hdr["row"], c[1], c[2]):
+            ok, why = False, "its cached states are missing or changed"
+        return hdr, ok, why
     c = re.match(rf"CACHED key=([0-9a-f]{{64}}) from (\S+) @({_SHA})$", v)
     if c:
         meta = cache_lookup(c[1])
@@ -1951,8 +1957,31 @@ def frozen_decision(row, cut, evidence, ancestor=None):
     for e in evidence:
         if e.passed and e.cut and e.cut != cut and not frozen_problem(row.id, e.inputs) \
                 and ancestor(e.cut, cut):
+            meta = frozen_cache_entry(row.id, e.receipt, e.cut)
+            if build_kind(row.id) and not meta:
+                continue    # its states are gone or changed: downstream rows could not use them
             return Decision("FROZEN", f"FROZEN from {e.receipt} @{e.cut} ({FROZEN_REASON})",
-                            e, inputs=e.inputs)
+                            e, inputs=e.inputs,
+                            cache=(meta["key"], meta.get("manifest"), meta) if meta else None)
+    return None
+
+
+def frozen_cache_entry(row_id, receipt, cut):
+    """The §1 cache entry that `receipt` (the build row's PASS at `cut`) populated, when it holds
+    every output of the build and each stored file still hashes as recorded (cache_lookup's
+    rule); None otherwise, or for a row that is not a build row."""
+    kind = build_kind(row_id)
+    root = state_cache_root()
+    for key in (sorted(os.listdir(root)) if kind and os.path.isdir(root) else []):
+        try:
+            with open(os.path.join(root, key, "meta.json"), encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if (m.get("row"), m.get("receipt"), m.get("cut")) == (row_id, receipt, cut):
+            meta = cache_lookup(key)
+            if meta and set(meta["files"]) == set(BUILD_OUTPUTS[kind[0]]):
+                return meta
     return None
 
 
@@ -1994,6 +2023,8 @@ def frozen_receipt(row, cut, lane, d):
     note = (f"{d.reason}\nfrozen history: the cited receipt recorded only pinned clean dump(s) "
             f"({', '.join(sorted(frozen_titles(row.id)))}); clean cartridges are refused, so it "
             f"cannot be re-run. Not checked against dependency globs or the git diff.\n"
+            + (f"outputs: {' '.join(f'{n}={h}' for n, h in sorted(d.cache[2]['files'].items()))}\n"
+               if d.cache else "")
             + inputs_note({k: v for k, v in d.inputs.items() if k.startswith("rom:")}))
     return receipts.run_receipt_text(row=row.id, item=row.item.replace(" ", "_"), cut=cut,
                                      lane=lane, command=row.command(), cwd=row.cwd, env=row.env,
@@ -2264,6 +2295,7 @@ def plan_decisions(rows, cut, carry, lane):
             meta = cache_lookup(key) if key else None
             out[r.id] = (Decision("CACHED", f"cache hit key={key[:12]} (built by {meta['receipt']})",
                                   cache=(key, manifest, meta)) if meta else
+                         (carry and frozen_decision(r, cut, ev.get(r.id, ()))) or
                          Decision("RUN", f"cache miss ({f'key={key[:12]}' if key else manifest}): "
                                          f"build live, then cache", cache=(key, manifest, None)))
         elif not carry:

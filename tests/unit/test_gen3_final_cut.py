@@ -1766,7 +1766,7 @@ def test_a_receipt_with_no_recorded_rom_identity_is_not_frozen():
     assert _frozen(rid, _ev(rid, inputs={"rom:firered": "MISSING", "rom:leafgreen": "MISSING"})) is None
 
 
-@pytest.mark.parametrize("rid", ["states_firered_town", "tutorials_firered", "zip_build", "zip_check",
+@pytest.mark.parametrize("rid", ["zip_build", "zip_check",
                                  "zip_boot_firered", "release_gate_quick", "probe_gates",
                                  "item6_route_diff", "rr_opcode_gates"])
 def test_builds_zips_gates_and_item6_are_never_frozen(rid):
@@ -1846,6 +1846,84 @@ def test_an_rr_or_emerald_receipt_proves_its_cartridge_through_its_identity_line
         tmp_path, "link_gen3_em_as_a", ident.format(t="emerald", h=fc.CLEAN_ROM_SHA256["emerald"]),
         cut="d" * 40, inputs_note="inputs: rom:emerald=" + "7" * 64))
     assert fc.frozen_problem("link_gen3_em_as_a", liar.inputs)
+
+
+# --- states_*/tutorials_* build rows freeze only while their cached outputs are intact --------
+
+BUILD_ROWS = [("states_firered_town", "town", "firered"), ("tutorials_leafgreen", "tutorials", "leafgreen")]
+
+
+def _built(tmp_path, monkeypatch, row_id, kind, title, note=None, cut=X):
+    """A live PASS build receipt for `row_id` at `cut` (recording `note`, default the clean ROM) and
+    its §1 cache entry; returns (the row's Evidence list, the cache entry dir)."""
+    probes = tmp_path / "probes"
+    probes.mkdir(exist_ok=True)
+    monkeypatch.setattr(fc, "PROBES", str(probes))
+    monkeypatch.setattr(fc, "state_cache_root", lambda: str(tmp_path / "cache"))
+    attempt = {"load": "cpu=1%", "start_utc": "2026-09-24T12:00:00Z", "end_utc": "2026-09-24T12:01:00Z",
+               "rc": 0, "tracked_before": True, "tracked_after": True, "classification": "pass",
+               "output": "built"}
+    note = f"inputs: rom:{title}={fc.CLEAN_ROM_SHA256[title]}" if note is None else note
+    (probes / f"fc_{row_id}_{cut[:8]}.txt").write_text(receipts.run_receipt_text(
+        row=row_id, item="§1.1 build", cut=cut, lane=LANE, command="c", cwd=".", env={},
+        attempts=[attempt], verdict="PASS", note=note), encoding="utf-8")
+    out = tmp_path / "out"
+    _outputs(out, kind)
+    assert fc.cache_store("k" * 64, {"m": 1}, _row_any(row_id), cut, str(out), 0)
+    return fc.collect_evidence()[row_id], tmp_path / "cache" / ("k" * 64)
+
+
+def _row_any(row_id):
+    return _any_row(row_id)
+
+
+@pytest.mark.parametrize("row_id,kind,title", BUILD_ROWS)
+def test_a_build_row_is_frozen_when_its_identity_is_clean_and_its_cached_outputs_match(
+        tmp_path, monkeypatch, row_id, kind, title):
+    ev, _entry = _built(tmp_path, monkeypatch, row_id, kind, title)
+    d = fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True)
+    assert d.kind == "FROZEN" and d.reason.startswith(f"FROZEN from fc_{row_id}_{X[:8]}.txt @{X} (")
+
+
+@pytest.mark.parametrize("row_id,kind,title", BUILD_ROWS)
+def test_a_build_row_is_not_frozen_when_a_cached_output_changed(tmp_path, monkeypatch, row_id, kind, title):
+    ev, entry = _built(tmp_path, monkeypatch, row_id, kind, title)
+    (entry / fc.BUILD_OUTPUTS[kind][0]).write_bytes(b"different state")
+    assert fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True) is None
+
+
+@pytest.mark.parametrize("row_id,kind,title", BUILD_ROWS)
+def test_a_build_row_is_not_frozen_when_a_cached_output_is_missing(tmp_path, monkeypatch, row_id, kind, title):
+    ev, entry = _built(tmp_path, monkeypatch, row_id, kind, title)
+    (entry / fc.BUILD_OUTPUTS[kind][-1]).unlink()
+    assert fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True) is None
+    # and with the whole entry gone
+    import shutil
+    shutil.rmtree(entry)
+    assert fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True) is None
+
+
+@pytest.mark.parametrize("row_id,kind,title", BUILD_ROWS)
+def test_a_build_row_with_no_recorded_identity_is_not_frozen(tmp_path, monkeypatch, row_id, kind, title):
+    ev, _entry = _built(tmp_path, monkeypatch, row_id, kind, title, note="inputs: (none)")
+    assert fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True) is None
+    ev, _entry = _built(tmp_path, monkeypatch, row_id, kind, title,
+                        note=f"inputs: rom:{title}={'7' * 64}", cut="c" * 40)
+    assert fc.frozen_decision(_any_row(row_id), CUT, [e for e in ev if e.cut == "c" * 40],
+                              lambda x, c: True) is None      # a ROM that is not the pinned clean dump
+
+
+def test_a_frozen_build_row_writes_a_receipt_that_needs_the_cache_to_stay_intact(tmp_path, monkeypatch):
+    row_id = "states_firered_town"
+    ev, entry = _built(tmp_path, monkeypatch, row_id, "town", "firered")
+    d = fc.frozen_decision(_any_row(row_id), CUT, ev, lambda x, c: True)
+    name = f"fc_{row_id}_{CUT[:8]}.txt"
+    text = fc.frozen_receipt(_any_row(row_id), CUT, LANE, d)
+    assert "outputs: slink_door.State=" in text
+    (tmp_path / "probes" / name).write_text(text, encoding="utf-8")
+    assert fc.fc_check(name, text, fc.PROBES)[1]
+    (entry / "slink_door.State").write_bytes(b"rotted")
+    assert not fc.fc_check(name, text, fc.PROBES)[1]
 
 
 def test_clean_pins_match_the_dumps_when_present():
