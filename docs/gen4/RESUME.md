@@ -54,6 +54,23 @@
 - Later commits: 4ff3e193 (abi asserts) and 9731330a (contract tightening that affects adoption: SitePin decodes the first instruction under the declared isa (`data=True` for literal sites); `continuation` is an absolute RAM address in a pinned container; autoload accessors return an AutoloadBlock).
 - **Adopt in ONE Gen 4 cut next session:** pk4.lua -> `pkm45_crypto`; hook_binding -> the residency contract. Then live receipts on HG/SS/hge.
 
+### Stop state (2026-10-02 16:37Z, owner timebox)
+- **Nothing in flight.**
+  - Codex card cx-b0f03f97 is complete and the lane released; its final audit is `C:/slink/g4/g1-aa45dd94-final.json` (24 cleanup records, originals unchanged).
+  - OMP 13112 and 21352 are idle, with all outcomes recorded. No Sonnet running.
+  - The only EmuHawk is foreign PID 45616 (Gen 2, gen2_frame_align.lua), untouched; PERF stays blocked while it runs.
+- **G1 is NOT qualified and NOT signed.** At `aa45dd94`:
+  - HG OPEN; hge FAIL (b, k); SS FAIL (b);
+  - all 4 row-o cells PASS;
+  - PERF OPEN.
+- **Next session, in order:**
+  1. **hge k:** fixed-frame RTC sampling. The red-first replay is staged in `.cache/gen4-next-cut/replay_hge_rtc_frame.py`.
+  2. **b/n prerequisites:** a battle route for hge/SS b; the PC withdraw leg (live Right+A trial, §6b); a queued-event-at-close witness.
+  3. **Shared NDS adoption cut:** NDS-1..5 at the latest `claude/nds-shared-stack` sha. It brings the production residency fix.
+  4. **C1 live canary** on the 4 KiB ITCM span (HG/SS/hge), then C2.
+  5. **PERF** on a quiet machine.
+  6. **Owner questions:** the FAILURE sound; whether C5 keeps a box arm.
+
 ### Other
 - Spawned chip: the `tests/conftest.py` cross-drive relpath INTERNALERROR (shared file).
 - OMP peers 13112 and 21352 are idle with all outcomes recorded. Codex is running hge/row-o/SS until the 17:05Z launch guard.
