@@ -54,8 +54,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from build_gen2_syms import ROOT, _load_lock, _source_check, _toolchains  # noqa: E402
 from make_ups import ups_apply, ups_create  # noqa: E402
 
-from patch.gen1.tools import title_screen  # noqa: E402
-
 LOCK_PATH = ROOT / "data" / "gen2_sources.lock.json"
 OVERLAY_CACHE = ROOT / ".cache" / "gen2-overlay"
 SRC_DIR = ROOT / "patch" / "gen2" / "src"
@@ -84,7 +82,7 @@ SFX_FILE = "sfx.asm"
 PHONE_FILES = ("phone_flags.asm", "phone.asm")
 VERSION_FILE = "version.asm"
 # TITLE: the SoulLink logo and the version on the real title screen. title.asm is shared; the art is per repo and is
-# copied under fixed names. The version tiles are rendered here, per build (title_version.2bpp).
+# copied under fixed names. The patch version is not on the title; version.asm prints it on the main menu.
 TITLE_FILE = "title.asm"
 TITLE_ART = {"pokecrystal": ("title_logo_crystal.2bpp", "title_rows_crystal.inc"),
              "pokegold": ("title_logo_gs.2bpp", "title_rows_gs.inc")}
@@ -204,14 +202,6 @@ def _title_entrance_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
     for old, new in TITLE_SHEAR_EDITS["engine/menus/intro_menu.asm"]:
         text = _replace_once(text, old, new, "Crystal title entrance")
     return path, text
-
-
-def title_version_tiles(repo: str, version: str) -> bytes:
-    """The patch version as 2bpp tiles in the repo's palette. Crystal: white (colour 1) on black, 8 cells, from pixel 2.
-    Gold/Silver: navy (3) on the sky (2), 5 cells, from pixel 2, without a pre-release suffix (it does not fit)."""
-    if repo == "pokecrystal":
-        return title_screen.text_tiles(version, 8, 2, fg=1, bg=0, y0=0)
-    return title_screen.text_tiles(version.split("-")[0], 5, 2, fg=3, bg=2, y0=1)
 
 
 def check_version(version: str | None) -> str:
@@ -361,8 +351,8 @@ def overlay_plan(
     if version and not (src_dir / "slink.asm").is_file():
         raise RuntimeError("version overlay requires slink.asm")
     title = (src_dir / TITLE_FILE).is_file()
-    if title and not (version and all((src_dir / name).is_file() for name in TITLE_ART[repo])):
-        raise RuntimeError("title overlay requires version.asm and its art (title_logo_*.2bpp, title_rows_*.inc)")
+    if title and not all((src_dir / name).is_file() for name in TITLE_ART[repo]):
+        raise RuntimeError("title overlay requires its art (title_logo_*.2bpp, title_rows_*.inc)")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -429,8 +419,6 @@ def apply_overlay(
     for dest_name, source_path, _include in plan:
         (dest_dir / dest_name).write_bytes(source_path.read_bytes())
         applied.append(dest_name)
-    if title_edit is not None:  # the version, rendered for this repo's palette: the one per-release build input
-        (dest_dir / "title_version.2bpp").write_bytes(title_version_tiles(repo, version))
     if include_names:
         block = "\n".join(
             ['; SLink companion overlay (tools/build_gen2_companion.py)']

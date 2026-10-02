@@ -1,4 +1,4 @@
-"""Gen 2 title band: a SoulLink logo and the version on Crystal / Gold / Silver (patch/gen2/src/title.asm)."""
+"""Gen 2 title band: a SoulLink wordmark on Crystal / Gold / Silver (patch/gen2/src/title.asm); the version is on the main menu."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ def test_crystal_ids_are_never_drawn_on_the_title():
     tiles = int(re.search(r"SLINK_TITLE_LOGO_TILES EQU (\d+)", inc).group(1))
     assert (SRC / "title_logo_crystal.2bpp").stat().st_size == tiles * 16
     logo = {i for row in _row_ids(inc, 2) for i in row}
-    version = set(range(0x60 + tiles, 0x60 + tiles + 8))                       # SlinkTitleVersionRow in title.asm
-    assert logo | version <= set(range(0x60, 0x7F)) and not ((logo | version) & _refs("crystal"))
+    assert logo <= set(range(0x60, 0x7F)) and not (logo & _refs("crystal"))
+    assert all(len(row) == 9 for row in _row_ids(inc, 2))
 
 
 @pytest.mark.parametrize("title", ["gold", "silver"])
@@ -44,37 +44,37 @@ def test_gold_silver_ids_are_never_drawn_on_the_title(title):
     inc = (SRC / "title_rows_gs.inc").read_text()
     assert (SRC / "title_logo_gs.2bpp").stat().st_size == 16 * 16
     logo = {i for row in _row_ids(inc, 2) for i in row}
-    version = {0x60, 0x61, 0x62, 0x63, 0x51}                                    # SlinkTitleVersionRow in title.asm
-    assert logo == set(range(0x70, 0x80)) and not ((logo | version) & _refs(title))
+    assert logo == set(range(0x70, 0x80)) and not (logo & _refs(title))
     assert all(len(row) == 8 for row in _row_ids(inc, 2))                      # the same wordmark as Crystal's, 8 tiles wide
 
 
 @pytest.mark.parametrize("title", ["gold", "silver"])
 def test_gold_silver_band_cells_are_plain_sky_on_the_measured_title(title):
-    """The band takes rows 7-8 (tiles 3-15), directly under the subtitle on row 6; nothing is drawn there but flat sky."""
+    """The wordmark takes rows 7-8 (tiles 6-13), directly under the subtitle on row 6; nothing is drawn there but flat sky."""
     m = json.loads((ROOT / f"tests/fixtures/gen2/title_vram_{title}.json").read_text())["map0"]
-    cells = {m[row][col] for row in (7, 8) for col in range(3, 16)}
+    cells = {m[row][col] for row in (7, 8) for col in range(6, 14)}
     assert len(cells) == 1, cells
     subtitle = {m[6][col] for col in range(20)}
     assert len(subtitle) == 20                                                  # row 6 is the logo's last row and the subtitle
 
 
+def test_crystal_band_cells_are_blank_on_the_measured_title():
+    """The wordmark takes rows 10-11 (tiles 6-14), directly under the CRYSTAL VERSION pill on row 9."""
+    m = json.loads((ROOT / "tests/fixtures/gen2/title_vram_crystal.json").read_text())["map0"]
+    blank = {m[row][col] for row in (10, 11) for col in range(6, 15)}
+    assert len(blank) == 1, blank
+
+
 def test_title_asm_agrees_with_the_art_and_the_measured_ids():
     asm = (SRC / "title.asm").read_text()
-    assert "db $60, $61, $62, $63, $51" in asm                                  # the Gold/Silver version ids
-    assert "vTiles2 tile $60" in asm and "vTiles2 tile $51" in asm and "decoord 3, 10" in asm
-    for gs in ("debgcoord 3, 7", "debgcoord 3, 8", "debgcoord 11, 8", "hlbgcoord 3, 7", "hlbgcoord 3, 8", "ld a, 1 ; the Pokemon logo"):
+    for crystal in ("decoord 6, 10", "decoord 6, 11", "hlbgcoord 6, 10", "hlbgcoord 6, 11"):
+        assert crystal in asm, crystal                                          # Crystal: rows 10-11, tiles 6-14
+    for gs in ("debgcoord 6, 7", "debgcoord 6, 8", "hlbgcoord 6, 7", "hlbgcoord 6, 8", "ld a, 1 ; the Pokemon logo"):
         assert gs in asm, gs                                                    # the Gold/Silver band: rows 7-8, palette 1
     assert "ld a, 6" in asm and asm.count("ld a, 1\n\tldh [rVBK], a") == 2   # palette 6 (Crystal); both bank-1 switches
-
-
-def test_version_tiles_are_drawn_in_each_games_palette():
-    crystal = builder.title_version_tiles("pokecrystal", "v0.3.0-dev")
-    assert len(crystal) == 8 * 16 and all(crystal[i + 1] == 0 for i in range(0, len(crystal), 2))   # colour 1 on 0: low plane only
-    assert any(crystal[0::2])
-    gold = builder.title_version_tiles("pokegold", "v0.3.0-dev")
-    assert len(gold) == 5 * 16 and all(gold[i + 1] == 0xFF for i in range(0, len(gold), 2))        # colour 3 on 2: high plane solid
-    assert gold == builder.title_version_tiles("pokegold", "v0.3.0")                               # the suffix does not fit and is dropped
+    # the version lives on the main menu now (version.asm), not in this file or its art
+    assert "VERSION" not in asm.replace("CRYSTAL VERSION", "") and "title_version" not in asm
+    assert not hasattr(builder, "title_version_tiles")
 
 
 def test_the_title_hook_is_a_single_same_size_call_rewrite():
