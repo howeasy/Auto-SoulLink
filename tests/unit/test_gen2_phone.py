@@ -259,7 +259,7 @@ def test_a_clean_cartridge_never_reaches_the_phone_binder():
     be posted. Stated here because the two tests above can no longer run on this cartridge."""
     from tests.unit.test_gen2_client import World
     with pytest.raises(Refused) as caught:
-        World("crystal", production=True)
+        World("crystal", production=True, clean=True)
     assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 

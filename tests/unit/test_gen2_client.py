@@ -192,7 +192,7 @@ NEEDS_OVERLAY = pytest.mark.skipif(
            "production-graph coverage returns when the overlay rows are promoted")
 
 class World:
-    def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None):
+    def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None, clean=False):
         self.title = title
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         if swaps:
@@ -205,6 +205,13 @@ class World:
         self.points = {n: pt for s in self.sites.values() for n, pt in s["point_symbols"].items()}
         repo = "pokecrystal" if title == "crystal" else "pokegold"
         rom = (ROOT / f".cache/gen2-build/{repo}/{self.profile['artifact']}.gbc").read_bytes()
+        if production and not clean:
+            # Patch-first: the only legal production cartridge is the overlay, i.e. the clean build
+            # with the shipped UPS applied (its sha1 is the ADMITTED overlay row's).
+            from patch.tools.make_ups import ups_apply
+            rows = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
+            ups = next(r for r in rows if r["kind"] == "overlay")["ups"]["file"]
+            rom = ups_apply(rom, (ROOT / ups).read_bytes())
         self.emu, self.io, self.net, self.hud, self.logs, log = self.lua.execute(EMULATOR)(
             rom, self.profile["ram"]["hROMBank"])
         self.checkpoint_ok = False
@@ -1429,10 +1436,10 @@ def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
 def test_production_refuses_what_the_receipts_do_not_cover():
     """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
     command NACKs at the hold with the missing kind, and no byte moves."""
-    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/crystal.write_window.json").read_text())
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/overlay/crystal.write_window.json").read_text())
     for mode in ("boxes", "boxes_reset", "boxes_reload", "battle_faint", "battle_bench"):
         del receipt["runs"][mode]
-    world = production(files={"/receipts/crystal.write_window.json": json.dumps(receipt)})
+    world = production(files={"/receipts/overlay/crystal.write_window.json": json.dumps(receipt)})
     active = mon()
     world.party([active, mon(species=172, dvs=0x3AAA)])
     world.hello()
@@ -1476,7 +1483,7 @@ def test_production_key_agrees_with_the_python_codec_on_the_same_record():
 @NEEDS_OVERLAY
 def test_each_title_admits_only_with_its_own_receipts(title, name, other):
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
-        production(title, files={f"/receipts/{name}": (RECEIPTS / other).read_text()})
+        production(title, files={f"/receipts/overlay/{name}": (RECEIPTS / "overlay" / other).read_text()})
 
 
 @pytest.mark.parametrize("name,path,value", [
@@ -1487,13 +1494,13 @@ def test_each_title_admits_only_with_its_own_receipts(title, name, other):
 ])
 @NEEDS_OVERLAY
 def test_a_forged_or_model_receipt_refuses_production(name, path, value):
-    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts" / name).read_text())
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/overlay" / name).read_text())
     node = receipt
     for key in path[:-1]:
         node = node[key]
     node[path[-1]] = value
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
-        production(files={f"/receipts/{name}": json.dumps(receipt)})
+        production(files={f"/receipts/overlay/{name}": json.dumps(receipt)})
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
@@ -1504,7 +1511,7 @@ def test_a_clean_gen2_cartridge_composes_no_client_and_says_why_it_needs_the_com
     rule they can no longer exercise is stated here, and they wait (NEEDS_OVERLAY) for a legal
     overlay row rather than pinning the clean one."""
     with pytest.raises(Refused) as caught:
-        production(title)
+        World(title, production=True, clean=True)
     reason = str(caught.value)
     assert f"this {title} cartridge needs the SLink companion patch" in reason
     assert "Manager or /patcher" in reason

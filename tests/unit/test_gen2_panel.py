@@ -306,7 +306,7 @@ def test_a_clean_cartridge_is_refused_before_a_panel_can_be_advertised():
     on exactly this cartridge; whether an ADMITTED client advertises the panel is pinned below,
     which is what decides per artifact kind on the server (artifact_kind == overlay)."""
     with pytest.raises(Refused) as caught:
-        World("crystal", production=True)
+        World("crystal", production=True, clean=True)
     assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 
