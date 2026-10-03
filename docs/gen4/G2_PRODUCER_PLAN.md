@@ -150,3 +150,20 @@ Behaviour already observed on HG, SS and hge, but the receipts are NOT signable 
     - No box→party call was found in 3 hops.
   - **Next step:** a live Right+A trial asserting `data+0x2C == 8` and `data+0x30 == 9` plus the manager state names the branch cheaply. Static walking has diminishing returns.
   - The toolbar spans nodes 6..11 plus three negative-coded nodes; their meaning is UNKNOWN.
+
+## §6b CORRECTION (2026-10-02, OMP cx-f6a47b99, coordinator spot-checked at pinned pret `ad7a3afa`)
+
+- **Withdraw is NOT a toolbar node.** Box->party is one primitive, `ov14_021E6184`: `CopyBoxPokemonToPokemon` -> `Party_AddMon` (`asm/overlay_14.s:1115`) -> delete the source.
+  - Its ONLY caller is the shared move dispatcher `ov14_021E637C` (`:1402`), reached when src < 0x1E (a box slot) and dst >= 0x1E + party count (`:1371-1402`).
+  - The entry is the per-mon popup on A (`ov14_021F0660`, `:21820-22002`), which ends in the move-execute state 0x6E (`ov14_021EE728`, `:18119-18181`). That is the deposit leg's own path, so withdraw is its sibling.
+- **Toolbar node 8 EXITS the box.** 0x97 -> `ov14_021F027C` -> fade -> state 2 returns the fade's slot (`[data+0x34]+0x440`, = 1) -> state 1 `ov14_021EB0E4` = full teardown (`:11511-11562`).
+  - The old "live Right+A trial" would close the box. Keep it only as the falsifier: `withdraw_not_committed` AND `box_closed`.
+- **Earlier readings that were wrong:**
+  - `data+0x2C` is a grid cell index for `GridInputHandler_Create` (`:34591-34648`), not an op enum. It is still a valid branch witness.
+  - `ov14_021F8A40` is a touch-hitbox array in the 11-row table `ov14_021F8B10`, not a four-node ring.
+  - The state word is sysdata+0 (`:11368-11385`), not man+0x14.
+- **Next (live trial, one owned lane):**
+  1. On the box app, A on box 0 slot 0 opens the popup.
+  2. Choose WITHDRAW. The item row is still unread: `ov14_021F6928` / `ov14_021F7D1C`; take it from the popup item table or one runtime screenshot of the popup (runtime state only).
+  3. Assert `[[data+0x34]+0xC]+0xE4` == 0 and `+0xE8` >= 0x1E + party count, then box slot 0 empty, party +1, and the box dirty mask bit 0 (`pokemon_storage_system.c:341`; it is a MASK).
+- **Still unknown:** the PC top-menu script and launch mode (`args+8` in {0..3}, `:11475-11479`); the launcher is not in `src/`.

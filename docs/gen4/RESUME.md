@@ -371,3 +371,11 @@ Session stopped at the owner timebox (2026-10-01, 22:09 EDT). HEAD is at the end
   - N2 is settled as a client lease, with the guard in the callback; framecount −1 still needs a live confirm.
   - The idle predicate is settled, with no new pack data.
   - F2 is closed.
+
+### Row b coverage (OMP cx-6c26d2e1, coordinator-checked against the receipts)
+- HG b is OPEN (it got the owning-overlay faint hit; the wrong-overlay collision is unobserved). hge/SS b FAIL at an earlier gate: no faint hit at all.
+- The cause is the run SCENARIO (`SLINK_GEN4_PROBE_SCENARIO`): it replaced the pack route with an indoor PC-SAVE subset for hge/SS. The hge/SS packs already carry the full battle route and the four phase cases.
+- **Fix (next cut, no code):** run hge/SS with a scenario that keeps the pack route, from an OUTDOOR save. hge: `saves/hge_a_OOO_630.SaveRAM` @ m60 (676,397). SS: needs a `gen4_routes.py plan --game SS` check first; no SS route lane exists yet.
+- Commit the scenario files (path + sha256) so the narrowing stops living only in receipt text.
+- The best outcome for hge/SS b is OPEN, not PASS: the collision row is unobserved on HG too.
+- SS row o needs its own route lane + harness entry (`test_gen4_battle_faint.py:56` PACK lacks soulsilver).
