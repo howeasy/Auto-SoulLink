@@ -70,6 +70,11 @@
 -- `pc_active` for the reducer = another app than the battle one is launched (the pack carries no
 -- PC-resident predicate: an approximation, absorbed by the reducer's pc_frames window).
 --
+-- `safe` (docs/protocol.md §9 item 19): one per battle end, armed in pre_pump and sent by the core
+-- (lua/core/session.lua:451-454) on the first frame this client is out of battle. Gen 4 has no
+-- battle-end signal, so the boundary it arms on is the reducer's debounced end of the battle chain,
+-- never the first frame that chain reads nil.
+--
 -- Step 4 (storage): the deferred executors below write box/party records at the checkpoint, see
 -- the "storage" section. Step 5 (D11): a reducer slot_replace note becomes a key_change with the
 -- alias and its exact message on identity.pending. Step 6: hello_fields/tick_fields, see "wire
@@ -132,6 +137,7 @@ function Client.new(p)
         attempted = 0,            -- write attempts (every byte this client moves counts here)
         party = nil, party_why = nil, party_frame = -1,
         battle = nil, battle_why = nil, app_active = false,
+        battle_gone = 0, battle_open = false, -- the battle-end debounce the `safe` arm rides (see pre_pump)
         ck = false, ck_why = "no frame yet", idle = false,
         boxes = { gen = 0, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 },
         d7 = nil,                 -- the armed lease { key, slot, entry, renewed, fired }
@@ -556,6 +562,7 @@ function Client.new(p)
         if signals then signals:disarm(Client.PHASE,true) end   -- save/reset ends the old battle context
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
         st.party_sig, st.d7_req_frame = nil, nil
+        st.battle_open, st.battle_gone = false, 0           -- a reset is not a battle end: nothing may arm later
         st.boxes = { gen = st.boxes.gen, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 }
     end
 
@@ -692,6 +699,22 @@ function Client.new(p)
         if st.prev_battle and not battle then st.boxes.dirty = true end        -- a catch can land in a box
         if st.app_active and not app then st.boxes.dirty = true end            -- the PC closed
         if idle and not st.prev_idle then st.boxes.dirty = true end            -- a task (script/gift) ended
+        -- `safe` (docs/protocol.md §9 item 19): exactly ONE, on the first overworld frame after a battle
+        -- ends. Gen 3 arms the same flag when its battle closes (lua/gen3/client.lua:647) and the core
+        -- turns it into the send (lua/core/session.lua:451-454); Gen 4 has no battle-end signal, so the
+        -- boundary is the reducer's own debounced end (poll_events.lua step_battle / end_frames), NOT
+        -- the first frame the chain reads nil: a one-frame chain refusal is not a battle's end (the fact
+        -- watch_step keeps its own w.gone counter for), and arming on it would put a `safe` on the wire
+        -- mid-battle. pe.cfg.end_frames is the reducer's OWN constant, so the two debounces cannot drift.
+        if battle then
+            st.battle_open, st.battle_gone = true, 0
+        elseif st.battle_open then
+            st.battle_gone = st.battle_gone + 1
+            if st.battle_gone >= pe.cfg.end_frames then
+                st.battle_open, st.battle_gone = false, 0
+                session.pending_safe = true
+            end
+        end
         if st.boxes.dirty and idle and not battle and frame >= st.boxes.next_try then
             local ok = scan_boxes(false)
             st.boxes.next_try = ok and 0 or frame + Client.BOX_RETRY_FRAMES
