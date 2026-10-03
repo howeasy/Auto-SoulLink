@@ -105,6 +105,11 @@ AutoMinimizeSkipping, ClockThrottle, VSyncThrottle, SuperHawkThrottle, audio
 flags/volume and Rewind; UI/history writes
 are allowed. Lua, diagnostic input config, copied state, staged ROM and surface
 remain byte-strict. Later audit errors append to the first/raw failure reason.
+If the emulator exits abnormally without rewriting bizhawk.ini (identical
+before/after hash), the audit labels it UNFLUSHED and requires the terminal
+Lua applied_rate witness. Every other frozen setting still compares exactly.
+An absent rate witness is unverified, not an inferred 300% rate. Empty/malformed
+results after process exit fail immediately rather than waiting the host bound.
 
 D1 reports PP-use ordinals (frame/battler/slot/move/before/after), species/level
 and both HP traces. Ordinals are NOT measured turns. No pinned miss/critical/
@@ -125,7 +130,17 @@ it is reported as OBSERVED_CENSORED with left_censored=true and no measured
 delta, never an invented zero. The first observable counter was PHYSICALLY 1
 on both b809 title runs; it does not globally censor inactive sites. The 24000-frame
 post-route observation ceiling/host timeout is not a policy/max measurement.
-Keep every sample, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
+The driver retains every sampled state as per-site run-length spans: first/last
+frame and count, active flag, full-pin match decision, all active region/slot
+locations and epoch ID. Each policy-input change splits the span; active edges create epochs
+with pin-land frames and censoring. Steady decisions are not discarded. Raw
+mismatched bytes can vary in reused BSS: spans retain first/last byte examples
+and pin_bytes_varied, rather than implying those unneeded bytes were constant
+or dumping them each frame. Every frame still receives a FULL pin read. Instrument
+bounds (256 spans / 128 epochs) fail explicitly on excessive churn, never truncate
+into a policy. Encoding precedes output opening; a named encoding FAIL is
+published via a closed temporary file and atomic rename.
+Keep every span/epoch, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
 (the diagnostic outputs manifest). Estimate 2-6 minutes/title. First falsifier:
 censored load, pin never lands, wrong image, 12-attempt errand bound or no wild
 launch. SS has ov12; hge additionally has ov130/ov129. Resident-from-boot ov129
@@ -148,6 +163,17 @@ script_a=3/recover_a=0 (return via NonNPCMsg directly to the storage menu). See
 pinned pret scr_seq_0003.s:754-885, msg_0040.gmm:142-152, scrcmd_message.c:142-151
 and render_text.c:95-105,158-168,270-273,302-310. This input schedule still needs
 PHYSICAL validation; the observed screenshot confirms menu state only.
+Down now uses one frame followed by the existing 30-frame release window.
+Pinned pret system.c:219-220,260-268 initializes repeat start/continue to 8/4
+polls. However, scrcmd_c.c:1028-1031 and overlay_01_021EDAFC.s:518 connect this
+PC script to Handle2dMenuInput, which consumes **newKeys**, not repeats
+(list_menu_2d.c:60-82; downward selection +1 at :134).
+The wd-hg-1003055138 0xB/0x2/0xC trace and MOVE screenshot confirm an extra row
+with the old three-frame hold. Source with one poll/frame does **not** explain
+that extra row; input-delivery attribution remains OPEN. The
+repeat-aware MODEL rejects repeats as its cause, and injects a release/re-press
+between held emulator frames as a conservative control, not a physical timing
+claim. script_a/recover_a, recipe, criteria and all run budgets remain unchanged.
 Estimate 2-5 minutes. First falsifier: named press blocks/wrong app, missing mon
 transition, SAVE or independent reload. Remains disclosed DIAGNOSTIC even if its
 consumer reports PASS.

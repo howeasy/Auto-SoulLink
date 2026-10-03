@@ -713,7 +713,12 @@ local function pc_withdraw()
       frames(wd.a_period) -- a late launch from the last attempt shows up here, before any press
     end
     no_app("before the Down")
-    for _ = 1, wd.menu_down do tap("Down", 3, 30); pressed("Down") end
+    -- One new-key pulse. The PC script calls Handle2dMenuInput (scrcmd_c.c:1030;
+    -- overlay_01_021EDAFC.s:518), which uses newKeys (list_menu_2d.c:60-82),
+    -- not the system's 8/4-poll repeats. wd-hg-1003055138's 0xB/0x2/0xC
+    -- trace confirmed MOVE with the old hold; its input-delivery cause is OPEN.
+    assert(wd.menu_hold==1,"withdraw menu requires a one-frame Down pulse")
+    for _ = 1, wd.menu_down do tap("Down", wd.menu_hold, 30); pressed("Down") end
     shot("pc_menu_withdraw" .. attempt)
     no_app("before the sub-menu A")
     tap("A", 3, 10)

@@ -31,6 +31,11 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def fight_recipe(title, name):
+    """Preserve the complete pack recipe and its identifier (used by recipe_sample)."""
+    return {**title["route_legs"][name], "name": name}
+
+
 def emulator_settings(settings, applied_rate):
     """Freeze listed pacing/audio/rewind keys, NDS sync/core, firmware and all NDS paths; ignore UI/history."""
     keys = ('Unthrottled','FrameSkip','AutoMinimizeSkipping','ClockThrottle','VSyncThrottle','SuperHawkThrottle',
@@ -49,8 +54,13 @@ def emulator_config_audit(config):
     settings=json.loads(path.read_text(encoding='utf-8-sig'))
     valid=emulator_settings(settings, config['requested_rate'])==item['expected_settings']
     # Compare the actual applied rate, not a projection that would replace it.
-    valid=valid and settings.get('SpeedPercent')==config['requested_rate']
-    return {'before_sha256':item['before_sha256'],'after_sha256':sha256(path),'settings_valid':valid}
+    after=sha256(path)
+    unflushed=after==item['before_sha256']
+    rate=config.get('observed_applied_rate') if unflushed else settings.get('SpeedPercent')
+    valid=valid and rate==config['requested_rate']
+    return {'before_sha256':item['before_sha256'],'after_sha256':after,'settings_valid':valid,
+            'flush_status':'UNFLUSHED' if unflushed else 'FLUSHED',
+            'rate_source':'Lua applied_rate' if unflushed else 'bizhawk.ini', 'applied_rate':rate}
 
 
 def record_failure(out, message):
@@ -132,13 +142,16 @@ def collect(config, lane, command, *, planner, timeout):
             if raw.is_file():
                 try:
                     observed = json.loads(raw.read_text())
-                except json.JSONDecodeError:
-                    continue
-                assert observed.get("terminal") is True, "non-terminal diagnostic"
-                assert observed.get("qualified") is False, "diagnostic claimed qualification"
-                assert observed.get("applied_rate") == config["requested_rate"], "applied/recorded rate differs"
-                out.update(observation=observed, status=observed["status"], reason=observed.get("reason", ""))
-                break
+                except json.JSONDecodeError as exc:
+                    if proc.poll() is not None:
+                        raise RuntimeError(f"invalid diagnostic result after emulator exit: {exc}") from exc
+                else:
+                    assert observed.get("terminal") is True, "non-terminal diagnostic"
+                    assert observed.get("qualified") is False, "diagnostic claimed qualification"
+                    config['observed_applied_rate']=observed.get('applied_rate')
+                    assert observed.get("applied_rate") == config["requested_rate"], "applied/recorded rate differs"
+                    out.update(observation=observed, status=observed["status"], reason=observed.get("reason", ""))
+                    break
             if proc.poll() is not None:
                 raise RuntimeError(f"emulator exited before diagnostic: {proc.poll()}")
             time.sleep(0.1)
@@ -224,9 +237,23 @@ function D.pp_delta(result,previous,current,frame)
     end
 end
 function D.settle_trace(sites)
-    local trace={samples={},epochs={},current={},sites={}}
+    local trace={samples={},epochs={},current={},sites={},encoding="site-state-rle-v1"}
     for _,s in ipairs(sites) do trace.sites[#trace.sites+1]=s.id end
     return trace
+end
+function D.locations(t,read,id)
+    assert(t.regions==3 and t.per_region==8 and t.entry_size==8,"overlay table geometry")
+    local locations={}; local keys={}
+    for region=0,t.regions-1 do
+        for slot=0,t.per_region-1 do
+            local p=t.address+(region*t.per_region+slot)*t.entry_size
+            if read(p+t.active_off)~=0 and read(p+t.id_off)==id then
+                locations[#locations+1]={region=region,slot=slot}
+                keys[#keys+1]=region..":"..slot
+            end
+        end
+    end
+    return locations,table.concat(keys,",")
 end
 function D.any_region_resident(t,read,id)
     assert(t.regions==3 and t.per_region==8 and t.entry_size==8,"overlay table geometry")
@@ -238,13 +265,13 @@ function D.any_region_resident(t,read,id)
     end
     return false
 end
-function D.begin_settle(sites,resident,bytes,frame,any_resident)
+function D.begin_settle(sites,resident,bytes,frame,any_resident,locations)
     local trace=D.settle_trace(sites)
     trace.attach_frame=frame
     -- PHYSICAL: b809 D2 hge/SS first Lua observation is frame 1, with all sites
     -- inactive (d2-{hge,ss}-1003033806/observation.json). The counter's origin
     -- is not a censoring oracle; only each site's initial flag/bytes are.
-    D.settle_sample(trace,sites,resident,bytes,frame)
+    D.settle_sample(trace,sites,resident,bytes,frame,locations)
     if any_resident then
         for _,site in ipairs(sites) do
             if any_resident(site.overlay_id) then trace.current[site.id].attach_censored=true end
@@ -252,18 +279,19 @@ function D.begin_settle(sites,resident,bytes,frame,any_resident)
     end
     return trace
 end
-function D.settle_sample(trace,sites,resident,bytes,frame)
+function D.settle_sample(trace,sites,resident,bytes,frame,locations)
     for _,s in ipairs(sites) do
         local active=resident(s.overlay_id)==true
         local pin=bytes(s.address,s.extent)
         local matched=pin==s.register_hex
         local prior=trace.current[s.id]
         local attach_censored=prior and prior.attach_censored or (not prior and (active or matched))
-        trace.samples[#trace.samples+1]={site=s.id,frame=frame,resident=active,
-            pin=pin,pin_matches=matched}
+        local places,key={},""
+        if locations then places,key=locations(s.overlay_id) end
         if active and (not prior or not prior.active) then
             local censored=not prior or attach_censored
-            local epoch={site=s.id,active_frame=frame,status=censored and "LEFT_CENSORED" or "WAITING",
+            assert(#trace.epochs<128,"settle telemetry epoch bound; no samples discarded")
+            local epoch={site=s.id,id=#trace.epochs+1,active_frame=frame,status=censored and "LEFT_CENSORED" or "WAITING",
                 left_censored=censored}
             trace.epochs[#trace.epochs+1]=epoch
             prior={epoch=epoch}
@@ -277,6 +305,25 @@ function D.settle_sample(trace,sites,resident,bytes,frame)
                 prior.epoch.delta=frame-prior.epoch.active_frame; prior.epoch.status="SETTLED"
             end
         end
+        local epoch_id=prior.epoch and prior.epoch.id or 0
+        local span=prior.span
+        if span and span.last_frame+1==frame and span.resident==active and span.pin_matches==matched
+            and span.location_key==key and span.epoch_id==epoch_id then
+            span.last_frame=frame; span.frames=span.frames+1
+            span.pin_bytes_varied=span.pin_bytes_varied or span.pin_last~=pin
+            span.pin_last=pin
+        else
+            -- Preserve every full-pin MATCH decision, flag and location. Unrelated
+            -- mismatched BSS bytes may change every frame; keep endpoint examples,
+            -- mark that variation, and never imply their bytes were constant.
+            -- Any policy-input change splits the span. Churn FAILs, never truncates.
+            assert(#trace.samples<256,"settle telemetry span bound; no samples discarded")
+            span={site=s.id,frame=frame,last_frame=frame,frames=1,resident=active,
+                pin_first=pin,pin_last=pin,pin_bytes_varied=false,pin_matches=matched,
+                locations=places,location_key=key,epoch_id=epoch_id}
+            trace.samples[#trace.samples+1]=span
+        end
+        prior.span=span
         prior.active=active; prior.pin_matches=matched; prior.attach_censored=attach_censored; trace.current[s.id]=prior
     end
 end
@@ -360,6 +407,23 @@ function D.boundary_ready(M,sites,bytes,resident,frame,settle,policy,image_pins)
         return M.phase_sites_ready(sites,bytes,resident,frame(),settle,policy,image_pins,wanted)
     end
 end
+function D.publish(json,result,path)
+    -- Encode before opening anything. A bounded fallback reports encoding failure;
+    -- the target is published only after a complete temporary file is closed.
+    local ok,encoded=pcall(function() return assert(json.encode(result)) end)
+    if not ok then
+        local first=result.reason and result.reason~="" and (result.reason.."; ") or ""
+        local failure={terminal=true,qualified=false,status="FAIL",applied_rate=result.applied_rate,
+            reason=(first.."diagnostic encode failed: "..tostring(encoded)):sub(1,2048)}
+        encoded=assert(json.encode(failure))
+    end
+    local temp=path..".tmp"
+    local f=assert(io.open(temp,"wb"))
+    local wrote,why=pcall(function() assert(f:write(encoded)); assert(f:close()) end)
+    if not wrote then pcall(f.close,f); error("diagnostic write failed: "..tostring(why),0) end
+    assert(os.rename(temp,path),"diagnostic atomic rename failed")
+    return ok
+end
 if G4_DIAG_TEST then return D end
 local root=assert(os.getenv("SLINK_ROOT"))
 local json=dofile(root.."/lua/json_codec.lua")
@@ -382,6 +446,7 @@ local function bytes(a,n)
     for i=1,n do t[i]=string.format("%02x",raw[i]) end; return table.concat(t)
 end
 local function resident(id) return M.resident(title,read,id) end
+local function locations(id) return D.locations(title.overlay_table,read,id) end
 local handles={}; local monitor,composite; local callback_error
 local function register(site,cb,name)
     M.validate_site(title,site,bytes,resident)
@@ -398,7 +463,7 @@ end
 local function step(buttons)
     if monitor then monitor.before() end
     joypad.set(buttons or {}); emu.frameadvance()
-    if cfg.command=="settle" then D.settle_sample(result.settle,cfg.sites,resident,bytes,emu.framecount()) end
+    if cfg.command=="settle" then D.settle_sample(result.settle,cfg.sites,resident,bytes,emu.framecount(),locations) end
     if monitor then monitor.after() end
     assert(not callback_error,callback_error)
 end
@@ -458,7 +523,7 @@ local function run()
     elseif cfg.command=="settle" then
         result.attach_frame=emu.framecount()
         result.settle=D.begin_settle(cfg.sites,resident,bytes,result.attach_frame,
-            function(id) return D.any_region_resident(title.overlay_table,read,id) end)
+            function(id) return D.any_region_resident(title.overlay_table,read,id) end,locations)
         result.boot=M.boot("bridge",3000,idle_field,function()
             local fs=read(title.symbols.sFieldSysPtr.address)
             return fs~=0 and read(fs+title.profile.probe_field.live)~=0
@@ -522,7 +587,8 @@ for h in pairs(handles) do local done,err=pcall(remove,h); if not done then loca
 if next(handles) then result.status="FAIL"; result.reason="retained diagnostic hooks" end
 result.terminal=true; result.qualified=false; result.callback_error=callback_error
 result.applied_rate=applied_rate
-local f=assert(io.open(cfg.lane.."/observation.json","w")); f:write(assert(json.encode(result))); f:close()
+local published,publication_error=pcall(D.publish,json,result,cfg.lane.."/observation.json")
+if not published and console and console.log then console.log("diagnostic publication failed: "..tostring(publication_error)) end
 pcall(client.exit)
 '''
 
@@ -588,7 +654,7 @@ def prepare(args):
         cfg["state_sha256"] = args.state_sha256
         cfg["originals"][str(args.state)] = args.state_sha256
         if args.command == "fight":
-            cfg["recipe"] = title["route_legs"][args.recipe]
+            cfg["recipe"] = fight_recipe(title, args.recipe)
         else:
             assert args.title == "heartgold", "D3 is HG-only"
             cfg["phase_case"] = next(c for c in title["phase_cases"] if c["name"] == args.phase_case)

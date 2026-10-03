@@ -522,6 +522,12 @@ PC_BEHAVIOR = 0x83
 # ov14_021F0418) is UNVERIFIED, so a full party is a named precondition, not a run.
 WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
 WITHDRAW_MENU_DOWN = 1  # PC top menu rows: DEPOSIT 0, WITHDRAW POKEMON 1 (scr_seq_0003.s:821-846)
+# Single-frame new-key pulse. scrcmd_c.c:1028-1031 -> overlay_01_021EDAFC.s:518
+# -> list_menu_2d.c:60-82 consumes newKeys, NOT newAndRepeatedKeys. system.c:219-220,
+# 260-268 initializes repeat start/continue to 8/4, but those repeats do not move
+# this menu. PHYSICAL wd-hg-1003055138 selected MOVE with a 3-frame hold; input
+# delivery/extra-row cause stays OPEN. A one-frame pulse removes repeated delivery.
+WITHDRAW_MENU_HOLD = 1
 WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
 # SOURCE: THREE accepted A presses after interact: dismiss msg33's \r, select
 # Which-PC row0 (Someone/Bill), dismiss msg35's \r. Then Down selects WITHDRAW
@@ -762,6 +768,7 @@ def withdraw_plan() -> dict:
     it drives (menu rows to go down, the box cell to grab)."""
     return {
         "menu_down": WITHDRAW_MENU_DOWN,
+        "menu_hold": WITHDRAW_MENU_HOLD,
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,

@@ -2067,6 +2067,70 @@ def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     assert 'SetupNativeScript' not in nonnpc and 'return FALSE;' in nonnpc
 
 
+def test_withdraw_down_is_one_pulse_in_repeat_aware_menu():
+    """Real PC input source plus a repeat-aware delivery-fault MODEL.
+
+    Repeat start=8/continue=4, but the PC uses NEW keys, ignoring repeats.
+    A release/re-press between held emulator frames is a fault injection,
+    not a physically measured root cause. It reproduces the extra row and
+    is prevented by one new-key pulse. No source claim about lag is invented.
+    """
+    system = (PRET / "src/system.c").read_text()
+    menu = (PRET / "src/list_menu_2d.c").read_text()
+    overlay = (PRET / "asm/overlay_01_021EDAFC.s").read_text()
+    scrcmd = (PRET / "src/scrcmd_c.c").read_text()
+    assert "gSystem.keyRepeatStartDelay = 8;" in system
+    assert "gSystem.keyRepeatContinueDelay = 4;" in system
+    assert "gSystem.keyRepeatCounter--;" in system and "gSystem.keyRepeatCounter == 0" in system
+    assert "ov01_021EDC84(*pp_menu);" in scrcmd
+    block = overlay[overlay.index("ov01_021EDE8C:"):overlay.index("thumb_func_end ov01_021EDE8C")]
+    assert "bl Handle2dMenuInput" in block
+    block = menu[menu.index("int Handle2dMenuInput("):menu.index("u8 Get2dMenuSelection(")]
+    assert "gSystem.newKeys & PAD_KEY_DOWN" in block and "newAndRepeatedKeys" not in block
+    assert "newPos = menu->selectedIndex + 1;" in menu
+    hold = gr.withdraw_plan()["menu_hold"]
+
+    def cursor(hold, dropout=False):
+        row, counter, held, repeats = 0, 0, False, 0
+        for frame, raw in enumerate([True] * hold + [False] * 30):
+            # Adversarial input delivery: a release at the second emulator frame.
+            if dropout and frame == 1:
+                raw = False
+            new = raw and not held
+            repeated = new
+            if raw and raw == held:
+                counter -= 1
+                if counter == 0:
+                    repeated = True
+                    counter = 4
+            else:
+                counter = 8
+            held = raw
+            if repeated:
+                repeats += 1
+            if new:  # Handle2dMenuInput consumes newKeys, not repeated keys.
+                row += 1
+        return row, repeats
+
+    assert cursor(3) == (1, 1)
+    assert cursor(20)[0] == 1 and cursor(20)[1] > 1
+    assert cursor(3, dropout=True)[0] == 2  # source does not prove this delivery fault
+    assert cursor(hold)[0] == cursor(hold, dropout=True)[0] == 1
+    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    assert 'tap("Down", wd.menu_hold, 30)' in src
+    assert "menu_hold" in src and hold == 1
+
+
+def test_old_withdraw_hold_repeat_control_red_revert(monkeypatch):
+    test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
+    original = gr.WITHDRAW_MENU_HOLD
+    monkeypatch.setattr(gr, "WITHDRAW_MENU_HOLD", 3)
+    with pytest.raises(AssertionError):
+        test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
+    monkeypatch.setattr(gr, "WITHDRAW_MENU_HOLD", original)
+    test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
+
+
 @pytest.mark.parametrize("old,new",[
     ('MenuItemAdd msg_0191_00061, 255, 0','MenuItemAdd msg_0191_00061, 255, 1'),
     ('MenuItemAdd msg_0191_00062, 255, 0','MenuItemAdd msg_0191_00062, 255, 1'),
