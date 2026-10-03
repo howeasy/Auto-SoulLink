@@ -2086,7 +2086,8 @@ H_PARTY_HP = _ch("include/pokemon.h", "345", "u16 hp")
 def d7_file_checks(xm: XMap, images: Images, build: str, vanilla: Images | None = None) -> dict:
     """FILE: the D7 seam and the replacement-flag offset, read from the ROM image and compared with the typed PHYSICAL constants.
     build hgss: dispatch entry 11 == UpdateFieldConditionExtra|1 and the 4 pin bytes there; hge: entry 9 (Thumb word) equals the typed
-    value AND the vanilla ROM's (the client reads the pin from the live ROM at that address)."""
+    value AND the vanilla ROM's, and its target bytes equal the proven trampoline. d7_values emits addr + pin_hex from these
+    FILE reads for EVERY build; the client never reads the pin from RAM (it would sample an in-flight async ov12 load)."""
     tbl = xm.lookup("sPlayerBattleCommands")
     if tbl.image != D7_OV:
         raise Fail(f"sPlayerBattleCommands is in {tbl.image}, not {D7_OV}")
