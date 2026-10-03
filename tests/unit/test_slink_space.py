@@ -381,6 +381,16 @@ def test_temp_and_lane_age_rules(W):
     assert not old_t.exists() and not lane.exists() and new_t.exists() and young.exists()
 
 
+def test_work_root_lanes_are_never_pruned(W):
+    lane = W.root / "lanes" / "g4"  # Gen 4's real 46 GB lane lives here
+    lane.mkdir(parents=True)
+    (lane / "state.bin").write_bytes(b"s" * 10)
+    _age(lane, 30)
+    p = plan(W)
+    assert item(p, lane)["status"] == "keep"
+    assert ss._norm(lane) not in {ss._norm(a["path"]) for a in p["actions"]}
+
+
 def test_lane_in_use_by_a_process_refused(W, real_processes):
     lane = W.c / "slink" / "running"
     lane.mkdir()

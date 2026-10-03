@@ -446,7 +446,9 @@ def default_locations(repo) -> list[list]:
 
 def _root_locations(root) -> list[list]:
     r = Path(root).as_posix()
-    rules = {"wt": "worktrees", "lanes": "lane", "tmp": "tmp", "cache": "cache",
+    # lanes/ belongs to the thread that runs each lane (Gen 4's 46 GB g4, Gen 3's cuts):
+    # report only, never age it out, exactly like cache/ and evidence/.
+    rules = {"wt": "worktrees", "lanes": "owned-lane", "tmp": "tmp", "cache": "cache",
              "evidence": "evidence"}
     return [[f"work:{c}", f"{r}/{c}/*", rules[c], False] for c in CATEGORIES]
 
@@ -540,6 +542,9 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
         item["rule"] = rule
     if rule in ("cache", "evidence"):
         return {**item, "status": "keep", "reason": rule}
+    if rule == "owned-lane":
+        return {**item, "status": "keep", "reason": "work-root lane: owned by its thread, "
+                                                    "never pruned"}
     if is_dir and os.path.lexists(os.path.join(p, ".git")):
         return {**item, "kind": "checkout", "status": "refuse",
                 "reason": "holds a .git entry (a checkout, not a lane); inspect by hand"}
