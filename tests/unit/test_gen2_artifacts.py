@@ -462,7 +462,10 @@ def test_gold_binding_generation_is_deterministic_and_resolves_execution_bytes(s
     from tools import gen2_artifacts
 
     binding = _no_infra(gen2_artifacts.generate_binding, "gold", root=ROOT)
-    assert binding["rom_sha1"] == "69067c4bcd74b2c567a02164896948f3a14e6d4a"
+    # The published identity, not a magic number: data/games/gen2_gold/overlay/binding.json
+    # (rom_sha1) and data/gen2/overlay_provenance.json (outputs.pokegold.sha1) both carry this
+    # digest, and `--check` below proves generation reproduces the committed binding.
+    assert binding["rom_sha1"] == "51b076ac7eba099a273ff7aff5c64ccb790825dd"
     assert binding["base_sha1"] == "d8b8a3600a465308c9953dfa04f0081c05bdcb94"
     assert binding["sites"]["battle_faint"]["symbol"] == "UpdateFaintedPlayerMon"
     assert binding["changes"] == [], "the published overlay changes no site byte"
@@ -490,7 +493,7 @@ def test_overlay_source_context_reconstructs_the_published_gold_rom(shared):
     from tools.gen2_source_data import load_overlay_context
 
     ctx = load_overlay_context("gold", root=ROOT)
-    assert hashlib.sha1(ctx.rom).hexdigest() == "69067c4bcd74b2c567a02164896948f3a14e6d4a"
+    assert hashlib.sha1(ctx.rom).hexdigest() == "51b076ac7eba099a273ff7aff5c64ccb790825dd"
     assert ctx.symbol("wPartyMon1") == ctx.base.symbol("wPartyMon1")
     assert ctx.source_record() == ctx.base.source_record()
 

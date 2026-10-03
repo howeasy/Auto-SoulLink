@@ -13,6 +13,7 @@ import pathlib
 import pytest
 
 from tests.unit.test_gb_panel import _abi
+from tests.unit.test_gen2_client import NEEDS_OVERLAY, Refused
 from tests.unit.test_gen2_panel import CAP_PANEL, PERMIT, Cart
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -229,6 +230,7 @@ def _production(caps):
 
 @pytest.mark.parametrize("caps, posted", [(CAP_PANEL | CAP_PHONE, [(FALLEN, "System Bus")]),
                                           (CAP_PANEL, []), (None, [])])
+@NEEDS_OVERLAY
 def test_the_client_forwards_a_tagged_command_only_to_a_phone_build(caps, posted):
     world, mb = _production(caps)
     world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
@@ -238,6 +240,7 @@ def test_the_client_forwards_a_tagged_command_only_to_a_phone_build(caps, posted
 
 @pytest.mark.parametrize("config, rings", [(None, True), ({"phone_calls": True}, True),
                                            ({"phone_calls": False}, False), ({"native_messages": False}, True)])
+@NEEDS_OVERLAY
 def test_phone_calls_are_their_own_switch_default_on(config, rings):
     """Owner 2026-10-02: phone calls are a run checkbox, default ON, separate from native_messages
     (default off). Only an explicit phone_calls=false silences the ring."""
@@ -248,6 +251,16 @@ def test_phone_calls_are_their_own_switch_default_on(config, rings):
     world.frames(5)
     assert bool([v for a, v, d in world.written() if a == mb + REQ]) is rings
     assert "prompt:A and B linked!" in world.shown()   # the BizHawk HUD pop-up always shows (owner ruling)
+
+
+def test_a_clean_cartridge_never_reaches_the_phone_binder():
+    """Patch-first (owner 2026-10-02): the phone service ships in the SLink companion overlay, and
+    the launcher refuses a clean Gen 2 cartridge before a client exists, so no tagged command can
+    be posted. Stated here because the two tests above can no longer run on this cartridge."""
+    from tests.unit.test_gen2_client import World
+    with pytest.raises(Refused) as caught:
+        World("crystal", production=True)
+    assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 
 # -- PHONE-NAMES: the staged record (docs/gen2/POST_RC_CARDS.md) --------------------------------

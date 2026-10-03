@@ -18,6 +18,7 @@ import lupa
 import pytest
 
 from tests.unit.test_gb_panel import _abi
+from tests.unit.test_gen2_client import NEEDS_OVERLAY, Refused, World
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
@@ -298,16 +299,18 @@ def _service(w, state, frames=1, caps=CAP_PANEL):
         w.frames(1)
 
 
-def test_production_client_on_a_clean_cartridge_advertises_no_panel():
-    from tests.unit.test_gen2_client import World
-    w = World("crystal", production=True)
-    hello = w.hello()
-    w.frames(5)
-    assert hello["panel"] is False and hello["panel_abi"] == 0 and hello["sfx"] is False
-    tm = w.profile["overlay"]["ram"]["wTilemap"]
-    assert not [x for x in w.written() if tm <= x[0] < tm + 360]
+def test_a_clean_cartridge_is_refused_before_a_panel_can_be_advertised():
+    """Patch-first (owner 2026-10-02): the panel ships in the SLink companion overlay, and the
+    launcher refuses a clean Gen 2 cartridge outright, so no production client exists that could
+    claim a panel on one. This is the replacement for the advertisement assertion that used to run
+    on exactly this cartridge; whether an ADMITTED client advertises the panel is pinned below,
+    which is what decides per artifact kind on the server (artifact_kind == overlay)."""
+    with pytest.raises(Refused) as caught:
+        World("crystal", production=True)
+    assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 
+@NEEDS_OVERLAY
 def test_production_client_holds_link_panel_rows_and_paints_on_the_await_transition():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)
@@ -422,6 +425,7 @@ def _service_sfx(w, state, frames=1, caps=CAPS_FULL):
         w.frames(1)
 
 
+@NEEDS_OVERLAY
 def test_production_client_advertises_sfx_and_posts_the_mapped_code():
     from tests.unit.test_gen2_client import World
     w = World("gold", production=True)
@@ -440,6 +444,7 @@ def test_production_client_advertises_sfx_and_posts_the_mapped_code():
     assert [x for x in w.written() if x[0] == mb + 7] and w.io.read_u8(mb + 7) == 2
 
 
+@NEEDS_OVERLAY
 def test_production_client_native_sounds_off_posts_nothing():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)
@@ -453,6 +458,7 @@ def test_production_client_native_sounds_off_posts_nothing():
     assert not [x for x in w.written() if x[0] == mb + 7]
 
 
+@NEEDS_OVERLAY
 def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)

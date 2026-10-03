@@ -167,6 +167,30 @@ class Refused(Exception):
     """Entry.build refused the production graph (the Lua reason is the message)."""
 
 
+
+# Patch-first (owner 2026-10-02): the SLink companion is REQUIRED for every Gen 2 title, so
+# lua/gen2/entry.lua's `eligible` refuses a CLEAN row ("needs the SLink companion patch") and the
+# production graph composes only an ACTIVATED overlay row. Until tools/gen_gen2_admission.py
+# --promote-overlays lands such a row there is NO legal production cartridge for Gen 2 at all, so
+# these tests read the shipped catalog row itself instead of pinning the CLEAN fixture the owner
+# ruled out. The skip is a dependency signal, never a green: it names itself and clears itself.
+def overlay_row(title):
+    rows = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text(encoding="utf-8"))["artifacts"]
+    return next(r for r in rows if r["kind"] == "overlay")
+
+
+def overlay_admitted(title):
+    row = overlay_row(title)
+    return (row.get("status") == "ADMITTED" and row.get("selection") == "SELECTED"
+            and (row.get("runtime_gate") or {}).get("state") == "ADMITTED")
+
+
+NEEDS_OVERLAY = pytest.mark.skipif(
+    not all(overlay_admitted(t) for t in ("crystal", "gold", "silver")),
+    reason="no ADMITTED Gen 2 overlay row yet: the launcher refuses every Gen 2 cartridge "
+           "(clean needs the SLink companion; the overlay row is still BUILT/FUTURE) -- "
+           "production-graph coverage returns when the overlay rows are promoted")
+
 class World:
     def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None):
         self.title = title
@@ -1275,6 +1299,7 @@ def falsify_production(check, swaps):
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@NEEDS_OVERLAY
 def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title):
     world = production(title)
     parts = world.parts
@@ -1295,6 +1320,7 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     assert world.emu.callbacks["SLink-gen2-checkpoint"] is None
 
 
+@NEEDS_OVERLAY
 def test_production_no_hello_before_an_accepted_checkpoint_hold():
     def check(world):
         world.frames(120)
@@ -1310,6 +1336,7 @@ def test_production_no_hello_before_an_accepted_checkpoint_hold():
         "if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then", "if false then")))
 
 
+@NEEDS_OVERLAY
 def test_production_refuses_an_unarmed_or_unheld_write():
     def check(world):
         attempt = world.lua.eval("""function(w, arm) return pcall(function()
@@ -1326,6 +1353,7 @@ def test_production_refuses_an_unarmed_or_unheld_write():
         "return kind ~= nil and checkpoint:check(kind) == true", "return true")))
 
 
+@NEEDS_OVERLAY
 def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
     world = production()
     bench = mon(species=172, dvs=0x3AAA)
@@ -1355,6 +1383,7 @@ def production_battle_hold(world, caller=True):
     return hit
 
 
+@NEEDS_OVERLAY
 def test_production_active_death_lands_only_inside_the_battle_hold():
     """O-30: behind the PHYSICAL battle_faint receipt the production graph hooks the battle hold; the write lands
     only when the held evaluation accepts it (here: the StartBattle caller word), never elsewhere in battle."""
@@ -1377,6 +1406,7 @@ def test_production_active_death_lands_only_inside_the_battle_hold():
     assert "show:!! PIKA KO'd" in world.shown()
 
 
+@NEEDS_OVERLAY
 def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
     world = production()
     lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
@@ -1395,6 +1425,7 @@ def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
     assert receipts == {"lua/gen2/entry.lua production"}
 
 
+@NEEDS_OVERLAY
 def test_production_refuses_what_the_receipts_do_not_cover():
     """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
     command NACKs at the hold with the missing kind, and no byte moves."""
@@ -1418,6 +1449,7 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     assert any(text.startswith("show:KO held") for text in world.shown()) and world.written() == []
 
 
+@NEEDS_OVERLAY
 def test_production_key_agrees_with_the_python_codec_on_the_same_record():
     def check(world):
         starter, caught = mon(species=155, ot=0x0BCD, dvs=0xFEDC), mon(species=19, ot=0x0BCD, dvs=0x1357)
@@ -1441,6 +1473,7 @@ def test_production_key_agrees_with_the_python_codec_on_the_same_record():
     ("gold", "gold.engine_sites.json", "silver.engine_sites.json"),
     ("crystal", "crystal.write_window.json", "gold.write_window.json"),  # only Silver follows Gold's U2
 ])
+@NEEDS_OVERLAY
 def test_each_title_admits_only_with_its_own_receipts(title, name, other):
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
         production(title, files={f"/receipts/{name}": (RECEIPTS / other).read_text()})
@@ -1452,6 +1485,7 @@ def test_each_title_admits_only_with_its_own_receipts(title, name, other):
     ("crystal.write_window.json", ("runs", "town", "evidence_level"), "MODEL"),
     ("crystal_battle.qualification.json", ("fixtures", 0, "artifacts", "fixture", "sha256"), "0" * 64),
 ])
+@NEEDS_OVERLAY
 def test_a_forged_or_model_receipt_refuses_production(name, path, value):
     receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts" / name).read_text())
     node = receipt
@@ -1460,6 +1494,20 @@ def test_a_forged_or_model_receipt_refuses_production(name, path, value):
     node[path[-1]] = value
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
         production(files={f"/receipts/{name}": json.dumps(receipt)})
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_clean_gen2_cartridge_composes_no_client_and_says_why_it_needs_the_companion(title):
+    """Patch-first (owner 2026-10-02): the companion overlay is REQUIRED for every Gen 2 title,
+    so lua/gen2/entry.lua refuses the shipped clean build BEFORE it composes anything. This is the
+    replacement for the production tests above, which used to run on exactly this cartridge: the
+    rule they can no longer exercise is stated here, and they wait (NEEDS_OVERLAY) for a legal
+    overlay row rather than pinning the clean one."""
+    with pytest.raises(Refused) as caught:
+        production(title)
+    reason = str(caught.value)
+    assert f"this {title} cartridge needs the SLink companion patch" in reason
+    assert "Manager or /patcher" in reason
 
 
 RUN_HOST = r"""
@@ -1493,7 +1541,9 @@ end
                                             ("crystal", "pokecrystal11")])
 def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(title, artifact):
     """The H1 duo driver's contract: SLINK_GEN2_CLIENT / SLINK_GEN2_PARTS (production_admitted),
-    the client's own onframeend tick; nil for a refused cartridge (Crystal 1.1 is BUILD_ONLY)."""
+    the client's own onframeend tick; nil for a refused cartridge. Patch-first (owner 2026-10-02)
+    moved BOTH refusals onto the launcher: a clean cartridge (the release build, `artifact` None)
+    now needs the SLink companion, and Crystal 1.1 stays refused as BUILD_ONLY."""
     profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
     repo = "pokecrystal" if title == "crystal" else "pokegold"
     rom = (ROOT / f".cache/gen2-build/{repo}/{artifact or profile['artifact']}.gbc").read_bytes()
@@ -1501,15 +1551,14 @@ def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(ti
     logs = lua.table()
     frames, callbacks = lua.execute(RUN_HOST)(rom, ROOT.as_posix(), logs)
     g = lua.globals()
+    assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
+    refusals = [line for line in logs.values() if "refused" in line]
+    assert refusals, dict(logs)
     if artifact is None:
-        assert g.SLINK_GEN2_PARTS.production_admitted is True
-        assert g.SLINK_GEN2_PARTS.qualification == "PHYSICAL_RECEIPTED" and g.SLINK_GEN2_PARTS.title == title
-        assert lua.eval("rawequal")(g.SLINK_GEN2_PARTS.client, g.SLINK_GEN2_CLIENT) and len(frames) == 1
-        assert callbacks["SLink-gen2-checkpoint"] == CHECKPOINT[title]["primary"]["execution_before"]["pc"]
-        assert any("PRODUCTION" in line for line in logs.values())
+        # the clean release build: refused for want of the companion, by name
+        assert f"this {title} cartridge" in refusals[0] and "needs the SLink companion patch" in refusals[0]
     else:
-        assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
-        assert any("refused" in line and "BUILD_ONLY" in line for line in logs.values())
+        assert "BUILD_ONLY" in refusals[0]
 
 
 # ── card BOX: box_mon / party_mon / memorialize through the composed executor (MODEL candidate) ───────

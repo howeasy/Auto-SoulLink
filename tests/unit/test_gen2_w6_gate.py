@@ -95,8 +95,10 @@ def test_w6_facts_are_the_pinned_overlay():
         names = {r["name"] for r in f["allow"]}
         # data/script labels (SlinkSpecialPhoneCallList, SlinkTradeReceptionistScript) are never writer code
         # SlinkMainMenuBridge: TITLE-VERSION A's ROM0 SetUpMenu bridge (patch/gen2/src/version.asm)
+        # SlinkTitleBridge: the titled overlays' ROM0 title-screen bridge (title-publish dc0a9c5b); the live gate
+        # derives its allowlist from the symbol file, so it follows the build
         assert names == {"SLink service bank", "SlinkDelayFrameBridge", "SlinkResetSoundBridge",
-                         "SlinkMainMenuBridge", "SlinkStartMenuEntry"}
+                         "SlinkMainMenuBridge", "SlinkStartMenuEntry", "SlinkTitleBridge"}
         assert all(r["bank"] != 0 or r["hi"] <= 0x100 for r in f["allow"]), "a ROM0 range runs past the header"
         entry = next(r for r in f["allow"] if r["name"] == "SlinkStartMenuEntry")
         assert entry["bank"] == 4 and entry["hi"] - entry["lo"] == 12   # call FadeToMenu / farcall / ld a,6 / ret

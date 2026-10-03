@@ -10,8 +10,13 @@ exists in shared code.
 What each adapter must answer is read here INDEPENDENTLY from data/games/gen2_<title>/
 (a grass-encounter species set and the item names), never from the other adapter.
 
-The production rows still select the legacy adapter until the G3 cutover (U5), so these
-tests re-point the six Gen 2 rows with the same monkeypatch U4's tests use.
+The six Gen 2 rows already select `gen2_gsc` (U5, O-22/O-23); the `cutover` fixture re-points them
+anyway, so a regressed row is repaired here rather than turning every test into a row test.
+
+Patch-first (owner 2026-10-02): the SLink companion overlay is REQUIRED for every Gen 2 title, so a
+clean Gen 2 hello is REFUSED (server/adapters/gen2_gsc.companion_refusal) and a run commits "overlay".
+Nothing here is about patching -- the per-player title binding is -- so every cartridge below connects
+as the artifact its title requires. The refusals themselves belong to test_companion_required_gen2.py.
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ import pytest
 from server import adapters
 from server.adapters import get_adapter
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.test_mixed_foundations import _hello, _refused, _session
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "games"
@@ -44,7 +50,12 @@ def cutover(monkeypatch):
 
 
 def _cart(rom_type):
-    return {"rom_type": rom_type, "artifact_kind": "clean"}
+    """A cartridge of `rom_type` that CONNECTS: the companion evidence its title requires.
+
+    Gen 2 needs `overlay`, Gen 3 `companion`, Gen 1 Red/Blue `named` + `panel`. The (e) case
+    below pairs two OTHER foundations through this same helper, so it must patch them too.
+    """
+    return {"rom_type": rom_type, **companion(rom_type)}
 
 
 def _pack(title, name):
@@ -297,6 +308,10 @@ async def test_hello_without_rom_type_preserves_accepted_binding(tmp_path, cutov
     try:
         await send(_hello("a", _cart("Crystal")))
         await send(_hello("b", _cart("Gold")))
+        # Both halves must be ACCEPTED, or the snapshot below is an empty run and the
+        # comparison is vacuous. `_refused` only sees MIXED GAMES, so check the error slot:
+        # a companion refusal would land there too.
+        assert not srv.state.identity_error, srv.state.identity_error
         before = _binding_snapshot(srv)
         # The TCP boundary refuses missing rom_type; direct dispatch must not erase
         # an accepted binding either (legacy/internal callers can reach this path).
@@ -316,6 +331,7 @@ async def test_rejected_hello_preserves_player_binding(tmp_path, cutover, reject
     try:
         await send(_hello("a", _cart("Crystal")))
         await send(_hello("b", _cart("Gold")))
+        assert not srv.state.identity_error, srv.state.identity_error
         before = _binding_snapshot(srv)
         if rejection == "admission":
             srv._rom_contract = {"unreadable": True}
