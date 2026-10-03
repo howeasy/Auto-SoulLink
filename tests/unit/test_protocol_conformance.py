@@ -531,7 +531,7 @@ def _party(*pids, hp=20):
     return [mon_record(p, _OT, species=4 + i, nickname=f"MON{i}", hp=hp) for i, p in enumerate(pids)]
 
 
-def _live(pack="gen3_frlg", title="firered", kind="clean", pids=(_A, _B), frames=60):
+def _live(pack="gen3_frlg", title="firered", kind=None, pids=(_A, _B), frames=60):
     w = World(pack, title, kind)
     w.set_party(_party(*pids))
     w.step_to(frames)
@@ -993,7 +993,7 @@ class _FakeBoxes:
         return L.table(deposit=deposit, withdraw=withdraw, memorialize=memorialize, memorial_box=13)
 
 
-def _boxed_world(pack="gen3_frlg", title="firered", kind="clean", pids=(_A, _B)):
+def _boxed_world(pack="gen3_frlg", title="firered", kind=None, pids=(_A, _B)):
     keys = [key_of(p, _OT) for p in pids]
     fake = _FakeBoxes(keys)
     w = World(pack, title, kind, boxes=fake.table)
