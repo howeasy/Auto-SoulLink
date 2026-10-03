@@ -449,7 +449,6 @@ if (window._slinkDashInit) {
 (function() {
   var announcer = document.getElementById('mk-announcer');
   var toastHost = document.getElementById('mk-toast-host');
-  var toggle = document.getElementById('mk-announce-toggle');
   if (!announcer) return;
 
   var PAUSE_KEY = 'slink-announce-paused';
@@ -457,16 +456,18 @@ if (window._slinkDashInit) {
     try { return localStorage.getItem(PAUSE_KEY) === '1'; } catch (_) { return false; }
   }
   function setPaused(p) {
+    var toggle = document.getElementById('mk-announce-toggle');   // inside #content now (data-morph-keep)
     try { localStorage.setItem(PAUSE_KEY, p ? '1' : '0'); } catch (_) {}
     if (toggle) {
       toggle.setAttribute('aria-pressed', p ? 'true' : 'false');
       toggle.textContent = p ? 'Resume announcements' : 'Pause announcements';
     }
   }
-  if (toggle) {
-    setPaused(isPaused());
-    toggle.addEventListener('click', function() { setPaused(!isPaused()); });
-  }
+  setPaused(isPaused());
+  // Delegated: the button lives in the polled board, so a morph that ever rebuilds it keeps working.
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.closest && e.target.closest('#mk-announce-toggle')) setPaused(!isPaused());
+  });
 
   var SECTIONS = ['party', 'pending', 'split', 'boxed', 'linked', 'fallen'];
   function sectionOf(article) {

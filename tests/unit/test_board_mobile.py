@@ -3,9 +3,11 @@
 `test_dashboard_contract.py` proves the board's DOM; this proves the two things added on
 top of it in this branch:
 
-  * the announcer/toggle/toast-host markup sits OUTSIDE `#content`, the htmx morph target
+  * the announcer/toast-host markup sits OUTSIDE `#content`, the htmx morph target
     -- inside it, the 2s poll would rebuild (and read aloud) the whole board every tick,
-    exactly the mistake `docs/public_ui/mobile-a11y.md` #4 calls out.
+    exactly the mistake `docs/public_ui/mobile-a11y.md` #4 calls out. The pause toggle sits
+    in the Rules row INSIDE `#content` (owner, 2026-10-03), marked data-morph-keep so the
+    morph leaves its pressed state and label alone; its click is delegated from document.
   * dashboard.js's board-announcer diff: a pair's section-class transition (pending ->
     party = a new link, anything -> fallen = a death) drives one sr-only announcement and
     one toast per event -- never for a dead zone, where both halves stay `.empty` -- and
@@ -49,7 +51,7 @@ async def test_announcer_and_toasts_sit_outside_the_polled_content(dashboard):
     content = dom.find(id="content")
     assert content, "no #content"
     inside_ids = {n.get("id") for n in content.walk() if n.get("id")}
-    for wanted in ("mk-announcer", "mk-announce-toggle", "mk-toast-host"):
+    for wanted in ("mk-announcer", "mk-toast-host"):
         assert wanted not in inside_ids, (
             f"#{wanted} is inside the polled #content -- it would be rebuilt (and, for the "
             "announcer, read aloud) on every 2s swap"
@@ -61,6 +63,8 @@ async def test_announcer_and_toasts_sit_outside_the_polled_content(dashboard):
     assert announcer.get("aria-atomic") == "true"
     toggle = dom.find(id="mk-announce-toggle")
     assert toggle is not None and toggle.get("aria-pressed") == "false"
+    assert toggle.get("data-morph-keep") is not None, "inside #content the toggle must survive the 2s morph"
+    assert "lock-rules" in (toggle.parent.get("class") or ""), "the toggle sits in the Rules row"
     assert dom.find(id="mk-toast-host") is not None
 
 
@@ -114,8 +118,10 @@ function fakePair(id, section, opts) {
   return el;
 }
 function fireOn(el, type, ev) {
-  ev = ev || {}; ev.type = type;
+  ev = ev || {}; ev.type = type; ev.target = el;
   for (const f of ((el._ls && el._ls[type]) || [])) f(ev);
+  // the announcements toggle's click is delegated from document
+  if (el === toggle) for (const f of (doc.ls[type] || [])) f(ev);
   return ev;
 }
 
@@ -138,6 +144,7 @@ const contentEl = {
 const announcer = makeEl('sr-only');
 const toastHost = makeEl('');
 const toggle = makeEl('');
+toggle.closest = sel => (sel === '#mk-announce-toggle' ? toggle : null);
 
 function bus() {
   const ls = {};
