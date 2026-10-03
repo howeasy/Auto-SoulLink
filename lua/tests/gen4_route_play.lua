@@ -652,6 +652,18 @@ local function withdrawn_ok(p0, b0, pid, home, label)
 end
 local function pc_withdraw()
   local wd = route.pc.withdraw
+  -- one diagnostic line per script press (never per frame): the live trace that settles the press count
+  local npress = 0
+  local function pressed(label)
+    npress = npress + 1
+    local ai = app_info()
+    say("press", npress, label, "taskman", hex(taskman() or 0), "ovy", ai and ai.ovy or "-", "state",
+      ai and ai.state and hx(ai.state) or "-")
+  end
+  -- never press into an app that came up late: a Down would move the box cursor, an A would grab
+  local function no_app(where)
+    if not app_gone(watch()) then finish("FAIL", "pc_late_launch", where, trace()) end
+  end
   face_pc()
   local p0, b0 = party_state(), box_census()
   if not p0 or not b0 then finish("FAIL", "ram_unreadable", "party", tostring(p0), "boxes", tostring(b0)) end
@@ -676,24 +688,32 @@ local function pc_withdraw()
   local started = false
   for try = 1, 4 do
     tap("A", 3, 60)
-    say("pc interact try", try, "taskman", hex(taskman() or 0))
+    pressed("A interact")
     if (taskman() or 0) ~= 0 then started = true; break end
   end
   if not started then finish("FAIL", "pc_script_not_started", pos_s(loc())) end
-  -- the script before the sub-menu takes THREE A presses (NPCMsg 33 / 34 + MenuExec / 35, the same three the
-  -- deposit leg's mash lands): a COUNT cannot absorb a press swallowed by printing text like the mash does, so
-  -- they are spaced a_period frames apart (a menu waits forever) and the launch mode below is the check
-  for _ = 1, wd.script_a do tap("A", 3, wd.a_period) end
+  -- the script before the sub-menu takes route.pc.withdraw.script_a A presses (INFERRED: 3 if only WaitButton-like
+  -- prompts block, 4 if NPCMsg blocks -- the per-press log settles it live). A COUNT cannot absorb a press
+  -- swallowed by printing text like the deposit's mash does, so they are spaced a_period frames apart (a menu
+  -- waits forever) and the launch mode below is the check
+  for i = 1, wd.script_a do tap("A", 3, wd.a_period); pressed("A script " .. i) end
   -- 2. the sub-menu: Down x menu_down (DEPOSIT -> WITHDRAW POKEMON, scr_seq_0003.s:821-846) then A (-> ScrCmd_158 1,
   --    :851-856). The launch MODE is the RAM signal that it landed: state 0x51 = withdraw, 0x5B = the DEPOSIT row;
   --    nothing launched = the script was one press behind. Either way retry Down+A from the sub-menu (INFERRED
   --    that the script re-offers its sub-menu after the app closes, as the deposit leg's exit relies on).
-  local a, why
+  local a
+  local why = "pc_menu_not_attempted" -- never nil in finish(): set before the loop, overwritten per failure
   for attempt = 1, wd.menu_attempts do
-    if attempt > 1 then say("withdraw menu attempt", attempt, "after", why, trace()) end
-    for _ = 1, wd.menu_down do tap("Down", 3, 30) end
+    if attempt > 1 then
+      say("withdraw menu attempt", attempt, "after", why, trace())
+      frames(wd.a_period) -- a late launch from the last attempt shows up here, before any press
+    end
+    no_app("before the Down")
+    for _ = 1, wd.menu_down do tap("Down", 3, 30); pressed("Down") end
     shot("pc_menu_withdraw" .. attempt)
+    no_app("before the sub-menu A")
     tap("A", 3, 10)
+    pressed("A submenu")
     local launched = false
     for f = 1, wd.launch_wait do
       local x = watch()
@@ -717,6 +737,7 @@ local function pc_withdraw()
         for _ = 1, 12 do if tap("B", 2, 45, app_gone) then gone = true; break end end
         if not gone then finish("FAIL", "pc_not_closed", trace()) end
         frames(wd.a_period)
+        for i = 1, wd.recover_a do tap("A", 3, wd.a_period); pressed("A recover " .. i) end
       end
     end
   end

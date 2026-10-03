@@ -679,7 +679,10 @@ class FakeDS:
     AV, MO = 0x02304800, 0x02304900
     PARTY_OFF, PC_OFF = 0x90, 0x10000
 
-    def __init__(self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None):
+    def __init__(
+        self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None,
+        extra_a=0, recover_msg=False, launch_delay=0,
+    ):
         self.ram = bytearray(0x400000)
         self.R = ram_layout
         self.stand, self.new_pid, self.wake_first = stand, new_pid, wake_first
@@ -687,6 +690,11 @@ class FakeDS:
         # the SYNTH mon boxed at box 0 slot 0, and an optional commit fault (see commit_withdraw)
         self.withdraw, self.fault, self.mcur, self.app_mode = withdraw, fault, 0, 0
         self.swallowed, self.pre_a = False, 0  # swallow_a/swallow_down faults; A presses the script accepted
+        # the real step model is settled by the live per-press trace: extra_a = one more blocking message
+        # before the sub-menu (NPCMsg itself blocks), recover_msg = the script shows a message after the app
+        # closes, launch_delay = extra frames between the sub-menu A and the app coming up
+        self.order = (["msg0"] if extra_a else []) + ["msg1", "menu_pc", "msg2", "menu_sub"]
+        self.recover_msg, self.launch_delay = recover_msg, launch_delay
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
         self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
@@ -759,7 +767,7 @@ class FakeDS:
         if "Up" in held and self.dir != 0:
             self.dir = 0
         if "A" in new and (self.x, self.y) == tuple(self.stand) and self.dir == 0:
-            self.mode, self.sub, self.t = "script", "msg1", 0
+            self.mode, self.sub, self.t = "script", self.order[0], 0
             self.task(1)
         if "X" in new:
             self.mode, self.t, self.cell, self.panel = "startmenu", 0, 0, 0
@@ -770,15 +778,18 @@ class FakeDS:
         # ONE script model for the deposit and the withdraw leg: each NPCMsg / menu needs a button
         # (three A presses after the interact), then the sub-menu: Down moves its cursor (row 0 DEPOSIT,
         # row 1 WITHDRAW POKEMON, scr_seq_0003.s:821-846) and A launches the box app in that mode.
-        order = ["msg1", "menu_pc", "msg2", "menu_sub"]
+        order = self.order
         if self.t < 8:
+            return
+        if ("A" in new or "B" in new) and self.sub == "msg_back":  # the message after the app closed (recover_msg)
+            self.sub, self.t = "menu_sub", 0
             return
         if "Down" in new and self.sub == "menu_sub":
             if self.fault == "swallow_down" and not self.swallowed:
                 self.swallowed = True  # a press the menu did not take
             else:
                 self.mcur = min(self.mcur + 1, 4)
-        elif "A" in new and self.sub in order[:3]:
+        elif "A" in new and self.sub in order[:-1]:
             if self.fault == "swallow_a" and not self.swallowed:
                 self.swallowed = True  # a press while the text still prints
             else:
@@ -792,7 +803,7 @@ class FakeDS:
             self.task(0)
 
     def _launching(self, held, new):
-        if self.t >= 20:
+        if self.t >= 20 + self.launch_delay:
             self.w32(self.SUB0 + 4, self.MAN)
             self.w32(self.MAN + 0x0C, 14)
             self.w32(self.MAN + 0x1C, self.APPD)
@@ -831,7 +842,7 @@ class FakeDS:
             self.app_state(0xB3)
         elif st == 0xB3 and t >= 30:
             self.w32(self.SUB0 + 4, 0)
-            self.mode, self.sub, self.t, self.mcur = "script", "menu_sub", 0, 0
+            self.mode, self.sub, self.t, self.mcur = "script", "msg_back" if self.recover_msg else "menu_sub", 0, 0
         elif st == 0x5C and t >= 40:
             self.app_state(0x61)
         elif st == 0x61 and t >= 10 and "A" in new:
@@ -907,7 +918,7 @@ class FakeDS:
 
 def _run_lua_leg(
     tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE, library=False, withdraw=False,
-    fault=None, plan=None, reload=None,
+    fault=None, plan=None, reload=None, fake=None,
 ):
     lupa = pytest.importorskip("lupa")
     _, err = _pc_stop()
@@ -938,7 +949,7 @@ def _run_lua_leg(
     }
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party, withdraw=withdraw, fault=fault)
+    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party, withdraw=withdraw, fault=fault, **(fake or {}))
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     held: dict = {}
 
@@ -1497,7 +1508,9 @@ def test_withdraw_plan_carries_the_source_cited_steps_in_order():
     assert r["kind"] == "pc" and r["phase"] == "withdraw"
     assert [s["step"] for s in wd["steps"]] == WD_ORDER
     assert (wd["menu_down"], wd["box_cell"], wd["party_max"]) == (1, 0, 5)
-    assert wd["script_a"] == gr.WITHDRAW_SCRIPT_A == 3 and wd["menu_attempts"] >= 2  # F1: 3 A after the interact
+    # the press counts are PLAN parameters (a live finding is a one-line plan change); 3 vs 4 is INFERRED
+    assert wd["script_a"] == gr.WITHDRAW_SCRIPT_A == 3 and wd["menu_attempts"] >= 2
+    assert wd["recover_a"] == gr.WITHDRAW_RECOVER_A == 0
     assert all(s["source"] for s in wd["steps"]), "every input step cites its SOURCE"
     # the input steps in press order: A (interact), A (menu 1), Down, A (WITHDRAW), A (grab), B (exit)
     assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Down", "A", "A", "B"]
@@ -1534,7 +1547,7 @@ def test_withdraw_inputs_match_the_decomp():
     assert "mov r2, #0x57" in grab and "bl Party_GetCount" in grab and "cmp r0, #6" in grab
 
 
-def test_withdraw_script_a_count_is_the_npcmsg_count_of_the_decomp_menu_path():
+def test_withdraw_decomp_menu_path_has_three_npcmsg_and_no_waitbutton_the_a_count_stays_inferred():
     if not Path(PRET).exists():
         pytest.skip(f"pokeheartgold source absent: {PRET}")
     scr = (PRET / "files/fielddata/script/scr_seq/scr_seq_0003.s").read_text(encoding="utf-8")
@@ -1548,15 +1561,61 @@ def test_withdraw_script_a_count_is_the_npcmsg_count_of_the_decomp_menu_path():
     assert all("WaitButton" not in body(lb) for lb in path)
     npc = sum(body(lb).count("NPCMsg") for lb in path)
     # msg_0040_00033 booted up, 00034 Which PC (+ its MenuExec), 00035 Storage System accessed, then the
-    # _0B53 sub-menu MenuExec: the A presses before the sub-menu are the NPCMsg count
+    # _0B53 sub-menu MenuExec. This pins ONLY the script shape. Whether NPCMsg itself blocks for a press
+    # is not in the source we parse (asm/macros/script.inc: WaitButton is the A/B/dpad wait), so the A
+    # count is INFERRED: 3 if only WaitButton-like prompts block, 4 if NPCMsg blocks. WITHDRAW_SCRIPT_A is
+    # the default; the live per-press trace settles it.
     assert npc == 3 and (body("_0AD1").count("MenuExec"), body("_0B53").count("MenuExec")) == (1, 1)
-    assert npc == gr.WITHDRAW_SCRIPT_A
+    assert gr.WITHDRAW_SCRIPT_A in (npc, npc + 1)
 
 
-def test_deposit_and_withdraw_legs_take_the_same_script_a_count_on_the_one_fake(tmp_path, monkeypatch):
+def test_deposit_and_withdraw_legs_share_the_one_fake_script_model(tmp_path, monkeypatch):
+    # wiring only: both legs run on the fake's default (3 A) model, which is an assumption until the live trace
     _, dep, _ = _run_lua_leg(tmp_path, monkeypatch)
     _, wd, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
-    assert dep.pre_a == wd.pre_a == gr.WITHDRAW_SCRIPT_A  # the withdraw reuses the deposit preamble
+    assert dep.pre_a == wd.pre_a == gr.WITHDRAW_SCRIPT_A
+
+
+def test_the_plan_not_the_lua_decides_the_press_counts(tmp_path, monkeypatch):
+    # a script with one more blocking message (NPCMsg itself blocks): the 3-A default recovers through the
+    # retry, script_a=4 lands first time -- so a live finding is a one-line plan change
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"extra_a": 1})
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" in log
+    last, ds, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, fake={"extra_a": 1}, plan={"script_a": 4}
+    )
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" not in log and ds.pre_a == 4
+    # a wrong-mode launch (a swallowed Down) is left by B; a script that then shows a message needs recover_a
+    kw = {"withdraw": True, "party": 1, "fault": "swallow_down", "fake": {"recover_msg": True}}
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, plan={"menu_attempts": 2}, **kw)
+    assert "RESULT FAIL pc_not_launched" in last
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, plan={"menu_attempts": 2, "recover_a": 1}, **kw)
+    assert "RESULT PC_WITHDRAW" in last and "A recover 1" in log
+
+
+def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(tmp_path, monkeypatch):
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
+    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 6, rows
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Down", "A submenu"]
+    assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_the_withdraw_leg_never_presses_into_a_late_launch(tmp_path, monkeypatch):
+    # the app comes up after launch_wait: a Down/A then would move the box cursor / grab. It must stop first.
+    # the delay picks which guard sees the app: 950 = up before the retry's Down, 1030 = up during the Down
+    for delay, where in ((950, "before the Down"), (1030, "before the sub-menu A")):
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"launch_delay": delay})
+        assert f"RESULT FAIL pc_late_launch {where}" in last, last
+        assert ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1 and ds.r(ds.pc, 4) == 0xCAFEBABE  # untouched
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"launch_delay": 300})  # control
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_the_failure_reason_is_never_nil_even_with_no_menu_attempts(tmp_path, monkeypatch):
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_attempts": 0})
+    assert "RESULT FAIL pc_menu_not_attempted" in last and "nil" not in last
 
 
 def test_the_lua_withdraw_leg_recovers_from_a_swallowed_press_and_names_the_failure_without_retries(
@@ -1616,8 +1675,9 @@ def test_withdraw_oracle_accepts_the_real_shape_and_refuses_each_missing_claim()
         assert e.value.reason == "withdraw_obs", missing
 
 
-def _wd_witness(party, boxes):
-    return {"party_keys": party, "box_keys": [{"box": b, "slot": s, "key": k} for (b, s), k in boxes.items()]}
+def _wd_witness(party, boxes, cur_box=0):
+    return {"party_keys": party, "cur_box": cur_box,
+            "box_keys": [{"box": b, "slot": s, "key": k} for (b, s), k in boxes.items()]}
 
 
 WD_SYNTH = {"new_pid": 0xAAAA0001, "otid": 0xBBBB0002}
@@ -1635,6 +1695,7 @@ def test_withdraw_precondition_refuses_a_full_party_and_a_misplaced_clone():
         (_wd_witness(["P1"], {}), "withdraw_setup"),  # not boxed at all
         (_wd_witness(["P1", WD_KEY], {(0, 0): WD_KEY}), "withdraw_setup"),  # already in the party too
         (_wd_witness(["P1"], {(0, 0): WD_KEY, (3, 3): WD_KEY}), "withdraw_setup"),  # boxed twice
+        (_wd_witness(["P1"], {(0, 0): WD_KEY}, cur_box=1), "withdraw_setup"),  # F-F: box 1 is displayed, not 0
     ):
         with pytest.raises(gr.RouteError) as e:
             gr.withdraw_precondition(bad, WD_SYNTH)
@@ -1684,6 +1745,25 @@ def test_verify_saved_withdraw_demands_the_clone_appended_and_the_slot_empty(mon
         _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {}, _wd(mod_after="0x2"))
     assert e.value.reason == "withdraw_dirty_bit"
     assert not hasattr(gr, "assert_reload_party")  # F6: the reload half re-reads the SAME file; RAM is the evidence
+    # F-H: the saved box is judged at the clone's position in the INPUT witness, not the cell the Lua reported
+    for detail in (_wd(box="3/5", mod_after="0x8"), _wd(box="0/1")):
+        with pytest.raises(gr.RouteError) as e:
+            _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {}, detail)
+        assert e.value.reason == "saved_mismatch", detail
+    with pytest.raises(gr.RouteError) as e:  # the real slot 0/0 still holds a mon while the Lua says 3/5 is empty
+        _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {(0, 0): "OTHER:0001"}, _wd(box="3/5", mod_after="0x8"))
+    assert e.value.reason == "saved_mismatch"
+
+
+def test_save_witness_records_the_displayed_box(monkeypatch, tmp_path):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    battery = _FakeWdBattery(["P1"], {(0, 0): WD_KEY})
+    battery.bank, battery.counter, battery.fallback = 1, 7, False
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: battery)
+    assert gr.save_witness(f, "HG")["cur_box"] == 0
+    battery.pc_meta = lambda: {"box_count": 18, "cur_box": 4, "modified": 0}
+    assert gr.save_witness(f, "HG")["cur_box"] == 4
 
 
 def test_a_deposit_receipt_is_not_withdraw_proof_and_the_battery_op_is_checked(tmp_path, monkeypatch):
@@ -1754,8 +1834,11 @@ def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monk
     assert "RESULT PC_WITHDRAW party_before=5 party_after=6" in last
 
 
-def test_the_lua_reload_leg_wants_the_withdrawn_mon_in_the_party_and_out_of_the_box(tmp_path, monkeypatch):
-    # after a withdraw + SAVE + cold boot: party [x, clone], box empty
+def test_wiring_the_lua_reload_branch_selects_its_check_by_op_on_synthetic_ram(tmp_path, monkeypatch):
+    # WIRING test, not evidence: a real run never reaches the failing reload cases (the reload boot reads the
+    # battery the SAVE wrote, so the persisted state is whatever the run already proved). It only proves the
+    # Lua branch exists, is selected by route.op and fails by name.
+    # synthetic cold-boot state after a withdraw + SAVE: party [x, clone], box empty
     last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", party=2, pid=0xCAFEBABE)
     assert "RESULT RELOAD_OK party=2 clone_slot=2 boxed=0 pid=0xcafebabe" in last
     # the clone still boxed and the party unchanged (the withdraw never persisted) is a named failure

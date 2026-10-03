@@ -528,7 +528,12 @@ WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
 # has a WaitButton and the deposit leg's A-mash proves each one takes an A: THREE presses after the interact A.
 # A COUNT, unlike the deposit's mash, cannot absorb a press swallowed by still-printing text, so the presses are
 # spaced WITHDRAW_A_PERIOD frames apart and the Down+A is retried when the launch mode says it missed.
+# INFERRED: NPCMsg blocking unknown; 3 if only WaitButton-like prompts block, 4 if NPCMsg blocks; settled by
+# the live per-press trace (the Lua logs every press). Both counts are PLAN parameters: a finding is a one-line
+# change here. WITHDRAW_RECOVER_A = A presses after the wrong-mode B-exit before Down (the script may show a
+# message again when it re-offers the sub-menu, scr_seq_0003.s _0C01); 0 until the trace says otherwise.
 WITHDRAW_SCRIPT_A = 3
+WITHDRAW_RECOVER_A = 0
 WITHDRAW_A_PERIOD = 120
 WITHDRAW_MENU_ATTEMPTS = 3
 WITHDRAW_LAUNCH_WAIT = 900  # frames to wait for the app after the sub-menu A (a real launch is ~500)
@@ -758,6 +763,7 @@ def withdraw_plan() -> dict:
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,
+        "recover_a": WITHDRAW_RECOVER_A,
         "a_period": WITHDRAW_A_PERIOD,
         "menu_attempts": WITHDRAW_MENU_ATTEMPTS,
         "launch_wait": WITHDRAW_LAUNCH_WAIT,
@@ -1090,6 +1096,8 @@ def withdraw_precondition(before: dict, synth: dict) -> None:
             f"party {len(before['party_keys'])}/6: the full-party withdraw path is unverified",
         )
     home = [(b["box"], b["slot"]) for b in before["box_keys"] if b["key"] == key]
+    if before.get("cur_box") not in (0, None):  # the grid shows the DISPLAYED box: cell 0 must be box 0's
+        raise RouteError("withdraw_setup", f"the displayed box is {before['cur_box']}, not 0")
     if home != [(0, WITHDRAW_CELL)] or key in before["party_keys"]:
         raise RouteError(
             "withdraw_setup",
@@ -1132,14 +1140,22 @@ def verify_saved_withdraw(path, game: str, synth: dict, before: dict, detail: st
     ram = check_withdraw_ram(detail)
     save = parse_save(Path(path).read_bytes(), GAMES[game][2])
     key = mon_key(synth["new_pid"], synth["otid"])
+    # the source cell is the clone's position in the INPUT witness; the cell the Lua reported must agree
+    # with it, so a wrong report can never point the file check at an empty box
+    home = [(b["box"], b["slot"]) for b in before["box_keys"] if b["key"] == key]
+    if home != [(ram["box"], ram["slot"])]:
+        raise RouteError(
+            "saved_mismatch", f"the Lua reported cell {ram['box']}/{ram['slot']}, the input witness has {home}"
+        )
+    hb, hs = home[0]
     party = [mon["key"] for mon in save.party()]
     boxes = save.boxes()
     boxed = [(i, s) for i, box in enumerate(boxes) for s, mon in box["mons"].items() if mon["key"] == key]
-    if party != before["party_keys"] + [key] or boxed or ram["slot"] in boxes[ram["box"]]["mons"]:
+    if party != before["party_keys"] + [key] or boxed or hs in boxes[hb]["mons"]:
         raise RouteError(
             "saved_mismatch",
             f"saved file: party {party} (want {before['party_keys']} + [{key}]), clone boxed at {boxed}, "
-            f"slot {ram['box']}/{ram['slot']} occupied: {ram['slot'] in boxes[ram['box']]['mons']}",
+            f"slot {hb}/{hs} occupied: {hs in boxes[hb]['mons']}",
         )
     meta = save.pc_meta()
     return {"op": "withdraw", "party": len(party), "clone_key": key, "party_slot": len(party) - 1,
@@ -1154,7 +1170,8 @@ def save_witness(path, game) -> dict:
     boxes = [{"box": box, "slot": slot, "key": mon["key"]}
              for box, data in enumerate(decoded.boxes()) for slot, mon in data["mons"].items()]
     return {"bank": decoded.bank, "counter": decoded.counter, "party_keys": party, "box_keys": boxes,
-            "keys": sorted([*party, *(mon["key"] for mon in boxes)]), "fallback": decoded.fallback}
+            "keys": sorted([*party, *(mon["key"] for mon in boxes)]), "fallback": decoded.fallback,
+            "cur_box": decoded.pc_meta().get("cur_box")}
 
 
 def assert_save_progress(before, saved, reloaded):
