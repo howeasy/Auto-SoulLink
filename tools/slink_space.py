@@ -761,6 +761,11 @@ def apply_plan(plan_file, repo=None, root=None, locations=None, lane_age=DEFAULT
     if _strip(saved["params"]) != _strip(expected):
         raise PlanChanged("plan params (repo/root/locations/thresholds) differ from this "
                           "command's; re-run the dry run with the same flags. Nothing was done.")
+    with _apply_lock(expected["root"]):
+        return _apply_fresh(saved, expected)
+
+
+def _apply_fresh(saved, expected) -> list[str]:
     fresh = build_plan(saved["kind"], **expected)
     if _strip(fresh["actions"]) != _strip(saved["actions"]):
         old = {json.dumps(a, sort_keys=True) for a in saved["actions"]}
@@ -881,22 +886,77 @@ def _relink(dst, links):
 def _move_worktree_readd(repo, a):
     if a["unlock"]:
         git(repo, "worktree", "unlock", a["src"])
+    src, dst = a["src"], a["dst"]
     # Not `git worktree move`: across volumes (C: -> F:) it fails with "Improper link".
-    # Detached add, drop the old one, then take the branch over in the new one.
-    git(repo, "worktree", "add", "--detach", a["dst"], a["head"])
-    _relink(a["dst"], a["links"])
-    if git(a["dst"], "rev-parse", "HEAD").strip() != a["head"] or _status(a["dst"]):
-        raise RuntimeError(f"{a['dst']}: new worktree does not match {a['src']}; old kept")
-    _remove_worktree(repo, {"path": a["src"], "unlock": False, "branch": None,
-                            "admin": _admin_dir(a["src"])})
-    if os.path.lexists(a["src"]):
-        raise RuntimeError(f"{a['src']}: old worktree dir still present after removal")
-    if a["branch"]:
-        git(a["dst"], "checkout", "-q", a["branch"])  # same commit: no file changes
-    current = git(a["dst"], "branch", "--show-current").strip() or None
-    if (git(a["dst"], "rev-parse", "HEAD").strip() != a["head"] or _status(a["dst"])
-            or current != a["branch"]):
-        raise RuntimeError(f"{a['dst']}: after the move HEAD/status/branch do not match the plan")
+    # Detached add, verify, drop the old one, then take the branch over in the new one.
+    # The source is not touched until the destination verifies; any failure after the add
+    # leaves things as they were.
+    git(repo, "worktree", "add", "--detach", dst, a["head"])
+    try:
+        _relink(dst, a["links"])
+        if git(dst, "rev-parse", "HEAD").strip() != a["head"] or _status(dst):
+            raise RuntimeError(f"{dst}: new worktree does not match {src}; old kept")
+    except BaseException:
+        _drop_new_worktree(dst)
+        raise
+    try:
+        _remove_worktree(repo, {"path": src, "unlock": False, "branch": None,
+                                "admin": _admin_dir(src)})
+    except BaseException:
+        if _registration(repo, src):  # refused before touching it: just undo the add
+            _drop_new_worktree(dst)
+        raise
+    try:
+        if os.path.lexists(src):
+            raise RuntimeError(f"{src}: old worktree dir still present after removal")
+        if a["branch"]:
+            git(dst, "checkout", "-q", a["branch"])  # same commit: no file changes
+        current = git(dst, "branch", "--show-current").strip() or None
+        if git(dst, "rev-parse", "HEAD").strip() != a["head"] or _status(dst) \
+                or current != a["branch"]:
+            raise RuntimeError(f"{dst}: after the move HEAD/status/branch do not match the plan")
+    except BaseException:
+        # dst is a verified clean copy of HEAD: drop it and put the worktree back at src.
+        _drop_new_worktree(dst)
+        if not os.path.lexists(src):
+            target = [src, a["branch"]] if a["branch"] else ["--detach", src, a["head"]]
+            git(repo, "worktree", "add", *target)
+            _relink(src, a["links"])
+        raise
+
+
+def _drop_new_worktree(dst) -> None:
+    """Undo a `worktree add` this run just made (its checkout and its admin dir)."""
+    admin = _admin_dir(dst)
+    if os.path.lexists(dst):
+        _rmtree(dst)
+    if admin and os.path.isdir(admin):
+        _rmtree(admin)
+
+
+@contextlib.contextmanager
+def _apply_lock(root):
+    """One --apply at a time per work root.  A lock left by a dead pid is taken over."""
+    lock = Path(root) / "tmp" / "slink-space-apply.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            text = lock.read_text(encoding="utf-8", errors="replace").strip()
+            if not text.isdigit() or pid_alive(int(text)):
+                raise PlanChanged(f"another --apply holds {lock} (pid {text or '?'}); "
+                                  "delete it only if that run is gone") from None
+            lock.unlink(missing_ok=True)
+    else:
+        raise PlanChanged(f"could not take {lock}")
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
 
 
 def _move_worktree_copy(repo, a):

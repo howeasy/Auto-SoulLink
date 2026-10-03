@@ -639,6 +639,64 @@ def test_c_drive_content_is_moved_not_deleted(W, monkeypatch):
     assert (lane / "s").exists() and wt.exists() and not pyt.exists()
 
 
+def _readd_setup(W, name):
+    p = add_wt(W, name, commits=1, old=False)
+    head = _git(p, "rev-parse", "HEAD").strip()
+    m = plan(W, "move")
+    assert next(a for a in m["actions"] if ss._norm(a["src"]) == ss._norm(p))["op"] == \
+        "move-worktree-readd"
+    return p, head, m, W.root / "wt" / name
+
+
+def _assert_rolled_back(W, p, head, new, name):
+    assert _git(p, "rev-parse", "HEAD").strip() == head
+    assert _git(p, "branch", "--show-current").strip() == name
+    assert _git(p, "status", "--porcelain") == ""
+    assert not new.exists()
+    listed = {ss._norm(w["path"]) for w in ss.list_worktrees(W.repo)}
+    assert ss._norm(p) in listed and ss._norm(new) not in listed
+
+
+def test_readd_rolls_back_when_relink_fails(W, monkeypatch):
+    p, head, m, new = _readd_setup(W, "rb1")
+
+    def boom(*_a):
+        raise OSError("relink failed")
+    monkeypatch.setattr(ss, "_relink", boom)
+    with pytest.raises(OSError):
+        apply(W, m)
+    _assert_rolled_back(W, p, head, new, "rb1")
+
+
+def test_readd_rolls_back_when_branch_checkout_fails(W, monkeypatch):
+    p, head, m, new = _readd_setup(W, "rb2")
+    real = ss.git
+
+    def git(cwd, *args):
+        if args[:1] == ("checkout",):
+            raise RuntimeError("checkout failed")
+        return real(cwd, *args)
+    monkeypatch.setattr(ss, "git", git)
+    with pytest.raises(RuntimeError, match="checkout failed"):
+        apply(W, m)
+    _assert_rolled_back(W, p, head, new, "rb2")
+
+
+def test_apply_takes_a_mutex(W):
+    lane = W.c / "slink" / "old"
+    lane.mkdir()
+    _age(lane)
+    lock = W.root / "tmp" / "slink-space-apply.lock"
+    p = plan(W)
+    lock.write_text(str(os.getpid()))
+    with pytest.raises(ss.PlanChanged, match="another"):
+        apply(W, p)
+    assert lane.exists()
+    lock.write_text(str(_dead_pid()))  # a crashed run's lock is taken over
+    apply(W, p)
+    assert not lane.exists() and not lock.exists()
+
+
 def test_move_refuses_live_lock_and_in_use(W, real_processes):
     locked = add_wt(W, "locked", commits=1)
     _git(W.repo, "worktree", "lock", "--reason", f"agent (pid {os.getpid()})", str(locked))
