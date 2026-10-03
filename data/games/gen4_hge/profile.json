@@ -3237,7 +3237,7 @@
             "balls_pocket_off": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/bag.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/bag.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
           },
           "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
-          "note": "27 item ids live in the balls pocket and 26 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "note": "27 item ids carry POCKET_BALLS but the pocket has 26 slots; any id can take any slot, so at most 26 distinct stacks coexist and no id is excluded (has_pokeballs scans every slot, so the surplus changes nothing)",
           "pocket_layout": {
             "TMsHMs": {
               "count": 101,
