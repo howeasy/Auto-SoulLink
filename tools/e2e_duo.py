@@ -6610,6 +6610,7 @@ class DuoRun:
                 if throws and throws[-1][0] == "timeout" and caught == 0:
                     tail = results[inst].rsplit(throw_lines[-1], 1)[1]
                     captures = []
+                    capture_prefix = ""
                     for line in tail.splitlines():
                         if line.startswith("TX "):
                             try:
@@ -6618,7 +6619,10 @@ class DuoRun:
                                 continue
                             if isinstance(event, dict) and event.get("event") == "capture":
                                 captures.append(event)
-                    growth = re.findall(r"(?m)^PARTY_COUNT (\d+) -> (\d+) @\d+$", tail)
+                                capture_prefix = tail.split(line, 1)[0]
+                    # Later party routing can remove/reinsert a captured mon; count
+                    # growth only up to the capture TX, not across the whole scenario.
+                    growth = re.findall(r"(?m)^PARTY_COUNT (\d+) -> (\d+) @\d+$", capture_prefix)
                     final_caught = (len(captures) == 1
                                     and captures[0].get("key") == key
                                     and captures[0].get("player") == inst

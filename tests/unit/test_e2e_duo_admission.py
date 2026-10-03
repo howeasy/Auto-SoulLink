@@ -2359,7 +2359,7 @@ def test_the_relaxation_leaves_every_other_gate_of_the_multi_hello_shape_in_plac
     assert any("OT ID changed" in p for p in problems(_after(base, *mix), ot="9999"))
 
 @pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
-@pytest.mark.parametrize("case", ["timeout_catch", "miss_then_timeout", "timeout_then_caught", "no_capture", "wrong_key", "duplicate_capture", "saved_disagrees"])
+@pytest.mark.parametrize("case", ["timeout_catch", "miss_then_timeout", "timeout_then_caught", "post_catch_reorder", "no_capture", "wrong_key", "duplicate_capture", "saved_disagrees"])
 def test_synth_timeout_throw_requires_later_capture_and_durable_ball_spend(tmp_path, scenario, case):
     run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
     proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
@@ -2387,13 +2387,15 @@ def test_synth_timeout_throw_requires_later_capture_and_durable_ball_spend(tmp_p
         capture *= 2
     observed = (throws + "PARTY_COUNT 1 -> 2 @4986\n" + capture
                 + f"[hunt] after battle: outcome=battle_over result=2 party=2 balls={20-spent} -> caught\n")
+    if case == "post_catch_reorder":
+        observed += "CAUGHT " + run._link_keys["a"] + "\nPARTY_COUNT 2 -> 1 @5615\nPARTY_COUNT 1 -> 2 @5616\n"
     a_text = a_text.replace("[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19\n", observed)
     path, sram, _rom = paths["a"]
     sram[codec._BAG_COUNT + 2] = 20 - spent + (case == "saved_disagrees")
     _seal_main(sram)
     path.write_bytes(sram)
     results = {"a": a_text, "b": proper}
-    if case in ("timeout_catch", "miss_then_timeout", "timeout_then_caught"):
+    if case in ("timeout_catch", "miss_then_timeout", "timeout_then_caught", "post_catch_reorder"):
         run.assert_linked_faint_saved(results, active=True)
     else:
         with pytest.raises(RuntimeError, match="SYNTH catch"):
