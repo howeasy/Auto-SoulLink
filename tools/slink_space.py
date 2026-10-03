@@ -826,7 +826,7 @@ def _digest(plan) -> str:
 
 
 def apply_plan(plan_file, repo=None, root=None, locations=None, lane_age=DEFAULT_LANE_AGE,
-               tmp_age=DEFAULT_TMP_AGE, kind=None) -> list[str]:
+               tmp_age=DEFAULT_TMP_AGE, kind=None, on_done=None) -> list[str]:
     """Apply a dry-run plan.  Repo, root, locations and thresholds come from the caller
     (the CLI: always the default locations), never from the file; the file must match."""
     saved = json.loads(Path(plan_file).read_text(encoding="utf-8"))
@@ -839,10 +839,10 @@ def apply_plan(plan_file, repo=None, root=None, locations=None, lane_age=DEFAULT
         raise PlanChanged("plan params (repo/root/locations/thresholds) differ from this "
                           "command's; re-run the dry run with the same flags. Nothing was done.")
     with _apply_lock(expected["root"]):
-        return _apply_fresh(saved, expected)
+        return _apply_fresh(saved, expected, on_done or (lambda _line: None))
 
 
-def _apply_fresh(saved, expected) -> list[str]:
+def _apply_fresh(saved, expected, on_done) -> list[str]:
     fresh = build_plan(saved["kind"], **expected)
     if _strip(fresh["actions"]) != _strip(saved["actions"]):
         old = {json.dumps(a, sort_keys=True) for a in saved["actions"]}
@@ -855,10 +855,17 @@ def _apply_fresh(saved, expected) -> list[str]:
     done = []
     for a in fresh["actions"]:
         target = a.get("path") or a.get("src")
-        if _norm(target) not in allowed:  # belt and braces: plan == fresh scan already
-            raise PlanChanged(f"refusing {target}: outside the scanned set")
-        _EXEC[a["op"]](repo, a)
-        done.append(f"{a['op']} {target}" + (f" -> {a['dst']}" if "dst" in a else ""))
+        line = f"{a['op']} {target}" + (f" -> {a['dst']}" if "dst" in a else "")
+        try:
+            if _norm(target) not in allowed:  # belt and braces: plan == fresh scan already
+                raise PlanChanged(f"refusing {target}: outside the scanned set")
+            _EXEC[a["op"]](repo, a)
+        except BaseException as e:
+            e.add_note(f"failed at: {line}")
+            e.add_note(f"already done ({len(done)}):" + "".join(f"\n  {d}" for d in done))
+            raise
+        done.append(line)
+        on_done(line)
     return done
 
 
@@ -1212,11 +1219,15 @@ def main(argv=None) -> int:
     plan_file = Path(args.plan or work_root("tmp") / f"slink-space-{kind}-plan.json")
     if args.apply:
         try:
-            for line in apply_plan(plan_file, kind=kind, **kw):
-                print(f"done: {line}")
+            apply_plan(plan_file, kind=kind, **kw,
+                       on_done=lambda line: print(f"done: {line}", flush=True))
         except PlanChanged as e:
             print(f"ABORTED: {e}", file=sys.stderr)
             return 2
+        except Exception as e:
+            notes = "\n".join(getattr(e, "__notes__", []))
+            print(f"FAILED: {type(e).__name__}: {e}\n{notes}", file=sys.stderr)
+            return 1
         return 0
     plan = build_plan(kind, **kw)
     plan_file.parent.mkdir(parents=True, exist_ok=True)

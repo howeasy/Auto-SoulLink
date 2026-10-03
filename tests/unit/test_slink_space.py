@@ -807,6 +807,30 @@ def test_readd_rolls_back_when_branch_checkout_fails(W, monkeypatch):
     _assert_rolled_back(W, p, head, new, "rb2")
 
 
+def test_apply_reports_each_action_and_what_ran_before_a_failure(W, monkeypatch):
+    lanes = []
+    for name in ("l1", "l2"):
+        lane = W.c / "slink" / name
+        lane.mkdir()
+        _age(lane)
+        lanes.append(lane)
+    p = plan(W)
+    real, calls = ss._EXEC["remove-dir"], []
+
+    def second_fails(repo, a):
+        calls.append(a["path"])
+        if len(calls) == 2:
+            raise OSError("disk went away")
+        real(repo, a)
+    monkeypatch.setitem(ss._EXEC, "remove-dir", second_fails)
+    seen = []
+    with pytest.raises(OSError) as ei:
+        apply(W, p, on_done=seen.append)
+    assert len(seen) == 1 and calls[0] in seen[0]
+    notes = "\n".join(getattr(ei.value, "__notes__", []))
+    assert "already done (1)" in notes and calls[0] in notes and calls[1] in notes
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows process API")
 def test_pid_alive_assumes_alive_when_the_exit_code_is_unreadable(monkeypatch):
     import ctypes
