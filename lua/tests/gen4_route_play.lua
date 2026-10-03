@@ -387,14 +387,18 @@ end
 local function box_census()
   local base = array_addr(RAM.id_pc)
   if not base then return nil end
-  local c, total, where = RAM.pc, 0, {}
+  local c, total, where, dups = RAM.pc, 0, {}, 0
   for b = 0, c.boxes - 1 do
     for sl = 0, c.per_box - 1 do
       local pid = r32(base + c.box_base + b * c.box_stride + sl * c.mon_stride)
-      if pid ~= 0 then total = total + 1; where[pid] = {b, sl} end
+      if pid ~= 0 then
+        total = total + 1
+        if where[pid] then dups = dups + 1 end -- `where` is keyed by PID: a repeated PID would hide a slot
+        where[pid] = {b, sl}
+      end
     end
   end
-  return {total = total, where = where,
+  return {total = total, where = where, dups = dups,
     cur = c.cur_box_off ~= J.null and r32(base + c.cur_box_off) or nil,
     mod = c.mod_off ~= J.null and r32(base + c.mod_off) or nil}
 end
@@ -628,7 +632,7 @@ end
 -- the deposit receipts); the asm calls it sysdata+0 (:11368-11385) -- the live trace in the log settles it.
 -- INFERRED, so polled/logged and never blind: the script-menu settle windows (no RAM signal for a script menu), the
 -- 0x57 -> 0x51 edge, and B at 0x51 reaching the exit YesNo. Precondition: a party with room (the 6/6 path is unverified).
-local ST_GRID, MENU_SETTLE = 0x51, 240
+local ST_GRID = 0x51
 local function box_slot_pid(box, slot)
   local base = array_addr(RAM.id_pc)
   local c = RAM.pc
@@ -640,7 +644,7 @@ end
 local function withdrawn_ok(p0, b0, pid, home, label)
   local p1, b1 = party_state(), box_census()
   local ok = p1 ~= nil and b1 ~= nil and p1.n == p0.n + 1 and p1.pids[p1.n] == pid and b1.total == b0.total - 1
-    and not b1.where[pid] and box_slot_pid(home[1], home[2]) == 0
+    and not b1.where[pid] and b1.dups == 0 and box_slot_pid(home[1], home[2]) == 0
   for i = 1, p0.n do if not (p1 and p1.pids[i] == p0.pids[i]) then ok = false end end
   say(label, "party", p1 and p1.n, "pids", p1 and table.concat(p1.pids, ","), "boxed", b1 and b1.total,
     "slot pid", hx(box_slot_pid(home[1], home[2])), "curBox", tostring(b1 and b1.cur), "modified", hx(b1 and b1.mod))
@@ -655,11 +659,17 @@ local function pc_withdraw()
   local home = b0.where[pid]
   say("before: party", p0.n, "pids", table.concat(p0.pids, ","), "boxed", b0.total, "curBox", tostring(b0.cur),
     "modified", hx(b0.mod), "synth pid", pid)
+  if b0.dups > 0 then finish("FAIL", "setup_duplicate_pid", "boxed twice:", b0.dups) end -- `where` is keyed by PID
   if p0.n > wd.party_max then finish("FAIL", "withdraw_party_full", "party", p0.n) end
   if not home or home[1] ~= (b0.cur or 0) or home[2] ~= wd.box_cell then
     finish("FAIL", "setup_not_in_cell", "clone at", home and (home[1] .. "/" .. home[2]) or "none", "curBox", tostring(b0.cur))
   end
-  for _, v in ipairs(p0.pids) do if v == pid then finish("FAIL", "setup_clone_in_party") end end
+  for _, v in ipairs(p0.pids) do
+    if v == pid then finish("FAIL", "setup_clone_in_party") end
+    if b0.where[v] then finish("FAIL", "setup_duplicate_pid", "party pid also boxed", hx(v)) end
+  end
+  -- the dirty mask is judged as a CLEAR -> SET edge on the source box's bit (a bit already set proves nothing)
+  if b0.mod ~= nil and (b0.mod & (1 << home[1])) ~= 0 then finish("FAIL", "setup_dirty_bit_already_set", hx(b0.mod), "box", home[1]) end
   shot("pc_facing")
 
   -- 1. interact (A on the PC tile), then the two script menus by BUTTONS ONLY
@@ -670,30 +680,51 @@ local function pc_withdraw()
     if (taskman() or 0) ~= 0 then started = true; break end
   end
   if not started then finish("FAIL", "pc_script_not_started", pos_s(loc())) end
-  frames(MENU_SETTLE)           -- INFERRED: "Which PC?" is up (a menu waits forever; early A would only speed the text)
-  tap("A", 3, MENU_SETTLE)      -- first row = the storage PC (scr_seq_0003.s:776-812)
-  for _ = 1, wd.menu_down do tap("Down", 3, 30) end -- DEPOSIT -> WITHDRAW POKEMON (scr_seq_0003.s:821-846)
-  shot("pc_menu_withdraw")
-  tap("A", 3, 10)               -- WITHDRAW POKEMON -> ScrCmd_158 1 (:851-856)
-  local launched = false
-  for f = 1, 3600 do
-    local a = watch()
-    if a and a.ovy == APP_OVY then launched = true; break end
-    emu.frameadvance()
-    if f % 600 == 0 then say("pc launch f+" .. f, "taskman", hex(taskman() or 0)); shot("pclaunch" .. f) end
+  -- the script before the sub-menu takes THREE A presses (NPCMsg 33 / 34 + MenuExec / 35, the same three the
+  -- deposit leg's mash lands): a COUNT cannot absorb a press swallowed by printing text like the mash does, so
+  -- they are spaced a_period frames apart (a menu waits forever) and the launch mode below is the check
+  for _ = 1, wd.script_a do tap("A", 3, wd.a_period) end
+  -- 2. the sub-menu: Down x menu_down (DEPOSIT -> WITHDRAW POKEMON, scr_seq_0003.s:821-846) then A (-> ScrCmd_158 1,
+  --    :851-856). The launch MODE is the RAM signal that it landed: state 0x51 = withdraw, 0x5B = the DEPOSIT row;
+  --    nothing launched = the script was one press behind. Either way retry Down+A from the sub-menu (INFERRED
+  --    that the script re-offers its sub-menu after the app closes, as the deposit leg's exit relies on).
+  local a, why
+  for attempt = 1, wd.menu_attempts do
+    if attempt > 1 then say("withdraw menu attempt", attempt, "after", why, trace()) end
+    for _ = 1, wd.menu_down do tap("Down", 3, 30) end
+    shot("pc_menu_withdraw" .. attempt)
+    tap("A", 3, 10)
+    local launched = false
+    for f = 1, wd.launch_wait do
+      local x = watch()
+      if x and x.ovy == APP_OVY then launched = true; break end
+      emu.frameadvance()
+    end
+    if not launched then
+      why = "pc_not_launched"
+    else
+      say("PC app up at frame", emu.framecount(), "attempt", attempt)
+      -- 3. the box grid: mode 1 = state 0x51, cursor on cell 0
+      if not frames(1200, app_input_state) then finish("FAIL", "pc_input_state_not_reached", trace()) end
+      frames(30)
+      a = watch()
+      if a and a.state == ST_GRID then break end
+      why = "pc_wrong_mode"
+      say("launched in the wrong mode: state", hx(a and a.state))
+      a = nil
+      if attempt < wd.menu_attempts then -- leave the app exactly as the deposit leg does, then the sub-menu is back
+        local gone = false
+        for _ = 1, 12 do if tap("B", 2, 45, app_gone) then gone = true; break end end
+        if not gone then finish("FAIL", "pc_not_closed", trace()) end
+        frames(wd.a_period)
+      end
+    end
   end
-  if not launched then finish("FAIL", "pc_not_launched", "taskman", hex(taskman() or 0), pos_s(loc())) end
-  say("PC app up at frame", emu.framecount())
-
-  -- 2. the box grid: mode 1 = state 0x51, cursor on cell 0 (a 0x5B here is mode 0 = the DEPOSIT row was taken)
-  if not frames(1200, app_input_state) then finish("FAIL", "pc_input_state_not_reached", trace()) end
-  frames(30)
-  local a = watch()
-  if not (a and a.state == ST_GRID) then finish("FAIL", "pc_wrong_mode", "state", hx(a and a.state), trace()) end
+  if not a then finish("FAIL", why, "taskman", hex(taskman() or 0), pos_s(loc()), trace()) end
   if a.sel ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "sel", hx(a.sel), "want", wd.box_cell, trace()) end
   shot("pc_grid")
 
-  -- 3. A = grab + one prompt; state 0x57 commits with no further input: poll the party count
+  -- 4. A = grab + one prompt; state 0x57 commits with no further input: poll the party count
   tap("A", 2, 6)
   local committed = false
   for f = 1, 1500 do
@@ -707,7 +738,7 @@ local function pc_withdraw()
   if not frames(600, in_state(ST_GRID)) then say("INFERRED edge 0x57 -> 0x51 not seen in 600 frames", trace()) end
   frames(30)
 
-  -- 4. verify by RAM: +1 party (appended, the rest unmoved), box slot empty, dirty MASK has the source box's bit
+  -- 5. verify by RAM: +1 party (appended, the rest unmoved), box slot empty, dirty MASK has the source box's bit
   local ok, p1, b1 = withdrawn_ok(p0, b0, pid, home, "after:")
   if not ok then finish("FAIL", "withdraw_state_wrong", trace()) end
   local mod_after = b1.mod
@@ -716,7 +747,7 @@ local function pc_withdraw()
   end
   save_state("withdrawn"); shot("withdrawn")
 
-  -- 5. leave the PC exactly as the deposit leg does (B until the overlay is gone; B backs out of the script menus)
+  -- 6. leave the PC exactly as the deposit leg does (B until the overlay is gone; B backs out of the script menus)
   local gone = false
   for _ = 1, 12 do
     if tap("B", 2, 45, app_gone) then gone = true; break end
@@ -731,7 +762,7 @@ local function pc_withdraw()
   if not idle then finish("FAIL", "pc_script_not_closed", "taskman", hex(taskman() or 0)) end
   shot("pc_off")
 
-  -- 6. native SAVE through the pack's persistence legs, then the save driver must be idle again
+  -- 7. native SAVE through the pack's persistence legs, then the save driver must be idle again
   for _, name in ipairs({"open_start_menu", "start_menu_cursor_to_save", "start_menu_select_save",
       "save_confirm_until_saved", "close_start_menu"}) do
     local used = play_leg(route.persistence[name], name)

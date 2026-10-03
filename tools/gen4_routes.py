@@ -523,12 +523,23 @@ PC_BEHAVIOR = 0x83
 WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
 WITHDRAW_MENU_DOWN = 1  # PC top menu rows: DEPOSIT 0, WITHDRAW POKEMON 1 (scr_seq_0003.s:821-846)
 WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
+# The script before the sub-menu (scr_seq_0003.s scr_seq_0003_010 -> _0A2E -> _0B01 -> _0B53): NPCMsg 00033
+# "booted up", 00034 "Which PC?" + MenuExec, 00035 "Storage System accessed", then the sub-menu MenuExec. None
+# has a WaitButton and the deposit leg's A-mash proves each one takes an A: THREE presses after the interact A.
+# A COUNT, unlike the deposit's mash, cannot absorb a press swallowed by still-printing text, so the presses are
+# spaced WITHDRAW_A_PERIOD frames apart and the Down+A is retried when the launch mode says it missed.
+WITHDRAW_SCRIPT_A = 3
+WITHDRAW_A_PERIOD = 120
+WITHDRAW_MENU_ATTEMPTS = 3
+WITHDRAW_LAUNCH_WAIT = 900  # frames to wait for the app after the sub-menu A (a real launch is ~500)
 WITHDRAW_STEPS = (
     {"step": "interact", "press": "A", "inferred": False,
      "source": "GetInteractedMetatileScript -> std_pokecenter_pc, scr_seq_0003.s:754-762 (scr_seq_0003_010)"},
-    {"step": "which_pc", "press": "A", "inferred": True,
-     "source": "scr_seq_0003.s:776-812 (_0A2E MenuExec, item 0 = the storage PC -> _0B01); menu readiness has "
-               "no RAM signal, so the Lua waits a settle window first (INFERRED timing)"},
+    {"step": "script_a", "press": "A", "count": WITHDRAW_SCRIPT_A, "inferred": True,
+     "source": "scr_seq_0003.s:754-812,814-846: NPCMsg 33 / NPCMsg 34 + MenuExec (item 0 = the storage PC) / "
+               "NPCMsg 35, then the _0B53 sub-menu: three A (the deposit leg's mash takes the same three); "
+               "script-menu readiness has no RAM signal, so presses are spaced and the launch mode is checked "
+               "(INFERRED timing)"},
     {"step": "menu_down", "press": "Down", "inferred": False,
      "source": "scr_seq_0003.s:821-833 (_0B17 rows DEPOSIT 0 / WITHDRAW POKEMON 1), cursor starts on row 0"},
     {"step": "menu_withdraw", "press": "A", "inferred": False,
@@ -746,6 +757,10 @@ def withdraw_plan() -> dict:
         "menu_down": WITHDRAW_MENU_DOWN,
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
+        "script_a": WITHDRAW_SCRIPT_A,
+        "a_period": WITHDRAW_A_PERIOD,
+        "menu_attempts": WITHDRAW_MENU_ATTEMPTS,
+        "launch_wait": WITHDRAW_LAUNCH_WAIT,
         "steps": [dict(s) for s in WITHDRAW_STEPS],
     }
 
@@ -1085,13 +1100,14 @@ def withdraw_precondition(before: dict, synth: dict) -> None:
 def check_withdraw_ram(detail: str) -> dict:
     """Judge the Lua leg's own RAM observation (the `RESULT PC_WITHDRAW` detail, key=value tokens)
     host side: the party grew by one, the source slot is empty, and the box DIRTY MASK has the source
-    box's bit (a mask, so bit 0 for box 0 -- a non-zero word with another bit is a refusal). A
-    `nil` mask is the pack saying it records no dirty word (hge), never a missing token."""
+    box's bit CLEAR before the leg and SET after it (a mask, so bit 0 for box 0 -- a non-zero word with
+    another bit is a refusal, and a bit that was already set proves nothing). A `nil` mask is the pack
+    saying it records no dirty word (hge), never a missing token."""
     obs = dict(t.split("=", 1) for t in detail.split() if "=" in t)
     try:
         before, after = int(obs["party_before"]), int(obs["party_after"])
         box, slot = (int(v) for v in obs["box"].split("/"))
-        mod, saved = obs["mod_after"], obs["mod_saved"]
+        mod0, mod, saved = obs["mod_before"], obs["mod_after"], obs["mod_saved"]
         slot_after = obs["slot_after"]
     except (KeyError, ValueError) as exc:
         raise RouteError("withdraw_obs", f"unreadable withdraw observation {detail!r}: {exc!r}") from exc
@@ -1099,12 +1115,14 @@ def check_withdraw_ram(detail: str) -> dict:
         raise RouteError("withdraw_party_unchanged", f"party {before} -> {after}, want +1")
     if slot_after != "empty":
         raise RouteError("withdraw_slot_occupied", f"box {box} slot {slot} reads {slot_after}")
+    if mod0 != "nil" and int(mod0, 16) & (1 << box):
+        raise RouteError("withdraw_dirty_bit", f"dirty mask {mod0} already had bit {box} before the withdraw")
     if mod != "nil" and not int(mod, 16) & (1 << box):
         raise RouteError("withdraw_dirty_bit", f"dirty mask {mod} lacks bit {box} (box {box})")
     if saved != "nil" and int(saved, 16) != 0:
         raise RouteError("withdraw_dirty_not_cleared", f"dirty mask {saved} after the native SAVE")
-    return {"party_before": before, "party_after": after, "box": box, "slot": slot, "mod_after": mod,
-            "mod_saved": saved}
+    return {"party_before": before, "party_after": after, "box": box, "slot": slot, "mod_before": mod0,
+            "mod_after": mod, "mod_saved": saved}
 
 
 def verify_saved_withdraw(path, game: str, synth: dict, before: dict, detail: str) -> dict:
@@ -1129,11 +1147,6 @@ def verify_saved_withdraw(path, game: str, synth: dict, before: dict, detail: st
             "battery_modified": meta.get("modified"), "ram": ram}
 
 
-def assert_reload_party(saved: dict, reloaded: dict) -> None:
-    if saved["party_keys"] != reloaded["party_keys"]:
-        raise RouteError("reload_keys", "cold reload changed the party (order or members)")
-
-
 def save_witness(path, game) -> dict:
     """Independent FILE oracle: newest coherent bank, wrap-aware counter, exact mon keys."""
     decoded = parse_save(Path(path).read_bytes(), GAMES[game][2])
@@ -1145,6 +1158,8 @@ def save_witness(path, game) -> dict:
 
 
 def assert_save_progress(before, saved, reloaded):
+    # saved vs before is the real native-SAVE evidence; the reloaded clauses compare the battery file with
+    # itself (the reload boot leaves it untouched) and only guard against a corrupted record.
     if counter_newer(saved["counter"], before["counter"]) <= 0:
         raise RouteError("save_counter", "native SAVE did not advance the coherent save counter")
     if counter_newer(reloaded["counter"], saved["counter"]) < 0:
@@ -1213,12 +1228,14 @@ def receipt_binding(script=None, extra_modules=(), kind: str = "route", title: s
     return binding
 
 
-def verify_receipt(path, kind: str, *, head: str | None = None) -> tuple[str, str]:
+def verify_receipt(path, kind: str, *, head: str | None = None, want: str | None = None) -> tuple[str, str]:
     """Consume a receipt/verdict JSON of `kind` ("route" | "catch"): (verdict, reason).
     STALE when it is unbound, trimmed (a required module hash absent), names the wrong script for its
     kind, or any of source_head / script_sha256 / module_sha256 differs from the tree now. FAIL when the
     ROM it ran on is not the pinned ROM of its title. Otherwise the receipt's own status for THIS kind
-    decides (PASS only for that kind's passing statuses; another kind's status is FAIL)."""
+    decides (PASS only for that kind's passing statuses; another kind's status is FAIL). `want` binds a
+    route receipt to ONE target status (e.g. "PC_WITHDRAW"): any other passing status is a FAIL, and a
+    withdraw must also carry the decoded battery's op == "withdraw" (a deposit never does)."""
     spec = RECEIPT_KINDS[kind]
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     title = doc.get("title")
@@ -1230,6 +1247,10 @@ def verify_receipt(path, kind: str, *, head: str | None = None) -> tuple[str, st
     except gen4_evidence.StaleEvidenceError as exc:
         return "STALE", str(exc)
     status = doc.get(spec["status_key"])
+    if want is not None and status in spec["pass"]:
+        op = (doc.get("battery") or {}).get("op")
+        if status != want or (op == "withdraw") != (want == "PC_WITHDRAW"):
+            return "FAIL", f"receipt status {status} (battery op {op}) is not the wanted {want}"
     if status in spec["pass"]:
         if kind == "route":
             try:
@@ -1500,10 +1521,11 @@ def run_lane(
                 if result["reload"]["status"] != "RELOAD_OK":
                     result.update(status="RELOAD_FAIL", detail=result["reload"]["detail"])
                 else:
+                    # NOTE: the reload boot does not rewrite the battery, so this re-reads the SAME file: it
+                    # is a consistency record, not independent evidence. The reload evidence is the Lua
+                    # RELOAD_OK status (a fresh boot read back by RAM: party + box + dirty mask).
                     result["reload"]["witness"] = save_witness(saved_path, game)
                     assert_save_progress(before_save, result["save_witness"], result["reload"]["witness"])
-                    if target == "pc_withdraw":
-                        assert_reload_party(result["save_witness"], result["reload"]["witness"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
         if kind:
