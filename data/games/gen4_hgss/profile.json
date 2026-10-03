@@ -3027,7 +3027,7 @@
             "balls_pocket_off": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/bag_types_def.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/item.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
           },
           "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
-          "note": "25 item ids live in the balls pocket and 24 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "note": "25 item ids carry POCKET_BALLS but the pocket has 24 slots; any id can take any slot, so at most 24 distinct stacks coexist and no id is excluded (has_pokeballs scans every slot, so the surplus changes nothing)",
           "pocket_layout": {
             "TMsHMs": {
               "count": 101,
@@ -3612,7 +3612,7 @@
             "count": 368,
             "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/save.c:733-768 (SaveData_InitSubstructs / GetSaveChunkSizePlusCRC: each array ((size+3)&~3)+4 bytes in id order), include/constants/save_arrays.h:5-47; include/save_vars_flags.h:9-12 (SaveVarsFlags: u16 vars[NUM_VARS] first), include/constants/vars.h:4,384 (VAR_BASE 0x4000, NUM_VARS 0x170), src/save_vars_flags.c:57-60 (var id - 0x4000 indexes vars[])",
             "evidence_class": "SOURCE+FILE",
-            "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (= 1948 + 4, 486 slots * 4 + registered) = 0xDE4, vars 0x2E0 + flags 0x16C + CRC = 0x44C + 4 closes exactly on the FILE-verified LocalFieldData 0x1234 (owner HG save); the owner HG save holds VAR 0x4030 = 155 at general+0xDE4+0x60 and VAR 0x4035 = 56150",
+            "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (sizeof(Bag) 0x79C = 486 slots * 4 + registeredItems[2], + the 4-byte array CRC trailer, src/save.c:733) = 0xDE4, vars 0x2E0 + flags 0x16C + CRC = 0x44C + 4 closes exactly on the FILE-verified LocalFieldData 0x1234 (owner HG save); the owner HG save holds VAR 0x4030 = 155 at general+0xDE4+0x60 and VAR 0x4035 = 56150",
             "general_off": 3556,
             "stride": 2
           }
@@ -8823,7 +8823,7 @@
             "balls_pocket_off": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/bag_types_def.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/item.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
           },
           "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
-          "note": "25 item ids live in the balls pocket and 24 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "note": "25 item ids carry POCKET_BALLS but the pocket has 24 slots; any id can take any slot, so at most 24 distinct stacks coexist and no id is excluded (has_pokeballs scans every slot, so the surplus changes nothing)",
           "pocket_layout": {
             "TMsHMs": {
               "count": 101,
@@ -9396,7 +9396,7 @@
             "count": 368,
             "evidence": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/save.c:733-768 (SaveData_InitSubstructs / GetSaveChunkSizePlusCRC: each array ((size+3)&~3)+4 bytes in id order), include/constants/save_arrays.h:5-47; include/save_vars_flags.h:9-12 (SaveVarsFlags: u16 vars[NUM_VARS] first), include/constants/vars.h:4,384 (VAR_BASE 0x4000, NUM_VARS 0x170), src/save_vars_flags.c:57-60 (var id - 0x4000 indexes vars[])",
             "evidence_class": "SOURCE+FILE",
-            "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (= 1948 + 4, 486 slots * 4 + registered) = 0xDE4, vars 0x2E0 + flags 0x16C + CRC = 0x44C + 4 closes exactly on the FILE-verified LocalFieldData 0x1234 (owner HG save); the owner HG save holds VAR 0x4030 = 155 at general+0xDE4+0x60 and VAR 0x4035 = 56150",
+            "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (sizeof(Bag) 0x79C = 486 slots * 4 + registeredItems[2], + the 4-byte array CRC trailer, src/save.c:733) = 0xDE4, vars 0x2E0 + flags 0x16C + CRC = 0x44C + 4 closes exactly on the FILE-verified LocalFieldData 0x1234 (owner HG save); the owner HG save holds VAR 0x4030 = 155 at general+0xDE4+0x60 and VAR 0x4035 = 56150",
             "general_off": 3556,
             "stride": 2
           }

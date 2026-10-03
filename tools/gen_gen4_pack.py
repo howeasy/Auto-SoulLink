@@ -767,8 +767,9 @@ def bag_profile(build: str, inputs: Inputs, array_id: int) -> tuple[dict | None,
         "pocket_layout": layout,
         "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose "
                          "u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
-        "note": (f"{len(ball_ids)} item ids live in the balls pocket and {counts['NUM_BAG_BALLS']} slots hold them; "
-                 f"the pocket holds one stack per id, so ids beyond the slot count cannot be carried"
+        "note": (f"{len(ball_ids)} item ids carry POCKET_BALLS but the pocket has {counts['NUM_BAG_BALLS']} slots; "
+                 f"any id can take any slot, so at most {counts['NUM_BAG_BALLS']} distinct stacks coexist and no id "
+                 f"is excluded (has_pokeballs scans every slot, so the surplus changes nothing)"
                  if len(ball_ids) > counts["NUM_BAG_BALLS"] else
                  f"{len(ball_ids)} item ids share {counts['NUM_BAG_BALLS']} balls-pocket slots (one stack per id)"),
         "evidence": evidence,
@@ -886,7 +887,7 @@ HGSS_FIELD_SAVE = {
                     "include/constants/vars.h:4,384 (VAR_BASE 0x4000, NUM_VARS 0x170), src/save_vars_flags.c:57-60 "
                     "(var id - 0x4000 indexes vars[])",
         "evidence_class": "SOURCE+FILE",
-        "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (= 1948 + 4, 486 slots * 4 + registered) = 0xDE4, vars 0x2E0 + flags 0x16C "
+        "file_cross_check": "FILE: Bag 0x644 + 0x7A0 (sizeof(Bag) 0x79C = 486 slots * 4 + registeredItems[2], + the 4-byte array CRC trailer, src/save.c:733) = 0xDE4, vars 0x2E0 + flags 0x16C "
                             "+ CRC = 0x44C + 4 closes exactly on the FILE-verified LocalFieldData 0x1234 (owner HG save); the "
                             "owner HG save holds VAR 0x4030 = 155 at general+0xDE4+0x60 and VAR 0x4035 = 56150",
     },
