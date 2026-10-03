@@ -271,7 +271,7 @@ def test_apply_aborts_on_tampered_plan(W):
     p = plan(W)
     p["actions"].append({"op": "remove-dir", "path": outside.as_posix(), "size": 1,
                          "fp": "1:1:0", "reason": "tampered"})
-    with pytest.raises(ss.PlanChanged):
+    with pytest.raises(ss.PlanChanged, match="edited"):
         apply(W, p)
     assert (outside / "keep.txt").exists()
 
