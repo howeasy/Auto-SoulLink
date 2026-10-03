@@ -223,9 +223,10 @@ remove/compact. The party commit primitive resets the slot's extra itself.
   the pret lib/include — `<stdint.h>`'s absence is the ruling, `<stddef.h>`'s
   presence is inferred. If the first on-target build rejects `<stddef.h>`,
   `compat.h` is where `size_t`/`offsetof` must be provided.
-- **Real-compiler evidence is the Gen 4 coordinator's run, not ours:** `abi.h` and
-  `compat.h` compiled clean on pret mwccarm 2.0/sp2p2 at ae5c06aa (negative assert
-  control fails as intended); `record_binding.h` and `trade_producer.h` were then
-  converted and must be re-run on the new head.
+- **Real-compiler evidence is the Gen 4 coordinator's run, not ours:** all six headers, an
+  all-includes TU, instantiations of every `static inline` and Gen 4's own beacon/dispatch
+  compiled clean on pret mwccarm 2.0/sp2p2 (`-W error`, no shim) at 78c2a0a0, with no undefined
+  symbols and the negative `SLINK_STATIC_ASSERT` control failing as intended. Re-run it after any
+  header change; this repo still vendors no mwccarm.
 - **The title-private region's layout is undefined.** Only its extent is pinned;
   a title card owns the 64 bytes and must document them.
