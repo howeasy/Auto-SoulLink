@@ -25,6 +25,7 @@ from server import adapters
 from server.adapters import get_adapter
 from server.server import SLinkServer
 from tests.unit.test_mixed_foundations import _hello, _refused, _session
+from tests.unit.companion_evidence import companion
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "games"
 TITLE = {"Crystal": "crystal", "crystal": "crystal", "Gold": "gold", "gold": "gold",
@@ -44,7 +45,11 @@ def cutover(monkeypatch):
 
 
 def _cart(rom_type):
-    return {"rom_type": rom_type, "artifact_kind": "clean"}
+    cart = {"rom_type": rom_type, "artifact_kind": "clean"}
+    if rom_type.lower() not in ("crystal", "gold", "silver"):
+        # a Gen 1 / Gen 3 half connects PATCHED (companion required, owner 2026-10-02)
+        cart.update(companion(rom_type))
+    return cart
 
 
 def _pack(title, name):

@@ -55,13 +55,15 @@ def test_unknown_hash_with_valid_expansion_anchors_is_refused(header):
 @pytest.mark.parametrize("pack,title,header", [("gen3_frlg", "firered", "BPRE"),
     ("gen3_frlg", "leafgreen", "BPGE"), ("gen3_rr", "radical_red", "BPRE"),
     ("gen3_emerald", "emerald", "BPEE")])
-def test_vanilla_and_rr_unknown_hash_anchor_admission_is_unchanged(pack, title, header):
+def test_vanilla_and_rr_unknown_hash_anchor_admission_is_now_refused_for_the_companion(pack, title, header):
+    """Companion required (owner 2026-10-02): a CLEAN vanilla/RR cartridge is no longer admitted by its anchors.
+    The expansion pack (test_unknown_hash_with_valid_expansion_anchors_is_refused above, and gen3_exp's own
+    admission tests) stays exempt and is unchanged."""
     world = World(pack=pack, title=title, build=False)
     codec = world.lua.eval(f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
-    got = world.Entry.admit_routed(world.lua.table(root=REPO.as_posix(), json=codec,
+    got, why = world.Entry.admit_routed(world.lua.table(root=REPO.as_posix(), json=codec,
         rom_hash="0" * 40, rom_read=world._rom_read, header_code=header))
-    assert lupa.lua_type(got) == "table"
-    assert got.pack == pack and got.title == title and got.admitted_by == "anchors"
+    assert got is None and "needs the SLink companion patch" in why, why
 
 
 def test_wrong_hash_header_only_and_wrong_build_remain_refused():

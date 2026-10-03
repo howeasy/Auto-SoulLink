@@ -11,6 +11,7 @@ import pytest
 
 from server import adapters
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 
 REPO = Path(__file__).resolve().parents[2]
 EXP = "emerald_expansion_28877d73"
@@ -158,6 +159,7 @@ async def test_uncontracted_server_trusts_reported_sha_and_does_not_prove_rom(
     reader, writer = await asyncio.open_connection("127.0.0.1", tcp.sockets[0].getsockname()[1])
     try:
         msg = hello(rom=rom)
+        msg.update(companion(rom))   # a vanilla title connects PATCHED (companion required); the expansion is exempt
         msg["rom_sha1"] = "0" * 40
         writer.write((json.dumps(msg) + "\n").encode())
         await writer.drain()

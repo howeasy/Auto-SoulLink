@@ -344,12 +344,12 @@ def _cart(title, kind, rom=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rand_first", (True, False))
-async def test_clean_bytes_shipped_as_rand_pair_with_a_clean_partner(rand_first, tmp_path):
-    rand = _cart("firered", "rand", _clean("firered"))
-    clean = _cart("leafgreen", "clean")
-    srv, err = await _pair(tmp_path, *((rand, clean) if rand_first else (clean, rand)))
-    assert err == "" and srv.state.artifact_kind == "clean"
+async def test_clean_bytes_shipped_as_rand_no_longer_pair_with_a_clean_partner(tmp_path):
+    """Companion required (owner 2026-10-02): the clean partner is refused, so this pair no longer forms. The
+    `rand`-labelled hello itself cannot be refused on the wire (a randomized cartridge declares `rand` whether
+    or not it carries the companion); the launcher refuses randomized-clean (lua/gen3/entry.lua admit_routed)."""
+    srv, err = await _pair(tmp_path, _cart("firered", "rand", _clean("firered")), _cart("leafgreen", "clean"))
+    assert "needs the SLink companion patch" in err, err
 
 
 @pytest.mark.asyncio
