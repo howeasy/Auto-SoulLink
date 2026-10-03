@@ -43,10 +43,12 @@ if __package__:
     from . import gen3_expansion_faint_oracle as exp_faint_oracle
     from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from .gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
+    from .slink_space import work_root
 else:
     import gen3_expansion_faint_oracle as exp_faint_oracle
     from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
+    from slink_space import work_root
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
@@ -251,7 +253,9 @@ SCENARIOS = {
     # patch's mailbox counter -- every Gen 1 row runs its companion cartridge (GAMES
     # `patched_saves`), so no scenario names a ROM of its own any more.
     "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
-                    "target": "battle", "no_setup": True, "frames": 2500000,
+                    # O-33: private qualified battle-save copies with 20 Poke Balls.
+                    # Catch/link/explode still run natively; each PYDEC receipt discloses SYNTH.
+                    "target": "battle", "gen1_synth": "explode", "no_setup": True, "frames": 2500000,
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
     # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
@@ -877,9 +881,9 @@ SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its batt
 # (the Lua card lands the string; the phrase is pinned here and cross-checked against the body
 # once it exists).
 EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION"
-# The phrases a LATER attempt may still be retried for: the species reroll observation and the
-# hunt's RNG budget are the same attempts, and explode_new's budget is its own two.
-LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS)
+# A third explode miss may reach its declared fourth attempt; other rows keep their budgets.
+EXPLODE_BALL_MISS = "hunt ended out-of-balls"
+LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS, EXPLODE_BALL_MISS)
 
 
 def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
@@ -888,7 +892,8 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
     on the other. Later attempts are only for the species hunt's own budget phrase — its
     reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
-    gets another whole run within `limit` (addendum (j)); a ball miss gets two retries (owner 2026-09-18).
+    gets another whole run within `limit` (addendum (j)). Most ball misses get two retries;
+    explode_new also admits an out-of-balls miss into its declared fourth attempt.
 
     A half with NO RESULT is NOT "worse than CONSEQUENCE" — it made no claim at all. The RNG
     half's FAIL is what ended the wait (`DuoRun.wait_for` -> `ClientFinishedEarly`) and the
@@ -924,7 +929,8 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
     return bool(causes) and all(
-        any(phrase in (text or "") for phrase in LATE_ATTEMPT_RNG) for text in causes)
+        any(phrase in (text or "") and (phrase != EXPLODE_BALL_MISS or scenario == "explode_new")
+            for phrase in LATE_ATTEMPT_RNG) for text in causes)
 
 
 def scenario_attempt_limit(name, game):
@@ -3616,14 +3622,15 @@ class DuoRun:
         self.http_port = free_port()
         if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
             os.makedirs(BUILD, exist_ok=True)
-        data_parent = BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade") else None
+        data_parent = (BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade")
+                       else work_root("tmp"))
         if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
             data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
             if not data_parent.is_relative_to(Path(REPO).resolve()):
                 raise RuntimeError("randomized lane SLINK_STATE_DIR must be private to this worktree")
             data_parent.mkdir(parents=True, exist_ok=True)
-        self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_",
-                                         dir=data_parent)
+        # Keep the leaf short: native SaveRAM/evidence paths have a 240-character ceiling.
+        self.data_dir = tempfile.mkdtemp(prefix="duo_", dir=data_parent)
         # This run's lane: the stub, the config copy, the SaveRAM directory and the window
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
@@ -4370,6 +4377,12 @@ class DuoRun:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(raw)
             return str(destination)
+        if self.cfg.get("gen1_synth") == "explode":
+            fixture = Path(self._prepare_gen1_explode_fixture(inst))
+            booted = Path(self._saveram_dir(inst)) / self._gen1_save_name(inst)
+            booted.parent.mkdir(parents=True, exist_ok=True)
+            booted.write_bytes(fixture.read_bytes())
+            return str(booted)
         from run_gb_gate import seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
@@ -4611,6 +4624,9 @@ class DuoRun:
                 if not os.path.isfile(os.path.join(REPO, rom)):
                     raise FileNotFoundError(f"{inst}: {rom} missing -- build the companion with "
                                             "`python patch/gen1/tools/build.py`")
+        if self.cfg.get("gen1_synth") == "explode":
+            for inst in ("a", "b"):
+                self._prepare_gen1_explode_fixture(inst)  # qualify/disclose both BEFORE either launch
         self._clear_attempt_artifacts()
         # F-4 tests B's CONTRACT verdict. A's randomized hello commits the run's artifact kind,
         # after which an un-randomized B is refused earlier by the mixed-kinds gate, which records
@@ -5945,8 +5961,31 @@ class DuoRun:
                                f"by {age:.0f}s")
         return file
 
+    def _prepare_gen1_explode_fixture(self, inst):
+        """An immutable private SYNTH baseline, distinct from the cartridge's writable save."""
+        import gen1_playthrough as play
+
+        cached = self.__dict__.setdefault("_gen1_synth_fixtures", {})
+        if inst in cached:
+            path, digest = cached[inst]
+            if hashlib.sha256(Path(path).read_bytes()).hexdigest() != digest:
+                raise RuntimeError(f"{inst}: SYNTH setup fixture changed after qualification")
+            return path
+        module = importlib.import_module(
+            "tools.gen1_synth_fixtures" if __package__ else "gen1_synth_fixtures")
+        title = self.gcfg["fixture"][inst]
+        source = Path(play.fixture_path(title, self._target_for(inst)))
+        rom = Path(REPO) / self._rom_for(inst)
+        raw, disclosure = module.build_explode_synth(title, source.read_bytes(), rom.read_bytes())
+        path = Path(self.data_dir) / f"explode_{inst}.SaveRAM"
+        path.write_bytes(raw)
+        disclosure.update(inst=inst, source=str(source), fixture=str(path))
+        self._pydec_note("GEN1_SYNTH_SETUP " + json.dumps(disclosure, sort_keys=True))
+        cached[inst] = (str(path), disclosure["fixture_sha256"])
+        return str(path)
+
     def _fixture_save_path(self, inst):
-        """The committed fixture this instance was seeded from — the bag baseline's source.
+        """The committed or disclosed private fixture this instance was seeded from.
 
         `run_gb_gate.seed_saveram` copies `<rom>_<target>.SaveRAM` from this directory into the
         instance's SaveRAM dir, so reading it here compares the flushed bag with the bytes the
@@ -5954,6 +5993,10 @@ class DuoRun:
         """
         import gen1_playthrough as play
 
+        if self.cfg.get("gen1_synth") == "explode":
+            if inst not in getattr(self, "_gen1_synth_fixtures", {}):
+                raise RuntimeError(f"{inst}: SYNTH setup was not prepared before the oracle")
+            return self._prepare_gen1_explode_fixture(inst)
         return os.path.join(play.FIXTURES,
                             f"{self.gcfg['fixture'][inst]}_{self._target_for(inst)}.SaveRAM")
 
