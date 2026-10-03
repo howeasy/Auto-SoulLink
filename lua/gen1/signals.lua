@@ -95,7 +95,20 @@ S.KINDS.save_witness = {
     end,
 }
 S.KINDS.blackout = { point = battle_point }
-S.KINDS.trade_service = {}  -- companion-patch receptionist pickup; registered by the client when patched
+S.KINDS.trade_service = {
+    -- Vanilla hooks SlinkForeground (a poll); pure overlays hook SlinkTradeService itself.
+    -- Both ROM services require the complete SLT1 publication and version +4 == 1
+    -- before using this tile-aliased union (trade_service.asm .magic / entry).
+    -- Do not add state/token/availability conditions: the hook must not drop ROM work.
+    filter = function(io, ram)
+        local lease = assert(ram.wSerialPartyMonsPatchList, "trade lease address required")
+        return io.read_u8(lease, "System Bus") == 0x53
+           and io.read_u8(lease + 1, "System Bus") == 0x4C
+           and io.read_u8(lease + 2, "System Bus") == 0x54
+           and io.read_u8(lease + 3, "System Bus") == 0x31
+           and io.read_u8(lease + 4, "System Bus") == 1
+    end,
+}
 -- MainInBattleLoop+0: the only instant the engine judges wBattleMonHP (W-2). The client's
 -- on_fire handler applies pending in-battle writes synchronously inside this hook.
 S.KINDS.battle_loop_head = {

@@ -193,7 +193,12 @@ def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch)
     monkeypatch.delenv("SLINK_SCRIPT_FLUSH", raising=False)
     passed, path, text = run_gate(SCRIPTED_GATE, rom_key=f"{rom}_cold", target="town", timeout=600, quiet=True)
     assert passed, f"scripted lab route FAILED on {rom}: {text[-1500:]}"
-    kinds = [tok.split("@")[0] for tok in re.search(r"^SIGNALS (.*)$", text, re.M).group(1).split()]
+    all_kinds = [tok.split("@")[0] for tok in re.search(r"^SIGNALS (.*)$", text, re.M).group(1).split()]
+    kinds = [kind for kind in all_kinds if kind != "trade_service"]
+    if rom == "yellow":
+        assert "trade_service" not in all_kinds, "Yellow must not register trade_service"
+    else:
+        assert "trade_service" not in all_kinds, "no-trade NEW GAME emitted trade_service"
     if rom == "yellow":
         # Yellow opens with Oak's Pikachu DEMONSTRATION battle (BATTLE_TYPE_PIKACHU, wCurOpponent
         # $54) before the gift, so its sequence is battle/wild first and the starter second; the

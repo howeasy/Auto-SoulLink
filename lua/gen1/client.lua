@@ -2227,15 +2227,18 @@ function Client.new(p)
         }
         local all_sites = sites
         if self.trade and self:trade_patch_present() then
-            -- the receptionist service entry exists only in a patched cartridge, so it is
-            -- pinned against the running ROM here rather than in engine_signals.json
+            -- Vanilla's anchor is SlinkForeground; pure overlays name SlinkTradeService.
+            -- signals.lua filters poll hits against the ROM's published trade-work gate.
+            -- This companion-only site is pinned against the running ROM here.
             local svc = self.trade.service_address()
             local flat = svc.bank * 0x4000 + (svc.addr - 0x4000)
             local bytes = io.read_range(flat, 6, "ROM")
             all_sites = {}
             for k, v in pairs(sites) do all_sites[k] = v end
             all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
-                                        capture_offset = 0, expected_hex = hex_of(bytes), symbol = "SlinkTradeService" }
+                                        capture_offset = 0, expected_hex = hex_of(bytes),
+                                        symbol = self.foundation == "gen1_purergb"
+                                            and "SlinkTradeService" or "SlinkForeground" }
             handlers.trade_service = logged("trade_service", function() self.trade:picked_up() end)
             self.trade_enabled = true
         end
