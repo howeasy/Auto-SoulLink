@@ -892,7 +892,7 @@ local function run()
             local reply
             for _=1,12000 do
                 local input=io.open(need(cfg.bridge_response,"bridge:response path"),"rb")
-                if input then local value=json.decode(input:read("a")); input:close()
+                if input then local raw=input:read("a"); input:close(); local value=json.decode(raw)
                     if value and value.id==request.id then reply=value; break end
                 end
                 step({})

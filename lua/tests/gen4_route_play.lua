@@ -56,8 +56,8 @@ local function say(...)
 end
 local function flush()
   if bridge then bridge.lines=lines; return end
-  local f = io.open(OUT, "w")
-  if f then f:write(table.concat(lines, "\n"), "\n"); f:close() end
+  local f = assert(io.open(OUT, "w"), "route log unwritable: " .. tostring(OUT))  -- fail loud, never a silent skip
+  f:write(table.concat(lines, "\n"), "\n"); f:close()
 end
 local shot -- defined below; a FAIL leaves a screenshot of the runtime state
 local terminal_witness -- withdraw-only, read-only; invoked before any terminal cleanup

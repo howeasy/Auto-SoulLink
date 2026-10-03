@@ -28,7 +28,7 @@ import pytest
 
 from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
 from tools import gen4_evidence, gen4_pins
-from tools.gen4_fixtures import lane_root
+from tools.gen4_fixtures import lane_root, replace_with_retry
 
 pytestmark = pytest.mark.usefixtures("model_surface")
 
@@ -931,6 +931,35 @@ def test_synth_sidecar_bound_hash_disclosure_and_wrong_revert(tmp_path):
     assert save_setup(save) == disclosed
 
 
+def test_planner_synth_admits_lead_level_baseline_without_pc_input(tmp_path):
+    # PHYSICAL Q at 080b3a22: launch_probe called synth_setup(save) with the default party2 kind, so every
+    # committed *_lead12 baseline (kind lead_level) was refused before the emulator started.
+    from tools import gen4_routes as routes
+    save = tmp_path / "lead.SaveRAM"
+    save.write_bytes(b"lead12-bytes")
+    side = Path(str(save) + ".synth.json")
+    for kind, expected_pc in (("lead_level", False), ("party2", True)):
+        extra = {"otid": 9} if kind == "party2" else {}  # real lead_level sidecars carry no otid
+        side.write_text(json.dumps({"schema": routes.SYNTH_SCHEMA, "kind": kind, "src_sha1": "1" * 40,
+                                    "out_sha1": digest(save, "sha1"), "new_pid": 7, **extra}))
+        meta = planner_synth(routes, save)
+        assert (meta is not None) is expected_pc and (meta is None or meta["setup"] == "SYNTH")
+    side.unlink()
+    assert planner_synth(routes, save) is None
+    # old call shape refuses the lead_level sidecar (the PHYSICAL failure); keep it red
+    side.write_text(json.dumps({"schema": routes.SYNTH_SCHEMA, "kind": "lead_level", "src_sha1": "1" * 40,
+                                "out_sha1": digest(save, "sha1"), "new_pid": 7}))
+    with pytest.raises(routes.RouteError, match="setup_mismatch"):
+        routes.synth_setup(save)
+
+
+def test_diag_bridge_replace_retries_sharing_violation():
+    # PHYSICAL ss1-q-10031638: WinError 5 replacing bridge-response.tmp; the diag bridge must reuse the
+    # shared retry the probe harness already had.
+    source = (REPO / "tools/gen4_diag.py").read_text(encoding="utf-8")
+    assert "g4.replace_with_retry(temp, target)" in source and "os.replace(temp, target)" not in source
+
+
 def test_row_o_requires_synth_disclosure(tmp_path):
     path = tmp_path / "o.txt"
     good = receipt("o", source_head="cut", producer="C1-8", oracle="independent", negative_control="red", setup="NATIVE")
@@ -1148,6 +1177,17 @@ def fixture_module():
         if not hasattr(module, name):
             pytest.skip(f"OPEN C1-4 function absent: tools.gen4_fixtures.{name}")
     return module
+
+
+def planner_synth(routes, save):
+    """The PC bridge's SYNTH disclosure: only a party2 sidecar enables PC legs; any other declared SYNTH kind
+    (lead_level baselines) is validated by its own kind and gives the planner no PC input."""
+    if save_setup(save)["setup"] != "SYNTH":
+        return None
+    # save_setup above already bound the sidecar to these bytes; lead_level sidecars carry no otid, so only a
+    # party2 sidecar goes through the route tool's PC-input validation.
+    kind = json.loads(Path(str(save) + ".synth.json").read_bytes()).get("kind")
+    return routes.synth_setup(save, "party2") if kind == "party2" else None
 
 
 def save_setup(save):
@@ -1480,19 +1520,6 @@ def phase_case_plan(cases, blocked, recipes=None):
     return resolved_cases, reasons
 
 
-def replace_with_retry(source, destination, *, attempts=20, delay=0.05):
-    """Windows can deny atomic replacement while Lua holds its short rb read."""
-    assert attempts >= 1 and delay >= 0
-    for attempt in range(attempts):
-        try:
-            source.replace(destination)
-            return
-        except PermissionError:
-            if attempt + 1 == attempts:
-                raise
-            time.sleep(delay)
-
-
 def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
     assert_harness_functions()
     bind_scenarios(cfg, title)
@@ -1527,7 +1554,7 @@ def launch_probe(module, title, source, save, profile, base, case, lane, cfg):
     cfg["bridge_request"], cfg["bridge_response"], cfg["bridge_lane"] = (lane / "bridge-request.json").as_posix(), (lane / "bridge-response.json").as_posix(), lane.as_posix()
     from tools import gen4_routes as routes
     game = {"heartgold": "HG", "soulsilver": "SS", "heartgold_hge": "hge"}[title]
-    synth = routes.synth_setup(save) if save_setup(save)["setup"] == "SYNTH" else None
+    synth = planner_synth(routes, save)
     planner = routes.BridgePlanner(source, game, synth)
     bridge_seen = None
     cfg["jit"] = settings["CoreSyncSettings"][CORE]["EnableJIT"]

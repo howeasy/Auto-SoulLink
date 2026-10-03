@@ -348,3 +348,16 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def replace_with_retry(source, destination, *, attempts=20, delay=0.05):
+    """Windows can deny atomic replacement while Lua holds its short rb read."""
+    assert attempts >= 1 and delay >= 0
+    for attempt in range(attempts):
+        try:
+            source.replace(destination)
+            return
+        except PermissionError:
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(delay)

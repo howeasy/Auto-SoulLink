@@ -92,7 +92,7 @@ def service_bridge(config, planner, seen):
     if not request.is_file():
         return seen
     try:
-        pending = json.loads(request.read_text())
+        pending = json.loads(request.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
         return seen
     if pending["id"] == seen:
@@ -106,7 +106,7 @@ def service_bridge(config, planner, seen):
     target = Path(config["bridge_response"])
     temp = target.with_suffix(".tmp")
     temp.write_text(json.dumps(answer))
-    os.replace(temp, target)
+    g4.replace_with_retry(temp, target)
     return pending["id"]
 
 
@@ -526,7 +526,7 @@ local function bridge()
         for _=1,12000 do
             local input=io.open(cfg.bridge_response,"rb")
             if input then
-                local value=json.decode(input:read("a")); input:close()
+                local raw=input:read("a"); input:close(); local value=json.decode(raw)
                 if value and value.id==attempt then reply=value; break end
             end
             step({})
