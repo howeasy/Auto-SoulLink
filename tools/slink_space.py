@@ -875,6 +875,7 @@ def _apply_fresh(saved, expected, on_done) -> list[str]:
         try:
             if _norm(target) not in allowed:  # belt and braces: plan == fresh scan already
                 raise PlanChanged(f"refusing {target}: outside the scanned set")
+            _recheck_use(target)
             _EXEC[a["op"]](repo, a)
         except BaseException as e:
             e.add_note(f"failed at: {line}")
@@ -883,6 +884,19 @@ def _apply_fresh(saved, expected, on_done) -> list[str]:
         done.append(line)
         on_done(line)
     return done
+
+
+def _recheck_use(target) -> None:
+    """Fresh process snapshot (~0.4 s) right before a destructive action: a lane run may
+    have started since the plan was rebuilt."""
+    global _PROCS, _CWDS
+    _PROCS = _CWDS = None
+    prob = process_scan_problem()
+    if prob:
+        raise PlanChanged(f"refusing {target}: {prob}")
+    pids = users_of(target)
+    if pids:
+        raise PlanChanged(f"refusing {target}: in use by pid {pids[:5]}")
 
 
 def _registration(repo, path) -> dict | None:

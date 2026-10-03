@@ -381,6 +381,30 @@ def test_temp_and_lane_age_rules(W):
     assert not old_t.exists() and not lane.exists() and new_t.exists() and young.exists()
 
 
+def test_apply_rechecks_use_right_before_each_action(W, real_processes):
+    l1, l2 = W.c / "slink" / "l1", W.c / "slink" / "l2"
+    for lane in (l1, l2):
+        lane.mkdir()
+        (lane / "s").write_text("s")
+        _age(lane)
+    p = plan(W)
+    assert len(p["actions"]) == 2
+    procs = []
+
+    def start_using_the_other(line):
+        other = l2 if "l1" in line else l1
+        procs.append(_sleeper(other))  # a lane run starts after the plan was rebuilt
+    try:
+        with pytest.raises(ss.PlanChanged, match="in use"):
+            apply(W, p, on_done=start_using_the_other)
+    finally:
+        for proc in procs:
+            proc.kill()
+            proc.wait()
+    assert l1.exists() != l2.exists()  # first removed, second refused
+    assert any((x / "s").exists() for x in (l1, l2))
+
+
 def test_work_root_lanes_are_never_pruned(W):
     lane = W.root / "lanes" / "g4"  # Gen 4's real 46 GB lane lives here
     lane.mkdir(parents=True)
