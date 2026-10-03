@@ -200,7 +200,7 @@ def test_owned_process_cleanup_and_error_publication(tmp_path, monkeypatch, mode
 @pytest.mark.parametrize("original,replacement,test", [
     ("pcall(M.play_recipe,leg,function(buttons)", "pcall(M.play_recipe,leg,function(buttons) buttons.A=not buttons.A;",
      test_fight_uses_exact_frozen_recipe_and_does_not_invent_turns),
-    ("left_censored=prior==nil", "left_censored=false",
+    ("left_censored=censored", "left_censored=false",
      test_settle_is_uncensored_and_first_resident_sample_is_left_censored),
     ("local active=resident(s.overlay_id)==true", "if frame>16 then return end; local active=resident(s.overlay_id)==true",
      test_settle_is_uncensored_and_first_resident_sample_is_left_censored),
@@ -412,3 +412,164 @@ def test_runbook_censoring_control_red_revert(monkeypatch, replacement):
         with pytest.raises(AssertionError):
             test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class()
     test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class()
+
+
+def test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path, monkeypatch):
+    import json
+    physical = Path('F:/slink-work/lanes/g4/d3-hg-1003033806')
+    before = json.loads((physical / 'bizhawk.initial-rebuilt.ini').read_text())
+    after = json.loads((physical / 'bizhawk.ini').read_text())
+    config = tmp_path / 'bizhawk.ini'
+    config.write_text(json.dumps(before))
+    source = tmp_path / 'diagnostic.lua'
+    source.write_text('immutable script')
+    diag = tmp_path / 'diagnostic-config.json'
+    diag.write_text('immutable input')
+    state = tmp_path / 'start.State'
+    state.write_bytes(b'immutable state')
+    rom = tmp_path / 'rom.nds'
+    rom.write_bytes(b'immutable staged ROM')
+    cfg = {'source_head':'MODEL','requested_rate':300,'originals':{},'hashes':{'driver':d.sha256(d.__file__)},
+           'generated_paths':{str(p):d.sha256(p) for p in [source,diag,state,rom]},
+           'emulator_config':{'path':str(config),'before_sha256':d.sha256(config),
+                              'expected_settings':d.emulator_settings(before,300)},
+           'frozen_surface':{},'title':'heartgold','rom_sha1':'x'}
+    monkeypatch.setattr(d.subprocess,'check_output',lambda cmd,**kw:'MODEL' if 'rev-parse' in cmd else '')
+    monkeypatch.setattr(d.evidence,'snapshot',lambda *a,**k:{})
+    monkeypatch.setattr(d.evidence,'bind',lambda *a,**k:None)
+    config.write_text(json.dumps(after))
+    audit=d.verify_after(cfg)
+    assert audit['before_sha256']!=audit['after_sha256'] and audit['settings_valid']
+    for path in [source,diag,state,rom]:
+        original=path.read_bytes()
+        path.write_bytes(original+b'!')
+        with pytest.raises(AssertionError,match='generated diagnostic input changed'):
+            d.verify_after(cfg)
+        path.write_bytes(original)
+        assert d.verify_after(cfg)['settings_valid']
+    bad={**after,'SpeedPercent':800}
+    config.write_text(json.dumps(bad))
+    with pytest.raises(AssertionError,match='emulator settings changed'):
+        d.verify_after(cfg)
+    config.write_text(json.dumps(after))
+    assert d.verify_after(cfg)['settings_valid']
+
+
+def test_observed_frame_one_attach_all_inactive_can_proceed():
+    r=api()
+    r.execute('''
+      local sites={{id="cold",overlay_id=12,address=20,extent=2,register_hex="aabb"}}
+      local trace=DIAG.begin_settle(sites,function() return false end,function() return "0000" end,1)
+      assert(trace.attach_frame==1 and trace.can_proceed==true)
+      DIAG.settle_sample(trace,sites,function() return true end,function() return "0000" end,10)
+      DIAG.settle_sample(trace,sites,function() return true end,function() return "aabb" end,12)
+      assert(trace.epochs[1].delta==2 and not trace.epochs[1].left_censored)
+      local loaded=DIAG.begin_settle(sites,function() return true end,function() return "aabb" end,1)
+      assert(loaded.epochs[1].left_censored and loaded.epochs[1].delta==nil)
+      local bytes_first=DIAG.begin_settle(sites,function() return false end,function() return "aabb" end,1)
+      DIAG.settle_sample(bytes_first,sites,function() return true end,function() return "aabb" end,2)
+      assert(bytes_first.epochs[1].left_censored and bytes_first.epochs[1].delta==nil)
+    ''')
+
+
+def test_initial_hp_zero_waits_bounded_and_refusal_keeps_values():
+    r=api()
+    r.execute('''
+      local frame=0
+      local function sample() return {our_hp=frame<9 and 0 or 20,enemy_hp=frame<9 and 0 or 17,value_available=true} end
+      local ready=DIAG.wait_battle(sample,function() return true end,function(b)
+        assert(next(b)==nil); frame=frame+1 end,function() return frame end,900)
+      assert(ready.status=="READY" and ready.frames_used==9 and ready.initial.our_hp==0)
+      assert(ready.last.our_hp==20 and ready.last.enemy_hp==17)
+      frame=0
+      local dead=DIAG.wait_battle(function() return {our_hp=0,enemy_hp=17} end,
+        function() return true end,function() frame=frame+1 end,function() return frame end,900)
+      assert(dead.status=="FAIL" and dead.frames_used==900 and dead.initial.our_hp==0 and dead.last.enemy_hp==17)
+      assert(dead.reason:match("our_hp=0") and dead.reason:match("enemy_hp=17"))
+    ''')
+
+
+def test_raw_failure_stays_first_when_audit_fails():
+    out={"status":"FAIL","reason":"state is not a live settled battle; our_hp=0"}
+    d.record_failure(out,"post-run identity verification: generated Lua changed")
+    assert out["reason"].startswith("state is not a live settled battle; our_hp=0;")
+    assert out["audit_errors"]==["post-run identity verification: generated Lua changed"]
+
+
+def test_old_byte_config_check_is_red_then_semantic_check_reverts(tmp_path, monkeypatch):
+    original=d.verify_after
+    def old_check(config):
+        value=original(config)
+        assert d.sha256(config["emulator_config"]["path"])==config["emulator_config"]["before_sha256"],"old mutable-byte check"
+        return value
+    test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path,monkeypatch)
+    monkeypatch.setattr(d,"verify_after",old_check)
+    with pytest.raises(AssertionError,match="old mutable-byte check"):
+        test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path,monkeypatch)
+    monkeypatch.setattr(d,"verify_after",original)
+    test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path,monkeypatch)
+
+
+@pytest.mark.parametrize("old,new,test",[
+    ("trace.can_proceed=true","trace.can_proceed=frame==0",test_observed_frame_one_attach_all_inactive_can_proceed),
+    ("for i=0,limit do","for i=0,0 do",test_initial_hp_zero_waits_bounded_and_refusal_keeps_values),
+])
+def test_live_instrument_controls_red_revert(monkeypatch,old,new,test):
+    source=d.LUA
+    test()
+    assert source.count(old)==1
+    monkeypatch.setattr(d,"LUA",source.replace(old,new))
+    with pytest.raises((AssertionError,lupa.LuaError)):
+        test()
+    monkeypatch.setattr(d,"LUA",source)
+    test()
+
+
+def test_frame_one_runtime_reaches_native_bridge_then_settle(tmp_path):
+    import json
+    title=json.loads((d.REPO/'data/games/gen4_hgss/profile.json').read_text())['titles']['heartgold']
+    site={**title['sites']['battle_faint_cmd'],'id':'battle_faint_cmd'}
+    config=tmp_path/'cfg.json'
+    config.write_text(json.dumps({'artifact':title,'lane':str(tmp_path),'command':'settle','requested_rate':300,
+       'sites':[site],'bridge_request':str(tmp_path/'request.json'),'bridge_response':str(tmp_path/'response.json')}))
+    (tmp_path/'response.json').write_text(json.dumps({'id':1,'route':{}}))
+    r=lupa.LuaRuntime(unpack_returned_tuples=True)
+    f=title['profile']['probe_field']
+    fs=0x02300000
+    sub=0x02310000
+    values={title['symbols']['sFieldSysPtr']['address']:fs,fs+f['sub']:sub,fs+f['live']:1,sub+f['field_app']:0x02320000}
+    table=title['overlay_table']['address']
+    r.globals().READ=lambda a,bus: (12 if a==table else 1 if a==table+4 and r.globals().ACTIVE else values.get(a,0))
+    r.globals().PIN=site['register_hex']
+    r.globals().CONFIG=config.as_posix()
+    r.globals().ROOT=d.REPO.as_posix()
+    r.execute('''
+      frame=1;ACTIVE=false
+      local oldget=os.getenv
+      os.getenv=function(k) if k=="SLINK_ROOT" then return ROOT elseif k=="G4_DIAG_CONFIG" then return CONFIG end; return oldget(k) end
+      local oldfile=dofile
+      dofile=function(path)
+        if path:match("gen4_route_play.lua$") then return {position=function() return {map=1,x=1,y=1,dir=0} end,
+          run=function(ctx) ACTIVE=true;LANDED=frame+4;for i=1,5 do ctx.step({}) end
+            error({route_result={status="BATTLE",detail="model natural wild launch",lines={"RESULT BATTLE settled"}}},0) end} end
+        return oldfile(path)
+      end
+      memory={read_u32_le=READ,read_bytes_as_array=function(a,n)
+        local t={};for i=1,n do t[i]=LANDED and frame>=LANDED and tonumber(PIN:sub(i*2-1,i*2),16) or 0 end;return t end}
+      emu={limitframerate=function() end,framecount=function() return frame end,frameadvance=function() frame=frame+1 end}
+      joypad={set=function() end};client={speedmode=function() end,exit=function() end};savestate={}
+    ''')
+    r.execute(d.LUA)
+    doc=json.loads((tmp_path/'observation.json').read_text())
+    assert doc['status']=='OBSERVED' and doc['attach_frame']==1 and len(doc['bridge'])==1,doc
+    assert doc['settle']['epochs'][0]['delta']==3 and doc['left_censored'] is False
+
+
+def test_first_failure_overwrite_control_red_revert(monkeypatch):
+    original=d.record_failure
+    test_raw_failure_stays_first_when_audit_fails()
+    monkeypatch.setattr(d,"record_failure",lambda out,message:out.update(status="FAIL",reason=message))
+    with pytest.raises(AssertionError):
+        test_raw_failure_stays_first_when_audit_fails()
+    monkeypatch.setattr(d,"record_failure",original)
+    test_raw_failure_stays_first_when_audit_fails()

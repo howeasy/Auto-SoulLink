@@ -98,25 +98,35 @@ Before EVERY cell: assert cut, fresh directory absent, prior own PID exited,
 and verify committed scenario/save hashes (plus SYNTH sidecars where used).
 Diagnostic host cleanup uses its Popen handle and fresh lane command matches,
 never an image-name kill. Timeout/error still publishes identity/cleanup audit.
+The mutable bizhawk.ini has before/after hashes and semantic checks for NDS
+sync, private paths, applied speed and pacing/audio settings; UI/history writes
+are allowed. Lua, diagnostic input config, copied state, staged ROM and surface
+remain byte-strict. Later audit errors append to the first/raw failure reason.
 
 D1 reports PP-use ordinals (frame/battler/slot/move/before/after), species/level
 and both HP traces. Ordinals are NOT measured turns. No pinned miss/critical/
 damage-cause witness exists in the pack; RNG attribution stays INCONCLUSIVE.
+The initial sample is recorded before validation. Empty-input readiness waits
+use the native battle_settled producer's existing 900-frame bound for the pack
+battle phase plus the unchanged positive-HP guard; no unpinned menu-ready
+criterion is invented. Both initial/last samples and refusal values are kept.
 Wrong slot/nonselection is input drift evidence. Estimate 1-3 minutes; first
 falsifier is wrong input/battle, unexpected PP, loss or recipe bound.
 
-D2 observes before first emulated frame, full registration pin and region-0
+D2 samples at the first Lua-observable frame, full registration pin and region-0
 residency every frame, with no 16-frame cutoff. An observed inactive-to-resident
-transition after cold boot is uncensored. Resident at attach is LEFT_CENSORED:
+transition after an initially inactive/unmatched observation is uncensored.
+Resident OR pin-matched at attach is LEFT_CENSORED:
 it is reported as OBSERVED_CENSORED with left_censored=true and no measured
-delta, never zero. Late attachment after frame 0 is OPEN. The 24000-frame
+delta, never an invented zero. The first observable counter was PHYSICALLY 1
+on both b809 title runs; it does not globally censor inactive sites. The 24000-frame
 post-route observation ceiling/host timeout is not a policy/max measurement.
 Keep every sample, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
 (the diagnostic outputs manifest). Estimate 2-6 minutes/title. First falsifier:
 censored load, pin never lands, wrong image, 12-attempt errand bound or no wild
 launch. SS has ov12; hge additionally has ov130/ov129. Resident-from-boot ov129
 is reported with its censoring class. The driver already attaches with --lua
-and samples before its first frameadvance, requiring emu.framecount()==0. That
+and samples before its first frameadvance, accepting the observed frame-1 origin. That
 does not establish observation before ROM/core initialization: an earlier
 attachment point is not implemented or PHYSICALLY verified here. These
 diagnostics do not author settle-policy values.
@@ -125,8 +135,16 @@ D3 is HG-only and uses the harness's committed HG settle policy/image pins and
 M.phase_sites_ready before arming. It compares callback/fall/close frames and same advance token, pending>=1,
 exactly-once delivery, retained0 and second-drain0. No assumed equal counters.
 Estimate 1-3 minutes; first falsifier is missing boundary/lost event or cleanup.
-D4 uses boxed row-i hash/sidecar inventory and target-specific receipt consumer;
-estimate 2-5 minutes. First falsifier: named press blocks/wrong app, missing mon
+D4 uses boxed row-i hash/sidecar inventory and target-specific receipt consumer.
+Source gives three ACCEPTED As after interact: msg33 carriage wait, choose the
+storage PC at Which-PC row0, msg35 carriage wait, THEN Down on the storage menu.
+{YESNO 0} is a focus indicator, not another YesNo prompt. Printing completes
+before each semantic A using the existing 900-frame launch bound; counts remain
+script_a=3/recover_a=0 (return via NonNPCMsg directly to the storage menu). See
+pinned pret scr_seq_0003.s:754-885, msg_0040.gmm:142-152, scrcmd_message.c:142-151
+and render_text.c:95-105,158-168,270-273,302-310. This input schedule still needs
+PHYSICAL validation; the observed screenshot confirms menu state only.
+Estimate 2-5 minutes. First falsifier: named press blocks/wrong app, missing mon
 transition, SAVE or independent reload. Remains disclosed DIAGNOSTIC even if its
 consumer reports PASS.
 

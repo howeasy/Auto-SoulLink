@@ -17,6 +17,7 @@
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
 -- same phase), done=1 = the phase finished (the next phase starts from the state).
 local Driver={}
+Driver.BATTLE_SETTLE_FRAMES=900 -- existing native battle_settled wait, reused by diagnostics
 function Driver.position(title)
   local fs=memory.read_u32_le(title.symbols.sFieldSysPtr.address,"ARM9 System Bus")
   assert(fs~=0,"bridge FieldSystem absent")
@@ -270,7 +271,7 @@ end
 
 -- a wild encounter arrives as a field task too: wait for the battle chain, never call it a script
 local TASK_POLL = 900
-local SETTLE_FRAMES = tonumber(getenv("G4_SETTLE") or "") or 900
+local SETTLE_FRAMES = tonumber(getenv("G4_SETTLE") or "") or Driver.BATTLE_SETTLE_FRAMES
 local SPECIES = {[16] = "PIDGEY", [19] = "RATTATA", [161] = "SENTRET"}
 local function species_name(id) return SPECIES[id] or ("#" .. tostring(id)) end
 local function poll_battle(frames)
@@ -692,11 +693,14 @@ local function pc_withdraw()
     if (taskman() or 0) ~= 0 then started = true; break end
   end
   if not started then finish("FAIL", "pc_script_not_started", pos_s(loc())) end
-  -- the script before the sub-menu takes route.pc.withdraw.script_a A presses (INFERRED: 3 if only WaitButton-like
-  -- prompts block, 4 if NPCMsg blocks -- the per-press log settles it live). A COUNT cannot absorb a press
-  -- swallowed by printing text like the deposit's mash does, so they are spaced a_period frames apart (a menu
-  -- waits forever) and the launch mode below is the check
-  for i = 1, wd.script_a do tap("A", 3, wd.a_period); pressed("A script " .. i) end
+  -- Three semantic A: msg33 \r -> storage-PC row0 -> msg35 \r. A during
+  -- printing is NOT also a menu press (render_text.c:95-105). First wait for
+  -- printing, using the existing launch bound; do not add A-mash that could
+  -- launch DEPOSIT before the Down. Count/recovery remain plan parameters.
+  for i = 1, wd.script_a do
+    frames(wd.script_wait)
+    tap("A", 3, wd.a_period); pressed("A script " .. i)
+  end
   -- 2. the sub-menu: Down x menu_down (DEPOSIT -> WITHDRAW POKEMON, scr_seq_0003.s:821-846) then A (-> ScrCmd_158 1,
   --    :851-856). The launch MODE is the RAM signal that it landed: state 0x51 = withdraw, 0x5B = the DEPOSIT row;
   --    nothing launched = the script was one press behind. Either way retry Down+A from the sub-menu (INFERRED

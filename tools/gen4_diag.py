@@ -31,6 +31,35 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def emulator_settings(settings, applied_rate):
+    """Ignore UI/history autosaves; freeze NDS execution, pacing and private paths."""
+    keys = ('FrameSkip','AutoMinimizeSkipping','ClockThrottle','VSyncThrottle','SuperHawkThrottle',
+            'SoundEnabled','SoundEnabledNormal','SoundEnabledRWFF','SoundVolume','Rewind')
+    return {**{k:settings.get(k) for k in keys}, 'SpeedPercent':applied_rate,
+            'NDS_sync':settings['CoreSyncSettings'][g4.NDS_CORE],
+            'NDS_paths':[p for p in settings['PathEntries']['Paths'] if p.get('System')=='NDS'
+                         and p.get('Type') in {'Save RAM','Savestates','Screenshots'}]}
+
+
+def emulator_config_audit(config):
+    item=config.get('emulator_config')
+    if not item:
+        return None  # MODEL collector seams without an emulator configuration.
+    path=Path(item['path'])
+    settings=json.loads(path.read_text())
+    valid=emulator_settings(settings, config['requested_rate'])==item['expected_settings']
+    # Compare the actual applied rate, not a projection that would replace it.
+    valid=valid and settings.get('SpeedPercent')==config['requested_rate']
+    return {'before_sha256':item['before_sha256'],'after_sha256':sha256(path),'settings_valid':valid}
+
+
+def record_failure(out, message):
+    out['status']='FAIL'
+    out.setdefault('audit_errors',[]).append(message)
+    first=out.get('reason','')
+    out['reason']=first+'; '+message if first else message
+
+
 def check_state_manifest(state, manifest, expected_sha256):
     """Require the reviewed digest and diagnostic setup provenance; never a receipt."""
     state, manifest = Path(state).resolve(), Path(manifest).resolve()
@@ -78,6 +107,9 @@ def verify_after(config):
         assert sha256(Path(path)) == expected, f"generated diagnostic input changed: {path}"
     evidence.bind(config["frozen_surface"], evidence.snapshot("probe", config["title"]),
                   title=config["title"], rom_sha1=config["rom_sha1"])
+    audit=emulator_config_audit(config)
+    assert audit is None or audit['settings_valid'], 'emulator settings changed'
+    return audit
 
 
 def collect(config, lane, command, *, planner, timeout):
@@ -130,12 +162,14 @@ def collect(config, lane, command, *, planner, timeout):
                 g4.kill_our_emuhawk(lane)
                 out["ownership"].update(exited=proc.poll() is not None, exit_code=proc.poll())
             except Exception as exc:
-                out.update(status="FAIL", reason=f"cleanup unconfirmed: {exc}")
+                record_failure(out, f"cleanup unconfirmed: {exc}")
         try:
+            out['emulator_config_audit']=emulator_config_audit(config)
             verify_after(config)
             out["inputs_unchanged"] = True
         except Exception as exc:
-            out.update(status="FAIL", reason=f"post-run identity verification: {exc}", inputs_unchanged=False)
+            record_failure(out, f"post-run identity verification: {exc}")
+            out['inputs_unchanged']=False
         input_state = Path(config["state_path"]).resolve() if config.get("state_path") else None
         out["states"] = {}
         out["outputs"] = {}
@@ -194,17 +228,28 @@ function D.settle_trace(sites)
     for _,s in ipairs(sites) do trace.sites[#trace.sites+1]=s.id end
     return trace
 end
+function D.begin_settle(sites,resident,bytes,frame)
+    local trace=D.settle_trace(sites)
+    trace.attach_frame=frame; trace.can_proceed=true
+    -- PHYSICAL: b809 D2 hge/SS first Lua observation is frame 1, with all sites
+    -- inactive (d2-{hge,ss}-1003033806/observation.json). The counter's origin
+    -- is not a censoring oracle; only each site's initial flag/bytes are.
+    D.settle_sample(trace,sites,resident,bytes,frame)
+    return trace
+end
 function D.settle_sample(trace,sites,resident,bytes,frame)
     for _,s in ipairs(sites) do
         local active=resident(s.overlay_id)==true
         local pin=bytes(s.address,s.extent)
         local matched=pin==s.register_hex
         local prior=trace.current[s.id]
+        local attach_censored=prior and prior.attach_censored or (not prior and (active or matched))
         trace.samples[#trace.samples+1]={site=s.id,frame=frame,resident=active,
             pin=pin,pin_matches=matched}
         if active and (not prior or not prior.active) then
-            local epoch={site=s.id,active_frame=frame,status=prior and "WAITING" or "LEFT_CENSORED",
-                left_censored=prior==nil}
+            local censored=not prior or attach_censored
+            local epoch={site=s.id,active_frame=frame,status=censored and "LEFT_CENSORED" or "WAITING",
+                left_censored=censored}
             trace.epochs[#trace.epochs+1]=epoch
             prior={epoch=epoch}
         elseif not active and prior and prior.active and prior.epoch.status=="WAITING" then
@@ -217,7 +262,7 @@ function D.settle_sample(trace,sites,resident,bytes,frame)
                 prior.epoch.delta=frame-prior.epoch.active_frame; prior.epoch.status="SETTLED"
             end
         end
-        prior.active=active; prior.pin_matches=matched; trace.current[s.id]=prior
+        prior.active=active; prior.pin_matches=matched; prior.attach_censored=attach_censored; trace.current[s.id]=prior
     end
 end
 function D.settle_verdict(trace)
@@ -250,6 +295,26 @@ function D.fight(M,title,leg,read,step,frame)
     if ok then result.status="OBSERVED"; result.reason=""
     else result.status,result.reason=D.failure(why) end
     result.final=previous; result.final_frame=frame()
+    return result
+end
+function D.wait_battle(sample,active,step,frame,limit)
+    local result={frames_used=0,limit=limit,samples={}}
+    for i=0,limit do
+        local ok,value=pcall(sample)
+        if not ok then local _,detail=D.failure(value); value={telemetry_error=detail} end
+        value.battle_active=active(); value.emulator_frame=frame()
+        if i==0 then result.initial=value end
+        result.last=value; result.frames_used=i
+        if i%30==0 or i==limit then result.samples[#result.samples+1]=value end
+        if value.battle_active and value.our_hp and value.our_hp>0 and value.enemy_hp and value.enemy_hp>0 then
+            result.status="READY"; return result
+        end
+        if i<limit then step({}) end
+    end
+    result.status="FAIL"
+    result.reason="state is not a live settled battle after "..limit.." frames; our_hp="..
+        tostring(result.last.our_hp).." enemy_hp="..tostring(result.last.enemy_hp)..
+        " battle_active="..tostring(result.last.battle_active)
     return result
 end
 function D.boundary_result(state,oracle,oracle_steps,composite)
@@ -367,17 +432,17 @@ local function run()
     if cfg.command=="fight" then
         local predicate
         for _,c in ipairs(title.phase_cases) do if c.name=="battle" then predicate=c.predicate end end
-        assert(M.predicate(title,read,assert(predicate)),"state is not in battle")
-        local initial=M.recipe_sample(title,read,cfg.recipe)
-        assert(initial.enemy_hp and initial.enemy_hp>0 and initial.our_hp and initial.our_hp>0,"state is not a live settled battle")
-        result=D.fight(M,title,cfg.recipe,read,step,emu.framecount); result.initial=initial
+        SLINK_GEN4_ROUTE_LIBRARY=true
+        local driver=dofile(root.."/lua/tests/gen4_route_play.lua"); SLINK_GEN4_ROUTE_LIBRARY=nil
+        local ready=D.wait_battle(function() return M.recipe_sample(title,read,cfg.recipe) end,
+            function() return M.predicate(title,read,assert(predicate)) end,step,emu.framecount,driver.BATTLE_SETTLE_FRAMES)
+        result.initial=ready.initial; result.readiness=ready
+        if ready.status~="READY" then result.status="FAIL"; result.reason=ready.reason; return end
+        result=D.fight(M,title,cfg.recipe,read,step,emu.framecount)
+        result.initial=ready.initial; result.readiness=ready; result.ready_sample=ready.last
     elseif cfg.command=="settle" then
-        result.settle=D.settle_trace(cfg.sites)
         result.attach_frame=emu.framecount()
-        D.settle_sample(result.settle,cfg.sites,resident,bytes,emu.framecount())
-        if result.attach_frame~=0 then
-            result.status="OPEN"; result.reason="LEFT_CENSORED: diagnostic attached after first emulated frame"; return
-        end
+        result.settle=D.begin_settle(cfg.sites,resident,bytes,result.attach_frame)
         result.boot=M.boot("bridge",3000,idle_field,function()
             local fs=read(title.symbols.sFieldSysPtr.address)
             return fs~=0 and read(fs+title.profile.probe_field.live)~=0
@@ -528,7 +593,7 @@ def prepare(args):
     rom = g4.stage_rom(rom_src, lane)
     battery = g4.stage_save(save, lane, cfg["rom_sha1"], rom_basename=rom.name)
     bizhawk = lane / "bizhawk.ini"
-    g4.write_nds_run_config(g4.BIZHAWK_CONFIG, bizhawk, initial_time="2010-01-01T12:00:00",
+    settings=g4.write_nds_run_config(g4.BIZHAWK_CONFIG, bizhawk, initial_time="2010-01-01T12:00:00",
                             lane_saveram_dir=battery.parent, saveram_name_hint=battery.name)
     lua = lane / "diagnostic.lua"
     lua.write_text(LUA, encoding="utf-8")
@@ -538,11 +603,13 @@ def prepare(args):
         cfg["state_path"] = state.as_posix()
     cfg["hashes"] = {"driver": sha256(Path(__file__)), "generated_lua": sha256(lua), "bizhawk_config": sha256(bizhawk),
                      "rom_sha256": sha256(rom), "profile": sha256(profile)}
+    cfg['emulator_config']={'path':str(bizhawk),'before_sha256':sha256(bizhawk),
+                            'expected_settings':emulator_settings(settings,cfg['requested_rate'])}
     config = lane / "diagnostic-config.json"
     config.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     # Hash outside the config to avoid a self-referential digest.
     cfg["hashes"]["diagnostic_config"] = sha256(config)
-    cfg["generated_paths"] = {str(lua): sha256(lua), str(bizhawk): sha256(bizhawk), str(config): sha256(config)}
+    cfg["generated_paths"] = {str(lua): sha256(lua), str(config): sha256(config), str(rom): sha256(rom)}
     if cfg.get("state_path"):
         cfg["generated_paths"][cfg["state_path"]] = cfg["state_sha256"]
     emulator = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))

@@ -681,7 +681,7 @@ class FakeDS:
 
     def __init__(
         self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None,
-        extra_a=0, recover_msg=False, launch_delay=0,
+        extra_a=0, recover_msg=False, launch_delay=0, print_frames=0,
     ):
         self.ram = bytearray(0x400000)
         self.R = ram_layout
@@ -695,6 +695,8 @@ class FakeDS:
         # closes, launch_delay = extra frames between the sub-menu A and the app coming up
         self.order = (["msg0"] if extra_a else []) + ["msg1", "menu_pc", "msg2", "menu_sub"]
         self.recover_msg, self.launch_delay = recover_msg, launch_delay
+        self.print_frames=print_frames
+        self.pc_choice=0
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
         self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
@@ -779,17 +781,29 @@ class FakeDS:
         # (three A presses after the interact), then the sub-menu: Down moves its cursor (row 0 DEPOSIT,
         # row 1 WITHDRAW POKEMON, scr_seq_0003.s:821-846) and A launches the box app in that mode.
         order = self.order
+        # SOURCE render_text.c:95-105: A while printing speeds it up, does NOT
+        # satisfy the \r wait or accept the following menu. Replay D4's three
+        # presses ending at Which PC, rather than assume one A per NPCMsg.
+        if self.sub in ("msg1","menu_pc","msg2") and self.t<self.print_frames:
+            if "A" in new:
+                self.t=self.print_frames
+            return
         if self.t < 8:
             return
         if ("A" in new or "B" in new) and self.sub == "msg_back":  # the message after the app closed (recover_msg)
             self.sub, self.t = "menu_sub", 0
             return
-        if "Down" in new and self.sub == "menu_sub":
+        if "Down" in new and self.sub == "menu_pc":
+            self.pc_choice=1  # scr_seq_0003_010: row1 PLAYER'S PC, not storage
+        elif "Down" in new and self.sub == "menu_sub":
             if self.fault == "swallow_down" and not self.swallowed:
                 self.swallowed = True  # a press the menu did not take
             else:
                 self.mcur = min(self.mcur + 1, 4)
         elif "A" in new and self.sub in order[:-1]:
+            if self.sub=="menu_pc" and self.pc_choice!=0:
+                self.sub="wrong_pc"
+                return
             if self.fault == "swallow_a" and not self.swallowed:
                 self.swallowed = True  # a press while the text still prints
             else:
@@ -1127,7 +1141,8 @@ def test_pc_bridge_runs_the_pokegear_errand_before_cherrygrove(monkeypatch):
     monkeypatch.setattr(gr, "plan_errand", lambda w, e, phase, start, game="HG": {
         "kind": "errand", "phase": phase, "which": e.name, "soft_events": crossing if e is pc else []})
     planner = gr.BridgePlanner("rom", "HG", synth={"kind": "party2"})
-    leg = lambda m, x, y: {"leg": "gen4_pc:reach_pc_terminal", "position": {"map": m, "x": x, "y": y, "dir": 1}}
+    def leg(m, x, y):
+        return {"leg": "gen4_pc:reach_pc_terminal", "position": {"map": m, "x": x, "y": y, "dir": 1}}
     first = planner.plan(leg(7, 7, 2))
     assert (first["which"], first["phase"]) == ("cherrygrove_pc", "enter") and "synth" in first
     walked_back = planner.plan(leg(7, 7, 2))  # T20_002 fired: no Pokegear
@@ -1993,3 +2008,42 @@ def test_run_lane_withdraw_refuses_a_full_party_before_touching_the_lane(tmp_pat
         gr.run_lane(target="pc_withdraw", save=tmp_path / "s.SaveRAM", lane="never_created_wd_lane")
     assert e.value.reason == "withdraw_party_full"
     assert not gr.lane_dir("never_created_wd_lane").exists()
+
+
+def test_live_d4_printing_replay_selects_storage_pc_before_down(tmp_path, monkeypatch):
+    # 180-frame print wait: old 60-frame interact wait + 120-frame A spacing
+    # consume A1/A3 in printing; Down reaches Which PC instead of WITHDRAW.
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"print_frames":180})
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert ds.pre_a==3
+
+
+def test_short_printer_wait_control_replays_live_fail_then_reverts(tmp_path,monkeypatch):
+    kw={"withdraw":True,"party":1,"fake":{"print_frames":180}}
+    last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
+    assert "RESULT PC_WITHDRAW" in last
+    last,_,log=_run_lua_leg(tmp_path,monkeypatch,plan={"script_wait":0},**kw)
+    assert "RESULT FAIL pc_not_launched" in last and "press 5 Down" in log
+    last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
+    import xml.etree.ElementTree as ET
+    scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
+    root=ET.parse(PRET/'files/msgdata/msg/msg_0040.gmm').getroot()
+    def message(index):
+        return root.find(f".//row[@index='{index}']/language[@name='English']").text
+    assert message(33).endswith(r"\r") and message(35).endswith(r"\r")
+    assert r"\r" not in message(34) and '{YESNO 0}' in message(34)
+    assert gr.WITHDRAW_SCRIPT_A==2+1  # two carriage waits plus storage-PC choice
+    assert gr.WITHDRAW_RECOVER_A==0  # _0C01 NonNPCMsg, no carriage wait
+    assert 'MenuInitStdGmm 1, 1, 0, 1' in scr
+    render=(PRET/'src/render_text.c').read_text()
+    focus=render[render.index('case 0x200:'):render.index('case 0x207:')]
+    assert 'RenderScreenFocusIndicatorTile' in focus and 'printer->state =' not in focus
+    assert 'case 0x25BC:' in render and 'TextPrinter_ContinueInputNew' in render
+    code=(PRET/'src/field/scrcmd_message.c').read_text()
+    assert 'return IsPrintFinished(*textPrinterNumPtr);' in code
+    nonnpc=code[code.index('BOOL ScrCmd_NonNPCMsg('):code.index('BOOL ScrCmd_NonNPCMsgExtern(')]
+    assert 'SetupNativeScript' not in nonnpc and 'return FALSE;' in nonnpc

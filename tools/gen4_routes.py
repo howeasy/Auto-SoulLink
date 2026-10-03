@@ -523,15 +523,18 @@ PC_BEHAVIOR = 0x83
 WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
 WITHDRAW_MENU_DOWN = 1  # PC top menu rows: DEPOSIT 0, WITHDRAW POKEMON 1 (scr_seq_0003.s:821-846)
 WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
-# The script before the sub-menu (scr_seq_0003.s scr_seq_0003_010 -> _0A2E -> _0B01 -> _0B53): NPCMsg 00033
-# "booted up", 00034 "Which PC?" + MenuExec, 00035 "Storage System accessed", then the sub-menu MenuExec. None
-# has a WaitButton and the deposit leg's A-mash proves each one takes an A: THREE presses after the interact A.
-# A COUNT, unlike the deposit's mash, cannot absorb a press swallowed by still-printing text, so the presses are
-# spaced WITHDRAW_A_PERIOD frames apart and the Down+A is retried when the launch mode says it missed.
-# INFERRED: NPCMsg blocking unknown; 3 if only WaitButton-like prompts block, 4 if NPCMsg blocks; settled by
-# the live per-press trace (the Lua logs every press). Both counts are PLAN parameters: a finding is a one-line
-# change here. WITHDRAW_RECOVER_A = A presses after the wrong-mode B-exit before Down (the script may show a
-# message again when it re-offers the sub-menu, scr_seq_0003.s _0C01); 0 until the trace says otherwise.
+# SOURCE: THREE accepted A presses after interact: dismiss msg33's \r, select
+# Which-PC row0 (Someone/Bill), dismiss msg35's \r. Then Down selects WITHDRAW
+# in the DIFFERENT storage menu. scr_seq_0003.s:754-838; msg_0040.gmm:142-152;
+# scrcmd_message.c:142-151; render_text.c:270-273,302-310,512-519.
+# {YESNO 0} in msg34 draws a focus indicator, NOT a blocking YesNo question:
+# charmap.txt:2889 and render_text.c:158-168. MenuInit cursor0: scrcmd_c.c:988-997.
+# A during printing only speeds printing (render_text.c:95-105), and cannot also
+# satisfy the later \r/menu. Replay wd-hg-1003033806 showed this failure. Wait
+# before each semantic A using the EXISTING 900-frame launch bound, not extra
+# A-mash (which would choose DEPOSIT once the storage menu is reached).
+# _0C01 returns via NonNPCMsg (instant print, no \r in msg34) straight to _0B53:
+# scr_seq_0003.s:879-885; scrcmd_message.c:45-50,226-232. Thus recover_a=0.
 WITHDRAW_SCRIPT_A = 3
 WITHDRAW_RECOVER_A = 0
 WITHDRAW_A_PERIOD = 120
@@ -541,10 +544,9 @@ WITHDRAW_STEPS = (
     {"step": "interact", "press": "A", "inferred": False,
      "source": "GetInteractedMetatileScript -> std_pokecenter_pc, scr_seq_0003.s:754-762 (scr_seq_0003_010)"},
     {"step": "script_a", "press": "A", "count": WITHDRAW_SCRIPT_A, "inferred": True,
-     "source": "scr_seq_0003.s:754-812,814-846: NPCMsg 33 / NPCMsg 34 + MenuExec (item 0 = the storage PC) / "
-               "NPCMsg 35, then the _0B53 sub-menu: three A (the deposit leg's mash takes the same three); "
-               "script-menu readiness has no RAM signal, so presses are spaced and the launch mode is checked "
-               "(INFERRED timing)"},
+     "source": "scr_seq_0003.s:754-838; msg_0040.gmm:142-152; render_text.c:95-105,270-273,302-310: "
+               "three ACCEPTED A: msg33 carriage wait / choose storage row0 / msg35 carriage wait; "
+               "existing launch_wait bounds each printer wait (timing unmeasured)"},
     {"step": "menu_down", "press": "Down", "inferred": False,
      "source": "scr_seq_0003.s:821-833 (_0B17 rows DEPOSIT 0 / WITHDRAW POKEMON 1), cursor starts on row 0"},
     {"step": "menu_withdraw", "press": "A", "inferred": False,
@@ -763,6 +765,7 @@ def withdraw_plan() -> dict:
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,
+        "script_wait": WITHDRAW_LAUNCH_WAIT,
         "recover_a": WITHDRAW_RECOVER_A,
         "a_period": WITHDRAW_A_PERIOD,
         "menu_attempts": WITHDRAW_MENU_ATTEMPTS,
