@@ -815,6 +815,22 @@ def test_rmtree_refuses_a_tree_holding_an_unknown_reparse_dir(W, cloud_names):
     assert (d / "a" / "first.txt").exists() and (d / "clouddir" / "inside.bin").exists()
 
 
+def test_clear_readonly_does_not_enter_unknown_reparse_dirs(W, cloud_names):
+    import stat as st_
+    d = W.tmp / "wt-ro"
+    (d / "clouddir").mkdir(parents=True)
+    inside, outside = d / "clouddir" / "in.txt", d / "out.txt"
+    for f in (inside, outside):
+        f.write_text("x")
+        os.chmod(f, st_.S_IREAD)
+    try:
+        ss._clear_readonly(d)
+        assert os.access(outside, os.W_OK)
+        assert not os.access(inside, os.W_OK)
+    finally:
+        os.chmod(inside, st_.S_IWRITE | st_.S_IREAD)
+
+
 def test_relink_only_recreates_links(W):
     with pytest.raises(ValueError):
         ss._relink(str(W.tmp / "dst"), [["x", str(W.tmp), "leaf", True]])

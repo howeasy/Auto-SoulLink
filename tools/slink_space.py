@@ -933,12 +933,16 @@ def _checkout_unclean(path) -> str | None:
 
 
 def _clear_readonly(path) -> None:
-    for d, dirs, files in os.walk(path):
-        dirs[:] = [x for x in dirs if not _path_is_link(os.path.join(d, x))]
-        for f in files:
-            p = os.path.join(d, f)
-            if not _path_is_link(p) and not os.access(p, os.W_OK):
-                os.chmod(p, stat.S_IWRITE)
+    """Make plain files writable; never enter or touch links or other reparse points."""
+    stack = [str(path)]
+    while stack:
+        for e in list(os.scandir(stack.pop())):
+            if _entry_link_kind(e):  # link or non-link reparse point (cloud, dedup)
+                continue
+            if e.is_dir(follow_symlinks=False):
+                stack.append(e.path)
+            elif not os.access(e.path, os.W_OK):
+                os.chmod(e.path, stat.S_IWRITE)
 
 
 def _remove_worktree(repo, a):
