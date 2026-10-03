@@ -98,14 +98,18 @@ def test_the_randomizer_exclusion_holds_even_if_the_game_gains_a_family(monkeypa
     assert KEY not in mgr.new_run_form()["randomizer_games"]
 
 
-def test_provision_itself_refuses_a_companion_or_randomizer_for_the_build(tmp_path):
+def test_provision_itself_refuses_a_randomizer_and_hands_out_the_build_without_a_companion(tmp_path):
+    """Patch-first (5ea1881f / 2d2c37db): the companion is decided SERVER-SIDE per player (companion_admitted), so a companion=True request
+    for the expansion (which has no admitted companion yet; Codex's build lands last, companion-only) resolves to companion False and the
+    reference ROM is handed out as picked. Before that change provision raised for it. The randomizer is still refused by name."""
     _need_rom()
     from server import cartridges
-    for kwargs in ({"companion": True, "randomize": None},
-                   {"companion": False, "randomize": {"settings_path": "x.rnqs"}}):
-        with pytest.raises(cartridges.CartridgeError, match="Emerald Expansion"):
-            cartridges.provision(str(tmp_path / "out"), {"a": ROM, "b": ROM}, **kwargs)
-    assert not (tmp_path / "out").exists()
+    with pytest.raises(cartridges.CartridgeError, match="Emerald Expansion"):
+        cartridges.provision(str(tmp_path / "refused"), {"a": ROM, "b": ROM}, companion=False,
+                             randomize={"settings_path": "x.rnqs"})
+    assert not (tmp_path / "refused").exists()
+    out = cartridges.provision(str(tmp_path / "out"), {"a": ROM, "b": ROM}, companion=True, randomize=None)
+    assert out["family"] == "gen3_exp" and out["companion"] is False and out["randomizer"] is None
 
 
 def test_no_companion_title_is_offered_for_the_expansion():
@@ -170,17 +174,25 @@ def test_a_randomizer_request_for_an_expansion_run_is_refused_by_name(manager_di
     assert "randomizer" not in (mgr._find_run(mgr._load_registry(), "run_x") or {})
 
 
-@pytest.mark.parametrize("extra, word", [({"randomize": True, "categories": ["wild"], "jar": "x"}, "randomiz"),
-                                          ({"companion": True}, "companion")])
-def test_expansion_cartridges_in_a_detect_run_refuse_randomizer_and_companion(manager_dir, monkeypatch, extra, word):
-    """A game-less (Detect) run picking the build: no randomizer and no companion exist for it."""
+def test_expansion_cartridges_in_a_detect_run_refuse_the_randomizer(manager_dir, monkeypatch):
+    """A game-less (Detect) run picking the build: no randomizer exists for it."""
     _need_rom()
     _add_run("")
     monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a, **k: pytest.fail("randomizer ran"))
-    status, out = _cartridges({"rom_a": ROM, "rom_b": ROM, **extra})
+    status, out = _cartridges({"rom_a": ROM, "rom_b": ROM, "randomize": True, "categories": ["wild"], "jar": "x"})
     assert status == 400 and not out["ok"], out
-    assert "Emerald Expansion" in out["error"] and word in out["error"].lower()
+    assert "Emerald Expansion" in out["error"] and "randomiz" in out["error"].lower()
     assert not (manager_dir / "run_x" / "roms").exists()
+
+
+def test_a_companion_request_for_the_expansion_is_handed_out_without_one(manager_dir):
+    """Patch-first (5ea1881f / 2d2c37db): the Manager always asks for the companion and the server decides per player; the expansion has none
+    admitted yet, so the pick comes back unchanged and the status says companion False (it lands last, companion-only)."""
+    _need_rom()
+    _add_run("")
+    status, out = _cartridges({"rom_a": ROM, "rom_b": ROM, "companion": True})
+    assert status == 200 and out["ok"], out
+    assert out["cartridges"]["companion"] is False and out["cartridges"]["family"] == "gen3_exp"
 
 
 def test_a_plain_expansion_pair_is_handed_out_unchanged(manager_dir):
