@@ -1092,8 +1092,12 @@ def _move_dir(_repo, a):
 
 
 def _move_file(_repo, a):
+    size = os.lstat(a["src"]).st_size
     os.makedirs(os.path.dirname(a["dst"]), exist_ok=True)
     shutil.copy2(a["src"], a["dst"])
+    copied = os.lstat(a["dst"]).st_size
+    if copied != size:
+        raise RuntimeError(f"{a['dst']}: copy size {copied} B != source {size} B; source kept")
     _force(os.remove, a["src"])
 
 
