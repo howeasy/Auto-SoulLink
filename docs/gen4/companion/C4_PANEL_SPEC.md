@@ -9,7 +9,13 @@
 >   - Hosts: a 0 on page == pages-1 is treated as close (never wrap on NDS); any non-zero result is done.
 >   - Reason: the Gen 3 host wraps on 0 (`lua/gen3/native.lua:1148-1157`), so 0x7F is the backward-compatible close.
 >   - The abi.h comment edit is queued with the SLINK_TITLE follow-up; cite this ruling until then.
-> - **Q2, hge msgdata for the label row:** OPEN, being researched (does hge's build rebuild msg NARC member 196, or does C6 ship a byte replacement?).
+> - **Q2 DECIDED: the label goes in msg bank 196 row 7 on every build** (OMP cx-6749bc7b + coordinator checks).
+>   - Why not a runtime string: the START menu draws every row label from bank 196 via `sStartMenuActions[].ident` (`src/start_menu.c:175-184`; ACTION_7 = `msg_0196_00007`), so a runtime string would need a hook in the start-menu draw (vanilla ARM9 on hge). The OMP's runtime-buffer option is rejected for the ROW; the panel app's own body text stays host-supplied.
+>   - Member 196 is byte-identical HG vs hge (sha256 d83267735d99b262; HG 829 members, hge 854). hge re-wraps the base msg NARC and re-encodes only members with a `data/text/<id>.txt` (`hg-engine/narcs.mk:776-780`, `Makefile:459-460`); 196 has none.
+>   - **pret (HG/SS):** edit `files/msgdata/msg/msg_0196.gmm` row 7 changing BOTH the attribute (`garbage` -> `used`, :32) and the English text (:33). With `garbage` kept, msgenc encodes the blanked Japanese node instead (`tools/msgenc/Gmm.cpp:92-97`, verified): a silent blank label.
+>   - **hge (C6):** add `data/text/196.txt` = the decoded member with row 7 filled.
+>     - It MUST be CRLF (LF collapses the member to one row; `data/text/.gitattributes`).
+>     - Gate: decode -> re-encode round-trip `cmp` on an output file named exactly `7_196` (the key derives from the filename) BEFORE the edit, then confirm the only changed member is 196 and the only changed row is 7.
 >
 > **Status: DRAFT** (OMP cx-ac8472b6, 2026-10-02). Peer spec draft for coordinator review and
 > owner sign-off. Nothing here is built. Every fact carries a `file:line`. Anything I could not
