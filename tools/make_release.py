@@ -543,13 +543,8 @@ _GUIDE_REST = """\
 
 ## If the LuaSocket DLL is missing
 
-The file `lua/x64/socket-windows-5-4.dll` is required. If it is absent,
-copy it from your [Archipelago](https://github.com/ArchipelagoMW/Archipelago/releases)
-installation:
-
-```
-<Archipelago folder>\\data\\lua\\x64\\socket-windows-5-4.dll
-```
+The file `lua/x64/socket-windows-5-4.dll` is required and ships in this
+package. If it is absent, download the setup ZIP from your host again.
 
 ---
 
@@ -758,7 +753,7 @@ def build_release(
             dll_files.append(p)
         else:
             dll_warnings.append(
-                f"  lua/x64/{fname} — not found; player must obtain it from Archipelago"
+                f"  lua/x64/{fname} — not found; the player package will lack it"
             )
 
     # ── Build zip ─────────────────────────────────────────────────────────────

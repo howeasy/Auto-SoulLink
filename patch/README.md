@@ -9,7 +9,7 @@ between linked Pokémon, sounds, and the SoulLink title screen. Every game below
 | | Games |
 |---|---|
 | **Patch required** | Red, Blue · PureRed, PureBlue, PureGreen · Gold, Silver, Crystal · FireRed, LeafGreen, Emerald · Radical Red |
-| Played clean | Yellow · Archipelago builds · Emerald Expansion |
+| Played clean | Yellow · Emerald Expansion |
 
 ## Get a patched cartridge
 

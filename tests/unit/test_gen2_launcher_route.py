@@ -115,7 +115,7 @@ def test_crystal_ap_is_refused_by_name():
     to fall through to game_detect and the legacy client. It now stops at the launcher with
     a message naming it, before game_detect or any client is reached."""
     loaded: list[str] = []
-    with pytest.raises(lupa.LuaError, match=r"Archipelago Crystal is not supported \(O-25\)"):
+    with pytest.raises(lupa.LuaError, match=r"This Crystal build is not supported"):
         _run_launcher("GBC", _rom("AP_CRYSTAL"), detected_game_id="gen2_crystal", loaded=loaded)
     assert not [p for p in loaded if p.endswith("run.lua") or "client" in p], loaded
 

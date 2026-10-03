@@ -96,7 +96,7 @@ These game families are offered by the current Manager. Game versions and option
 | **Emerald Expansion** | Emerald Expansion on both sides; played clean, no randomizer |
 | **Radical Red 4.1** | Radical Red on both sides |
 
-Archipelago builds may run clean, but the Manager doesn't offer them until a client supports them. Gen 4 and Gen 5 work is experimental and isn't offered there either.
+Gen 4 and Gen 5 support is experimental and isn't offered in the Manager yet.
 
 SLink is in active development and is tested in **BizHawk**; not every game has been played start to finish.
 
@@ -114,7 +114,7 @@ What it adds, inside the game:
 | **The SLINK panel** | An in-game Soul Link panel you can read without leaving the game. |
 | **Native trades** | A trade counterparty in the game itself — a receptionist on patched Gen 1 and Gen 2, a Pokémon Center NPC on Gen 3 by default. On Gen 3 the real in-game trade animation plays on both sides, and only a linked mon is ever accepted: your partner's matching half. |
 
-Yellow, Archipelago and the Emerald Expansion have no companion yet and still run clean — the same Soul Link rules, without the panel or the native trades. The new-run form shows which options you can use; they are separate from the core linking rules.
+Yellow and the Emerald Expansion have no companion yet and still run clean — the same Soul Link rules, without the panel or the native trades. The new-run form shows which options you can use; they are separate from the core linking rules.
 
 More detail: [Companion patches](patch/README.md).
 

@@ -11,7 +11,6 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | **Gen 1** — Red, Blue, Yellow (US English) | 🟡 **Partially verified** — mechanisms proven live, a playthrough is not | Red ↔ Blue |
 | **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen | 🟡 **Same bar as Red/Blue** | pureRGB ↔ pureRGB, same artifact kind |
 | **Gen 2** — Crystal, Gold, Silver (GBC) | 🟡 **Partially verified** — mechanisms proven live, a playthrough is not | C↔C, G↔S, C↔G |
-| **Gen 3** — the Archipelago FireRed/LeafGreen builds | ❌ **Not supported** — see below | — |
 | **Gen 4** — HeartGold, SoulSilver, Platinum | ⚠️ **Experimental** — never run against a cartridge | HGSS ↔ HGSS |
 | **Gen 5** — Black, White, Black 2, White 2 | ⚠️ **Experimental** — never run against a cartridge | — |
 
@@ -34,9 +33,6 @@ has one and a clean cartridge is refused — see [patch/README.md](../patch/READ
   by ROM hash or by its engine-site anchors (header-only builds refused). It pairs only with itself,
   never with FRLG/RR. The owner's EG4 sign-off is pending (`docs/gen3_emerald/PLAN.md` §10,
   `docs/gen3_emerald/`).
-- **Gen 3 Archipelago FRLG** — ❌ Not supported. They ran only on the old Gen 3 client, archived at
-  C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua` refuses them by name until
-  they are ported to `lua/gen3/`.
 - **Gen 1 Red / Blue / Yellow** — 🟡 Partially verified. The Soul Link *mechanisms* are proven against
   running cartridges; a *playthrough* is not.
   - **Proven live** — **encounter linking from actual play**: both cartridges walk Route 1's grass,
@@ -61,7 +57,7 @@ has one and a clean cartridge is refused — see [patch/README.md](../patch/READ
     within the frame (measured three ways before the probe was retired) — and the fly warp reaches
     thirteen destinations of which two carry encounters.
   - Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums). The
-    Red/Blue companion patch (required; Yellow and Archipelago are exempt and have none) adds the
+    Red/Blue companion patch (required; Yellow is exempt and has none) adds the
     in-game SLINK panel and native sound. The VBlank `PlaySound` path ABI 2 used was swallowed during
     music fades and re-entered a non-reentrant audio routine, so sound now runs on the main thread:
     `SlinkSfxService` (`patch/gen1/src/slink.asm`, `SLINK_CAP_SFX`) plays the semantic code the client
@@ -131,8 +127,6 @@ has one and a clean cartridge is refused — see [patch/README.md](../patch/READ
   - **Companion overlay** (`patch/dist/SLink-{Crystal,Gold,Silver}.ups`): **admitted and required**.
     The overlay rows are SELECTED/ADMITTED under the G4 runtime gate, so a clean Crystal/Gold/Silver
     cartridge is refused exactly like any other companion title.
-  - **Archipelago Crystal is refused** at admission (owner ruling O-8/O-25;
-    `data/games/gen2_crystal/admission.json`).
 
 ### Why "unit tests pass" is not the bar
 
@@ -824,7 +818,6 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 |---|---|
 | TCP transport (LuaSocket) | ✅ Working |
 | ROM validation (FireRed/LeafGreen US 1.0) | ✅ Working |
-| Archipelago (AP) patched ROM support | ❌ Not supported — AP FireRed/LeafGreen ran only on the old, now-archived Gen 3 client; `lua/slink.lua` refuses them by name until they are ported to `lua/gen3/` |
 | Radical Red 4.1 (CFRU) support | ✅ Working |
 | Emerald (pinned US dump, `gen3_emerald` pack, E<->E pairing only) | 🟡 Release candidate — EG4 owner sign-off pending (`docs/gen3_emerald/`) |
 | Area mapping (all FRLG routes/dungeons/locations) | ✅ Working |
@@ -1192,47 +1185,6 @@ Override keys are `(ability_id, natdex_base_form)`. Form collisions (e.g. Kyurem
 
 ---
 
-## Archipelago (AP) Support
-
-> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite. Archipelago FireRed/LeafGreen is not supported until then.
-
-SLink auto-detects AP-patched ROMs and adjusts all memory addresses automatically. No manual configuration needed.
-
-**How it works:**
-- AP recompiles the FRLG binary, shifting all EWRAM globals (+0x14) and IWRAM pointers (−0xB0)
-- `memory_gba.lua` reads a signature string at ROM offset 0x108 to detect AP ROMs ("pokemon red version" / "pokemon green version")
-- All profile-dependent addresses are stored in a `PROFILES` table and applied at startup via `M.initProfile()`
-- The status page shows "FireRed (AP)" or "LeafGreen (AP)" for AP clients
-
-**AP address profile (complete):**
-
-| Symbol | Vanilla | AP | Shift |
-|---|---|---|---|
-| `gMain` | `0x030030F0` | `0x03003040` | −0xB0 (IWRAM) |
-| `gSaveBlock1Ptr` | `0x03005008` | `0x03004F58` | −0xB0 |
-| `gSaveBlock2Ptr` | `0x0300500C` | `0x03004F5C` | −0xB0 |
-| `gPokemonStoragePtr` | `0x03005010` | `0x03004F60` | −0xB0 |
-| `gPlayerParty` | `0x02024284` | `0x02024298` | +0x14 (EWRAM) |
-| `gBattleTypeFlags` | `0x02022B4C` | `0x02022B60` | +0x14 |
-| `gBattleOutcome` | `0x02023E8A` | `0x02023E9E` | +0x14 |
-| SB1 Pokéball pocket | `+0x0430` | `+0x0680` | +0x250 (struct) |
-| SB2 `encryptionKey` | `+0x0F20` | `+0x0F2C` | +0x0C (struct) |
-| `gBaseStats` | `0x08254784` | `0x0825634C` | +0xEBC8 (ROM) |
-
-**AP-specific behavior:**
-
-- **Overworld detection**: AP uses a custom `gMain+0x038` field (1 = overworld, anything else = not overworld) instead of the vanilla `gMain+0x439` inBattle bit
-- **Battle detection**: Three-condition check prevents false triggers from menus: `gMain+0x038 != 1` AND `gBattleTypeFlags != 0` AND `gBattleOutcome == 0`. The `gBattleOutcome` check is necessary because `gBattleTypeFlags` stays stale (non-zero) after battles end in AP.
-- **Item tracking**: AP expands bag pocket structs by 592 bytes (0x250). Item IDs are not encrypted; quantities are XOR'd with `encryptionKey & 0xFFFF` from `SB2+0x0F2C`. The AP encryption key is at a +0x0C shift from vanilla. `M.hasPokeballs()` and `M.countPokeballs()` use profile-dependent offsets automatically.
-- **Battle redirect**: `forceImmediateWhiteout()` cannot redirect to `ReturnFromBattleToOverworld` in AP mode (ROM function address unknown); it zeros party HP only
-- **Sound effects**: In-game SE playback works on AP ROMs. Song header addresses are discovered per-ROM via `lua/test_sound_discovery.lua` and stored in the AP profile's `SE_SONG_HEADERS` table.
-- **Starter/gift linking**: AP supports randomized starting locations. If a gift/static Pokémon appears before `nuzlocke_active` is set, the client uses `"intro"` as the area_id so both players' starters link regardless of randomized start location. Post-nuzlocke gifts (Eevee, Lapras, fossils) use their real area_id. The server treats `"intro"` and `"gift"` as gift areas (no `pokeballs_obtained` activation, pre-nuzlocke faint immunity).
-- **Menu/script state protection**: AP's `isInOverworld()` returns false during menus (bag, PC, Repel use). The `party_diff_ok` gate freezes all party change detection during non-overworld/non-battle states, preventing false `box_to_party`/`party_to_box` events from memory read glitches during BizHawk window resize or in-game menus.
-- **Coexistence**: SLink runs alongside the AP BizHawk client — both use different memory write targets (AP writes item flags; SLink writes HP/party data)
-- **Gym badge bitmask**: Badges are read from `SaveBlock1.flags[0x104]` as a raw bitmask (each bit = one badge). AP can grant badges out of order, so the status page renders each badge independently via `badge_mask & (1 << i)` — no assumption of sequential acquisition
-
----
-
 ## Radical Red (CFRU) Support
 
 > **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
@@ -1315,15 +1267,14 @@ Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` ins
 
 > **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
 
-SLink supports three ROM profiles, auto-detected at startup by `memory_gba.lua`. All profile-dependent addresses are stored in the `PROFILES` table and applied via `M.initProfile()`.
+SLink supports two ROM profiles, auto-detected at startup by `memory_gba.lua`. All profile-dependent addresses are stored in the `PROFILES` table and applied via `M.initProfile()`.
 
 | Profile | ROM type | Detection method | Battle detection | Box format | Substructs |
 |---|---|---|---|---|---|
-| **`vanilla`** | Standard FRLG US 1.0 + data-only randomizers (UPR, etc.) | Default — no AP or CFRU signature found | `gMain+0x439` inBattle bit (bit 1, mask `0x02`) | 80-byte `BoxPokemon` × 30 × 14 boxes | Encrypted (XOR `personality ^ otId`); permuted order (`personality % 24`) |
-| **`ap`** | Archipelago-patched FRLG | ASCII string at ROM offset `0x108` ("pokemon red/green version") | `gMain+0x038` overworld check + three-condition battle check (`gMain+0x038 != 1` AND `gBattleTypeFlags != 0` AND `gBattleOutcome == 0`) | 80-byte `BoxPokemon` × 30 × 14 boxes | Encrypted (same scheme as vanilla) |
+| **`vanilla`** | Standard FRLG US 1.0 + data-only randomizers (UPR, etc.) | Default — no CFRU signature found | `gMain+0x439` inBattle bit (bit 1, mask `0x02`) | 80-byte `BoxPokemon` × 30 × 14 boxes | Encrypted (XOR `personality ^ otId`); permuted order (`personality % 24`) |
 | **`radical_red`** | Radical Red 4.1 / CFRU-based hacks | CFRU signature bytes in ROM binary | `gBattleOutcome`-based ("battle_outcome" mode) — `gMain` unreliable in CFRU | 58-byte `CompressedPokemon` × 30 × 25 boxes (4 EWRAM regions) | **Unencrypted**; fixed order: Growth / Attacks / EVs / Misc |
 
-For full address tables, see the [AP Support](#archipelago-ap-support) and [RR Support](#radical-red-cfru-support) sections above. All vanilla addresses in the FRLG Memory Map section below apply only to the `vanilla` profile — AP and RR use different addresses as documented in their respective profiles in `lua/memory_gba.lua`.
+For full address tables, see the [RR Support](#radical-red-cfru-support) section above. All vanilla addresses in the FRLG Memory Map section below apply only to the `vanilla` profile — RR uses different addresses as documented in their respective profiles in `lua/memory_gba.lua`.
 
 ---
 

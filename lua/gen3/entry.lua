@@ -290,7 +290,7 @@ function Entry.admit_routed(args)
     if admitted.admitted_by == "header" then
         return nil, "this " .. tostring(admitted.title) .. " build (header "
                     .. tostring(args.header_code) .. ") is not a pinned cartridge -- "
-                    .. "Archipelago builds and unknown hacks are not supported yet"
+                    .. "other builds and hacks are not supported yet"
     end
     if not Entry.ROUTED[admitted.pack] then
         return nil, "the " .. tostring(admitted.pack) .. " pack is not yet routed to the Gen 3 client"
