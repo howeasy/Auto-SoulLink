@@ -7,7 +7,11 @@
 >   2. Leave `status = BUSY` while a request is held.
 >   3. `capabilities` stays ROM-owned.
 > - **Host depth for sound = 1 in flight** (one opcode slot); the GB queue of 4 does not port.
-> - **D-C3-1 (the NOTIFY capability bit) and D-C3-2 (a distinguishable reason for code 2): asked of the ABI owner (Gen 5)** as title-private conventions; no abi.h edit from Gen 4.
+> - **D-C3-1 / D-C3-2 RULED by the ABI owner (Gen 5, 2026-10-02):**
+>   - Title-private capability bits are **16..31** (bits 7..15 are reserved for future shared caps), so Gen 4 gates NOTIFY on its own title bit **1<<16** in its host adapter, and NATIVE_SOUND (1<<2) keeps its shared meaning.
+>   - Title-private reason codes are **32..63** (16..31 are reserved for future shared reasons), so Gen 4 refuses sound code 2 with reason **32 = SOUND_CODE_REFUSED**, decoded only by the Gen 4 adapter.
+>   - The trade_producer else-ack issue is confirmed; Gen 5 queues a fix (gate the else on trade-owned opcodes). Until then the C2 dispatcher routes by opcode.
+>   - Cite this ruling until the abi.h comments land.
 > 
 > **Status: DRAFT** (OMP cx-95e28acd, 2026-10-02). Peer spec draft for coordinator review and
 > owner sign-off. Nothing here is built. Every fact carries a `file:line`. Anything I could not
