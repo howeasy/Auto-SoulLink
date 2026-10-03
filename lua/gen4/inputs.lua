@@ -8,10 +8,14 @@
 --
 --   Inputs.area_of(deps)       -> function(map_id, loc) -> area_id, loc_name | nil, reason
 --   Inputs.charmap(deps)       -> { [code] = text }              | nil, reason
---   Inputs.has_pokeballs(deps) -> function() -> bool             | nil, reason
+--   Inputs.has_pokeballs(deps) -> function() -> bool | nil       | nil, reason
 --   Inputs.build(deps)         -> { area_of = ..., charmap = ..., has_pokeballs = ... }, gaps[]
 --
--- deps = { root, json, pack_profile (repo-relative profile.json path, from Entry.PACKS), log }
+-- deps = { root, json, pack_profile (repo-relative profile.json path, from Entry.PACKS), log,
+--          title      the admitted title name (Entry.admit's `title`), which picks the row out of
+--                    profile.json `titles`;
+--          save_array function(array_id) -> function(off, len) -> value | nil, reason
+--                                    | nil, reason }
 --
 -- Facts, and where each one comes from:
 --   area_of   data/games/<pack>/area_map.json  `.maps[map_id]`  -> area_id or JSON null
@@ -19,23 +23,22 @@
 --             place, the file's `unmapped_maps` explains each), and
 --             data/games/<pack>/locations.json `.locations[map_id].name` -> loc_name.
 --             SHIPPED for gen4_hgss. gen4_hge ships no area map, so its producer refuses.
---   charmap   data/games/<pack>/charmap.json `.glyphs[dec_code]` -> text; the pack-directory
---             convention data/games/gen1_purergb/charmap.json already uses. NOT YET GENERATED
---             for Gen 4 (tools/gen_gen4_names.py parses charmap.txt but emits only names), so the
---             producer refuses today rather than borrowing the Python oracle's table.
---   has_pokeballs  REFUSED: needs a bag fact the pack does not carry (see Inputs.GAPS).
+--   charmap   data/games/<pack>/charmap.json `.glyphs[dec_code]` -> text (tools/gen_gen4_names.py;
+--             the pack-directory convention data/games/gen1_purergb/charmap.json already uses).
+--             The table is keyed by NUMBER here, because R.decode_name (reads.lua) looks a u16 up
+--             as a number -- the file's decimal-string keys are converted once, at load.
+--   has_pokeballs  data/games/<pack>/profile.json `titles.<t>.profile.bag` (tools/gen_gen4_pack.py):
+--             the bag save array's balls pocket -- { array_id, balls_pocket_off, ball_slot_size,
+--             ball_slot_count, slot_fields{id,quantity}.{off,size}, ball_ids }. Every offset is
+--             relative to that ARRAY's base (`base: bag_array`), never to the general block. A pack
+--             that cannot source the fact emits `null` with the reason in `titles.<t>.open.bag`.
+--
+-- `deps.save_array` is this file's ONLY route to the save, so it names no address and no struct
+-- offset: it resolves save data + array by id the way the client does (reads.lua R.save_data ->
+-- R.array) and hands back a bounds-checked reader over that array's base, where `off` is
+-- ARRAY-relative. run.lua owns it because run.lua owns the BizHawk io adapters.
 local Inputs = {}
 
--- The exact pack fact each refusal is waiting on. Names the key, not a value: nothing here is a
--- guessed address, and Inputs.build reports every entry as a startup gap so the omission is
--- visible on the console instead of silent.
-Inputs.GAPS = {
-    charmap = "pack_gap:data/games/<pack>/charmap.json .glyphs -- the u16 code->text table "
-        .. "(tools/gen_gen4_names.py reads charmap.txt but emits only names)",
-    has_pokeballs = "pack_gap:profile.bag -- { balls_pocket_off, ball_slot_size, ball_slot_count, "
-        .. "ball_ids } for the save-array bag, array_id already named by save.array_ids.bag "
-        .. "(pret/pokeheartgold@ad7a3afa src/bag.c; kwsch PlayerBag4HGSS.cs)",
-}
 
 -- Read a pack data file. Absence is a normal outcome (a fact this pack does not ship), never an
 -- error: the caller turns it into a named gap.
@@ -88,13 +91,13 @@ function Inputs.area_of(deps)
     end
 end
 
--- u16 charcode -> display text. Refuses until the pack ships charmap.json.
+-- u16 charcode -> display text, from the pack's charmap.json.
 function Inputs.charmap(deps)
     local dir, why = pack_dir(deps)
     if not dir then return nil, why end
     local doc
     doc, why = load_optional(deps.json, deps.root .. "/" .. dir .. "charmap.json")
-    if not doc then return nil, why .. " (" .. Inputs.GAPS.charmap .. ")" end
+    if not doc then return nil, why end
     local glyphs = doc.glyphs
     if type(glyphs) ~= "table" then return nil, "pack_gap:" .. dir .. "charmap.json .glyphs" end
     local out = {}
@@ -106,10 +109,71 @@ function Inputs.charmap(deps)
     return out
 end
 
--- Refuses: the save-array bag has no pocket geometry in either Gen 4 pack (only the array id).
--- Not a stub -- naming the fact is the whole contract, and Inputs.build reports it as a gap.
-function Inputs.has_pokeballs(_deps)
-    return nil, Inputs.GAPS.has_pokeballs
+-- true iff some balls-pocket slot holds an id the pack calls a ball with a quantity above zero.
+-- The pack decides WHICH ids are balls; this file adds only the pack's own offsets. A read that
+-- refuses at call time answers nil (unknown), never false: the client's own seam treats a nil
+-- answer as "not yet" (client.lua sends `p.has_pokeballs() or false`, and the reducer latches the
+-- gate only upward), so a false would be a claim the save never made.
+function Inputs.has_pokeballs(deps)
+    local dir, why = pack_dir(deps)
+    if not dir then return nil, why end
+    if type(deps.save_array) ~= "function" then
+        return nil, "pack_gap:deps.save_array -- function(array_id) -> function(off, len) -> value | nil, reason"
+    end
+    if type(deps.title) ~= "string" then return nil, "pack_gap:deps.title -- the admitted title name" end
+    local doc
+    doc, why = load_optional(deps.json, deps.root .. "/" .. dir .. "profile.json")
+    if not doc then return nil, why end
+    local titles = doc.titles
+    if type(titles) ~= "table" then return nil, "pack_gap:" .. dir .. "profile.json .titles" end
+    local title = titles[deps.title]
+    if type(title) ~= "table" then
+        return nil, "pack_gap:" .. dir .. "profile.json titles." .. deps.title
+    end
+    -- The reason is the pack's, read from where it records it; nothing here is invented.
+    local function no_bag()
+        local open = title.open
+        local reason = (type(open) == "table" and type(open.bag) == "string")
+            and open.bag or "the pack ships no bag fact and no reason for it"
+        return nil, "pack_gap:" .. dir .. "profile.json titles." .. deps.title
+            .. ".profile.bag -- open.bag: " .. reason
+    end
+    local prof = title.profile
+    local bag = type(prof) == "table" and prof.bag or nil
+    local sf = type(bag) == "table" and bag.slot_fields or nil
+    local idf = type(sf) == "table" and sf.id or nil
+    local qtf = type(sf) == "table" and sf.quantity or nil
+    -- A JSON null decodes to a table, so shape is what tells a real fact from an absent one.
+    if type(bag) ~= "table" or type(bag.ball_ids) ~= "table"
+       or type(bag.array_id) ~= "number" or type(bag.balls_pocket_off) ~= "number"
+       or type(bag.ball_slot_size) ~= "number" or type(bag.ball_slot_count) ~= "number"
+       or type(idf) ~= "table" or type(idf.off) ~= "number" or type(idf.size) ~= "number"
+       or type(qtf) ~= "table" or type(qtf.off) ~= "number" or type(qtf.size) ~= "number"
+       or bag.ball_slot_count < 1 or bag.ball_slot_size < idf.size + qtf.size then
+        return no_bag()
+    end
+    local balls = {}
+    for _, id in ipairs(bag.ball_ids) do
+        if type(id) == "number" then balls[id] = true end
+    end
+    if next(balls) == nil then return no_bag() end
+    return function()
+        -- The array is resolved ONCE per answer: a fresh save read per field would re-validate the
+        -- whole array-header table for every slot, and a cached base would outlive a save rewrite.
+        local at, rwhy = deps.save_array(bag.array_id)
+        if not at then return nil, "bag array " .. tostring(bag.array_id) .. ": " .. tostring(rwhy) end
+        for i = 0, bag.ball_slot_count - 1 do
+            local slot = bag.balls_pocket_off + i * bag.ball_slot_size
+            local id = at(slot + idf.off, idf.size)
+            if id == nil then return nil, "bag slot " .. i .. " id unreadable" end
+            if balls[id] then
+                local qty = at(slot + qtf.off, qtf.size)
+                if qty == nil then return nil, "bag slot " .. i .. " quantity unreadable" end
+                if qty > 0 then return true end
+            end
+        end
+        return false
+    end
 end
 
 -- Only the producers that exist are put in the returned table, so a nil seam is ABSENT from the
