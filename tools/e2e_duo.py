@@ -207,8 +207,9 @@ SCENARIOS = {
                                "target": "battle", "no_setup": True, "frames": 2500000,
                                "oracle": "assert_linked_faint_saved",
                                "oracle_kwargs": {"active": False}},
+    # Control rows retain the ordinary original attempt plus two RNG retries.
     "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
-                                "target": "battle", "gen1_synth": "explode", "rng_attempts": 4, "no_setup": True, "frames": 2500000,
+                                "target": "battle", "gen1_synth": "explode", "rng_attempts": 3, "no_setup": True, "frames": 2500000,
                                 "oracle": "assert_linked_faint_saved",
                                 "oracle_kwargs": {"active": True}},
     # The same linked faint landing while B's linked mon sits on the BENCH of a wild battle
@@ -221,7 +222,7 @@ SCENARIOS = {
                                       "oracle_kwargs": {"active": False, "bench_battle": True}},
     "explode_bench_battle_new": {"flags": ["--explode-mode"], "timeout": 1500,
                                  "games": ("gen1_new",), "target": "battle", "gen1_synth": "explode",
-                                 "rng_attempts": 4, "no_setup": True,
+                                 "rng_attempts": 3, "no_setup": True,
                                  "frames": 2500000, "oracle": "assert_linked_faint_saved",
                                  "oracle_kwargs": {"active": False, "bench_battle": True,
                                                    "explode": True}},
@@ -255,6 +256,8 @@ SCENARIOS = {
     # patch's mailbox counter -- every Gen 1 row runs its companion cartridge (GAMES
     # `patched_saves`), so no scenario names a ROM of its own any more.
     "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
+                    # The wild foe can KO the linked mon before EXPLOSION (25-49%);
+                    # four attempts cover crit/tie variation in that additional battle.
                     # O-33: private qualified battle-save copies with 20 Poke Balls.
                     # Catch/link/explode still run natively; each PYDEC receipt discloses SYNTH.
                     "target": "battle", "gen1_synth": "explode", "rng_attempts": 4, "no_setup": True, "frames": 2500000,
@@ -883,12 +886,12 @@ SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its batt
 # (the Lua card lands the string; the phrase is pinned here and cross-checked against the body
 # once it exists).
 EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION"
-# A third explode miss may reach its declared fourth attempt; other rows keep their budgets.
+# Only explode_new may retry a third miss; the two SYNTH controls retain three attempts.
 EXPLODE_BALL_MISS = "hunt ended out-of-balls"
 LATE_ATTEMPT_RNG = (
-    (SPECIES_BUDGET_MISS, None),  # preserve the existing species-hunt policy
+    (SPECIES_BUDGET_MISS, frozenset()),  # preserve the existing species-hunt policy
     (EXPLODE_KO_MISS, frozenset({"explode_new"})),
-    (EXPLODE_BALL_MISS, frozenset({"explode_new", "linked_faint_active_new", "explode_bench_battle_new"})),
+    (EXPLODE_BALL_MISS, frozenset({"explode_new"})),
 )
 
 
@@ -896,10 +899,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     """May these receipts restart one whole gen1_new run?
 
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
-    on the other. Later attempts are only for the species hunt's own budget phrase — its
-    reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
-    gets another whole run within `limit` (addendum (j)). Most ball misses get two retries;
-    explode_new also admits an out-of-balls miss into its declared fourth attempt.
+    on the other. Attempts 1 and 2 may retry an RNG cause. Later attempts require a
+    phrase whose tuple scope admits the named scenario (an empty set is unscoped).
+    Species-budget misses retain their existing policy; explode_new admits foe-KO
+    and out-of-balls misses into its fourth attempt. The SYNTH controls stop at three.
+    Omitting the scenario never admits a scoped late phrase.
 
     A half with NO RESULT is NOT "worse than CONSEQUENCE" — it made no claim at all. The RNG
     half's FAIL is what ended the wait (`DuoRun.wait_for` -> `ClientFinishedEarly`) and the
@@ -935,7 +939,7 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
     return bool(causes) and all(
-        any(phrase in (text or "") and (scenarios is None or scenario in scenarios)
+        any(phrase in (text or "") and (not scenarios or scenario in scenarios)
             for phrase, scenarios in LATE_ATTEMPT_RNG) for text in causes)
 
 
@@ -6220,6 +6224,18 @@ class DuoRun:
             if link[inst]["key"] != key:
                 raise RuntimeError(f"{inst} persisted link key differs from captured {key}")
             sram, party, current_box, codec = self._saved_gen1_party(inst)
+            if getattr(self, "cfg", {}).get("gen1_synth") == "explode":
+                from server.adapters import gen1_codec
+                layout = gen1_codec.for_foundation("gen1_purergb" if is_pure_pairing(self.game) else "gen1_rby")
+                stock = self._gen1_synth_fixtures[inst][2]["balls_after"]
+                throws = re.findall(r"^\[hunt\] threw ball index \d+ -> caught "
+                                    r"balls_before=(\d+) balls_after=(\d+)$", results[inst], re.M)
+                saved_balls = sum(qty for item, qty in layout.decode_bag(sram) if item in layout.ball_items)
+                if throws != [(str(stock), str(stock - 1))] or saved_balls != stock - 1:
+                    raise RuntimeError(f"{inst}: SYNTH catch must spend exactly one Ball: "
+                                       f"stock={stock} throws={throws} saved={saved_balls}")
+                self._pydec_note(f"GEN1_SYNTH_CATCH inst={inst} balls_before={stock} "
+                                 f"balls_after={saved_balls} saved=true")
             if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
                 raise RuntimeError(f"{inst} saved party is not its living starter: "
                                    f"{[(codec.key(m), m['hp']) for m in party]}")

@@ -167,12 +167,15 @@ def test_generator_gets_ball_ids_from_the_foundation_layout(monkeypatch):
 
 
 @pytest.mark.parametrize("scenario", SYNTH_ROWS)
-def test_each_synth_comparison_row_has_an_honest_four_attempt_budget(scenario):
+def test_each_synth_comparison_row_has_an_honest_attempt_budget(scenario):
     assert duo.SCENARIOS[scenario].get("gen1_synth") == "explode"
-    assert duo.SCENARIOS[scenario].get("rng_attempts") == 4
+    expected = 4 if scenario == "explode_new" else 3
+    assert duo.SCENARIOS[scenario].get("rng_attempts") == expected
     limit = duo.scenario_attempt_limit(scenario, "gen1_pure")
     miss = {"a": duo.RNG_OUT_OF_BALLS, "b": ""}
-    assert limit == 4 and duo.retryable_gen1_rng("gen1_pure", miss, 3, limit, scenario=scenario)
+    assert limit == expected
+    assert duo.retryable_gen1_rng("gen1_pure", miss, 2, limit, scenario=scenario)
+    assert duo.retryable_gen1_rng("gen1_pure", miss, 3, limit, scenario=scenario) == (scenario == "explode_new")
     assert not duo.retryable_gen1_rng("gen1_pure", miss, 4, limit, scenario=scenario)
 
 
@@ -189,3 +192,9 @@ def test_explode_ko_cannot_grant_late_retries_to_another_row():
     assert duo.retryable_gen1_rng("gen1_new", miss, 3, 4, scenario="explode_new")
     for other in ("linked_faint_active_new", "explode_bench_battle_new", "poison_new"):
         assert not duo.retryable_gen1_rng("gen1_new", miss, 3, 4, scenario=other)
+
+
+def test_late_scopes_are_sets_and_missing_scenario_never_admits_scoped_phrase():
+    assert all(isinstance(scope, frozenset) for _, scope in duo.LATE_ATTEMPT_RNG)
+    for phrase in (duo.EXPLODE_KO_MISS, duo.EXPLODE_BALL_MISS):
+        assert not duo.retryable_gen1_rng("gen1_new", {"a": f"RESULT: FAIL ({phrase})", "b": ""}, 3, 4)

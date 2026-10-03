@@ -937,6 +937,10 @@ def _oracle_runner(tmp_path, scenario):
 
     run.emus = [Finished(), Finished()]
     paths = {}
+    for inst in ("a", "b"):
+        companion = Path(duo.REPO) / run._rom_for(inst)
+        if not companion.is_file():
+            pytest.skip(f"companion input absent: {companion}")
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
         if run.cfg.get("gen1_synth"):
@@ -993,7 +997,8 @@ def _linked_faint_fixture(tmp_path, scenario):
     for inst, (path, sram, rom) in paths.items():
         if run.cfg.get("gen1_synth"):
             balls = codec.bag_quantity(sram, codec.POKE_BALL)
-            hunts[inst] = f"[hunt] encounter 1 at (10,35) mode=catch balls={balls}\n"
+            hunts[inst] = (f"[hunt] encounter 1 at (10,35) mode=catch balls={balls}\n"
+                           f"[hunt] threw ball index 0 -> caught balls_before={balls} balls_after={balls-1}\n")
             sram[codec._BAG_COUNT + 2] = balls - 1  # model one native prerequisite throw
             _seal_main(sram)
         run._link_keys[inst] = _put_fainted_in_box12(sram, rom)
@@ -2084,3 +2089,54 @@ def test_prepared_admission_cartridge_remains_selected_at_oracle_time(runner, mo
     runner._run_oracle(results)
     assert observed == [expected] and runner._admit_roms == {"a": expected}
     assert (Path(duo.REPO) / expected).read_bytes() == b"random-red"
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("fault", ["untouched_save", "untouched_receipt", "missing_receipt"])
+def test_synth_catch_oracle_requires_one_spent_ball(tmp_path, scenario, fault):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    def receipt(text):
+        return text if "balls_before=" in text else text + "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19\n"
+    results = {"a": receipt(a_text), "b": receipt(proper)}
+    run.assert_linked_faint_saved(results, active=True)
+    if fault == "untouched_save":
+        path, sram, _rom = paths["a"]
+        sram[codec._BAG_COUNT + 2] = 20
+        _seal_main(sram)
+        path.write_bytes(sram)
+    elif fault == "untouched_receipt":
+        results["a"] = results["a"].replace("balls_after=19", "balls_after=20")
+    else:
+        results["a"] = "\n".join(line for line in results["a"].splitlines() if "threw ball" not in line)
+    with pytest.raises(RuntimeError, match="one.*[Bb]all"):
+        run.assert_linked_faint_saved(results, active=True)
+
+
+
+def test_oracle_fixture_skips_when_private_companion_input_is_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    with pytest.raises(pytest.skip.Exception, match="companion input absent"):
+        _oracle_runner(tmp_path, "link_new")
+
+
+def test_hunt_logs_driver_ball_counts_for_the_oracle():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    logs, menus = [], []
+    def menu(_budget):
+        menus.append(True)
+        return lua.table(ok=len(menus) == 1, frames=1, why="battle_over")
+    driver = lua.table(wait_menu=menu,
+                       use_item=lambda *_: lua.table(why="caught", balls_before=20, balls_after=19))
+    route = module.new(lua.table(player="a"), lua.table(driver=driver, step=lambda _: None,
+        rd=lambda a: {1: 1, 2: 4, 3: 20, 4: 0, 5: 1, 6: 0, 7: 14}.get(a, 0),
+        symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", log=lambda line: logs.append(str(line))))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    route.step(None, None, battle, 1)
+    assert "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19" in logs
