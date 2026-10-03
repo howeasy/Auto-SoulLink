@@ -1063,6 +1063,8 @@ def build(roms: dict[str, bytes]) -> tuple[dict, dict]:
         if name == "rr_companion":
             # RR-DURABLE: the shipped durable-trade UPS (patch/dist/SLink-RR.ups); its native
             # trade descriptor binds only for explicit production metadata (lua/gen3/entry.lua).
+            # `production` does not decide admission of clean companion titles; the companion-required
+            # rule does (lua/gen3/entry.lua Entry.admit_routed + server companion_refusal).
             artifact = {"production": True, **artifact}
         packs[pack]["titles"].setdefault(title, {"artifacts": {}})["artifacts"][kind] = artifact
     for pack in packs.values():

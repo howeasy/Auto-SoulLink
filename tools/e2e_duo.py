@@ -511,10 +511,12 @@ SCENARIOS = {
     #                refused with stale_battle_id -- the C5-10 battle-identity gate (2dc1b750;
     #                docs/gen3/research/rival_swap_refresh_window.md §3.3: missing session /
     #                battle_id -> refuse, nothing written) answers before any refresh window.
-    #   native_absent B boots the CLEAN RR dump (rom_kind clean/companion split; runs on
-    #                rr_town.sav). Both sides get the same VALID apply_trade (the partner
-    #                fixture's slot-1 record): the companion must stage it natively, the clean
-    #                cartridge must refuse it and write nothing (trade port 78908fe8).
+    #   native_absent REFUSAL PROOF (patch-first, owner 2026-10-02: the companion patch is
+    #                REQUIRED, a clean RR is refused at launch): B boots the CLEAN RR dump
+    #                (rom_kind clean/companion split) and `expect_refused` makes the driver PASS
+    #                B only on lua/gen3/run.lua's own "needs the SLink companion patch" refusal --
+    #                no client, no hello, no write, no save. A (companion) boots and connects
+    #                alone and must see no partner, no link and no write.
     # Owner ruling 19: RR force_explode's commit ends in the P+H hand-off, so it runs on the P+H
     # carrier (active_faint_case "explode"): no press after the commit, the same engine oracles,
     # and the attacker's own faint site after the 153 stamp. A QUALIFICATION row (G5-RR-ORACLES):
@@ -542,8 +544,8 @@ SCENARIOS = {
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
-                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("b",),
-                           "oracle": "assert_native_absent_gen3_saved"},
+                           "rom_kind": {"a": "companion", "b": "clean"}, "expect_refused": ("b",),
+                           "no_save": ("a", "b"), "oracle": "assert_native_absent_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
     # (slot 1 is the linked/traded mon); the oracle reads both flashes (PYDEC) + links.json.
@@ -588,25 +590,11 @@ SCENARIOS = {
     # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
     # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
-    #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
+    #   R2 clean   RETIRED 2026-10-03 (patch-first): a clean RR is refused at launch, so there is
+    #              no clean-side link row; native_absent_gen3 is the single refusal proof
+    #              (docs/gen3/RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
     #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
     #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
-    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
-                                       "target": "battle2", "frames": 2500000,
-                                       "rom_kind": {"a": "companion", "b": "clean"},
-                                       "scenario_module": "linked_faint_active",
-                                       "oracle": "assert_linked_faint_active_clean_gen3_saved"},
-    # G5-RR-CLEAN, owner ruling 25(a) (docs/gen3/G4_request_draft.md §6): the second and last
-    # clean-side row ("a decent amount", not full S-1..S-11 coverage) -- a basic link+faint on
-    # the clean ROM. Reuses faint_cmd_gen3's own module/oracle: link the slot-1 mons, then the
-    # server injects A's faint through the debug API. Nothing here pokes either cartridge but
-    # the clients (faint_cmd_gen3's own orchestrate docstring), so it needs no companion-only
-    # mechanism and runs on the clean dump exactly as native_absent_gen3's B half already does.
-    "faint_cmd_clean_gen3": {"flags": [], "timeout": 900, "games": ("gen3_rr",),
-                             "target": "battle2", "frames": 2000000,
-                             "rom_kind": {"a": "companion", "b": "clean"},
-                             "scenario_module": "faint_cmd",
-                             "oracle": "assert_faint_cmd_clean_gen3_saved"},
     "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                          "target": "battle2", "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
@@ -1513,7 +1501,7 @@ GEN3_TITLES = {
     GEN3_EXP_TITLE: {"artifact": "pokeemerald.gba", "saveram": "gen3 pokeemerald.SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
-# for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
+# for native_absent_gen3's refusal-proof side only (`rom_kind`: "clean"). It resolves through the
 # ORDINARY repo-root/parents dump search (no `staged` entry), same as firered/leafgreen, because
 # unlike the companion build it genuinely is a raw dump to stage; its battery name is computed
 # from the staged path at resolve time (_gen3_battery_path), not pinned here, since stage_rom's
@@ -1529,6 +1517,10 @@ GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # event it SENDS and one per command it RECEIVES.
 GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
 GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
+# lua/gen3/entry.lua Entry.admit_routed's refusal of a clean companion-required cartridge, as run.lua
+# logs it (console.log "[SLink-gen3] refused: <why>", teed with the "[client] " prefix by the driver).
+GEN3_CLEAN_REFUSAL_RE = (r"(?m)^\[client\] \[SLink-gen3\] refused: this radical_red cartridge needs the SLink "
+                         r"companion patch; prepare it through the Manager or /patcher$")
 # duo_gen3_main.lua dump_witness: one per extension RAM copy, right after its save's DUMP line.
 GEN3_EXT_RE = re.compile(r"SAVE_WITNESS_EXT path=(\S+) bytes=(\d+) saves=(\d+)\s*$")
 
@@ -3730,6 +3722,11 @@ class DuoRun:
         kind = self.cfg.get("rom_kind", "companion")
         return kind[inst] if isinstance(kind, dict) else kind
 
+    def _gen3_expect_refused(self, inst) -> bool:
+        """True when this side is a REFUSAL PROOF (scenario field `expect_refused`, like `rom_kind`):
+        the driver passes it only on lua/gen3/run.lua's companion-patch refusal, never as a client."""
+        return inst in self.cfg.get("expect_refused", ())
+
     def _gen3_rom(self, inst) -> str:
         """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
         the launch rule shared with run_gate). An already-staged copy is used when the dump
@@ -4487,6 +4484,7 @@ class DuoRun:
                 print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
                       f"scope={scope} install_root={REPO}")
             duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
+            duo["expect_refused"] = self._gen3_expect_refused(inst)
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
@@ -8193,8 +8191,6 @@ class DuoRun:
               f"{self._link_keys['b']}; re-queued to A: "
               f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
 
-    orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
-
     # ── NAT-LEGS (S-8, S-9, S-11): link the leg's subject (server staging), GO; nothing else is
     # injected -- the stimulus is A's own native play (scenario_gen3_{evolve,npc_trade,poison_faint}).
     def orchestrate_evolve_gen3(self):
@@ -8226,7 +8222,6 @@ class DuoRun:
 
     orchestrate_linked_faint_active_whiteout_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_trainer_gen3 = orchestrate_linked_faint_active_gen3
-    orchestrate_linked_faint_active_clean_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_lhammer_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_mega_gen3 = orchestrate_linked_faint_active_gen3
 
@@ -9180,17 +9175,16 @@ class DuoRun:
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):
-        """PLAN P5's clean-vs-companion RR control (Codex C4-6b finding 6), redesigned for the
-        durable trade (RR-DURABLE): B boots rom_kind=clean, A the companion build. Each side is
-        sent the same well-formed apply_prepare -- its slot-1 key as old_key. The companion must
-        answer ok only after its NATIVE pre-save (PREPARE posted, the native save dialog, READY);
-        the clean cartridge must answer ok:false and write nothing."""
-        ka, kb = self._gen3_prelude()
+        """Clean-RR REFUSAL PROOF (patch-first, owner 2026-10-02). B boots the raw dump and the
+        driver (`expect_refused`) must see lua/gen3/run.lua refuse it: no MYKEY, no hello. So only A
+        is waited on for keys and a hello; B is waited on for its refusal line; then A is released
+        to sit quietly (it must see no partner and no write)."""
+        self.wait_for("a: MYKEY line", lambda: extract_keys(self._read_receipt("a")) or None, 120)
+        self.wait_for("a: hello accepted", lambda: ((self._status() or {}).get("players", {})
+                                                    .get("a", {}).get("connected")) or None, 120)
+        self.wait_for("b: refused at launch", lambda: re.search(GEN3_CLEAN_REFUSAL_RE,
+                                                                self._read_receipt("b")), 120)
         self.go()
-        for inst, own in (("a", ka), ("b", kb)):
-            self.queue_command(inst, {"cmd": "apply_prepare", "slot": 1, "old_key": own[1],
-                                      "token": f"native_absent_{inst}"})
-        self._native_absent_keys = {"a": ka[1], "b": kb[1]}
 
     def _gen3_wrong_save(self, path):
         """A real save, qualifying under the row's own layout (vanilla or CFRU), whose trainer id
@@ -9342,30 +9336,6 @@ class DuoRun:
         for process in getattr(self, "emus", []):
             process.wait(timeout=30)
 
-    def _gen3_rom_provenance_problems(self, want_kind, results) -> list:
-        """Each side's own admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by
-        admitted_by) player X -> host:port (rom HASH)" -- is what the CLIENT independently found
-        on its own cartridge, checked against the rom_sha1/rom_md5 pins in engine_signals.json
-        (Entry.admit, lua/gen3/entry.lua): admitted_by=="hash" is a pin hit, "anchors"/"header"
-        are the weaker fallbacks. A scenario's rom_kind config (self._gen3_rom_kind) is only what
-        the harness INTENDED to stage; this is the independent proof it actually happened
-        (G5-RR-CLEAN-2, OMP review cx-39175521) -- also catches a same-dump mislabel, where both
-        sides admit the identical hash under two different kind claims."""
-        problems, hashes = [], {}
-        for inst, kind in want_kind.items():
-            text = results.get(inst) or ""
-            problems += gen3_receipt_problems(
-                inst, text,
-                required=[rf"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \({re.escape(kind)} by hash\) "
-                          rf"player {inst} "])
-            m = re.search(rf"(?m)^\[client\] \[SLink-gen3\] .*player {inst} .* \(rom ([0-9A-Fa-f]+)\)$", text)
-            if m:
-                hashes[inst] = m.group(1)
-        if len(hashes) > 1 and len(set(hashes.values())) < len(hashes):
-            problems.append(f"the sides admitted the same ROM hash {hashes}: the companion/clean "
-                            f"split did not actually run two different dumps")
-        return problems
-
     def assert_faint_cmd_gen3_saved(self, results):
         """Both memorials saved: the linked key left each party for the memorial box and nothing
         else moved; B's key went to HP 0 through an armed OVERWORLD write (the checkpoint), after
@@ -9392,14 +9362,6 @@ class DuoRun:
                      (forced, gen3_tx("memorialize_done", kb))])
         self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
                                    f"B's HP 0 came from an overworld-armed write")
-
-    def assert_faint_cmd_clean_gen3_saved(self, results):
-        """faint_cmd_gen3's own oracle wholesale (the link+faint mechanics are identical) -- plus
-        proof the clean-side split actually ran: A admitted as the companion build and B as the
-        raw CLEAN dump, both by HASH against the pins, on two different cartridges."""
-        self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
-                         "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
-        self.assert_faint_cmd_gen3_saved(results)
 
     # ── NAT-LEGS oracles: the engine signal (the driver's SIGNAL tee), what the client sent, what
     # the SERVER persisted, and A's saved battery against its SYNTH fixture.
@@ -9653,7 +9615,6 @@ class DuoRun:
 
     assert_linked_faint_active_whiteout_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_trainer_gen3_saved = assert_linked_faint_active_gen3_saved
-    assert_linked_faint_active_clean_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_lhammer_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_mega_gen3_saved = assert_linked_faint_active_gen3_saved
 
@@ -9982,27 +9943,35 @@ class DuoRun:
                                    "identity-less team was refused with stale_battle_id")
 
     def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3 (RR-DURABLE): the same valid apply_prepare, two outcomes. A
-        (companion): a native write AFTER the command (the PREPARE post; the link panel may write
-        native before it), the native pre-save (gSaveCounter advanced), the producer READY, and
-        apply_ready ok:true. B (clean): apply_ready ok:false, no write at all. Neither side saves."""
-        native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
-        prepared = r"(?m)^NATIVE_PREPARED phase=2 writes=[1-9]"
-        after_cmd = r"(?ms)^RX apply_prepare\b.*?^\[client\] \[SLink-gen3\] write native "
-        ready_ok = r'(?m)^TX apply_ready - .*"ok":true'
+        """native_absent_gen3: the clean-RR REFUSAL PROOF. B (raw dump): lua/gen3/run.lua's own
+        "needs the SLink companion patch" refusal line, the driver's REFUSED_AT_LAUNCH, WRITES 0,
+        and nothing a working client leaves (no MYKEY, no TX, no RX, no admission line, no write, no
+        save dump). A (companion): admitted, hello sent, a settled window with no write and no
+        command, none of the partner-driven commands. The server: B never connected and no link
+        exists. Neither side saves."""
+        partner_cmds = "|".join(("apply_prepare", "apply_trade", "force_faint", "force_explode", "memorialize",
+                                 "party_mon", "box_mon", "replace_rival_team"))
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_prepare\b", after_cmd, ready_ok, prepared],
-            forbidden=[r'(?m)^TX apply_ready - .*"ok":false'])
-        m = re.search(r"(?m)^PRESAVE_COUNTER before=(\d+) after=(\d+)$", results["a"])
-        if not m or int(m[2]) <= int(m[1]):
-            problems.append("a: the native pre-save never advanced gSaveCounter "
-                            f"({m[0] if m else 'no PRESAVE_COUNTER line'})")
+            "a", results["a"],
+            required=[r"(?m)^TX hello\b", r"(?m)^PROBE_SETTLED writes=0 rx=0$"],
+            forbidden=[rf"(?m)^RX (?:{partner_cmds})\b", r"(?m)^\[client\] \[SLink-gen3\] refused"])
         problems += gen3_receipt_problems(
-            "b", results["b"], required=[r"(?m)^RX apply_prepare\b", r'(?m)^TX apply_ready - .*"ok":false',
-                                         r"(?m)^WRITES 0$", r"(?m)^PROBE_SETTLED writes=0$"],
-            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write ", r'"ok":true'])
-        self._gen3_raise(problems, "native_absent: the companion answered the valid prepare only after "
-                                   "its native pre-save; the clean cartridge refused it and wrote nothing")
+            "b", results["b"],
+            required=[GEN3_CLEAN_REFUSAL_RE, r"(?m)^REFUSED_AT_LAUNCH \[SLink-gen3\] refused: ",
+                      r"(?m)^WRITES 0$"],
+            forbidden=[r"(?m)^MYKEY ", r"(?m)^TX ", r"(?m)^RX ", r"(?m)^\[client\] \[SLink-gen3\] write ",
+                       r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player ",
+                       r"(?m)^SAVE_WITNESS_DUMP"])
+        status = self._status()
+        if status is None:
+            problems.append("server: /api/status unavailable, cannot show B never connected")
+        elif (status.get("players") or {}).get("b", {}).get("connected"):
+            problems.append("server: b connected -- the refused cartridge reached the server")
+        if self._links_json():
+            problems.append(f"server: a persisted link exists: {self._links_json()}")
+        self._gen3_raise(problems, "native_absent REFUSAL PROOF: the clean RR was refused at launch (needs the "
+                                   "SLink companion patch), never connected, linked nothing and wrote nothing; "
+                                   "the companion side stayed quiet")
 
     def _run_oracle(self, results):
         """Revalidate the family contract and run its injected evidence stages.

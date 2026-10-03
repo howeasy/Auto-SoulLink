@@ -196,7 +196,7 @@ EMERALD_UNIT_FILES = [
     "tests/unit/test_gen3_title_syms.py",
 ]
 UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
-                   # the unpatched RR ROM the RR clean rows and test_mailbox_absent.lua need; a
+                   # the unpatched RR ROM native_absent_gen3's refusal-proof side and test_mailbox_absent.lua need; a
                    # lane outside the main checkout's folder can't find it by walking up
                    "Pokemon - Radical Red.gba",
                    "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",

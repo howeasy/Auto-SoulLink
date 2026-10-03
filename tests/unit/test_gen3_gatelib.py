@@ -245,26 +245,29 @@ def test_ported_gate_fails_without_the_companion(gate, tmp_path):
     assert verdict(text).startswith("RESULT: FAIL"), text
 
 
-def _rr_clean_is_production():
-    import json
-    pack = json.loads((Path(__file__).resolve().parents[2] / "data/games/gen3_rr/engine_signals.json")
-                      .read_text(encoding="utf-8"))
-    return pack["titles"]["radical_red"]["artifacts"]["clean"].get("production") is not False
+LAUNCHER_CHECK = "the launcher refuses the clean RR: the companion patch is required"
 
 
 def test_absent_gate_passes_on_clean_and_fails_on_a_beacon(tmp_path):
-    if not _rr_clean_is_production():
-        # FOLLOW-UP (reported with the migration): lua/tests/test_mailbox_absent.lua boots the
-        # CLEAN RR ROM through Entry.admit, which now refuses it. Until the gate is re-based
-        # (e.g. a companion artifact with the mailbox unwritten) it fails at admission, live too.
-        text = run_gate("test_mailbox_absent.lua", tmp_path, kind="clean")
-        assert verdict(text).startswith("RESULT: FAIL") and "non-production cartridge is not admitted" in text
-        return
-    assert verdict(run_gate("test_mailbox_absent.lua", tmp_path, kind="clean")).startswith("RESULT: PASS")
+    """The clean RR boots as an admitted CLEAN artifact (native absent, Lua fallback) AND the
+    launcher (Entry.admit_routed) refuses it with the companion verdict (patch-first, 2026-10-02)."""
+    text = run_gate("test_mailbox_absent.lua", tmp_path, kind="clean")
+    assert verdict(text).startswith("RESULT: PASS"), text
+    assert LAUNCHER_CHECK in text and "needs the SLink companion patch" in text, text
     other = tmp_path / "beacon"
     other.mkdir()
     text = run_gate("test_mailbox_absent.lua", other, kind="clean", beacon=True)
     assert verdict(text).startswith("RESULT: FAIL"), text
+
+
+def test_absent_gate_fails_if_the_launcher_would_admit_the_clean_rr(tmp_path):
+    """The launcher check can fail: a gate copy whose t.routed() reports the clean RR admitted."""
+    src = (GATE_DIR / "test_mailbox_absent.lua").read_text(encoding="utf-8")
+    assert "t.routed()" in src
+    mutant = tmp_path / "mutant_absent.lua"
+    mutant.write_text(src.replace("t.routed()", "{ pack = 'gen3_rr', kind = 'clean' }"), encoding="utf-8")
+    text = run_gate("test_mailbox_absent.lua", tmp_path / "out", kind="clean", path=mutant)         if (tmp_path / "out").mkdir() is None else ""
+    assert verdict(text).startswith("RESULT: FAIL") and LAUNCHER_CHECK in text, text
 
 
 def test_absent_gate_fails_on_the_companion_artifact(tmp_path):
