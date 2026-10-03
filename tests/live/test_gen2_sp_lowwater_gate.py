@@ -123,14 +123,15 @@ def test_sp_lowwater_on_the_patched_rom(emuhawk, title):  # noqa: F811
     receipt = combine(parts, title, staged)
     assert receipt["overlay_sha1"] == facts["overlay_sha1"] and receipt["evidence_level"] == "PHYSICAL", receipt
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
-    errors = gate._sp_lowwater_gate_row_errors(REPO, title, receipt)
-    assert not errors, errors
     # B1/B2: overlay evidence lands in the overlay namespace and carries its own artifact identity. This
     # gate's Lua (gen2_sp_lowwater_gate.lua) is not in stream B's file grant, so the executed sha1 is the
     # independently hashed staged identity rather than an in-emulator observation; the binding is still
-    # checked in-emulator by every gate's shared scripted-gate context.
+    # checked in-emulator by every gate's shared scripted-gate context. The identity goes on BEFORE the row
+    # check: the verifier's row check requires it, so checking first could never pass.
     identity = live.identity(title, "overlay")
     receipt.update(artifact_kind=identity["kind"], rom_sha1=identity["rom_sha1"],
                    base_sha1=identity["base_sha1"], binding_sha256=identity["binding_sha256"])
+    errors = gate._sp_lowwater_gate_row_errors(REPO, title, receipt)
+    assert not errors, errors
     live.receipt_file(f"{title}.sp_lowwater_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
