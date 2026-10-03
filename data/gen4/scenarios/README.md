@@ -106,16 +106,23 @@ Wrong slot/nonselection is input drift evidence. Estimate 1-3 minutes; first
 falsifier is wrong input/battle, unexpected PP, loss or recipe bound.
 
 D2 observes before first emulated frame, full registration pin and region-0
-residency every frame, with no 16-frame cutoff. First observed residency is
-LEFT_CENSORED, never a zero latency. Late attachment is OPEN. The 24000-frame
+residency every frame, with no 16-frame cutoff. An observed inactive-to-resident
+transition after cold boot is uncensored. Resident at attach is LEFT_CENSORED:
+it is reported as OBSERVED_CENSORED with left_censored=true and no measured
+delta, never zero. Late attachment after frame 0 is OPEN. The 24000-frame
 post-route observation ceiling/host timeout is not a policy/max measurement.
 Keep every sample, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
 (the diagnostic outputs manifest). Estimate 2-6 minutes/title. First falsifier:
 censored load, pin never lands, wrong image, 12-attempt errand bound or no wild
-launch. SS has ov12; hge additionally has ov130/ov129. Startup ov129 must actually
-be witnessed uncensored. These diagnostics do not author settle-policy values.
+launch. SS has ov12; hge additionally has ov130/ov129. Resident-from-boot ov129
+is reported with its censoring class. The driver already attaches with --lua
+and samples before its first frameadvance, requiring emu.framecount()==0. That
+does not establish observation before ROM/core initialization: an earlier
+attachment point is not implemented or PHYSICALLY verified here. These
+diagnostics do not author settle-policy values.
 
-D3 compares raw callback/fall/close frames and same advance token, pending>=1,
+D3 is HG-only and uses the harness's committed HG settle policy/image pins and
+M.phase_sites_ready before arming. It compares callback/fall/close frames and same advance token, pending>=1,
 exactly-once delivery, retained0 and second-drain0. No assumed equal counters.
 Estimate 1-3 minutes; first falsifier is missing boundary/lost event or cleanup.
 D4 uses boxed row-i hash/sidecar inventory and target-specific receipt consumer;
@@ -137,11 +144,24 @@ python tools/gen4_routes.py run --game SS --target grass --errand pokegear --sav
 ```
 
 Select the actual new BATTLE+settled states, not a guessed leg number. Pin their
-hashes from reviewed manifests before row o. Set G4_SS_ONE and G4_SS_TWO to
+hashes from reviewed manifests before row o. Diagnostic.json identifies every
+state by producer, qualified:false, setup class and sha256 (including resync
+states and retained-input copies); it is NOT a receipt. Diagnostic-produced
+states are disclosed setup inputs, not qualification evidence. Set G4_SS_ONE and G4_SS_TWO to
 lane-relative paths: native SS one-state may be the reviewed D2 output; two-state
 is the new party2 route output. Q's native/PC/boxed saves remain the committed
 scenario inventory, including sidecar hashes. Verify every retained state hash
-before reuse. Q is approximately 50-90 minutes, not a timeout extension.
+before reuse. Fill the expected hashes from independently reviewed manifests,
+not by hashing a possibly changed file at launch. Q is approximately 50-90
+minutes, not a timeout extension.
+
+```powershell
+$env:G4_SS_ONE='<lane-relative D2 bridge-N_battle_settled.State>'
+$env:G4_SS_ONE_MANIFEST="$root/$d2s/diagnostic.json"
+$env:G4_SS_ONE_SHA256='<reviewed SHA256 from the D2 outputs entry>'
+$env:G4_SS_TWO='<lane-relative new party2 route state>'
+$env:G4_SS_TWO_SHA256='<independently reviewed SHA256 of the native route state>'
+```
 
 ## Q: qualification ONLY after diagnostic review and the NEW FROZEN
 
@@ -167,19 +187,31 @@ import json, os, re, shutil
 from tests.live import test_gen4_battle_faint as f
 from tools.gen4_fixtures import lane_root
 from tools import gen4_pins
+from tools.gen4_diag import check_state_manifest, sha256
 root=lane_root()
-for title, short, native, one, two in [
+for title, short, native, one, two, one_sha, two_sha in [
     ('heartgold','hg','saves/hg_base_26310.SaveRAM',
-     'route/route_leg2_battle_settled.State', 'g1hg-p2-route-1016/p2hg_leg2_battle_settled.State'),
+     'route/route_leg2_battle_settled.State', 'g1hg-p2-route-1016/p2hg_leg2_battle_settled.State',
+     'eca826afb5df8b73f3057219b41647028c60216aee0767302c489bd341d60da2',
+     '0aafe8182ef6943366daba6338bac0c7b8da3fefe97a218843f9b2f0091579aa'),
     ('heartgold_hge','hge','saves/hge_a_OOO_630.SaveRAM',
-     'route_hge/route_hge_leg5_battle_settled.State', 'g1hge-p2-route-1022/p2hge_leg5_battle_settled.State'),
+     'route_hge/route_hge_leg5_battle_settled.State', 'g1hge-p2-route-1022/p2hge_leg5_battle_settled.State',
+     '2b363fade4dcef46bde004379e6499cac53da8de0d5984c33782f49eca6f2b7f',
+     'e8c96480a25609cdd1ef1d431a1cda9ec0cc69ac9b85e0dca331887ac5fc0941'),
     ('soulsilver','ss','saves/ss_DDDD_25944.SaveRAM',
-     os.environ['G4_SS_ONE'], os.environ['G4_SS_TWO'])]:
+     os.environ['G4_SS_ONE'], os.environ['G4_SS_TWO'],
+     os.environ['G4_SS_ONE_SHA256'], os.environ['G4_SS_TWO_SHA256'])]:
     for p2, relative in [(False,one),(True,two)]:
         import subprocess
         assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['G4_FROZEN']
         assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
         state=f.need(root/relative, 'retained settled battle input')
+        expected=two_sha if p2 else one_sha
+        assert sha256(state)==expected, 'reviewed state hash mismatch'
+        setup={'producer':'tools/gen4_routes.py','qualified':False,'setup':'RETAINED_ROUTE_STATE','sha256':expected}
+        if title=='soulsilver' and not p2:
+            setup=check_state_manifest(state, os.environ['G4_SS_ONE_MANIFEST'], expected)
+        print(json.dumps({'state':str(state),'state_setup':setup}))
         log=state.with_name(state.name.replace('_battle_settled.State','.log'))
         text=f.need(log, 'settled input log').read_text()
         assert re.search(r'RESULT BATTLE\b',text) and re.search(r'settled after \d+ frames',text)
@@ -189,7 +221,7 @@ for title, short, native, one, two in [
         before={p:f.digest(p) for p in (state,save)}
         status,payload,lane,out=f.launch(title,scenario,state,gen4_pins.default_locations().roms[title],save,synth=synth)
         verdict,why=f.receipt_verdict(out,title=title,rom_sha1=payload['rom_sha1'])
-        print(json.dumps({'receipt':str(out),'verdict':verdict,'reason':why}))
+        print(json.dumps({'receipt':str(out),'verdict':verdict,'reason':why,'state_setup':setup}))
         assert all(f.digest(p)==h for p,h in before.items()), 'original input changed'
         assert verdict==status=='PASS', out
         shutil.copyfile(out, f.LANES[title]/f'row_o_{title}_{scenario}.txt')

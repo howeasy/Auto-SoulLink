@@ -43,6 +43,26 @@ def test_driver_is_outside_every_qualification_surface():
     assert Path(d.__file__).resolve() == d.REPO / "tools/gen4_diag.py"
 
 
+def test_boundary_readiness_gate_does_not_arm_an_unready_site():
+    r = api()
+    r.globals().REGISTRY = r.execute((d.REPO / "lua/hook_registry.lua").read_text())
+    r.execute('''
+      local site={id="site",image="ov12",overlay_id=12,address=20,extent=4,register_hex="aabbccdd"}
+      local pin="00000000"; local frame=0; local armed=0
+      local settle={current={},samples={}}
+      local ready=DIAG.boundary_ready(PROBE,{site},function() return pin end,function() return true end,
+        function() return frame end,settle,{max_frames=16,measured_max=11,margin=5},{site={}})
+      local composite=PROBE.composite(REGISTRY,{validate=function(s) return s end,
+        register=function() armed=armed+1; return "handle" end,unregister=function() return true end,
+        capture=function() return nil end})
+      local monitor=PROBE.phase_monitor(composite,"battle_close",{site},"site",
+        function() return true end,ready,function() return frame end)
+      monitor.before(); monitor.after(); assert(armed==0)
+      pin="aabbccdd"; frame=9; monitor.before(); monitor.after(); assert(armed==1)
+      monitor.finish(); assert(composite:live_handles()==0)
+    ''')
+
+
 def test_settle_is_uncensored_and_first_resident_sample_is_left_censored():
     r = api()
     r.execute('''
@@ -58,7 +78,52 @@ def test_settle_is_uncensored_and_first_resident_sample_is_left_censored():
       local first=DIAG.settle_trace(sites)
       DIAG.settle_sample(first,sites,function() return true end,function() return "aabb" end,0)
       assert(first.epochs[1].status=="LEFT_CENSORED" and first.epochs[1].delta==nil)
-      assert(DIAG.settle_verdict(first)=="OPEN" and DIAG.settle_verdict(trace)=="OBSERVED")
+      assert(DIAG.settle_verdict(first)=="OBSERVED_CENSORED" and DIAG.settle_verdict(trace)=="OBSERVED")
+    ''')
+
+
+def test_attach_resident_is_reported_censored_without_a_measured_delta():
+    r = api()
+    r.execute('''
+      local sites={{id="boot",overlay_id=129,register_hex="aabb",address=20,extent=2}}
+      local trace=DIAG.settle_trace(sites)
+      DIAG.settle_sample(trace,sites,function() return true end,function() return "aabb" end,0)
+      local status,facts=DIAG.settle_verdict(trace)
+      assert(status=="OBSERVED_CENSORED" and facts.left_censored==true)
+      assert(trace.epochs[1].left_censored==true and trace.epochs[1].delta==nil)
+      local cold=DIAG.settle_trace(sites)
+      DIAG.settle_sample(cold,sites,function() return false end,function() return "0000" end,0)
+      DIAG.settle_sample(cold,sites,function() return true end,function() return "aabb" end,1)
+      local complete,uncensored=DIAG.settle_verdict(cold)
+      assert(complete=="OBSERVED" and uncensored.left_censored==false and cold.epochs[1].delta==0)
+    ''')
+
+
+def test_recorded_rate_is_the_rate_applied_to_the_client():
+    r = api()
+    r.execute('''
+      local calls={}; local applied
+      local rate=DIAG.apply_rate({limitframerate=function(on) calls[#calls+1]=on end},
+        {speedmode=function(value) applied=value end},300)
+      assert(calls[1]==true and applied==300 and rate==applied)
+    ''')
+
+
+def test_fight_reports_named_table_errors_without_pointer_text():
+    r = api()
+    r.execute('''
+      local title={profile={battle={}},symbols={x={address=4}},phase_cases={}}
+      local leg={name="model",max_frames=1,steps={{press={"A"},hold_frames=1,then_wait_frames=0}},
+        ["until"]={symbol="x",deref={},offset=0,value=1}}
+      local function fail(value)
+        return DIAG.fight(PROBE,title,leg,function() return 0 end,function() error(value,0) end,function() return 0 end)
+      end
+      local opened=fail({open="missing predicate source"})
+      assert(opened.status=="OPEN" and opened.reason=="missing predicate source")
+      local fault=fail({check="invalid site mode"})
+      assert(fault.status=="FAIL" and fault.reason=="invalid site mode")
+      local unknown=fail({anything=3})
+      assert(unknown.status=="FAIL" and not unknown.reason:match("table: 0x"))
     ''')
 
 
@@ -141,6 +206,12 @@ def test_owned_process_cleanup_and_error_publication(tmp_path, monkeypatch, mode
      test_settle_is_uncensored_and_first_resident_sample_is_left_censored),
     ("callback_minus_fall=f-b.fall_frame", "callback_minus_fall=0",
      test_boundary_preserves_callback_vs_post_advance_frame_parity),
+    ("return M.phase_sites_ready(sites,bytes,resident,frame(),settle,policy,image_pins,wanted)", "return true",
+     test_boundary_readiness_gate_does_not_arm_an_unready_site),
+    ('return facts.left_censored and "OBSERVED_CENSORED" or "OBSERVED",facts', 'return "OBSERVED",facts',
+     test_attach_resident_is_reported_censored_without_a_measured_delta),
+    ("client.speedmode(rate)", "client.speedmode(100)", test_recorded_rate_is_the_rate_applied_to_the_client),
+    ('if type(why)=="table" then', 'if false then', test_fight_reports_named_table_errors_without_pointer_text),
 ])
 def test_lua_controls_red_and_revert(monkeypatch, original, replacement, test):
     source = d.LUA
@@ -153,7 +224,8 @@ def test_lua_controls_red_and_revert(monkeypatch, original, replacement, test):
     test()
 
 
-def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tmp_path):
+@pytest.mark.parametrize("reverse", [False, True])
+def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tmp_path, reverse):
     """Execute the entire generated runtime, not just its pure helper functions."""
     import json
     import struct
@@ -164,7 +236,9 @@ def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tm
     producer = title["sites"][case["producer_site"]]
     config = tmp_path / "config.json"
     config.write_text(json.dumps({"lane": tmp_path.as_posix(), "artifact": title, "command": "boundary",
-                                 "phase_case": case, "state_path": "model",
+                                 "phase_case": case, "state_path": "model", "requested_rate": 300,
+                                 "phase_settle": {"max_frames": 16, "measured_max": 11, "margin": 5},
+                                 "phase_image_pins": {case["producer_site"]: {}},
                                  "producer_word": int(producer["fire_hex"], 16)}))
     world = World()
     r = lupa.LuaRuntime(unpack_returned_tuples=True)
@@ -174,19 +248,24 @@ def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tm
     r.globals().SITE = producer["address"]
     r.globals().WORD = int(producer["fire_hex"], 16)
     r.globals().PC = producer["address"] + 4
+    r.globals().REVERSE = reverse
     r.globals().READ = lambda a, bus: struct.unpack_from("<I", world.m, a - BASE)[0]
     r.globals().FALL = lambda: world.w32(SUB0 + 4, 0)
     r.execute('''
       local original=os.getenv
       os.getenv=function(key) if key=="SLINK_ROOT" then return ROOT elseif key=="G4_DIAG_CONFIG" then return CONFIG end; return original(key) end
-      frame=7; callbacks={}
+      frame=7; callbacks={}; order={}
       memory={read_u32_le=READ,read_bytes_as_array=function(a,n)
         assert(a==SITE); local bytes={}; for i=1,n do bytes[i]=tonumber(PIN:sub(i*2-1,i*2),16) end; return bytes end}
       event={on_bus_exec=function(cb,a,name,bus) callbacks[name]=cb; return name end,
         unregisterbyid=function(h) callbacks[h]=nil; return true end}
-      emu={framecount=function() return frame end,getregister=function() return PC end,
-        frameadvance=function() for _,cb in pairs(callbacks) do cb(SITE,WORD,0) end; FALL(); frame=frame+1 end}
-      joypad={set=function() end}; savestate={load=function() end}; client={exit=function() end}
+      emu={limitframerate=function(on) assert(on) end,framecount=function() return frame end,getregister=function() return PC end,
+        frameadvance=function()
+          local names={}; for name in pairs(callbacks) do names[#names+1]=name end; table.sort(names)
+          for n=1,#names do local i=REVERSE and #names+1-n or n; order[#order+1]=names[i]; callbacks[names[i]](SITE,WORD,0) end
+          FALL(); frame=frame+1
+        end}
+      joypad={set=function() end}; savestate={load=function() end}; client={exit=function() end,speedmode=function(v) APPLIED=v end}
     ''')
     r.execute(d.LUA)
     observed = json.loads((tmp_path / "observation.json").read_text())
@@ -194,6 +273,21 @@ def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tm
     assert observed["frame_parity"]["callback_minus_fall"] == -1
     assert observed["retained"] == 0 and observed["state"]["pending_at_close"] == 1
     assert observed["qualified"] is False
+    assert observed["applied_rate"] == r.globals().APPLIED == 300
+    assert r.globals().order[1].startswith("g4probe" if reverse else "g4diag")
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_opposite_order_token_control_red_revert(tmp_path, monkeypatch, reverse):
+    source = d.LUA
+    needle = "oracle_steps[#oracle_steps+1]=state.step_id"
+    assert source.count(needle) == 1
+    test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tmp_path, reverse)
+    monkeypatch.setattr(d, "LUA", source.replace(needle, needle+"+1"))
+    with pytest.raises(AssertionError):
+        test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tmp_path, reverse)
+    monkeypatch.setattr(d, "LUA", source)
+    test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tmp_path, reverse)
 
 
 @pytest.mark.parametrize("mode", ["timeout", "error"])
@@ -209,3 +303,112 @@ def test_cleanup_control_red_and_revert(tmp_path, monkeypatch, mode):
         test_owned_process_cleanup_and_error_publication(tmp_path, monkeypatch, mode)
     monkeypatch.setattr(d, "collect", original)
     test_owned_process_cleanup_and_error_publication(tmp_path, monkeypatch, mode)
+
+
+def model_collect(tmp_path, monkeypatch, *, qualified=False):
+    import json
+    class Process:
+        pid = 413
+        def poll(self): return 0
+        def wait(self, timeout): return 0
+    state = tmp_path / "native_battle_settled.State"
+    state.write_bytes(b"model native state")
+    (tmp_path / "native_resync.State").write_bytes(b"model resync state")
+    input_state = tmp_path / "start.State"
+    input_state.write_bytes(b"copied input")
+    (tmp_path / "observation.json").write_text(json.dumps({"terminal": True, "qualified": qualified,
+                                                        "status": "OBSERVED", "applied_rate": 300}))
+    cfg = {"schema": "gen4-diagnostic-v1", "qualified": False, "source_head": "MODEL", "command": "settle",
+           "title": "heartgold", "rom_sha1": d.gen4_pins.ROM_SPECS["heartgold"][0],
+           "requested_rate": 300, "hashes": {"driver": "model"}, "state_path": str(input_state)}
+    with monkeypatch.context() as patch:
+        patch.setattr(d.subprocess, "Popen", lambda *a, **k: Process())
+        patch.setattr(d.g4, "kill_our_emuhawk", lambda lane: None)
+        patch.setattr(d, "verify_after", lambda config: None)
+        patch.setattr(d, "service_bridge", lambda *a: None)
+        result = d.collect(cfg, tmp_path, ["model-owned"], planner=None, timeout=2)
+    return result, json.loads((tmp_path / "diagnostic.json").read_text()), state
+
+
+def test_every_output_state_has_diagnostic_provenance_and_reviewed_hash(tmp_path, monkeypatch):
+    code, doc, state = model_collect(tmp_path, monkeypatch)
+    assert code == 0
+    assert set(doc["outputs"]) == {"native_battle_settled.State", "native_resync.State"}
+    for name, entry in doc["outputs"].items():
+        assert entry["producer"] == "tools/gen4_diag.py" and entry["qualified"] is False
+        assert entry["sha256"] == d.sha256(tmp_path / name)
+        assert entry["setup"] == "DIAGNOSTIC_PRODUCED"
+    assert doc["states"]["start.State"]["setup"] == "RETAINED_INPUT_COPY"
+    assert d.check_state_manifest(state, tmp_path / "diagnostic.json", d.sha256(state))["qualified"] is False
+    with pytest.raises(AssertionError, match="state hash"):
+        d.check_state_manifest(state, tmp_path / "diagnostic.json", "0" * 64)
+    assert d.check_state_manifest(state, tmp_path / "diagnostic.json", d.sha256(state))["sha256"] == d.sha256(state)
+
+
+def test_output_state_provenance_control_red_revert(tmp_path, monkeypatch):
+    source = Path(d.__file__).read_text()
+    needle = '"producer": "tools/gen4_diag.py", "qualified": False, "sha256"'
+    assert source.count(needle) == 1
+    namespace = {"__file__": d.__file__}
+    exec(compile(source.replace(needle, '"producer": "unknown", "qualified": False, "sha256"'), d.__file__, "exec"), namespace)
+    namespace["verify_after"] = lambda config: None
+    namespace["service_bridge"] = lambda *a: None
+    original = d.collect
+    test_every_output_state_has_diagnostic_provenance_and_reviewed_hash(tmp_path, monkeypatch)
+    monkeypatch.setattr(d, "collect", namespace["collect"])
+    with pytest.raises(AssertionError):
+        test_every_output_state_has_diagnostic_provenance_and_reviewed_hash(tmp_path, monkeypatch)
+    monkeypatch.setattr(d, "collect", original)
+    test_every_output_state_has_diagnostic_provenance_and_reviewed_hash(tmp_path, monkeypatch)
+
+
+def test_collect_rejects_raw_qualification_claim(tmp_path, monkeypatch):
+    code, doc, _ = model_collect(tmp_path, monkeypatch, qualified=True)
+    assert code == 1 and doc["status"] == "FAIL"
+    assert "claimed qualification" in doc["reason"] and doc["qualified"] is False
+
+
+def test_collect_rejects_config_qualification_before_popen(tmp_path, monkeypatch):
+    import json
+    started = []
+    monkeypatch.setattr(d.subprocess, "Popen", lambda *a, **k: started.append(True))
+    monkeypatch.setattr(d, "verify_after", lambda config: None)
+    code = d.collect({"qualified": True, "source_head": "MODEL"}, tmp_path, ["model-owned"], planner=None, timeout=2)
+    doc = json.loads((tmp_path / "diagnostic.json").read_text())
+    assert code == 1 and not started and "config claimed qualification" in doc["reason"]
+
+
+def test_collect_artifact_is_stale_for_real_receipt_consumers_even_without_flag(tmp_path, monkeypatch):
+    from tools import gen4_evidence as e, gen4_routes as routes
+    code, doc, _ = model_collect(tmp_path, monkeypatch)
+    assert code == 0
+    surface = e.snapshot("probe", "heartgold", committed=False)
+    doc["qualified"] = True  # Shape, not this flag, prevents promotion.
+    path = tmp_path / "diagnostic.json"
+    import json
+    path.write_text(json.dumps(doc))
+    with pytest.raises(e.StaleEvidenceError, match="module_sha256"):
+        e.bind(doc, surface, title="heartgold", rom_sha1=doc["rom_sha1"])
+    assert routes.verify_receipt(path, "route")[0] == "STALE"
+
+
+def test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class():
+    text = (d.REPO / "data/gen4/scenarios/README.md").read_text()
+    assert "OBSERVED_CENSORED" in text
+    assert "G4_SS_ONE_SHA256" in text and "G4_SS_TWO_SHA256" in text
+    assert "check_state_manifest(state," in text
+    assert "First observed residency is\nLEFT_CENSORED" not in text
+    assert "be witnessed uncensored" not in text
+
+
+@pytest.mark.parametrize("replacement", ["First observed residency is\nLEFT_CENSORED", "be witnessed uncensored"])
+def test_runbook_censoring_control_red_revert(monkeypatch, replacement):
+    path = d.REPO / "data/gen4/scenarios/README.md"
+    source = path.read_text()
+    original = Path.read_text
+    test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class()
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_text", lambda p, *a, **k: source+"\n"+replacement if p==path else original(p, *a, **k))
+        with pytest.raises(AssertionError):
+            test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class()
+    test_runbook_uses_reviewed_state_manifest_and_correct_censoring_class()

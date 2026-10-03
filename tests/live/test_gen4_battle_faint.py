@@ -559,20 +559,27 @@ def test_ss_model_controls_red_and_revert():
     assert bytes(world.m) == original
 
 
-def test_ss_file_pin_corruption_refuses_and_reverts(monkeypatch):
+@pytest.mark.parametrize("corruption,reason", [
+    ("heal", "SS Lua floor mismatch: HealParty"),
+    ("seam", "SS pack seam differs"),
+    ("dispatch", "SS dispatch target differs"),
+])
+def test_ss_file_pin_corruption_refuses_and_reverts(monkeypatch, corruption, reason):
     from tools import gen_gen4_pack as generator
     rom = need(gen4_pins.default_locations().roms["soulsilver"], "SS ROM")
     good = ss_file_proof(rom)
     original = generator.load_images
     images = original(rom)
+    corrupt_address = {"heal": good["observers"]["heal"]["addr"], "seam": good["seams"]["ufce"]["addr"],
+                       "dispatch": CMD_TABLE + 4 * UFCE_CMD["soulsilver"]}[corruption]
     class Corrupt:
         def read(self, image, address, size):
             raw = images.read(image, address, size)
-            if address == good["observers"]["heal"]["addr"]:
+            if address == corrupt_address:
                 return bytes([raw[0] ^ 1]) + raw[1:]
             return raw
     monkeypatch.setattr(generator, "load_images", lambda *a, **k: Corrupt())
-    with pytest.raises(AssertionError, match="SS Lua floor mismatch: HealParty"):
+    with pytest.raises(AssertionError, match=reason):
         ss_file_proof(rom)
     monkeypatch.setattr(generator, "load_images", original)
     assert ss_file_proof(rom) == good

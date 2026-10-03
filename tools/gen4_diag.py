@@ -31,6 +31,20 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def check_state_manifest(state, manifest, expected_sha256):
+    """Require the reviewed digest and diagnostic setup provenance; never a receipt."""
+    state, manifest = Path(state).resolve(), Path(manifest).resolve()
+    doc = json.loads(manifest.read_text())
+    assert doc.get("schema") == "gen4-diagnostic-v1" and doc.get("producer") == "tools/gen4_diag.py", "wrong state producer"
+    assert doc.get("qualified") is False and doc.get("status") in {"OBSERVED", "OBSERVED_CENSORED"}, "unreviewable diagnostic state setup"
+    relative = state.relative_to(manifest.parent).as_posix()
+    entry = doc["outputs"][relative]
+    assert entry.get("qualified") is False and entry.get("producer") == "tools/gen4_diag.py", "state provenance absent"
+    assert entry.get("setup") == "DIAGNOSTIC_PRODUCED", "not a diagnostic-produced setup state"
+    assert entry["sha256"] == expected_sha256 == sha256(state), "reviewed state hash mismatch"
+    return entry
+
+
 def service_bridge(config, planner, seen):
     request = Path(config["bridge_request"])
     if not request.is_file():
@@ -68,10 +82,11 @@ def verify_after(config):
 
 def collect(config, lane, command, *, planner, timeout):
     """Own one Popen handle; publish diagnostic even on timeout/planner/cleanup error."""
-    out = {**config, "qualified": False, "level": "SOURCE", "status": "FAIL",
+    out = {**config, "producer": "tools/gen4_diag.py", "qualified": False, "level": "SOURCE", "status": "FAIL",
            "ownership": {"pid": None, "command": command, "lane": lane.as_posix(), "exited": True, "started": False}}
     proc = None
     try:
+        assert config.get("qualified") is False, "diagnostic config claimed qualification"
         proc = subprocess.Popen(command, cwd=lane, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 env={**os.environ, **config.get("launch_env", {})},
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
@@ -89,8 +104,8 @@ def collect(config, lane, command, *, planner, timeout):
                     continue
                 assert observed.get("terminal") is True, "non-terminal diagnostic"
                 assert observed.get("qualified") is False, "diagnostic claimed qualification"
+                assert observed.get("applied_rate") == config["requested_rate"], "applied/recorded rate differs"
                 out.update(observation=observed, status=observed["status"], reason=observed.get("reason", ""))
-                out["outputs"] = {p.name: sha256(p) for p in lane.glob("*_battle_settled.State")}
                 break
             if proc.poll() is not None:
                 raise RuntimeError(f"emulator exited before diagnostic: {proc.poll()}")
@@ -121,11 +136,37 @@ def collect(config, lane, command, *, planner, timeout):
             out["inputs_unchanged"] = True
         except Exception as exc:
             out.update(status="FAIL", reason=f"post-run identity verification: {exc}", inputs_unchanged=False)
+        input_state = Path(config["state_path"]).resolve() if config.get("state_path") else None
+        out["states"] = {}
+        out["outputs"] = {}
+        for path in sorted(lane.rglob("*.State")):
+            name = path.relative_to(lane).as_posix()
+            setup = "RETAINED_INPUT_COPY" if path.resolve() == input_state else "DIAGNOSTIC_PRODUCED"
+            entry = {"producer": "tools/gen4_diag.py", "qualified": False, "sha256": sha256(path), "setup": setup,
+                     "command": config.get("command"), "source_head": config["source_head"]}
+            out["states"][name] = entry
+            if setup == "DIAGNOSTIC_PRODUCED":
+                out["outputs"][name] = entry
         (lane / "diagnostic.json").write_text(json.dumps(out, indent=2))
-    return 0 if out["status"] == "OBSERVED" else 2 if out["status"] == "OPEN" else 1
+    return 0 if out["status"] in {"OBSERVED", "OBSERVED_CENSORED"} else 2 if out["status"] == "OPEN" else 1
 
 LUA = r'''
 local D={}
+function D.failure(why)
+    if type(why)=="table" then
+        if type(why.open)=="string" then return "OPEN",why.open end
+        for _,key in ipairs({"check","reason","message"}) do
+            if type(why[key])=="string" then return "FAIL",why[key] end
+        end
+        return "FAIL","unclassified diagnostic error table"
+    end
+    return "FAIL",tostring(why)
+end
+function D.apply_rate(emu,client,rate)
+    assert(rate==300,"diagnostic requires the recorded 300% rate")
+    emu.limitframerate(true); client.speedmode(rate)
+    return rate
+end
 function D.pp_delta(result,previous,current,frame)
     if not previous then return end
     result.hp_changes=result.hp_changes or {}
@@ -180,16 +221,21 @@ function D.settle_sample(trace,sites,resident,bytes,frame)
     end
 end
 function D.settle_verdict(trace)
+    local facts={left_censored=false,censoring={}}
     for _,id in ipairs(trace.sites) do
-        if not trace.current[id] or not trace.current[id].active or not trace.current[id].pin_matches then return "OPEN" end
+        if not trace.current[id] or not trace.current[id].active or not trace.current[id].pin_matches then return "OPEN",facts end
         local witnessed=false
         for _,e in ipairs(trace.epochs) do
             if e.site==id and e.status=="SETTLED" then witnessed=true end
-            if e.site==id and (e.status=="WAITING" or e.status=="UNLOADED_BEFORE_PIN") then return "OPEN" end
+            if e.site==id and e.left_censored and e.pin_frame then
+                facts.left_censored=true; facts.censoring[id]="LEFT_CENSORED"; witnessed=true
+                assert(e.delta==nil,"resident-at-attach epoch cannot have a measured delta")
+            end
+            if e.site==id and (e.status=="WAITING" or e.status=="UNLOADED_BEFORE_PIN") then return "OPEN",facts end
         end
-        if not witnessed then return "OPEN" end
+        if not witnessed then return "OPEN",facts end
     end
-    return "OBSERVED"
+    return facts.left_censored and "OBSERVED_CENSORED" or "OBSERVED",facts
 end
 function D.fight(M,title,leg,read,step,frame)
     local result={recipes={},pp_deltas={},hp_changes={},start_frame=frame(),turn_count_available=false,
@@ -201,7 +247,8 @@ function D.fight(M,title,leg,read,step,frame)
         D.pp_delta(result,previous,current,frame()); previous=current
     end,function(p) return M.predicate(title,read,p) end,
         function() local s=M.recipe_sample(title,read,leg); s.emulator_frame=frame(); return s end,result.recipes)
-    result.status=ok and "OBSERVED" or "FAIL"; result.reason=ok and "" or tostring(why)
+    if ok then result.status="OBSERVED"; result.reason=""
+    else result.status,result.reason=D.failure(why) end
     result.final=previous; result.final_frame=frame()
     return result
 end
@@ -227,6 +274,12 @@ function D.boundary_result(state,oracle,oracle_steps,composite)
     end
     return result
 end
+function D.boundary_ready(M,sites,bytes,resident,frame,settle,policy,image_pins)
+    assert(policy.max_frames==policy.measured_max+policy.margin and policy.max_frames>0,"invalid settle policy")
+    return function(wanted)
+        return M.phase_sites_ready(sites,bytes,resident,frame(),settle,policy,image_pins,wanted)
+    end
+end
 if G4_DIAG_TEST then return D end
 local root=assert(os.getenv("SLINK_ROOT"))
 local json=dofile(root.."/lua/json_codec.lua")
@@ -238,7 +291,7 @@ local function read_json(path)
     strip(v); return v
 end
 local cfg=read_json(assert(os.getenv("G4_DIAG_CONFIG")))
-local title=cfg.artifact; local result={}
+local title=cfg.artifact; local result={}; local applied_rate
 SLINK_GEN4_PROBE_TEST=true
 local M=dofile(root.."/lua/tests/probe_gen4_hooks.lua")
 SLINK_GEN4_PROBE_TEST=nil
@@ -254,7 +307,7 @@ local function register(site,cb,name)
     M.validate_site(title,site,bytes,resident)
     local h=event.on_bus_exec(function(a,v,flags)
         local ok,why=pcall(cb,a,v,flags)
-        if not ok then callback_error=tostring(why) end
+        if not ok then local _,detail=D.failure(why); callback_error=detail end
     end,site.address,name,BUS)
     assert(M.valid_handle(h),"registration failed: "..name); handles[h]=true; return h
 end
@@ -309,6 +362,7 @@ local function bridge()
     error("native bridge resync bound (12)")
 end
 local function run()
+    applied_rate=D.apply_rate(emu,client,cfg.requested_rate)
     if cfg.state_path then savestate.load(cfg.state_path) end
     if cfg.command=="fight" then
         local predicate
@@ -339,8 +393,11 @@ local function run()
             if all then break end
             step({})
         until emu.framecount()-start>=24000
-        result.status=D.settle_verdict(result.settle)
-        result.reason=result.status=="OPEN" and "unwitnessed/censored/unsettled site; not a measured zero or policy" or ""
+        local facts
+        result.status,facts=D.settle_verdict(result.settle)
+        result.left_censored=facts.left_censored; result.censoring=facts.censoring
+        result.reason=result.status=="OPEN" and "unwitnessed/unsettled site; not a policy" or
+            result.status=="OBSERVED_CENSORED" and "resident-at-attach sites reported LEFT_CENSORED without latency" or ""
     else
         local case=cfg.phase_case
         assert(M.close_boundary_required(case),"not a boundary case")
@@ -363,25 +420,27 @@ local function run()
                 return e
             end}
         composite=M.composite(dofile(root.."/lua/hook_registry.lua"),binding)
+        local settle={current={},samples={}}
         monitor,state=M.phase_monitor(composite,case.name,{producer},case.producer_site,active,
-            function(wanted) if wanted then M.validate_site(title,producer,bytes,resident) end; return true end,emu.framecount)
+            D.boundary_ready(M,{producer},bytes,resident,emu.framecount,settle,cfg.phase_settle,cfg.phase_image_pins),emu.framecount)
         result.boundary_state=state; result.oracle_frames=oracle; result.oracle_steps=oracle_steps
         for _,name in ipairs({"run_from_wild","exit_battle_to_overworld"}) do
             M.play_recipe(title.route_legs[name],step,function(p) return M.predicate(title,read,p) end)
         end
         monitor.finish(); monitor=nil
         result=D.boundary_result(state,oracle,oracle_steps,composite)
+        result.settle={policy=cfg.phase_settle,samples=settle.samples}
     end
 end
 local ok,why=pcall(run)
 if not ok then
-    result.status=type(why)=="table" and why.open and "OPEN" or "FAIL"
-    result.reason=type(why)=="table" and why.open or tostring(why)
+    result.status,result.reason=D.failure(why)
 end
-if monitor then local done,err=pcall(monitor.finish); if not done then result.status="FAIL"; result.reason=tostring(err) end end
-for h in pairs(handles) do local done,err=pcall(remove,h); if not done then result.status="FAIL"; result.reason=tostring(err) end end
+if monitor then local done,err=pcall(monitor.finish); if not done then local _,detail=D.failure(err); result.status="FAIL"; result.reason=detail end end
+for h in pairs(handles) do local done,err=pcall(remove,h); if not done then local _,detail=D.failure(err); result.status="FAIL"; result.reason=detail end end
 if next(handles) then result.status="FAIL"; result.reason="retained diagnostic hooks" end
 result.terminal=true; result.qualified=false; result.callback_error=callback_error
+result.applied_rate=applied_rate
 local f=assert(io.open(cfg.lane.."/observation.json","w")); f:write(assert(json.encode(result))); f:close()
 pcall(client.exit)
 '''
@@ -392,7 +451,7 @@ def parser():
     sub = ap.add_subparsers(dest="command", required=True)
     for name in ("fight", "settle", "boundary"):
         cmd = sub.add_parser(name)
-        cmd.add_argument("--title", choices=tuple(evidence.PACKS), required=True)
+        cmd.add_argument("--title", choices=["heartgold"] if name=="boundary" else tuple(evidence.PACKS), required=True)
         cmd.add_argument("--scenario", required=True)
         cmd.add_argument("--lane", required=True)
         cmd.add_argument("--source-cut", default=os.environ.get("G4_FROZEN"))
@@ -414,7 +473,11 @@ def parser():
 
 def prepare(args):
     """No emulator: validate the committed inventory, then create one fresh private lane."""
-    from tests.live.test_gen4_probe_gates import load_scenario
+    from tests.live.test_gen4_probe_gates import (
+        load_scenario,
+        phase_image_pins,
+        phase_settle_policy,
+    )
     if args.timeout <= 0:
         raise ValueError("timeout must be positive")
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
@@ -446,7 +509,10 @@ def prepare(args):
         if args.command == "fight":
             cfg["recipe"] = title["route_legs"][args.recipe]
         else:
+            assert args.title == "heartgold", "D3 is HG-only"
             cfg["phase_case"] = next(c for c in title["phase_cases"] if c["name"] == args.phase_case)
+            cfg["phase_settle"] = phase_settle_policy(args.title, title)
+            cfg["phase_image_pins"] = phase_image_pins(rom_src, title, args.title)
             producer = title["sites"][cfg["phase_case"]["producer_site"]]
             # fire_hex is the formatted decoded LE u32; register_hex spells ROM bytes.
             cfg["producer_word"] = int(producer["fire_hex"], 16)
@@ -477,6 +543,8 @@ def prepare(args):
     # Hash outside the config to avoid a self-referential digest.
     cfg["hashes"]["diagnostic_config"] = sha256(config)
     cfg["generated_paths"] = {str(lua): sha256(lua), str(bizhawk): sha256(bizhawk), str(config): sha256(config)}
+    if cfg.get("state_path"):
+        cfg["generated_paths"][cfg["state_path"]] = cfg["state_sha256"]
     emulator = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
     if not emulator.is_file():
         raise g4.RomAbsent(f"OPEN EmuHawk absent: {emulator}")
