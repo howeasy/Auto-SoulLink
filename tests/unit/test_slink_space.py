@@ -855,6 +855,10 @@ def test_move_clean_worktree_readds_and_plain_dirs_move(W):
     (lane / "s").write_text("state")
     loose = W.c / "slink-wt" / "run.log"
     loose.write_text("log")
+    co = W.c / "slink-wt" / "loose-checkout"
+    co.mkdir()
+    (co / ".git").write_text("gitdir: /nowhere\n")
+    (co / "work.c").write_text("w")
     (W.repo / "doc.md").write_text(f"see {p.as_posix()} for the run\n")
     _git(W.repo, "add", "doc.md")
     _git(W.repo, "commit", "-qm", "doc")
@@ -869,5 +873,10 @@ def test_move_clean_worktree_readds_and_plain_dirs_move(W):
     assert _git(new, "branch", "--show-current").strip() == "unmerged"
     assert _git(new, "status", "--porcelain") == ""
     assert not p.exists() and not lane.exists() and not loose.exists()
-    assert (W.root / "lanes" / "lane-young" / "s").read_text() == "state"
+    # Moved, not deleted, end to end: a young C: lane and an unregistered checkout go to
+    # evidence/ (which prune never touches), not lanes/ or wt/ (which it ages out).
+    assert not (W.root / "lanes" / "lane-young").exists()
+    assert (W.root / "evidence" / "slink" / "lane-young" / "s").read_text() == "state"
+    assert (W.root / "evidence" / "slink-wt" / "loose-checkout" / "work.c").read_text() == "w"
+    assert not (W.root / "wt" / "loose-checkout").exists()
     assert (W.root / "evidence" / "slink-wt" / "run.log").read_text() == "log"

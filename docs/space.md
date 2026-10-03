@@ -61,9 +61,10 @@ or its current directory is inside it. Current directories are read from the pro
 ## Retention rules
 
 **C: content is moved, not deleted.** On C:, prune deletes only pytest temps and pure junk:
-orphan admin dirs, Drive conflict copies, and the two known restored files. Old C: lanes, state
-dirs and merged C: worktrees go to the work root through move-to-work-root. Old lanes land in
-`evidence/`.
+orphan admin dirs, Drive conflict copies, and the two known restored files. Everything else on
+C: goes to the work root through move-to-work-root. Registered worktrees go to `wt/` and pinned
+inputs to `cache/`. Lanes, state dirs, unregistered checkouts and loose files go to
+`evidence/<label>/` at any age, because prune never touches `evidence/`.
 
 Off C:, prune also removes:
 

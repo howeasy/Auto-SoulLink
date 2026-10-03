@@ -732,9 +732,6 @@ def _prune_actions(repo, items) -> list[dict]:
     return actions
 
 
-_MOVE_DEST = {"lane": "lanes", "cache": "cache", "evidence": "evidence", "checkouts": "evidence"}
-
-
 def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
     root = Path(params["root"])
     actions, refused = [], []
@@ -764,12 +761,15 @@ def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
             refuse(f"in use by pid {pids[:5]}")
             continue
         name = os.path.basename(it["path"])
-        if it["kind"] in ("worktree", "checkout"):
+        # Registered worktrees -> wt/, pinned inputs -> cache/. Everything else (lanes, state
+        # dirs, unregistered checkouts, loose files) -> evidence/<label>/, whatever its age:
+        # prune ages out lanes/ and wt/, and "moved, not deleted" has to hold end to end.
+        if it["kind"] == "worktree":
             dst = root / "wt" / name
-        elif it["kind"] == "file" or it["status"] == "stale":  # old C: lanes: kept as evidence
-            dst = root / "evidence" / it["label"] / name
+        elif it.get("rule") == "cache":
+            dst = root / "cache" / name
         else:
-            dst = root / _MOVE_DEST[it["rule"]] / name
+            dst = root / "evidence" / it["label"] / name
         if os.path.lexists(dst):
             refuse(f"destination exists: {dst.as_posix()}")
             continue
