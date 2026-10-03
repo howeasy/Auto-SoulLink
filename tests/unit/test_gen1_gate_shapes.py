@@ -58,7 +58,7 @@ def test_apex_gate_reads_the_live_start_shape(companion, pokedex):
 
     mon = lua.table(dvs=lua.table(raw=0x1234), ot_id=1, species=1)
     client = lua.table(start=lambda _self: None, frame_end=lambda _self: None,
-                       send_hello=lambda _self: None, trade_patch_present=lambda _self: companion,
+                       send_hello=lambda _self: None, trade_patch_present=lambda _self: not companion, trade_enabled=companion,
                        writes_enabled=True, player="a")
     t = lua.table(ROOT=ROOT.as_posix(), title="purered", facts=facts, client=client,
                   parts=lua.table(profile=lua.table(ram=lua.table_from(ram)),

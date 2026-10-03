@@ -78,7 +78,7 @@ local fields = dofile(t.ROOT .. "/lua/tests/gen1_rb_point_fields.lua")
 local read_bus = dofile(t.ROOT .. "/lua/gen1/entry.lua").harness_bus_u8()
 local function start_shape()
     local dex = fields.event_bit(read_bus, assert(play.symbols.wEventFlags), F.EVENT.GOT_POKEDEX)
-    local companion = t.client:trade_patch_present()
+    local companion = t.client.trade_enabled == true
     local menu = F.MENU.START
     local save = dex and menu.save_index_with_pokedex or menu.save_index_without_pokedex
     -- Pokédex prepends a row; SLINK appends one without moving ITEM.

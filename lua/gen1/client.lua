@@ -2235,11 +2235,23 @@ function Client.new(p)
             local bytes = io.read_range(flat, 6, "ROM")
             all_sites = {}
             for k, v in pairs(sites) do all_sites[k] = v end
+            local function waiting_for_pickup()
+                return self.trade.phase ~= "picked_up" and self.trade.phase ~= "done"
+            end
             all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
                                         capture_offset = 0, expected_hex = hex_of(bytes),
+                                        lease_address = assert(profile.ram.wSerialPartyMonsPatchList, "trade lease_address required"),
+                                        client_accept = waiting_for_pickup,
                                         symbol = self.foundation == "gen1_purergb"
                                             and "SlinkTradeService" or "SlinkForeground" }
+            -- Polls never prove pickup. The binder requires its post-restore stack witness.
             handlers.trade_service = logged("trade_service", function() self.trade:picked_up() end)
+            all_sites.trade_consumed = self.trade.pickup_site(function(a) return io.read_u8(a, "ROM") end)
+            all_sites.trade_consumed.client_accept = waiting_for_pickup
+            handlers.trade_consumed = logged("trade_consumed", function(sig)
+                local _, why = self.trade:picked_up(sig.sp)
+                if why then log("[SLink-gen1] trade consumption unverified; holding: " .. tostring(why)) end
+            end)
             self.trade_enabled = true
         end
         -- Re-arming (e.g. against a newly patched ROM) releases the previous hook set first:
@@ -2254,19 +2266,33 @@ function Client.new(p)
 
     function self:frame_end()
         self.frame = io.framecount()
-        -- FIRST: the patch whites the screen and polls for us, and the player doing that is
-        -- sitting in the START menu with the overworld write checkpoint long behind them.
-        if self.panel then
-            local pok, perr = self.panel:service()
-            if not pok then log("[SLink-gen1] panel: " .. tostring(perr)) end
+        -- Keep the successful-frame order, but an early hold can never skip draining.
+        local stage = "panel"
+        local ready, connected = pcall(function()
+            if self.panel then
+                local pok, perr = self.panel:service()
+                if not pok then error("panel: " .. tostring(perr), 0) end
+            end
+            stage = "net.pump"
+            net.pump()
+            stage = "hello"
+            local online = self.hello_session:step(self.frame)
+            self.hello_sent = online == true
+            stage = "validate"
+            if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
+            online = online and self.hello_session:status().ready
+            stage = "owed"
+            self.owed:step(net.connected(), online == true, send)
+            return online
+        end)
+        if not ready then
+            if not self.frame_hold_error then
+                self.frame_hold_error = stage .. ": " .. tostring(connected)
+                log("[SLink-gen1] frame hold: " .. self.frame_hold_error)
+            end
+        else
+            self.frame_hold_error = nil
         end
-        -- master: a pump error propagates (run.lua logs "frame error"); the session stands
-        net.pump()
-        local connected = self.hello_session:step(self.frame)
-        self.hello_sent = connected == true
-        if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
-        connected = connected and self.hello_session:status().ready
-        self.owed:step(net.connected(), connected == true, send) -- never before the (post-reset) hello
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
@@ -2294,6 +2320,7 @@ function Client.new(p)
             log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(st.failed))
             hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
         end
+        if not ready then return end -- drained and diagnosed; no deferred work during the hold
         self:rival_window_tick()
         self:settle_pending_change()
         -- Every readable frame OBSERVES each alias (pure pass, no similarity, nothing refreshed):

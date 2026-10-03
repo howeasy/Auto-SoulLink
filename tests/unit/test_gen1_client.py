@@ -970,7 +970,9 @@ def _patched_world():
     w = World("red")
     rom = bytearray(w.rom)
     rom[0x29C3:0x29C3 + 5] = bytes([0x21, 0x00, 0x4C, 0x06, 0x3F])
-    w.rom = bytes(rom)
+    from tests.unit.gen1_trade_witness import plant_restore
+
+    w.rom = plant_restore(rom, PROFILE["red"])
     w.client.trade_enabled = False
     w.client.start(w.client)  # re-arm signals against the patched ROM (adds the service site)
     rng = random.Random(11)
@@ -1973,13 +1975,16 @@ def _boxed(mon):
 
 
 def _fire_trade_service(w):
-    """The cartridge reaching `SlinkTradeService`: the client pins that hook against the patched
-    ROM itself (client.lua:1025-1036), so it is not a site `World.fire` can look up.
+    """Model the foreground poll and subsequent guarded native lease restoration.
+    Both runtime-only sites are pinned against the patched ROM, outside the World.fire table.
     """
     svc = w.client.trade.service_address()
     w.bus[w.ram["hLoadedROMBank"]] = int(svc["bank"])
     w.regs["PC"] = int(svc["addr"])
     w.hooks["SLink-gen1-trade_service"][0]()
+    from tests.unit.gen1_trade_witness import consume_world
+
+    consume_world(w)
 
 
 def _withdrawn(rng, boxed, nick="BOXED"):
@@ -3678,7 +3683,6 @@ def test_a_withdrawn_unpicked_apply_restores_the_union_and_reports_nothing_chang
     """The Gen 1 service picks APPLY up on any overworld frame (SlinkForeground): an APPLY left armed
     past the server's settle could commit after a rollback (review probe P3)."""
     w = _patched_world()
-    base = w.ram["wSerialPartyMonsPatchList"]
     preimage = _overlay(w)
     old_key = codec.key(w.party()[0])
     rng = random.Random(31)

@@ -111,6 +111,7 @@ class PureWorld:
             set_game_over=lambda: None, set_rebuilding=lambda t: None, clear_rebuilding=lambda: None,
             sanitize=lambda s: s,
         )
+        self.io, self.net = io, net
         Entry = L.eval(f'dofile("{ENTRY}")')
         deps = L.table(root=REPO.as_posix(), io=io, net=net, hud=hud, pack="gen1_purergb", title=title,
                        kind=kind, player=player, rom_sha1=PROFILE[title]["rom_sha1"],

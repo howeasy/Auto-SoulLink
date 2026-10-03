@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from tests.unit import test_gen1_client as vanilla
+from tests.unit.gen1_trade_witness import consume_world, plant_restore
 from tests.unit.test_gen1_purergb_overlay import OverlayWorld
 
 TITLES = ("red", "blue", "purered", "pureblue", "puregreen")
@@ -19,7 +20,7 @@ def _synthetic_vanilla(title):
         raw = bytes.fromhex(value)
         rom[ws[key]:ws[key] + len(raw)] = raw
     rom[0x29C3:0x29C8] = bytes.fromhex("21004C063F")
-    return bytes(rom)
+    return plant_restore(rom, vanilla.PROFILE[title])
 
 
 def _world(monkeypatch, title):
@@ -38,9 +39,9 @@ def _world(monkeypatch, title):
     calls = []
     original = world.client.trade.picked_up
 
-    def picked_up(trade):
+    def picked_up(trade, *evidence):
         calls.append(True)
-        return original(trade)
+        return original(trade, *evidence)
 
     world.client.trade.picked_up = picked_up
     return world, calls
@@ -72,7 +73,9 @@ def test_idle_trade_polls_cannot_fill_the_signal_queue_and_pickup_still_fires(mo
     _fire(world)
     queued = signals.drain(signals)
     assert len(queued) == 1 and queued[1].kind == "trade_service"
-    assert calls == [True] and world.client.trade.phase == "picked_up"
+    assert calls == [True] and world.client.trade.phase == "armed"
+    consume_world(world)
+    assert calls == [True, True] and world.client.trade.phase == "picked_up"
 
 
 @pytest.mark.parametrize("title", TITLES)

@@ -409,6 +409,9 @@ class OverlayWorld(pc.PureWorld):
                 return self._rt.table(*a, **kw)
         monkeypatch.setattr(pc, "lupa", types.SimpleNamespace(LuaRuntime=KindedRuntime))
         super().__init__(title)
+        from tests.unit.gen1_trade_witness import plant_restore
+
+        self.rom = plant_restore(bytearray(self.rom), profile[title])
 
 
 def test_an_overlay_cartridge_is_admitted_as_kind_overlay():
