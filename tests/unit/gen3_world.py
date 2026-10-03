@@ -112,6 +112,10 @@ class World:
         kind = default_kind(pack, title) if kind is None else kind
         self.pack, self.title, self.kind, self.player = pack, title, kind, player
         self.artifact_kind = "clean" if kind == "named" else kind
+        # A CLEAN cartridge is not a production artifact (production:false, refused at admission),
+        # so a clean World is a MODEL of the client's clean-vs-companion branches: the build below
+        # strips the flag from its decoded copy of the pack. Companion worlds are the real thing.
+        model_clean = self.artifact_kind == "clean"
         titles = pack_json(pack, "engine_signals.json")["titles"]
         self.sites = titles[title]["artifacts"][self.artifact_kind]["sites"]
         self.profile = pack_json(pack, "profile.json")["titles"][title]
@@ -183,23 +187,39 @@ class World:
         if boxes is not None:           # boxes(lua_runtime) -> the mover's Lua table
             mover = boxes(L)
             deps["boxes_new"] = lambda *_a: mover
-        if model_companion:
-            # Explicit MODEL-only client binding over vanilla read/anchor geometry.
-            # No production admission/profile/READY flag is changed.
+        if model_companion or model_clean:
+            # Explicit MODEL-only seams over the real build, undone right after it:
+            # * model_companion: bind the companion client over vanilla read/anchor geometry
+            #   (no production admission/profile/READY flag is changed).
+            # * model_clean: see above; only the decoded copy of the pack loses the flag.
+            L.globals().MODEL_COMPANION, L.globals().MODEL_CLEAN = model_companion, model_clean
             L.execute('''
                 model_real_dofile = dofile
                 function dofile(path)
                     local module = model_real_dofile(path)
-                    if path:match("lua/gen3/client.lua$") then
+                    if MODEL_COMPANION and path:match("lua/gen3/client.lua$") then
                         local make = module.new
                         module.new = function(p) p.artifact_kind="companion"; return make(p) end
+                    end
+                    if MODEL_CLEAN and path:match("lua/json_codec.lua$") then
+                        local decode = module.decode
+                        module.decode = function(...)
+                            local value = decode(...)
+                            if type(value) == "table" and type(value.titles) == "table" then
+                                for _, title in pairs(value.titles) do
+                                    local clean = type(title) == "table" and title.artifacts and title.artifacts.clean
+                                    if clean then clean.production = nil end
+                                end
+                            end
+                            return value
+                        end
                     end
                     return module
                 end
             ''')
         self.client, self.parts = self.Entry.build(L.table(**deps))
-        if model_companion:
-            L.execute('dofile = model_real_dofile; model_real_dofile = nil')
+        if model_companion or model_clean:
+            L.execute('dofile = model_real_dofile; model_real_dofile = nil; MODEL_COMPANION = nil; MODEL_CLEAN = nil')
         policy = self.parts.policy
         real_check = policy.check
 
@@ -209,6 +229,10 @@ class World:
             return real_check(this, snap, reason, args)
         policy.check = check
         self.setup_save()
+        # Vanilla (ABI 2) companion worlds carry companion evidence from boot; RR keeps its
+        # historic mailbox-less start (tests attach a carrier, or call write_companion_mailbox()).
+        if self.artifact_kind == "companion" and native is None and not self.rr:
+            self.write_companion_mailbox()
         self.overworld_safe()
         self.client.start(self.client)
 
@@ -300,6 +324,17 @@ class World:
         self.set_trainer(ot_id, name)
         self.set_location(3, 19)
         self.set_party([])
+
+    def write_companion_mailbox(self):
+        """Companion evidence: the patch's RAM mailbox signature and ABI word (profile native
+        block: BASE/SIG/ABI), the two reads native.lua's present() and companion_live() judge.
+        A no-op when the pack profile has no native block."""
+        nat = pack_json(self.pack, "profile.json").get("native")
+        if not isinstance(nat, dict) or not all(isinstance(nat.get(k), int) for k in ("BASE", "SIG", "ABI")):
+            return False
+        self.poke_int(nat["BASE"], nat["SIG"], 4)
+        self.poke_int(nat["BASE"] + 4, nat["ABI"], 2)
+        return True
 
     def set_trainer(self, ot_id, name="RED"):
         if "SB2_OT_ID_OFFSET" in self.d:          # each offset independently: packs pin them apart
