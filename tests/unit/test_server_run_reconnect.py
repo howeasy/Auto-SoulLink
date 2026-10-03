@@ -126,3 +126,25 @@ async def test_old_disconnect_does_not_mark_live_replacement_disconnected(tmp_pa
         assert srv.connected_players["a"]["connected"]
         await _send(fresh, {"event": "no_catch", "player": "a", "area_id": "route_1"})
         assert srv.state.area_states["route_1"].value == "dead_zone"
+
+
+@pytest.mark.asyncio
+async def test_a_hello_from_a_does_not_admit_b_on_the_same_socket(tmp_path, monkeypatch):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    dispatched = []
+    dispatch = srv._dispatch
+    def record(player, message):
+        dispatched.append((player, message.get("event")))
+        return dispatch(player, message)
+    monkeypatch.setattr(srv, "_dispatch", record)
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        await _send(socket, _hello("a", {"rom_type": "red"}))
+        tick = {"event": "tick", "player": "b", "party": []}
+        refused = await _send(socket, tick)
+        assert any(c.get("refused") == "no_hello" for c in refused["commands"])
+        assert not srv.connected_players.get("b", {}).get("connected")
+        assert ("b", "tick") not in dispatched
+        await _send(socket, _hello("b", {"rom_type": "red"}))
+        await _send(socket, tick)
+        assert srv.is_admitted("b") and ("b", "tick") in dispatched

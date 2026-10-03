@@ -550,3 +550,19 @@ async def test_multibyte_raw_truncation_at_most_1024_bytes(wired, line):
         assert line.startswith(raw)
     finally:
         await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [42, None, "a", [1], {"event": "tick", "player": 42}])
+async def test_non_object_json_through_handle_client_without_the_wire_tap(tmp_path, message):
+    from tests.unit.test_mixed_foundations import _hello
+    from tests.unit.test_server_run_reconnect import _send as send, _tcp
+    srv = SLinkServer(data_dir=str(tmp_path))
+    assert srv._wire_log is None
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        await send(socket, message)
+        reply = await send(socket, _hello("a", {"rom_type": "red"}))
+        assert "commands" in reply and srv.is_admitted("a")
+        await send(socket, {"event": "no_catch", "player": "a", "area_id": "route_1"})
+        assert srv.state.area_states["route_1"].value == "dead_zone"

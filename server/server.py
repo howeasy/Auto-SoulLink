@@ -1594,7 +1594,7 @@ class SLinkServer:
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
-        hello_seen = False
+        hello_players = set()
         conn_gen: dict[str, int] = {}   # player -> the generation this connection's hello was given
         no_hello_warned = False
         try:
@@ -1636,14 +1636,27 @@ class SLinkServer:
                     continue
                 if self._wire_log:
                     writer.c2s(line, msg)
-                    if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
-                        await self._respond(writer, [{"cmd": "noop"}])
-                        continue
+                if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+                    await self._respond(writer, [{"cmd": "noop"}])
+                    continue
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
                     log.warning(f"Rejected unknown player_id: {repr(player_id)} from {peer}")
                     await self._respond(writer, [{"cmd": "noop"}])
+                    continue
+
+                # Hello-first. A connection has proved nothing until it has said hello, so
+                # nothing else on it is listened to. Without this a cartridge whose hello was
+                # lost still had its ticks reconciled into whichever slot it named, and a
+                # wrong save's party discarded the run's linked keys (reconnect_new,
+                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
+                if msg.get("event") != "hello" and player_id not in hello_players:
+                    if not no_hello_warned:
+                        no_hello_warned = True
+                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
+                                    f"{peer} — dropping this connection's events until it says hello")
+                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
                     continue
 
                 # Retain overlapping connections until each closes, including a socket
@@ -1757,19 +1770,6 @@ class SLinkServer:
                         # is ours to clear, and only a routable hello gets this far.
                         self._rom_type_rejected.discard(player_id)
                         self.state.identity_error.pop(player_id, None)
-                # Hello-first. A connection has proved nothing until it has said hello, so
-                # nothing else on it is listened to. Without this a cartridge whose hello was
-                # lost still had its ticks reconciled into whichever slot it named, and a
-                # wrong save's party discarded the run's linked keys (reconnect_new,
-                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
-                if msg.get("event") != "hello" and not hello_seen:
-                    if not no_hello_warned:
-                        no_hello_warned = True
-                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
-                                    f"{peer} — dropping this connection's events until it says hello")
-                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
-                    continue
-
                 # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
                 # and every client sends hello on (re)connect and counts up from there. So a
                 # seq is only ever a duplicate of one seen on THIS connection — comparing
@@ -1783,7 +1783,7 @@ class SLinkServer:
                     log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
                     last_seq = seq
                 if msg.get("event") == "hello":
-                    hello_seen = True
+                    hello_players.add(player_id)
                     self._conn_gen[player_id] = conn_gen[player_id] = self._conn_gen.get(player_id, 0) + 1
                 elif conn_gen.get(player_id, self._conn_gen.get(player_id)) != self._conn_gen.get(player_id):
                     # KEY-SCOPE-5: a newer connection helloed as this player; a delayed line from
