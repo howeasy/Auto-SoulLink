@@ -882,6 +882,9 @@ def test_hgss_battle_block_equals_the_pret_struct_layout():
         assert (bsys["battleType"], bsys["ctx"]) == (b["type_off"], b["ctx_off"])
     # control: the parser is not vacuous (it sees the real offsets, so a wrong expectation is a different number)
     assert mon["hp"] != 0x4E and bsys["ctx"] != 0x34
+    for title in ("heartgold", "soulsilver"):
+        b = _pack("hgss")["titles"][title]["profile"]["battle"]
+        assert (mon["moves"], mon["movePPCur"]) == (b["moves_off"], b["pp_off"]) == (0x0C, 0x2C)
 
 
 def test_hge_battle_block_equals_the_fork_offset_comments():
@@ -894,6 +897,7 @@ def test_hge_battle_block_equals_the_fork_offset_comments():
     b = _pack("hge")["titles"]["heartgold_hge"]["profile"]["battle"]
     got = {"species_off": at("species"), "level_off": at("level"), "hp_off": at("hp"), "max_hp_off": at("maxhp"),
            "personality_off": at("personal_rnd"), "otid_off": at("id_no"), "ability_off": at("ability"), "type_off": at("battleType"),
+           "moves_off": at(r"move\[4\]"), "pp_off": at(r"pp\[4\]"),
            "ctx_off": at("sp"), "mons_off": at(r"battlemon\[CLIENT_MAX\]"), "selected_off": at(r"sel_mons_no\[CLIENT_MAX\]"),
            "fainted_flag_off": at("server_status_flag")}
     assert got == {k: b[k] for k in got}

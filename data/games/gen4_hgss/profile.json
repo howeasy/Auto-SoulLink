@@ -2648,10 +2648,12 @@
           "max_hp_off": 80,
           "mon_size": 192,
           "mons_off": 11584,
+          "moves_off": 12,
           "otid_off": 116,
           "outcome_mask": 63,
           "outcome_off": 9248,
           "personality_off": 104,
+          "pp_off": 44,
           "selected_off": 8604,
           "species_off": 0,
           "template_id": 12,
@@ -2952,6 +2954,14 @@
               "struct": "BattleContext"
             }
           },
+          "moves_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:214 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
+          },
           "otid_off": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:255 (field order; offset hand-counted and equal to the hge comment)",
             "class": "SOURCE",
@@ -2978,6 +2988,14 @@
           },
           "personality_off": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:252 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
+          },
+          "pp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:243 (field order; offset hand-counted and equal to the hge comment)",
             "class": "SOURCE",
             "owner": {
               "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
@@ -5220,7 +5238,7 @@
               "Left",
               "Right"
             ],
-            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
+            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newKeys, include/system.h:40-48)",
             "groups": 4,
             "image": "ov27",
             "rows": [
@@ -7918,10 +7936,12 @@
           "max_hp_off": 80,
           "mon_size": 192,
           "mons_off": 11584,
+          "moves_off": 12,
           "otid_off": 116,
           "outcome_mask": 63,
           "outcome_off": 9248,
           "personality_off": 104,
+          "pp_off": 44,
           "selected_off": 8604,
           "species_off": 0,
           "template_id": 12,
@@ -8222,6 +8242,14 @@
               "struct": "BattleContext"
             }
           },
+          "moves_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:214 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
+          },
           "otid_off": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:255 (field order; offset hand-counted and equal to the hge comment)",
             "class": "SOURCE",
@@ -8248,6 +8276,14 @@
           },
           "personality_off": {
             "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:252 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE",
+            "owner": {
+              "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
+              "struct": "BattleMon"
+            }
+          },
+          "pp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:243 (field order; offset hand-counted and equal to the hge comment)",
             "class": "SOURCE",
             "owner": {
               "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (struct BattleMon)",
@@ -10478,7 +10514,7 @@
               "Left",
               "Right"
             ],
-            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)",
+            "evidence": "FILE: ROM bytes [ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9 when image is arm9] at the pret asm label (asm/overlay_27.s:6073-6101); lookup asm/overlay_27.s:2441-2470: for the pressed direction the first candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 (asm/overlay_27.s:2530-2610, gSystem+0x48 = newKeys, include/system.h:40-48)",
             "groups": 4,
             "image": "ov27",
             "rows": [

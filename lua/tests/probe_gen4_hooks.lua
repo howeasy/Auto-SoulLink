@@ -157,6 +157,16 @@ function M.recipe_sample(title,read,leg)
         -- never from a second hard-coded pointer or HP offset.
         if address and b.hp_width==4 and leg["until"].offset==b.mons_off+b.mon_size+b.hp_off then
             sample.our_hp=hp(read(base+b.mons_off+b.hp_off))
+            -- Identity + move/PP per battler (pack offsets; aligned u32 reads masked to the field): PP drops show the slot used.
+            if b.moves_off and b.pp_off then
+                local function ident(prefix,mon)
+                    local m0,m2,pp=read(mon+b.moves_off),read(mon+b.moves_off+4),read(mon+b.pp_off)
+                    sample[prefix.."_species"]=read(mon+b.species_off)&0xFFFF; sample[prefix.."_level"]=read(mon+b.level_off)&0xFF
+                    sample[prefix.."_moves"]={m0&0xFFFF,m0>>16,m2&0xFFFF,m2>>16}
+                    sample[prefix.."_pp"]={pp&0xFF,(pp>>8)&0xFF,(pp>>16)&0xFF,pp>>24}
+                end
+                ident("our",base+b.mons_off); ident("enemy",base+b.mons_off+b.mon_size)
+            end
             if b.turn_count_off and b.turn_count_width==4 then
                 sample.turn_count=read(base+b.turn_count_off); sample.turn_count_available=true
             end

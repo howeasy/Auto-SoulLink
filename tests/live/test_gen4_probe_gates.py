@@ -865,10 +865,19 @@ def test_fight_trace_reads_the_pack_predicate_source_and_our_hp(api):
              600 + b["mons_off"] + b["hp_off"]: 20,
              600 + b["mons_off"] + b["mon_size"] + b["hp_off"]: 17,
              500 + b["outcome_off"]: 0}
+    # battler 0 / 1 identity: aligned u32 reads, so each field is masked out of a word whose neighbours are junk
+    for slot, (species, level, moves, pp) in enumerate([(0x1FA, 7, (33, 45, 0, 0), (35, 40, 0, 0)), (0x10, 5, (10, 28, 0, 0), (35, 15, 0, 0))]):
+        mon = 600 + b["mons_off"] + slot * b["mon_size"]
+        words[mon + b["species_off"]] = 0x1234 << 16 | species
+        words[mon + b["level_off"]] = 0xAB << 16 | 0x05 << 8 | level
+        words[mon + b["moves_off"]], words[mon + b["moves_off"] + 4] = moves[1] << 16 | moves[0], moves[3] << 16 | moves[2]
+        words[mon + b["pp_off"]] = pp[3] << 24 | pp[2] << 16 | pp[1] << 8 | pp[0]
     sample = from_lua(api.recipe_sample(to_lua(r, artifact), lambda addr: words.get(addr, 0), to_lua(r, leg)))
     assert sample["value"] == sample["enemy_hp"] == 17 and sample["our_hp"] == 20
     assert sample["battle_active"] is True and sample["battle_outcome"] == 0
     assert sample["turn_count_available"] is False
+    assert (sample["our_species"], sample["our_level"], list(sample["our_moves"].values()), list(sample["our_pp"].values())) == (0x1FA, 7, [33, 45, 0, 0], [35, 40, 0, 0])
+    assert (sample["enemy_species"], sample["enemy_level"], list(sample["enemy_moves"].values()), list(sample["enemy_pp"].values())) == (0x10, 5, [10, 28, 0, 0], [35, 15, 0, 0])
     words[600 + b["mons_off"] + b["mon_size"] + b["hp_off"]] = 0
     assert api.predicate(to_lua(r, artifact), lambda addr: words.get(addr, 0), to_lua(r, leg["until"])) is True
     words[548] = 0

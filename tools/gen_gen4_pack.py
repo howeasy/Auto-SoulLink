@@ -1538,7 +1538,7 @@ def ui_geometry(xm: XMap, images: Images, other: Images, other_label: str) -> di
             "neighbour_table": {**n, "dir_order": list(DIRS), "rows": nav, "address_hex": f"{n['address']:#010x}",
                                 "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9] at the pret asm label ({S_NAV_TBL}); lookup {S_NAV_FN}: for the pressed direction the first "
                                             "candidate whose cell is enabled wins; direction mapping Up/Down/Left/Right = 0/1/2/3 "
-                                            f"({S_NAV_KEYS}, gSystem+0x48 = newAndRepeatedKeys, include/system.h:40-48)"},
+                                            f"({S_NAV_KEYS}, gSystem+0x48 = newKeys, include/system.h:40-48)"},
             "layout_rows": {**lay, "rows": layout, "address_hex": f"{lay['address']:#010x}", "none": 0x0D,
                             "evidence": f"FILE: ROM bytes [{ARM9_BYTES_NOTE} when image is arm9] ({S_NAV_LAYOUT}); row 0 is the full menu: cell c shows icon c"},
             "icon_order": list(START_ICONS),
@@ -1862,7 +1862,8 @@ S_CTX_STATUS_ASM = _c("asm/overlay_10_trainer_ai.s", "6922", "=0x0000213C")
 S_CTX_MONS_ASM = _c("asm/overlay_12_battle_controller.s", "341", "=0x00002DBE")  # 0x2D40 + BattleMon.gender 0x7E
 S_MON_STRUCT = _c(_BH, "207-266", "typedef struct BattleMon {")
 S_MON = {k: _c(_BH, str(n), needle) for k, (n, needle) in {
-    "species": (208, "u16 species"), "ability": (230, "u8 ability"), "level": (245, "u8 level"), "hp": (248, "s32 hp"),
+    "species": (208, "u16 species"), "moves": (214, "u16 moves[MAX_MON_MOVES]"), "pp": (243, "u8 movePPCur[MAX_MON_MOVES]"),
+    "ability": (230, "u8 ability"), "level": (245, "u8 level"), "hp": (248, "s32 hp"),
     "max_hp": (249, "u32 maxHp"), "personality": (252, "u32 personality"), "otid": (255, "u32 otid")}.items()}
 S_BATTLER_MAX = _c(_CB, "10", "BATTLER_MAX")
 S_OUTCOMES = _c(_CB, "112-118", "BATTLE_OUTCOME_NONE")
@@ -1877,7 +1878,7 @@ H_CTX_MONS, H_CTX_SEL = _ch("include/battle.h", "1403", "battlemon[CLIENT_MAX]")
 H_CTX_STATUS = _ch("include/battle.h", "1365", "server_status_flag")
 H_MON_STRUCT = _ch("include/battle.h", "859", "struct BattlePokemon")
 H_MON = {k: _ch("include/battle.h", str(n), needle) for k, (n, needle) in {
-    "species": (860, "u16 species"), "level": (902, "u8 level"), "hp": (905, "s32 hp"), "max_hp": (906, "u32 maxhp"),
+    "species": (860, "u16 species"), "moves": (866, "u16 move[4]"), "pp": (900, "u8 pp[4]"), "level": (902, "u8 level"), "hp": (905, "s32 hp"), "max_hp": (906, "u32 maxhp"),
     "personality": (909, "u32 personal_rnd"), "otid": (912, "u32 id_no"), "ability": (914, "u16 ability")}.items()}
 H_CLIENT_MAX = _ch("include/battle.h", "14", "CLIENT_MAX 4")
 H_FAINTED, H_FAINTED_SHIFT = _ch("include/battle.h", "614", "BATTLE_STATUS_FAINTED"), _ch("include/battle.h", "617", "BATTLE_STATUS_FAINTED_SHIFT")
@@ -1980,7 +1981,7 @@ def battle_owners() -> dict:
         "hp_off": ("BattleMon", f"{mon}; {S_MON['hp']}"), "hp_width": ("BattleMon", f"{mon}; {S_MON['hp']} (s32)"),
         "hp_signed": ("BattleMon", f"{mon}; {S_MON['hp']} (s32)"),
     }
-    for key in ("species_off", "level_off", "max_hp_off", "personality_off", "otid_off", "ability_off", "ability_width"):
+    for key in ("species_off", "level_off", "moves_off", "pp_off", "max_hp_off", "personality_off", "otid_off", "ability_off", "ability_width"):
         own[key] = ("BattleMon", mon)
     return own
 
@@ -2024,7 +2025,7 @@ def battle_evidence(build: str, template: dict) -> dict:
                         "PHYSICAL: battler 1 read and written at +0xC0 live (profile.battle_physical)"),
         "selected_off": _ev("ASM", R(H_CTX_SEL + " (`/*0x219C*/ sel_mons_no`, explicit)", S_CTX_SEL),
                             f"{PRET_HG} {S_CTX_SEL_ASM} (literal 0x219C, ldrb)"),
-        "species_off": mon("species"), "level_off": mon("level"), "hp_off": mon("hp"), "max_hp_off": mon("max_hp"),
+        "species_off": mon("species"), "level_off": mon("level"), "moves_off": mon("moves"), "pp_off": mon("pp"), "hp_off": mon("hp"), "max_hp_off": mon("max_hp"),
         "personality_off": mon("personality"), "otid_off": mon("otid"),
         "hp_width": _ev("SOURCE", hp_ref + " (s32: all four bytes are the value, a 2-byte write leaves a stale high half)",
                         "docs/gen4/research/battle_faint.md"),
@@ -2052,7 +2053,7 @@ def battle_values(template: dict, build: str) -> dict:
         "man_data_off": 0x1C, "ctx_off": 0x30, "type_off": 0x2C, "outcome_off": 0x2420, "outcome_mask": 0x3F,
         "template_off": template["ovy_id_off"], "template_id": template["ovy_id"], "max_battlers": 4,
         "mons_off": 0x2D40, "mon_size": 0xC0, "selected_off": 0x219C,
-        "species_off": 0, "level_off": 0x34, "hp_off": 0x4C, "hp_width": 4, "hp_signed": True, "max_hp_off": 0x50,
+        "species_off": 0, "level_off": 0x34, "moves_off": 0x0C, "pp_off": 0x2C, "hp_off": 0x4C, "hp_width": 4, "hp_signed": True, "max_hp_off": 0x50,
         "personality_off": 0x68, "otid_off": 0x74,
         "fainted_flag_off": 0x213C, "fainted_flag_shift": 24, "fainted_flag_mask": 0x0F000000,
         "ability_off": 0x7A if build == "hge" else 0x27, "ability_width": 2 if build == "hge" else 1,
