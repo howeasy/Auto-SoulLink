@@ -595,9 +595,16 @@ def _drive_hazards(repo) -> list[dict]:
     out = git(repo, "ls-files", "--others", "--exclude-standard", "-z")
     untracked = [f for f in out.split("\0") if f][:500]
     if untracked:
-        blobs = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin-paths"],
-                               input="\n".join(untracked), capture_output=True, text=True,
-                               encoding="utf-8").stdout.split()
+        h = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin-paths"],
+                           input="\n".join(untracked), capture_output=True, text=True,
+                           encoding="utf-8")
+        blobs = h.stdout.split()
+        if h.returncode or len(blobs) != len(untracked):
+            items.append({"label": "drive", "kind": "drive-copy", "path": Path(repo).as_posix(),
+                          "size": 0, "newest": 0.0, "links": [], "status": "refuse",
+                          "reason": f"untracked-copy check skipped: git hash-object failed "
+                                    f"({h.returncode}: {h.stderr.strip()[:200]})"})
+            return items
         # Prefilter: only blobs git already has can equal a committed revision.
         check = subprocess.run(["git", "-C", str(repo), "cat-file", "--batch-check"],
                                input="\n".join(blobs) + "\n", capture_output=True, text=True,

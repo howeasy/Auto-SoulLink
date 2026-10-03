@@ -645,6 +645,23 @@ def test_conflict_copy_whose_base_is_gone_is_refused(W):
     assert item(plan(W), W.repo / "c (1).txt")["status"] == "refuse"
 
 
+def test_failed_hash_object_refuses_the_check_instead_of_crashing(W, monkeypatch):
+    _git(W.repo, "rm", "-q", "a.txt")
+    _git(W.repo, "commit", "-qm", "drop a")
+    (W.repo / "a.txt").write_text("v1\n")
+    real = subprocess.run
+
+    def run(args, *a, **k):
+        if "hash-object" in args:
+            return subprocess.CompletedProcess(args, 128, "", "fatal: unable to hash")
+        return real(args, *a, **k)
+    monkeypatch.setattr(ss.subprocess, "run", run)
+    p = plan(W)
+    drive = [i for i in p["items"] if i["kind"] == "drive-copy"]
+    assert [i["status"] for i in drive] == ["refuse"] and "hash-object" in drive[0]["reason"]
+    assert not any(a["op"] == "remove-file" for a in p["actions"])
+
+
 def test_other_untracked_old_revision_is_refused_and_survives(W):
     _git(W.repo, "rm", "-q", "--cached", "a.txt")  # benign: someone untracking a file
     p = plan(W)
