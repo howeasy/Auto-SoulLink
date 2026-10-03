@@ -9036,6 +9036,7 @@ class DuoRun:
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
             self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} companion=overlay "
+                             f"companion_pin={pins.get(title + '_companion', '')[:12]} "
                              f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
                              f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:

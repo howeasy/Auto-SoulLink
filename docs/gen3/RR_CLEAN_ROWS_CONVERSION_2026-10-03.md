@@ -81,3 +81,49 @@ but unrunnable).
   `save_then_write_gen3` B halves no oracle reads the battery, and the proof is the declared-no_save gate in `check_save_witness_gen3` (a
   no_save half whose receipt dumped a save FAILS). The 8 frlgc no-write halves are pinned by name, each with its proof kind as data, in
   `tests/unit/test_e2e_duo_gen3_companion_battery.py`.
+
+## The live plan: `--title frlgc-rand` (Overlord ruling 2026-10-03)
+
+The re-pointed randomized-companion rows and the clean zip-boot refusals MUST run live as part of Gen 3 readiness. They get their own
+small opt-in plan so `--title frlgc` keeps its owner-agreed 65 rows. 13 rows, ids `frlgcr_*`, always RUN, summary
+`fc_SUMMARY_<cut8>_frlgc_rand.txt`:
+
+`frlgcr_source_{firered,leafgreen,emerald}` (companion-check), `frlgcr_admit_randomized_{frlg,emerald}` (pair, wrong_rom, rules_changed,
+equivalent_pair, mixed_kind, clean_refused legs), `frlgcr_link_gen3_rand_{frlg,emerald}`, `frlgcr_trainer_panel_gen3_rand_{frlg,emerald}`,
+`frlgcr_zip_build`, `frlgcr_zip_check`, `frlgcr_zip_boot_firered_refused`, `frlgcr_zip_boot_emerald_refused`.
+
+Same machinery as frlgc: `rom_pins(require_companions=True)` and the same pinned-input dicts for provisioning, `row_inputs` (each row records the
+clean dump and staged companion of its titles, every randomized ROM it reads under `rand:<file>` and the overlay ROMs the harness stages
+under `overlay:<kind>_<title>`, so a receipt names the exact companion-randomized bytes that booted; `--resume` re-runs on any difference),
+companion evidence in `run_row` and `fc_check` (`rand_attempt_problem`: both sides' RAND_INPUT lines must say `companion=overlay` on the pinned
+companion build, the admission rows also owe the clean_refused leg, a zip-boot refusal row owes the shipped client's refusal), never
+carried or cached. A row whose randomized ROM is absent BLOCKS the pass by name before anything is provisioned (exit 2); `--dry-run` shows the
+block. `python tools/gen3_final_cut.py stage-companions` stages `patch/build/slink_{FireRed,LeafGreen,Emerald}.gba` (UPS on the clean dumps,
+pins checked, no toolchain).
+
+### Estimated wall time (from retained receipts; printed by `--dry-run`)
+
+~9 s per emulator launch (a 3-launch `reconnect_gen3` row takes 26 s fr / 25.5 s em median across the retained fc_* receipts),
+`_prepare_gen3_rand` 1.7-3.3 s per row (measured), zip_boot 33.5/34 s median, zip_build 2 s, zip_check 6 s, the R4/E-RAND physical
+receipts for link (orchestrate 28.8 s + 1.8 s) and trainer panel (4.7 + 2.4 s). admit_randomized_* has 8 launches: ~90 s. Per row:
+source 3 s x3, admit 90 s x2, link 60 s x2, trainer panel 45 s x2, zip build 2 + check 6, zip boots 34 s x2: **475 s serial (7.9 min)**;
+**3 shards ~180 s (3.0 min)** longest. The hard budgets are far higher (`timeout x attempts + 900` per duo row).
+
+### Feasibility (no emulator; scratch preparation run on 2026-10-03)
+
+- `SLINK_GEN3_RAND_ROMS=F:/slink-work/cache/rand_roms` holds every file the rows read: `FireRed_allowed`, `LeafGreen_allowed`, `FireRed_widest`,
+  `Emerald_allowed`, `Emerald_allowed_b`, `Emerald_widest` (`LeafGreen_widest` also present, unused).
+- The overlay is not a key in `patch/dist/gen3_companions.json`: it is `protected_spans` (16 FR/LG, 12 Emerald) + the shipped UPS;
+  `tools.gen3_companions.overlay_randomized` copies the companion's bytes over exactly those spans of the randomized ROM and refuses if the
+  randomizer touched any of them. `_prepare_gen3_rand` produced every ROM for all six (scenario, game) pairs in 1.7-3.3 s each.
+- In every produced ROM the protected spans equal the published companion's bytes, and the `SLNK` mailbox signature (FR/LG `0xEB2AB0`,
+  Emerald `0xE3F5BC`, both inside a protected span) is intact; ~30,200-30,600 bytes differ from the clean dump (randomizer + companion).
+- Missing for a real run: the staged companion ROMs `patch/build/slink_{FireRed,LeafGreen,Emerald}.gba` do not exist in the main checkout
+  (only `slink_RR.gba`), so provisioning aborts ("no source matches pin") until `stage-companions` is run once. Owner action.
+- Produced ROM sha1s (deterministic from the clean dump, the randomized ROM and the shipped UPS):
+  FR/LG row: A (FireRed) `4593828a17e9f7e0901f1dfcf9eaa778ac412390`, B (LeafGreen) `75350a72e0bafddde726056b1f202da32bcdcae9`,
+  equivalent_a `9682adb43a6a4ad77a1f538bef37dac83cab057c`, forbidden_a `f2181731f1f241779f44aafec1cc5f510ab417be`, plain companion partner
+  `55fb6e9bfa79d562d727b65077fa85064f342b60`. Emerald row: A `9e2466ac15eac55a89266e8e7b2526e9692a454b`, B
+  `d2e807344a9d2914847426eb52cbc6674bb3872e`, equivalent_a `edd14a205734047fc84abddcaaed9a7d803a6990`, forbidden_a
+  `d5409cca7e7a568883efae69d97b69713b955dc2`, companion partner `f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b`. link / trainer-panel rows
+  reuse the same A and B ROMs.
