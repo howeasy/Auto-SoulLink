@@ -102,8 +102,15 @@ def ticks(w):
 
 _WORLD_TESTS: dict[str, str] = {}
 
-# Coverage owed (OMP cx-ca3ddf5e): encounter/reducer events, key stability/ack, two stragglers.
-OWED_WORLD_ITEMS = ["11", "20", "21", "23", "24", "26", "27", "31", "36", "38a", "38b"]
+# Coverage owed: the two items the model world cannot reach. 11 was COVERED as a refusal (the client
+# withholds the hello instead of sending party=[]), so it is no longer owed.
+OWED_WORLD_ITEMS = [
+    "23",  # no_catch is gated on st.has_pokeballs (poll_events.lua:417) and the client reads
+           # has_pokeballs ONLY from the injected p.has_pokeballs (client.lua:524; the bag read is
+           # a documented pack gap, client.lua:73). gen4_world.py:200-216 injects none, so the
+           # branch is unreachable until the harness grows a bag read.
+    "24",  # unresolve_area's only observable effect is the re-armed no_catch of item 23
+]
 
 
 def world_item(*item_ids):
@@ -403,3 +410,272 @@ def test_open_hge_hello_is_currently_refused_for_routing():
     problems = ps.validate_event(hello, strict=True)
     assert any("not one the server routes" in p for p in problems), \
         f"expected the hge routing refusal, got {problems}"
+
+
+# -- 11 / 20 / 21 / 26 / 27: the encounter + reducer half, on the production client -------------------
+
+
+def _map_cell(w):
+    """The Player Location map_id cell the client reads for area_now() (gen4_world.py:285-288)."""
+    return w.dyn + w.arrays[5][1] + w.prof["location"]["map_off"]
+
+
+def _pc_edge(w, settle=8):
+    """Let the driver notice that a box moved: a task edge (client.lua:685) marks the census dirty."""
+    w.field(task=1)
+    w.advance(3)
+    w.field(task=0)
+    w.advance(settle)
+
+
+def _traded():
+    """A world whose slot-0 record was replaced in place (the NPC-trade shape, item 37)."""
+    w = ready()
+    w.party[0] = Mon(X.pid, 16, 3, 13, 13, otid=X.otid)
+    w.write_party()
+    w.advance(8)
+    return w
+
+
+@world_item("11")
+def test_world_no_hello_ever_carries_a_party_the_client_cannot_read():
+    """Item 11's Gen 4 half. hello_fields sends `party = []` whenever party_read() fails
+    (client.lua:521-523), but hello_ready calls game_is_live, which REFUSES an unreadable party
+    (client.lua:502-519): the line that would carry `[]` never goes out at all. So the obligation
+    is satisfied as a refusal, and that refusal is what this asserts on RAM -- with the SaveData
+    pointer nulled (reads.lua:161, "null_ptr") a running session publishes no hello whatsoever,
+    and the first hello after the save returns carries the party again.
+
+    The BORROWED half has no Gen 4 source: `party_borrowed` is a Gen-3-only driver seam
+    (lua/core/session.lua:26; its only implementor is lua/gen3/client.lua:1066).
+    """
+    w = ready()
+    hello = w.events("hello")[0]
+    assert [m["key"] for m in hello["party"]] == [m.key for m in w.party]
+
+    ptr, keep = w.prof["save_ptr"]["address"], w.get(w.prof["save_ptr"]["address"], 4)
+    w.connected = False
+    w.advance(2)
+    w.put(ptr, bytes(4))                                  # SaveData pointer cell nulled
+    w.connected = True
+    w.advance(40)
+    assert len(w.events("hello")) == 1, [h["party"] for h in w.events("hello")[1:]]
+    assert w.state.fatal is None
+
+    w.put(ptr, keep)
+    w.connected = False
+    w.advance(2)
+    w.connected = True
+    w.advance(40)
+    assert len(w.events("hello")) == 2, "the client never re-helloed once the save was readable"
+    assert [m["key"] for m in w.events("hello")[1]["party"]] == [m.key for m in w.party]
+
+
+@world_item("20")
+def test_world_area_enter_fires_once_per_map_change_and_never_repeats_one():
+    w = ready(area_of=AREA)
+    assert w.events("area_enter") == [], "the baseline area announced itself"
+    cell = _map_cell(w)
+
+    w.w(cell, 61)
+    w.advance(40)
+    (first,) = w.events("area_enter")
+    assert first["area_id"] == "route_61" and first["loc_name"] == "Route 61", first
+    assert [t["area_id"] for t in ticks(w)][-1] == "route_61", "the tick did not follow the map change"
+
+    w.w(cell, 62)
+    w.advance(40)
+    assert [e["area_id"] for e in w.events("area_enter")] == ["route_61", "route_62"], \
+        "the same map re-fired, or the new map was missed"
+
+
+@world_item("21")
+def test_world_capture_carries_key_area_species_level_and_the_acquisition_flags():
+    # an out-of-battle acquisition is a gift and says so; a party catch carries no in_box
+    w = ready(area_of=AREA)
+    w.party.append(Mon(0x33333333, 16, 3, 13, 13))
+    w.write_party()
+    w.advance(12)
+    (gift,) = w.events("capture")
+    assert gift["key"] == key_of(0x33333333) and gift["area_id"] == "route_60", gift
+    assert gift["species_id"] == 16 and gift["level"] == 3
+    assert gift["gift"] is True and gift["is_egg"] is False and "in_box" not in gift, gift
+
+    # the same species CAUGHT out of a wild battle: the capture carries the encounter's area and
+    # is not a gift (poll_events.lua:364-379; the world foe is Mon(0x01010101, otid=0x0000BEEF))
+    w2 = ready(area_of=AREA)
+    w2.enter_battle()
+    w2.advance(5)
+    w2.leave_battle()
+    w2.party.append(Mon(0x01010101, 16, 3, 13, 13, otid=0x0000BEEF))
+    w2.write_party()
+    w2.advance(12)
+    caught = w2.events("capture")
+    assert len(caught) == 1, caught
+    assert caught[0]["area_id"] == "route_60" and "gift" not in caught[0], caught[0]
+    assert caught[0]["species_id"] == 16 and caught[0]["level"] == 3 and caught[0]["is_egg"] is False
+
+
+@world_item("26")
+def test_world_whiteout_fires_once_per_losing_battle_and_never_twice_for_one():
+    w = ready(area_of=AREA)
+    lose = w.prof["battle_enums"]["outcomes"]["lose"]                  # BATTLE_OUTCOME_LOSE (2)
+
+    w.enter_battle()
+    w.advance(3)
+    w.set_outcome(lose)
+    w.advance(3)
+    w.leave_battle()
+    w.advance(8)
+    assert len(w.events("whiteout")) == 1, w.events("whiteout")
+
+    for m in w.party:
+        m.hp = 0
+    w.write_party()
+    w.advance(60)
+    assert len(w.events("whiteout")) == 1, "the all-fainted party reported a second whiteout"
+
+    w.enter_battle()
+    w.advance(3)
+    w.set_outcome(lose)
+    w.advance(3)
+    w.leave_battle()
+    w.advance(8)
+    assert len(w.events("whiteout")) == 2, "a second loss is its own whiteout"
+
+
+@world_item("27")
+def test_world_party_to_box_and_box_to_party_fire_for_a_player_driven_move():
+    mon = Mon(0x1000ABCD, 155, 6, 12, 30)
+    w = ready(party=[Mon(A.pid, 155, 5, 20, 20), mon])
+
+    w.party = [w.party[0]]                       # the player boxes the second mon themselves
+    w.boxes[(3, 4)] = mon
+    w.write_party()
+    w.write_boxes()
+    _pc_edge(w)
+    (dep,) = w.events("party_to_box")
+    assert dep["key"] == mon.key and dep["stats"]["level"] == 6, dep
+
+    w.boxes.pop((3, 4))
+    w.party.append(mon)                          # ... and takes it back out
+    w.write_party()
+    w.write_boxes()
+    _pc_edge(w)
+    assert [e["key"] for e in w.events("box_to_party")] == [mon.key]
+    assert w.events("capture") == [], "a player-driven PC move is not an acquisition"
+
+
+# -- 31 / 36 / 38a / 38b: the deferred queue and the key machinery ---------------------------------
+
+
+@world_item("31")
+def test_world_deferred_commands_run_one_per_frame_in_order_and_dedupe():
+    a, b, c, d, e = (Mon(0x10000001 + i) for i in range(5))
+    w = ready(party=[a, b, c, d, e])
+
+    w.field(driver_state=0)                      # the save driver is mid-write: the gate is shut
+    w.advance(3)
+    w.reply({"cmd": "box_mon", "key": a.key}, {"cmd": "box_mon", "key": b.key})
+    w.advance(3)
+    assert w.events("stats_cache") == [] and w.box_keys() == {}, "a command ran while unsafe"
+
+    w.field()
+    w.advance(1)
+    assert [k["key"] for k in w.events("stats_cache")] == [a.key], "not one command, or out of order"
+    w.advance(4)
+    assert [k["key"] for k in w.events("stats_cache")] == [a.key, b.key]
+
+    w.reply({"cmd": "memorialize", "key": c.key}, {"cmd": "memorialize", "key": c.key})
+    w.advance(8)
+    assert [e["key"] for e in w.events("memorialize_done")] == [c.key], "a duplicate memorialize ran"
+    assert w.box_keys()[c.key] == (17, 0), w.box_keys()
+
+    w.reply({"cmd": "party_mon", "key": d.key, "stats": STATS},   # the box_mon cancels the queued
+            {"cmd": "box_mon", "key": d.key})                     # party_mon, not the other way round
+    w.advance(8)
+    assert [k["key"] for k in w.events("stats_cache")][-1] == d.key
+    assert w.events("sync_retrieve_done") == [], "the cancelled party_mon still withdrew"
+    assert d.key in w.box_keys() and d.key not in w.saved_keys()
+    assert w.state.fatal is None
+
+
+@world_item("36")
+def test_world_keys_survive_a_box_round_trip_a_held_item_change_and_a_reconnect():
+    mon = Mon(0x2000BEEF, 155, 6, 12, 30)
+    w = ready(party=[Mon(A.pid, 155, 5, 20, 20), mon])
+    before = {m["key"] for m in w.events("hello")[0]["party"]}
+    assert before == {key_of(A.pid), mon.key}
+
+    w.reply({"cmd": "box_mon", "key": mon.key})
+    w.advance(5)
+    w.reply({"cmd": "party_mon", "key": mon.key, "stats": STATS})
+    w.advance(5)
+    assert mon.key in w.saved_keys() and mon.key not in w.box_keys(), "the round trip lost or changed the key"
+
+    mon.item = 42                                   # a held-item change is not a key change
+    w.write_party()
+    w.advance(40)
+    assert w.events("key_change") == [], "a held-item change was reported as a key change"
+    entry = [e for e in ticks(w)[-1]["party"] if e["key"] == mon.key]
+    assert len(entry) == 1 and entry[0]["held_item_id"] == 42, entry
+    assert [e["key"] for e in ticks(w)[-1]["party"]] == w.saved_keys()
+
+    w.connected = False
+    w.advance(2)
+    w.connected = True
+    w.advance(40)
+    assert len(w.events("hello")) == 2
+    assert {m["key"] for m in w.events("hello")[1]["party"]} == before, "the reconnect changed the keys"
+
+
+@world_item("38a")
+def test_world_one_answer_settles_a_key_change_and_the_alias_follows_that_answer():
+    # ACK: exactly one answer settles the alias, and the old key then names nothing
+    w = _traded()
+    (kc,) = w.events("key_change")
+    w.reply({"cmd": "key_change_ack", "old_key": kc["old_key"], "new_key": kc["new_key"], "migrated": True})
+    w.advance(6)
+    assert w.session.identity.pending is None, "the ack did not settle the alias"
+    w.reply({"cmd": "force_faint", "key": kc["old_key"]})
+    w.advance(6)
+    assert w.writes == [] and w.saved_hp(0) == 13, "an acked old key still resolved to the record"
+    assert len(w.events("key_change")) == 1, "the settled change was re-sent"
+
+    # REJECTED: the alias is retired, so the same old key DOES resolve to the changed record
+    w2 = _traded()
+    (kc2,) = w2.events("key_change")
+    w2.reply({"cmd": "key_change_rejected", "old_key": kc2["old_key"], "new_key": kc2["new_key"],
+              "reason": "collision"})
+    w2.advance(6)
+    assert w2.session.identity.pending is None
+    ident = w2.session.identity
+    assert ident.retired(ident, kc2["old_key"]) is not None, "the rejection retired nothing"  # Lua method: pass self
+    w2.reply({"cmd": "force_faint", "key": kc2["old_key"]})
+    w2.advance(6)
+    assert w2.saved_hp(0) == 0 and w2.saved_hp(1) == 11, "the retired alias did not find the record"
+    assert any(h[0] == "show" and "IDENTITY CHANGE REFUSED" in h[1] for h in w2.hud), w2.hud
+    assert len(w2.events("key_change")) == 1
+
+
+@world_item("38b")
+def test_world_a_replayed_key_change_answer_is_idempotent_and_writes_nothing():
+    w = _traded()
+    (kc,) = w.events("key_change")
+    w.reply({"cmd": "key_change_ack", "old_key": kc["old_key"], "new_key": kc["new_key"], "migrated": False})
+    w.advance(6)
+    w.reply({"cmd": "key_change_ack", "old_key": kc["old_key"], "new_key": kc["new_key"], "migrated": False})
+    w.advance(20)
+    assert len(w.events("key_change")) == 1, "a replayed answer re-sent the change"
+    assert w.session.identity.pending is None
+    assert w.writes == [] and w.saved_keys() == [X.key, key_of(B.pid)], "a replayed answer moved bytes"
+    assert w.state.fatal is None
+
+    w2 = _traded()
+    (kc2,) = w2.events("key_change")
+    w2.reply({"cmd": "key_change_rejected", "old_key": kc2["old_key"], "new_key": kc2["new_key"],
+              "reason": "collision"})
+    w2.advance(40)
+    assert len(w2.events("key_change")) == 1, "a rejected change was re-sent without a new census"
+    assert w2.writes == [], "a rejected change wrote to the cartridge"
+    assert w2.saved_keys() == [X.key, key_of(B.pid)]
