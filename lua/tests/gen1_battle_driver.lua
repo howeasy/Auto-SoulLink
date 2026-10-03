@@ -331,6 +331,22 @@ function M.new(o)
         end
         t.bag_cursor=D.state();t.bag_cursor.index=bag_index()
         if t.bag_cursor.index~=index then t.why="bag cursor stuck at "..t.bag_cursor.index;return t end
+        -- Receipt-only observations. Do not change the input-free post-A wait below.
+        local function ball_quantity()
+            if not A.wNumBagItems or not A.wBagItems then return nil end
+            local total=0
+            for slot=0,u8(A.wNumBagItems)-1 do
+                local item=u8(A.wBagItems+slot*2)
+                for _,ball in ipairs(F.ITEM.BALL_IDS) do
+                    if item==ball then total=total+u8(A.wBagItems+slot*2+1);break end
+                end
+            end
+            return total
+        end
+        local party_before,balls_before=rd("wPartyCount"),ball_quantity()
+        local selected=A.wBagItems and u8(A.wBagItems+index*2)
+        local throwing=false
+        for _,ball in ipairs(F.ITEM.BALL_IDS) do if selected==ball then throwing=true end end
         t.stages.confirmed=press("A")
         t.cur_item=rd("wCurItem")
         why,used,st=until_(function(s)
@@ -338,7 +354,15 @@ function M.new(o)
             if count("execute_enemy_move")>base.eem then return "turn_used"end
             if count("display_battle_menu")>base.dbm and battle_menu_consistent(s)then return "battle_menu_again"end
         end,max_frames)
-        t.frames_after_a=used;t.why=why or "timeout";t.ok=why=="turn_used" or why=="battle_over";t.state=st
+        t.frames_after_a=used;t.wait_why=why or "timeout";t.why=t.wait_why
+        t.ok=why=="turn_used" or why=="battle_over";t.state=st
+        local party_after,balls_after=rd("wPartyCount"),ball_quantity()
+        if throwing and party_before and party_after and balls_before and balls_after then
+            t.party_before,t.party_after,t.balls_before,t.balls_after=party_before,party_after,balls_before,balls_after
+            if party_after>party_before then t.why="caught"
+            -- A full-party catch may go to a box; these counts alone cannot classify it.
+            elseif party_before<6 and balls_after<balls_before then t.why="missed" end
+        end
         return t
     end
 

@@ -62,7 +62,7 @@ def _rom(title, species):
 def facts():
     return {side: duo.gen3_rand_rom_facts(_rom(title, species), title)
             for side, title, species in (("a", "firered", 1), ("b", "leafgreen", 2),
-                                          ("clean_b", "leafgreen", 3))}
+                                          ("companion_b", "leafgreen", 3))}
 
 
 def _hello(fact, kind="rand"):
@@ -76,15 +76,15 @@ def _admission_case(phase, facts):
     status = {"players": {}, "gen3_rand_effective_kind": "rand", "gen3_rand_identity_errors": {}}
     hellos = {}
     for side in (("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)):
-        fact = facts[side] if phase == "pair" else facts["b"] if phase == "wrong_rom" else facts["clean_b"]
-        hellos[side] = _hello(fact, "clean" if phase == "mixed_kind" else "rand")
+        fact = facts[side] if phase == "pair" else facts["b"] if phase == "wrong_rom" else facts["companion_b"]
+        hellos[side] = _hello(fact, "companion" if phase == "mixed_kind" else "rand")
         reason = "cartridge matches the contract"
         if phase == "wrong_rom":
             reason = ("this is not the cartridge built for player a (reported "
                       + facts["b"]["content_fingerprint"][:12] + ", expected "
                       + facts["a"]["content_fingerprint"][:12] + ")")
         if phase == "mixed_kind":
-            reason = "Mixed artifact kinds: slot B runs a 'clean' ROM, this run is committed to 'rand'"
+            reason = "Mixed artifact kinds: slot B runs a 'companion' ROM, this run is committed to 'rand'"
         status["players"][side] = {"connected": phase == "pair", "admission_reason": reason,
                                   "admission": "admitted" if phase == "pair" else "rejected"}
     return {"status": status, "hellos": hellos}
@@ -149,7 +149,7 @@ def test_ruling32_oracle_requires_declared_rand_but_effective_clean(facts):
     case = {"status": {"gen3_rand_effective_kind": "clean", "gen3_rand_identity_errors": {},
                        "players": {side: {"connected": True, "admission": "admitted",
                            "admission_reason": "no randomized-ROM contract for this run"} for side in ("a", "b")}},
-            "hellos": {"a": _hello(facts["equivalent_a"]), "b": _hello(facts["clean_b"], "clean")}}
+            "hellos": {"a": _hello(facts["equivalent_a"]), "b": _hello(facts["companion_b"], "companion")}}
     _revert_checked(case, lambda c: duo.gen3_rand_admission_problems("equivalent_pair", facts=facts, **c),
                     lambda c: c["status"].update(gen3_rand_effective_kind="rand"), "effective kind")
 
@@ -389,7 +389,8 @@ def test_dependency_committed_positive_missing_and_dirty_reverted(monkeypatch, t
 def test_admission_driver_really_launches_other_rom_then_clean_then_correct_pair():
     run = object.__new__(duo.DuoRun)
     run._rand_inputs = {"a": {"rom": "rand_fr"}, "b": {"rom": "rand_lg"},
-                        "clean_b": {"rom": "clean_lg"}}
+                        "companion_b": {"rom": "companion_lg"},
+                        "clean_b": {"rom": "clean_lg", "expect_refused": True}}
     run._rand_current = {side: run._rand_inputs[side] for side in ("a", "b")}
     run._expected_exit = set()
     actions = []
@@ -399,14 +400,17 @@ def test_admission_driver_really_launches_other_rom_then_clean_then_correct_pair
         ("launch", side, phase, run._rand_current[side]["rom"]))
     run._observe_gen3_rand_admission = lambda phase: actions.append(("observe", phase))
     run._finish_gen3_rand_negative = lambda side, phase: actions.append(("finish", side, phase))
+    run._observe_gen3_rand_refused = lambda side, phase: actions.append(("refused", side, phase))
     run._status = lambda: {"players": {"a": {"admission_reason": "cartridge matches the contract"}}}
     run.wait_for = lambda _label, predicate, _timeout: predicate()
     run._start_gen3_rand_admission()
     assert actions == [
         ("rule_controls",),
         ("launch", "a", "wrong_rom", "rand_lg"), ("observe", "wrong_rom"), ("finish", "a", "wrong_rom"),
-        ("launch", "a", "initial", "rand_fr"), ("launch", "b", "mixed_kind", "clean_lg"),
-        ("observe", "mixed_kind"), ("finish", "b", "mixed_kind"), ("launch", "b", "initial", "rand_lg"),
+        ("launch", "a", "initial", "rand_fr"), ("launch", "b", "mixed_kind", "companion_lg"),
+        ("observe", "mixed_kind"), ("finish", "b", "mixed_kind"),
+        ("launch", "b", "clean_refused", "clean_lg"), ("refused", "b", "clean_refused"),
+        ("launch", "b", "initial", "rand_lg"),
     ]
 
 
@@ -414,7 +418,7 @@ def test_ruling32_driver_uses_real_roms_and_a_fresh_server_before_the_rand_pair(
     run = object.__new__(duo.DuoRun)
     run.data_dir = str(tmp_path)
     Path(tmp_path, "rom_contract.json").write_text("{}")
-    run._rand_inputs = {key: {"rom": key} for key in ("a", "b", "forbidden_a", "equivalent_a", "clean_b")}
+    run._rand_inputs = {key: {"rom": key} for key in ("a", "b", "forbidden_a", "equivalent_a", "companion_b")}
     run._rand_facts = facts
     run._rand_current = {side: run._rand_inputs[side] for side in ("a", "b")}
     run._expected_exit = set()
@@ -434,7 +438,7 @@ def test_ruling32_driver_uses_real_roms_and_a_fresh_server_before_the_rand_pair(
     assert actions == [
         ("launch", "a", "rules_changed", "forbidden_a"), ("observe", "rules_changed"),
         ("passive_flash", "a", "rules_changed"),
-        ("launch", "a", "equivalent", "equivalent_a"), ("launch", "b", "clean_partner", "clean_b"),
+        ("launch", "a", "equivalent", "equivalent_a"), ("launch", "b", "companion_partner", "companion_b"),
         ("observe", "equivalent_pair"), ("passive_flash", "a", "equivalent_a"),
         ("passive_flash", "b", "equivalent_b"), ("stop_owned_server",), ("fresh_server",),
     ]
@@ -571,3 +575,184 @@ def test_real_upr_tables_and_live_server_adapter_probe(title, label, tmp_path):
     _revert_checked(case, lambda c: duo.gen3_rand_panel_problems(facts=both, **c),
                     lambda c: c["probes"]["a"].update(briefs=copy.deepcopy(c["probes"]["b"]["briefs"])),
                     "OWN ROM")
+
+
+# ── patch-first (owner 2026-10-02): no clean / randomized-clean cartridge survives launch ─────────────
+# The randomized rows launch randomized COMPANION cartridges; a plain companion is the mixed-kind and
+# clean-equivalent partner; the clean cartridge itself is refused at launch (the clean_refused leg).
+REFUSAL_LG = ("this leafgreen cartridge needs the SLink companion patch; "
+              "prepare it through the Manager or /patcher")
+
+
+def _refused_receipt(title_line=REFUSAL_LG):
+    return (f"[client] [SLink-gen3] refused: {title_line}\n"
+            f"REFUSED_AT_LAUNCH [SLink-gen3] refused: {title_line}\nWRITES 0\n")
+
+
+def _refusal_run(receipt, status=None):
+    run = object.__new__(duo.DuoRun)
+    run._rand_inputs = {"clean_b": {"title": "leafgreen", "expect_refused": True}}
+    run._rand_refusals, run._expected_exit, run.notes = {}, set(), []
+    run._pydec_note = run.notes.append
+    run._read_receipt = lambda side: receipt
+    run._status = lambda: status if status is not None else {"players": {"a": {"connected": True}}}
+    run.wait_for = lambda _label, predicate, _timeout: predicate()
+    run.emu_by_inst = {"b": SimpleNamespace(wait=lambda timeout: 0)}
+    return run
+
+
+def test_the_randomized_clean_leg_is_a_launch_refusal_proof():
+    run = _refusal_run(_refused_receipt())
+    run._observe_gen3_rand_refused("b", "clean_refused")
+    assert run._rand_refusals == {"clean_refused": "b"} and run._expected_exit == {"b"}
+    assert any("RAND_REFUSED phase=clean_refused" in n for n in run.notes)
+
+
+@pytest.mark.parametrize("receipt, status, match", [
+    (_refused_receipt().replace("needs the SLink companion patch", "is not an admitted Gen 3 cartridge"),
+     None, "missing"),                                                        # a different refusal is no proof
+    (_refused_receipt().replace("this leafgreen", "this firered"), None, "missing"),
+    (_refused_receipt().replace("WRITES 0", "WRITES 3"), None, "WRITES 0"),
+    (_refused_receipt() + "TX hello - {}\n", None, "forbidden"),
+    (_refused_receipt() + "MYKEY 1 K\n", None, "forbidden"),
+    (_refused_receipt(), {"players": {"b": {"connected": True}}}, "b connected"),
+    (_refused_receipt(), {"players": {}, "links": [{"a": {}, "b": {}}]}, "persisted link"),
+])
+def test_the_randomized_clean_leg_is_red_on_every_way_it_could_have_worked(receipt, status, match):
+    run = _refusal_run(receipt, status)
+    with pytest.raises(RuntimeError, match=match):
+        run._observe_gen3_rand_refused("b", "clean_refused")
+    assert run._rand_refusals == {}
+
+
+def test_the_admission_oracle_refuses_a_run_without_its_clean_refused_leg():
+    run = object.__new__(duo.DuoRun)
+    run._check_gen3_rand_pair = lambda: None
+    run._rand_refusals = {}
+    with pytest.raises(RuntimeError, match="clean_refused"):
+        run.assert_admit_randomized_frlg_saved({})
+    run._rand_refusals = {"clean_refused": "a"}             # the wrong side is no proof either
+    with pytest.raises(RuntimeError, match="clean_refused"):
+        run.assert_admit_randomized_frlg_saved({})
+
+
+def test_mixed_kind_rejection_must_name_rand_and_companion(facts):
+    case = _admission_case("mixed_kind", facts)
+    _revert_checked(case, lambda c: duo.gen3_rand_admission_problems("mixed_kind", **c, facts=facts),
+                    lambda c: c["status"]["players"]["b"].update(
+                        admission_reason="Mixed artifact kinds: slot B runs a 'clean' ROM"),
+                    "both kinds")
+
+
+def test_the_randomized_phases_name_only_companion_partners():
+    for phase in ("mixed_kind", "equivalent_pair"):
+        assert duo.GEN3_RAND_PHASES[phase]["b"] == ("companion_b", "companion"), phase
+    assert not any(src.startswith("clean") for rows in duo.GEN3_RAND_PHASES.values() for src, _ in rows.values())
+
+
+def test_the_equivalent_rom_changes_one_unprotected_padding_byte():
+    rom = bytearray(b"\x01" * 16)
+    rom[10] = rom[13] = rom[15] = 0xFF
+    out = duo.gen3_rand_equivalent_rom(bytes(rom), [{"offset": 14, "size": 2}])     # 15 is protected
+    assert [i for i in range(16) if out[i] != rom[i]] == [13] and out[13] == 0xFE
+    assert duo.gen3_rand_equivalent_rom(bytes(rom), [{"offset": 11, "size": 5}])[10] == 0xFE
+    with pytest.raises(ValueError, match="no unused 0xFF"):
+        duo.gen3_rand_equivalent_rom(bytes(rom), [{"offset": 0, "size": 16}])
+
+
+def test_the_refusal_regex_names_its_title():
+    import re
+
+    line = ("[client] [SLink-gen3] refused: this firered cartridge needs the SLink companion patch; "
+            "prepare it through the Manager or /patcher")
+    assert re.search(duo.gen3_clean_refusal_re("firered"), line)
+    assert not re.search(duo.gen3_clean_refusal_re("leafgreen"), line)
+    assert not re.search(duo.gen3_clean_refusal_re(), line)             # radical_red by default
+
+
+def test_expect_refused_is_a_side_set_of_clean_or_rand_sides_only():
+    for name, cfg in duo.SCENARIOS.items():
+        assert duo.gen3_expect_refused_problems(cfg) == [], name
+    base = {"rom_kind": {"a": "companion", "b": "clean"}}
+    assert duo.gen3_expect_refused_problems({**base, "expect_refused": ("b",)}) == []
+    assert duo.gen3_expect_refused_problems({**base, "expect_refused": {"b"}}) == []
+    assert any("tuple/set" in p for p in duo.gen3_expect_refused_problems({**base, "expect_refused": "b"}))
+    assert any("not a side" in p for p in duo.gen3_expect_refused_problems({**base, "expect_refused": ("c",)}))
+    assert any("rom_kind 'companion'" in p for p in duo.gen3_expect_refused_problems({**base, "expect_refused": ("a",)}))
+    assert any("rom_kind 'companion'" in p
+               for p in duo.gen3_expect_refused_problems({"expect_refused": ("b",)}))      # no rom_kind at all
+    assert duo.gen3_expect_refused_problems({"rom_kind": "rand", "expect_refused": ("a", "b")}) == []
+    run = object.__new__(duo.DuoRun)
+    run.cfg = {**base, "expect_refused": "b"}
+    with pytest.raises(RuntimeError, match="tuple/set"):
+        run._gen3_expect_refused("b")
+
+
+def _launch_run(scenario, game, companion=False):
+    run = object.__new__(duo.DuoRun)
+    run.scenario, run.game = scenario, game
+    run.cfg, run.gcfg = dict(duo.SCENARIOS[scenario]), dict(duo.GAMES[game])
+    run.gen3_companion = companion
+    return run
+
+
+def test_a_clean_launch_is_refused_up_front_unless_it_is_the_proof():
+    # a clean FR/LG/E plan row boots clean cartridges as working clients: refused at launch, so say so now
+    clean = _launch_run("faint_cmd_gen3", "gen3_frlg")
+    assert len(clean._gen3_launch_refusal_problems()) == 2
+    assert all("--gen3-companion" in p for p in clean._gen3_launch_refusal_problems())
+    assert _launch_run("faint_cmd_gen3", "gen3_frlg", companion=True)._gen3_launch_refusal_problems() == []
+    assert _launch_run("faint_cmd_gen3", "gen3_emerald")._gen3_launch_refusal_problems() != []
+    # RR boots its companion by default; only the refusal-proof side is clean, and it is expected to be refused
+    assert _launch_run("faint_cmd_gen3", "gen3_rr")._gen3_launch_refusal_problems() == []
+    assert _launch_run("clean_rr_refused_gen3", "gen3_rr")._gen3_launch_refusal_problems() == []
+    rr = _launch_run("faint_cmd_gen3", "gen3_rr")
+    rr.cfg["rom_kind"] = {"a": "companion", "b": "clean"}
+    assert [p[:1] for p in rr._gen3_launch_refusal_problems()] == ["b"]
+    # the randomized rows are deliberately outside: their cartridges are companions plus a refusal leg
+    assert _launch_run("link_gen3_rand", "gen3_frlg")._gen3_launch_refusal_problems() == []
+
+
+def test_run_refuses_a_clean_launch_before_any_server_or_emulator(monkeypatch):
+    """The preflight sits at the top of DuoRun.run(): nothing is prepared, started or launched first."""
+    class Runner(duo.DuoRun):
+        is_gen3_battery = True
+
+    run = object.__new__(Runner)
+    run.scenario, run.game, run.attempt = "faint_cmd_gen3", "gen3_frlg", 1
+    run.cfg, run.gcfg, run.gen3_companion = dict(duo.SCENARIOS["faint_cmd_gen3"]), dict(duo.GAMES["gen3_frlg"]), False
+    cleaned = []
+    run.cleanup = cleaned.append
+
+    def boom(*a, **k):
+        raise AssertionError("a refused row prepared or launched something")
+    for name in ("start_server", "start_instances", "_prepare_gen3_rand", "_gen3_identity"):
+        monkeypatch.setattr(run, name, boom)
+    with pytest.raises(RuntimeError, match="would boot a clean firered as a working client"):
+        run.run()
+    assert cleaned == [False]
+
+
+def _observe(phase, hello):
+    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+    runtime.globals().ROOT = str(ROOT).replace(chr(92), "/")
+    runtime.globals().HELLO = runtime.eval("function(t) return t end")(runtime.table_from(hello, recursive=True))
+    runtime.globals().PHASE = phase
+    return runtime.execute("""
+        local M = dofile(ROOT .. "/lua/tests/duo/scenario_gen3_rand_common.lua")
+        local ctx = { phase = PHASE, D = { wt = ROOT }, last_sent = function() return HELLO end, log = function() end }
+        local ok, why = M.observe(ctx)
+        return ok, why
+    """)
+
+
+def test_the_partner_legs_expect_a_companion_hello_and_never_a_clean_one():
+    sha = "a" * 40
+    comp = {"artifact_kind": "companion", "rom_sha1": sha}
+    for phase in ("mixed_kind", "companion_partner"):
+        assert _observe(phase, comp)[0] is True, phase
+        ok, why = _observe(phase, {**comp, "artifact_kind": "clean"})
+        assert not ok and "wanted companion" in why, phase
+    rand = {"artifact_kind": "rand", "rom_sha1": sha, "rom_content": {"tables": {}}}
+    assert _observe("pair", rand)[0] is True
+    assert not _observe("pair", comp)[0]

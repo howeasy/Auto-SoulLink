@@ -669,8 +669,31 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
     return rom_rel, run_dir, battery
 
 
+def companion_pin_problem(rom_path, title, root=REPO):
+    """Why `rom_path` is not THE published companion cartridge of `title` (patch/dist/gen3_companions.json
+    `rom_sha1`, read from `root` -- by default the checkout this tool runs from), or None. A companion boot-check row is only
+    evidence for the pinned build: without this the tool boots whatever --rom names."""
+    if title not in ("firered", "leafgreen", "emerald"):
+        return f"--companion needs --title firered|leafgreen|emerald (got {title!r})"
+    manifest = Path(root) / "patch" / "dist" / "gen3_companions.json"
+    try:
+        pin = json.loads(manifest.read_text(encoding="utf-8"))["titles"][title]["rom_sha1"]
+    except (OSError, KeyError, ValueError) as exc:
+        return f"no published {title} companion pin in {manifest} ({type(exc).__name__}: {exc})"
+    try:
+        got = hashlib.sha1(Path(rom_path).read_bytes()).hexdigest()
+    except OSError as exc:
+        return f"cannot read --rom {rom_path}: {exc}"
+    if got != pin:
+        return f"--rom {rom_path} sha1 {got} is not the {title} companion pin {pin} ({manifest})"
+    return None
+
+
 def cmd_boot_check(args: argparse.Namespace) -> int:
     fixture = Path(args.fixture)
+    if getattr(args, "companion", False) and (why := companion_pin_problem(args.rom, getattr(args, "title", None))):
+        print(f"BOOT-CHECK FAIL: {why}", file=sys.stderr)
+        return 2
     emerald = getattr(args, "title", None) == "emerald"
     if emerald and args.rr:
         print("BOOT-CHECK FAIL: --title emerald with --rr: Emerald is a vanilla title, not CFRU",
@@ -2368,6 +2391,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "refuses --rr")
     p_boot.add_argument("--saveram-name", default=None,
                         help="battery filename to seed, when BizHawk's gamedb names it")
+    p_boot.add_argument("--companion", action="store_true",
+                        help="the --rom must be the title's published companion build (its gen3_companions.json "
+                             "rom_sha1); refused before anything is staged or launched otherwise")
     p_boot.add_argument("--timeout", type=int, default=600)
     p_boot.set_defaults(func=cmd_boot_check)
 

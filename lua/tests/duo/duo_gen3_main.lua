@@ -749,8 +749,32 @@ end
 local okrun, errrun = pcall(dofile, ROOT .. "/lua/gen3/run.lua")
 dofile = original_dofile
 if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
+-- What the launch means for THIS side. An ordinary row needs a built client. A REFUSAL-PROOF side
+-- (SLINK_DUO.expect_refused: a clean companion-required cartridge, patch-first 2026-10-02) passes
+-- ONLY when run.lua refused it with the companion verdict and built nothing; an admitted client, a
+-- different refusal (bad hash, header-only) or no refusal at all fails it. -> done, pass, msg
+local function launch_verdict(client_built, refusal, expect_refused)
+    if expect_refused then
+        if client_built then return true, false, "expected a refusal but the cartridge was admitted and a client built" end
+        if refusal and refusal:find("needs the SLink companion patch", 1, true) then
+            return true, true, "refused at launch: the cartridge needs the SLink companion patch; no client was built"
+        end
+        return true, false, "expected the companion-patch refusal, got: " .. tostring(refusal or "no refusal logged")
+    end
+    if not client_built then
+        return true, false, "run.lua built no client: " .. tostring(refusal or "no reason logged")
+    end
+    return false
+end
+local launch_done, launch_pass, launch_msg = launch_verdict(SLINK_GEN3_CLIENT, refused, D.expect_refused)
+if launch_done then
+    if launch_pass then
+        log("REFUSED_AT_LAUNCH " .. tostring(refused))
+        log(fmt("WRITES %d", writes))
+    end
+    finish(launch_pass, launch_msg)
+end
 local session = SLINK_GEN3_CLIENT
-if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
 local hello_watch
 if D.game == "gen3_exp" then
     local raw_structs = read_json("data/games/gen3_exp/28877d73/facts.json").structs

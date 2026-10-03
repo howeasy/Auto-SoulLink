@@ -140,7 +140,7 @@ from tools import rr_companion  # noqa: E402
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
 # P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
-GEN3_RR_ONLY = ("rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY = ("rival_swap_gen3", "clean_rr_refused_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -733,100 +733,131 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 
 
 # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
-def _native_absent_receipts():
-    a = ("RX apply_prepare\n"
-         "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n"
-         "PRESAVE_COUNTER before=4 after=5\n"
-         'TX apply_ready - {"event":"apply_ready","ok":true,"token":"native_absent_a"}\n'
-         "NATIVE_PREPARED phase=2 writes=3\nWRITES 3\n")
-    b = ("RX apply_prepare\n"
-         'TX apply_ready - {"event":"apply_ready","ok":false,"token":"native_absent_b"}\n'
-         "PROBE_SETTLED writes=0\nWRITES 0\n")
+REFUSAL = "this radical_red cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
+
+
+def _clean_rr_refused_receipts():
+    a = ("MYKEY 1 KA\nTX hello - {}\nPROBE_SETTLED writes=0 rx=0\nWRITES 0\n")
+    b = (f"[client] [SLink-gen3] refused: {REFUSAL}\n"
+         f"REFUSED_AT_LAUNCH [SLink-gen3] refused: {REFUSAL}\nWRITES 0\n")
     return {"a": a, "b": b}
 
 
-def test_native_absent_oracle_needs_a_native_presave_and_a_clean_refusal():
-    """RR-DURABLE redesign: the same valid apply_prepare. The companion answers ok only after its
-    native pre-save (a native write after the command, gSaveCounter advanced, producer READY);
-    the clean cartridge answers ok:false and writes nothing."""
-    # the companion half saves natively (its pre-save), so only the clean half is no_save;
-    # A's flash is byte-checked by the save-witness stage like every saving half
-    assert duo.SCENARIOS["native_absent_gen3"]["no_save"] == ("b",)
-    run = _oracle_run("native_absent_gen3", game="gen3_rr")
-    notes = []
-    run._pydec_note = notes.append
-    run._native_absent_keys = {"a": "KA", "b": "KB"}
-    receipts = _native_absent_receipts()
-    run.assert_native_absent_gen3_saved(receipts)
-    assert notes and "native pre-save" in notes[-1]
-    both_refuse = dict(receipts, a=receipts["b"])
-    with pytest.raises(RuntimeError, match="write native|ok.:true"):
-        run.assert_native_absent_gen3_saved(both_refuse)
-    unsaved = dict(receipts, a=receipts["a"].replace("after=5", "after=4"))
-    with pytest.raises(RuntimeError, match="pre-save"):
-        run.assert_native_absent_gen3_saved(unsaved)
-    not_ready = dict(receipts, a=receipts["a"].replace("NATIVE_PREPARED phase=2", "NATIVE_PREPARED phase=1"))
-    with pytest.raises(RuntimeError, match="NATIVE_PREPARED"):
-        run.assert_native_absent_gen3_saved(not_ready)
-    clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
-    with pytest.raises(RuntimeError, match="forbidden"):
-        run.assert_native_absent_gen3_saved(clean_wrote)
-    clean_ok = dict(receipts, b=receipts["b"].replace('"ok":false', '"ok":true'))
-    with pytest.raises(RuntimeError, match="ok.:false"):
-        run.assert_native_absent_gen3_saved(clean_ok)
-    # the companion's link panel writes native BEFORE the command; only a write after it counts
-    panel = "RX link_panel\n[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4\n"
-    panel_only = dict(receipts, a=panel + receipts["a"].replace(
-        "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", ""))
-    with pytest.raises(RuntimeError, match="write native"):
-        run.assert_native_absent_gen3_saved(panel_only)
+def _clean_rr_refused_run(connected=False, links=()):
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
+    run.notes = []
+    run._pydec_note = run.notes.append
+    run._status = lambda: {"players": {"a": {"connected": True}, **({"b": {"connected": True}} if connected else {})}}
+    run._links_json = lambda: list(links)
+    return run
 
 
-# ── G5-RR-CLEAN-2: faint_cmd_clean_gen3's registration and its ROM-provenance oracle wrapper ──
-def _clean_gen3_receipts(a_kind="companion", b_kind="clean", a_hash="AAAAAAAA", b_hash="BBBBBBBB"):
-    return {
-        "a": (f"[client] [SLink-gen3] gen3_rr/radical_red ({a_kind} by hash) player a -> "
-             f"127.0.0.1:1 (rom {a_hash})\n"),
-        "b": (f"[client] [SLink-gen3] gen3_rr/radical_red ({b_kind} by hash) player b -> "
-             f"127.0.0.1:1 (rom {b_hash})\n"),
-    }
+def test_clean_rr_refused_is_the_clean_rr_refusal_proof():
+    """Owner policy 2026-10-02 (companion REQUIRED): the clean RR is refused at launch with the
+    companion verdict, links nothing and writes nothing; the companion side A boots alone and stays
+    quiet. Neither side saves."""
+    row = duo.SCENARIOS["clean_rr_refused_gen3"]
+    assert row["no_save"] == ("a", "b") and row["expect_refused"] == ("b",)
+    assert row["rom_kind"] == {"a": "companion", "b": "clean"}
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
+    run.assert_clean_rr_refused_gen3_saved(receipts)
+    assert run.notes and "refused" in run.notes[-1]
 
 
-def test_faint_cmd_clean_gen3_is_registered_with_rom_kind_and_aliases():
-    assert duo.SCENARIOS["faint_cmd_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
-    assert duo.DuoRun.orchestrate_faint_cmd_clean_gen3 is duo.DuoRun.orchestrate_faint_cmd_gen3
-    assert callable(duo.DuoRun.assert_faint_cmd_clean_gen3_saved)
-    # the oracle "alias" now wraps the reused faint_cmd_gen3 oracle rather than literally being it
-    # (the provenance check runs first) -- prove it still delegates through, exactly once
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    calls = []
-    run.assert_faint_cmd_gen3_saved = lambda results: calls.append(results)
-    receipts = _clean_gen3_receipts()
-    run.assert_faint_cmd_clean_gen3_saved(receipts)
-    assert calls == [receipts]
+@pytest.mark.parametrize("side, mutate, problem", [
+    # B: the refusal line is the evidence; every way the cartridge could have worked is red
+    ("b", lambda t: t.replace("needs the SLink companion patch", "is not an admitted cartridge"), "missing"),
+    ("b", lambda t: t.replace("REFUSED_AT_LAUNCH", "NOTHING"), "REFUSED_AT_LAUNCH"),
+    ("b", lambda t: t.replace("WRITES 0", "WRITES 1"), "WRITES 0"),
+    ("b", lambda t: t + "MYKEY 1 KB\n", "forbidden"),
+    ("b", lambda t: t + "TX hello - {}\n", "forbidden"),
+    ("b", lambda t: t + "RX apply_prepare key=KB\n", "forbidden"),
+    ("b", lambda t: t + "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", "forbidden"),
+    ("b", lambda t: t + "[client] [SLink-gen3] gen3_rr/radical_red (clean by hash) player b -> 127.0.0.1:1 (rom AB)\n",
+     "forbidden"),
+    ("b", lambda t: t + "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n", "forbidden"),
+    # A: the companion booted and connected, and nothing B-shaped reached it
+    ("a", lambda t: t.replace("TX hello - {}\n", ""), "hello"),
+    ("a", lambda t: t.replace("PROBE_SETTLED writes=0 rx=0\n", ""), "PROBE_SETTLED"),
+    ("a", lambda t: t.replace("writes=0 rx=0", "writes=2 rx=0"), "PROBE_SETTLED"),
+    ("a", lambda t: t.replace("writes=0 rx=0", "writes=0 rx=1"), "PROBE_SETTLED"),
+    ("a", lambda t: t + "RX apply_prepare key=KA\n", "forbidden"),
+    ("a", lambda t: t + "RX force_faint key=KA\n", "forbidden"),
+])
+def test_clean_rr_refused_oracle_is_red_on_every_way_the_clean_side_could_work(side, mutate, problem):
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
+    receipts[side] = mutate(receipts[side])
+    with pytest.raises(RuntimeError, match=problem):
+        run.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_faint_cmd_clean_gen3_provenance_needs_hash_admitted_companion_a_clean_b():
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    assert run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"},
-                                             _clean_gen3_receipts()) == []
-    kind_swapped = run._gen3_rom_provenance_problems(
-        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA"))
-    assert any("clean by hash" in p for p in kind_swapped), kind_swapped
-    same_dump = run._gen3_rom_provenance_problems(
-        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_hash="AAAAAAAA"))
-    assert any("same ROM hash" in p for p in same_dump), same_dump
-    no_line = run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, {"a": "", "b": ""})
-    assert len(no_line) == 2, no_line
+def test_clean_rr_refused_oracle_reads_the_server_for_no_partner_and_no_link():
+    receipts = _clean_rr_refused_receipts()
+    with pytest.raises(RuntimeError, match="b connected"):
+        _clean_rr_refused_run(connected=True).assert_clean_rr_refused_gen3_saved(receipts)
+    with pytest.raises(RuntimeError, match="persisted link"):
+        _clean_rr_refused_run(links=[{"a": {"key": "KA"}, "b": {"key": "KB"}, "status": "alive"}]
+                           ).assert_clean_rr_refused_gen3_saved(receipts)
+    gone = _clean_rr_refused_run()
+    gone._status = lambda: None
+    with pytest.raises(RuntimeError, match="status"):
+        gone.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_the_clean_oracle_rejects_a_receipt_whose_b_side_is_companion():
-    """The whole point of the provenance wrap: a receipt claiming B ran the companion ROM must
-    never reach (or pass) faint_cmd_gen3's own memorial checks."""
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    receipts = _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA")   # A and B: same ROM
-    with pytest.raises(RuntimeError, match="clean by hash"):
-        run.assert_faint_cmd_clean_gen3_saved(receipts)
+def test_clean_rr_refused_orchestration_waits_for_a_alone_then_b_refusal_then_releases_a():
+    run = _clean_rr_refused_run()
+    calls, receipts = [], {"a": "", "b": ""}
+    run._read_receipt = lambda inst: receipts[inst]
+    run.wait_for = lambda desc, pred, timeout: calls.append(desc) or pred() or calls.append("PRED_FALSE")
+    run.go = lambda *args: calls.append("go")
+    receipts.update(a="MYKEY 1 KA\n", b=_clean_rr_refused_receipts()["b"])
+    run._status = lambda: {"players": {"a": {"connected": True}}}
+    run.orchestrate_clean_rr_refused_gen3()
+    assert calls == ["a: MYKEY line", "a: hello accepted", "b: refused at launch", "go"], calls
+    # B never produces keys or a hello: the orchestration must not wait on either
+    receipts["b"] = ""
+    calls.clear()
+    run.orchestrate_clean_rr_refused_gen3()
+    assert "PRED_FALSE" in calls
+
+
+def test_a_refused_side_is_launched_with_expect_refused():
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
+    assert run._gen3_expect_refused("b") is True and run._gen3_expect_refused("a") is False
+    assert _oracle_run("faint_cmd_gen3", game="gen3_rr")._gen3_expect_refused("b") is False
+
+
+def _launch_verdict():
+    """The driver's REAL launch_verdict (lua/tests/duo/duo_gen3_main.lua), lifted by name."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    text = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("launch_verdict"), text, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no launch_verdict"
+    return runtime.execute(found.group(0) + "\nreturn launch_verdict")
+
+
+def test_the_driver_passes_a_refused_launch_only_when_refusal_was_expected():
+    verdict = _launch_verdict()
+    says = f"[SLink-gen3] refused: {REFUSAL}"
+    # expected refusal with the companion verdict: done, pass
+    done, ok, msg = verdict(None, says, True)
+    assert (done, ok) == (True, True) and "companion" in msg
+    # expected refusal but a different refusal (a bad hash, not the companion rule): done, FAIL
+    done, ok, msg = verdict(None, "[SLink-gen3] refused: header BPEE is not an admitted Gen 3 cartridge", True)
+    assert (done, ok) == (True, False)
+    # expected refusal but no refusal at all, and no client: FAIL
+    assert verdict(None, None, True)[:2] == (True, False)
+    # expected refusal but the cartridge was ADMITTED and a client built: FAIL, never carry on
+    done, ok, msg = verdict({}, None, True)
+    assert (done, ok) == (True, False) and "admitted" in msg
+    # ordinary rows: a built client carries on; a refusal with none expected is the old failure
+    assert verdict({}, None, False) is False   # a built client: nothing to decide, carry on
+    done, ok, msg = verdict(None, says, False)
+    assert (done, ok) == (True, False) and "built no client" in msg
 
 
 def test_rival_swap_is_only_a_negative_characterization():
@@ -904,6 +935,8 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     args = argparse.Namespace(game="gen3_frlg", lane="t", scenario=scenario, idle_jitter=0)
     run = duo.DuoRun(scenario, args, attempt=1)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"patch/build/gen3_{inst}.gba")
+    # a clean dump (the fake ROM path is no file): the cartridge-kind decision is tested in test_e2e_duo_gen3_companion_battery.py
+    monkeypatch.setattr(run, "_gen3_companion_cart", lambda inst, title: False)
     run.launch_instance("a")
     battery = Path(run._saveram_dir("a")) / "Pokemon - FireRed Version (USA).SaveRAM"
     assert battery.read_bytes() == fixture
@@ -923,6 +956,13 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
 
 
 def test_gen3_rom_prefers_the_dump_then_the_staged_copy(monkeypatch, tmp_path):
+    # Hermetic: _gen3_rom walks up EVERY parent of REPO for the dump, so a real FireRed dump anywhere above the pytest
+    # temp root (a checkout root, F:/slink-work, ...) would satisfy the search the test expects to fail. Only the dump this
+    # test creates under tmp_path may exist.
+    import pathlib
+    real_is_file = pathlib.Path.is_file
+    monkeypatch.setattr(pathlib.Path, "is_file", lambda self: real_is_file(self) and not (
+        self.name == "Pokemon - FireRed Version (USA).gba" and tmp_path not in self.parents))
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.gcfg, run.cfg = dict(duo.GAMES["gen3_frlg"]), dict(duo.SCENARIOS["link_gen3"])
     root = tmp_path / "main" / "wt"
@@ -960,10 +1000,10 @@ def test_gen3_rr_rom_companion_missing_build_refuses(monkeypatch, tmp_path):
 
 
 def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
-    """native_absent_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
+    """clean_rr_refused_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
     raw dump (patch/tools/build.py:91 DEFAULT_RR / patch/README.md:18), same rule as firered."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     root = tmp_path / "main" / "wt"
     root.mkdir(parents=True)
     monkeypatch.setattr(duo, "REPO", str(root))
@@ -985,7 +1025,7 @@ def test_gen3_rr_battery_path_clean_kind_computes_the_saveram_name(monkeypatch, 
     """No hand-transcribed saveram name for the clean side: it is derived from whatever
     `_gen3_rom` actually staged (gen3_fixtures.saveram_name), avoiding a transcription error."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     run._saveram_dir = lambda inst: str(tmp_path)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: "patch/build/gen3_Pokemon_-_Radical_Red.gba")
     path = run._gen3_battery_path("b")
@@ -1392,6 +1432,13 @@ function FAKE(scenario, player, phase, spec)
     local gone, boxed, used, writes = {}, {}, 0, spec.writes or 0
     if spec.gone then gone[spec.gone] = true end     -- a record the server moved out (quarantine)
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
+    -- clean_rr_refused's A: spec.drift_writes / spec.drift_rx land inside the 600-frame settle window
+    local rx_extra, base_frames = 0, ctx.frames
+    ctx.frames = function(n)
+        if n == 600 then writes = writes + (spec.drift_writes or 0); rx_extra = rx_extra + (spec.drift_rx or 0) end
+        return base_frames(n)
+    end
+    ctx.rx_count = function() return rx_extra end
     ctx.sent = function(event)
         if event == "box_mon_failed" or event == "sync_retrieve_failed" then
             return spec.failed == event and 1 or 0
@@ -1766,9 +1813,7 @@ def _run_module(lua, scenario, player, phase, spec):
     # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["PRESAVE_COUNTER before=4 after=4",
-                                           "NATIVE_PREPARED phase=2 writes=3"]),
-    ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
+    ("clean_rr_refused", "a", "initial", {}, ["PROBE_SETTLED writes=0 rx=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
     ok, passed, msg, logs = _run_module(lua, scenario, player, phase, spec)
@@ -1788,10 +1833,9 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
-    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_prepare never arrived"),
-    ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
-    ("native_absent", "a", "initial", {"ready_ok": "lua:false"}, "the companion refused the valid prepare"),
-    ("native_absent", "b", "initial", {"ready_ok": "lua:true"}, "the clean cartridge said ok"),
+    ("clean_rr_refused", "a", "initial", {"drift_writes": 2}, "wrote 2 time(s)"),
+    ("clean_rr_refused", "a", "initial", {"drift_rx": 1}, "received 1 command(s)"),
+    ("clean_rr_refused", "b", "initial", {}, "refusal-proof side"),
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
@@ -4461,7 +4505,6 @@ def test_p_h_rows_are_registered_with_their_cases():
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
-             "linked_faint_active_clean_gen3": ("wild", ("gen3_rr",)),
              "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr",)),
              "linked_faint_active_mega_gen3": ("mega", ("gen3_rr",)),
              "explode_gen3": ("explode", ("gen3_frlg", "gen3_rr", "gen3_emerald"))}
@@ -4474,13 +4517,16 @@ def test_p_h_rows_are_registered_with_their_cases():
         for game in games:
             assert duo.scenario_applies(name, game)
     # RR fixtures: R1/R2/R3 need rr_battle2 (a second mon, balls); R4 and explode run on rr_battle
-    rr = {"linked_faint_active_gen3": "battle2", "linked_faint_active_clean_gen3": "battle2",
+    rr = {"linked_faint_active_gen3": "battle2",
           "linked_faint_active_lhammer_gen3": "battle2", "linked_faint_active_whiteout_gen3": "battle",
           "explode_gen3": "battle"}
     for name, target in rr.items():
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == target, name
     assert duo.scenario_target(duo.SCENARIOS["linked_faint_active_gen3"], "gen3_frlg") == "battle"
-    assert duo.SCENARIOS["linked_faint_active_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
+    # patch-first (2026-10-02): the clean-RR link rows are retired -- a clean RR is refused at launch
+    for gone in ("linked_faint_active_clean_gen3", "faint_cmd_clean_gen3"):
+        assert gone not in duo.SCENARIOS, gone
+        assert not hasattr(duo.DuoRun, "orchestrate_" + gone), gone
     # G4-SYNTH-TRAINER (6e85ddfc): the cached-native trainer fixture replaces the T2 walk
     trainer = duo.SCENARIOS["linked_faint_active_trainer_gen3"]
     assert trainer["target"] == {"a": "battle", "b": "trainer"}
@@ -4517,7 +4563,7 @@ def test_rr_rows_skip_until_their_battle_fixtures_exist(monkeypatch, tmp_path):
     assert "rr_battle2" in duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr")[0]
     (tmp_path / "rr_battle2.sav").write_bytes(b"")
     (tmp_path / "rr_battle2_b.sav").write_bytes(b"")
-    for name in ("linked_faint_active_gen3", "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3"):
+    for name in ("linked_faint_active_gen3", "linked_faint_active_lhammer_gen3"):
         assert duo.skip_reason(name, "gen3_rr") is None, name
     why, allowed = duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr")
     assert why.startswith("SIGNED LIMIT: owner ruling 20") and allowed is True
@@ -4912,7 +4958,10 @@ RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLi
 
 # (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
 # calls RR's ChoosePartyMonByMenuType, which owns that reference)
-COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D84]}
+# 0x0802EA11's companion referrer moved 0x08379D84 -> 0x08379D88 when the title/menu-version payload (companion
+# sha1 e87a6a7e, patch/dist/companion_pins.json) grew the payload by 4 bytes ahead of it: a pure relocation (the
+# count 8 + 1 is unchanged and every other pinned referrer is where it was)
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D88]}
 
 
 def _pret_battle_berries():
@@ -5147,7 +5196,7 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     """G5-RR-BATTERY (live 3fa789da: KeyError 1 on slot-1 links over the one-mon rr_town, no
     balls on rr_battle): every RR row that links/trades slot 1 or throws a ball boots rr_battle2."""
     for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
-                 "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
+                 "reconnect_gen3", "clean_rr_refused_gen3", "linked_faint_active_gen3"):
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
     fr = {"faint_cmd_gen3": "town", "link_gen3": "catch_synth", "boxsync_gen3": {"a": "battle", "b": "town"}}
     for name, want in fr.items():

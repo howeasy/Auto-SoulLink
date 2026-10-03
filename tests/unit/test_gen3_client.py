@@ -29,7 +29,7 @@ def party(*pids, hp=20):
     return [mon_record(p, OT, species=4 + i, nickname=f"MON{i}", hp=hp) for i, p in enumerate(pids)]
 
 
-def live(pack="gen3_frlg", title="firered", kind="clean", pids=(A, B), frames=60):
+def live(pack="gen3_frlg", title="firered", kind=None, pids=(A, B), frames=60):
     """A connected client past its first validation: hello sent, writes enabled."""
     w = World(pack, title, kind)
     w.set_party(party(*pids))
@@ -514,9 +514,7 @@ def test_rr_nature_change_refuses_unpaired_or_invalid_pid_store(failure):
 @pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
 def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):
     from tests.unit import gen3_world as gw
-
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     bystander = mon_record(0x4D55444B, 0x20250925, species=283)
     outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
     received = mon_record(0x84, 0x9746, species=298)
@@ -580,9 +578,7 @@ def test_save_cleared_reset_discards_queued_npc_trade_preimage():
 @pytest.mark.parametrize("size,slot", [(size, slot) for size in range(1, 7) for slot in range(size)])
 def test_emerald_npc_trade_maps_each_slot_and_party_size(monkeypatch, size, slot):
     from tests.unit import gen3_world as gw
-
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     mons = [mon_record(A + i, OT, species=283) for i in range(size)]
     w.set_party(mons)
     w.step_to(60)
@@ -655,7 +651,7 @@ def test_shared_client_forwards_existing_server_phone_content_without_consuming_
 
 def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
     calls = []
-    w = World(native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
+    w = World(kind="clean", native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
     w.set_party(party(A, B))
     w.step_to(60)
     w.command(cmd="msgbox", text="same message", phone="first_link")
@@ -1363,8 +1359,11 @@ def test_prompts_without_a_native_part_get_the_cancel_sentinels(name, extra, eve
     assert reply["token"] == "tk" and reply[field] == value
 
 
-def test_rival_swap_without_the_companion_refuses_like_the_old_client():
-    w = live("gen3_rr", "radical_red")
+@pytest.mark.parametrize("kind,error", [("clean", "patch_required"), ("companion", "native absent")])
+def test_rival_swap_without_the_companion_refuses_like_the_old_client(kind, error):
+    # clean: no native part at all (the old client); companion: the native part is armed but the
+    # fake ROM answers no mailbox, so the final refusal is native.lua's "native absent".
+    w = live("gen3_rr", "radical_red", kind)
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w))
     w.step()
     assert w.events("rival_team_replaced")[-1]["error"] == "not_in_battle"
@@ -1373,7 +1372,7 @@ def test_rival_swap_without_the_companion_refuses_like_the_old_client():
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == error
     assert w.writes == []
 
 
@@ -2019,12 +2018,16 @@ def test_a_stale_opponent_after_a_battle_is_not_announced_again():
     assert [e["trainer_id"] for e in w.events("trainer_battle_start")] == [331]
 
 
-def test_frlg_keeps_the_in_battle_announcement():
-    w = live()
+@pytest.mark.parametrize("kind,announced", [("clean", 0), ("companion", 1)])
+def test_frlg_keeps_the_in_battle_announcement(kind, announced):
+    """Clean FR announces in battle only. The companion FR builds a native part, and client.lua's
+    pre_announce hook keys on native.rival_window_open EXISTING (not on the pack), so a
+    FR/LG/Emerald companion announces on the opponent edge too (found by the slice-2 migration)."""
+    w = live(kind=kind)
     w.step(3)
     w.poke_int(w.ram["TRAINER_OPPONENT_ADDR"], 5, 2)
     w.step(10)
-    assert w.events("trainer_battle_start") == []
+    assert len(w.events("trainer_battle_start")) == announced
 
 
 def test_a_pre_announced_swap_is_staged_and_posts_in_the_w1_window():
@@ -2409,11 +2412,11 @@ def test_c510b_two_client_sessions_get_distinct_nonces_and_the_old_id_is_refused
     b.step()
     assert b.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
     assert b.writes == before, "the other session's command must write nothing"
-    # ... while B's own identity is not itself a refusal (no companion here: patch_required)
+    # ... while B's own identity is not itself a refusal (no mailbox answers here: native absent)
     b.command(cmd="replace_rival_team", trainer_id=42, n=1, blobs_hex=viable_blobs(b),
               session=start_b["session"], battle_id=start_b["battle_id"])
     b.step()
-    assert b.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert b.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 def test_c510b_the_hello_declares_the_battle_identity_capability():
@@ -2445,15 +2448,16 @@ def test_c510b_a_missing_or_malformed_seed_fails_closed(monkeypatch):
 
 
 def test_c510_the_happy_path_passes_the_guard():
-    """A valid identity is not itself a refusal: with no companion the reply is the existing
-    patch_required, i.e. the command got past the guard and into the later checks."""
+    """A valid identity is not itself a refusal: the reply is the final refusal
+    (native absent: the companion's mailbox does not answer in the fake ROM), i.e. the command
+    got past the guard and into the later checks."""
     w = live("gen3_rr", "radical_red")
     ready_battle(w, 5)
     session, bid = battle_identity(w)
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 # ── C5-11a: the rival opcode, the window refusal and the pre-filters ─────────────────────────
@@ -2538,7 +2542,7 @@ def test_c511a_the_selectable_team_rule_needs_two_distinct_mons_in_doubles():
     w.command(cmd="replace_rival_team", trainer_id=5, n=2, blobs_hex=viable_blobs(w, 2),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 def test_c511a_the_selectable_team_rule_follows_the_engine_getter_on_bad_eggs():

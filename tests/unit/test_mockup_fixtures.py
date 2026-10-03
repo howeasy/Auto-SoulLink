@@ -30,11 +30,14 @@ def _load(name: str) -> dict:
 
 
 @pytest.fixture(scope="module")
-def live_status() -> dict:
+def live_status(tmp_path_factory) -> dict:
     """A status dict from a real, freshly-built server -- the contract to compare against."""
     from server.server import SLinkServer
 
-    srv = SLinkServer(data_dir=None)
+    # A tmp data dir on purpose: data_dir=None falls back to the repo's LIVE data/links.json, and the
+    # autouse isolate_data_dir (tests/conftest.py) is function-scoped, so it cannot cover this module-scoped
+    # fixture. A leftover run's rom_type then changes the adapter and adds keys (e.g. trade_recovery).
+    srv = SLinkServer(data_dir=str(tmp_path_factory.mktemp("mockup_status")))
     return srv._build_status_dict()
 
 

@@ -11,16 +11,14 @@ from tests.unit.gen3_world import World, key_of, mon_record
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
-TITLES = [("gen3_frlg", "firered", "clean"), ("gen3_frlg", "leafgreen", "clean"),
-          ("gen3_emerald", "emerald", "clean"), ("gen3_rr", "radical_red", "clean"),
-          ("gen3_rr", "radical_red", "companion")]
+TITLES = [("gen3_frlg", "firered", "companion"), ("gen3_frlg", "leafgreen", "companion"),
+          ("gen3_emerald", "emerald", "companion"), ("gen3_rr", "radical_red", "companion")]
 OT = 0xABCD
 LEAD = mon_record(0x11111111, OT)
 EGG = mon_record(0x22222222, OT, is_egg=1)
 
 
 def world(monkeypatch, pack, title, kind, *, boot_egg=False):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", ROOT / "data/games/gen3_emerald")
     w = World(pack, title, kind)
     w.set_party([LEAD, EGG] if boot_egg else [LEAD])
     w.step_to(60)
@@ -80,7 +78,7 @@ def test_boxed_egg_withdrawal_does_not_absorb_its_future_hatch(monkeypatch, pack
 
 
 def test_a_different_gift_signal_cannot_acquire_a_pending_hatch(monkeypatch):
-    w = world(monkeypatch, "gen3_frlg", "firered", "clean", boot_egg=True)
+    w = world(monkeypatch, "gen3_frlg", "firered", "companion", boot_egg=True)
     w.set_party([LEAD, dict(EGG, is_egg=0, is_egg_flag=0)])
     w.fire("mon_given")
     w.step()
@@ -93,7 +91,7 @@ def test_a_different_gift_signal_cannot_acquire_a_pending_hatch(monkeypatch):
 
 @pytest.mark.parametrize("fault", ["bad_pointer", "still_egg", "bad_egg", "reset"])
 def test_invalid_hatch_observation_never_publishes(monkeypatch, fault):
-    w = world(monkeypatch, "gen3_frlg", "firered", "clean", boot_egg=True)
+    w = world(monkeypatch, "gen3_frlg", "firered", "companion", boot_egg=True)
     mon = dict(EGG, is_egg=0, is_egg_flag=0)
     if fault == "still_egg":
         mon = EGG

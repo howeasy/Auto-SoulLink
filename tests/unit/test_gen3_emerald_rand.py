@@ -81,13 +81,24 @@ def test_emerald_table_counts_and_profile_are_symbol_sized():
         assert "pokeemerald" in profile["rom_tables_provenance"][name]
 
 
-def test_unknown_hash_emerald_is_rand_and_reuses_clean_sites():
-    from tests.unit.test_gen3_entry import World, _admit, lua_to_py
+def test_unknown_hash_emerald_is_rand_companion_and_reuses_companion_sites():
+    from tests.unit.test_gen3_entry import World, _admit, _split, lua_to_py
 
-    w = World(pack="gen3_emerald", title="emerald", build=False)
-    got = lua_to_py(_admit(w, rom_hash="00" * 20, rom_read=w._rom_read, header_code="BPEE"))
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand")
+    w = World(pack="gen3_emerald", title="emerald", kind="companion", build=False)
+    got = lua_to_py(_split(_admit(w, rom_hash="00" * 20, rom_read=w._rom_read, header_code="BPEE"))[0])
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand_companion")
     assert got["admitted_by"] == "anchors"
+    w.kind = "rand_companion"
+    _, parts = w.Entry.build(w.deps())
+    assert parts.kind == "rand_companion" and parts.artifact_kind == "companion"
+
+
+def test_the_rand_kind_still_reuses_the_clean_emerald_sites_in_an_observer_build():
+    """Observer builds ignore `production`; admission refuses a randomized CLEAN Emerald once
+    the clean artifact is non-production (test_gen3_emerald_entry / test_gen3_entry)."""
+    from tests.unit.test_gen3_entry import World
+
+    w = World(pack="gen3_emerald", title="emerald", kind="clean", build=False)
     w.kind = "rand"
     _, parts = w.Entry.build(w.deps())
     assert parts.kind == "rand" and parts.artifact_kind == "clean"

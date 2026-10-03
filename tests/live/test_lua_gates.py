@@ -82,11 +82,12 @@ PORTED = (
     "test_live_startmenu.lua",         # read-only START-menu recon
     "test_live_startmenu_shapes.lua",  # SOULLINK row: with-Pokedex / Safari / tools-page shapes
     "test_live_tradescene.lua",        # raw durable PREPARE 29 + SCENE 21 (RR-DURABLE)
-    "test_mailbox_absent.lua",         # negative control: native absent on the clean ROM
+    "test_mailbox_absent.lua",         # negative control: native absent AND launcher refusal on the clean ROM
     "test_mailbox_battle.lua",         # raw OP_FORCE_FAINT / OP_FORCE_MOVE / unknown opcode
     "test_mailbox_ping.lua",           # raw OP_PING + beacon stability
 )
-# Negative controls: they assert the patch is ABSENT, so they need the unpatched ROM.
+# Negative controls: they assert the patch is ABSENT (and that the launcher refuses the cartridge for
+# it, patch-first 2026-10-02), so they need the unpatched ROM.
 CLEAN_ROM_GATES = {"test_mailbox_absent.lua"}
 
 _GHOST = "peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md)"

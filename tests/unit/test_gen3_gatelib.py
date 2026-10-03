@@ -245,12 +245,32 @@ def test_ported_gate_fails_without_the_companion(gate, tmp_path):
     assert verdict(text).startswith("RESULT: FAIL"), text
 
 
+LAUNCHER_CHECK = "the launcher refuses the clean RR: the companion patch is required"
+
+
 def test_absent_gate_passes_on_clean_and_fails_on_a_beacon(tmp_path):
-    assert verdict(run_gate("test_mailbox_absent.lua", tmp_path, kind="clean")).startswith("RESULT: PASS")
+    """The gate's bare catalog admission (Entry.admit, via t.boot) classifies the cartridge as the RR CLEAN
+    artifact with native absent, AND the launcher (Entry.admit_routed, via t.routed) refuses that same
+    cartridge with the companion verdict (patch-first, 2026-10-02)."""
+    text = run_gate("test_mailbox_absent.lua", tmp_path, kind="clean")
+    assert verdict(text).startswith("RESULT: PASS"), text
+    assert LAUNCHER_CHECK in text and "needs the SLink companion patch" in text, text
     other = tmp_path / "beacon"
     other.mkdir()
     text = run_gate("test_mailbox_absent.lua", other, kind="clean", beacon=True)
     assert verdict(text).startswith("RESULT: FAIL"), text
+
+
+def test_absent_gate_fails_if_the_launcher_would_admit_the_clean_rr(tmp_path):
+    """The launcher check can fail: a gate copy whose t.routed() reports the clean RR admitted."""
+    src = (GATE_DIR / "test_mailbox_absent.lua").read_text(encoding="utf-8")
+    assert "t.routed()" in src
+    mutant = tmp_path / "mutant_absent.lua"
+    mutant.write_text(src.replace("t.routed()", "{ pack = 'gen3_rr', kind = 'clean' }"), encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+    text = run_gate("test_mailbox_absent.lua", out, kind="clean", path=mutant)
+    assert verdict(text).startswith("RESULT: FAIL") and LAUNCHER_CHECK in text, text
 
 
 def test_absent_gate_fails_on_the_companion_artifact(tmp_path):

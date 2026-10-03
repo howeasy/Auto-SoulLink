@@ -1,5 +1,7 @@
 # Gen 3 release requirements
 
+> **Update 2026-10-03 (patch-first):** the RR clean rows `linked_faint_active_clean_gen3` and `faint_cmd_clean_gen3` are retired and `native_absent_gen3` is replaced by the renamed refusal proof `clean_rr_refused_gen3` (a different claim: the clean RR is refused at launch), so the RR plan is 39 rows, not 41. The old row's receipts are a clean-client PASS and never count for the new row. The 41/41 record below stays as history; see [RR_CLEAN_ROWS_CONVERSION_2026-10-03.md](gen3/RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
+
 ## RR completion — 2026-10-01
 
 RR passed **41/41 authoritative plan rows** at `aab6fb325780e8a4a94b1b33d0f04c74749a51d5`, with no cross-cut carries. The exact-cut [summary](gen3/probes/fc_SUMMARY_aab6fb32_rr.txt) includes all applicable explicit feature/recovery rows, Nature Changer, three School borrowed-party controls, opcode gates and ZIP build/check/boot. The [source/model quick gate](gen3/probes/source_quick_aab6fb32.txt) passed **5,180 tests, zero skips/failures, all five lanes**. Source is integrated into local main; [the completion record](gen3/RR_COMPLETION_2026-09-30.md) records evidence and preservation.

@@ -709,3 +709,19 @@ def test_the_oracle_names_the_overlay_save_on_a_pure_row(tmp_path):
     run = _gen1_oracle_run(tmp_path, "gen1_pure_green")
     assert run._gen1_save_name("a") == "gen1 purered overlay.SaveRAM"
     assert run._gen1_save_name("b") == "gen1 puregreen overlay.SaveRAM"
+
+
+@pytest.mark.parametrize("game", GEN1_ROWS)
+@pytest.mark.parametrize("method", ["_rom_for", "_gen1_save_name"])
+@pytest.mark.parametrize("staged", [False, True])
+def test_gen1_row_without_companion_key_cannot_fall_back_to_clean(game, method, staged,
+                                                                monkeypatch, tmp_path):
+    run = duo.DuoRun("link_new", _args(game=game))
+    run.gcfg = dict(run.gcfg, patched_saves={})
+    # Neither the old scenario fallback nor a staged artifact excuses a broken game row.
+    run.cfg = dict(run.cfg, rom={"a": "clean-red.gb", "b": "clean-blue.gb"})
+    if staged:
+        run._admit_roms = {"a": "randomized-companion.gb"}
+    monkeypatch.setattr(g1, "staged_rom", lambda key: f"clean-{key}.gb")
+    with pytest.raises(RuntimeError, match="Gen 1 row has no companion key"):
+        getattr(run, method)("a")

@@ -706,3 +706,44 @@ def test_qualify_prints_the_clients_key_for_each_party_mon():
     """The key format is the client's (lua/gen3/reads.lua r.key): PID:OTID, 8 upper-hex each."""
     entry = fx._party_entry({"personality": 0x2D356A90, "ot_id": 0x99DE0D8A, "species": 7, "level": 9})
     assert entry == {"key": "2D356A90:99DE0D8A", "species": 7, "level": 9}
+
+
+# --- F2: a companion boot-check boots only the published companion build ---
+
+def _pin_root(tmp_path, title, rom_bytes):
+    import hashlib
+    import json as _json
+
+    dist = tmp_path / "patch" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "gen3_companions.json").write_text(_json.dumps(
+        {"titles": {title: {"rom_sha1": hashlib.sha1(rom_bytes).hexdigest()}}}), encoding="utf-8")
+    return tmp_path
+
+
+def test_companion_pin_problem_binds_the_rom_to_the_lanes_pin(tmp_path):
+    rom = tmp_path / "slink.gba"
+    rom.write_bytes(b"the pinned build")
+    root = _pin_root(tmp_path, "firered", b"the pinned build")
+    assert fx.companion_pin_problem(rom, "firered", root) is None
+    rom.write_bytes(b"another cartridge")                               # present but not the pin
+    assert "is not the firered companion pin" in fx.companion_pin_problem(rom, "firered", root)
+    assert "cannot read" in fx.companion_pin_problem(tmp_path / "absent.gba", "firered", root)
+    assert "no published leafgreen companion pin" in fx.companion_pin_problem(rom, "leafgreen", root)
+    assert "needs --title" in fx.companion_pin_problem(rom, None, root)
+    assert "needs --title" in fx.companion_pin_problem(rom, "radical_red", root)
+
+
+def test_boot_check_companion_refuses_a_wrong_rom_before_staging_or_launching(tmp_path, monkeypatch, capsys):
+    rom = tmp_path / "wrong.gba"
+    rom.write_bytes(b"a clean dump")
+    monkeypatch.setattr(fx, "REPO", str(_pin_root(tmp_path, "firered", b"the pinned build")))
+
+    def boom(*a, **k):
+        raise AssertionError("staged or launched past the pin check")
+    monkeypatch.setattr(fx, "_prepare_run", boom)
+    monkeypatch.setattr(fx, "_launch", boom)
+    args = _parse(["boot-check", "--rom", str(rom), "--fixture", "f.sav", "--title", "firered", "--companion"])
+    assert args.companion is True and fx.cmd_boot_check(args) == 2
+    assert "is not the firered companion pin" in capsys.readouterr().err
+    assert _parse(["boot-check", "--rom", "r.gba", "--fixture", "f.sav"]).companion is False
