@@ -102,15 +102,8 @@ def ticks(w):
 
 _WORLD_TESTS: dict[str, str] = {}
 
-# Coverage owed: the two items the model world cannot reach. 11 was COVERED as a refusal (the client
-# withholds the hello instead of sending party=[]), so it is no longer owed.
-OWED_WORLD_ITEMS = [
-    "23",  # no_catch is gated on st.has_pokeballs (poll_events.lua:417) and the client reads
-           # has_pokeballs ONLY from the injected p.has_pokeballs (client.lua:524; the bag read is
-           # a documented pack gap, client.lua:73). gen4_world.py:200-216 injects none, so the
-           # branch is unreachable until the harness grows a bag read.
-    "24",  # unresolve_area's only observable effect is the re-armed no_catch of item 23
-]
+# Every world obligation now has a registered wire-level test; named GAPs stay in the map.
+OWED_WORLD_ITEMS = []
 
 
 def world_item(*item_ids):
@@ -509,6 +502,112 @@ def test_world_capture_carries_key_area_species_level_and_the_acquisition_flags(
     assert len(caught) == 1, caught
     assert caught[0]["area_id"] == "route_60" and "gift" not in caught[0], caught[0]
     assert caught[0]["species_id"] == 16 and caught[0]["level"] == 3 and caught[0]["is_egg"] is False
+
+
+def _wild_end(w, *, btype=0, outcome=None):
+    w.enter_battle(btype=btype)
+    w.advance(5)
+    if outcome is not None:
+        w.set_outcome(outcome)
+        w.advance(3)
+    w.leave_battle()
+    w.advance(12)
+
+
+@world_item("23")
+@pytest.mark.parametrize("title", TITLES)
+def test_world_no_catch_ball_gate_once_per_area_and_never_after_capture(title):
+    w = ready(title, area_of=AREA, balls=True)
+    assert w.events("hello")[0]["has_pokeballs"] is True
+    w.enter_battle()
+    w.advance(5)
+    assert w.events("no_catch") == []
+    w.leave_battle()
+    w.advance(12)
+    assert [{k: e[k] for k in ("area_id", "species_id", "level")} for e in w.events("no_catch")] == [
+        {"area_id": "route_60", "species_id": 16, "level": 3}]
+    w.advance(80)
+    _wild_end(w)
+    assert len(w.events("no_catch")) == 1  # same area, a second battle cannot resolve it twice
+    assert w.writes == []
+
+    caught = ready(title, area_of=AREA, balls=True)
+    caught.enter_battle()
+    caught.advance(5)
+    caught.leave_battle()
+    caught.party.append(Mon(0x01010101, 16, 3, 13, 13, otid=0x0000BEEF))
+    caught.write_party()
+    caught.advance(12)
+    assert len(caught.events("capture")) == 1
+    assert caught.events("capture")[0]["area_id"] == "route_60"
+    assert "gift" not in caught.events("capture")[0]
+    assert caught.events("no_catch") == []
+    assert caught.writes == []
+
+    # The native CAUGHT outcome suppresses no_catch even if copy-back is not yet attributable.
+    outcome_only = ready(title, area_of=AREA, balls=True)
+    _wild_end(outcome_only, outcome=outcome_only.prof["battle_enums"]["outcomes"]["caught"])
+    assert outcome_only.events("no_catch") == []
+    assert outcome_only.writes == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("balls", [None, False])
+def test_world_no_catch_stays_off_without_balls_or_without_the_producer(title, balls):
+    w = ready(title, area_of=AREA, balls=balls)
+    assert w.events("hello")[0]["has_pokeballs"] is False
+    _wild_end(w)
+    assert w.events("no_catch") == []
+    assert w.writes == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("item,quantity", [(1, 0), (17, 1)])
+def test_world_no_catch_requires_a_ball_id_and_positive_quantity(title, item, quantity):
+    def pocket(w):
+        bag = w.prof["bag"]
+        slot = w.dyn + w.arrays[bag["array_id"]][1] + bag["balls_pocket_off"]
+        for name, value in (("id", item), ("quantity", quantity)):
+            field = bag["slot_fields"][name]
+            w.w(slot + field["off"], value, field["size"])
+
+    w = ready(title, area_of=AREA, balls=False, pre=pocket)
+    assert w.events("hello")[0]["has_pokeballs"] is False
+    _wild_end(w)
+    assert w.events("no_catch") == []
+    assert w.writes == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_open_gen4_no_catch_resolves_a_gift_area_without_the_missing_predicate(title):
+    # GAP item 23: docs/protocol.md §6 requires gift_ recognition. The desired [] assertion
+    # went red on all three titles: client.lua constructs PE without its optional gift_area.
+    # Pin the observed defect explicitly; invert this test when the production seam is wired.
+    w = ready(title, area_of="function() return 'gift_daycare', 'Daycare gift' end", balls=True)
+    _wild_end(w)
+    assert [{k: e[k] for k in ("area_id", "species_id", "level")} for e in w.events("no_catch")] == [
+        {"area_id": "gift_daycare", "species_id": 16, "level": 3}]
+    assert w.writes == []
+
+
+@world_item("24")
+@pytest.mark.parametrize("title", TITLES)
+def test_world_unresolve_area_rearms_no_catch_only_for_the_named_area(title):
+    w = ready(title, area_of=AREA, balls=True)
+    _wild_end(w)
+    assert [e["area_id"] for e in w.events("no_catch")] == ["route_60"]
+    w.reply({"cmd": "unresolve_area", "area_id": "route_99"})
+    w.advance(3)
+    _wild_end(w)
+    assert [e["area_id"] for e in w.events("no_catch")] == ["route_60"]
+    w.reply({"cmd": "unresolve_area", "area_id": "route_60"})
+    w.advance(3)
+    _wild_end(w)
+    assert [e["area_id"] for e in w.events("no_catch")] == ["route_60", "route_60"]
+    w.advance(80)
+    _wild_end(w)
+    assert [e["area_id"] for e in w.events("no_catch")] == ["route_60", "route_60"]
+    assert w.writes == []  # protocol rearming never writes the game save
 
 
 @world_item("26")

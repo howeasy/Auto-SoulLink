@@ -164,17 +164,18 @@ ITEMS: list[Item] = [
                    "behaviour is historical). No current client, Gen 4 included, has this obligation."),
     Item("23", "no_catch fires once per unresolved wild battle, never for gifts, never twice, never after a "
                "capture in that battle", "world",
-         open="OWED (HARNESS gap, not a client gap): the branch is gated on st.has_pokeballs "
-              "(lua/gen4/poll_events.lua:417), which the client takes ONLY from the injected "
-              "p.has_pokeballs (lua/gen4/client.lua:524,536,693; the bag read is a documented pack "
-              "gap, client.lua:73). tests/unit/gen4_world.py:200-216 builds a cfg with no "
-              "has_pokeballs, so it is false in EVERY world and no_catch cannot be provoked. "
-              "Proving this needs a bag-read injection in the harness (a follow-up card)."),
+         "test_world_no_catch_ball_gate_once_per_area_and_never_after_capture",
+         open="GAP (gift-area exclusion): MODEL test_open_gen4_no_catch_resolves_a_gift_area_without_the_missing_predicate "
+              "records no_catch for gift_daycare on HG/SS/hge. The desired empty wire assertion goes red. "
+              "lua/gen4/client.lua:1112 omits PE's gift_area predicate, so poll_events.lua:415-418 cannot "
+              "exclude an adapter's gift_ area. Real inputs.lua -> client:save_array ball gating, empty/"
+              "unwired gates, once-per-area and post-capture suppression are covered; gifts stay OPEN."),
     Item("24", "unresolve_area{area_id} re-arms no_catch / encounter HUD", "world",
-         open="OWED with item 23: unresolve_area clears session.resolved_areas "
-              "(lua/core/session.lua:294-295) and the reducer reads that same table through the proxy "
-              "at lua/gen4/client.lua:1075-1077, but its only observable effect is the re-armed "
-              "no_catch, which item 23's missing has_pokeballs makes unreachable."),
+         "test_world_unresolve_area_rearms_no_catch_only_for_the_named_area",
+         open="PARTIAL: no_catch rearming and named-area isolation are wire-proven on HG/SS/hge. "
+              "The encounter-HUD half is not claimed: Gen 4 has no NEW ENCOUNTER banner producer "
+              "(client.lua:732-736 sends reducer events; poll_events.lua emits no banner). "
+              "These world tests assert sent events / writes only, not HUD setup or presentation."),
     Item("25", "faint fires once per real HP>0->0 transition and NOT for client-zeroed HP", "world",
          "test_world_faint_fires_once_for_a_real_transition_and_never_for_a_commanded_zero"),
     Item("26", "whiteout fires exactly once when every previously-alive party mon is at 0 HP after a real faint",

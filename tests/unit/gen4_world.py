@@ -154,9 +154,10 @@ def py(v):
 class World:
     def __init__(self, title="heartgold", *, party=None, boxes=None, d7="model", connected=True, rom_hash=None,
                  start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None, order="hook_new",
-                 party_extra=None, party_array_size=0x5B4, patch_title=None):
+                 party_extra=None, party_array_size=0x5B4, patch_title=None, balls=None):
         self.title_name = title
         self.party_array_size = party_array_size
+        self.balls = balls  # None keeps the historical unwired world; bool opts into the real producer.
         self.order = order          # "hook_new": the hook sees the NEW framecount; "hook_old": the OLD one
         self.reads = 0              # io read calls (the per-frame read budget)
         self.read_log = None        # when a list: every read address (which reads a code path makes)
@@ -202,6 +203,23 @@ class World:
             "log": lambda s: self.logs.append(s), "player": "a", "rom_hash": self.rom_hash,
             "header_code": self.title["rom"]["header_code"],
         }
+        ball_client = self.lua.table()
+        if balls is not None:
+            # Same late binding as run.lua: Inputs reads the public client seam, not a fake bag callable.
+            Inputs = self.lua.eval("dofile")((ROOT / "lua/gen4/inputs.lua").as_posix())
+            save_array = self.lua.eval("""function(holder)
+                return function(id)
+                    if not holder.client then return nil, "client_not_ready" end
+                    return holder.client:save_array(id)
+                end
+            end""")(ball_client)
+            producer = Inputs.has_pokeballs(self.lua.table_from({
+                "root": ROOT.as_posix(), "json": self.json, "title": title,
+                "pack_profile": f"data/games/{self.pack_name}/profile.json", "save_array": save_array,
+            }))
+            if isinstance(producer, tuple):
+                raise ValueError(f"world bag producer refused: {producer[1]}")
+            cfg["has_pokeballs"] = producer
         if self.d7 is not None:
             cfg["d7"] = to_lua(self.lua, self.d7)
         if area_of is not None:                          # Lua source: function(map_id, loc) -> area_id, loc_name
@@ -220,6 +238,7 @@ class World:
             self.session, self.admit_why = res
         else:
             self.session = res
+        ball_client.client = self.session
         if self.session is not None and start:
             self.session.start(self.session)
 
@@ -265,9 +284,21 @@ class World:
         pc_off, pc_extra = PC_OFF[self.title_name]
         self.pc_size = prof["boxes"] * 0x1000 + pc_extra
         self.arrays = {1: (0x30, 0x60), 2: (self.party_array_size, 0x90), 5: (0x84, 0x1234), 41: (self.pc_size, pc_off)}
+        if self.balls is not None:
+            bag = prof["bag"]
+            # Model allocation in unused general-block RAM; the real runtime header resolves its base.
+            # Pocket/slot geometry and ids come exclusively from this title's committed pack.
+            size = max(p["off"] + p["count"] * bag["ball_slot_size"] for p in bag["pocket_layout"].values()) + 8
+            self.arrays[bag["array_id"]] = (size, 0x2000)
         self.dyn = SD + sv["dynamic_region_off"]
         for i, (size, off) in self.arrays.items():
             self.put(SD + sv["array_headers_off"] + i * sv["array_header_size"], struct.pack("<IIIHH", i, size, off, 0, 0))
+        if self.balls:
+            bag = prof["bag"]
+            slot = self.dyn + self.arrays[bag["array_id"]][1] + bag["balls_pocket_off"]
+            for name, value in (("id", bag["ball_ids"][0]), ("quantity", 1)):
+                field = bag["slot_fields"][name]
+                w(slot + field["off"], value, field["size"])
         spec = SD + sv["slot_specs_off"]
         self.put(spec, struct.pack("<BBHII", 0, 0, 0x10, 0, general))
         self.put(spec + 12, struct.pack("<BBHII", 1, 0x10, 0x13, pc_off, self.pc_size))
