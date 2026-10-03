@@ -1077,6 +1077,57 @@ def _new_events(problems, events_before, events_after):
     return events_after[:len(events_after) - kept]
 
 
+# Identity-bearing fields of the (200-char truncated) `TX hello - {...}` receipt lines: a refresh hello may change the AREA (the
+# client re-announces it when the map settles after CONTINUE) but nothing here. ot_id and the party keys are past the truncation, so
+# the server's own view (events.json "Connected (" rows of one text, the locked OT, identity_error) carries that half of the check.
+SAME_SAVE_HELLO_IDENTITY_FIELDS = ("artifact_kind", "foundation", "companion_abi", "badges", "ball_count", "has_pokeballs")
+_RECONNECT_HELLO_LINE_RE = re.compile(r"(?m)^RECONNECT_HELLO\b.*$")
+_TX_HELLO_LINE_RE = re.compile(r"(?m)^TX hello - (\{.*)$")
+
+
+def same_save_hello_problems(result_text):
+    """Violations in a same-save phase receipt (empty = none). The Gen 3 reconnect driver logs ONE `RECONNECT_HELLO <phase> count=N`
+    line (N = hellos sent when the phase starts; a companion cartridge sends capability-refresh hellos too, so N = 1..3 is normal),
+    and every `TX hello` of the phase must carry the same identity-bearing fields as the first. Any hello line for another phase
+    (a different save), any line this check cannot parse, or identity drift between the hellos is a violation."""
+    problems, parsed = [], []
+    for line in _RECONNECT_HELLO_LINE_RE.findall(result_text or ""):
+        m = re.fullmatch(r"RECONNECT_HELLO (\S+) count=(\d+)\s*", line)
+        if m:
+            parsed.append((m[1], int(m[2])))
+        else:
+            problems.append(f"unknown reconnect hello line {line.strip()!r}")
+    other = sorted({phase for phase, _count in parsed if phase != "same_save"})
+    if other:
+        problems.append(f"hello for another save in the same-save window: {', '.join(other)}")
+    hellos = [{k: v for k, v in re.findall(r'"(' + "|".join(SAME_SAVE_HELLO_IDENTITY_FIELDS) + r')":("[^"]*"|-?\d+|true|false)', body)}
+              for body in _TX_HELLO_LINE_RE.findall(result_text or "")]
+    for k, hello in enumerate(hellos[1:], 2):
+        drift = sorted(f for f in SAME_SAVE_HELLO_IDENTITY_FIELDS if f in hello and f in hellos[0] and hello[f] != hellos[0][f])
+        if drift:
+            problems.append(f"hello #{k} differs from hello #1 in {', '.join(drift)} (not a capability refresh of one save)")
+    return problems
+
+
+def same_save_hello_seen(result_text):
+    """The wait predicate: True once a `RECONNECT_HELLO same_save count=N` line with N >= 1 is there. It RAISES on a violation
+    (same_save_hello_problems) instead of waiting out the timeout, so a mixed same/different-save window fails at once."""
+    problems = same_save_hello_problems(result_text)
+    if problems:
+        raise RuntimeError("same-save reconnect window is not one save: " + "; ".join(problems))
+    return re.search(r"(?m)^RECONNECT_HELLO same_save count=[1-9]\d*\s*$", result_text or "") is not None
+
+
+def accepted_reconnect_hellos(events_before, events_after):
+    """True when A added at least one hello row since the baseline, every one ACCEPTED ("Connected (") and all of one text (the
+    same rom and party size: one identity), with no event-log rewrite."""
+    problems = []
+    new_hellos = _new_a_hellos(problems, events_before, events_after)
+    return (not problems and bool(new_hellos)
+            and all(row.get("text", "").startswith("Connected (") for row in new_hellos)
+            and len({row.get("text") for row in new_hellos}) == 1)
+
+
 def _new_a_hellos(problems, events_before, events_after):
     """A's hellos among the rows this reconnect actually added, not among all of history."""
     return [row for row in _new_events(problems, events_before, events_after)
@@ -1106,6 +1157,8 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
         if not new_hellos or any(not row.get("text", "").startswith("Connected (")
                                  for row in new_hellos):
             problems.append("A did not add only accepted reconnect hellos")
+        elif len({row.get("text") for row in new_hellos}) != 1:
+            problems.append("A's accepted reconnect hellos name more than one cartridge/party (another identity)")
     elif len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
@@ -9431,25 +9484,20 @@ class DuoRun:
             raise RuntimeError("the live link changed when A's EmuHawk was killed")
         self.launch_instance("a", phase="same_save", seed=False)
         same_path = self._phase_result_path("a", "same_save")
-        self.wait_for("same-save A hello",
-                      lambda: "RECONNECT_HELLO same_save count=1" in text(same_path), 300)
+        self.wait_for("same-save A hello", lambda: same_save_hello_seen(text(same_path)), 300)
         self.wait_for("server accepts A's same-save party", lambda: (
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
             60)
-        def accepted_reconnect_hello():
-            problems = []
-            new_hellos = _new_a_hellos(problems, baseline["events"], self._reconnect_events())
-            return (not problems and bool(new_hellos)
-                    and all(row.get("text", "").startswith("Connected (") for row in new_hellos))
-
-        self.wait_for("durable accepted reconnect hello", accepted_reconnect_hello, 30)
+        self.wait_for("durable accepted reconnect hello",
+                      lambda: accepted_reconnect_hellos(baseline["events"], self._reconnect_events()), 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
                                            baseline["links"]["player_identity"]["a"]["ot_id"],
                                            allow_accepted_refreshes=True)
+        problems += same_save_hello_problems(text(same_path))
         problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
             r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
         if problems:

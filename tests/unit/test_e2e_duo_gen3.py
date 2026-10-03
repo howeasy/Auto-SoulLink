@@ -5720,3 +5720,67 @@ def test_non_expansion_bm_still_refuses_an_unreadable_fallback(battle_model):
     lua.globals().start(40)
     ok, why = lua.globals().LOSE()
     assert ok is True and list(lua.globals().M.used.values())[:2] == [39, 33], why
+
+
+# ── frlgc 2026-10-03: reconnect_gen3's same-save window with a companion cartridge ─────────────────────
+# Evidence (F:/slink-work/tmp/duo_2jsg2y18, the Emerald same_save result file): one client session sends THREE `TX hello` lines in the
+# first ~550 frames -- the connect hello, then capability refreshes after `resolved_areas/config/dead_keys` and the native link-panel
+# write -- all with the same artifact_kind/foundation/companion_abi/badges/ball_count and the same party; only area_id may differ (the
+# map settles after CONTINUE). The phase driver logs ONE `RECONNECT_HELLO same_save count=N` line (N = hellos sent so far).
+def _tx_hello(area="oldale_town", kind="companion", abi=2, badges=0, balls=5, foundation="gen3_emerald"):
+    return ('TX hello - {"area_id":"%s","artifact_kind":"%s","badges":%d,"ball_count":%d,"battle_identity":true,'
+            '"companion_abi":%d,"event":"hello","foundation":"%s","has_pokeballs":true,"in_battle":fal\n'
+            % (area, kind, badges, balls, abi, foundation))
+
+
+def _same_save_window(count=3, hellos=3, **kw):
+    return ("booted\n" + "".join(_tx_hello(**kw) for _ in range(hellos))
+            + f"RECONNECT_HELLO same_save count={count}\n")
+
+
+@pytest.mark.parametrize("count, hellos", [(1, 1), (2, 2), (3, 3), (3, 1)])
+def test_same_save_hello_wait_accepts_the_companions_extra_hellos(count, hellos):
+    window = _same_save_window(count, hellos)
+    assert duo.same_save_hello_seen(window) is True and duo.same_save_hello_problems(window) == []
+
+
+def test_same_save_hello_wait_is_not_satisfied_by_nothing_or_count_zero():
+    for text in ("", "booted\n", "RECONNECT_HELLO same_save count=0\n"):
+        assert duo.same_save_hello_seen(text) is False and duo.same_save_hello_problems(text) == []
+
+
+def test_a_refresh_may_change_the_area_but_not_the_identity_fields():
+    areas = ("booted\n" + _tx_hello(area="viridian_city") + _tx_hello(area="viridian_city_mart")
+             + "RECONNECT_HELLO same_save count=2\n")
+    assert duo.same_save_hello_problems(areas) == []
+    for field, bad in (("kind", "clean"), ("abi", 1), ("badges", 3), ("balls", 4), ("foundation", "gen3_frlg")):
+        window = "booted\n" + _tx_hello() + _tx_hello(**{field: bad}) + "RECONNECT_HELLO same_save count=2\n"
+        problems = duo.same_save_hello_problems(window)
+        assert problems and "hello #2 differs from hello #1" in problems[0], (field, problems)
+        with pytest.raises(RuntimeError, match="not one save"):
+            duo.same_save_hello_seen(window)
+
+
+def test_a_mixed_same_and_different_save_window_fails_and_never_waits_out_the_timeout():
+    """RED case: the window holds a same_save hello AND a hello for another save (or a line nobody can parse)."""
+    mixed = _same_save_window(2, 2) + "RECONNECT_HELLO wrong_save count=1\n"
+    assert any("another save" in p and "wrong_save" in p for p in duo.same_save_hello_problems(mixed))
+    with pytest.raises(RuntimeError, match="wrong_save"):
+        duo.same_save_hello_seen(mixed)
+    only_other = "RECONNECT_HELLO wrong_save count=1\n"                   # a wrong_save-only window is no same-save hello
+    with pytest.raises(RuntimeError, match="another save"):
+        duo.same_save_hello_seen(only_other)
+    for odd in ("RECONNECT_HELLO other_save count=1\n", "RECONNECT_HELLO same_save\n", "RECONNECT_HELLO same_save count=x\n"):
+        problems = duo.same_save_hello_problems(_same_save_window(1, 1) + odd)
+        assert problems, odd
+        with pytest.raises(RuntimeError):
+            duo.same_save_hello_seen(_same_save_window(1, 1) + odd)
+
+
+def test_the_orchestration_waits_with_the_checked_predicate_and_re_checks_at_the_oracle():
+    import inspect
+
+    src = inspect.getsource(duo.DuoRun.orchestrate_reconnect_gen3)
+    assert "same_save_hello_seen(text(same_path))" in src            # the wait predicate (raises on a violation)
+    assert "same_save_hello_problems(text(same_path))" in src        # and the final problems list
+    assert "accepted_reconnect_hellos(baseline" in src and "RECONNECT_HELLO same_save count=1" not in src

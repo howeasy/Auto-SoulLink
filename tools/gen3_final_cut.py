@@ -1362,6 +1362,27 @@ def expansion_source_problem(row, lane):
     return None
 
 
+def keep_row_artifacts(row, lane):
+    """Copy the duo row's e2e result artifacts (e2e_<scenario>_*: the per-side and per-phase result files, the attempt archives, the
+    PYDEC file, the witness dumps, kept SaveRAMs) out of the SHARED, scenario-named files into patch/build/fc_rows/<row id>/ of the
+    lane, so a later row of the same scenario (FR then LG, or a retry) cannot overwrite them -- a failing row's evidence is exactly
+    what a rewrite used to lose. patch/build is gitignored (patch/.gitignore), so the lane stays tracked-clean. Returns the kept
+    directory (posix), or None for a row that is not an e2e_duo scenario run or left no artifact."""
+    argv = list(row.argv)
+    if "tools/e2e_duo.py" not in argv or "--scenario" not in argv:
+        return None
+    build = os.path.join(lane, "patch", "build")
+    files = [f for f in sorted(glob.glob(os.path.join(build, f"e2e_{argv[argv.index('--scenario') + 1]}_*"))) if os.path.isfile(f)]
+    if not files:
+        return None
+    dest = os.path.join(build, "fc_rows", row.id)
+    shutil.rmtree(dest, ignore_errors=True)          # only THIS row's own earlier copy (a re-run of the same row)
+    os.makedirs(dest)
+    for f in files:
+        shutil.copy2(f, os.path.join(dest, os.path.basename(f)))
+    return dest.replace("\\", "/")
+
+
 def run_row(row, cut, lane, deadline):
     """Run one row (plus at most one contention retry), write its receipt, return the verdict."""
     attempts, verdict = [], ""
@@ -1414,6 +1435,9 @@ def run_row(row, cut, lane, deadline):
             break
         print(f"[final_cut] {row.id}: contention timeout -> the one allowed retry")
     note = inputs_note(hash_inputs(row_inputs(row, lane)))   # after the run: what it used
+    kept = keep_row_artifacts(row, lane)                     # pass or fail: the row's own e2e result files
+    if kept:
+        note += f"\nkept: {kept}"
     with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:
         f.write(receipts.run_receipt_text(row=row.id, item=row.item.replace(" ", "_"), cut=cut,
                                           lane=lane, command=row.command(), cwd=row.cwd,

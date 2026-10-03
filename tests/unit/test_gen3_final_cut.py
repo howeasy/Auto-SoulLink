@@ -1929,3 +1929,82 @@ def test_resume_inputs_problem_names_what_differs():
     problem = fc.resume_inputs_problem(row, "# " + fc.inputs_note({**now, "rom:extra": "1"}), LANE)
     assert problem and "rom:extra" in problem
     assert "unrecorded" in fc.resume_inputs_problem(row, "no inputs line", LANE)
+
+
+# ---------------------------------------------------------------------------
+# row-scoped, KEPT e2e result files (the shared e2e_<scenario>_* names are overwritten by the next row of the scenario)
+# ---------------------------------------------------------------------------
+
+def _duo_rows(lane, *ids):
+    plan = {r.id: r for r in fc.build_plan("c" * 40, lane, MASTER)}
+    return [plan[i] for i in ids]
+
+
+def _writing_run_once(lane, results):
+    """A fake e2e_duo: it writes the scenario-named result files the real harness writes, with the row's verdict inside."""
+    def fake(row, deadline):
+        scenario = row.argv[row.argv.index("--scenario") + 1]
+        build = os.path.join(lane, "patch", "build")
+        os.makedirs(build, exist_ok=True)
+        rc, tag = results[row.id]
+        for name in (f"e2e_{scenario}_a_result.txt", f"e2e_{scenario}_b_result.txt", f"e2e_{scenario}_pydec_result.txt",
+                     f"e2e_{scenario}_a_attempt1_result.txt", f"e2e_{scenario}_a_1_witness.bin"):
+            with open(os.path.join(build, name), "w", encoding="utf-8") as handle:
+                handle.write(f"{tag}: {name}")
+        return rc, f"[duo] {tag}", False, False
+    return fake
+
+
+def test_two_rows_of_one_scenario_keep_distinct_result_files_and_a_failing_row_keeps_its_own(monkeypatch, tmp_path):
+    lane = str(tmp_path / "lane")
+    fr, lg = _duo_rows(lane, "active_end_gen3_fr_as_a", "active_end_gen3_lg_as_a")
+    _stub_row_env(monkeypatch, tmp_path / "probes", [])
+    (tmp_path / "probes").mkdir()
+    monkeypatch.setattr(fc, "run_once", _writing_run_once(lane, {fr.id: (1, "FR-FAILED b: missing WRITES 0"), lg.id: (0, "LG-PASSED")}))
+    assert fc.run_row(fr, "c" * 40, lane, None)[0] == "FAIL exit=1"
+    assert fc.run_row(lg, "c" * 40, lane, None)[0] == "PASS"
+    shared = os.path.join(lane, "patch", "build", "e2e_active_end_gen3_b_result.txt")
+    assert "LG-PASSED" in open(shared, encoding="utf-8").read()            # the shared name WAS overwritten by the later row ...
+    kept = {r.id: os.path.join(lane, "patch", "build", "fc_rows", r.id) for r in (fr, lg)}
+    assert kept[fr.id] != kept[lg.id]
+    assert "FR-FAILED b: missing WRITES 0" in open(os.path.join(kept[fr.id], "e2e_active_end_gen3_b_result.txt"), encoding="utf-8").read()
+    assert "LG-PASSED" in open(os.path.join(kept[lg.id], "e2e_active_end_gen3_b_result.txt"), encoding="utf-8").read()
+    for r in (fr, lg):                                                      # every artifact kind is kept, per row
+        assert sorted(os.listdir(kept[r.id])) == [
+            "e2e_active_end_gen3_a_1_witness.bin", "e2e_active_end_gen3_a_attempt1_result.txt",
+            "e2e_active_end_gen3_a_result.txt", "e2e_active_end_gen3_b_result.txt", "e2e_active_end_gen3_pydec_result.txt"]
+        text = open(fc.receipt_path(r.id, "c" * 40), encoding="utf-8").read()
+        assert f"# kept: {kept[r.id].replace(os.sep, '/')}" in text         # and the receipt header names where
+
+
+def test_keeping_the_files_changes_neither_the_inputs_note_nor_the_verdict(monkeypatch, tmp_path):
+    lane = str(tmp_path / "lane")
+    (row,) = _duo_rows(lane, "faint_cmd_gen3_fr_as_a")
+    (tmp_path / "probes").mkdir()
+    _stub_row_env(monkeypatch, tmp_path / "probes", [])
+    monkeypatch.setattr(fc, "run_once", _writing_run_once(lane, {row.id: (0, "ok")}))
+    assert fc.run_row(row, "c" * 40, lane, None)[:2] == ("PASS", 1)
+    text = open(fc.receipt_path(row.id, "c" * 40), encoding="utf-8").read()
+    assert fc.parse_inputs(text) == fc.hash_inputs(fc.row_inputs(row, lane))      # the same inputs line as before
+    assert fc.prior_verdict(row.id, "c" * 40, lane) == "PASS"                      # the receipt is still a valid, resumable one
+    assert fc.resume_inputs_problem(row, text, lane) is None
+
+
+def test_a_row_that_is_not_an_e2e_duo_run_or_left_nothing_keeps_nothing(tmp_path):
+    lane = str(tmp_path / "lane")
+    build = tmp_path / "lane" / "patch" / "build"
+    build.mkdir(parents=True)
+    (build / "e2e_faint_cmd_gen3_a_result.txt").write_text("x", encoding="utf-8")
+    plan = {r.id: r for r in fc.build_plan("c" * 40, lane, MASTER)}
+    assert fc.keep_row_artifacts(plan["states_firered_town"], lane) is None          # not a duo row
+    assert fc.keep_row_artifacts(plan["whiteout_gen3_fr_as_a"], lane) is None        # a duo row that left no file
+    assert fc.keep_row_artifacts(plan["faint_cmd_gen3_fr_as_a"], lane).endswith("/fc_rows/faint_cmd_gen3_fr_as_a")
+    # a re-run of the SAME row replaces only its own copy
+    (build / "e2e_faint_cmd_gen3_a_result.txt").write_text("second run", encoding="utf-8")
+    fc.keep_row_artifacts(plan["faint_cmd_gen3_fr_as_a"], lane)
+    assert (build / "fc_rows" / "faint_cmd_gen3_fr_as_a" / "e2e_faint_cmd_gen3_a_result.txt").read_text(encoding="utf-8") == "second run"
+
+
+def test_the_kept_directory_is_gitignored_so_the_lane_stays_tracked_clean():
+    ignored = subprocess.run(["git", "-C", fc.REPO, "check-ignore", "-q", "patch/build/fc_rows/some_row/e2e_x_a_result.txt"])
+    assert ignored.returncode == 0, "patch/build/fc_rows must be ignored (patch/.gitignore build/)"

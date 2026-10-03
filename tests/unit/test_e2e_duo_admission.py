@@ -2053,3 +2053,73 @@ def test_saved_gen1_party_reports_rom_scan_failure_as_named_qualification(runner
     with pytest.raises(RuntimeError, match="qualification: neither the clean nor the overlay anchor set holds"):
         runner._saved_gen1_party("a")
     assert seen == [(b"saved party", rom.read_bytes())]
+
+
+# ── frlgc 2026-10-03: a companion cartridge's 2-3 accepted A hellos in ONE same-save reconnect ──────────
+# Server events as events.json stores them (NEWEST FIRST, area_id differs between refreshes, same "Connected (rom, N mons)" text).
+def _hello_row(text="Connected (firered, 2 mons)", area="viridian_city", player="a"):
+    return {"player": player, "type": "hello", "text": text, "area_id": area, "key": ""}
+
+
+def _multi(events, n=3, **kw):
+    areas = ["viridian_city", "viridian_city_mart", "pallet_town"]
+    return _with_new_events(events, *[_hello_row(area=areas[k % 3], **kw) for k in range(n)])
+
+
+@pytest.mark.parametrize("n", [1, 2, 3])
+def test_two_or_three_accepted_refresh_hellos_pass_every_downstream_step(n):
+    before, after, events = _reconnect_snapshots()
+    resumed = _multi(events, n)
+    assert duo.accepted_reconnect_hellos(events, resumed) is True
+    assert duo.reconnect_same_problems(before, after, events, resumed, "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+    # B's hello rows and area_enter rows between them are not A's reconnect hellos
+    noisy = _with_new_events(resumed, {"player": "b", "type": "hello", "text": "Connected (leafgreen, 2 mons)"},
+                             {"player": "a", "type": "area_enter", "text": "Entered Viridian City"})
+    assert duo.accepted_reconnect_hellos(events, noisy) is True
+    assert duo.reconnect_same_problems(before, after, events, noisy, "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+
+
+def test_the_strict_one_hello_form_still_rejects_the_multi_hello_shape():
+    before, after, events = _reconnect_snapshots()
+    problems = duo.reconnect_same_problems(before, after, events, _multi(events, 3), "AAAA:1111:01", "1234")
+    assert any("exactly one accepted reconnect hello" in p for p in problems)
+
+
+@pytest.mark.parametrize("name, mutate, expect", [
+    ("a refused hello among them",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("REJECTED — wrong save/slot")), "only accepted reconnect hellos"),
+    ("a hello from another cartridge",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("Connected (leafgreen, 2 mons)")), "another identity"),
+    ("a hello with another party size",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("Connected (firered, 3 mons)")), "another identity"),
+    ("a duplicated gameplay event",
+     lambda ev: _with_new_events(_multi(ev, 3), {"player": "a", "type": "capture", "text": "duplicate"}), "count changed"),
+    ("a duplicated link event",
+     lambda ev: _with_new_events(_multi(ev, 2), {"player": "b", "type": "linked", "text": "again"}), "count changed"),
+    ("no hello at all",
+     lambda ev: _with_new_events(ev, {"player": "b", "type": "hello", "text": "Connected (leafgreen, 2 mons)"}),
+     "only accepted reconnect hellos"),
+    ("a rewritten log",
+     lambda ev: [_hello_row(), *ev[2:]], "shrank or was rewritten"),
+])
+def test_the_failing_multi_hello_shapes_are_each_rejected(name, mutate, expect):
+    before, after, events = _reconnect_snapshots()
+    mutated = mutate(events)
+    problems = duo.reconnect_same_problems(before, after, events, mutated, "AAAA:1111:01", "1234",
+                                           allow_accepted_refreshes=True)
+    assert any(expect in p for p in problems), (name, problems)
+    if "gameplay" not in name and "link event" not in name:
+        assert duo.accepted_reconnect_hellos(events, mutated) is False, name
+
+
+def test_the_multi_hello_shape_still_needs_the_servers_accepted_identity():
+    before, after, events = _reconnect_snapshots()
+    resumed = _multi(events, 3)
+    refused = {**after, "status": {"players": {**after["status"]["players"],
+                                               "a": {**after["status"]["players"]["a"], "identity_error": "Identity mismatch"}}}}
+    assert any("accepted identity" in p for p in duo.reconnect_same_problems(
+        before, refused, events, resumed, "AAAA:1111:01", "1234", allow_accepted_refreshes=True))
+    assert any("OT ID changed" in p for p in duo.reconnect_same_problems(
+        before, after, events, resumed, "AAAA:1111:01", "9999", allow_accepted_refreshes=True))
