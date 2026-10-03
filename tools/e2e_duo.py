@@ -3755,9 +3755,24 @@ class DuoRun:
             import gen3_fixtures
 
             saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
+        elif self._gen3_companion_cart(inst, title):
+            # A patched FR/LG/Emerald cartridge is an unknown hash to BizHawk's gamedb: its battery follows the FILENAME
+            # (same rule as the RR branch above), so seeding the clean gamedb name would leave an untouched file for the
+            # oracles to read back (_flushed_saveram returns the seeded name whenever it exists).
+            import gen3_fixtures
+
+            saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
         else:
             saveram = row["saveram"]
         return os.path.join(self._saveram_dir(inst), saveram)
+
+    def _gen3_companion_cart(self, inst, title) -> bool:
+        """True when `title` is a gamedb-known one (FR/LG/Emerald) and the resolved ROM is NOT its pinned clean dump."""
+        if title not in ("firered", "leafgreen", "emerald"):
+            return False
+        from tools.gen3_final_cut import rom_pins
+
+        return hashlib.sha1(Path(REPO, self._gen3_rom(inst)).read_bytes()).hexdigest() != rom_pins(REPO)[title]
 
     def _gen3_flushed(self, inst) -> bytes:
         """The battery the instance's EmuHawk left, by the gamedb name it was seeded under (or the
@@ -3767,6 +3782,14 @@ class DuoRun:
         import gen3_fixtures
 
         seeded = Path(self._gen3_battery_path(inst))
+        if self._gen3_companion_cart(inst, self._gen3_title(inst)):
+            # The seed is written before the launch: only a file the emulator wrote after it is an oracle input, under the
+            # derived name alone (no 'any other *.SaveRAM' fallback: a stale file of another name must not be adopted).
+            launched = self._launch_times.get(inst)
+            if not launched or not seeded.is_file() or seeded.stat().st_mtime < launched:
+                raise RuntimeError(f"{inst}: companion cartridge has no fresh flushed battery at {rel_to_repo(seeded)} "
+                                   f"(only the seed, or nothing, is there)")
+            return seeded.read_bytes()
         found = gen3_fixtures._flushed_saveram(seeded.parent, seeded.name)
         if found is None:
             raise RuntimeError(f"{inst}: EmuHawk left no *.SaveRAM in {rel_to_repo(seeded.parent)}")
