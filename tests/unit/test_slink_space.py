@@ -271,6 +271,38 @@ def test_apply_aborts_on_tampered_plan(W):
     assert (outside / "keep.txt").exists()
 
 
+def _remove_action(p):
+    return {"path": p.as_posix(), "unlock": False, "branch": None,
+            "admin": ss._admin_dir(p)}
+
+
+def test_remove_worktree_rechecks_dirty_at_execution(W):
+    p = add_wt(W, "late")
+    (p / "a.txt").write_text("edited after planning\n")
+    with pytest.raises(RuntimeError, match="dirty"):
+        ss._remove_worktree(W.repo, _remove_action(p))
+    assert (p / "a.txt").read_text() == "edited after planning\n"
+
+
+def test_remove_worktree_fallback_spares_a_live_unregistered_checkout(W):
+    # git no longer lists it (admin gitdir gone), so `worktree remove` fails and the old
+    # fallback rmtree'd it, dirty work included.
+    p = add_wt(W, "ghost")
+    (Path(ss._admin_dir(p)) / "gitdir").unlink()
+    (p / "a.txt").write_text("uncommitted\n")
+    with pytest.raises(RuntimeError):
+        ss._remove_worktree(W.repo, _remove_action(p))
+    assert (p / "a.txt").read_text() == "uncommitted\n"
+
+
+def test_remove_worktree_refuses_a_locked_one(W):
+    p = add_wt(W, "held")
+    _git(W.repo, "worktree", "lock", "--reason", "pid 1", str(p))
+    with pytest.raises(RuntimeError):
+        ss._remove_worktree(W.repo, _remove_action(p))
+    assert (p / "a.txt").exists()
+
+
 def test_apply_refuses_a_plan_built_with_other_params(W):
     # Review vector: a plan whose own params widen the scan (and whose actions are
     # self-consistent with them) must not be replayed.

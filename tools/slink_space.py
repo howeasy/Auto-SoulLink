@@ -697,22 +697,58 @@ def apply_plan(plan_file, repo=None, root=None, locations=None, lane_age=DEFAULT
     return done
 
 
-def _remove_worktree(repo, a):
-    if a["unlock"]:
-        git(repo, "worktree", "unlock", a["path"])
-    # Unlink untracked links (the .cache junctions) first so no deleter can walk into them.
-    for rel, *_ in tree_stats(a["path"])["links"]:
-        if not git(a["path"], "ls-files", "--", rel.replace("\\", "/")).strip():
-            _rmtree(os.path.join(a["path"], rel))
-    r = git_rc(repo, "worktree", "remove", a["path"])
+def _registration(repo, path) -> dict | None:
+    return next((w for w in list_worktrees(repo) if _norm(w["path"]) == _norm(path)), None)
+
+
+def _checkout_unclean(path) -> str | None:
+    """None when `git status` reads clean; otherwise why not (unreadable counts as unclean)."""
+    r = git_rc(path, "status", "--porcelain")
     if r.returncode:
-        # Drive: git may unregister the worktree and then trip on read-only leftovers.
-        entry = next((w for w in list_worktrees(repo) if _norm(w["path"]) == _norm(a["path"])),
-                     None)
+        return f"unreadable by git ({r.stderr.strip()[:200]})"
+    return "dirty" if r.stdout.strip() else None
+
+
+def _clear_readonly(path) -> None:
+    for d, dirs, files in os.walk(path):
+        dirs[:] = [x for x in dirs if not _path_is_link(os.path.join(d, x))]
+        for f in files:
+            p = os.path.join(d, f)
+            if not _path_is_link(p) and not os.access(p, os.W_OK):
+                os.chmod(p, stat.S_IWRITE)
+
+
+def _remove_worktree(repo, a):
+    path = a["path"]
+    # Re-check at execution time, not just at plan time.
+    entry = _registration(repo, path)
+    if entry is None or "prunable" in entry:
+        raise RuntimeError(f"{path}: no longer a registered worktree; refusing to delete it")
+    if entry.get("locked") and not a["unlock"]:
+        raise RuntimeError(f"{path}: locked ({entry['locked']}); refusing")
+    why = _checkout_unclean(path)
+    if why:
+        raise RuntimeError(f"{path}: {why} at execution time; refusing")
+    if a["unlock"]:
+        git(repo, "worktree", "unlock", path)
+    # Unlink untracked links (the .cache junctions) first so no deleter can walk into them.
+    for rel, *_ in tree_stats(path)["links"]:
+        if not git(path, "ls-files", "--", rel.replace("\\", "/")).strip():
+            _rmtree(os.path.join(path, rel))
+    _clear_readonly(path)  # Drive's read-only bits would make git stop halfway
+    r = git_rc(repo, "worktree", "remove", path)
+    if os.path.lexists(path):
+        # Fallback for husks git left behind, only once git has let go and nothing live is left.
+        entry = _registration(repo, path)
         if entry is not None and "prunable" not in entry:
-            raise RuntimeError(f"git worktree remove {a['path']}: {r.stderr.strip()}")
-    if os.path.lexists(a["path"]):
-        _rmtree(a["path"])
+            raise RuntimeError(f"git worktree remove {path}: {r.stderr.strip()}")
+        if entry is not None and entry.get("locked"):
+            raise RuntimeError(f"{path}: leftover is locked; finish by hand")
+        if os.path.lexists(os.path.join(path, ".git")):
+            why = _checkout_unclean(path)
+            if why:
+                raise RuntimeError(f"{path}: leftover is {why}; finish by hand")
+        _rmtree(path)
     # Not `git worktree prune`: that is global and would also drop refused admin dirs.
     if a.get("admin") and os.path.isdir(a["admin"]):
         _rmtree(a["admin"])
