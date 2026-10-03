@@ -5,13 +5,15 @@ faint-block fallback does not, so a natural faint that never ran the opcode was
 silent. One site inside SetValuesOnFaint covers both, because +0x86 is the join.
 """
 import json
+import os
 import re
 from pathlib import Path
 
 import capstone
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-ART = ROOT / ".cache/expansion-output/reference"
+ART = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ROOT / ".cache/expansion-output/reference"))
 TITLE = "emerald_expansion_28877d73"
 ROM_BASE = 0x08000000
 IMAGE_END = 0x200000          # the 0x08 image is file 0..0x200000 in this 32 MiB build
@@ -26,8 +28,15 @@ ROM_OFFSET = 0x000DF526
 CALLERS = (0x080A5BDA, 0x080936FC)
 
 
+def _art(name: str) -> Path:
+    path = ART / name
+    if not path.is_file():
+        pytest.skip(f"expansion reference artifact absent: {path}")
+    return path
+
+
 def _rom() -> bytes:
-    return (ART / "pokeemerald.gba").read_bytes()
+    return _art("pokeemerald.gba").read_bytes()
 
 
 def _bl_sites(rom: bytes):
@@ -55,7 +64,7 @@ def _disasm():
 
 def test_symbol_is_one_global_of_the_expected_size():
     rows = [re.match(r"^([0-9a-f]{8}) ([a-z]) ([0-9a-f]{8}) (\S+)$", line.strip())
-            for line in (ART / "pokeemerald.sym").read_text().splitlines()]
+            for line in _art("pokeemerald.sym").read_text().splitlines()]
     hit = [m for m in rows if m and m.group(4) == SYMBOL]
     assert len(hit) == 1, "symbol must be unique in the build's .sym"
     assert int(hit[0].group(1), 16) == ADDRESS

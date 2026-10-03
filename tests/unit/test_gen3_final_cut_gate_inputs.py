@@ -25,6 +25,9 @@ INPUTS_DIGEST = "cfd581034cf79d219e59b4d68d4e9753ba908d15de76995e593c86f674c9d75
 
 def _all_row_inputs(monkeypatch):
     monkeypatch.setenv("SLINK_GEN3_RAND_ROMS", "R:/rand")
+    # probe_gates' rom:firered_root sits under main_checkout(); the digest was taken with the owner's checkout. A string, never opened,
+    # pinned so the digest does not depend on where the repo is cloned (CI's checkout gave 00bf6f77...).
+    monkeypatch.setattr(fc, "main_checkout", lambda: "E:/Google Drive/SLink")
     out = {}
     for name, plan in (("frlg", fc.build_plan), ("rr", fc.build_plan_rr), ("emerald", fc.build_plan_emerald),
                        ("exp", fc.build_plan_exp), ("frlgc", fc.build_plan_frlgc), ("frlgc-rand", fc.build_plan_frlgc_rand)):

@@ -79,7 +79,8 @@ def test_dry_run_prints_every_runbook_row_in_order(capsys):
     assert "$ python tools/e2e_duo.py --game gen3_lgfr --scenario active_end_gen3" in out
     assert "$ python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_trainer_gen3" in out
     assert "--fixture tests/fixtures/gen3/leafgreen_party_battle_b.sav --title leafgreen" in out
-    assert f"check_release_zip.py L:/lane/dist/SLink-player-g4-{cut[:8]}.zip --rev {cut}" in out
+    lane = os.path.abspath(LANE).replace("\\", "/")      # main() abspaths --lane; "L:/lane" is relative on POSIX (CI)
+    assert f"check_release_zip.py {lane}/dist/SLink-player-g4-{cut[:8]}.zip --rev {cut}" in out
     assert "$ SLINK_LIVE=1 python -m pytest tests/live/test_gen3_probe_gates.py" in out
     assert f"--out checkpoint_lg_clean_{cut[:8]}.txt" in out
     # the superseded hold rows are gone (P+H, G4_request_draft.md 4aaaee7e)
