@@ -6228,14 +6228,30 @@ class DuoRun:
                 from server.adapters import gen1_codec
                 layout = gen1_codec.for_foundation("gen1_purergb" if is_pure_pairing(self.game) else "gen1_rby")
                 stock = self._gen1_synth_fixtures[inst][2]["balls_after"]
-                throws = re.findall(r"^\[hunt\] threw ball index \d+ -> caught "
-                                    r"balls_before=(\d+) balls_after=(\d+)$", results[inst], re.M)
+                throw_lines = [line for line in results[inst].splitlines()
+                               if line.startswith("[hunt] threw ball")]
+                throws = []
+                for line in throw_lines:
+                    throw = re.fullmatch(r"\[hunt\] threw ball index \d+ -> (missed|caught) "
+                                         r"balls_before=(\d+) balls_after=(\d+)", line)
+                    if not throw:
+                        raise RuntimeError(f"{inst}: SYNTH catch has malformed throw receipt: {line}")
+                    throws.append((throw[1], int(throw[2]), int(throw[3])))
                 saved_balls = sum(qty for item, qty in layout.decode_bag(sram) if item in layout.ball_items)
-                if throws != [(str(stock), str(stock - 1))] or saved_balls != stock - 1:
-                    raise RuntimeError(f"{inst}: SYNTH catch must spend exactly one Ball: "
+                remaining = stock
+                for _outcome, before, after in throws:
+                    if before != remaining or after != before - 1:
+                        raise RuntimeError(f"{inst}: SYNTH catch throw counts are not continuous: {throws}")
+                    remaining = after
+                decrement = stock - remaining
+                if (not throws or decrement != len(throws) or decrement < 1
+                        or sum(outcome == "caught" for outcome, _, _ in throws) != 1
+                        or throws[-1][0] != "caught" or saved_balls != remaining):
+                    raise RuntimeError(f"{inst}: SYNTH catch spent balls must match recorded throws: "
                                        f"stock={stock} throws={throws} saved={saved_balls}")
                 self._pydec_note(f"GEN1_SYNTH_CATCH inst={inst} balls_before={stock} "
-                                 f"balls_after={saved_balls} saved=true")
+                                 f"balls_after={saved_balls} throws={len(throws)} "
+                                 f"decrement={decrement} saved=true")
             if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
                 raise RuntimeError(f"{inst} saved party is not its living starter: "
                                    f"{[(codec.key(m), m['hp']) for m in party]}")

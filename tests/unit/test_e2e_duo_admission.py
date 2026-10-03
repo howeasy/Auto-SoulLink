@@ -2093,7 +2093,7 @@ def test_prepared_admission_cartridge_remains_selected_at_oracle_time(runner, mo
 
 @pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
 @pytest.mark.parametrize("fault", ["untouched_save", "untouched_receipt", "missing_receipt"])
-def test_synth_catch_oracle_requires_one_spent_ball(tmp_path, scenario, fault):
+def test_synth_catch_oracle_requires_spent_balls(tmp_path, scenario, fault):
     run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
     proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
               + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
@@ -2112,7 +2112,7 @@ def test_synth_catch_oracle_requires_one_spent_ball(tmp_path, scenario, fault):
         results["a"] = results["a"].replace("balls_after=19", "balls_after=20")
     else:
         results["a"] = "\n".join(line for line in results["a"].splitlines() if "threw ball" not in line)
-    with pytest.raises(RuntimeError, match="one.*[Bb]all"):
+    with pytest.raises(RuntimeError, match="SYNTH catch"):
         run.assert_linked_faint_saved(results, active=True)
 
 
@@ -2140,3 +2140,50 @@ def test_hunt_logs_driver_ball_counts_for_the_oracle():
                        party_count=1, font_loaded=False, joy_ignore=0)
     route.step(None, None, battle, 1)
     assert "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19" in logs
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("case", ["one", "three", "wrong_delta", "untouched", "saved_disagrees",
+                                  "no_caught", "two_caught", "noncontiguous", "extra_miss"])
+def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    throws = [("caught", 20, 19)] if case == "one" else [
+        ("missed", 20, 19), ("missed", 19, 18), ("caught", 18, 17)]
+    saved = 19 if case == "one" else 17
+    if case == "wrong_delta":
+        throws[-1] = ("caught", 18, 16)
+        saved = 16  # receipt agrees with save, but four balls for three throws is false
+    elif case == "untouched":
+        saved = 20
+    elif case == "saved_disagrees":
+        saved = 18
+    elif case == "no_caught":
+        throws[-1] = ("missed", 18, 17)
+    elif case == "two_caught":
+        throws[0] = ("caught", 20, 19)
+    elif case == "extra_miss":
+        throws = [("missed", 20, 20), ("caught", 20, 19)]
+        saved = 19
+    elif case == "noncontiguous":
+        throws[1] = ("missed", 18, 17)  # total decrement still equals count; chain is impossible
+    path, sram, _rom = paths["a"]
+    sram[codec._BAG_COUNT + 2] = saved
+    _seal_main(sram)
+    path.write_bytes(sram)
+    lines = []
+    for line in a_text.splitlines():
+        if line.startswith("[hunt] threw ball"):
+            lines.extend(f"[hunt] threw ball index 0 -> {why} balls_before={before} balls_after={after}"
+                         for why, before, after in throws)
+        else:
+            lines.append(line)
+    results = {"a": "\n".join(lines) + "\n", "b": proper}
+    if case in ("one", "three"):
+        run.assert_linked_faint_saved(results, active=True)
+    else:
+        with pytest.raises(RuntimeError, match="SYNTH catch"):
+            run.assert_linked_faint_saved(results, active=True)
