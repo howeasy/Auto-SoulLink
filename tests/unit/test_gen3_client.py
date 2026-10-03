@@ -2941,3 +2941,111 @@ def test_every_pack_maps_every_sound_id_the_server_and_session_send():
             if isinstance(block, dict) and "sound" in block:
                 mapped = {int(k) for k in block["sound"]["se_ids"]}
                 assert wire <= mapped, (pack, title, sorted(wire - mapped))
+
+
+# ── ACQ diagnostics: log-only lines naming each acquisition's signal, its path and its outcome ───────────────────────────
+def acq(w, *needles):
+    return [line for line in w.logs if "[SLink-gen3] ACQ " in line and all(n in line for n in needles)]
+
+
+def caught_world():
+    w = live()
+    w.set_balls(5)
+    w.step(30)                                            # the tick latches has_pokeballs
+    w.logs.clear()                                        # the connect-time baseline line is not what these tests count
+    return w
+
+
+def test_acq_a_party_capture_logs_its_signals_and_the_capture_exactly_once():
+    w = caught_world()
+    w.enter_battle([FOE])
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.fire("mon_given")
+    w.step()
+    w.step(40)                                            # more frames: nothing repeats
+    (cap,) = w.events("capture")
+    assert len(acq(w, "signal kind=capture_wild", "in_battle=true")) == 1 and len(acq(w, "signal kind=mon_given")) == 1
+    (line,) = acq(w, "capture via=settle:party")
+    assert f"key={KC} " in line and "species=6 " in line and "gift=false" in line and "sent=true" in line
+    assert acq(w, "none") == [] and acq(w, "skipped") == [] and acq(w, "held") == []
+    assert len(acq(w)) == 3
+
+
+def test_acq_a_gift_and_a_box_capture_name_their_own_path():
+    w = caught_world()
+    w.set_party(party(A, B, C))
+    w.fire("mon_given")
+    w.step()
+    (gift,) = acq(w, "capture via=settle:party")
+    assert "gift=true" in gift and "sent=true" in gift
+    w = live(pids=(A, B))
+    w.logs.clear()
+    w.enter_battle([mon_record(C, OT, species=19)])
+    w.set_box(1, 0, mon_record(C, OT, species=19))
+    w.fire("capture_wild")
+    w.fire("pc_move")
+    w.step()
+    (boxed,) = acq(w, "capture via=settle:box")
+    assert f"key={KC} " in boxed and "species=19" in boxed and "sent=true" in boxed
+
+
+def test_acq_nothing_acquired_logs_nothing():
+    w = caught_world()
+    w.step(200)
+    w.fire("faint")
+    w.step(5)
+    assert acq(w) == []
+
+
+def test_acq_an_acquisition_signal_with_no_unknown_key_says_so_once():
+    w = caught_world()
+    w.fire("capture_wild")                                 # caught, but nothing new is in the party or boxes
+    w.step(30)
+    assert w.events("capture") == []
+    (line,) = acq(w, "none via=settle")
+    assert "caught=true" in line and "known_already=all" in line and "no capture sent" in line
+    assert len(acq(w, "signal kind=capture_wild")) == 1
+
+
+def test_acq_a_mon_the_quiet_observer_absorbs_is_logged_with_that_path():
+    """The silent route: a mon appears with NO acquisition signal and observe_known marks it known (so it is never a capture)."""
+    w = caught_world()
+    w.set_party(party(A, B, C))
+    w.step(120)
+    assert w.events("capture") == []
+    (line,) = acq(w, "known via=seed:observe")
+    assert "new=1" in line and f"keys={KC}" in line
+    w.step(120)
+    assert len(acq(w, "known via=")) == 1                    # and only once
+
+
+def test_acq_a_signal_dropped_while_a_trade_settles_is_logged_once():
+    w = caught_world()
+    w.client.state.trade_settle_until = 10 ** 9              # io.framecount() < trade_settle_until: "trading"
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.step(20)
+    assert w.events("capture") == []
+    (line,) = acq(w, "skipped")
+    assert "reason=trading" in line and "dropped=true" in line and "caught=true" in line
+
+
+def test_acq_the_connect_baseline_names_its_path_and_adds_no_behaviour():
+    w = World()
+    w.set_party(party(A, B))
+    w.step_to(60)
+    (line,) = acq(w, "known via=seed:hello")
+    assert "new=2" in line and KA in line and KB in line
+    assert len(w.events("hello")) == 1 and w.events("capture") == []
+
+
+def test_acq_the_client_does_not_seed_known_from_the_server_or_a_partner():
+    """Report, pinned: every st.known write in lua/gen3/client.lua is a local-RAM path (seed_known from the party and box cache, a
+    capture/hatch/pc/identity settle, a link-trade completion). Nothing reads a server message, a partner event or the HUD notice
+    (server/state.py 'Partner caught ...' is a hud_show text the client only displays)."""
+    src = (REPO / "lua" / "gen3" / "client.lua").read_text(encoding="utf-8")
+    writes = [line.strip() for line in src.splitlines() if re.search(r"st\.known\[[^\]]+\]\s*(,[^=]*)?=\s*true", line)]
+    assert writes, "no st.known writes found"
+    assert not re.search(r"st\.known\[[^\]]+\]\s*=\s*(msg|cmd|payload)", src)
+    assert "Partner caught" not in src and "partner" not in "".join(w for w in writes)

@@ -1806,8 +1806,36 @@ function ctx.hunt(label)
 end
 
 local boot_keys = {}
+-- Scenarios (SLINK_DUO.scenario names) whose caught mon legitimately has NO client `capture` event, so ctx.catch may fall back to the
+-- party scan for them. EMPTY on purpose: every caller of ctx.catch (link, deadzone, clause, shiny_bonus, static_wild, and ball_gate through
+-- link) requires the production capture TX right after (their own "no production TX" / "capture missing" checks, or the server's
+-- pairing / retirement). A caught mon the client never reported is the product bug this strictness exists to name, not a harness gap.
+ctx.catch_without_capture_event = {}
+local CAPTURE_TX_WINDOW_FRAMES = 600   -- frames (not wall clock) a late capture TX may take after the scene settles
+--- The key of the mon just caught: the capture event THIS ctx.catch produced (`captures_before` = how many were sent on entry).
+function ctx.caught_key(captures_before)
+    local function new_capture()
+        local cap = ctx.last_sent("capture")
+        if ctx.sent("capture") > captures_before and cap and type(cap.key) == "string" and not boot_keys[cap.key] then return cap.key end
+    end
+    local key = new_capture()
+    if key then return key end
+    if not ctx.catch_without_capture_event[D.scenario] then
+        for _ = 1, CAPTURE_TX_WINDOW_FRAMES do
+            ctx.frames(1)
+            key = new_capture()
+            if key then return key end
+        end
+        return nil, "caught, but the client never sent a capture event"
+    end
+    for _, m in ipairs(ctx.party() or {}) do
+        if not boot_keys[m.key] then return m.key, m end
+    end
+    return nil, "caught, but no new key in the party"
+end
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
 function ctx.catch(label, already_hunted, expected_ball, native_player_probe)
+    local captures_before = ctx.sent("capture")
     if not already_hunted and not ctx.hunt(label) then return nil, "no wild encounter" end
     -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
     -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
@@ -1918,12 +1946,7 @@ function ctx.catch(label, already_hunted, expected_ball, native_player_probe)
     end
     -- The client's own capture event names the key: by the time the field settles the server may
     -- already have quarantined (box_mon) or retired (dead zone) the record out of the party.
-    local cap = ctx.last_sent("capture")
-    if cap and type(cap.key) == "string" and not boot_keys[cap.key] then return cap.key end
-    for _, m in ipairs(ctx.party() or {}) do
-        if not boot_keys[m.key] then return m.key, m end
-    end
-    return nil, "caught, but no new key in the party"
+    return ctx.caught_key(captures_before)
 end
 
 --- Keep choosing a no-damage move until the ACTIVE `key` faints (a natural engine faint).
