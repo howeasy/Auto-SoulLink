@@ -950,6 +950,8 @@ def scenario_attempt_limit(name, game):
         return 3
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
+    if scenario_family(game) == "gen2_new" and name in GEN2_TRADE_SCENARIOS:
+        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)
     entry = SCENARIOS.get(name, {})
     if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
         return 16
@@ -2867,6 +2869,11 @@ GEN2_BALL_GATE_FIXTURES = {"gen2_new": {"a": "crystal_town", "b": "crystal_town_
 # F.driver's refusal when the Ball pocket is empty (lua/tests/gen2_frame_align.lua): five natural Balls at ~33% a
 # throw miss about 13% of full-HP catches, so the lane may retry once on exactly this reason.
 GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
+# A Gen 2 trade scenario's link route throws balls at its first wild battle. On the pinned DUO-CLOCK the whole route
+# is bit-for-bit deterministic, so a starter that loses that battle loses it on every re-run of the same attempt
+# (gen2_new/gen2_trade_refuse_item, sweep gen2-fsw-1003-0029 and -rerun1: ENGINE_WHITEOUT at the same frame twice).
+# The one retry runs on the next pinned clock minute (_duo_clock_minute), a disclosed second roll like gen2_ball_gate's.
+GEN2_ROUTE_BATTLE_LOST = "link route failed: the battle ended without a catch"
 # DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
 # <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
 GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
@@ -10400,6 +10407,13 @@ def run_scenario_with_rng_retry(name, args):
                 and any(line.startswith("RESULT: FAIL") and GEN2_OUT_OF_BALLS in line
                         for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
             print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
+            continue
+        if (not ok and name in GEN2_TRADE_SCENARIOS and scenario_family(args.game) == "gen2_new"
+                and attempt < limit
+                and any(line.startswith("RESULT: FAIL") and GEN2_ROUTE_BATTLE_LOST in line
+                        for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
+            print(f"[duo] {name}: the route's wild battle was lost on attempt {attempt}; retrying fresh lane "
+                  f"on the next pinned clock minute")
             continue
         if SCENARIOS[name].get("battle_window_case"):
             classification = battle_window_failure(name, receipts, attempt) if not ok else None
