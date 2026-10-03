@@ -398,7 +398,7 @@ def test_a_route_receipt_does_not_pass_as_a_catch_verdict(tmp_path):
     }
     path = tmp_path / "r.json"
     path.write_text(json.dumps(route_doc), encoding="utf-8")
-    assert routes.verify_receipt(path, "route", head=route_doc["source_head"])[0] == "PASS"
+    assert routes.verify_receipt(path, "route", head=route_doc["source_head"], want="PC_DEPOSIT")[0] == "PASS"
     assert (
         routes.verify_receipt(path, "catch", head=route_doc["source_head"])[0] == "STALE"
     )  # wrong script/kind

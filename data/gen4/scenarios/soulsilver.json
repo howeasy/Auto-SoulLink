@@ -1,0 +1,11 @@
+{
+  "schema": "gen4-probe-scenario-v2",
+  "title": "soulsilver",
+  "purpose": "baseline",
+  "save": {
+    "path": "saves/ss_DDDD_25944.SaveRAM",
+    "sha256": "8b6fbf1755f63712132bf8ee9aa7ec192c5bd51f30ce235e2c67726f178234d2"
+  },
+  "row_i_scenario": "data/gen4/scenarios/soulsilver_row_i.json",
+  "provenance": "Native OUTDOOR played save. Routes and four phase cases come from the title pack; no runtime overrides."
+}

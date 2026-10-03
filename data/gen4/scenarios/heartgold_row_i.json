@@ -1,0 +1,11 @@
+{
+  "schema": "gen4-probe-scenario-v2",
+  "title": "heartgold",
+  "purpose": "row_i",
+  "save": {
+    "path": "g1inputs-c935-1015/hg_boxed.SaveRAM",
+    "sha256": "80dd0319a0a914548432338b8604d4063e9c95b8da5a4fba3c9acb80252ded67",
+    "sidecar_sha256": "ad07f1f94df933484546b94cac8acbd3a0022409da660612c6fc049af696c3c1"
+  },
+  "provenance": "SYNTH party2 ancestry; native PC deposit/SAVE descendant. Used only by row i. See hash-pinned sidecar for parent and native receipt hashes."
+}

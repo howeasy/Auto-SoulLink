@@ -1218,6 +1218,9 @@ local function run()
             level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
             source_head=cfg.source_head,script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
         payload.module_sha256=cfg.module_sha256; payload.surface_sha256=cfg.surface_sha256; payload.receipt_kind=cfg.receipt_kind
+        payload.scenario_path=cfg.scenario_path; payload.scenario_sha256=cfg.scenario_sha256
+        payload.row_i_scenario_path=cfg.row_i_scenario_path; payload.row_i_scenario_sha256=cfg.row_i_scenario_sha256
+        payload.scenario_role=cfg.scenario_role or "baseline"
         payload.setup=cfg.setup or "NATIVE"; payload.sidecar_sha256=cfg.sidecar_sha256
         payload.setup_src_sha1=cfg.src_sha1; payload.setup_out_sha1=cfg.out_sha1
         payload.setup_new_pid=cfg.new_pid
