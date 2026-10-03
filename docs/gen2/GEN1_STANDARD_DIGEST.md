@@ -409,13 +409,13 @@ but also at `AddPartyMon`, box withdrawal, evolution, and the vitamin/Rare Candy
 grow between those events, hence the band rather than a single recompute (`tools/gen1_fixtures.py:134-145`;
 `docs/gen1_requirements.md:38`, H-8 entry).
 
-**Live gates.** `live-new-gates` boots the selected titles (`SLINK_GEN1_ROMS`, default red/blue/yellow —
+**Live gates.** `live-new-gates` boots the selected titles (`SLINK_GEN1_ROMS`: since 2026-10-02 red_patched/blue_patched/yellow — the companion is REQUIRED and a clean Red/Blue/pureRGB is refused —
 `tools/verify_gen1_release.py:129-138`) against `town`/`battle` targets in EmuHawk, runs
 `lua/tests/test_gen1_inspect_gate.lua`, and requires Lua-on-hardware and the Python codec to agree field
 for field on the same dumped bytes; plus three scripted New Game runs with ordinary buttons
 (`docs/gen1_gen2_runtime_checks.md:32-38`; `tests/live/test_gen1_new_gates.py:32-47`). The `_ot2` wrong-save
 fixture and the six pureRGB fixtures are exercised by their own named lanes/scenarios
-(`inspect-purergb` and its scenarios), not by this lane's default selection.
+(`inspect-purergb`, on the three `*_overlay` keys, and its scenarios), not by this lane's default selection.
 `live-gates` is the companion patch (VBlank hook, mailbox, START-menu row, panel on a randomized+injected
 ROM) `:123-128`; `live-trade-gates` is the receptionist `:157-163`.
 Driver rules that were learned the hard way: no `console.log` per frame; re-pulse native menus on the
@@ -446,10 +446,11 @@ They are cited by **marker text**, not line number, because a lane run regenerat
 (`docs/gen1_requirements.md:38`, a7ea4cf entry). A run whose receipts are not committed flips no cell
 (`docs/gen1_requirements.md:38`, H-2 entry). `patch/build/…` paths are gitignored and are not receipts.
 
-**Release runner lanes** (18, `tools/verify_gen1_release.py:98-211`): `unit`, `rom-layout`, `lua-parse`,
+**Release runner lanes** (17 since 2026-10-02, when `inspect-purergb-overlay` was retired into
+`inspect-purergb`; `tools/verify_gen1_release.py`): `unit`, `rom-layout`, `lua-parse`,
 `profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
 `patch-build` (fast); `live-gates`, `live-new-gates`, `inspect-purergb`, `apex-purergb`,
-`live-trade-gates`, `inspect-purergb-overlay`, `live-trade-gates-purergb`, `apex-refusal-purergb`,
+`live-trade-gates`, `live-trade-gates-purergb`, `apex-refusal-purergb`,
 `duo-pairs`, `duo-pairs-purergb` (slow, `_SLOW` at `:55-57`). "Give it the machine": the emulator lanes are
 wall-clock sensitive and a competing unit run has been observed turning a 65-second scenario into a
 1500-second timeout (`tools/verify_gen1_release.py:30-35`).

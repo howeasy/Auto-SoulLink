@@ -694,6 +694,102 @@ def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
     assert sorted(mod.SCENARIOS) == sorted(GEN1_NEW_SCENARIOS)
 
 
+class _Launched(Exception):
+    pass
+
+
+def _outcome(call, *args):
+    """How a wrapper call ended: "launched", or "fail: ..." / "skip: ...". A pytest.skip raised
+    inside the wrapper would otherwise propagate and mark THIS test skipped, not failed."""
+    try:
+        call(*args)
+    except _Launched:
+        return "launched"
+    except pytest.fail.Exception as exc:
+        return f"fail: {exc}"
+    except pytest.skip.Exception as exc:
+        return f"skip: {exc}"
+    return "returned without launching"
+
+
+def _duo_wrapper(monkeypatch, tmp_path, name, *, companion, clean=True):
+    """A wrapper module whose every input but the companion artifact is present.
+
+    `companion` False: no vanilla companion build under REPO and the overlay applier raises
+    FileNotFoundError -- absent, the case that used to skip. True: both present, and the wrapper
+    must get as far as launching the runner (the positive control). `clean` False leaves out
+    every row's clean dumps, which only the admission gate reads."""
+    import e2e_duo
+    import gen1_playthrough as play
+
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    new = __import__("test_duo_gen1_new")
+    mod = __import__(name)
+    emuhawk = tmp_path / "EmuHawk.exe"
+    emuhawk.write_bytes(b"")
+    monkeypatch.setattr(play, "EMUHAWK", str(emuhawk))
+    if clean:
+        for row in ("gen1_new", "gen1_pure", "gen1_pure_green"):
+            for rel in e2e_duo.GAMES[row]["rom"].values():
+                (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp_path / rel).write_bytes(b"")
+    for module in {new, mod}:
+        monkeypatch.setattr(module, "REPO", str(tmp_path))
+    if companion:
+        for rom in ("slink_red.gb", "slink_blue.gb"):
+            (tmp_path / "patch" / "gen1" / "build").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "patch" / "gen1" / "build" / rom).write_bytes(b"")
+        monkeypatch.setattr(play, "staged_rom", lambda key: f"patch/build/gen1_{key}.gbc")
+    else:
+        def absent(key):
+            raise FileNotFoundError(f"pureRGB {key} is not here")
+        monkeypatch.setattr(play, "staged_rom", absent)
+
+    def launched(*_args, **_kwargs):
+        raise _Launched
+
+    monkeypatch.setattr(mod.subprocess, "run", launched)
+    return mod
+
+
+_WRAPPER_CASES = [("test_duo_gen1_new", "test_gen1_new_duo", ("link_new",)),
+                  ("test_duo_gen1_new", "test_gen1_new_duo", ("admit_randomized_new",)),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure", "link_new")),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure_green", "trade_new"))]
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_missing_companion_artifact_fails_the_duo_wrapper_never_skips(monkeypatch, tmp_path,
+                                                                          name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=False)
+    outcome = _outcome(getattr(mod, test), *args)
+    assert outcome.startswith("fail: ") and "companion" in outcome, outcome
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_present_companion_reaches_the_runner(monkeypatch, tmp_path, name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=True)
+    assert _outcome(getattr(mod, test), *args) == "launched"
+
+
+@pytest.mark.parametrize("name,test,args", [case for case in _WRAPPER_CASES
+                                            if "admit_randomized_new" not in case[2]])
+def test_absent_clean_dumps_never_skip_a_companion_scenario(monkeypatch, tmp_path, name, test, args):
+    """The instances boot the companion builds, so with those present and every clean dump
+    absent the wrapper still launches the runner -- a skip here would let a machine without
+    the (refused) clean dumps count as having nothing to prove."""
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=True, clean=False)
+    assert _outcome(getattr(mod, test), *args) == "launched"
+
+
+def test_the_admission_gate_fails_without_its_clean_sources(monkeypatch, tmp_path):
+    """admit_randomized_new provisions its randomized companion pair FROM the clean dumps, so
+    for it alone a missing clean dump fails (never skips)."""
+    mod = _duo_wrapper(monkeypatch, tmp_path, "test_duo_gen1_new", companion=True, clean=False)
+    outcome = _outcome(mod.test_gen1_new_duo, "admit_randomized_new")
+    assert outcome.startswith("fail: clean a source ROM missing"), outcome
+
+
 def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
     """S-4/W-3's scenario opts in to `gen1_new` alone.
 

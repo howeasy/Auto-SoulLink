@@ -29,11 +29,13 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/test_gen1_inspect_gate.lua"
-VANILLA_ROMS = ("red", "blue", "yellow")
-# The built pureRGB cartridges (P3b-e). They are ordinary rom keys here: gen1_playthrough stages
-# them from data/purergb_sources.lock.json, run_gb_gate carries their SaveRAM names and fixtures,
-# and gen1_gate admits them by sha1, so a pure title boots exactly like a vanilla one.
-PURE_ROMS = ("purered", "pureblue", "puregreen")
+# The SLink companion is REQUIRED for Red/Blue/pureRGB (owner 2026-10-02): the gate harness
+# refuses a clean Red/Blue/pureRGB cartridge, so these cases boot the companion builds -- the
+# vanilla patch (red_patched/blue_patched, slink_*.gb) and the pureRGB overlays (the pinned clean
+# build + patch/dist/SLink-Pure*.ups). Yellow has no companion and runs clean. Every key seeds the
+# CLEAN title's fixture (run_gb_gate.PATCHED base; the companion moves no SRAM, A4).
+VANILLA_ROMS = ("red_patched", "blue_patched", "yellow")
+PURE_ROMS = ("purered_overlay", "pureblue_overlay", "puregreen_overlay")
 ALL_ROMS = VANILLA_ROMS + PURE_ROMS
 TARGETS = ("town", "battle")
 
@@ -64,7 +66,7 @@ def _red_blue_params() -> list:
     return [pytest.param(rom, marks=pytest.mark.skipif(
                 rom not in ROMS,
                 reason=f"{rom} is not one of this lane's cartridges (SLINK_GEN1_ROMS)"))
-            for rom in ("red", "blue")]
+            for rom in ("red_patched", "blue_patched")]
 
 
 @pytest.fixture(scope="module")
@@ -89,25 +91,54 @@ def _lua_to_py(mon: dict) -> dict:
     return out
 
 
+def _base(rom: str) -> str:
+    """The clean title a key's cartridge and fixture derive from: red_patched -> red,
+    purered_overlay -> purered, yellow -> yellow."""
+    from run_gb_gate import PATCHED
+    return PATCHED[rom][0] if rom in PATCHED else rom
+
+
+def _skip_if_dump_absent(rom: str) -> None:
+    """Skip when the cartridge is not in the tree; FAIL when it is there but wrong.
+
+    The companion builds resolve exactly as run_gb_gate launches them: a vanilla build is the file
+    patch/gen1/tools/build.py writes, an overlay is staged by g1.staged_rom (the UPS applied to the
+    sha1-pinned clean build, the result sha1-checked against admission_overlay.json). Only a
+    FileNotFoundError is absence; a sha1 mismatch raises ValueError and fails the case. In a
+    release lane a skip is a lane failure anyway -- the lane's inputs have to be there.
+    """
+    import gen1_playthrough as play
+    from run_gb_gate import PATCHED
+    if rom in PATCHED:
+        rom_rel = PATCHED[rom][1]
+        if rom_rel is not None:
+            if not os.path.exists(os.path.join(REPO, rom_rel)):
+                pytest.skip(f"{rom} cartridge dump not present ({rom_rel}; "
+                            "`python patch/gen1/tools/build.py`)")
+            return
+        try:
+            play.staged_rom(rom)
+        except FileNotFoundError as exc:
+            pytest.skip(f"{rom} cartridge dump not present ({exc})")
+        return
+    ext = "gbc" if rom == "yellow" else "gb"
+    if not (os.path.exists(os.path.join(REPO, play.ROMS[rom]))
+            or os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.{ext}"))):
+        pytest.skip(f"{rom} cartridge dump not present")
+
+
 def _skip_if_absent(rom: str, target: str) -> None:
     """Skip when this cartridge or its battery save is not in the tree.
 
-    Both facts are checked because the inspect gate boots a fixture: a pure title can have its
-    staged .gbc and no SaveRAM yet (tools/gen1_fixtures.py builds those per title), and a vanilla
-    title can have the dump and no fixture. In a release lane a skip is a lane failure, which is
-    the point -- the lane's inputs have to be there.
+    Both facts are checked because the inspect gate boots a fixture, and the fixture is the CLEAN
+    title's (`_base`): a companion build can be present with no SaveRAM built yet
+    (tools/gen1_fixtures.py builds those per title).
     """
     import gen1_playthrough as play
-    if rom in PURE_ROMS:
-        dump_ok = os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.gbc"))
-    else:
-        ext = "gbc" if rom == "yellow" else "gb"
-        dump_ok = (os.path.exists(os.path.join(REPO, play.ROMS[rom]))
-                   or os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.{ext}")))
-    if not dump_ok:
-        pytest.skip(f"{rom} cartridge dump not present")
-    if not os.path.exists(play.fixture_path(rom, target)):
-        pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
+    _skip_if_dump_absent(rom)
+    base = _base(rom)
+    if not os.path.exists(play.fixture_path(base, target)):
+        pytest.skip(f"{base}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
 
 
 def _assert_inspect_gate_agrees(text: str, rom: str, target: str) -> None:
@@ -141,41 +172,8 @@ def test_inspect_gate_and_hardware_differential(rom, target, emuhawk):
     _assert_inspect_gate_agrees(text, rom, target)
 
 
-# The pureRGB companion OVERLAY (PLAN M3/P4): the clean build + the SLink UPS, admitted on its
-# own sha1 (admission_overlay.json). Selected independently of ROMS/SLINK_GEN1_ROMS so a default
-# full run of this file does not silently pull the overlay cartridges into the vanilla/clean-pure
-# lab-route test above, which has no overlay wiring.
-OVERLAY_ROMS = ("purered_overlay", "pureblue_overlay", "puregreen_overlay")
-
-
-def _selected_overlay_roms() -> tuple:
-    wanted = tuple(part for part in re.split(r"[,\s]+", os.environ.get("SLINK_GEN1_OVERLAY_ROMS", "")) if part)
-    unknown = [rom for rom in wanted if rom not in OVERLAY_ROMS]
-    if unknown:
-        raise ValueError(f"unknown SLINK_GEN1_OVERLAY_ROMS entries {unknown}; known: {OVERLAY_ROMS}")
-    return wanted or OVERLAY_ROMS
-
-
-OVERLAY_SELECTED = _selected_overlay_roms()
-
-
-@pytest.mark.parametrize("target", TARGETS)
-@pytest.mark.parametrize("rom", OVERLAY_SELECTED)
-def test_inspect_gate_overlay_round_trip(rom, target, emuhawk):
-    """A4 live: a clean pure SaveRAM loads on the overlay build unchanged. fixture_path resolves
-    an overlay key to the CLEAN pure fixture (g1.fixture_path); staged_rom applies the UPS and
-    sha1-verifies the result against admission_overlay.json."""
-    import gen1_playthrough as play
-    from run_gb_gate import run_gate
-    if not os.path.exists(play.fixture_path(rom, target)):
-        pytest.skip(f"{rom}_{target}.SaveRAM not present (build it with tools/gen1_fixtures.py)")
-    try:
-        play.staged_rom(rom)
-    except Exception as exc:  # noqa: BLE001 - any staging failure just skips a live gate
-        pytest.skip(f"{rom}: overlay cartridge unavailable ({exc})")
-    passed, path, text = run_gate(GATE, rom_key=rom, target=target, timeout=240, quiet=True)
-    assert passed, f"gate FAILED on {rom}/{target}: {text[-1500:]}"
-    _assert_inspect_gate_agrees(text, rom, target)
+# (The separate overlay round-trip test is gone: with the overlays in ROMS, the case above IS the
+# A4 round trip -- a clean pure SaveRAM booted on the overlay build, decoded identically.)
 
 
 SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
@@ -184,15 +182,14 @@ SCRIPTED_GATE = "lua/tests/test_gen1_scripted_gate.lua"
 @pytest.mark.parametrize("rom", ROMS)
 def test_new_game_lab_route_emits_the_engine_sequence(rom, emuhawk, monkeypatch):
     """S-1 PHYSICAL: a cold cartridge, NEW GAME -> starter -> rival battle by buttons only, with
-    the signals layer armed. The engine-site sequence must be the one pret's scripts imply."""
-    import gen1_playthrough as play
+    the signals layer armed. The engine-site sequence must be the one pret's scripts imply.
+    `{rom}_cold` is the same cartridge with no save (red_patched_cold, purered_overlay_cold, ...)."""
     from run_gb_gate import run_gate
-    if rom in PURE_ROMS and not os.path.exists(os.path.join(play.BUILD, f"gen1_{rom}.gbc")):
-        pytest.skip(f"{rom} cartridge dump not present")
+    _skip_if_dump_absent(rom)
     monkeypatch.setenv("SLINK_SCRIPT_CHAIN", "lab")
     # Bulbasaur on the A side (the R/B lab driver's slot 8), Charmander otherwise -- the pure
     # titles take the shared R/B lab driver (their OaksLab script rows are SAME).
-    monkeypatch.setenv("SLINK_SCRIPT_PLAYER", "a" if rom in ("red", "purered") else "b")
+    monkeypatch.setenv("SLINK_SCRIPT_PLAYER", "a" if _base(rom) in ("red", "purered") else "b")
     monkeypatch.delenv("SLINK_SCRIPT_FLUSH", raising=False)
     passed, path, text = run_gate(SCRIPTED_GATE, rom_key=f"{rom}_cold", target="town", timeout=600, quiet=True)
     assert passed, f"scripted lab route FAILED on {rom}: {text[-1500:]}"
@@ -233,22 +230,25 @@ _APEX_OK_LINES = (
 )
 
 
-@pytest.mark.skipif("purered" not in ROMS,
-                    reason="purered is not one of this lane's cartridges (SLINK_GEN1_ROMS)")
+APEX_ROM = "purered_overlay"
+
+
+@pytest.mark.skipif(APEX_ROM not in ROMS,
+                    reason=f"{APEX_ROM} is not one of this lane's cartridges (SLINK_GEN1_ROMS)")
 def test_apex_chip_contract_on_a_pure_cartridge(emuhawk):
     """T1/T3 PHYSICAL: the APEX CHIP identity contract on a real pureRGB cartridge.
 
-    purered only: the gate needs the one-mon town fixture (a starter and an empty bag) and it
-    refuses a vanilla cartridge outright (vanilla has no APEX CHIP). The release gate's
-    apex-purergb lane names this test by node id and pins SLINK_GEN1_ROMS=purered, so the lane
-    cannot pass by skipping: a missing dump or fixture skips with its own reason, and only the
-    lane-SELECTION reason is in ALLOWED_SKIPS.
+    PureRed's companion overlay only (the clean build is refused): the gate needs the one-mon
+    town fixture (a starter and an empty bag) and it refuses a vanilla cartridge outright (vanilla
+    has no APEX CHIP). The release gate's apex-purergb lane names this test by node id and pins
+    SLINK_GEN1_ROMS=purered_overlay, so the lane cannot pass by skipping: a missing dump or
+    fixture skips with its own reason, and only the lane-SELECTION reason is in ALLOWED_SKIPS.
     """
     from run_gb_gate import run_gate
-    _skip_if_absent("purered", "town")
-    passed, path, text = run_gate(APEX_GATE, rom_key="purered", target="town", timeout=600,
+    _skip_if_absent(APEX_ROM, "town")
+    passed, path, text = run_gate(APEX_GATE, rom_key=APEX_ROM, target="town", timeout=600,
                                   quiet=True)
-    assert passed, f"APEX gate FAILED on purered/town: {text[-1500:]}"
+    assert passed, f"APEX gate FAILED on {APEX_ROM}/town: {text[-1500:]}"
     for line in _APEX_OK_LINES:
         assert f"[ok] {line}" in text, f"APEX gate did not report {line!r}:\n{text[-1500:]}"
 

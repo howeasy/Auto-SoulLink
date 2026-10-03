@@ -54,8 +54,9 @@ def test_gen2_seeds_distinct_fixtures_under_the_same_name_in_separate_dirs(monke
 
 
 def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monkeypatch, tmp_path):
-    import tools.gen2_synth_fixtures as gen2_synth_fixtures
     import run_gb_gate as gate
+
+    import tools.gen2_synth_fixtures as gen2_synth_fixtures
 
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     monkeypatch.setattr(duo, "REPO", str(tmp_path))
@@ -540,7 +541,9 @@ def test_the_window_offset_leaves_lane_zero_and_primary_alone(monkeypatch, tmp_p
 # ── the pureRGB pairing row ─────────────────────────────────────────────────────────────────────
 
 
-def test_the_pure_pairing_row_names_the_staged_builds_and_its_fixtures():
+def test_the_pure_pairing_row_names_its_clean_sources_and_its_fixtures():
+    """`rom` is the clean pinned build: the instances boot the overlay (`patched_saves`), and only
+    admit_randomized_new reads these, as the sources its randomized companion pair is made from."""
     row = duo.GAMES["gen1_pure"]
     assert row["main"] == duo.GAMES["gen1_new"]["main"]      # same driver, same scenarios
     assert row["game"] == "gen1_new"                         # the scenario registry selects on this
@@ -552,69 +555,154 @@ def test_the_pure_pairing_row_names_the_staged_builds_and_its_fixtures():
         assert g1.fixture_path(key, "town").endswith(f"{key}_town.SaveRAM")
 
 
-def test_the_runner_stages_a_battery_boot_rom_through_its_play_module():
-    """`_rom_for` is what the launch line uses: for the vanilla rows it returns the GAMES path
-    (staged_rom resolves the same string), and for a pure row it stages from the source lock."""
-    run = duo.DuoRun("link_new", _args(game="gen1_pure"), attempt=1)
-    try:
-        assert run._rom_for("a") == "patch/build/gen1_purered.gbc"
-    except FileNotFoundError as exc:
-        pytest.skip(f"pureRGB builds not staged here: {exc}")
-
-
-def test_a_scenario_that_stages_its_own_rom_wins(monkeypatch, tmp_path):
+def test_a_scenario_that_stages_its_own_rom_wins_for_that_instance_only(monkeypatch, tmp_path):
     run = _run(monkeypatch, tmp_path)
     monkeypatch.setattr(run, "_admit_roms",
-                        {"a": "patch/build/e2e_admit_randomized_new/a.gb",
-                         "b": "patch/build/gen1_blue.gb"}, raising=False)
+                        {"a": "patch/build/e2e_admit_randomized_new/a.gb"}, raising=False)
     assert run._rom_for("a") == "patch/build/e2e_admit_randomized_new/a.gb"
-    assert run._rom_for("b") == "patch/build/gen1_blue.gb"
+    assert run._rom_for("b") == "patch/gen1/build/slink_blue.gb"   # B: the row's companion
 
 
-# ── the pureRGB companion OVERLAY pairing row (PLAN M3/P4) ────────────────────────────────────────
+# ── the companion cartridge is REQUIRED (owner 2026-10-02): every Gen 1 row boots it ──────────────
+
+GEN1_ROWS = sorted(name for name, row in duo.GAMES.items() if row.get("game") == "gen1_new")
 
 
-def test_the_overlay_pairing_row_reuses_the_clean_pure_fixture_and_overrides_the_trade_key():
-    row = duo.GAMES["gen1_pure_overlay"]
-    assert row["main"] == duo.GAMES["gen1_new"]["main"]
-    assert row["game"] == "gen1_new"
-    assert row["not_yet"] == ()                              # M3: every scenario runs here
-    assert row["uses_savestate"] is False
-    assert row["fixture"] == {"a": "purered", "b": "pureblue"}   # A4: the clean pure fixture
-    assert row["patched_saves_override"] == {"a": "purered_overlay", "b": "pureblue_overlay"}
-    for key in row["fixture"].values():
-        assert g1.is_purergb(key) and not g1.is_purergb_overlay(key)
-    for key in row["patched_saves_override"].values():
-        assert g1.is_purergb_overlay(key)
+def test_the_gen1_rows_are_the_vanilla_pair_and_the_two_pure_pairs():
+    # the clean-pure/overlay split is gone: gen1_pure runs every scenario on the overlay
+    assert GEN1_ROWS == ["gen1_new", "gen1_pure", "gen1_pure_green"]
 
 
-def test_the_overlay_row_runs_all_20_scenarios_including_the_three_trade_ones():
-    all_ = duo.scenarios_for("gen1_pure_overlay")
-    clean = duo.scenarios_for("gen1_pure")
-    assert set(all_) - set(clean) == {"trade_new", "trade_decline_new", "explode_new"}
-    assert len(all_) == 20   # +2 bench-in-battle lanes, live PASS on gen1_pure and gen1_pure_overlay
+@pytest.mark.parametrize("game", GEN1_ROWS)
+def test_every_gen1_row_names_a_companion_key_with_both_fixtures(game):
+    """The row's `patched_saves` is what boots: each key is a run_gb_gate.PATCHED row whose seed
+    base IS the row's clean fixture title (A4), with both the town and battle saves committed,
+    and the gate harness answers it (named for the vanilla build, admitted for an overlay)."""
+    from run_gb_gate import PATCHED, named_title
+
+    row = duo.GAMES[game]
+    assert set(row["patched_saves"]) == {"a", "b"}
+    for inst, key in row["patched_saves"].items():
+        base, rom_rel, save_name = PATCHED[key]
+        assert base == row["fixture"][inst]
+        assert save_name == g1.save_name_for(rom_rel or f"patch/build/gen1_{key}.gbc")
+        for target in g1.TARGETS:
+            assert os.path.isfile(g1.fixture_path(base, target)), (key, target)
+        assert named_title(key) == (None if g1.is_purergb_overlay(key) else base)
 
 
-def test_a_trade_scenario_on_the_overlay_row_stages_the_overlay_cartridge_not_the_vanilla_one(monkeypatch):
-    """trade_new's SCENARIO dict hardcodes `patched_saves` to the vanilla red_patched/
-    blue_patched keys (it predates any second foundation); `_patch_key`/`_rom_for` must read the
-    overlay row's own `patched_saves_override` instead -- the whole mechanism that lets the three
-    trade scenarios run here without touching SCENARIOS at all."""
-    run = duo.DuoRun("trade_new", _args(game="gen1_pure_overlay", scenario="trade_new"), attempt=1)
-    assert run._patch_key("a") == "purered_overlay"
-    assert run._patch_key("b") == "pureblue_overlay"
+@pytest.mark.parametrize("game", GEN1_ROWS)
+def test_no_gen1_row_defers_a_scenario(game):
+    scenarios = duo.scenarios_for(game)
+    assert "not_yet" not in duo.GAMES[game]
+    assert {"trade_new", "trade_decline_new", "explode_new"} <= set(scenarios)
+    assert len(scenarios) == 20
+
+
+@pytest.mark.parametrize("game,want", [
+    ("gen1_new", {"a": "red_patched", "b": "blue_patched"}),
+    ("gen1_pure", {"a": "purered_overlay", "b": "pureblue_overlay"}),
+    ("gen1_pure_green", {"a": "purered_overlay", "b": "puregreen_overlay"}),
+])
+@pytest.mark.parametrize("scenario", ["link_new", "trade_new", "ball_gate_new"])
+def test_patch_key_falls_back_to_the_game_row_for_every_scenario(game, want, scenario):
+    """No scenario names a cartridge: rules-only, trade and cold-boot scenarios all boot the
+    row's companion. (A scenario-level key used to apply only to the three trade scenarios, so
+    every other scenario booted the CLEAN build.)"""
+    assert "patched_saves" not in duo.SCENARIOS[scenario] and "rom" not in duo.SCENARIOS[scenario]
+    run = duo.DuoRun(scenario, _args(game=game, scenario=scenario), attempt=1)
+    assert {inst: run._patch_key(inst) for inst in ("a", "b")} == want
+
+
+def test_rom_for_boots_the_vanilla_companion_build(monkeypatch):
+    monkeypatch.setattr(g1, "staged_rom", lambda key: pytest.fail(f"staged clean {key}"))
+    run = duo.DuoRun("link_new", _args(game="gen1_new"), attempt=1)
+    assert run._rom_for("a") == "patch/gen1/build/slink_red.gb"
+    assert run._rom_for("b") == "patch/gen1/build/slink_blue.gb"
+
+
+@pytest.mark.parametrize("game,b_key", [("gen1_pure", "pureblue_overlay"),
+                                        ("gen1_pure_green", "puregreen_overlay")])
+def test_rom_for_stages_the_overlay_on_the_pure_rows(monkeypatch, game, b_key):
+    """The INVERSE of the retired overlay-row pin: a rules-only scenario on a pure row used to
+    stage the CLEAN pure cartridge; now it stages the overlay, through the applier that
+    sha1-verifies it against admission_overlay.json."""
     monkeypatch.setattr(g1, "staged_rom", lambda key: f"STAGED:{key}")
+    run = duo.DuoRun("link_new", _args(game=game), attempt=1)
     assert run._rom_for("a") == "STAGED:purered_overlay"
-    assert run._rom_for("b") == "STAGED:pureblue_overlay"
+    assert run._rom_for("b") == f"STAGED:{b_key}"
 
 
-def test_a_non_trade_scenario_on_the_overlay_row_stages_the_clean_pure_cartridge(monkeypatch):
-    """link_new carries no `patched_saves`, so the override never applies: A4 says the clean and
-    overlay cartridges are behaviourally identical outside native trade, so the rules-only
-    scenarios stage the SAME clean build gen1_pure does."""
-    run = duo.DuoRun("link_new", _args(game="gen1_pure_overlay"), attempt=1)
-    assert run._patch_key("a") is None
-    try:
-        assert run._rom_for("a") == "patch/build/gen1_purered.gbc"
-    except FileNotFoundError as exc:
-        pytest.skip(f"pureRGB builds not staged here: {exc}")
+def test_start_instances_refuses_a_missing_companion_build_before_any_launch(monkeypatch, tmp_path):
+    run = _run(monkeypatch, tmp_path)
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))          # no patch/gen1/build here
+    run._clear_attempt_artifacts = lambda: pytest.fail("got past the companion check")
+    with pytest.raises(FileNotFoundError, match="slink_red.gb missing"):
+        run.start_instances()
+    assert run.launched == []
+
+
+def _gen1_oracle_run(tmp_path, game="gen1_new"):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = dict(duo.GAMES[game])
+    run.cfg = dict(duo.SCENARIOS["link_new"])
+    run._saveram_dir = lambda inst: str(tmp_path / f"saves_{inst}")
+    run._pydec_note = lambda _fact: None
+    return run
+
+
+def test_the_oracle_reads_the_companion_save_and_rom_never_the_clean_seed(monkeypatch, tmp_path):
+    """THE stale-data false green: `_saved_gen1_party`'s default used to read the clean title's
+    gamedb-named SaveRAM -- the fixture seed, which the companion cartridge never writes -- and
+    qualify it against the CLEAN ROM. Here the clean-named file holds different (and perfectly
+    valid) bytes; the oracle must not see them, and must qualify against the companion build."""
+    import gen1_fixtures
+    from run_gb_gate import GENS
+
+    battle = Path(g1.fixture_path("red", "battle")).read_bytes()
+    town = Path(g1.fixture_path("red", "town")).read_bytes()
+    assert battle != town
+    for rel, raw in (("patch/gen1/build/slink_red.gb", b"COMPANION-RED"),
+                     ("patch/build/gen1_red.gb", b"CLEAN-RED")):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(raw)
+    saves = tmp_path / "saves_a"
+    saves.mkdir()
+    (saves / "slink red.SaveRAM").write_bytes(battle)                        # what the cart wrote
+    (saves / GENS["gen1"]["saveram_names"]["red"]).write_bytes(town)        # a stale clean seed
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    roms = []
+    monkeypatch.setattr(gen1_fixtures, "qualify",
+                        lambda sram, rom, notes=None: roms.append(rom) or [])
+    sram, _party, _box, _codec = _gen1_oracle_run(tmp_path)._saved_gen1_party("a")
+    assert sram == battle, "the oracle read the clean-named seed, not the companion's save"
+    assert roms == [b"COMPANION-RED"], "the save was qualified against the clean ROM"
+
+
+def test_the_wrong_save_leg_qualifies_against_the_companion_rom_never_the_clean_dump(monkeypatch, tmp_path):
+    """The reconnect leg's second-OT save check (`_wrong_red_save_ot`) qualifies the save against
+    the cartridge A boots -- its companion build -- not the clean dump the run refuses."""
+    import gen1_fixtures
+
+    for rel, raw in (("patch/gen1/build/slink_red.gb", b"COMPANION-RED"),
+                     ("patch/build/gen1_red.gb", b"CLEAN-RED"),
+                     ("data/games/gen1_rby/profile.json",
+                      Path(_REPO, "data", "games", "gen1_rby", "profile.json").read_bytes())):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(raw)
+    wrong = tmp_path / "red_town_ot2.SaveRAM"
+    wrong.write_bytes(Path(g1.fixture_path("red", "battle")).read_bytes())
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    roms = []
+    monkeypatch.setattr(gen1_fixtures, "qualify",
+                        lambda sram, rom, notes=None: roms.append(rom) or [])
+    _gen1_oracle_run(tmp_path)._wrong_red_save_ot(str(wrong), expected_ot=-1)
+    assert roms == [b"COMPANION-RED"], "the wrong save was qualified against the clean ROM"
+
+
+def test_the_oracle_names_the_overlay_save_on_a_pure_row(tmp_path):
+    run = _gen1_oracle_run(tmp_path, "gen1_pure_green")
+    assert run._gen1_save_name("a") == "gen1 purered overlay.SaveRAM"
+    assert run._gen1_save_name("b") == "gen1 puregreen overlay.SaveRAM"

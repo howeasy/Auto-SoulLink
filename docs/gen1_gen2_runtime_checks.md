@@ -31,9 +31,9 @@ Seventeen lanes (`tools/verify_gen1_release.py --list`): `unit`, `rom-layout`, `
 `profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
 `patch-build` (8 fast) and `live-gates`, `live-new-gates`, `inspect-purergb`, `apex-purergb`,
 `live-trade-gates`, `live-trade-gates-purergb`,
-`apex-refusal-purergb`, `duo-pairs`, `duo-pairs-purergb` (9 slow, emulator). The vanilla lane
-list grew from 11/12 to include the seven pureRGB (second-foundation) lanes once that work
-landed; `unit` runs the full `tests/unit` tree (14215 collected at this pass), not a Gen
+`apex-refusal-purergb`, `duo-pairs`, `duo-pairs-purergb` (9 slow, emulator). The six pureRGB
+(second-foundation) lanes include `inspect-purergb`, which now covers the overlays and replaces
+the separate `inspect-purergb-overlay` lane. `unit` runs the full `tests/unit` tree (14215 collected at this pass), not a Gen
 1-scoped subset — `ALLOWED_SKIPS` in `tools/verify_gen1_release.py` was widened 2026-09-26 to
 also excuse Gen 2/Gen 3 input skips (pokecrystal/pokegold not cloned, no staged FR ROM, etc.)
 now that this lane collects their tests too, while every Gen 1 input skip stays unexcused. The
@@ -212,7 +212,7 @@ one that passes, and refusing it is stated, not silent.
 are `SELECTED`/`ADMITTED` with their G4 grant and binding pin, and the launcher admits them only on
 their own PHYSICAL receipts (`lua/gen2/entry.lua` `Entry.admit`, round-1 captures on the overlay
 ROMs). The Manager composes the companion for every Gen 2 pick while its row stays activated
-(`server/cartridges.py` `companion_admitted`). Release evidence is the post-freeze 148-cell sweep,
+(`server/cartridges.py` `companion_admitted`). Release evidence is the post-freeze overlay-only 86-cell sweep (64 duo + 22 gates),
 not round 1.
 
 The three live gates run per title against `tests/fixtures/gen2/<title>_{town,battle}.SaveRAM`,

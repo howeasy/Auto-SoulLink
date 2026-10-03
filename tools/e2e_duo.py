@@ -229,12 +229,9 @@ SCENARIOS = {
     "ball_gate_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                       "cold_boot": True, "no_setup": True, "frames": 400000,
                       "oracle": "assert_ball_gate_saved"},
-    # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
+    # T-3/T-4: the companion trade bank (every Gen 1 row's cartridge carries it).
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
-                  "rom": {"a": "patch/gen1/build/slink_red.gb",
-                          "b": "patch/gen1/build/slink_blue.gb"},
-                  "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                   "oracle": "assert_trade_new"},
     # W-6/R-4: A holds A+B+Select+Start for 16 polls, the WRAM clear lands, the client withholds
     # its hello and pauses writes, CONTINUE reloads the SAME save, and the re-hello carries the
@@ -247,20 +244,14 @@ SCENARIOS = {
     # confirm, so no blob is ever staged and no party moves.
     "trade_decline_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                           "target": "battle", "no_setup": True, "frames": 2500000,
-                          "rom": {"a": "patch/gen1/build/slink_red.gb",
-                                  "b": "patch/gen1/build/slink_blue.gb"},
-                          "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                           "oracle": "assert_trade_decline_saved"},
     # W-3 / D-11: linked_faint_active_new's A half against a server started with --explode-mode
     # (server/server.py:4755 spells it exactly that; the help text still says "RR only" although
-    # the Gen 1 client consumes force_explode too). Runs the trade-carrying ROMs because B's
-    # in-battle VBlank probe reads the companion patch's mailbox counter, and it saves under the
-    # filename-derived patched save name.
+    # the Gen 1 client consumes force_explode too). B's in-battle VBlank probe reads the companion
+    # patch's mailbox counter -- every Gen 1 row runs its companion cartridge (GAMES
+    # `patched_saves`), so no scenario names a ROM of its own any more.
     "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
                     "target": "battle", "no_setup": True, "frames": 2500000,
-                    "rom": {"a": "patch/gen1/build/slink_red.gb",
-                            "b": "patch/gen1/build/slink_blue.gb"},
-                    "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
     # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
@@ -313,8 +304,9 @@ SCENARIOS = {
     "rival_swap_new": {"flags": ["--rival-team-swap"], "timeout": 1800, "games": ("gen1_new",),
                        "target": {"a": "battle", "b": "battle"}, "no_setup": True,
                        "frames": 2500000, "oracle": "assert_rival_swap_new_saved"},
-    # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
-    # Blue contract. The second UPR output is required by prepare_pair but is not launched.
+    # F-4: one randomized Red hello admitted, the un-randomized companion Blue rejected against
+    # its randomized Blue contract. The second UPR output is required by prepare_pair but is not
+    # launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                              "target": "town", "no_setup": True, "frames": 100000,
                              "oracle": "assert_admit_randomized_saved"},
@@ -3026,7 +3018,14 @@ GAMES = {
         "scenario_prefix": "gen2_",
     },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
-    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
+    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py).
+    #
+    # `patched_saves` is the cartridge each instance LAUNCHES (a run_gb_gate.PATCHED key): the
+    # SLink companion is REQUIRED for Red/Blue/pureRGB (owner 2026-10-02), so every scenario runs
+    # on red_patched/blue_patched or the pureRGB overlays, seeded from the clean title's fixture
+    # (`fixture`; the companion adds ROM code and moves no SRAM, A4) under the companion build's
+    # filename-derived SaveRAM name. `rom` stays the CLEAN base: it is what the randomized-admission
+    # leg hands the randomizer, never what an emulator boots. The scenarios it
     # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
     # savestate-less shared ones do not leak in, and every scenario here
     # carries an `oracle` -- a Gen 1 verdict always reads the saved state (A0-H2). duo_gen1_main
@@ -3037,6 +3036,7 @@ GAMES = {
         "game": "gen1_new",
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
+        "patched_saves": {"a": "red_patched", "b": "blue_patched"},
         "uses_savestate": False,
         "fixture": {"a": "red", "b": "blue"},
         "scenario_prefix": "gen1_",
@@ -3045,46 +3045,27 @@ GAMES = {
     # gen1_new -- only the cartridges and their fixtures differ. A=purered, B=pureblue (the vanilla
     # pair's shape). `game` stays "gen1_new" because the scenario registry names that game (a
     # scenario's `games` tuple is what selects it), while `self.game` (the row key) carries the
-    # foundation: `is_gen1` and the battery-boot branch both read it.
+    # foundation: `is_gen1` and the battery-boot branch both read it. Every scenario runs on the
+    # companion OVERLAY (clean build + patch/dist/SLink-Pure*.ups, PLAN M3/P4), booting the clean
+    # pure fixture (A4); admit_randomized runs on the M5 fork jar.
     "gen1_pure": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        # docs/purergb/PLAN.md §13: trade/explode need the M3 source overlay (admit_randomized
-        # runs on the M5 fork jar); `--scenario all` on this row runs the other fifteen.
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
+        "patched_saves": {"a": "purered_overlay", "b": "pureblue_overlay"},
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "pureblue"},
         "scenario_prefix": "gen1_",
-    },
-    # The pureRGB companion OVERLAY pairing (PLAN M3/P4): clean build + the SLink UPS. Rules-only
-    # scenarios stage the CLEAN pure cartridge through the ordinary fixture path below (A4: a
-    # clean pure SaveRAM loads on the overlay build unchanged, so the two are behaviourally
-    # equivalent for anything that is not native trade) -- only a scenario carrying
-    # `patched_saves` needs the trade-carrying cartridge, and `patched_saves_override` is what
-    # redirects those three (SCENARIOS hardcodes them to the vanilla companion-patch keys, since
-    # a scenario dict has no idea which GAME row is running it; `_patch_key`/`_rom_for` in
-    # DuoRun read this override). `not_yet` is empty: the overlay artifacts exist.
-    "gen1_pure_overlay": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
-        "game": "gen1_new",
-        "not_yet": (),
-        "play": "gen1_playthrough",
-        "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
-        "uses_savestate": False,
-        "fixture": {"a": "purered", "b": "pureblue"},
-        "scenario_prefix": "gen1_",
-        "patched_saves_override": {"a": "purered_overlay", "b": "pureblue_overlay"},
     },
     # The third pure title on the B side (PureGreen's fixtures lead with Charmander like Blue's),
-    # so every pure cartridge has a duo pairing; same deferred scenarios as gen1_pure.
+    # so every pure cartridge has a duo pairing; on the overlays, like gen1_pure.
     "gen1_pure_green": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_puregreen.gbc"},
+        "patched_saves": {"a": "purered_overlay", "b": "puregreen_overlay"},
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
@@ -4128,8 +4109,9 @@ class DuoRun:
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from server import cartridges
         from server.adapters.gen1_rom_scan import fingerprint_rom
-        from server.upr_pipeline import find_upr_jar, prepare_pair
+        from server.upr_pipeline import find_upr_jar
         from server.upr_settings import build_categories
 
         jar = find_upr_jar()  # upr_pipeline.py:101-123 searches the main checkout's .cache/upr
@@ -4145,51 +4127,46 @@ class DuoRun:
         fastest = not is_pure_pairing(getattr(self, "game", ""))
         with open(settings, "wb") as handle:
             handle.write(build_categories({"wild"}, fastest_text=fastest))  # upr_settings.py:483-491
-        # prepare_pair requires BOTH players, writes .gbc outputs and verifies distinct seeds
-        # and rule-bearing data (upr_pipeline.py:254-335). One invocation, no retry.
-        result = prepare_pair(jar, settings, sources, os.path.join(self.data_dir, "roms"))
-        players = result["players"]
-        contract = {
-            "upr_version": result["upr_version"],
-            "settings_sha256": result["settings_sha256"],
-            "categories": result["categories"],
-            "players": {p: {"fingerprint": players[p]["fingerprint"], "seed": str(players[p]["seed"]),
-                            "rom_sha1": players[p]["sha1"]} for p in ("a", "b")},
-        }  # Manager-shaped: manager.py:954-964; spec belongs to the registry, not this file.
+        # Companion required: the cartridges are what the Manager hands out for a randomized
+        # companion run -- server.cartridges.provision, the production composition (vanilla
+        # randomizes the clean bytes, THEN injects the companion; pureRGB randomizes the overlay
+        # after its UPS). A randomized CLEAN cartridge is refused by the harness like any clean
+        # one. provision runs prepare_pair once (both players, distinct seeds, rule-bearing data)
+        # and writes the Manager-shaped contract to <run_dir>/rom_contract.json, which is the path
+        # server.py reads from --data-dir.
+        result = cartridges.provision(self.data_dir, sources, companion=True,
+                                      randomize={"settings_path": settings}, jar=jar)
+        with open(os.path.join(self.data_dir, "rom_contract.json"), encoding="utf-8") as handle:
+            contract = json.load(handle)
         # BizHawk opens a .gbc as a Color title and misses the DMG battery save
-        # (tools/make_randomized_patched.py:30-34). Stage unchanged bytes under a known
-        # space-free .gb basename; never apply UPS or the structural injector in this gate.
+        # (tools/make_randomized_patched.py:30-34). Stage the final bytes unchanged under a known
+        # space-free .gb basename.
         stage_dir = os.path.join(BUILD, "e2e_admit_randomized_new")
         os.makedirs(stage_dir, exist_ok=True)
         stage = os.path.join(stage_dir, "slink_red_randomized.gb")
-        shutil.copyfile(players["a"]["output"], stage)
+        shutil.copyfile(result["players"]["a"]["output"], stage)
         with open(stage, "rb") as handle:
             staged = handle.read()
         if hashlib.sha1(staged).hexdigest() != contract["players"]["a"]["rom_sha1"]:
             raise RuntimeError("staged randomized Red SHA-1 differs from the contract")
         if fingerprint_rom(staged) != contract["players"]["a"]["fingerprint"]:
             raise RuntimeError("staged randomized Red fingerprint differs from the contract")
-        with open(sources["b"], "rb") as handle:
-            clean_blue_fingerprint = fingerprint_rom(handle.read())
-        if clean_blue_fingerprint == contract["players"]["b"]["fingerprint"]:
-            raise RuntimeError("clean Blue equals randomized Blue fingerprint; negative control is invalid")
-        self._admit_roms = {"a": os.path.relpath(stage, REPO).replace("\\", "/"),
-                            "b": self.gcfg["rom"]["b"]}
-        # run_gb_gate.py:47-80: patched/unknown-hash ROMs use the filename-derived SaveRAM
-        # name. Seed both that fallback and the clean gamedb name into the same isolated dir.
-        from run_gb_gate import GENS
-
-        self._admit_extra_saves = {
-            "a": GENS["gen1"]["patched"]["red_rand_patched"][2],
-        }
+        # Only A stages its own cartridge. B boots the row's companion build (`_rom_for`): a clean
+        # cartridge is refused outright now (owner 2026-10-02), before any contract check, so the
+        # negative control is the un-randomized COMPANION B, and its fingerprint is read off the
+        # bytes that actually boot.
+        self._admit_roms = {"a": os.path.relpath(stage, REPO).replace("\\", "/")}
+        with open(os.path.join(REPO, self._rom_for("b")), "rb") as handle:
+            b_fingerprint = fingerprint_rom(handle.read())
+        if b_fingerprint == contract["players"]["b"]["fingerprint"]:
+            raise RuntimeError("un-randomized B equals randomized Blue fingerprint; negative control is invalid")
+        # A's save is seeded under the filename-derived name of the staged cartridge alone
+        # (`_gen1_save_name`, which `_seed_instance_save` and the oracles share).
         self._admit_fingerprints = {"expected_b": contract["players"]["b"]["fingerprint"],
-                                    "reported_b": clean_blue_fingerprint}
-        # server.py:468-505 reads this exact path from --data-dir, including on hello refresh.
-        with open(os.path.join(self.data_dir, "rom_contract.json"), "w", encoding="utf-8") as handle:
-            json.dump(contract, handle, indent=2)
+                                    "reported_b": b_fingerprint}
         print(f"[duo] admission contract staged: A={contract['players']['a']['fingerprint'][:12]} "
               f"B expected={contract['players']['b']['fingerprint'][:12]} "
-              f"B clean={clean_blue_fingerprint[:12]}")
+              f"B companion={b_fingerprint[:12]}")
         return contract
 
     def _target_for(self, inst):
@@ -4238,42 +4215,44 @@ class DuoRun:
             json.dump(cfg, handle, indent=2)
 
     def _patch_key(self, inst: str) -> str | None:
-        """Which `run_gb_gate.PATCHED` row a trade-carrying scenario needs on this instance, or
-        None when the running scenario does not carry one at all.
+        """The `run_gb_gate.PATCHED` row (companion cartridge) this instance launches, or None
+        for a row without one.
 
-        `trade_new`/`trade_decline_new`/`explode_new` hardcode `patched_saves` to the vanilla
-        companion-patch keys (`red_patched`/`blue_patched`) at the SCENARIO level, because they
-        predate any second foundation and a scenario has no idea which GAME row is running it.
-        A GAME row that needs a DIFFERENT trade-carrying cartridge for those same three scenarios
-        (the pureRGB overlay row, PLAN M3/P4) says so with its own `patched_saves_override`,
-        keyed the same way; this is the one place that override is read.
+        The GAME row decides, never the scenario: the companion is REQUIRED for Red/Blue/pureRGB
+        (owner 2026-10-02), so every Gen 1 row except Yellow names its companion keys
+        (red_patched/blue_patched, or the *_overlay keys on the pure rows) and every scenario on
+        it runs that cartridge. This is the one place the key is read; `_rom_for` (what boots),
+        `_seed_instance_save` (which file is seeded) and `_saved_gen1_party` (which file and ROM
+        the oracle reads) all go through it, so the three can never disagree.
         """
-        if not self.cfg.get("patched_saves"):
-            return None
-        override = self.gcfg.get("patched_saves_override")
-        return override[inst] if override else self.cfg["patched_saves"][inst]
+        return (self.gcfg.get("patched_saves") or {}).get(inst)
 
     def _rom_for(self, inst: str) -> str:
         """The ROM path this instance launches.
 
-        A trade-carrying scenario whose GAME row overrides `patched_saves` (the pureRGB overlay
-        row) stages ITS OWN cartridge first: g1.staged_rom applies the UPS and sha1-verifies the
-        result, so returning a bare literal path here would race the artifact into existing.
-        Otherwise a scenario that stages its own (the randomized-admission legs, or the vanilla
-        trade scenarios' literal patched-ROM path) wins; failing that, a battery-boot game
-        resolves the ROM through its own play module's staged_rom(), which copies and verifies
-        it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
-        pureRGB fixture key stage from the pinned source lock.
+        A scenario that stages its own cartridge for an instance (the randomized-admission leg's
+        A) wins. Otherwise the instance's companion key does: a vanilla companion build is the
+        literal `patch/gen1/build/slink_*.gb` path, and an overlay key stages ITS OWN cartridge
+        (g1.staged_rom applies the UPS and sha1-verifies the result). Failing both, a battery-boot
+        game resolves the ROM through its own play module's staged_rom(), which copies and
+        verifies it.
         """
         if self.is_gen3_battery:
             return self._gen3_rom(inst)
         if self.gcfg.get("launch_profile") == "gen2":
             return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
+        admitted = getattr(self, "_admit_roms", None) or {}
+        if inst in admitted:
+            return admitted[inst]
         patch_key = self._patch_key(inst)
-        if patch_key and self.gcfg.get("patched_saves_override"):
-            import gen1_playthrough as g1
-            return g1.staged_rom(patch_key)
-        staged = getattr(self, "_admit_roms", None) or self.cfg.get("rom")
+        if patch_key:
+            from run_gb_gate import PATCHED
+            rom_rel = PATCHED[patch_key][1]
+            if rom_rel is None:
+                import gen1_playthrough as g1
+                return g1.staged_rom(patch_key)
+            return rom_rel
+        staged = self.cfg.get("rom")
         if staged:
             return staged[inst]
         if self.battery_boot and self.gcfg.get("play") and self.gcfg.get("fixture"):
@@ -4321,17 +4300,17 @@ class DuoRun:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(raw)
             return str(destination)
-        from run_gb_gate import GENS, seed_saveram
+        from run_gb_gate import seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
                               dest_dir=self._saveram_dir(inst))
-        patch_key = self._patch_key(inst)
-        if patch_key:
-            save_name = GENS["gen1"]["patched"][patch_key][2]
-            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
-        extra_name = getattr(self, "_admit_extra_saves", {}).get(inst)
-        if extra_name:
-            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
+        if self._patch_key(inst) or inst in (getattr(self, "_admit_roms", None) or {}):
+            # MOVED, not copied, to the one name the booted cartridge (companion, or a staged
+            # randomized one) reads and writes: any other name left beside it is a stale file an
+            # oracle could read and pass on (the fixture's bytes, never touched by the run).
+            booted = os.path.join(self._saveram_dir(inst), self._gen1_save_name(inst))
+            os.replace(seeded, booted)
+            seeded = booted
         return seeded
 
     @property
@@ -4548,16 +4527,24 @@ class DuoRun:
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
+            for inst in ("a", "b"):
+                # the cartridge each instance boots (its companion build, or the overlay staged
+                # and sha1-verified here) must exist BEFORE either emulator starts: BizHawk handed
+                # a missing path opens nothing and the lane would wait out its whole timeout
+                rom = self._rom_for(inst)
+                if not os.path.isfile(os.path.join(REPO, rom)):
+                    raise FileNotFoundError(f"{inst}: {rom} missing -- build the companion with "
+                                            "`python patch/gen1/tools/build.py`")
         self._clear_attempt_artifacts()
         # F-4 tests B's CONTRACT verdict. A's randomized hello commits the run's artifact kind,
-        # after which a pure clean B is refused earlier by the mixed-kinds gate, which records
+        # after which an un-randomized B is refused earlier by the mixed-kinds gate, which records
         # no admission verdict (server.py _mixed_games_error), so B must hello alone first.
         b_first = self.scenario == "admit_randomized_new"
         for inst in (("b", "a") if b_first else ("a", "b")):
             with self._timed(f"launch_{inst}"):
                 self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
             if b_first and inst == "b":
-                self.wait_for("clean B's contract verdict before A launches", lambda: (
+                self.wait_for("un-randomized companion B's contract verdict before A launches", lambda: (
                     ((self._status() or {}).get("players") or {}).get("b", {})
                     .get("admission") == "rejected"), 120)
         print("[duo] two EmuHawk instances launched")
@@ -5585,7 +5572,8 @@ class DuoRun:
                 or not (name.startswith(title_a) or f"{title_a} version" in name)):
             raise RuntimeError(f"--wrong-save must name an existing second-OT {title_a} SaveRAM")
         sram = source.read_bytes()
-        rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
+        # the cartridge A boots (its companion build), never the clean dump the run refuses
+        rom = (Path(REPO) / self._rom_for("a")).read_bytes()
         problems = qualify(sram, rom)  # gen1_fixtures.py:81-148, game's checksum/stat oracle
         if problems:
             raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")
@@ -5608,8 +5596,6 @@ class DuoRun:
         """C-2 crash/reload while B stays online, then optional fail-closed C-1 wrong save."""
         from pathlib import Path
 
-        from run_gb_gate import GENS
-
         self.go()
         self.assert_link_new()
         for inst in ("a", "b"):
@@ -5618,7 +5604,7 @@ class DuoRun:
         _sram, party, _current, codec = self._saved_gen1_party("a")
         if [codec.key(mon) for mon in party] != [self._boot_keys["a"], self._link_keys["a"]]:
             raise RuntimeError("A's flushed Red save does not hold the linked pair before the crash")
-        correct_save = Path(self._saveram_dir("a")) / GENS["gen1"]["saveram_names"][self.gcfg["fixture"]["a"]]
+        correct_save = Path(self._saveram_dir("a")) / self._gen1_save_name("a")
         shutil.copyfile(correct_save, os.path.join(self.data_dir, "a_original_before_reconnect.SaveRAM"))
         baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
         shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
@@ -5953,30 +5939,47 @@ class DuoRun:
         return os.path.join(play.FIXTURES,
                             f"{self.gcfg['fixture'][inst]}_{self._target_for(inst)}.SaveRAM")
 
+    def _gen1_save_name(self, inst):
+        """The SaveRAM filename the cartridge this instance boots reads and writes: its companion
+        key's filename-derived name, or the clean title's gamedb name on a row with no companion
+        (Yellow)."""
+        from run_gb_gate import GENS
+
+        staged = (getattr(self, "_admit_roms", None) or {}).get(inst)
+        if staged:
+            # a scenario-staged cartridge (admit_randomized_new's A) is unknown to the gamedb
+            import gen1_playthrough as g1
+            return g1.save_name_for(staged)
+        patch_key = self._patch_key(inst)
+        if patch_key:
+            return GENS["gen1"]["patched"][patch_key][2]
+        return GENS["gen1"]["saveram_names"][self.gcfg["fixture"][inst]]
+
     def _saved_gen1_party(self, inst, rom=None, save_name=None):
         """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM.
 
-        `rom` (repo-relative, the path the instance launched) and `save_name` override the
-        clean-title defaults, which name the wrong file for two scenarios: admit_randomized_new
-        launches the staged randomized Red, whose SaveRAM carries the filename-derived name a
-        hash BizHawk does not know resolves to, and reconnect_new's same-save leg is overwritten
-        in place by the wrong-OT copy before the run ends. An absolute `save_name` is read as
-        given; a relative one resolves inside the instance's own SaveRAM directory.
+        The defaults are the cartridge the instance LAUNCHED: `_rom_for` for the ROM and the save
+        name of its companion key (`_patch_key`), which is the filename-derived name BizHawk gives
+        a hash it does not know. Defaulting to the clean title's gamedb name read the fixture
+        bytes seeded under it -- a file the companion cartridge never touches -- and passed on
+        them. `rom` (repo-relative) and `save_name` override the defaults: reconnect_new's
+        same-save leg is overwritten in place by the wrong-OT copy before the run ends, and
+        admit_randomized_new's A saves under the randomized build's own name. An absolute
+        `save_name` is read as given; a relative one resolves inside the instance's own SaveRAM
+        directory.
         """
         from pathlib import Path
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)
         from gen1_fixtures import qualify
-        from run_gb_gate import GENS
 
         from server.adapters import gen1_codec as codec
 
-        title = self.gcfg["fixture"][inst]
-        name = save_name or GENS["gen1"]["saveram_names"][title]
+        name = save_name or self._gen1_save_name(inst)
         path = Path(name) if os.path.isabs(str(name)) else Path(self._saveram_dir(inst)) / name
         sram = path.read_bytes()
-        rom_bytes = (Path(REPO) / (rom or self.gcfg["rom"][inst])).read_bytes()
+        rom_bytes = (Path(REPO) / (rom or self._rom_for(inst))).read_bytes()
         # tools/gen1_fixtures.py:81-148 uses codec.verify_bank1 (the game's CalcCheckSum),
         # decode_party, level_from_exp and recompute_stats against this exact ROM.
         # `notes` carries the stored stats that lag their stat exp: legal (the engine only
@@ -6057,36 +6060,13 @@ class DuoRun:
         self._pydec_note("B initialized box banks and all 12 counts/terminators/checksums valid")
         self._pydec_note(f"B Box 12 holds {self._deadzone_b_key} at HP 0")
 
-    def _patched_saved_state(self, inst):
-        """The flushed SaveRAM of a trade-carrying cartridge (companion patch in the ROM, or the
-        pureRGB companion OVERLAY on a row that sets `patched_saves_override`).
-
-        Those scenarios launch `patch/gen1/build/slink_{red,blue}.gb` (or, overridden, the
-        overlay cartridge `_rom_for` staged), whose SaveRAM name is the filename-derived patched
-        one, so the clean-title default would read the wrong file. One resolver, shared by every
-        oracle that runs those ROMs.
-        """
-        if REPO not in sys.path:
-            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
-        from run_gb_gate import GENS
-
-        patch_key = self._patch_key(inst)
-        save_name = GENS["gen1"]["patched"][patch_key][2]
-        rom_path = self._rom_for(inst) if self.gcfg.get("patched_saves_override") else self.cfg["rom"][inst]
-        return self._saved_gen1_party(inst, rom=rom_path, save_name=save_name)
-
-    def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False,
-                                  bench_battle=False):
+    def assert_linked_faint_saved(self, results, *, active, explode=False, bench_battle=False):
         """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
 
         `bench_battle` is the bench-in-battle lane (commit 6a8958fb): B's linked mon sits on the
         bench of a wild battle when the command arrives, and every B marker has to show the write
         landing INSIDE that battle -- the pre-fix client deferred it to the overworld checkpoint.
-
-        `saved_state(inst)` defaults to the clean-title read; explode_new passes the patched
-        resolver because it runs the trade-carrying ROMs, whose SaveRAM name and ROM differ.
         """
-        read = saved_state or self._saved_gen1_party
         for process in self.emus:
             process.wait(timeout=30)
         matches = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
@@ -6113,7 +6093,7 @@ class DuoRun:
             key = self._link_keys[inst]
             if link[inst]["key"] != key:
                 raise RuntimeError(f"{inst} persisted link key differs from captured {key}")
-            sram, party, current_box, codec = read(inst)
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
             if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
                 raise RuntimeError(f"{inst} saved party is not its living starter: "
                                    f"{[(codec.key(m), m['hp']) for m in party]}")
@@ -6241,16 +6221,15 @@ class DuoRun:
         """W-3/D-11: the shared faint half plus the markers only a companion-patched cartridge
         with `--explode-mode` can produce.
 
-        The saved-state half is `assert_linked_faint_saved(active=True)` run through the
-        patched-save resolver, because explode_new launches the trade-carrying ROMs: the pair
+        The saved-state half is `assert_linked_faint_saved(active=True)` on the companion
+        cartridges' own saves (`_saved_gen1_party` reads what each instance launched): the pair
         must be dead with cause battle and both Box 12s must hold the linked key at HP 0. B's
         markers then prove the path was Explode Mode's: the in-battle VBlank counter advanced
         (the patch's hook still runs), the server sent only `force_explode`, the move menu
         showed the catch's own moves BEFORE the write and four EXPLOSIONs after it, and the
         commit was the coerced turn rather than a queued one.
         """
-        self.assert_linked_faint_saved(results, active=True, explode=True,
-                                       saved_state=self._patched_saved_state)
+        self.assert_linked_faint_saved(results, active=True, explode=True)
         a_text, b_text = results["a"], results["b"]
 
         marker(a_text, r"A_ENGINE_FAINT", "A engine faint")
@@ -6746,8 +6725,7 @@ class DuoRun:
 
         The saved state is read through the same PYDEC path as `assert_pc_ops_new_saved`
         (`_saved_gen1_party`, whose `qualify()` checks the game's own checksum and recomputed
-        stats). This scenario runs the clean fixtures, so the patched-ROM resolver
-        (`_patched_saved_state`) does not apply.
+        stats), on the save of the companion cartridge the instance launched.
         """
         for process in self.emus:
             process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
@@ -7288,7 +7266,6 @@ class DuoRun:
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
-        from run_gb_gate import GENS
 
         from server.adapters import gen1_codec as codec
         from tests.unit import protocol_schema
@@ -7307,8 +7284,7 @@ class DuoRun:
             raise RuntimeError(f"links.json halves were not swapped: {link['a']['key']} / {link['b']['key']}")
 
         for inst, incoming, partner in (("a", before_b, "b"), ("b", before_a, "a")):
-            save_name = GENS["gen1"]["patched"][self._patch_key(inst)][2]
-            save = Path(self._saveram_dir(inst)) / save_name
+            save = Path(self._saveram_dir(inst)) / self._gen1_save_name(inst)
             sram = save.read_bytes()
             if len(sram) != codec.SRAM_SIZE:
                 raise RuntimeError(f"{inst} SaveRAM is {len(sram)} bytes, expected {codec.SRAM_SIZE}")
@@ -7373,7 +7349,7 @@ class DuoRun:
         self._pydec_note(f"durable route_1 pair unchanged: a={before_a} b={before_b}")
 
         for inst in ("a", "b"):
-            _sram, party, _box, codec = self._patched_saved_state(inst)
+            _sram, party, _box, codec = self._saved_gen1_party(inst)
             keys = [codec.key(mon) for mon in party]
             want = [self._boot_keys[inst], self._link_keys[inst]]
             if keys != want:
@@ -7394,7 +7370,8 @@ class DuoRun:
             return (status if a.get("admission") == "admitted" and a.get("admission_reason")
                     and b.get("admission") == "rejected" else None)
 
-        status = self.wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
+        status = self.wait_for("randomized A admitted and un-randomized companion B rejected",
+                               both_verdicts, 180)
         a, b = status["players"]["a"], status["players"]["b"]
         if a.get("admission_reason") != "cartridge matches the contract":
             raise RuntimeError(f"A admission reason differs: {a.get('admission_reason')!r}")
@@ -7442,17 +7419,17 @@ class DuoRun:
         if ("[a] admission: admitted — cartridge matches the contract" not in log_text
                 or "[b] admission: rejected — " + reason not in log_text):
             raise RuntimeError("slink.log omitted an admission transition")
-        self._pydec_note(f"F-4 public verdicts: A admitted, clean B rejected; "
+        self._pydec_note(f"F-4 public verdicts: A admitted, un-randomized companion B rejected; "
                          f"expected={want[:12]} reported={got[:12]} (admission-only, no save mutation)")
         self._live_complete["admit_randomized_new"] = True
 
     def assert_admit_randomized_saved(self, results):
         """F-4's saved half, with explicit provenance for both cartridges.
 
-        A runs the STAGED randomized Red, whose SaveRAM carries the filename-derived name
-        BizHawk resolves for a hash it does not know — so the default read would qualify the
-        untouched clean-name seed against the clean ROM and prove nothing. B's readback shows
-        the rejected cartridge's save was not touched by the server: party and current box
+        A runs the STAGED randomized companion Red, whose SaveRAM carries the filename-derived
+        name BizHawk resolves for a hash it does not know (`_gen1_save_name`, the one name it was
+        seeded under), qualified against that staged ROM. B -- the un-randomized companion build --
+        shows the rejected cartridge's save was not touched by the server: party and current box
         unchanged from the seed it booted with, its rejection the only durable record, and none
         of its keys anywhere in links.json.
         """
@@ -7464,7 +7441,7 @@ class DuoRun:
             process.wait(timeout=30)  # client.exit flushes CartRAM
 
         a_rom = self._admit_roms["a"]
-        a_save = self._admit_extra_saves["a"]
+        a_save = self._gen1_save_name("a")
         a_path = Path(self._saveram_dir("a")) / a_save
         launched = self._launch_times.get("a")
         if not launched or a_path.stat().st_mtime < launched:
@@ -7475,7 +7452,7 @@ class DuoRun:
         self._pydec_note(f"phase initial: {os.path.relpath(a_path, REPO)} written after launch, "
                          f"qualifies against {a_rom}, party {[codec.key(m) for m in a_party]}")
 
-        b_sram, b_party, b_box, _codec = self._saved_gen1_party("b", rom=self._admit_roms["b"])
+        b_sram, b_party, b_box, _codec = self._saved_gen1_party("b")
         seed = Path(self._fixture_save_path("b")).read_bytes()
         party_start = codec.SRAM_LAYOUT["sPartyData"]
         box_start = codec.SRAM_LAYOUT["sCurBoxData"]
@@ -7854,15 +7831,12 @@ class DuoRun:
     def _witness_flush(self, inst):
         """The flushed SaveRAM the scenario's OWN oracle reads.
 
-        The scenario's resolver, not a hardcoded name: a randomized cartridge (admit_randomized_new)
-        saves under BizHawk's filename-derived name while the gamedb name still holds the fixture
-        it was seeded from, and a trade-carrying ROM saves under its patched name. Comparing a
+        The scenario's resolver, not a hardcoded name: a staged randomized cartridge
+        (admit_randomized_new) and a companion cartridge each save under their own
+        filename-derived name (`_gen1_save_name`, `_saved_gen1_party`'s default). Comparing a
         witness against a fixture would fail for a reason that is not the cartridge's.
         """
-        if self.cfg.get("patched_saves"):
-            return self._patched_saved_state(inst)[0]
-        return self._saved_gen1_party(inst, save_name=getattr(self, "_admit_extra_saves",
-                                                              {}).get(inst))[0]
+        return self._saved_gen1_party(inst)[0]
 
     def check_save_witness(self, results):
         """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.

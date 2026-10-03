@@ -38,7 +38,6 @@ from types import MappingProxyType
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-from repo_paths import inside_repo  # noqa: E402
 import gen1_playthrough as g1  # noqa: E402
 from gen1_playthrough import (  # noqa: E402
     BIZHAWK_CONFIG,
@@ -48,6 +47,7 @@ from gen1_playthrough import (  # noqa: E402
     write_run_config,
 )
 from gen2_source_data import load_context as load_gen2_context  # noqa: E402
+from repo_paths import inside_repo  # noqa: E402
 
 # The fixture builders, per generation. Gen 1's is tools/gen1_fixtures.py (the new client's
 # scripted pipeline); the old gen1_playthrough driver this message used to name is gone, and
@@ -202,6 +202,12 @@ GENS = {
             "red_rand_patched": ("red", "patch/gen1/build/slink_red_randomized.gb",
                                  "slink red randomized.SaveRAM"),
             "blue_patched": ("blue", "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
+            # The companion is REQUIRED for Red/Blue/pureRGB (owner 2026-10-02), so a cold boot
+            # (the scripted NEW GAME route) runs on the companion cartridge too: same ROM and
+            # save name as the warm row, no fixture. The clean `*_cold` rows below stay for
+            # Yellow (no companion) and the clean-cartridge tooling.
+            "red_patched_cold": (None, "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
+            "blue_patched_cold": (None, "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
             # Cold-boot keys: the vanilla cartridge with no save at all, so it reaches the
             # intro rather than CONTINUE. A ROM path of None means "the vanilla dump for the
             # key before _cold" (tests/live/test_gen1_new_gates.py, tools/gen1_fixtures.py).
@@ -213,8 +219,9 @@ GENS = {
             # pureRGB (P3b-e): the built cartridges take the same treatment as the patched builds
             # — BizHawk has no gamedb entry for them, so the SaveRAM name is filename-derived and
             # the ROM is staged from the pinned lock (g1.PURERGB_KEYS), not from a repo-root dump.
-            # The `_cold` rows are what the fixture builder drives: a previous build's save must
-            # not be seeded into the next one. The bare keys boot FROM a built pure fixture.
+            # A `_cold` row boots with no save, so a previous build's save is not seeded into the
+            # next one; the fixture builder drives the `*_overlay_cold` rows below (the harness
+            # refuses these clean builds). The bare keys boot FROM a built pure fixture.
             "purered": ("purered", None, "gen1 purered.SaveRAM"),
             "pureblue": ("pureblue", None, "gen1 pureblue.SaveRAM"),
             "puregreen": ("puregreen", None, "gen1 puregreen.SaveRAM"),
@@ -229,6 +236,9 @@ GENS = {
             "purered_overlay": ("purered", None, "gen1 purered overlay.SaveRAM"),
             "pureblue_overlay": ("pureblue", None, "gen1 pureblue overlay.SaveRAM"),
             "puregreen_overlay": ("puregreen", None, "gen1 puregreen overlay.SaveRAM"),
+            "purered_overlay_cold": (None, None, "gen1 purered overlay.SaveRAM"),
+            "pureblue_overlay_cold": (None, None, "gen1 pureblue overlay.SaveRAM"),
+            "puregreen_overlay_cold": (None, None, "gen1 puregreen overlay.SaveRAM"),
             # A RANDOMIZED PureRed (tests/live/test_gen1_rand_gates.py): the UPR fork's output,
             # copied under this path by the test itself, cold-booted (NEW GAME) and admitted by
             # the pack anchors (kind rand) -- its sha1 is in no table by construction.
@@ -295,7 +305,9 @@ def named_title(rom_key: str) -> str | None:
     is admitted on its bytes or the gate refuses.
     """
     spec = GENS["gen1"]
-    base = spec["patched"].get(rom_key, (None, None, None))[0]
+    # A companion cold key names the family of its warm twin ("red_patched_cold" -> "red"); a
+    # clean cold key ("red_cold") has no patched twin and stays unnamed.
+    base = spec["patched"].get(rom_key.removesuffix("_cold"), (None, None, None))[0]
     return base if base in spec["play"].ROMS else None
 
 
@@ -477,12 +489,11 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
     elif rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
         if rom_rel is None:
-            # An overlay key stages ITS OWN cartridge (g1.purergb_overlay_dump applies the UPS)
-            # — rsplit("_", 1) would strip "_overlay" and stage the clean build instead. Every
-            # other None-rom_rel row (the bare pure keys, the "*_cold" rows) IS the stripped
-            # form: "purered" unchanged, "purered_cold" -> "purered".
-            stage_key = rom_key if g1.is_purergb_overlay(rom_key) else rom_key.rsplit("_", 1)[0]
-            rom_rel = play.staged_rom(stage_key)
+            # The cartridge is the key minus a trailing "_cold" and nothing else: "purered_cold"
+            # -> "purered", "purered_overlay_cold" -> "purered_overlay" (g1.purergb_overlay_dump
+            # applies the UPS). An rsplit("_", 1) would turn "purered_overlay" into the CLEAN
+            # build, and only reached the right answer for "*_overlay_cold" by accident.
+            rom_rel = play.staged_rom(rom_key.removesuffix("_cold"))
         if not os.path.exists(os.path.join(REPO, rom_rel)):
             how = ("build the pinned pureRGB source (see data/purergb_sources.lock.json)"
                    if g1.is_purergb(rom_key) else "python patch/gen1/tools/build.py")

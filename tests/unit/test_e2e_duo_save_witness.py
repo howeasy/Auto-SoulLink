@@ -34,8 +34,7 @@ def _dump_line(blob, saves=1, frame=100, rel=None):
     return (f"SAVE_WITNESS_DUMP path={rel} bytes={len(blob)} saves={saves} frame={frame}")
 
 
-def _stub(tmp_path, monkeypatch, *, blob=None, flushed=None, a_extra="", b_extra="",
-          patched=False):
+def _stub(tmp_path, monkeypatch, *, blob=None, flushed=None, a_extra="", b_extra=""):
     """A DuoRun whose flush is `flushed` and whose witness file holds `blob`."""
     build = tmp_path / "build"
     build.mkdir(exist_ok=True)
@@ -48,8 +47,6 @@ def _stub(tmp_path, monkeypatch, *, blob=None, flushed=None, a_extra="", b_extra
     run.game = "gen1_new"
     run.emus = []
     run.cfg = dict(duo.SCENARIOS["link_new"])
-    if patched:
-        run.cfg["patched_saves"] = {"a": "red_patched", "b": "blue_patched"}
     run.gcfg = dict(duo.GAMES["gen1_new"])
     run.data_dir = str(tmp_path)
     notes = []
@@ -60,8 +57,6 @@ def _stub(tmp_path, monkeypatch, *, blob=None, flushed=None, a_extra="", b_extra
     monkeypatch.setattr(duo, "REPO", str(tmp_path))
     monkeypatch.setattr(run, "_saved_gen1_party",
                         lambda inst, **kw: (flushed, [], [], codec))
-    monkeypatch.setattr(run, "_patched_saved_state",
-                        lambda inst: (b"\x00" * codec.SRAM_SIZE, [], [], codec))
 
     lines = {}
     for inst in ("a", "b"):
@@ -165,12 +160,17 @@ def test_a_logged_path_the_harness_did_not_expect_fails(tmp_path, monkeypatch):
         run.check_save_witness(results)
 
 
-def test_the_flush_comes_from_the_scenarios_own_resolver(tmp_path, monkeypatch):
-    """A trade-carrying ROM saves under its patched name; comparing the witness against the
-    gamedb-named fixture would fail for a reason that is not the cartridge's."""
-    run, results, _notes, _build = _stub(tmp_path, monkeypatch, patched=True)
-    with pytest.raises(RuntimeError, match="does not match the flushed SaveRAM"):
-        run.check_save_witness(results)  # _patched_saved_state returns zeros
+def test_the_flush_comes_from_the_oracles_own_default_read(tmp_path, monkeypatch):
+    """The witness is compared with exactly what `_saved_gen1_party` reads by default (the
+    launched cartridge's save, see test_e2e_duo_lane_isolation), never a hardcoded name: no
+    save_name is passed at all -- a scenario-staged cartridge is resolved by that default too."""
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    seen = []
+    flushed = _image()
+    monkeypatch.setattr(run, "_saved_gen1_party",
+                        lambda inst, **kw: seen.append(kw) or (flushed, [], [], codec))
+    run.check_save_witness(results)
+    assert seen and all(kw == {} for kw in seen), seen
 
 
 def test_stale_witnesses_are_cleared_at_attempt_start(tmp_path, monkeypatch):

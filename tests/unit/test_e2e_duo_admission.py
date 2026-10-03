@@ -42,6 +42,11 @@ def runner(tmp_path, monkeypatch):
     source_dir.mkdir(parents=True)
     (source_dir / "gen1_red.gb").write_bytes(b"clean-red")
     (source_dir / "gen1_blue.gb").write_bytes(b"clean-blue")
+    # the companion builds the row's instances boot (GAMES["gen1_new"]["patched_saves"])
+    companion_dir = tmp_path / "patch" / "gen1" / "build"
+    companion_dir.mkdir(parents=True)
+    (companion_dir / "slink_red.gb").write_bytes(b"companion-red")
+    (companion_dir / "slink_blue.gb").write_bytes(b"companion-blue")
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario = "admit_randomized_new"
     run.cfg = dict(duo.SCENARIOS[run.scenario])
@@ -64,26 +69,37 @@ def runner(tmp_path, monkeypatch):
 
 
 def _fake_pipeline(monkeypatch):
+    """server.cartridges.provision, faked: the companion composition itself is
+    test_cartridges.py's; here only what the scenario asks for and does with the result."""
+    from server import cartridges
+
     called = []
     monkeypatch.setattr(upr_pipeline, "find_upr_jar", lambda: "fake.jar")
     mapping = {b"random-red": "a" * 64, b"random-blue": "b" * 64,
-               b"clean-blue": "c" * 64, b"clean-red": "d" * 64}
+               b"clean-blue": "9" * 64, b"clean-red": "d" * 64,
+               b"companion-blue": "c" * 64, b"companion-red": "e" * 64}
     monkeypatch.setattr(scan, "fingerprint_rom", lambda raw: mapping[raw])
 
-    def prepare(jar, settings, sources, out_dir):
-        called.append((jar, settings, sources, out_dir))
-        Path(out_dir).mkdir(parents=True)
-        players = {}
-        for player, raw in (("a", b"random-red"), ("b", b"random-blue")):
-            output = Path(out_dir) / f"{player}_randomized.gbc"
+    def provision(run_dir, sources, *, companion, randomize, jar=""):
+        called.append((run_dir, sources, companion, randomize, jar))
+        roms = Path(run_dir) / "roms"
+        roms.mkdir(parents=True)
+        players, contract_players = {}, {}
+        for player, raw, seed in (("a", b"random-red", "1"), ("b", b"random-blue", "2")):
+            output = roms / f"{player}.gb"
             output.write_bytes(raw)
             players[player] = {"output": str(output), "fingerprint": mapping[raw],
-                               "seed": 1 if player == "a" else 2,
-                               "sha1": hashlib.sha1(raw).hexdigest()}
-        return {"upr_version": "4.6.1", "settings_sha256": "f" * 64,
-                "categories": ["wild"], "spec": {"wild": "random"}, "players": players}
+                               "rom_sha1": hashlib.sha1(raw).hexdigest(), "kind": "rand_companion"}
+            contract_players[player] = {"fingerprint": mapping[raw], "seed": seed,
+                                        "rom_sha1": hashlib.sha1(raw).hexdigest()}
+        contract = {"upr_version": "4.6.1", "settings_sha256": "f" * 64, "categories": ["wild"],
+                    "players": contract_players}
+        (Path(run_dir) / "rom_contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        return {"family": "vanilla", "companion": companion, "randomizer": {}, "players": players}
 
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", prepare)
+    monkeypatch.setattr(cartridges, "provision", provision)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair",
+                        lambda *args: pytest.fail("randomized outside the companion composition"))
     return called
 
 
@@ -91,11 +107,11 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     called = _fake_pipeline(monkeypatch)
     contract = runner.prepare_admit_randomized_new()
     assert len(called) == 1
-    jar, settings, sources, out_dir = called[0]
-    assert jar == "fake.jar"
-    assert Path(settings).read_bytes() == build_categories({"wild"})
+    run_dir, sources, companion, randomize, jar = called[0]
+    # the cartridges a randomized companion run hands out: companion ON, from the clean sources
+    assert companion is True and jar == "fake.jar" and run_dir == runner.data_dir
+    assert Path(randomize["settings_path"]).read_bytes() == build_categories({"wild"})
     assert sources == {p: os.path.join(duo.REPO, runner.gcfg["rom"][p]) for p in ("a", "b")}
-    assert out_dir == os.path.join(runner.data_dir, "roms")
     path = Path(runner.data_dir) / "rom_contract.json"
     assert json.loads(path.read_text(encoding="utf-8")) == contract
     assert set(contract) == {"upr_version", "settings_sha256", "categories", "players"}
@@ -103,8 +119,11 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     assert contract["players"]["a"]["seed"] == "1"
     staged = Path(duo.REPO) / runner._admit_roms["a"]
     assert staged.suffix == ".gb" and staged.read_bytes() == b"random-red"
-    assert runner._admit_roms["b"] == runner.gcfg["rom"]["b"]
-    assert runner._admit_extra_saves == {"a": "slink red randomized.SaveRAM"}
+    # B boots its companion build (a clean cartridge is refused before any contract check), and
+    # the reported fingerprint ("c") is the one read off THOSE bytes, not the clean source's ("9")
+    assert set(runner._admit_roms) == {"a"}
+    assert runner._rom_for("b") == "patch/gen1/build/slink_blue.gb"
+    assert runner._gen1_save_name("a") == "slink red randomized.SaveRAM"
     assert runner._admit_fingerprints == {"expected_b": "b" * 64, "reported_b": "c" * 64}
 
 
@@ -115,8 +134,8 @@ def test_missing_jar_fails_before_any_contract_is_written(runner, monkeypatch):
     assert not (Path(runner.data_dir) / "rom_contract.json").exists()
 
 
-def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
-    runner._admit_extra_saves = {"a": GENS["gen1"]["patched"]["red_rand_patched"][2]}
+def test_each_save_is_seeded_under_the_one_name_its_cartridge_boots(runner, monkeypatch):
+    runner._admit_roms = {"a": "build/e2e_admit_randomized_new/slink_red_randomized.gb"}
 
     def seed(rom, target, dest_dir):
         assert target == "town"
@@ -130,9 +149,12 @@ def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
     runner._seed_instance_save("b")
     a_dir = Path(runner._saveram_dir("a"))
     b_dir = Path(runner._saveram_dir("b"))
-    assert (a_dir / GENS["gen1"]["saveram_names"]["red"]).read_bytes() == b"red-town"
+    # A boots the staged randomized cartridge, B its companion: each fixture lands under that
+    # cartridge's name only -- no clean-named or companion-named copy is left beside A's save
+    # for an oracle to read by mistake
     assert (a_dir / "slink red randomized.SaveRAM").read_bytes() == b"red-town"
-    assert (b_dir / GENS["gen1"]["saveram_names"]["blue"]).read_bytes() == b"blue-town"
+    assert len(list(a_dir.iterdir())) == 1
+    assert (b_dir / "slink blue.SaveRAM").read_bytes() == b"blue-town"
     assert len(list(b_dir.iterdir())) == 1
 
 
@@ -528,8 +550,8 @@ def test_reconnect_kills_only_a_and_leaves_b_process_running(runner, monkeypatch
 def test_existing_red_town_is_not_a_second_ot_save():
     town = REPO / "tests/fixtures/gen1/red_town.SaveRAM"
     battle = REPO / "tests/fixtures/gen1/red_battle.SaveRAM"
-    if not town.exists() or not battle.exists() or not (REPO / "patch/build/gen1_red.gb").exists():
-        pytest.skip("Red town/battle saves or clean ROM absent")
+    if not town.exists() or not battle.exists() or not (REPO / "patch/gen1/build/slink_red.gb").exists():
+        pytest.skip("Red town/battle saves or the companion Red build absent")
     profile = json.loads((REPO / "data/games/gen1_rby/profile.json").read_text(
         encoding="utf-8"))["titles"]["red"]["ram"]
     offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
@@ -906,7 +928,7 @@ def _oracle_runner(tmp_path, scenario):
     paths = {}
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
-        path = Path(run._saveram_dir(inst)) / GENS["gen1"]["saveram_names"][title]
+        path = Path(run._saveram_dir(inst)) / run._gen1_save_name(inst)   # the companion's save, as the oracle reads it
         path.parent.mkdir(parents=True)
         paths[inst] = (path, sram, rom)
         start = codec.SRAM_LAYOUT["sPartyData"]
@@ -1532,8 +1554,9 @@ def test_explode_oracle_reads_the_markers_and_delegates_the_shared_half(tmp_path
     assert calls[0]["explode"] is True, (
         "the delegate has to be told this is Explode Mode's half, or it demands the markers "
         "the scenario asserts absent")
-    assert calls[0]["saved_state"] == run._patched_saved_state, (
-        "the shared half must read the patched saves, not the clean-title defaults")
+    # no per-scenario save resolver any more: `_saved_gen1_party`'s own default reads the
+    # companion cartridge's save (test_e2e_duo_lane_isolation pins that default)
+    assert "saved_state" not in calls[0]
 
 
 def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_delegate(
@@ -1559,7 +1582,7 @@ def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_dele
     b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
     run._link_keys = {"a": key_a, "b": key_b}
     run._boot_keys = {"a": codec.key(a_party[0]), "b": codec.key(b_party[0])}
-    run._patched_saved_state = lambda inst: (
+    run._saved_gen1_party = lambda inst: (
         bytes(a_image if inst == "a" else b_image),
         a_party if inst == "a" else b_party, [], codec)
     run._links_json = lambda: [{"area_id": "route_1", "status": "memorial", "cause": "battle",
@@ -1925,7 +1948,7 @@ def test_soft_reset_oracle_refuses_a_stat_for_a_mon_that_was_never_booted(tmp_pa
 
 def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
     """F-4 is B's CONTRACT verdict. If A's randomized hello commits the run's artifact kind
-    first, a pure clean B is refused earlier by the mixed-kinds gate (server.py
+    first, an un-randomized B is refused earlier by the mixed-kinds gate (server.py
     _mixed_games_error), which records no admission verdict, and the live wait times out
     (gen1_pure lane, 2026-09-25). B hellos alone first; A launches only after B's verdict."""
     run = duo.DuoRun.__new__(duo.DuoRun)
