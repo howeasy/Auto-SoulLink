@@ -5821,7 +5821,8 @@ def _probe_rom_and_row(slot=_PROBE_SLOT):
 def test_the_probe_flips_the_last_padding_byte_of_the_version_slot_by_a_fixed_rule():
     rom, row = _probe_rom_and_row()
     choice = duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)])
-    assert choice == {"offset": 0x100 + 0x20 + 19, "before": 0, "after": 1, "span": 0, "rule": "version-slot padding byte"}
+    assert choice == {"offset": 0x100 + 0x20 + 19, "before": 0, "after": 1, "span": 0, "rule": "version-slot padding byte",
+                      "span_offset": 0x100, "span_size": 0x100}
     assert duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)]) == choice                  # deterministic
     flipped = rom[:choice["offset"]] + bytes([choice["after"]]) + rom[choice["offset"] + 1:]
     assert [i for i in range(len(rom)) if rom[i] != flipped[i]] == [choice["offset"]]   # exactly one byte differs
@@ -5873,11 +5874,11 @@ def test_the_probe_is_opt_in_and_in_no_plan():
 
     row = duo.SCENARIOS[PROBE]
     assert row["explicit_only"] is True and row["gen3_probe_flip"] is True and row["no_save"] == ("a", "b")
-    assert set(row["games"]) == {"gen3_frlg", "gen3_emerald"}
-    for game in ("gen3_frlg", "gen3_emerald"):
+    assert set(row["games"]) == {"gen3_frlg", "gen3_lgfr", "gen3_emerald"}
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_emerald"):
         assert PROBE not in duo.scenarios_for(game) and duo.scenario_applies(PROBE, game)
-    for game in ("gen3_rr", "gen3_exp", "gen3_fr_trade"):         # (gen3_lgfr is the FR/LG family: LeafGreen as A, same probe)
-        assert not duo.scenario_applies(PROBE, game), game
+    # applicable to exactly the three per-title games and to NO other pairing row
+    assert sorted(g for g in duo.GAMES if duo.scenario_applies(PROBE, g)) == ["gen3_emerald", "gen3_frlg", "gen3_lgfr"]
     cut = "c" * 40
     os.environ.setdefault("SLINK_GEN3_RAND_ROMS", "R:/rand")
     for plan in (fc.build_plan, fc.build_plan_rr, fc.build_plan_emerald, fc.build_plan_exp, fc.build_plan_frlgc, fc.build_plan_frlgc_rand):
@@ -5888,7 +5889,8 @@ def test_the_probe_is_opt_in_and_in_no_plan():
 
 def _probe_run(receipt_b, status_b=None):
     run = object.__new__(duo.DuoRun)
-    run._probe_flip = {"title": "firered", "offset": 0xEB2E27, "before": 0, "after": 1}
+    run._probe_flip = {"title": "firered", "offset": 0xEB2E27, "before": 0, "after": 1, "span": 0, "span_offset": 0xEB2000,
+                       "span_size": 0x4000, "anchors_checked": 11}
     notes, went = [], []
     run._pydec_note = notes.append
     run._read_receipt = lambda side: receipt_b
@@ -6126,3 +6128,25 @@ def test_the_late_whiteout_retry_does_not_fire_for_other_rows(scenario):
 def test_only_the_flipped_instance_is_launched_as_a_probe():
     source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
     assert 'duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"' in source
+
+
+@pytest.mark.parametrize("game, flipped", [("gen3_frlg", "leafgreen"), ("gen3_lgfr", "firered"), ("gen3_emerald", "emerald")])
+def test_each_probe_game_flips_one_named_title_on_the_b_cart(game, flipped):
+    """gen3_frlg is FireRed(A)/LeafGreen(B), gen3_lgfr is LeafGreen(A)/FireRed(B), gen3_emerald is Emerald/Emerald: B is the flipped cart,
+    so the three games observe LeafGreen, FireRed and Emerald. Their fixtures are the ordinary party_town battery pair."""
+    sides = duo.GAMES[game]["sides"]
+    assert sides["b"][0] == flipped and duo.GAMES[game]["scenario_prefix"] == "gen3_"
+    assert duo.scenario_target(duo.SCENARIOS[PROBE], game) == "town"
+    assert duo.scenario_applies(PROBE, game)
+
+
+def test_the_observed_line_names_which_title_was_flipped_and_where():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    observed = next(n for n in notes if n.startswith("PROBE_FLIP_OBSERVED"))
+    for fact in ("flipped_title=firered", "cart=b", "offset=0xeb2e27", "inside_protected_span=0xeb2000+0x4000", "on_anchor=false",
+                 "checked 11 anchors", "client=refused_at_launch"):
+        assert fact in observed, fact
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert "flipped_title=firered" in notes[0] and "inside_protected_span=0xeb2000+0x4000" in notes[0]

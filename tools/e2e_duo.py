@@ -125,7 +125,7 @@ SCENARIOS = {
     # LIVE PROBE (not a gate, in no plan): a companion pair where B's cartridge has ONE byte flipped inside a protected span, off every
     # anchor (gen3_probe_flip_choice). It records what the client and the server actually do with it -- admitted or refused, and why --
     # and passes on any recorded observation; it fails only when the harness itself breaks. Opt-in: --scenario probe_protected_span_flip_gen3.
-    "probe_protected_span_flip_gen3": {"flags": [], "timeout": 300, "games": ("gen3_frlg", "gen3_emerald"),
+    "probe_protected_span_flip_gen3": {"flags": [], "timeout": 300, "games": ("gen3_frlg", "gen3_lgfr", "gen3_emerald"),
         "target": "town", "frames": 600000, "no_save": ("a", "b"), "gen3_probe_flip": True, "explicit_only": True,
         "scenario_module": "probe_flip", "oracle": "assert_probe_protected_span_flip_gen3_saved"},
     # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
@@ -3499,7 +3499,15 @@ def gen3_probe_flip_choice(patched, row, anchors):
         raise ValueError("probe byte is not inside a protected span")
     if any(start <= offset < start + length for start, length in anchors):
         raise ValueError(f"probe byte {offset:#x} is on an anchor")
-    return {"offset": offset, "before": patched[offset], "after": patched[offset] ^ 0x01, "span": span, "rule": rule}
+    return {"offset": offset, "before": patched[offset], "after": patched[offset] ^ 0x01, "span": span, "rule": rule,
+            "span_offset": spans[span]["offset"], "span_size": spans[span]["size"]}
+
+
+def probe_flip_facts(flip):
+    """The flipped cartridge, named: which title (B's cart: gen3_frlg flips LeafGreen, gen3_lgfr FireRed, gen3_emerald Emerald), its byte,
+    the protected span that byte is inside, and that it is off every anchor."""
+    return (f"flipped_title={flip['title']} cart=b offset={flip['offset']:#x} inside_protected_span={flip['span_offset']:#x}+{flip['span_size']:#x} "
+            f"(span {flip['span']}) on_anchor=false (checked {flip['anchors_checked']} anchors)")
 
 
 def gen3_rand_equivalent_rom(patched, protected_spans):
@@ -3956,7 +3964,8 @@ class DuoRun:
         """Patch-first preflight: a side that would boot a CLEAN companion-required cartridge as a working
         client dies at launch (Entry.admit_routed), so refuse the run up front and name why. The clean
         FR/LG/Emerald plans land here; --gen3-companion, a companion rom_kind and `expect_refused` clear it."""
-        if not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
+        if (not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade")
+                or self.cfg.get("gen3_probe_flip")):      # (the probe stages its own companion carts; --gen3-companion is optional there)
             return []
         problems = []
         for inst in ("a", "b"):
@@ -4036,7 +4045,8 @@ class DuoRun:
             return
         from tools.gen3_final_cut import rom_pins
 
-        sides = {inst: self._gen3_title(inst) for inst in ("a", "b")}
+        # the protected-span probe's B is an UNKNOWN-hash cart on purpose (one byte flipped): only A is proven by hash
+        sides = {inst: self._gen3_title(inst) for inst in (("a",) if self.cfg.get("gen3_probe_flip") else ("a", "b"))}
         problems, proofs = gen3_companion_admission_problems(results, sides, rom_pins(REPO, require_companions=True))
         if problems:
             raise RuntimeError("companion provenance: " + "; ".join(problems))
@@ -9156,13 +9166,13 @@ class DuoRun:
         stage.mkdir(parents=True, exist_ok=True)
         dest = stage / f"b_{title_b}.gba"
         dest.write_bytes(flipped)
-        self._probe_flip = {**choice, "title": title_b, "sha1": hashlib.sha1(flipped).hexdigest(),
+        self._probe_flip = {**choice, "title": title_b, "anchors_checked": len(anchors), "sha1": hashlib.sha1(flipped).hexdigest(),
                             "published_sha1": hashlib.sha1(patched).hexdigest()}
         self._rand_current = {"a": {"title": title_a, "rom": self._gen3_companion_rom(title_a)},
                               "b": {"title": title_b, "rom": dest.relative_to(REPO).as_posix()}}
         self._rand_inputs = dict(self._rand_current)
         self._pydec_note(
-            f"PROBE_FLIP_INPUT title={title_b} offset={choice['offset']:#x} before={choice['before']:#04x} after={choice['after']:#04x} "
+            f"PROBE_FLIP_INPUT {probe_flip_facts(self._probe_flip)} before={choice['before']:#04x} after={choice['after']:#04x} "
             f"span={choice['span']} rule='{choice['rule']}' sha1={self._probe_flip['sha1']} published_sha1={self._probe_flip['published_sha1']}")
 
     def orchestrate_probe_protected_span_flip_gen3(self):
@@ -9190,7 +9200,7 @@ class DuoRun:
         self._probe_observed = {**seen, **server}
         flip = self._probe_flip
         self._pydec_note(
-            f"PROBE_FLIP_OBSERVED title={flip['title']} offset={flip['offset']:#x} client={seen['client']} server={server['server']} "
+            f"PROBE_FLIP_OBSERVED {probe_flip_facts(flip)} client={seen['client']} server={server['server']} "
             f"reason='{(seen['reason'] or server['server_reason']).replace(chr(10), ' ')[:200]}'")
         self.go()
 
@@ -9207,7 +9217,8 @@ class DuoRun:
         if observed and observed["client"] == "admitted" and not hello_facts_from(results["b"]):
             problems.append("b: no hello was logged although the probe records it as admitted")
         outcome = (observed or {}).get("client", "nothing")
-        self._gen3_raise(problems, f"OBSERVED {outcome} (an observation, not a verdict): probe_protected_span_flip {observed}")
+        self._gen3_raise(problems, f"OBSERVED {outcome} (an observation, not a verdict): probe_protected_span_flip "
+                          f"{probe_flip_facts(self._probe_flip) if getattr(self, '_probe_flip', None) else 'no flip recorded'} {observed}")
 
     def _prepare_gen3_rand(self):
         problems = gen3_rand_dependencies()

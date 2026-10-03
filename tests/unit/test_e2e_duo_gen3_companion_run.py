@@ -131,3 +131,26 @@ def test_a_run_oracle_without_the_proof_fails_and_with_it_notes_the_lines(tmp_pa
     monkeypatch.setattr(clean, "_pydec_note", notes.append)
     clean._gen3_require_companion_admission({"a": "RESULT: PASS\n", "b": "RESULT: PASS\n"})   # not a companion run: no demand
     assert notes == []
+
+
+def test_the_protected_span_probe_proves_only_a_by_hash_and_needs_no_flag(tmp_path, monkeypatch):
+    """probe_protected_span_flip_gen3: B is an UNKNOWN-hash cart on purpose, so --gen3-companion demands the by-hash proof of A alone, and the\n    launch preflight does not treat the probe's staged companion carts as clean ones."""
+    run = _run(tmp_path, monkeypatch, "firered", scenario="probe_protected_span_flip_gen3")
+    sides = {"a": "firered", "b": "leafgreen"}
+    monkeypatch.setattr(run, "_gen3_title", lambda inst: sides[inst])
+    notes = []
+    monkeypatch.setattr(run, "_pydec_note", notes.append)
+    flipped_b = {"a": _texts()["a"], "b": "boot\n[SLink-gen3] refused: unknown cart\nRESULT: PASS\n"}
+    run._gen3_require_companion_admission(flipped_b)                                  # B has no by-hash line: fine for the probe
+    assert [n for n in notes if n.startswith("COMPANION_ADMISSION a:")] and not [n for n in notes if "COMPANION_ADMISSION b" in n]
+    with pytest.raises(RuntimeError, match="companion"):                              # A is still held to the proof
+        run._gen3_require_companion_admission({"a": "RESULT: PASS\n", "b": flipped_b["b"]})
+    ordinary = _run(tmp_path, monkeypatch, "firered")                                  # negative control: any other row still needs both
+    monkeypatch.setattr(ordinary, "_gen3_title", lambda inst: sides[inst])
+    with pytest.raises(RuntimeError, match="companion"):
+        ordinary._gen3_require_companion_admission(flipped_b)
+    for companion in (False, True):
+        run.gen3_companion = companion
+        assert run._gen3_launch_refusal_problems() == [], companion
+    ordinary.gen3_companion = False
+    assert ordinary._gen3_launch_refusal_problems()                                   # a clean plan row is still refused up front
