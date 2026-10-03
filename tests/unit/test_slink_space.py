@@ -613,6 +613,32 @@ def test_deleters_refuse_when_link_detection_is_unavailable(W, monkeypatch):
 
 # ---------------------------------------------------------------- move-to-work-root
 
+def test_c_drive_content_is_moved_not_deleted(W, monkeypatch):
+    monkeypatch.setattr(ss, "_on_c", lambda p: ss._norm(p).startswith(ss._norm(W.c)))
+    lane = W.c / "slink" / "old-state"
+    lane.mkdir()
+    (lane / "s").write_text("s")
+    _age(lane)
+    wt = add_wt(W, "c-done", commits=1, merge=True)
+    pyt = W.c / "temp" / "pytest-of-me" / "pytest-3"
+    pyt.mkdir(parents=True)
+    t = time.time() - 30 * 3600
+    os.utime(pyt, (t, t))
+    gone = add_wt(W, "c-gone")
+    ss._rmtree(gone)  # orphan admin dir: pure junk, still pruned
+    pr = plan(W)
+    pruned = {ss._norm(a["path"]) for a in pr["actions"]}
+    assert ss._norm(lane) not in pruned and ss._norm(wt) not in pruned
+    assert ss._norm(pyt) in pruned
+    assert any(a["op"] == "prune-admin" for a in pr["actions"])
+    mv = plan(W, "move")
+    dst = {ss._norm(a["src"]): a["dst"] for a in mv["actions"]}
+    assert dst[ss._norm(lane)] == (W.root / "evidence" / "slink" / "old-state").as_posix()
+    assert ss._norm(wt) in dst and ss._norm(pyt) not in dst
+    apply(W, pr)
+    assert (lane / "s").exists() and wt.exists() and not pyt.exists()
+
+
 def test_move_refuses_live_lock_and_in_use(W, real_processes):
     locked = add_wt(W, "locked", commits=1)
     _git(W.repo, "worktree", "lock", "--reason", f"agent (pid {os.getpid()})", str(locked))

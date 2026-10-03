@@ -632,10 +632,17 @@ def build_plan(kind: str, repo=None, root=None, locations=None, lane_age=DEFAULT
     return plan
 
 
+def _prefer_move(it) -> bool:
+    """C: content is moved to the work root, never deleted; only temps and pure junk
+    (admin dirs, Drive copies) are deleted there."""
+    return (bool(it.get("movable")) and _on_c(it["path"]) and it.get("rule") != "tmp"
+            and it["kind"] not in ("admin", "drive-copy", "link"))
+
+
 def _prune_actions(repo, items) -> list[dict]:
     actions = []
     for it in items:
-        if it["status"] != "stale":
+        if it["status"] != "stale" or _prefer_move(it):
             continue
         a = {"path": it["path"], "size": it["size"], "fp": it.get("fp"), "reason": it["reason"]}
         if it["kind"] == "worktree":
@@ -669,8 +676,8 @@ def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
         if it["kind"] == "link":
             refuse(f"already a link ({it['reason']})")
             continue
-        if it["status"] == "stale":
-            refuse("stale: prune removes it instead")
+        if it["status"] == "stale" and not _prefer_move(it):
+            refuse("stale temp: prune removes it instead")
             continue
         if it.get("lock") and not (it.get("lock_pid") and not it.get("lock_alive")):
             refuse(f"locked ({it['lock']})")
@@ -682,7 +689,7 @@ def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
         name = os.path.basename(it["path"])
         if it["kind"] in ("worktree", "checkout"):
             dst = root / "wt" / name
-        elif it["kind"] == "file":
+        elif it["kind"] == "file" or it["status"] == "stale":  # old C: lanes: kept as evidence
             dst = root / "evidence" / it["label"] / name
         else:
             dst = root / _MOVE_DEST[it["rule"]] / name
@@ -942,13 +949,16 @@ def _on_c(p) -> bool:
 
 
 def _summary(items) -> list[str]:
-    stale = [i for i in items if i["status"] == "stale"]
+    stale = [i for i in items if i["status"] == "stale" and not _prefer_move(i)]
     refused = [i for i in items if i["status"] == "refuse"]
     tot = sum(i["size"] for i in stale)
     c = sum(i["size"] for i in stale if _on_c(i["path"]))
     c_all = sum(i["size"] for i in items if _on_c(i["path"]) and i["kind"] != "admin")
-    return [f"reclaimable: {_hsize(tot)} in {len(stale)} items (on C: {_hsize(c)}); "
-            f"refused: {len(refused)}; SLink content still on C: {_hsize(c_all)}"]
+    to_move = [i for i in items if i["status"] == "stale" and _prefer_move(i)]
+    return [f"prune deletes: {_hsize(tot)} in {len(stale)} items (on C: {_hsize(c)}); "
+            f"stale on C: (moved, not deleted): {_hsize(sum(i['size'] for i in to_move))} in "
+            f"{len(to_move)} items; refused: {len(refused)}; "
+            f"SLink content still on C: {_hsize(c_all)}"]
 
 
 def render_report(items, root) -> str:
