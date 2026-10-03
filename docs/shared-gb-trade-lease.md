@@ -61,9 +61,12 @@ with the existing
 new-key claim while awaiting native completion. After
 `TRADE_HOLD_TERMINAL_FRAMES` (1800) held frames with missing
 consumption evidence, APPLY declares uncertainty exactly once and schedules
-`pending_change={kind="rescan"}` so the next normal settlement publishes the readback.
-PROMPT instead owes one `menu_result{choice=0}`: the server sees a decline and
-ends the confirming offer. Neither outcome writes the union. Both keep their
+`pending_change={kind="rescan"}`. Settlement re-reads boxes and refreshes
+known_keys; it sends nothing. The readback reaches the server on the next regular tick.
+PROMPT instead owes one `menu_result{choice=0,uncertain=true}` and shows the same
+check-party HUD notice. The server ends the confirming offer with "Trade canceled -
+no response." for both players and records an uncertain trade_last/journal outcome.
+A plain choice=0 remains a player decline. Neither outcome writes the union. Both keep their
 terminal local trade state until reset; clearing it would reopen re-staging over
 a native-owned request. A late PROMPT completion cannot reverse the decline.
 Late withdrawal and terminal uncertainty show the

@@ -123,7 +123,7 @@ def test_request_slot_store_is_pinned_exactly(monkeypatch, title, byte):
 
 
 @pytest.mark.parametrize("title", ["red", "purered"])
-def test_prompt_hold_declines_once_without_writes(monkeypatch, title):
+def test_prompt_terminal_shows_the_uncertainty_notice(monkeypatch, title):
     world, _ = _world(monkeypatch, title)
     _applying_state(world)
     base, _, _, preimage = _armed(world)
@@ -139,6 +139,8 @@ def test_prompt_hold_declines_once_without_writes(monkeypatch, title):
     owed = list(world.client.trade_owed.values())
     assert len(owed) == 1 and owed[0].event == "menu_result"
     assert owed[0].fields.token == "late" and owed[0].fields.choice == 0
+    assert owed[0].fields.uncertain is True
+    assert len([h for h in world.hud if h[1] == "TRADE UNCERTAIN - CHECK PARTY"]) == 1
     assert world.writes == [] and bytes(world.bus[base:base+16]) == preimage
     assert world.client.trade_state.pickup_terminal is True
     world.client.trade_forget(world.client, "reset after terminal")

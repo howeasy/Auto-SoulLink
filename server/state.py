@@ -1154,10 +1154,17 @@ class SoulLinkState:
                     self._execute_trade(pt)
             else:
                 self.pending_trade = None
-                self.queued_commands[pt["initiator"]].append({
-                    "cmd": "msgbox", "text": "Your partner declined the trade.", "fb": "prompt"})
-                self.queued_commands[player_id].append({
-                    "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
+                if msg.get("uncertain") is True:
+                    pt["problem"] = "Trade canceled - no response."
+                    self._record_trade(pt, "uncertain")
+                    for pid in ("a", "b"):
+                        self.queued_commands[pid].append({
+                            "cmd": "msgbox", "text": "Trade canceled - no response.", "fb": "prompt"})
+                else:
+                    self.queued_commands[pt["initiator"]].append({
+                        "cmd": "msgbox", "text": "Your partner declined the trade.", "fb": "prompt"})
+                    self.queued_commands[player_id].append({
+                        "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
 
     def _cancel_trade(self, text: str):
         """Clear a trade nothing was applied for, telling both players."""

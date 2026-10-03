@@ -5757,6 +5757,7 @@ def test_same_area_no_catch_without_area_enter_still_suppresses_retry():
 def test_state_save_uses_shared_atomic_helper_and_survives_drive_lock(tmp_path, monkeypatch):
     import json
     import time
+
     from server import json_files
     state = SoulLinkState(data_dir=str(tmp_path))
     helper, replace = json_files.atomic_write_json, json_files.os.replace
@@ -5801,6 +5802,7 @@ def test_load_distinguishes_unreadable_json_from_decode_errors(tmp_path, content
 
 def test_open_error_remains_tolerant_but_unsafe_migration_raises(tmp_path, monkeypatch):
     import builtins
+
     from server.state import UnsafeGameMigration
     path = tmp_path / "links.json"
     path.write_text('{}')
@@ -5817,3 +5819,31 @@ def test_open_error_remains_tolerant_but_unsafe_migration_raises(tmp_path, monke
     monkeypatch.setattr(SoulLinkState, "_load_mon_stats", unsafe)
     with pytest.raises(UnsafeGameMigration, match="migration refused"):
         SoulLinkState.load(data_dir=str(tmp_path))
+
+
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_prompt_terminal_records_uncertainty_without_claiming_a_decline(tmp_path, uncertain):
+    import json
+    from pathlib import Path
+
+    from server.server import SLinkServer
+    server = SLinkServer(data_dir=str(tmp_path / "server"))
+    state = _with_trade_blobs(make_state_with_link())
+    server.state, server.adapter = state, state.adapter
+    state.on_trade_outcome = server._journal_trade
+    token = _offer_and_pick(state)
+    state.queued_commands = {"a": [], "b": []}
+    b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 0, "uncertain": uncertain})
+    a = state.handle_event("a", {"event": "tick"})
+    assert state.pending_trade is None and state.links[0].status == LinkStatus.ALIVE
+    if uncertain:
+        assert [c["text"] for c in a if c["cmd"] == "msgbox"] == ["Trade canceled - no response."]
+        assert [c["text"] for c in b if c["cmd"] == "msgbox"] == ["Trade canceled - no response."]
+        assert state.trade_last["outcome"] == "uncertain" and state.trade_last["token"] == token
+        assert server._build_status_dict()["trade_last"] == state.trade_last
+        rows = json.loads(Path(server._events_path).read_text())
+        assert len([r for r in rows if r["type"] == "trade_uncertain" and r["key"] == token]) == 1
+    else:
+        assert any(c.get("text") == "Your partner declined the trade." for c in a)
+        assert any(c.get("text") == "Trade declined." for c in b)
+        assert state.trade_last is None
