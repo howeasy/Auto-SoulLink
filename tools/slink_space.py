@@ -467,6 +467,9 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
         item["rule"] = rule
     if rule in ("cache", "evidence"):
         return {**item, "status": "keep", "reason": rule}
+    if is_dir and os.path.lexists(os.path.join(p, ".git")):
+        return {**item, "kind": "checkout", "status": "refuse",
+                "reason": "holds a .git entry (a checkout, not a lane); inspect by hand"}
     pids = users_of(p)
     if pids:
         return {**item, "status": "refuse", "reason": f"in use by pid {pids[:5]}"}

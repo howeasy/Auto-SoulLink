@@ -419,6 +419,18 @@ def test_users_of_matches_whole_path_components(W, monkeypatch):
     assert ss.users_of(f"{base}/slin") == []
 
 
+def test_lane_holding_a_git_entry_refused(W):
+    lane = W.c / "slink" / "looks-like-a-lane"
+    lane.mkdir()
+    (lane / ".git").write_text("gitdir: /somewhere\n")
+    (lane / "work.c").write_text("w")
+    _age(lane)
+    p = plan(W)
+    assert item(p, lane)["status"] == "refuse"
+    apply(W, p)
+    assert (lane / "work.c").exists()
+
+
 def test_evidence_and_unregistered_checkouts_kept(W):
     ev = W.c / "slink-wt" / "rr-final-evidence"
     ev.mkdir()
