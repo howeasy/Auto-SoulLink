@@ -198,10 +198,11 @@ def _shrunk(drop_site=False, drop_anchor=False):
     return doc
 
 
-def test_floor_on_the_real_pack_is_exactly_what_it_ships(env):
+@pytest.mark.parametrize("title", [HG, SS], ids=["HG", "SS"])
+def test_floor_on_the_real_pack_is_exactly_what_it_ships(env, title):
     """F11 sanity: the floors equal today's counts, so the real pack passes (see test_hg_admitted_*) and any loss refuses."""
-    n = sum(1 for s in HG["sites"].values() if s["image"] == "arm9" and s.get("register_hex"))
-    assert (n, len(HG["admission_anchors"])) == (env.entry.MIN_SITE_ANCHORS, env.entry.MIN_ADMISSION_ANCHORS)
+    n = sum(1 for s in title["sites"].values() if s["image"] == "arm9" and s.get("register_hex"))
+    assert (n, len(title["admission_anchors"])) == (env.entry.MIN_SITE_ANCHORS, env.entry.MIN_ADMISSION_ANCHORS)
 
 
 @pytest.mark.parametrize("kw", [{"drop_site": True}, {"drop_anchor": True}, {"drop_site": True, "drop_anchor": True}])

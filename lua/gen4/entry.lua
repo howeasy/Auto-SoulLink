@@ -47,10 +47,10 @@ local function sorted_keys(t)
     return keys
 end
 
--- FLOORS (F11): a vanilla admission with fewer anchors than this is refused, so a pack edit that
--- drops anchors cannot quietly weaken the hge-vs-vanilla discrimination. Today's HG/SS packs carry
--- 20 arm9 site anchors (including the Battle_Exit closing-frame probe) + 3 admission_anchors (0x02000CD0 hook site and two more); raising the numbers
--- is a conscious edit here, lowering them is a security decision.
+-- FLOORS (F11), HG/SS vanilla admission ONLY: losing an anchor must refuse admission.
+-- HG/SS ship 20 ARM9 site anchors (including Battle_Exit) + 3 admission_anchors.
+-- hge is hash-only; its ARM9 PC trampoline is a probe/phase site, NOT an admission anchor.
+-- Raising these floors is conscious; lowering them is a security decision.
 Entry.MIN_SITE_ANCHORS, Entry.MIN_ADMISSION_ANCHORS = 20, 3
 
 -- Pinned byte runs a vanilla ROM must show in ARM9 RAM: {name, address, hex}, in a fixed order.

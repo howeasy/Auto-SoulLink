@@ -1351,7 +1351,7 @@ def validate_phase_cases(title: dict) -> list[str]:
         if case.get("producer_site") not in ids:
             errs.append(f"{where}: producer_site {case.get('producer_site')!r} must be one of sites "
                         "(the probe compares the always-on observer with the registry events of that site)")
-        if case.get("name") == "pc":
+        if case.get("phase") == "pc" and case.get("status") != "BLOCKED_NO_FIXTURE":
             producer = title["sites"].get(case.get("producer_site"), {})
             if producer.get("image") != "arm9" or producer.get("overlay_id") is not None:
                 errs.append(f"{where}: static_pc producer must be an ARM9 site, never an overlay label")

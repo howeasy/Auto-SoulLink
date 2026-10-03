@@ -116,3 +116,9 @@ row o remains OPEN. hge/SS have no title-specific measured phase settle policy;
 retain the measured verdicts/reasons rather than inheriting HG's allowance.
 Read back every combined receipt before reporting. Preserve failed lanes and
 all historical cuts. Audit owned PID exit and original hashes before release.
+
+Boundary frame parity is OPEN until the first PHYSICAL diagnostic compares the
+callback timestamp with post-advance predicate-fall and close timestamps. The
+probe binds event and predicate fall to the same explicit advance token, accepts
+pre_close or finish only with a false predicate and pending event, and checks
+delivery exactly once. It does not assume equal callback/post-advance counters.

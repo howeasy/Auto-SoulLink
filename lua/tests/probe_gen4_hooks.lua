@@ -407,31 +407,42 @@ end
 -- Probe driver for the shared composition; one implementation for native collection and MODEL boundary replays.
 function M.phase_monitor(composite,phase,sites,producer_id,active,ready,frame)
     local armed=false
-    local state={pending_at_close=0,second_drain=0,seen={},close_boundaries={}}
+    local state={pending_at_close=0,second_drain=0,seen={},seen_steps={},close_boundaries={},step_id=0}
     local function drain()
         for _,e in ipairs(composite:drain()) do
-            if e.id==producer_id then state.seen[#state.seen+1]=e.frame end
+            if e.id==producer_id then
+                state.seen[#state.seen+1]=e.frame; state.seen_steps[#state.seen_steps+1]=e.step_id
+            end
         end
     end
     local function record_close(reg,seam)
         local queued=reg:peek()
-        local frames={}
-        for _,e in ipairs(queued) do if e.id==producer_id then frames[#frames+1]=e.frame end end
+        local frames,steps={},{}
+        for _,e in ipairs(queued) do if e.id==producer_id then
+            frames[#frames+1]=e.frame; steps[#steps+1]=e.step_id
+        end end
         local pending=reg:status().pending
         state.pending_at_close=state.pending_at_close+pending
         state.close_boundaries[#state.close_boundaries+1]={frame=frame(),pending=pending,
-            predicate_after=active(),producer_frames=frames,seam=seam}
+            predicate_before=state.fall and state.fall.predicate_before or false,
+            predicate_after=active(),producer_frames=frames,producer_steps=steps,seam=seam,
+            fall_frame=state.fall and state.fall.frame,fall_step_id=state.fall and state.fall.step_id}
     end
     local monitor={before=function()
         local wanted=active(); local enabled=ready(wanted) and wanted
         if enabled and not armed then
-            check(composite:enter(phase,sites),"phase construction failed"); armed=true
+            check(composite:enter(phase,sites),"phase construction failed"); armed=true; state.fall=nil
         elseif not enabled and armed then
             record_close(composite.phases[phase],"pre_close"); composite:leave(phase); armed=false
         end
+        state.step_id=state.step_id+1; state.predicate_before=wanted
     end,after=function()
         -- A closing-frame event stays queued for the next pre-close drain.
-        if active() or not armed then drain() end
+        local wanted=active()
+        if armed and state.predicate_before and not wanted then
+            state.fall={frame=frame(),step_id=state.step_id,predicate_before=true}
+        end
+        if wanted or not armed then drain() end
         check(not composite.failure,"phase composite fault: "..tostring(composite.failure))
         check(composite:live_handles()+1<=4,"physical observer + phase budget")
     end,finish=function()
@@ -442,7 +453,7 @@ function M.phase_monitor(composite,phase,sites,producer_id,active,ready,frame)
     return monitor,state
 end
 function M.static_pc(case,producer)
-    return case.name=="pc" and producer.image=="arm9" and producer.overlay_id==nil
+    return case.phase=="pc" and case.fixture_role=="pc_case" and producer.image=="arm9" and producer.overlay_id==nil
 end
 
 function M.phase_controls(Registry)
@@ -639,6 +650,43 @@ validators.m=function(x)
     check(need(x.halt,"m:OS_Halt symbol")>0 and x.idle_hits>0,"idle-thread PC not observed")
     check(x.save_same_as_idle==false,"save/script PC distribution matches idle")
 end
+local function validate_n_case(case)
+    check(case.first_expected>0 and case.first_seen==case.first_expected and case.last_expected>0
+        and case.last_seen==case.last_expected,"first/last producer lost in phase case: "..tostring(case.phase))
+    check(case.peak<=4 and case.live_after_close==0 and case.second_drain==0,"phase case handle/cleanup invariant")
+    check(case.max_cost<1/60 and case.restored_fps>=case.baseline_fps*0.9,"phase case timing/cleanup performance")
+        if case.close_boundary_required then
+            check(#case.oracle_steps==#case.oracle_frames and #case.seen_steps==#case.seen_frames,
+                "closing-frame event/advance lengths differ")
+            local boundaries=need(case.close_boundaries,"n:closing-frame boundary oracle")
+            local witnessed=0
+            for _,b in ipairs(boundaries) do
+                for i,f in ipairs(b.producer_frames) do
+                    check((b.seam=="pre_close" or b.seam=="finish") and b.predicate_before==true
+                        and b.predicate_after==false and b.pending>=1 and b.producer_steps[i]==b.fall_step_id,
+                        "closing-frame predicate/queue mismatch")
+                    local oracle_count,seen_count=0,0
+                    for k,o in ipairs(case.oracle_frames) do if o==f then
+                        check(case.oracle_steps[k]==b.fall_step_id,"closing-frame oracle advance mismatch")
+                        oracle_count=oracle_count+1
+                    end end
+                    for k,o in ipairs(case.seen_frames) do if o==f then
+                        check(case.seen_steps[k]==b.fall_step_id,"closing-frame delivery advance mismatch")
+                        seen_count=seen_count+1
+                    end end
+                    check(oracle_count==1 and seen_count==1,"closing-frame event not delivered exactly once")
+                    witnessed=witnessed+1
+                end
+            end
+            check(witnessed>0,"closing-frame event absent at close")
+        end
+end
+function M.evaluate_n_case(physical)
+    local ok,why=pcall(function() validate_n_case(need(physical,"n:physical phase case")) end)
+    if ok then return "PASS" end
+    if type(why)=="table" and why.open then return "OPEN",why.open end
+    return "FAIL",tostring(why)
+end
 validators.n=function(x)
     local m=need(x.model,"n:real registry controls")
     check(m.last_event==1 and m.second_drain==0 and m.after_close==0 and m.reset_event==1,"last-event/reset drain")
@@ -649,29 +697,9 @@ validators.n=function(x)
     local p=need(x.physical,"n:pack phase predicates + earliest/last producer oracle")
     local cases=need(p.cases,"n:per-phase case measurements")
     check(#cases>0,"no measured phase cases")
-    for _,case in ipairs(cases) do
-        check(case.first_expected>0 and case.first_seen==case.first_expected and case.last_expected>0
-            and case.last_seen==case.last_expected,"first/last producer lost in phase case: "..tostring(case.phase))
-    end
+    for _,case in ipairs(cases) do validate_n_case(case) end
     check(p.first_expected>0 and p.first_seen==p.first_expected and p.last_seen==p.last_expected and p.last_expected>0,
         "first/last producer lost")
-    for _,case in ipairs(cases) do
-        if case.close_boundary_required then
-            local boundaries=need(case.close_boundaries,"n:closing-frame boundary oracle")
-            local witnessed=0
-            for _,b in ipairs(boundaries) do
-                for _,f in ipairs(b.producer_frames) do
-                    check(b.seam=="pre_close" and b.predicate_after==false and b.pending>=1 and f==b.frame,"closing-frame predicate/queue mismatch")
-                    local oracle_count,seen_count=0,0
-                    for _,o in ipairs(case.oracle_frames) do if o==f then oracle_count=oracle_count+1 end end
-                    for _,o in ipairs(case.seen_frames) do if o==f then seen_count=seen_count+1 end end
-                    check(oracle_count==1 and seen_count==1,"closing-frame event not delivered exactly once")
-                    witnessed=witnessed+1
-                end
-            end
-            check(witnessed>0,"closing-frame event absent at close")
-        end
-    end
     check(p.static_pc and p.reset and p.peak<=4 and p.live_after_close==0,"phase coverage/accounting")
     check(need(p.pending_at_close,"n:physical queued-last-event close")>0 and p.second_drain==0,"physical last-event close not exercised")
     check(p.max_cost<1/60 and p.restored_fps>=p.baseline_fps*0.9,"phase timing/cleanup performance")
@@ -1180,7 +1208,8 @@ local function run()
             local sites={}; for _,id in ipairs(case.sites) do local s=clone(need(title.sites[id],"n:phase site:"..id)); s.id=id; sites[#sites+1]=s end
             check(#sites>0 and #sites+1<=4,"producer observer + phase handle budget")
             local baseline_start=os.clock(); idle(cfg.sample_frames,true); local baseline=cfg.sample_frames/(os.clock()-baseline_start)
-            local oracle={}
+            local oracle,oracle_steps={},{}
+            local phase_state
             local active
             local h=register(producer,function(a,v,flags)
                 -- The oracle does not reuse the composition's residency gate. It
@@ -1190,7 +1219,7 @@ local function run()
                 if active() and bytes(producer.address,producer.extent)==producer.register_hex then
                     check(u32(a)==producer.address and u32(v)==word(producer.fire_hex),"independent producer address/word")
                     check(u32(emu.getregister("ARM9 r15"))==producer.address+(producer.mode=="thumb" and 4 or 8),"independent producer PC")
-                    oracle[#oracle+1]=emu.framecount()
+                    oracle[#oracle+1]=emu.framecount(); oracle_steps[#oracle_steps+1]=phase_state.step_id
                 end
             end,"g4n.oracle")
             local binding={validate=function(s) return M.validate_site(title,s,bytes,resident) end,
@@ -1198,14 +1227,16 @@ local function run()
                 unregister=function(handle) remove(handle); return true end,
                 capture=function(s,a,v,flags)
                     local e=M.capture(s,a,v,flags,emu.getregister("ARM9 r15"),resident)
-                    if e then M.validate_site(title,s,bytes,resident); e.frame=emu.framecount() end; return e
+                    if e then M.validate_site(title,s,bytes,resident); e.frame=emu.framecount(); e.step_id=phase_state.step_id end; return e
                 end}
             local composite=M.composite(dofile(root.."/lua/hook_registry.lua"),binding)
             active=function() return M.predicate(title,read,predicate) end
-            local monitor,state=M.phase_monitor(composite,case.name,sites,case.producer_site,active,
+            local monitor
+            monitor,phase_state=M.phase_monitor(composite,case.name,sites,case.producer_site,active,
                 function(wanted)
                     return M.phase_sites_ready(sites,bytes,resident,emu.framecount(),settle,settle_policy,image_pins,wanted)
                 end,emu.framecount)
+            local state=phase_state
             phase_monitor={before=monitor.before,after=monitor.after,finish=function()
                 monitor.finish()
                 local seen=state.seen
@@ -1220,7 +1251,8 @@ local function run()
                     pending_at_close=state.pending_at_close,second_drain=state.second_drain,
                     close_boundaries=state.close_boundaries,close_boundary_required=case.close_boundary==true,
                     fixture_role=cfg.scenario_role or "baseline",setup=cfg.setup or "NATIVE",sidecar_sha256=cfg.sidecar_sha256,
-                    oracle_frames=oracle,seen_frames=seen,phase=case.name,predicate_source=case.source}
+                    oracle_frames=oracle,seen_frames=seen,oracle_steps=oracle_steps,seen_steps=state.seen_steps,
+                    frame_parity={status="OPEN",note="callback/fall/close framecount mapping requires first PHYSICAL boundary diagnostic"},phase=case.name,predicate_source=case.source}
                 result.physical.cases={clone(result.physical)}
                 result.physical.bridge_gaps=clone(bridge_gaps)
                 result.physical.settle={policy=clone(settle_policy),samples=clone(settle.samples)}
@@ -1255,7 +1287,10 @@ local function run()
     for h in pairs(owned) do local good,why=pcall(remove,h); if not good then cleanup_error=tostring(why) end end
     local lines,overall={},"PASS"
     for row in ROWS:gmatch(".") do
-        local status,why=M.evaluate(row,observations[row])
+        local status,why
+        if row=="n" and cfg.phase_case and observations.n and observations.n.physical then
+            status,why=M.evaluate_n_case(observations.n.physical)
+        else status,why=M.evaluate(row,observations[row]) end
         if errors[row] then
             status=type(errors[row])=="table" and errors[row].open and "OPEN" or "FAIL"
             why=type(errors[row])=="table" and errors[row].open or tostring(errors[row])
@@ -1266,6 +1301,7 @@ local function run()
         local payload={schema="gen4-probe-row-v1",run_id=cfg.run_id,title=cfg.title,rom_sha1=cfg.rom_sha1,
             level="PHYSICAL",mode=cfg.mode,reason=why,observation=observations[row],requested_rate=cfg.requested_rate,
             source_head=cfg.source_head,script_sha256=cfg.code_sha256,profile_sha256=cfg.profile_sha256,callback_errors=callback_errors}
+        if row=="n" then payload.validation_scope=cfg.phase_case and "case" or "aggregate" end
         payload.module_sha256=cfg.module_sha256; payload.surface_sha256=cfg.surface_sha256; payload.receipt_kind=cfg.receipt_kind
         payload.scenario_path=cfg.scenario_path; payload.scenario_sha256=cfg.scenario_sha256
         payload.row_i_scenario_path=cfg.row_i_scenario_path; payload.row_i_scenario_sha256=cfg.row_i_scenario_sha256

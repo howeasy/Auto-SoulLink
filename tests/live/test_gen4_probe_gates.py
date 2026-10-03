@@ -256,7 +256,9 @@ def examples():
               "physical": {"first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
                            "static_pc": True, "reset": True, "peak": 3, "live_after_close": 0,
                            "pending_at_close": 1, "second_drain": 0,
-                           "cases": [{"phase": name, "first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1}
+                           "cases": [{"phase": name, "first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
+                                      "peak": 3, "live_after_close": 0, "second_drain": 0,
+                                      "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}
                                      for name in ("battle", "pc", "reset")],
                            "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}},
     }
@@ -1768,7 +1770,7 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
             "oracle": "save-driver active-to-idle state reads + server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
 def phase_case_input(case, cfg, baseline, codec, profile):
     """A PC deposit never inherits the native one-mon baseline or row-i boxed descendant."""
-    if case.get("name") == "pc" and case.get("fixture_role") != "pc_case":
+    if case.get("phase") == "pc" and case.get("fixture_role") != "pc_case":
         return None, None, "pc: dedicated pc_case fixture_role absent"
     if case.get("fixture_role") != "pc_case":
         return baseline, cfg, None
@@ -1783,6 +1785,68 @@ def phase_case_input(case, cfg, baseline, codec, profile):
     assert synth_identity_present(decoded, setup["new_pid"]), "pc_case SYNTH identity absent"
     return save, {**cfg, **setup, "scenario_role": "pc_case", "save_witness": source_witness(codec, decoded)}, None
 
+
+def finish_phase_n(observations, errors, collected, reasons, model, *, api):
+    """Grade phase evidence independently of the baseline's unarmed n row."""
+    measured, failures, opens = [], [], list(reasons)
+    prior = errors.get("n")
+    if prior and prior[0] == "FAIL":
+        failures.append("baseline n: " + str(prior[1].get("reason")))
+    for name, rows in sorted(collected.items()):
+        if not name.startswith("phase-"):
+            continue
+        status, payload = rows["n"]
+        physical = (payload.get("observation") or {}).get("physical")
+        if status == "FAIL":
+            failures.append(f"{name}: {payload.get('reason') or 'phase n FAIL'}")
+        elif status == "OPEN":
+            opens.append(f"{name}: {payload.get('reason') or 'phase n OPEN'}")
+        if physical is None:
+            if status == "PASS":
+                failures.append(f"{name}: PASS lacks physical phase measurement")
+            continue
+        outcome = api.evaluate_n_case(to_lua(api._runtime, physical))
+        case_status, why = outcome if isinstance(outcome, tuple) else (outcome, None)
+        if case_status == "FAIL":
+            failures.append(f"{name}: {why}")
+        elif case_status == "OPEN":
+            opens.append(f"{name}: {why}")
+        measured.append(physical)
+        opens.extend(physical.get("bridge_gaps", []))
+    observation = {"model": copy.deepcopy(model)}
+    if measured:
+        observation["physical"] = {
+            "first_expected": sum(p["first_expected"] for p in measured),
+            "first_seen": sum(p["first_seen"] for p in measured),
+            "last_expected": sum(p["last_expected"] for p in measured),
+            "last_seen": sum(p["last_seen"] for p in measured),
+            "static_pc": any(p["static_pc"] for p in measured),
+            "reset": any(p["reset"] for p in measured),
+            "peak": max(p["peak"] for p in measured),
+            "live_after_close": sum(p["live_after_close"] for p in measured),
+            "max_cost": max(p["max_cost"] for p in measured),
+            "pending_at_close": sum(p["pending_at_close"] for p in measured),
+            "second_drain": sum(p["second_drain"] for p in measured),
+            "baseline_fps": 1,
+            "restored_fps": min(p["restored_fps"] / p["baseline_fps"] for p in measured),
+            "cases": measured,
+        }
+    else:
+        opens.append("n: no physical phase measurements collected")
+    observations["n"] = observation
+    if failures:
+        errors["n"] = (
+            "FAIL",
+            {
+                "reason": "n: " + "; ".join(failures),
+                "open_reasons": opens,
+                "observation": observation,
+            },
+        )
+    elif opens:
+        errors["n"] = ("OPEN", {"reason": "n: " + "; ".join(opens), "observation": observation})
+    else:
+        errors.pop("n", None)
 
 # MODEL replays may replace collaborators; production launch may not.
 def assert_harness_functions():
@@ -1913,41 +1977,24 @@ def test_gen4_hook_probe(api, title):
         if cfg.get("phase_cases") or cfg.get("phase_cases_blocked"):
             stage, failure_row = "phase plan", "n"
             runnable, reasons = phase_case_plan(cfg.get("phase_cases", []), cfg["phase_cases_blocked"], recipes)
-            measured = []
-            if reasons:
-                errors["n"] = ("OPEN", {"reason": "n: " + "; ".join(reasons),
-                                        "phase_cases": [case["name"] for case in cfg.get("phase_cases", [])],
-                                        "phase_cases_blocked": cfg["phase_cases_blocked"]})
             for index, case in enumerate(runnable):
                 stage = f"phase-{index} ({case['name']})"
+                if cfg.get("phase_settle") is None:
+                    collected[f"phase-{index}"] = {"n": ("OPEN", {
+                        "reason": f"no measured overlay settle policy for {title}"})}
+                    continue
                 case_save, case_cfg, missing = phase_case_input(case, cfg, save, codec, decoded.profile)
                 if missing:
-                    errors["n"] = ("OPEN", {"reason": missing})
-                    reasons.append(missing)
+                    collected[f"phase-{index}"] = {"n": ("OPEN", {"reason": missing})}
                     continue
                 rows, _ = launch_probe(module, title, source, case_save, profile, base, f"phase-{index}", batch / f"phase-{index}",
                                        {**case_cfg, "phase_case": case, "route": case["route"]})
                 collected[f"phase-{index}"] = rows
-                p = rows["n"][1].get("observation", {}).get("physical")
-                assert p is not None, f"phase case lacks physical measurement: {case['name']}"
-                measured.append(p)
-            if "n" in observations and measured:
-                observations["n"]["physical"] = {
-                    "first_expected": sum(p["first_expected"] for p in measured), "first_seen": sum(p["first_seen"] for p in measured),
-                    "last_expected": sum(p["last_expected"] for p in measured), "last_seen": sum(p["last_seen"] for p in measured),
-                    "static_pc": any(p["static_pc"] for p in measured), "reset": any(p["reset"] for p in measured),
-                    "peak": max(p["peak"] for p in measured), "live_after_close": sum(p["live_after_close"] for p in measured),
-                    "max_cost": max(p["max_cost"] for p in measured),
-                    "pending_at_close": sum(p["pending_at_close"] for p in measured),
-                    "second_drain": sum(p["second_drain"] for p in measured),
-                    "baseline_fps": 1, "restored_fps": min(p["restored_fps"] / p["baseline_fps"] for p in measured),
-                    "cases": measured,
-                }
-                gaps = [gap for p in measured for gap in p.get("bridge_gaps", [])]
-                if gaps:
-                    errors["n"] = ("OPEN", {"reason": "n: " + "; ".join(gaps)})
-                elif not reasons:
-                    errors.pop("n", None)
+            baseline_model = (observations.get("n") or {}).get("model")
+            if baseline_model is None:
+                registry = api._runtime.execute((REPO / "lua/hook_registry.lua").read_text(encoding="utf-8"))
+                baseline_model = from_lua(api.phase_controls(registry))
+            finish_phase_n(observations, errors, collected, reasons, baseline_model, api=api)
         performance = os.environ.get("SLINK_GEN4_PERF_RECEIPT")
         if performance:
             stage, failure_row = "PERF consumer", "f"
@@ -1998,13 +2045,16 @@ def test_gen4_hook_probe(api, title):
                                     attempt_metadata, stage, failure_row, failure)
         assert unchanged, "original save was modified"
 
-@pytest.mark.parametrize("failure", ("baseline", "persistence", "phase-launch", "phase-observation", "row-o", "surface", "original-save", "row-i-original-save"))
+@pytest.mark.parametrize("failure", ("baseline", "persistence", "phase-launch", "phase-observation", "row-o", "surface", "original-save", "row-i-original-save", "graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"))
 @pytest.mark.parametrize("title", TITLE_PACK)
 def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path, failure, title):
     """Replay the real orchestration boundary without launching an emulator."""
     import sys
     from types import SimpleNamespace
     module = sys.modules[__name__]
+    registry_text = (REPO / "lua/hook_registry.lua").read_text()
+    (tmp_path / "lua").mkdir()
+    (tmp_path / "lua/hook_registry.lua").write_text(registry_text)
     source, save, base = (tmp_path / name for name in ("rom.nds", "played.sav", "config.ini"))
     boxed = tmp_path / "boxed.sav"
     for path in (source, save, boxed, base):
@@ -2032,7 +2082,7 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
         assert internal_loads == internal_census_loads(title, artifact)
         return {}
     monkeypatch.setattr(module, "census_file_pins", census_pins)
-    monkeypatch.setattr(module, "phase_settle_policy", lambda *args: {})
+    monkeypatch.setattr(module, "phase_settle_policy", lambda *args: None if failure == "graded-no-settle" else {})
     monkeypatch.setattr(module, "phase_image_pins", lambda *args: {})
     monkeypatch.setattr(module, "save_setup", lambda path: {"setup": "NATIVE"})
     monkeypatch.setattr(module, "phase_case_plan", lambda *args: ([{"name": "battle", "route": []}], []))
@@ -2045,6 +2095,7 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
         return MODEL_CUT
     monkeypatch.setattr(module, "committed_cut", cut)
     good = examples()
+    external_calls = []
     def launch(*args):
         case = args[6]
         assert args[-1]["internal_loads"] == internal_census_loads(title, artifact)
@@ -2065,6 +2116,12 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
             rows["l"][1]["observation"]["overworld"] = False
         if failure == "phase-observation" and case.startswith("phase-"):
             rows["n"] = ("FAIL", {"reason": "route until predicate not reached", "observation": {}})
+        if case == "baseline" and failure in {"graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"}:
+            rows["n"] = ("OPEN", {"reason": "n:normal-input phase case absent"})
+        if case.startswith("phase-") and failure == "phase-row-n-fail":
+            rows["n"] = ("FAIL", {"reason": "deliberate phase n failure", "observation": copy.deepcopy(good["n"])})
+        if case.startswith("phase-") and failure == "graded-no-settle":
+            rows["n"] = ("OPEN", {"reason": "no measured overlay settle policy", "observation": {}})
         if failure == "original-save":
             save.write_bytes(b"modified")
         return rows, save
@@ -2078,19 +2135,57 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
         return copy.deepcopy(good["i"]), None
     monkeypatch.setattr(module, "persistence_rows", persistence)
     def external(*args):
+        external_calls.append(True)
         if failure == "row-o":
             raise AssertionError("present row-o receipt is wrong")
         return ("PASS", {"reason": "MODEL external row"})
     monkeypatch.setattr(module, "row_o", external)
-    with pytest.raises((AssertionError, PermissionError)):
+    if failure == "aggregate-baseline-open":
         test_gen4_hook_probe(api, title)
+    else:
+        exception = pytest.skip.Exception if failure == "graded-no-settle" else (AssertionError, PermissionError)
+        with pytest.raises(exception):
+            test_gen4_hook_probe(api, title)
     batch, = (tmp_path / "runs").iterdir()
     assert (batch / "control-reds.json").is_file(), failure
     combined = (batch / "combined.txt").read_text()
-    assert combined.rstrip().endswith("RESULT: FAIL"), failure
+    expected = "PASS" if failure == "aggregate-baseline-open" else "OPEN" if failure == "graded-no-settle" else "FAIL"
+    assert combined.rstrip().endswith("RESULT: " + expected), failure
     rows = [ROW_RE.fullmatch(line) for line in combined.splitlines()[:-1]]
     assert all(rows) and {m[1] for m in rows} == set("abcdefghijklmno")
-    assert any("attempt_failure" in json.loads(m[3]) for m in rows), failure
+    written = {m[1]: (m[2], json.loads(m[3])) for m in rows}
+    if failure in {"graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"}:
+        assert external_calls and written["o"][0] == "PASS"
+        assert written["i"][0] == "PASS" and written["k"][0] == "PASS"
+        assert written["n"][0] == expected
+        if failure == "graded-no-settle":
+            assert "no measured overlay settle policy for " + title in written["n"][1]["reason"]
+            # Reintroduce the former title-abort behavior in memory, then revert it.
+            import inspect
+            source_text = inspect.getsource(test_gen4_hook_probe)
+            source_text = source_text[source_text.index("def test_gen4_hook_probe") :]
+            source_text = source_text.replace('if cfg.get("phase_settle") is None:', 'if False:')
+            needle = '                collected[f"phase-{index}"] = rows'
+            source_text = source_text.replace(needle, needle + '\n                assert (rows["n"][1].get("observation") or {}).get("physical") is not None, "old phase abort"')
+            namespace = dict(globals())
+            exec(source_text, namespace)
+            before_calls = len(external_calls)
+            monkeypatch.setenv("SLINK_GEN4_PROBE_RUNS", str(tmp_path / "mutant-runs"))
+            with pytest.raises(AssertionError, match="old phase abort"):
+                namespace["test_gen4_hook_probe"](api, title)
+            assert len(external_calls) == before_calls  # red: row o was never reached
+            monkeypatch.setenv("SLINK_GEN4_PROBE_RUNS", str(tmp_path / "reverted-runs"))
+            with pytest.raises(pytest.skip.Exception):
+                test_gen4_hook_probe(api, title)
+            assert len(external_calls) == before_calls + 1
+        elif failure == "aggregate-baseline-open":
+            assert written["n"][1]["observation"]["physical"]["cases"]
+        else:
+            assert "phase-0" in written["n"][1]["reason"]
+    elif failure == "phase-observation":
+        assert written["n"][0] == "FAIL" and external_calls
+    else:
+        assert any("attempt_failure" in json.loads(m[3]) for m in rows), failure
 
 def test_hge_internal_census_config_covers_pinned_loaders_red_revert():
     artifact = json.loads((REPO / "data/games/gen4_hge/profile.json").read_text())["titles"]["heartgold_hge"]
@@ -2396,14 +2491,14 @@ def test_harness_in_place_code_replacement_is_refused_and_reverts(monkeypatch):
 
 
 BOUNDARY_REPLAY = r"""
-local callbacks={}; local frame=0; local wanted=true
+local callbacks={}; local frame=0; local wanted=true; local state
 local Registry=load(REGISTRY_TEXT)()
 local binding={validate=function(s) return s end,
  register=function(s,cb) callbacks[s.id]=cb; return "boundary-"..s.id end,
  unregister=function() return true end,
- capture=function(s) return {id=s.id,frame=frame} end}
+ capture=function(s) return {id=s.id,frame=frame,step_id=state.step_id} end}
 local composite=M.composite(Registry,binding)
-local monitor,state=M.phase_monitor(composite,"battle_close",{{id="exit"}},"exit",
+local monitor; monitor,state=M.phase_monitor(composite,"battle_close",{{id="exit"}},"exit",
  function() return wanted end,function() return true end,function() return frame end)
 monitor.before(); frame=1; callbacks.exit(); wanted=false; monitor.after()
 monitor.before(); monitor.after(); monitor.finish()
@@ -2423,7 +2518,7 @@ def test_closing_frame_monitor_preserves_pending_once_red_revert(api):
     assert list(boundary["producer_frames"].values()) == [1]
     text = SCRIPT.read_text()
     for old, new, field, expected in (
-        ("if active() or not armed then", "if true then", "pending_at_close", 0),
+        ("if wanted or not armed then", "if true then", "pending_at_close", 0),
         (
             "for _,e in ipairs(reg:drain()) do self.ready_events[#self.ready_events+1]=e end",
             "",
@@ -2466,7 +2561,7 @@ def test_pc_phase_fixture_absent_never_uses_baseline(tmp_path):
 
 def test_static_pc_never_labels_an_overlay_as_arm9(api):
     r = api._runtime
-    case = to_lua(r, {"name": "pc"})
+    case = to_lua(r, {"name": "pc", "phase": "pc", "fixture_role": "pc_case"})
     assert api.static_pc(case, to_lua(r, {"image": "arm9"})) is True
     assert api.static_pc(case, to_lua(r, {"image": "ov129", "overlay_id": 129})) is False
     assert api.static_pc(case, to_lua(r, {"image": "arm9", "overlay_id": 129})) is False
@@ -2481,12 +2576,15 @@ def test_closing_frame_validator_requires_the_oracle_and_one_delivery(api):
         close_boundary_required=True,
         oracle_frames=[7],
         seen_frames=[7],
+        oracle_steps=[1],
+        seen_steps=[1],
         close_boundaries=[
             {
                 "frame": 7,
                 "pending": 1,
                 "predicate_after": False,
                 "producer_frames": [7],
+                "producer_steps": [1], "fall_step_id": 1, "predicate_before": True,
                 "seam": "pre_close",
             }
         ],
@@ -2582,5 +2680,168 @@ def test_settle_guard_mutations_red_revert(api, guard):
 def test_pc_case_missing_role_never_falls_back(tmp_path):
     baseline = tmp_path / "baseline.sav"
     baseline.write_bytes(b"baseline")
-    save, _, reason = phase_case_input({"name": "pc"}, {}, baseline, None, "hgss")
+    save, _, reason = phase_case_input({"name": "pc", "phase": "pc"}, {}, baseline, None, "hgss")
     assert save is None and "fixture_role" in reason
+
+
+@pytest.mark.parametrize("phase_status", ("PASS", "FAIL"))
+def test_phase_n_aggregate_exists_without_baseline_observation(phase_status, api):
+    good = examples()["n"]
+    observations = {}
+    errors = {"n": ("OPEN", {"reason": "baseline phase_case absent"})}
+    collected = {
+        "phase-0": {
+            "n": (
+                phase_status,
+                {
+                    "observation": good,
+                    "reason": "deliberate phase FAIL" if phase_status == "FAIL" else None,
+                },
+            )
+        }
+    }
+    finish_phase_n(observations, errors, collected, [], good["model"], api=api)
+    assert observations["n"]["physical"]["cases"]
+    if phase_status == "FAIL":
+        assert errors["n"][0] == "FAIL" and "phase-0" in errors["n"][1]["reason"]
+        assert errors["n"][1]["observation"]["physical"]["cases"]
+    else:
+        assert "n" not in errors
+
+
+def test_phase_n_aggregation_mutations_and_open_reasons_revert(api):
+    import inspect
+
+    good = examples()["n"]
+    source = inspect.getsource(finish_phase_n)
+    rows = {"phase-0": {"n": ("FAIL", {"reason": "phase failed", "observation": good})}}
+    reasons = ["withdraw caller remains OPEN"]
+
+    def run(function):
+        observations, errors = {}, {}
+        function(observations, errors, rows, reasons, good["model"], api=api)
+        return observations, errors
+
+    observations, errors = run(finish_phase_n)
+    assert observations["n"]["physical"]["cases"] and errors["n"][0] == "FAIL"
+    assert reasons[0] in errors["n"][1]["open_reasons"]
+    for old, new in (
+        (
+            "    measured, failures, opens = [], [], list(reasons)",
+            '    if "n" not in observations: return\n    measured, failures, opens = [], [], list(reasons)',
+        ),
+        ('        if status == "FAIL":', "        if False:"),
+    ):
+        namespace = dict(globals())
+        exec(source.replace(old, new), namespace)
+        bad, bad_errors = run(namespace["finish_phase_n"])
+        assert "n" not in bad or bad_errors["n"][0] != "FAIL"
+        restored, restored_errors = run(finish_phase_n)
+        assert restored["n"]["physical"]["cases"] and restored_errors["n"][0] == "FAIL"
+
+
+def test_pc_family_alias_requires_fixture_and_can_be_static(api, tmp_path):
+    baseline = tmp_path / "baseline.sav"
+    baseline.write_bytes(b"baseline")
+    case = {"name": "pc_deposit", "phase": "pc"}
+    save, _, reason = phase_case_input(case, {}, baseline, None, "hgss")
+    assert save is None and "fixture_role" in reason
+    case["fixture_role"] = "pc_case"
+    assert (
+        api.static_pc(to_lua(api._runtime, case), to_lua(api._runtime, {"image": "arm9"})) is True
+    )
+
+
+@pytest.mark.parametrize("seam", ("pre_close", "finish"))
+@pytest.mark.parametrize("increment_in_callback", (False, True))
+def test_boundary_gate_handles_callback_frame_increment(api, seam, increment_in_callback):
+    r = api._runtime
+    r.globals().M = api._api
+    r.globals().REGISTRY_TEXT = (REPO / "lua/hook_registry.lua").read_text()
+    replay = BOUNDARY_REPLAY
+    if increment_in_callback:
+        replay = replay.replace(
+            "return {id=s.id,frame=frame,step_id=state.step_id}",
+            "local e={id=s.id,frame=frame,step_id=state.step_id}; frame=frame+1; return e",
+        )
+    if seam == "finish":
+        replay = replay.replace(
+            "monitor.before(); monitor.after(); monitor.finish()", "monitor.finish()"
+        )
+    state, retained = r.execute(replay)
+    boundary = from_lua(state["close_boundaries"][1])
+    assert boundary["seam"] == seam and retained == 0
+    good = examples()["n"]
+    case = copy.deepcopy(good["physical"]["cases"][0])
+    case.update(
+        close_boundary_required=True,
+        close_boundaries=[boundary],
+        oracle_frames=[1],
+        seen_frames=[1],
+        oracle_steps=[1],
+        seen_steps=[1],
+    )
+    good["physical"]["cases"] = [case]
+    assert api.evaluate("n", to_lua(r, good)) == "PASS"
+    broken = copy.deepcopy(good)
+    broken["physical"]["cases"][0]["close_boundaries"][0]["producer_frames"] = [2]
+    assert (
+        api.evaluate("n", to_lua(r, broken))[0] == "FAIL"
+    )  # frame+1 cannot replace the recorded event
+    assert api.evaluate("n", to_lua(r, good)) == "PASS"
+    if seam == "finish":
+        source = SCRIPT.read_text()
+        mutant = r.execute(
+            source.replace('(b.seam=="pre_close" or b.seam=="finish")', '(b.seam=="pre_close")')
+        )
+        assert mutant.evaluate("n", to_lua(r, good))[0] == "FAIL"
+        restored = r.execute(source)
+        assert restored.evaluate("n", to_lua(r, good)) == "PASS"
+
+
+def test_n_case_scope_passes_battle_but_aggregate_requires_pc_reset(api):
+    good = examples()["n"]
+    physical = copy.deepcopy(good["physical"])
+    physical.update(static_pc=False, reset=False, pending_at_close=0)
+    assert api.evaluate_n_case(to_lua(api._runtime, physical)) == "PASS"
+    good["physical"] = physical
+    assert api.evaluate("n", to_lua(api._runtime, good))[0] == "FAIL"
+    source = SCRIPT.read_text()
+    mutation = source.replace(
+        "local function validate_n_case(case)",
+        'local function validate_n_case(case) check(case.static_pc and case.reset,"old aggregate coverage applied per case")',
+        1,
+    )
+    assert mutation != source
+    mutant = api._runtime.execute(mutation)
+    assert mutant.evaluate_n_case(to_lua(api._runtime, physical))[0] == "FAIL"
+    restored = api._runtime.execute(source)
+    assert restored.evaluate_n_case(to_lua(api._runtime, physical)) == "PASS"
+
+
+@pytest.mark.parametrize("patch", ({"peak": 5}, {"last_seen": 0}))
+def test_n_case_invariant_failure_reaches_combined(api, patch):
+    good = examples()["n"]
+    physical = copy.deepcopy(good["physical"])
+    physical.update(patch)
+    observations, errors = {}, {}
+    finish_phase_n(
+        observations,
+        errors,
+        {"phase-0": {"n": ("PASS", {"observation": {"physical": physical}})}},
+        [],
+        good["model"],
+        api=api,
+    )
+    assert errors["n"][0] == "FAIL"
+    reverted = copy.deepcopy(good["physical"])
+    observations, errors = {}, {}
+    finish_phase_n(
+        observations,
+        errors,
+        {"phase-0": {"n": ("PASS", {"observation": {"physical": reverted}})}},
+        [],
+        good["model"],
+        api=api,
+    )
+    assert "n" not in errors
