@@ -36,6 +36,7 @@ DEFAULT_WORK_ROOT = "F:/slink-work"
 CATEGORIES = ("wt", "lanes", "tmp", "cache", "evidence")
 DEFAULT_LANE_AGE = 3 * 86400
 DEFAULT_TMP_AGE = 2 * 3600
+TMP_FLOOR_NO_CWD = 24 * 3600
 _EVIDENCE_NAME = re.compile(r"evidence|receipt|proof", re.I)
 _DRIVE_COPY = re.compile(r" \(\d+\)(\.[^./\\ ]+)?$")  # Google Drive conflict copy: "master (1)"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -212,11 +213,80 @@ def processes() -> list[tuple[int, str]]:
     return _PROCS
 
 
+_CWDS: dict | None = None
+_PEB_PARAMS, _PARAMS_CURDIR = 0x20, 0x38  # x64 PEB.ProcessParameters, ...CurrentDirectory
+
+
+def cwd_scan_available() -> bool:
+    import ctypes
+    return (_IS_WIN and ctypes.sizeof(ctypes.c_void_p) == 8) or os.path.isdir("/proc/self")
+
+
+def _win_cwd(pid: int) -> str | None:
+    """Current directory of a process, read from its PEB (64-bit Windows, stdlib only)."""
+    import ctypes
+    c = ctypes
+    k = c.WinDLL("kernel32", use_last_error=True)
+    nt = c.WinDLL("ntdll")
+    k.OpenProcess.restype = c.c_void_p
+    k.ReadProcessMemory.argtypes = [c.c_void_p, c.c_void_p, c.c_void_p, c.c_size_t,
+                                    c.POINTER(c.c_size_t)]
+    k.CloseHandle.argtypes = [c.c_void_p]
+    nt.NtQueryInformationProcess.argtypes = [c.c_void_p, c.c_ulong, c.c_void_p, c.c_ulong,
+                                             c.c_void_p]
+    h = k.OpenProcess(0x0410, False, pid)  # QUERY_INFORMATION | VM_READ
+    if not h:
+        return None
+
+    def read(addr, n):
+        buf, got = c.create_string_buffer(n), c.c_size_t()
+        if not k.ReadProcessMemory(h, addr, buf, n, c.byref(got)) or got.value != n:
+            raise OSError("ReadProcessMemory")
+        return buf.raw
+
+    try:
+        pbi = (c.c_void_p * 6)()  # PROCESS_BASIC_INFORMATION; [1] = PebBaseAddress
+        if nt.NtQueryInformationProcess(h, 0, pbi, c.sizeof(pbi), None) != 0 or not pbi[1]:
+            return None
+        params = int.from_bytes(read(pbi[1] + _PEB_PARAMS, 8), "little")
+        ustr = read(params + _PARAMS_CURDIR, 16)  # UNICODE_STRING: Length, Max, pad, Buffer
+        length, buf = int.from_bytes(ustr[:2], "little"), int.from_bytes(ustr[8:], "little")
+        return read(buf, length).decode("utf-16-le") if length and buf else None
+    except OSError:
+        return None
+    finally:
+        k.CloseHandle(h)
+
+
+def _cwds() -> dict[int, str]:
+    """pid -> current directory for every process we may read; cached for one scan."""
+    global _CWDS
+    if _CWDS is None:
+        out = {}
+        for pid, _ in processes():
+            try:
+                cwd = _win_cwd(pid) if _IS_WIN else os.readlink(f"/proc/{pid}/cwd")
+            except OSError:
+                cwd = None
+            if cwd:
+                out[pid] = cwd
+        _CWDS = out
+    return _CWDS
+
+
 def users_of(path) -> list[int]:
-    """Pids whose command line names this path (best effort: no cwd/open-handle scan)."""
+    """Pids whose command line names this path (whole components) or whose current
+    directory is inside it.  Best effort: open handles are not scanned."""
     n = _norm(path).lower()
-    return [pid for pid, cmd in processes()
-            if pid != os.getpid() and n in cmd.replace("\\", "/").lower()]
+    named = re.compile(re.escape(n) + r"(?=$|[/\s\"'])")
+    pids = {pid for pid, cmd in processes() if named.search(cmd.replace("\\", "/").lower())}
+    if cwd_scan_available():
+        for pid, cwd in _cwds().items():
+            c = _norm(cwd).lower()
+            if c == n or c.startswith(n + "/"):
+                pids.add(pid)
+    pids.discard(os.getpid())
+    return sorted(pids)
 
 
 def pid_alive(pid: int) -> bool:
@@ -401,9 +471,12 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
     if pids:
         return {**item, "status": "refuse", "reason": f"in use by pid {pids[:5]}"}
     limit = tmp_age if rule == "tmp" else lane_age
+    floor = ""
+    if rule == "tmp" and not cwd_scan_available():  # can't see who sits in it: wait a day
+        limit, floor = max(limit, TMP_FLOOR_NO_CWD), " (no cwd scan: 24h floor)"
     age = _age(now, st["newest"])
     if age < limit:
-        return {**item, "status": "keep", "reason": f"active {_hage(age)} ago"}
+        return {**item, "status": "keep", "reason": f"active {_hage(age)} ago{floor}"}
     since = time.strftime("%Y-%m-%d %H:%M", time.localtime(st["newest"]))
     return {**item, "status": "stale", "reason": f"{rule} untouched since {since}"}
 
@@ -479,8 +552,8 @@ def _orphan_admin(repo) -> list[dict]:
 
 def scan(repo=None, root=None, locations=None, lane_age=DEFAULT_LANE_AGE,
          tmp_age=DEFAULT_TMP_AGE) -> list[dict]:
-    global _PROCS
-    _PROCS = None
+    global _PROCS, _CWDS
+    _PROCS = _CWDS = None
     repo = main_checkout(repo or Path(__file__).resolve().parent)
     root = Path(root) if root else work_root()
     for c in CATEGORIES:

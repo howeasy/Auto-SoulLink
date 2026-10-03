@@ -47,8 +47,12 @@ def _snapshot(root):
     return out
 
 
-def _sleeper(path):
-    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", str(path)])
+def _sleeper(cwd):
+    """A process that sits in `cwd`; its argv does NOT name the path."""
+    p = subprocess.Popen([sys.executable, "-c", "import time; print(1, flush=True); "
+                          "time.sleep(120)"], cwd=str(cwd), stdout=subprocess.PIPE)
+    p.stdout.readline()  # started and sitting in cwd
+    return p
 
 
 def _dead_pid():
@@ -75,6 +79,7 @@ def _no_process_scan(monkeypatch):
 def real_processes(monkeypatch):
     monkeypatch.setattr(ss, "processes", _REAL_PROCESSES)
     monkeypatch.setattr(ss, "_PROCS", None)
+    monkeypatch.setattr(ss, "_CWDS", None)
 
 
 _REAL_PROCESSES = ss.processes
@@ -373,6 +378,45 @@ def test_lane_in_use_by_a_process_refused(W, real_processes):
     finally:
         proc.kill()
         proc.wait()
+
+
+def test_old_temp_with_a_process_inside_refused(W, real_processes):
+    pyt = W.c / "temp" / "pytest-of-me" / "pytest-7"
+    (pyt / "deep").mkdir(parents=True)
+    t = time.time() - 3 * 3600
+    for f in (pyt / "deep", pyt):
+        os.utime(f, (t, t))
+    if not ss.cwd_scan_available():
+        pytest.skip("no cwd scan on this platform (the 24h floor test covers it)")
+    proc = _sleeper(pyt / "deep")
+    try:
+        it = item(plan(W), pyt)
+        assert it["status"] == "refuse" and str(proc.pid) in it["reason"]
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_without_cwd_scan_temps_get_a_24h_floor(W, monkeypatch):
+    monkeypatch.setattr(ss, "cwd_scan_available", lambda: False)
+    pyt = W.c / "temp" / "pytest-of-me" / "pytest-8"
+    pyt.mkdir(parents=True)
+    t = time.time() - 3 * 3600
+    os.utime(pyt, (t, t))
+    assert item(plan(W), pyt)["status"] == "keep"
+    t = time.time() - 25 * 3600
+    os.utime(pyt, (t, t))
+    assert item(plan(W), pyt)["status"] == "stale"
+
+
+def test_users_of_matches_whole_path_components(W, monkeypatch):
+    base = W.c.as_posix()
+    monkeypatch.setattr(ss, "processes", lambda: [(4242, f"tool {base}/slink-cache/f.bin"),
+                                                  (4243, f'tool "{base}\\slink\\run.py"')])
+    monkeypatch.setattr(ss, "_CWDS", {})
+    assert ss.users_of(f"{base}/slink-cache") == [4242]
+    assert ss.users_of(f"{base}/slink") == [4243]
+    assert ss.users_of(f"{base}/slin") == []
 
 
 def test_evidence_and_unregistered_checkouts_kept(W):
