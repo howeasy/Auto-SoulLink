@@ -1398,6 +1398,9 @@ def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
 # card gen2-p4-w6 (tests/live/test_gen2_w6_gate.py): the live mailbox write-watch over the whole scripted corpus.
 W6_GATE_LEGS = ("panel", "sfx", "u1")
 # Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day; Gold boots the SYNTH psn lead).
+# U1 legs run on the CURRENT drivers (tests/live/test_gen2_w6_gate.py U1_CHAINS["head"]) and a disclosed SYNTH poisoned
+# lead: their receipt must bind each driver file to the released tree and carry the synth/start_phase disclosure.
+W6_HEAD_DRIVER_LEGS = {("gold", "u1")}
 W6_CLOCK_LEGS = {("silver", "u1"), ("gold", "u1")}   # Gold: the SYNTH poisoned lead + the pinned clock (O-33)
 
 
@@ -1451,6 +1454,27 @@ def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
     return []
 
 
+def _w6_head_driver_errors(root: Path, leg: dict) -> list[str]:
+    """The current-drivers U1 chain ("head") is bound to the RELEASED tree: every driver file the leg ran has the sha256
+    of the same file here (a driver edited after the receipt, or a receipt from other drivers, is refused), and the leg
+    discloses the SYNTH poisoned lead it booted (poison_setup is re-derived by the clock check)."""
+    errors = []
+    driver = leg.get("driver")
+    files = driver.get("files") if isinstance(driver, dict) else None
+    if not isinstance(files, dict) or not files or driver.get("ref") != "head":
+        return ["driver chain is not the pinned current-drivers ('head') chain"]
+    for rel, entry in sorted(files.items()):
+        ref, want = (entry or {}).get("ref"), (entry or {}).get("sha256")
+        if not isinstance(ref, str) or not re.fullmatch(r"[0-9a-f]{40}", ref):
+            errors.append(f"driver {rel} is not pinned to an exact commit")
+        elif _lf_sha256(root / rel) != want:
+            errors.append(f"driver {rel} differs from the released tree's file")
+    if (not isinstance(leg.get("poison_setup"), dict) or leg.get("synth_psn") is not True
+            or leg.get("poison_start_phase") != "tick"):
+        errors.append("the SYNTH poisoned-lead disclosure (poison_setup, synth_psn, start_phase tick) is missing")
+    return errors
+
+
 def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     """O-27 D1 tripwire: the overlay gate binding, then every corpus leg ran to completion on its committed
     fixture with no mailbox writer outside SLink code, and both known-positive controls fired in it."""
@@ -1479,6 +1503,8 @@ def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
             errors.extend(f"w6 gate leg {name}: {e}" for e in _clock_setup_errors(root, title, leg))
         elif (title, name) in W6_CLOCK_LEGS:
             errors.append(f"w6 gate leg {name} has no clock setup disclosure (it hunts by day)")
+        if (title, name) in W6_HEAD_DRIVER_LEGS:
+            errors.extend(f"w6 gate leg {name}: {e}" for e in _w6_head_driver_errors(root, leg))
     if receipt.get("violation_count") != 0:
         errors.append("w6 gate receipt records mailbox violations")
     return errors

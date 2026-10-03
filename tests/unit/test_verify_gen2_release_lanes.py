@@ -1975,6 +1975,27 @@ def _clock(raw, title, hour=11, now=1790278047):
     return synth.day_clock(raw, hour=hour, now=now, title=title)[1]
 
 
+def _w6_gold_u1_leg(tmp_path, leg, now=1790278047):
+    """Gold's W6 U1 leg the way the gate records it: the SYNTH poisoned lead + the pinned clock on the errand fixture, the
+    current-drivers ('head') chain bound file by file, and the synth/start_phase disclosure."""
+    import gen2_synth_fixtures as synth
+    from tests.live.test_gen2_w6_gate import U1_CHAINS
+    fixture = "gold_battle_errand"
+    base = (REPO / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
+    (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(base)
+    boot, poison = synth.build_named("gold_synth_psn", root=REPO)
+    clock = synth.day_clock(boot, hour=11, now=now, title="gold")[1]
+    files = {}
+    for rel in U1_CHAINS["head"]:
+        data = (REPO / rel).read_bytes()
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(data)
+        files[rel] = {"ref": "a" * 40, "sha256": hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()}
+    return {**leg, "fixture": fixture, "fixture_sha256": hashlib.sha256(base).hexdigest(), "clock_setup": clock,
+            "poison_setup": poison, "synth_psn": True, "poison_start_phase": "tick",
+            "driver": {"ref": "head", "files": files}}
+
+
 def _live_gates_tree(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
@@ -2008,8 +2029,9 @@ def _live_gates_tree(tmp_path):
                          "reset": {"result": "PASS", "pending_at_entry": True, "played_id": None,
                                    "on_channel": None}},
             "w6_gate": {**bind, "schema": "gen2-w6-gate-v1", "violation_count": 0,
-                        "legs": {name: {**leg, "clock_setup": _clock(raw, title) if (title, name) in
-                                        gate.W6_CLOCK_LEGS else None} for name in gate.W6_GATE_LEGS}},
+                        "legs": {name: (_w6_gold_u1_leg(tmp_path, leg) if (title, name) in gate.W6_HEAD_DRIVER_LEGS
+                                        else {**leg, "clock_setup": _clock(raw, title) if (title, name) in
+                                              gate.W6_CLOCK_LEGS else None}) for name in gate.W6_GATE_LEGS}},
             "sp_lowwater_gate": good_lowwater_receipt(bind),
         }
         for kind, receipt in receipts.items():
@@ -2022,6 +2044,52 @@ def _live_gates_tree(tmp_path):
     doc = {"requirements": rows}
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
     return doc
+
+
+def _w6_gold_errors(tmp_path, mutate):
+    _live_gates_tree(tmp_path)
+    path = tmp_path / "tests/fixtures/gen2/receipts/overlay/gold.w6_gate.json"
+    receipt = json.loads(path.read_text())
+    mutate(receipt["legs"]["u1"], tmp_path)
+    path.write_text(json.dumps(receipt), encoding="utf-8", newline="\n")
+    return gate._w6_gate_row_errors(tmp_path, "gold", receipt)
+
+
+def _drop(key):
+    return lambda leg, _root: leg.pop(key)
+
+
+def _edit_poison(leg, _root):
+    leg["poison_setup"]["edits"]["party_status"]["hp"] = 9
+
+
+def _edit_driver_file(leg, root):
+    rel = next(iter(leg["driver"]["files"]))
+    (root / rel).write_bytes((root / rel).read_bytes() + b"-- edited after the receipt\n")
+
+
+def _unpin_driver(leg, _root):
+    rel = next(iter(leg["driver"]["files"]))
+    leg["driver"]["files"][rel]["ref"] = "HEAD"
+
+
+@pytest.mark.parametrize("name,mutate,needle", [
+    ("clean", lambda leg, root: None, None),
+    ("hand-edited poison_setup", _edit_poison, "clock setup"),
+    ("no clock", _drop("clock_setup"), "no clock setup disclosure"),
+    ("no poison_setup", _drop("poison_setup"), "SYNTH poisoned-lead disclosure"),
+    ("no synth flag", _drop("synth_psn"), "SYNTH poisoned-lead disclosure"),
+    ("no start_phase", _drop("poison_start_phase"), "SYNTH poisoned-lead disclosure"),
+    ("driver file edited after the receipt", _edit_driver_file, "differs from the released tree"),
+    ("driver not pinned to a commit", _unpin_driver, "not pinned to an exact commit"),
+    ("no driver chain", _drop("driver"), "driver chain is not the pinned"),
+])
+def test_gold_w6_u1_leg_is_bound_to_its_drivers_and_its_synth_disclosure(tmp_path, name, mutate, needle):
+    errors = _w6_gold_errors(tmp_path, mutate)
+    if needle is None:
+        assert errors == [], errors
+    else:
+        assert any(needle in e for e in errors), (name, errors)
 
 
 def test_live_gates_green_only_on_a_valid_tree(tmp_path):
