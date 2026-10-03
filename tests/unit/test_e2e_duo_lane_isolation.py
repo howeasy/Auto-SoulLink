@@ -310,7 +310,7 @@ def test_gen2_oracle_waits_for_both_exit_flushes(monkeypatch, tmp_path, fault):
     for path in files.values():
         path.write_bytes(b"pre-exit")
     def wait(side, timeout):
-        assert 0 < timeout <= 30
+        assert 0 < timeout <= 30 + 1e-6   # deadline - time.monotonic() of two large floats can round a hair above 30
         actions.append(side)
         if fault == "timeout" and side == "b":
             raise duo.subprocess.TimeoutExpired("emu", timeout)
