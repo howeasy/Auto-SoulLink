@@ -410,6 +410,12 @@ def test_jitter_matching_the_harness_value_passes(text, expected):
     assert duo.jitter_problems(text, expected) == []
 
 
+def _gen1_client_receipt(run, inst, text):
+    digest = hashlib.sha1((Path(duo.REPO) / run._rom_for(inst)).read_bytes()).hexdigest()
+    title = run.gcfg["fixture"][inst]
+    return (f"client built: title={title} pack=gen1_rby kind=named player={inst} "
+            f"rom={digest[:8]} -> 127.0.0.1:54321\n{text}")
+
 def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
     """No echo means the check did not run; a silent pass would be the harness lying."""
     runner.scenario = "reconnect_new"
@@ -419,7 +425,8 @@ def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
-    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, "RESULT: PASS")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     with pytest.raises(RuntimeError, match="JITTER marker missing"):
@@ -434,7 +441,8 @@ def test_a_gen1_new_run_whose_echo_matches_is_unaffected(runner):
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
-    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, f"RESULT: PASS\n{_JITTER_1}")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     assert runner.run() is True
@@ -495,7 +503,8 @@ def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: runner._live_complete.update(reconnect_new=False)
-    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, f"RESULT: PASS\n{_JITTER_1}")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     assert runner.run() is False
@@ -1970,3 +1979,77 @@ def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
     run.start_instances()
     assert order[0] == "b" and order[-1] == "a" and order.index("a") > order.index("status")
     assert order.count("a") == order.count("b") == 1
+
+
+@pytest.mark.parametrize("game,scenario,expected", [
+    ("gen1_new", "link_new", []),
+    ("gen1_new", "admit_randomized_new", ["red", "blue"]),
+    ("gen1_pure", "link_new", ["purered", "pureblue", "purered_overlay", "pureblue_overlay"]),
+    ("gen1_pure_green", "link_new",
+     ["purered", "puregreen", "purered_overlay", "puregreen_overlay"]),
+])
+def test_gen1_start_stages_clean_dumps_only_when_they_are_inputs(runner, monkeypatch,
+                                                              tmp_path, game, scenario, expected):
+    import gen1_playthrough as play
+
+    runner.game, runner.scenario = game, scenario
+    runner.gcfg, runner.cfg = dict(duo.GAMES[game]), dict(duo.SCENARIOS[scenario])
+    runner.battery_boot = True
+    staged, launched = [], []
+
+    def stage(key):
+        if game == "gen1_new" and scenario != "admit_randomized_new":
+            raise FileNotFoundError(f"clean dump is absent: {key}")
+        staged.append(key)
+        rel = f"patch/build/{key}.gb"
+        (tmp_path / rel).write_bytes(key.encode())
+        return rel
+
+    monkeypatch.setattr(play, "staged_rom", stage)
+    runner._clear_attempt_artifacts = lambda: None
+    runner._timed = lambda _phase: contextlib.nullcontext()
+    runner.launch_instance = lambda inst, **_kw: launched.append(inst)
+    runner.wait_for = lambda *_args, **_kwargs: None
+    runner.start_instances()
+    assert staged == expected
+    assert launched == (["b", "a"] if scenario == "admit_randomized_new" else ["a", "b"])
+
+
+@pytest.mark.parametrize("game,scenario", [
+    ("gen1_new", "admit_randomized_new"), ("gen1_pure", "link_new"),
+])
+def test_gen1_start_still_requires_real_randomization_or_ups_bases(runner, monkeypatch, game, scenario):
+    import gen1_playthrough as play
+
+    runner.game, runner.scenario = game, scenario
+    runner.gcfg, runner.cfg = dict(duo.GAMES[game]), dict(duo.SCENARIOS[scenario])
+    runner.battery_boot = True
+
+    def absent(key):
+        raise FileNotFoundError(f"required clean input missing: {key}")
+
+    monkeypatch.setattr(play, "staged_rom", absent)
+    runner.launch_instance = lambda *_a, **_kw: pytest.fail("launched without its input")
+    with pytest.raises(FileNotFoundError, match="required clean input missing"):
+        runner.start_instances()
+
+
+def test_saved_gen1_party_reports_rom_scan_failure_as_named_qualification(runner, monkeypatch, tmp_path):
+    import gen1_fixtures
+
+    rom = tmp_path / "randomized-overlay.gbc"
+    rom.write_bytes(b"randomized overlay with damaged anchors")
+    runner._admit_roms = {"a": str(rom)}
+    save = Path(runner._saveram_dir("a")) / runner._gen1_save_name("a")
+    save.parent.mkdir()
+    save.write_bytes(b"saved party")
+    seen = []
+
+    def qualify(sram, rom_bytes, notes):
+        seen.append((sram, rom_bytes))
+        raise scan.RomScanError("neither the clean nor the overlay anchor set holds")
+
+    monkeypatch.setattr(gen1_fixtures, "qualify", qualify)
+    with pytest.raises(RuntimeError, match="qualification: neither the clean nor the overlay anchor set holds"):
+        runner._saved_gen1_party("a")
+    assert seen == [(b"saved party", rom.read_bytes())]

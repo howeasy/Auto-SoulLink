@@ -4304,18 +4304,20 @@ class DuoRun:
         A scenario that stages its own cartridge for an instance (the randomized-admission leg's
         A) wins. Otherwise the instance's companion key does: a vanilla companion build is the
         literal `patch/gen1/build/slink_*.gb` path, and an overlay key stages ITS OWN cartridge
-        (g1.staged_rom applies the UPS and sha1-verifies the result). Failing both, a battery-boot
-        game resolves the ROM through its own play module's staged_rom(), which copies and
-        verifies it.
+        (g1.staged_rom applies the UPS and sha1-verifies the result). Every Gen 1 row must
+        declare a companion key, even when the scenario stages a randomized companion.
+        Other battery-boot games resolve through their own play module's staged_rom().
         """
         if self.is_gen3_battery:
             return self._gen3_rom(inst)
         if self.gcfg.get("launch_profile") == "gen2":
             return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
+        patch_key = self._patch_key(inst)
+        if self.gcfg.get("game") == "gen1_new" and not patch_key:
+            raise RuntimeError(f"{inst}: Gen 1 row has no companion key")
         admitted = getattr(self, "_admit_roms", None) or {}
         if inst in admitted:
             return admitted[inst]
-        patch_key = self._patch_key(inst)
         if patch_key:
             from run_gb_gate import PATCHED
             rom_rel = PATCHED[patch_key][1]
@@ -4596,8 +4598,13 @@ class DuoRun:
                 self._gen3_rom(inst)  # staged (and found) before either emulator starts
         elif self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
-            for key in self.gcfg["fixture"].values():
-                play.staged_rom(key)  # space-free relative ROM paths for BizHawk
+            # Clean Gen 1 dumps are inputs only to randomization or a pureRGB UPS base;
+            # ordinary vanilla scenarios boot already-built companions without those dumps.
+            if (self.gcfg.get("game") != "gen1_new"
+                    or self.scenario == "admit_randomized_new"
+                    or is_pure_pairing(getattr(self, "game", ""))):
+                for key in self.gcfg["fixture"].values():
+                    play.staged_rom(key)  # space-free relative input paths for BizHawk
             for inst in ("a", "b"):
                 # the cartridge each instance boots (its companion build, or the overlay staged
                 # and sha1-verified here) must exist BEFORE either emulator starts: BizHawk handed
@@ -5953,20 +5960,18 @@ class DuoRun:
                             f"{self.gcfg['fixture'][inst]}_{self._target_for(inst)}.SaveRAM")
 
     def _gen1_save_name(self, inst):
-        """The SaveRAM filename the cartridge this instance boots reads and writes: its companion
-        key's filename-derived name, or the clean title's gamedb name on a row with no companion
-        (Yellow)."""
+        """The companion's SaveRAM filename; a missing game-row companion key is an error."""
         from run_gb_gate import GENS
 
+        patch_key = self._patch_key(inst)
+        if not patch_key:
+            raise RuntimeError(f"{inst}: Gen 1 row has no companion key")
         staged = (getattr(self, "_admit_roms", None) or {}).get(inst)
         if staged:
             # a scenario-staged cartridge (admit_randomized_new's A) is unknown to the gamedb
             import gen1_playthrough as g1
             return g1.save_name_for(staged)
-        patch_key = self._patch_key(inst)
-        if patch_key:
-            return GENS["gen1"]["patched"][patch_key][2]
-        return GENS["gen1"]["saveram_names"][self.gcfg["fixture"][inst]]
+        return GENS["gen1"]["patched"][patch_key][2]
 
     def _saved_gen1_party(self, inst, rom=None, save_name=None):
         """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM.
@@ -5988,6 +5993,7 @@ class DuoRun:
         from gen1_fixtures import qualify
 
         from server.adapters import gen1_codec as codec
+        from server.adapters.gen1_rom_scan import RomScanError
 
         name = save_name or self._gen1_save_name(inst)
         path = Path(name) if os.path.isabs(str(name)) else Path(self._saveram_dir(inst)) / name
@@ -5999,7 +6005,10 @@ class DuoRun:
         # rebuilds stats where it calls CalcStats -- see the band in gen1_fixtures.qualify),
         # but named in the PYDEC line so a tolerated value is never silent.
         notes: list[str] = []
-        problems = qualify(sram, rom_bytes, notes)
+        try:
+            problems = qualify(sram, rom_bytes, notes)
+        except RomScanError as exc:
+            problems = [f"qualification: {exc}"]
         if problems:
             raise RuntimeError(f"{inst} saved game would not qualify: {problems}")
         start = codec.SRAM_LAYOUT["sPartyData"]  # gen1_codec.py:66-72,587-595
@@ -7854,7 +7863,9 @@ class DuoRun:
     def check_save_witness(self, results):
         """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.
 
-        One PYDEC line per instance, exactly:
+        Each instance first requires a client-built ROM hash prefix matching its resolved
+        cartridge and records that cartridge's full SHA-1 in GEN1_ROM_SHA1. This applies
+        even when the instance never saved. The save witness then records:
 
             SAVE_WITNESS_SHA256 inst=<a|b> site=<hex> file=<hex> match=<true|false> saves=<n>
 
@@ -7882,6 +7893,22 @@ class DuoRun:
             process.wait(timeout=30)  # the flush boundary; see _saved_gen1_party
         for inst in ("a", "b"):
             receipt = (results or {}).get(inst) or ""
+            # Bind every receipt, including a no-save half, to the cartridge the launcher
+            # resolved. Repeated builds must all agree; one good line cannot mask a bad one.
+            built = [line for line in receipt.splitlines() if line.startswith("client built:")]
+            pattern = (rf"client built: title=\S+ pack=\S+ kind=\S+ player={inst} "
+                       r"rom=([0-9a-fA-F]{8}) -> \S+")
+            matches = [re.fullmatch(pattern, line) for line in built]
+            if not matches or any(match is None for match in matches):
+                raise RuntimeError(f"{inst}: client built ROM receipt missing or malformed")
+            rom = self._rom_for(inst)
+            digest = hashlib.sha1((Path(REPO) / rom).read_bytes()).hexdigest()
+            prefixes = {match[1].lower() for match in matches}
+            if prefixes != {digest[:8]}:
+                raise RuntimeError(f"{inst}: client built ROM prefixes {sorted(prefixes)} "
+                                   f"differ from booted cartridge {rom} sha1={digest}")
+            self._pydec_note(f"GEN1_ROM_SHA1 inst={inst} rom={rom} sha1={digest} "
+                             f"receipt={digest[:8]} match=true")
             dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
             if not re.search(r"(?m)^SAVE_WITNESS[_ ]", receipt):
                 self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
