@@ -193,3 +193,143 @@ Behaviour already observed on HG, SS and hge, but the receipts are NOT signable 
 - The box app in **mode 1 (WITHDRAW) does NOT pass through 0x5B**. State 0xB's mode-1 branch (`asm/overlay_14.s:11822-11831`) puts the cursor on box cell 0 (`ov14_021E7588(data, 0)`) and goes straight to **0x51**. Only mode 0 (DEPOSIT) goes to 0x5B with cell 0x1E (`:11814-11820`).
 - So the withdraw leg needs NO d-pad: at 0x51 with cell 0, press A, and state 0x57 commits.
 - The state word: the leg polls man+0x14 (`app_info()`), which is PHYSICAL on the deposit receipts. `PCBox_Main` receives `&man->proc_state`, so it is the same word as the asm's sysdata+0. The first live run logs the trace.
+
+## §6b CORRECTION 3 (2026-10-03, coordinator-verified, supersedes the withdraw-commit lines of CORRECTIONS 1-2)
+
+**Keyboard withdraw is TWO A presses.** The first A opens an action menu; the second A commits.
+CORRECTION 2's single-A model was the **touchscreen** path, which a d-pad run never enters.
+
+Evidence below is re-read by this card at the pinned pret `pokeheartgold @ ad7a3afa`
+(`E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold`). Tags: **SRC** = re-read here,
+**CARD** = coordinator's own verification not re-read by this card.
+
+### 1. PC top menu: WITHDRAW is reached with Right x1 (SRC)
+
+- Opcode 752 `MenuExec` -> `ov01_021F6ABC` launches bottom-screen app 3 = ov27
+  (`src/scrcmd_c.c:5025-5032`).
+- ov27 is a 2-column grid. Its nav table `ov27_0225D174` (`asm/overlay_27.s:6116-6118`) is
+  `.byte 0x00, 0x02, 0x00, 0x01, ...`, i.e. **row 0 = Up 0 / Down 2 / Left 0 / Right 1**.
+  The 6-item table `ov27_0225D1B4` (`:6129-6131`) has the same row 0.
+  So the row moves **Right**, never Down. The neighbour-table index is `count - 2`
+  (`ov27_0225CA68`, `:5418`), which selects *which* nav table, not which direction.
+- **CARD:** observed physically — `menu_result 1` / `launch_mode 1` / `state 0x51`.
+  The static table agrees; the run is what promotes it from INFERRED.
+
+### 2. Box app input model (SRC)
+
+- `GridInputHandler`: `isButtons` **+0x08**, `modeSwitchLagFrame` **+0x0C**,
+  `nextInput` **+0x0D** (`include/unk_02019BA4.h:24-26`).
+- `modeSwitchLagFrame` is written **only** as `FALSE`, once, at creation
+  (`src/unk_02019BA4.c:20`); the three other hits in the file are `== TRUE` reads
+  (`:60`, `:124`, `:167`). The `isButtons == FALSE && modeSwitchLagFrame == TRUE`
+  arm is therefore dead, so **there is no "wake A"**: the first A acts.
+- **The withdraw launch sets button mode 1.** Re-read here, and it is broader than the
+  coordinator stated: `GridInputHandler_SetButtonInputMode(grid, 1)` appears on **all four**
+  0x51 entry paths, at `asm/overlay_14.s:13581-13584` (in `ov14_021EC150`, state 0x1D's
+  successor), `:16668-16671` (0x51, no-selection / B path), `:17179-17182` (0x57 return) and
+  `:25214-25217` (in `ov14_021F21D0`). That four-site list was already carried by
+  `data/games/gen4/scenarios/README.md:338-340` and asserted by
+  `tests/unit/test_gen4_routes.py:2441-2445`; this card confirms it against the asm.
+  The mode-1 A-on-box-mon branch itself (`:16992-16995`) calls only
+  `GridInputHandler_SetNextInput(grid, 0x22)` — it does not re-assert the mode, because it
+  is already in button mode. **Confirms the claim; strengthens it.**
+
+### 3. The two A presses, state by state (SRC)
+
+The dispatcher is `ov14_021EAF8C`: `lsl r2, r1, #2` / `ldr r1, _021EAFA8` / `ldr r1,[r1,r2]` /
+`blx r1` / `str r0, [r4]` (`asm/overlay_14.s:11373-11377`). Entry N handles state N and
+returns the next state.
+
+**First A (state 0x51).** Handler is `ov14_021EDA4C` (table entry `asm/overlay_14.s:37047`),
+ **not** `ov14_021F0418`. Its box-mon A branch (`:16968-16999`):
+
+- `ov14_021F5EE4(data, ov14_021F7D2C, 4)` (`:16978-16981`) builds a **4-item action menu**.
+- `ov14_021F7D2C` = `.byte 0x45, 0x41, 0x43, 0x44` (`:36938-36940`), and
+- `msg_0024.gmm` resolves those bytes as row 69 **WITHDRAW**, 65 **SUMMARY**, 67 **MARKING**,
+  68 **RELEASE** (`files/msgdata/msg/msg_0024.gmm:274-293`). The bytes are the *labels*; the
+  item at grid position 0 is WITHDRAW, which is why the default cursor commits a withdraw.
+- `GridInputHandler_SetNextInput(grid, 0x22)` (`:16992-16995`) -> **nextInput = 0x22**.
+- `ov14_021F04D4` schedules state **0x58** (`:21712-21715`), and state 0x58 is
+  `ov14_021EE850` = `Heap_Free` then `mov r0, #0x51` (`:18286-18293`). So the leg returns
+  to 0x51 with the menu open. **There is no destination pick.**
+
+**Second A (action-menu selection 0x22).** In `ov14_021EDA4C` the menu selection feeds a
+9-case jump table (`:16697-16706`) indexed by `selection - 0x1E`; 0x22 lands on **case 4**
+-> `_021EDB98` (`:16730-16746`), which plays `PlaySE` and calls
+`ov14_021F2270(data, 4, 0xA7)`. That helper stores `data+0x30 = 0xA7` and **returns 8**
+(`:25375-25378`). Hence the coordinator's chain, each link re-read:
+
+| Hop | Where | What |
+|---|---|---|
+| 8 | `ov14_021EB27C` (`:11716-11728`) | returns `data+0x30`, i.e. **0xA7** |
+| 0xA7 | `ov14_021F27CC` -> `ov14_021F13B0` (`:26022-26025`, `:23503-23528`) | `Party_GetCount`, `cmp #6`, then `ov14_021F0234(..., 0x53)` -> **0x53** |
+| 0x53 | `ov14_021EDE38` (`:17022-17048`) | `data+0x22 = 2`, then `ov14_021F0234(..., 0x54)` -> **0x54** |
+| 0x54 | `ov14_021EDE70` (`:17050-17062`) | `ov14_021F0234(..., 0x55)` -> **0x55** |
+| 0x55 | `ov14_021EDE88` (`:17064-17119`) | `PlaySE(0x5EA)`, `SetNextInput`, `SetButtonInputMode`-free, then **`bl ov14_021E637C`** at `:17100` -> the commit |
+
+**The commit** is `ov14_021E637C` -> src < 0x1E and dst >= 0x1E + party count
+(`:1371-1402`) -> `ov14_021E6184` -> `CopyBoxPokemonToPokemon` (`:1112`) ->
+`Party_AddMon` (`:1115`) -> `ov14_021E6100` -> **`PCStorage_DeleteBoxMonByIndexPair`**
+(`:1043-1047`). Both the add and the delete are in that one primitive.
+
+**State 0x57 is touch-only.** `ov14_021F0418` (the `msg_0025` "You can add it to your
+party!" grab -> 0x57) has exactly **one** caller, `asm/overlay_14.s:16618`, and that
+caller is inside the touch branch: `System_GetTouchNewCoords` at `:16594`, then
+`ov14_021F0418` at `:16618`. State 0x57 (`ov14_021EDF28`, `:17139-17187`) reads no input
+and returns 0x51. A d-pad run never reaches it. This is exactly why CORRECTION 2 read a
+touch-only state as the keyboard path.
+
+**Oracle.** party count +1 and the box slot cleared. It is **not** a sampled state word;
+no single state value proves the commit on its own.
+
+**Addresses.** ov14 loads at `0x021E5900`, so the dispatcher table literal
+`_021EAFA8: .word ov14_021F7D9C` (`:11386`) is **ov14 + 0x56A8** (RAM `0x021EAFA8`), and the
+table it points at, `ov14_021F7D9C`, is **table + 0x1249C** (RAM `0x021F7D9C`). The state-0x55
+entry is `.word ov14_021EDE88` (`:37051`), which carries the Thumb bit in the ROM word:
+**`0x021EDE89`**. Both offsets are RAM-minus-overlay-base, not file offsets.
+
+### 4. Per title (ROM spot-check of the three pinned ROMs) — CARD, not re-read here
+
+- The ov14 action-menu bytes `45 41 43 44` and the `0x55` handler pointer are identical
+  on HG / SS / hge.
+- SS ov14 is byte-identical to HG.
+- hge ov14 differs elsewhere; hge replaces **29** `PCStorage` functions in ov129 (not 25),
+  plus display/form hooks. The keyboard path and the RAM witness offsets are unchanged.
+- The directly proved first-selection patch on hge is `BoxDisplayMon_StoreAbility` within
+  `E7358` (called from `E7588`).
+- `HandleBoxPokemonFormeChanges` is a broader replacement, **not** a proved on-path
+  requirement. Do not treat it as one.
+- Function-pin observers on hge must target **ov129** addresses, not ov14 / arm9.
+- **No per-title withdraw plan parameters are needed.** One leg serves all three titles.
+
+### 5. Open
+
+- **PHYSICAL two-A withdraw on SS and hge is pending.** The emulator is paused by owner
+  ruling; the HG run is the only physical receipt, and it predates this correction.
+
+### Superseded lines
+
+Each quote is 10 words or fewer, with its line number in this file.
+
+- `:113` — "tap Right then A" — one A is not enough; the second A is the commit. (The
+  Right is right, but for the PC top menu, not a box toolbar.)
+- `:115` — "Node 7 = WITHDRAW is INFERRED" — dead; no toolbar node is involved.
+- `:147` — "**Node 8 = WITHDRAW is UNVERIFIED**" — dead, same reason.
+- `:174` — "**Box-mon withdraw = no menu.**" — false for the keyboard path; there are two.
+- `:175` — "State 0x51 calls `ov14_021F0418`" — false; state 0x51 is `ov14_021EDA4C`.
+- `:175` — "then schedules state **0x57**" — 0x57 is touch-only.
+- `:176` — "reads NO input: `PlaySE(0x5EA)` -> `ov14_021E637C`" — true of 0x57, but 0x57 is
+  unreachable by d-pad, so it is not the withdraw commit.
+- `:183` — "PC top menu: Down x1 then A" — it is **Right** x1 (SRC: `ov27_0225D174` row 0).
+- `:186` — "the msg_0025 row 37 prompt, state 0x57" — touch-only; keyboard shows no msg_0025.
+- `:187` — "The commit, back to 0x51." — the commit is state **0x55**, reached 8 -> 0xA7 ->
+  0x53 -> 0x54 -> 0x55, and 0x55 hands off to 0x56, not straight back to 0x51.
+- `:194` — "press A, and state 0x57 commits" — the **no-d-pad** half of this line survives
+  and is now proved; the **one A / 0x57** half is superseded.
+- `:529` (in `tools/gen4_routes.py`, not this file) cites only "6b CORRECTION 2" as its
+  source of record; see the reply for the comment list in that file.
+
+### Consequence for the implemented leg
+
+`tools/gen4_routes.py`'s `grab` / `commit` steps still encode the single-A / 0x57 model.
+That file is owned by another card; the edits it needs are enumerated in this card's reply.
