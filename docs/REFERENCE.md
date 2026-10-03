@@ -1,142 +1,151 @@
 # SLink — Soul Link Nuzlocke Automation
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, …) to a central Python server over TCP. The server enforces the Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands in the same response. You play; the bookkeeping happens.
 
-**Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, companion-patched; a clean cartridge is refused)
-  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
-  frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
-  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
-  hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
-- **Gen 3** — Emerald (pinned US dump) — 🟡 **Release candidate** on its own `gen3_emerald` pack under
-  `lua/gen3/`; admitted by ROM hash or by its engine-site anchors (header-only builds refused) and pairs only with itself, never with FRLG/RR. The owner's EG4
-  sign-off is pending (`docs/gen3_emerald/PLAN.md` §10, `docs/gen3_emerald/`).
-- **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
-  the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
-  refuses them by name until they are ported to `lua/gen3/`.
-- **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
-  *mechanisms* are proven against running cartridges; a *playthrough* is not. Be precise about
-  which you are relying on:
-  - **Proven live** — **encounter linking from actual play**: both cartridges walk Route 1's
-    grass, meet real wild Pokémon, throw real Poké Balls, and the server pairs the two
-    captures by area on its own (`area=route_1`, nothing injected, Nuzlocke gate flipped by
-    the client's own bag read). Plus faint propagation and party→box sync across two real
-    cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
-    write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
-    companion patch's VBlank hook, its START-menu row, and the in-game panel — including a
-    page turn and a close — on both a clean and a randomized+injected cartridge.
-    The rewritten client's duo harness (`tools/e2e_duo.py`, game `gen1_new`) runs **eighteen**
-    scenarios, all paired **Red (player A) against Blue (player B)** — there is no Yellow duo
-    pairing in this harness. Yellow's −1 WRAM shift is instead exercised by the non-duo
-    inspect/scripted live gates (`tests/live/test_gen1_new_gates.py`), which run on all three
-    cartridges individually.
-  - **Proven live, without injection** — encounter linking, the ball gate, the dead zone and
-    the species clause: `link_new`, `ball_gate_new`, `deadzone_new` and `species_clause_new`
-    walk Route 1's grass on both cartridges, meet real wild Pokemon and throw real Poke Balls,
-    and the server pairs the captures by area (`docs/gen1_requirements.md` D-1..D-4).
-  - **NOT proven live** — whiteout and the gender/type clauses; any map *transition* (every
-    playing scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution
-    `key_change`; and the Archipelago variants, which have never been launched. The scripted
-    warp that would reach the other 38 is undrivable from Lua — `hWarpDestinationMap` at
-    `$FF81` is shared HRAM the renderer overwrites within the frame (measured three ways
-    before the probe was retired) — and the fly warp reaches thirteen destinations of which
-    two carry encounters.
-  Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
-  The Red/Blue companion patch (required; Yellow and Archipelago are exempt and have none) adds
-  the in-game SLINK panel and native sound. The VBlank `PlaySound` path ABI 2 used was swallowed
-  during music fades and re-entered a non-reentrant audio routine, so sound now runs on the main
-  thread: `SlinkSfxService` (`patch/gen1/src/slink.asm`, `SLINK_CAP_SFX`) plays the semantic
-  code the client posts at mailbox `+7` (`request_sfx_local` in `lua/gen1/client.lua`, gated on
-  `panel:sfx_present()` and `native_sounds`).
-- **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) —
-  🟡 **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
-  `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec
-  and server machinery; every game fact is generated from the pinned source and byte-verified
-  in the built ROMs (`docs/purergb/PLAN.md`, §13.1 gate ledger). What differs from vanilla and
-  how it is handled:
+## Supported games
+
+| Game | Status | Pairs with |
+|---|---|---|
+| **Gen 3** — FireRed, LeafGreen (pinned US 1.0), Radical Red 4.1 (CFRU) | 🟡 **Release candidate** on the rewritten client (`lua/gen3/`); owner's G4/G5 sign-off pending | FR ↔ LG ↔ RR |
+| **Gen 3** — Emerald (pinned US dump) | 🟡 **Release candidate** on its own `gen3_emerald` pack | Emerald ↔ Emerald only |
+| **Gen 1** — Red, Blue, Yellow (US English) | 🟡 **Partially verified** — mechanisms proven live, a playthrough is not | Red ↔ Blue |
+| **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen | 🟡 **Same bar as Red/Blue** | pureRGB ↔ pureRGB, same artifact kind |
+| **Gen 2** — Crystal, Gold, Silver (GBC) | 🟡 **Partially verified** — mechanisms proven live, a playthrough is not | C↔C, G↔S, C↔G |
+| **Gen 3** — the Archipelago FireRed/LeafGreen builds | ❌ **Not supported** — see below | — |
+| **Gen 4** — HeartGold, SoulSilver, Platinum | ⚠️ **Experimental** — never run against a cartridge | HGSS ↔ HGSS |
+| **Gen 5** — Black, White, Black 2, White 2 | ⚠️ **Experimental** — never run against a cartridge | — |
+
+Companion-patched titles are the norm: since 2026-10-02 the patch is **required** for every title that
+has one and a clean cartridge is refused — see [patch/README.md](../patch/README.md).
+
+> **Note:** Gen 1 and Gen 2 have live coverage of their *mechanisms*, not of a *run* — read the
+> per-generation caveats before trusting either. Gen 3 has extensive live-play coverage. Gens 4 and 5
+> have full feature pipelines and pass their unit-test suites; they stay ⚠️ Experimental because
+> nothing has run them against a cartridge.
+
+## What is proven, per generation
+
+- **Gen 3 FireRed / LeafGreen / Radical Red** — 🟡 Release candidate on the rewritten client under
+  `lua/gen3/`: the frozen-cut gate passes FR/LG **43/43** and RR **19/19** on real cartridges
+  (`docs/gen3/G4_request_draft.md`, `docs/gen3/G5_request_draft.md`); the owner's G4/G5 sign-off is
+  pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`); randomized and other
+  unpinned builds are refused by name. Radical Red is companion-patched; a clean cartridge is refused.
+- **Gen 3 Emerald** — 🟡 Release candidate on its own `gen3_emerald` pack under `lua/gen3/`, admitted
+  by ROM hash or by its engine-site anchors (header-only builds refused). It pairs only with itself,
+  never with FRLG/RR. The owner's EG4 sign-off is pending (`docs/gen3_emerald/PLAN.md` §10,
+  `docs/gen3_emerald/`).
+- **Gen 3 Archipelago FRLG** — ❌ Not supported. They ran only on the old Gen 3 client, archived at
+  C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua` refuses them by name until
+  they are ported to `lua/gen3/`.
+- **Gen 1 Red / Blue / Yellow** — 🟡 Partially verified. The Soul Link *mechanisms* are proven against
+  running cartridges; a *playthrough* is not.
+  - **Proven live** — **encounter linking from actual play**: both cartridges walk Route 1's grass,
+    meet real wild Pokémon, throw real Poké Balls, and the server pairs the two captures by area on its
+    own (`area=route_1`, nothing injected, Nuzlocke gate flipped by the client's own bag read). Plus
+    faint propagation and party→box sync across two real cartridges; memorialize into Box 12; Explode
+    Mode arming Explosion; the enemy-party write; `force_faint`; box level at `box+0x03`; Yellow's −1
+    WRAM shift (reads); the companion patch's VBlank hook, its START-menu row, and the in-game panel
+    (a page turn and a close) on both a clean and a randomized+injected cartridge. The rewritten
+    client's duo harness (`tools/e2e_duo.py`, game `gen1_new`) runs **twenty** scenarios, all paired
+    **Red (player A) against Blue (player B)** — there is no Yellow duo pairing in this harness.
+    Yellow's −1 shift is instead exercised by the non-duo inspect/scripted live gates
+    (`tests/live/test_gen1_new_gates.py`), which run on all three cartridges individually.
+  - **Proven live, without injection** — encounter linking, the ball gate, the dead zone and the
+    species clause: `link_new`, `ball_gate_new`, `deadzone_new` and `species_clause_new` walk Route 1's
+    grass on both cartridges, meet real wild Pokémon and throw real Poké Balls, and the server pairs
+    the captures by area (`docs/gen1_requirements.md` D-1..D-4).
+  - **NOT proven live** — whiteout and the gender/type clauses; any map *transition* (every playing
+    scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution `key_change`; and
+    the Archipelago variants, never launched. The scripted warp that would reach the other 38 is
+    undrivable from Lua — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites
+    within the frame (measured three ways before the probe was retired) — and the fly warp reaches
+    thirteen destinations of which two carry encounters.
+  - Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums). The
+    Red/Blue companion patch (required; Yellow and Archipelago are exempt and have none) adds the
+    in-game SLINK panel and native sound. The VBlank `PlaySound` path ABI 2 used was swallowed during
+    music fades and re-entered a non-reentrant audio routine, so sound now runs on the main thread:
+    `SlinkSfxService` (`patch/gen1/src/slink.asm`, `SLINK_CAP_SFX`) plays the semantic code the client
+    posts at mailbox `+7` (`request_sfx_local` in `lua/gen1/client.lua`, gated on `panel:sfx_present()`
+    and `native_sounds`).
+- **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) — 🟡
+  **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
+  `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec and
+  server machinery; every game fact is generated from the pinned source and byte-verified in the built
+  ROMs (`docs/purergb/PLAN.md`, §13.1 gate ledger).
   - **Admission by full ROM sha1** (`admission.json`, `admission_overlay.json`; the pure headers
-    collide with vanilla's) — any other pureRGB version is refused. Randomized pure cartridges
-    are admitted by every engine-site anchor + the overworld checkpoint bytes (kind `rand` /
-    `rand_overlay`) and then by the preparation contract's fingerprint **and** sha1.
-  - **Reads through the flat `WRAM` domain** for `$D000-$DFFF` and writes gated on
-    `WRAM BANK ∈ {0,1}`: pureRGB runs the overworld at GBC 2× and selects WRAM bank 2 inside
-    its palette-buffer loop with interrupts enabled. BizHawk **Console Mode GBC**, not SGB.
+    collide with vanilla's) — any other pureRGB version is refused. Randomized pure cartridges are
+    admitted by every engine-site anchor + the overworld checkpoint bytes (kind `rand` /
+    `rand_overlay`), then by the preparation contract's fingerprint **and** sha1.
+  - **Reads through the flat `WRAM` domain** for `$D000-$DFFF`, writes gated on `WRAM BANK ∈ {0,1}`:
+    pureRGB runs the overworld at GBC 2× and selects WRAM bank 2 inside its palette-buffer loop with
+    interrupts enabled. BizHawk **Console Mode GBC**, not SGB.
   - **Overworld checkpoint** `PC == $0040`, `[SP] == DelayFrame+24`, `[SP+2] == OverworldLoop+1`,
     `wDelayFrameBank == 0` (`write_checkpoint.json`, generated with source asserts).
-  - **Species by internal index**, never dex: 151 + 13 non-dex records (7 transformation forms,
-    5 uncatchable spirits, MissingNo `$B5`) with pureRGB's default typings (the per-save Type
-    Guy toggles are ignored by design) and `PokedexOrder` for the species clause.
-  - **Identity:** script transformations (`ChangePartyPokemonSpecies`, 10 sites) and the APEX
-    CHIP (DVs → `$FFFF`) are `key_change{reason: transform | apex_chip}`, **acknowledged** by the
-    server (`key_change_ack` / `key_change_rejected`); a predicted collision (same species +
-    OT already at `$FFFF`) restores the DV bytes at the commit site and sends nothing; a
-    server-side rejection retires the pair (`identity_lost`). A transformed DEAD mon is
-    re-fainted (the engine heals it to full HP).
-  - **Explode Mode:** pureRGB's EXPLOSION only faints its user below ⅓ HP, so `force_explode`
-    first drops the active battler under `max/3` (profile `derived.explode_low_hp_fraction`).
-  - **Pairing:** pureRGB pairs only with pureRGB, same artifact kind (clean↔overlay is refused);
-    Cable Club trades between a vanilla and a pure cartridge are not supportable.
-  - **Companion overlay** (`patch/gen1/purergb/`, `patch/dist/SLink-Pure*.ups`): the vanilla
-    binary patch cannot apply (ROM0 is full, RST vectors are live code, the vanilla mailbox
-    address is inside pureRGB's box data), so the native trade, the START-menu SLINK row + panel
-    and an APEX collision guard are **source sections** linked into the pureRGB build: bank
-    `$3F`, 15 bytes of ROM0, a 12-byte mailbox at `$DEEA` (the bank-1 WRAM tail), ABI 3 / lease
-    `SLT1` unchanged. RAM/SRAM placement is proven equal to the clean build, and a clean save
-    loads on the overlay unchanged (A4 gate, `tests/unit/test_gen1_purergb_overlay.py`).
-  - **Randomizer:** the SLink fork of UPR ZX 4.6.1 (`patch/upr/*.patch`, `tools/build_upr_fork.py`,
-    jar `4.6.1-slink3`, fork revision 3 required) with lossless load→save for pure entries, generated INI rows
-    (`tools/gen_upr_gen1_ini.py`), a write-domain audit (`tools/upr_write_domain_diff.py`) and
-    every code-patching tweak refused (`server/upr_settings.py` pure family); one tweak allowed,
-    lower-case names (a data write over the species-name table, re-cased byte-for-byte in place).
-  - **Evidence:** unit pins mirror the vanilla contract (`tests/unit/test_gen1_purergb_*.py`);
-    live: inspect on all six pure cartridges (clean + overlay), APEX restore and APEX refusal
-    gates, receptionist/menu-row/panel on the overlay, GBC FADE stress; duo: the vanilla
-    scenario set on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing
-    (`tests/e2e/test_duo_gen1_pure.py`, lane `duo-pairs-purergb`), including
-    `admit_randomized_new` on the fork jar.
+  - **Species by internal index**, never dex: 151 + 13 non-dex records (7 transformation forms, 5
+    uncatchable spirits, MissingNo `$B5`) with pureRGB's default typings (the per-save Type Guy toggles
+    are ignored by design) and `PokedexOrder` for the species clause.
+  - **Identity:** script transformations (`ChangePartyPokemonSpecies`, 10 sites) and the APEX CHIP
+    (DVs → `$FFFF`) are `key_change{reason: transform | apex_chip}`, **acknowledged** by the server
+    (`key_change_ack` / `key_change_rejected`); a predicted collision (same species + OT already at
+    `$FFFF`) restores the DV bytes at the commit site and sends nothing; a server-side rejection retires
+    the pair (`identity_lost`). A transformed DEAD mon is re-fainted (the engine heals it to full HP).
+  - **Explode Mode:** pureRGB's EXPLOSION only faints its user below ⅓ HP, so `force_explode` first
+    drops the active battler under `max/3` (profile `derived.explode_low_hp_fraction`).
+  - **Pairing:** pureRGB pairs only with pureRGB, same artifact kind (clean↔overlay is refused); Cable
+    Club trades between a vanilla and a pure cartridge are not supportable.
+  - **Companion overlay** (`patch/gen1/purergb/`, `patch/dist/SLink-Pure*.ups`): the vanilla binary
+    patch cannot apply (ROM0 is full, RST vectors are live code, the vanilla mailbox address is inside
+    pureRGB's box data), so the native trade, the START-menu SLINK row + panel and an APEX collision
+    guard are **source sections** linked into the pureRGB build: bank `$3F`, 15 bytes of ROM0, a 12-byte
+    mailbox at `$DEEA` (the bank-1 WRAM tail), ABI 3 / lease `SLT1` unchanged. RAM/SRAM placement is
+    proven equal to the clean build, and a clean save loads on the overlay unchanged (A4 gate,
+    `tests/unit/test_gen1_purergb_overlay.py`).
+  - **Randomizer:** the SLink fork of UPR ZX 4.6.1 (`patch/upr/*.patch`, `tools/build_upr_fork.py`, jar
+    `4.6.1-slink3`, fork revision 3 required) with lossless load→save for pure entries, generated INI rows
+    (`tools/gen_upr_gen1_ini.py`), a write-domain audit (`tools/upr_write_domain_diff.py`) and every
+    code-patching tweak refused (`server/upr_settings.py` pure family); one tweak allowed, lower-case
+    names (a data write over the species-name table, re-cased byte-for-byte in place).
+  - **Evidence:** unit pins mirror the vanilla contract (`tests/unit/test_gen1_purergb_*.py`); live:
+    inspect on all six pure cartridges (clean + overlay), APEX restore and APEX refusal gates,
+    receptionist/menu-row/panel on the overlay, GBC FADE stress; duo: the vanilla scenario set on
+    PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`tests/e2e/test_duo_gen1_pure.py`,
+    lane `duo-pairs-purergb`), including `admit_randomized_new` on the fork jar.
 - **Gen 2** — Gold, Silver, Crystal (GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
   *mechanisms* are proven against real cartridges, a *playthrough* is not.
   - One adapter serves all three titles: `server/adapters/gen2_gsc.py`, with `gen2_codec.py` (save and
     party structs) and `gen2_rom_scan.py`, over the per-title packs `data/games/gen2_{crystal,gold,silver}/`,
     all generated from the pinned pret decomps (`data/gen2_sources.lock.json`). The legacy Crystal-only
     adapter was removed at the P3b.8 cutover.
-  - **Proven live** on real dumps of all three titles, in 98 PHYSICAL duo and gate cells (pairings C↔C,
-    G↔S, C↔G) judged from committed receipts by `tools/verify_gen2_release.py`. Duos: encounter linking,
-    the species/gender/type clauses, the ball gate, faint and active-battler faint (wild and trainer),
-    whiteout and whiteout-rebuild, overworld poison, PC deposit/withdraw/release and box changes, NPC
-    trade, evolution, gift, egg hatch, boxed capture, reconnect, soft reset, wrong-ROM admission, and
-    the native SLINK TRADE (commit, decline, refuse-item, trade-evolve, timeout, reset). Gates: read,
-    engine sites (all three titles) and write windows (Crystal, Gold; Silver shares Gold's, O-23); on
-    the companion overlay the START-menu panel, native sound, phone calls, the W6 write guard and the
-    battle-text stack low-water gate. The memorial box is the last box (`gen2_gsc.memorial_box_index`).
+  - **Proven live** on real dumps of all three titles, in **98** PHYSICAL duo and gate cells (pairings
+    C↔C, G↔S, C↔G) judged from committed receipts by `tools/verify_gen2_release.py`. Duos: encounter
+    linking, the species/gender/type clauses, the ball gate, faint and active-battler faint (wild and
+    trainer), whiteout and whiteout-rebuild, overworld poison, PC deposit/withdraw/release and box
+    changes, NPC trade, evolution, gift, egg hatch, boxed capture, reconnect, soft reset, wrong-ROM
+    admission, and the native SLINK TRADE (commit, decline, refuse-item, trade-evolve, timeout,
+    reset). Gates: read, engine sites (all three titles) and write windows (Crystal, Gold; Silver
+    shares Gold's, O-23); on the companion overlay the START-menu panel, native sound, phone calls,
+    the W6 write guard and the battle-text stack low-water gate. The memorial box is the last box
+    (`gen2_gsc.memorial_box_index`).
   - **Not proven:** a full playthrough. The Gen 2 dead zone rides on the generation-independent server
     rule that Gen 1's `deadzone_new` proves live; there is no Gen 2 dead-zone duo.
-  - **Companion overlay** (`patch/dist/SLink-{Crystal,Gold,Silver}.ups`): BUILT, not yet ADMITTED. It is
-    promoted only after the owner signs G4 (`docs/gen2/PLAN.md` §6.1).
-  - **Archipelago Crystal is refused** at admission (owner ruling O-8/O-25; `data/games/gen2_crystal/admission.json`).
-- **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
-- **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
+  - **Companion overlay** (`patch/dist/SLink-{Crystal,Gold,Silver}.ups`): **admitted and required**.
+    The overlay rows are SELECTED/ADMITTED under the G4 runtime gate, so a clean Crystal/Gold/Silver
+    cartridge is refused exactly like any other companion title.
+  - **Archipelago Crystal is refused** at admission (owner ruling O-8/O-25;
+    `data/games/gen2_crystal/admission.json`).
 
-> **Note:** Gen 1 and Gen 2 have live coverage of their mechanisms, not of a run — see the
-> per-generation caveats above before trusting either. Gen 3 has extensive live-play coverage.
-> Gens 4 and 5 have full feature pipelines
-> (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass
-> their unit-test suites; static profile addresses are checked against pret decomps at review
-> time. They remain ⚠️ Experimental because nothing has run them against a cartridge.
->
-> That distinction is not academic, and Gen 2 proved it twice. Bringing Gen 1 up found defects no
-> static check could reach — a deferred-command queue that bound to a nil global and crashed the
-> client on the first box or memorialize command; a `party_to_box` debounce that could never
-> complete, so party/box sync was silently dead; a box level read from an offset past the end of
-> the box struct; Archipelago detection reading HRAM instead of ROM. Gen 2 then went in with a
-> larger unit suite than Gen 1 ever had and everything the static suite could not see was wrong:
-> Gold, Silver and AP Crystal routed to the **Gen 3** adapter, `party_blob_size()` inherited 0 so
-> every Gen 2 party blob was discarded, no profile declared `stats_offset` so every box deposit
-> dropped the stat block, and the Apricorn ball IDs pointed at SUN_STONE, which left the Nuzlocke
-> gate shut for anyone carrying balls Kurt made. All of it passed the unit suite and the Lua
-> syntax gate. Treat "unit tests pass" as necessary, not sufficient.
+### Why "unit tests pass" is not the bar
 
----
+That distinction is not academic, and Gen 2 proved it twice. Bringing Gen 1 up found defects no static
+check could reach — a deferred-command queue that bound to a nil global and crashed the client on the
+first box or memorialize command; a `party_to_box` debounce that could never complete, so party/box
+sync was silently dead; a box level read from an offset past the end of the box struct; Archipelago
+detection reading HRAM instead of ROM. Gen 2 went in with a larger unit suite than Gen 1 ever had and
+everything the static suite could not see was wrong: Gold, Silver and AP Crystal routed to the **Gen 3**
+adapter, `party_blob_size()` inherited 0 so every Gen 2 party blob was discarded, no profile declared
+`stats_offset` so every box deposit dropped the stat block, and the Apricorn ball IDs pointed at
+SUN_STONE, leaving the Nuzlocke gate shut for anyone carrying balls Kurt made. All of it passed the
+unit suite and the Lua syntax gate. Treat "unit tests pass" as necessary, not sufficient.
 
 ## Prerequisites
 
