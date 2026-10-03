@@ -583,9 +583,16 @@ def _drive_hazards(repo) -> list[dict]:
         blobs = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin-paths"],
                                input="\n".join(untracked), capture_output=True, text=True,
                                encoding="utf-8").stdout.split()
+        # Prefilter: only blobs git already has can equal a committed revision.
+        check = subprocess.run(["git", "-C", str(repo), "cat-file", "--batch-check"],
+                               input="\n".join(blobs) + "\n", capture_output=True, text=True,
+                               encoding="utf-8").stdout.splitlines()
+        known = {ln.split()[0] for ln in check if ln.split()[1:2] != ["missing"]}
         # Not `log --all`: a Drive conflict ref ("master (1)") makes that fatal.
         revs = git(repo, "for-each-ref", "--format=%(objectname)", "refs/heads", "refs/tags")
         for rel, blob in zip(untracked, blobs, strict=True):
+            if blob not in known:
+                continue
             conflict = bool(_DRIVE_COPY.search(rel))
             base = _DRIVE_COPY.sub(lambda m: m.group(1) or "", rel) if conflict else rel
             hit = subprocess.run(["git", "-C", str(repo), "log", "--stdin", "-1", "--format=%h",
@@ -600,7 +607,11 @@ def _drive_hazards(repo) -> list[dict]:
                     "fp": f"{st.st_size}:{st.st_mtime:.0f}:{blob}"}
             # Only the shapes Drive is known to produce are junk; anything else equal to an old
             # revision may be someone's deliberate `git rm --cached`.
-            if conflict or rel in KNOWN_DRIVE_RESTORES:
+            if conflict and not (Path(repo) / base).is_file():
+                items.append({**item, "status": "refuse", "reason":
+                              f"Drive conflict copy of {base}, but {base} itself is gone; "
+                              "this may be the only copy, inspect by hand"})
+            elif conflict or rel in KNOWN_DRIVE_RESTORES:
                 items.append({**item, "status": "stale",
                               "reason": f"Drive-restored copy of {base} as committed in {hit}"})
             else:

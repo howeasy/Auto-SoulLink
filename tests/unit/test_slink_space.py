@@ -555,6 +555,16 @@ def test_known_drive_restores_and_conflict_copies_are_stale(W):
     assert ss._norm(W.repo / "novel.txt") not in paths
 
 
+def test_conflict_copy_whose_base_is_gone_is_refused(W):
+    (W.repo / "c.txt").write_text("sea\n")
+    _git(W.repo, "add", "c.txt")
+    _git(W.repo, "commit", "-qm", "c")
+    _git(W.repo, "rm", "-q", "c.txt")
+    _git(W.repo, "commit", "-qm", "drop c")
+    (W.repo / "c (1).txt").write_text("sea\n")  # the only copy left of c.txt on disk
+    assert item(plan(W), W.repo / "c (1).txt")["status"] == "refuse"
+
+
 def test_other_untracked_old_revision_is_refused_and_survives(W):
     _git(W.repo, "rm", "-q", "--cached", "a.txt")  # benign: someone untracking a file
     p = plan(W)
