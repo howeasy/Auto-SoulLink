@@ -17,15 +17,16 @@ this to give each run its own isolated data directory.
 """
 
 import json
-import time
 import logging
 import os
+import time
 from collections import Counter, deque
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
+from server import json_files
 from server.adapters.base import GameRulesAdapter, humanize_area_id
 from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
 
@@ -231,6 +232,7 @@ class SoulLinkState:
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
+        self.load_failed: str = ""
         # set of monKeys known to be in each player's party right now
         self.party_keys: dict[str, set[str]] = {"a": set(), "b": set()}
         # cached party stats per monKey (populated by party_to_box events, echoed in party_mon)
@@ -486,6 +488,8 @@ class SoulLinkState:
         Returns commands to send back to player_id (including any queued cross-player commands).
         Cross-player commands are queued and delivered on the partner's next call.
         """
+        if self.load_failed:
+            return [{"cmd": "noop", "refused": "load_failed"}]
         event = msg.get("event", "unknown")
         refused = self.refuse_hidden_event(player_id, msg)
         if refused is not None:
@@ -1759,6 +1763,10 @@ class SoulLinkState:
         try:
             with open(state._links_path) as f:
                 data = json.load(f)
+        except (OSError, ValueError) as exc:
+            log.error(f"Failed to read {state._links_path}: {exc}")
+            return state
+        try:
             for ed in data.get("links", []):
                 a = MonInfo(**ed["a"]) if ed.get("a") else None
                 b = MonInfo(**ed["b"]) if ed.get("b") else None
@@ -1926,7 +1934,8 @@ class SoulLinkState:
             # resume it under the stale adapter, exactly what this refusal prevents.
             raise
         except Exception as e:
-            log.error(f"Failed to load {state._links_path}: {e}")
+            state.load_failed = f"{type(e).__name__}: {e}"
+            log.error(f"Failed to load {state._links_path}: {state.load_failed}")
         return state
 
     # ── event handlers ───────────────────────────────────────────────────────
@@ -4629,29 +4638,8 @@ class SoulLinkState:
             self.queued_commands[pid].append({"cmd": "game_over"})
 
     def _atomic_write_json(self, path: str, payload):
-        """Write JSON atomically: write to .tmp, fsync, rename over target.
-
-        On crash mid-write, the original file at `path` is untouched.
-        `os.replace` is atomic on both Windows and POSIX.
-
-        On Windows, file sync software (e.g. Google Drive) can briefly hold
-        a lock on the target file, making `os.replace` raise PermissionError.
-        We retry up to 5 times with a short sleep before giving up.
-        """
-        import time
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w") as f:
-            json.dump(payload, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        for attempt in range(5):
-            try:
-                os.replace(tmp_path, path)
-                return
-            except PermissionError:
-                if attempt == 4:
-                    raise
-                time.sleep(0.2 * (attempt + 1))
+        """Preserve the state monkeypatch seam; publication/retries live in json_files."""
+        return json_files.atomic_write_json(path, payload)
 
     def _save(self):
         os.makedirs(self._data_dir, exist_ok=True)

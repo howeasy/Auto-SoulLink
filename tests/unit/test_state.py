@@ -5751,3 +5751,69 @@ def test_same_area_no_catch_without_area_enter_still_suppresses_retry():
     commands = state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
     assert has_cmd(commands, "unresolve_area")
     assert state.area_states.get("route_2") != AreaStatus.DEAD_ZONE
+
+
+
+def test_state_save_uses_shared_atomic_helper_and_survives_drive_lock(tmp_path, monkeypatch):
+    import json
+    import time
+    from server import json_files
+    state = SoulLinkState(data_dir=str(tmp_path))
+    helper, replace = json_files.atomic_write_json, json_files.os.replace
+    delegated, attempts = [], []
+    def publish(path, value):
+        delegated.append(path)
+        return helper(path, value)
+    def locked(source, target):
+        attempts.append(target)
+        if len(attempts) < 3:
+            raise PermissionError("Drive lock")
+        return replace(source, target)
+    monkeypatch.setattr(json_files, "atomic_write_json", publish)
+    monkeypatch.setattr(json_files.os, "replace", locked)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    state._save()
+    assert state._links_path in delegated and len(attempts) >= 3
+    assert not state.save_failed and json.loads((tmp_path / "links.json").read_text())["links"] == []
+
+
+@pytest.mark.parametrize("error", [ValueError("bad stats"), OSError("decode IO"), RuntimeError("decoder broke")])
+def test_decode_failure_latches_and_refuses_events(tmp_path, monkeypatch, error):
+    path = tmp_path / "links.json"
+    path.write_text('{"links":[]}')
+    def broken(*_args):
+        raise error
+    monkeypatch.setattr(SoulLinkState, "_load_mon_stats", broken)
+    state = SoulLinkState.load(data_dir=str(tmp_path))
+    assert state.load_failed == f"{type(error).__name__}: {error}"
+    for event in ("hello", "tick", "capture"):
+        commands = state.handle_event("a", {"event": event, "key": "A:1", "area_id": "route_1", "party": []})
+        assert commands == [{"cmd": "noop", "refused": "load_failed"}]
+    assert path.read_text() == '{"links":[]}' and not state.party_keys["a"]
+
+
+@pytest.mark.parametrize("contents", ["{broken", "null", '{"area_states":{"route_1":"nonsense"}}'])
+def test_load_distinguishes_unreadable_json_from_decode_errors(tmp_path, contents):
+    (tmp_path / "links.json").write_text(contents)
+    state = SoulLinkState.load(data_dir=str(tmp_path))
+    assert bool(state.load_failed) == (contents != "{broken")
+
+
+def test_open_error_remains_tolerant_but_unsafe_migration_raises(tmp_path, monkeypatch):
+    import builtins
+    from server.state import UnsafeGameMigration
+    path = tmp_path / "links.json"
+    path.write_text('{}')
+    original = builtins.open
+    def locked(name, *args, **kwargs):
+        if str(name) == str(path):
+            raise PermissionError("locked")
+        return original(name, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "open", locked)
+        assert SoulLinkState.load(data_dir=str(tmp_path)).load_failed == ""
+    def unsafe(*_args):
+        raise UnsafeGameMigration("migration refused")
+    monkeypatch.setattr(SoulLinkState, "_load_mon_stats", unsafe)
+    with pytest.raises(UnsafeGameMigration, match="migration refused"):
+        SoulLinkState.load(data_dir=str(tmp_path))

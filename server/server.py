@@ -2109,6 +2109,8 @@ class SLinkServer:
         return commands
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
+        if self.state.load_failed:
+            return [{"cmd": "noop", "refused": "load_failed"}]
         event = msg.get("event", "unknown")
         # enemy_party is client JSON read by every battle view: keep only a list of objects.
         if "enemy_party" in msg:
@@ -2893,6 +2895,7 @@ class SLinkServer:
         return {
             # "" when the last save succeeded; the error text when it did not.
             "save_failed": s.save_failed,
+            "load_failed": s.load_failed,
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
@@ -4864,6 +4867,8 @@ class SLinkServer:
         a_name = entry.a.nickname if entry.a else "?"
         b_name = entry.b.nickname if entry.b else "?"
 
+        s.run_over = False
+        s._check_game_over()
         s._save()
         log.info(f"[revive] Revived link: {a_name} <-> {b_name} on {area_id}")
         self._notify_sse()

@@ -9,6 +9,7 @@ def empty_status_payload() -> dict:
     """
     return {
         "save_failed": "",
+        "load_failed": "",
         "players": {
             pid: {
                 "connected": False,

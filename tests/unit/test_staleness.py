@@ -103,3 +103,28 @@ async def test_a_stalled_faint_repair_is_surfaced(srv, page):
     srv.state.faint_repair_stalled["b"] = {"mon1": 3}
     html = await page()
     assert "Player B: 1 linked faint(s) never landed in game" in html
+
+
+@pytest.mark.asyncio
+async def test_load_failure_is_exposed_in_status_and_blocks_banner(srv, page):
+    srv.state.load_failed = "ValueError: <bad state>"
+    assert srv._build_status_dict()["load_failed"] == "ValueError: <bad state>"
+    rendered = await page()
+    assert "Run could not be loaded safely" in rendered and "Events are blocked" in rendered
+    assert "&lt;bad state&gt;" in rendered and "<bad state>" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_load_failure_cannot_be_overwritten_by_a_socket_hello(tmp_path):
+    from tests.unit.test_mixed_foundations import _hello
+    from tests.unit.test_server_run_reconnect import _send, _tcp
+    path = tmp_path / "links.json"
+    original = '{"links":[],"trade_token":"broken"}'
+    path.write_text(original)
+    server = SLinkServer(data_dir=str(tmp_path))
+    assert server.state.load_failed
+    async with _tcp(server) as (connect, _):
+        socket = await connect()
+        reply = await _send(socket, _hello("a", {"rom_type": "red"}))
+        assert any(c.get("refused") == "load_failed" for c in reply["commands"])
+        assert path.read_text() == original
