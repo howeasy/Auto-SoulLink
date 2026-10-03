@@ -55,9 +55,13 @@ typedef struct {
     uint32_t save_start_frame;        /* stamped from e->frame at post_save_begin */
     SlinkIdentity incoming_id;        /* binding identity of the staged record (host claim, checked) */
     SlinkIdentity received_id;        /* identity OBSERVED by the engine after the swap */
-    _Alignas(4) uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads */
-    _Alignas(4) uint8_t scratch[SLINK_MAX_RECORD];  /* handed to engines whose commit mutates input */
+    uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads: 4-aligned by layout, asserted below */
+    uint8_t scratch[SLINK_MAX_RECORD];  /* handed to engines whose commit mutates input */
 } SlinkTradeProducer;
+/* _Alignas is C11-only and mwccarm has none, so the word alignment of the two buffers is
+ * guaranteed by layout (every preceding member is a 4-aligned run) and proved here. */
+SLINK_STATIC_ASSERT(offsetof(SlinkTradeProducer, incoming) % 4u == 0u, "incoming word alignment");
+SLINK_STATIC_ASSERT(offsetof(SlinkTradeProducer, scratch) % 4u == 0u, "scratch word alignment");
 
 static inline uint32_t tp_word(const volatile uint8_t *p)
 {
@@ -84,10 +88,11 @@ static inline void tp_mark(volatile SlinkTradeWitnessV2 *w, unsigned kind, uint1
 static inline int tp_identity(const volatile SlinkMailboxV2 *m,
                               const volatile SlinkTradeWitnessV2 *w)
 {
+    unsigned i;
     if (!m->session_epoch || m->session_epoch != w->session_epoch
         || tp_word(m->args+12) != w->visit_id
         || tp_word(m->args+4) != w->old_pid || tp_word(m->args+8) != w->old_otid) return 0;
-    for (unsigned i=0;i<16;i++) if (m->args[16+i] != w->token[i]) return 0;
+    for (i=0;i<16;i++) if (m->args[16+i] != w->token[i]) return 0;
     return 1;
 }
 static inline void tp_ack(volatile SlinkMailboxV2 *m, uint16_t seq, int ok, uint16_t reason)
@@ -121,8 +126,9 @@ static inline void tp_finish(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
 static inline int slink_trade_commit_entered(SlinkTradeProducer *s,
     volatile SlinkTradeWitnessV2 *w, unsigned actual_slot, const SlinkTradeEngine *e)
 {
+    int slot;
     if (s->phase != TP_SCENE) return 1; /* ordinary cartridge trades are not ours */
-    int slot = e->locate(e->context,w->old_pid,w->old_otid);
+    slot = e->locate(e->context,w->old_pid,w->old_otid);
     if (slot < 0 || (unsigned)slot != actual_slot || actual_slot != s->slot) {
         s->cancel_scene = 1;
         return 0;
@@ -143,12 +149,13 @@ static inline int tp_accept_stage(SlinkTradeProducer *s, const volatile SlinkRec
     uint16_t layout = st->layout_version, id = st->binding_id, len = st->stage_len;
     uint8_t gen = st->generation, flags = st->flags;
     SlinkIdentity claimed = { st->claimed_pid, st->claimed_otid }, actual = {0,0};
+    unsigned i;
     if (!slink_binding_ok(b) || layout != SLINK_NDS_STAGE_LAYOUT || id != b->id
         || gen != b->generation || len != slink_binding_stage_len(b,op) || len > b->max_len
         || len > SLINK_MAX_RECORD || (flags & ~(unsigned)SLINK_STAGE_RAW_ENCRYPTED)
         || ((flags & SLINK_STAGE_RAW_ENCRYPTED) != 0) != ((b->flags & SLINK_RB_RAW_ENCRYPTED) != 0))
         return 0;
-    for (unsigned i=0;i<SLINK_MAX_RECORD;i++) s->incoming[i] = i < len ? st->record[i] : 0;
+    for (i=0;i<SLINK_MAX_RECORD;i++) s->incoming[i] = i < len ? st->record[i] : 0;
     s->incoming_len = len;
     if (!b->validate(e->decoder,s->incoming,len)) return 0;
     if (!b->identity(e->decoder,s->incoming,len,&actual)) return 0;
@@ -174,8 +181,9 @@ static inline int tp_save_poll(const SlinkTradeProducer *s, const SlinkTradeEngi
 static inline void tp_save_resolve(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     volatile SlinkTradeWitnessV2 *w, int polled, const SlinkTradeEngine *e)
 {
+    int ok;
     if (polled == SLINK_SAVEPOLL_PENDING) return;
-    int ok = polled == SLINK_SAVEPOLL_OK;
+    ok = polled == SLINK_SAVEPOLL_OK;
     tp_open(w);
     w->save_status = ok ? SLINK_SAVE_OK : SLINK_SAVE_FAILED;
     if (ok) {
@@ -191,6 +199,10 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     volatile SlinkTradeWitnessV2 *w, const volatile SlinkRecordStageV1 *stage,
     const SlinkTradeEngine *e)
 {
+    uint16_t op, seq;
+    unsigned i, token;
+    int slot;
+    const uint8_t *handed;
     if (s->phase == TP_PRE_SAVE) {
         int result = e->poll_pre_save(e->context);
         if (result == 2) {
@@ -246,7 +258,7 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
             }
         }
     }
-    uint16_t op=m->opcode,seq=m->seq;
+    op=m->opcode; seq=m->seq;
     if (!op) return;
     /* Mailbox ownership: the sound and panel producers share this mailbox, so only
      * the four trade opcodes dispatched below are ours. FAIL-acking a foreign opcode
@@ -259,20 +271,20 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         || (s->phase==TP_SCENE && op==SLINK_OP_TRADE_SCENE && seq==s->scene_seq)) return;
     if (op==SLINK_OP_TRADE_PREPARE) {
         if (s->phase==TP_READY && seq==s->prepare_seq && tp_identity(m,w)) { tp_ack(m,seq,1,0); return; }
-        unsigned token=0;
-        for (unsigned i=0;i<16;i++) token |= m->args[16+i];
+        token=0;
+        for (i=0;i<16;i++) token |= m->args[16+i];
         if ((s->phase!=TP_IDLE && s->phase!=TP_DONE) || !m->session_epoch
             || !tp_word(m->args+12) || !token || !e->safe_field(e->context)
             || (s->phase==TP_DONE && tp_identity(m,w))) { tp_ack(m,seq,0,12); return; }
         if (!slink_binding_ok(e->binding) || !e->save_timeout_frames) { tp_ack(m,seq,0,SLINK_REASON_BAD_ARGS); return; }
-        int slot=e->locate(e->context,tp_word(m->args+4),tp_word(m->args+8));
+        slot=e->locate(e->context,tp_word(m->args+4),tp_word(m->args+8));
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0] || m->args[1]>1) { tp_ack(m,seq,0,2); return; }
         tp_open(w);
         w->session_epoch=m->session_epoch;w->visit_id=tp_word(m->args+12);
-        for (unsigned i=0;i<16;i++) w->token[i]=m->args[16+i];
+        for (i=0;i<16;i++) w->token[i]=m->args[16+i];
         w->old_pid=tp_word(m->args+4);w->old_otid=tp_word(m->args+8);
         w->received_pid=0;w->received_otid=0;w->milestones=0;
-        for (unsigned i=0;i<5;i++) { w->milestone_seq[i]=0;w->milestone_frame[i]=0; }
+        for (i=0;i<5;i++) { w->milestone_seq[i]=0;w->milestone_frame[i]=0; }
         w->visit_flags=SLINK_VISIT_ACCEPTED;w->save_status=0;w->final_result=SLINK_TRADE_PENDING;
         tp_close(w);
         s->prepare_seq=seq;s->slot=(uint8_t)slot;s->cancel_scene=0;s->saving=0;s->phase=TP_PRE_SAVE;
@@ -291,15 +303,15 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         }
         if (s->phase!=TP_READY) { tp_ack(m,seq,0,12); return; }
         if (!e->safe_field(e->context)) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
-        int slot=e->locate(e->context,w->old_pid,w->old_otid);
+        slot=e->locate(e->context,w->old_pid,w->old_otid);
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0]) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         if (!tp_accept_stage(s,stage,e,SLINK_STAGE_OP_TRADE)) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         s->scene_seq=seq;s->slot=(uint8_t)slot;s->phase=TP_SCENE;s->cancel_scene=0;s->saving=0;
         m->status=SLINK_ST_BUSY;
-        const uint8_t *handed = s->incoming;
+        handed = s->incoming;
         if (e->binding->flags & SLINK_RB_COMMIT_MUTATES_INPUT) {
             /* must-not-alias: the engine may scribble on its argument */
-            for (unsigned i=0;i<s->incoming_len;i++) s->scratch[i] = s->incoming[i];
+            for (i=0;i<s->incoming_len;i++) s->scratch[i] = s->incoming[i];
             handed = s->scratch;
         }
         if (!e->start_scene(e->context,(unsigned)slot,handed,s->incoming_len))

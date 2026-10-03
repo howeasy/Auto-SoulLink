@@ -263,8 +263,9 @@ static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
                                                 uint16_t prepare_seq, uint16_t scene_seq,
                                                 uint32_t expected_pid, uint32_t expected_otid)
 {
+    unsigned i;
     if (w->milestone_seq[SLINK_PRE_SAVE_OK] != prepare_seq) return 0;
-    for (unsigned i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
+    for (i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
         if (w->milestone_seq[i] != scene_seq) return 0;
     return w->final_result == SLINK_TRADE_COMMITTED
         && (w->visit_flags & (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT))

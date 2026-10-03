@@ -185,9 +185,10 @@ static const SlinkRecordBinding slink_binding_gen5_pk5 = {
 static inline int slink_text_terminator_index(const volatile uint8_t *row, uint32_t bytes,
                                               const SlinkTextSpec *t)
 {
+    uint32_t i, unit;
     if (!t || (t->width != 1 && t->width != 2)) return -1;
-    for (uint32_t i = 0; i + t->width <= bytes; i += t->width) {
-        uint32_t unit = row[i];
+    for (i = 0; i + t->width <= bytes; i += t->width) {
+        unit = row[i];
         if (t->width == 2) unit |= (uint32_t)row[i + 1] << 8;
         if (unit == t->terminator) return (int)(i / t->width);
     }
@@ -201,8 +202,12 @@ static inline void slink_copy_text_bounded(volatile uint8_t *dst, uint32_t capac
                                            const volatile uint8_t *src, uint32_t source_bytes,
                                            const SlinkTextSpec *t)
 {
+    uint32_t w, cap, n, i;
     if (!t || (t->width != 1 && t->width != 2)) return;
-    uint32_t w = t->width, cap = capacity_bytes / w, n = source_bytes / w, i = 0;
+    w = t->width;
+    cap = capacity_bytes / w;
+    n = source_bytes / w;
+    i = 0;
     if (!cap) return;
     while (i < n && i + 1 < cap) {
         uint32_t unit = src[i * w];
@@ -216,7 +221,7 @@ static inline void slink_copy_text_bounded(volatile uint8_t *dst, uint32_t capac
     if (w == 2) dst[i * w + 1] = (uint8_t)(t->terminator >> 8);
 }
 
-_Static_assert(sizeof(SlinkIdentity) == 8, "identity size");
-_Static_assert(SLINK_MAX_RECORD >= 0xECu, "largest reference party record must fit the stage");
-_Static_assert(SLINK_INFO_LINE_WIDTH % 2u == 0u, "info rows hold whole 16-bit units");
+SLINK_STATIC_ASSERT(sizeof(SlinkIdentity) == 8, "identity size");
+SLINK_STATIC_ASSERT(SLINK_MAX_RECORD >= 0xECu, "largest reference party record must fit the stage");
+SLINK_STATIC_ASSERT(SLINK_INFO_LINE_WIDTH % 2u == 0u, "info rows hold whole 16-bit units");
 #endif

@@ -64,4 +64,7 @@ typedef long long int64_t;
 #  endif
 #endif
 
+/* No SLINK_ALIGNAS: _Alignas is C11-only and the only users were two buffers whose word alignment
+ * is a layout fact, now proved with SLINK_STATIC_ASSERT(offsetof(...) % 4 == 0) in trade_producer.h. */
+
 #endif

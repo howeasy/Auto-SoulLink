@@ -1055,8 +1055,11 @@ def test_nds_headers_have_no_gba_addresses_and_do_not_include_gen3(header):
 def test_readme_exists_and_static_assert_blocks_are_pinned():
     assert (COMMON / "README.md").exists()
     # exact counts: adding or dropping an ABI/record invariant is a deliberate, reviewed change
-    pinned = {"abi.h": 0, "compat.h": 1, "record_binding.h": 3, "trade_producer.h": 0, "panel_producer.h": 0, "sound_producer.h": 0}
-    actual = {h: _strip_comments((COMMON / h).read_text()).count("_Static_assert(") for h in pinned}
+    # compat.h is the only file allowed to spell the C11 form (one define, in its non-mwcc arm)
+    raw = {h: _strip_comments((COMMON / h).read_text()).count("_Static_assert(") for h in HEADERS}
+    assert raw == {h: (1 if h == "compat.h" else 0) for h in HEADERS}
+    pinned = {"abi.h": 27, "compat.h": 2, "record_binding.h": 3, "trade_producer.h": 2, "panel_producer.h": 0, "sound_producer.h": 0}
+    actual = {h: _strip_comments((COMMON / h).read_text()).count("SLINK_STATIC_ASSERT(") for h in pinned}
     assert actual == pinned
 
 

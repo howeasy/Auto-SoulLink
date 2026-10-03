@@ -37,9 +37,15 @@ enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/ge
 * **The per-title build still has to glue the include dir.** Its mwcc compile line
   needs `-I<dir containing patch/src/nds/common>` so `#include "abi.h"` resolves
   from the per-title sources, exactly as the host build passes `-I`.
-* **Still C11-only outside `abi.h`'s own path** (not this directory's other
-  headers' card): `record_binding.h` uses `_Static_assert` three times and
-  `trade_producer.h` uses `_Alignas`; mwccarm will reject both.
+* **Every header here is C89-style for mwcc** (no `_Static_assert`/`_Alignas`/`<stdint.h>`
+  outside compat.h's C11 arm; declarations at block top, no for-loop-head
+  declarations). The word alignment of the trade producer's two stage buffers is
+  proved by `offsetof` asserts instead of `_Alignas`. `static inline` stays (the real
+  mwccarm accepted it in the Gen 4 build); `tests/unit/test_nds_c89_scan.py` enforces
+  the rest on host gcc with `-std=gnu89 -Wdeclaration-after-statement`.
+* **Title dispatchers MUST route by opcode.** `slink_trade_service` ignores any opcode
+  that is not a trade opcode (so sound/panel commands are never FAIL-acked), but it
+  must still be called on every visit: the save and scene polls live inside it.
 
 ## ABI version 3 and the reader rule
 
@@ -210,7 +216,9 @@ remove/compact. The party commit primitive resets the slot's extra itself.
   the pret lib/include — `<stdint.h>`'s absence is the ruling, `<stddef.h>`'s
   presence is inferred. If the first on-target build rejects `<stddef.h>`,
   `compat.h` is where `size_t`/`offsetof` must be provided.
-- **`record_binding.h` and `trade_producer.h` are still unconverted for mwcc**
-  (three `_Static_assert`s, two `_Alignas`): C11 spellings mwccarm rejects.
+- **Real-compiler evidence is the Gen 4 coordinator's run, not ours:** `abi.h` and
+  `compat.h` compiled clean on pret mwccarm 2.0/sp2p2 at ae5c06aa (negative assert
+  control fails as intended); `record_binding.h` and `trade_producer.h` were then
+  converted and must be re-run on the new head.
 - **The title-private region's layout is undefined.** Only its extent is pinned;
   a title card owns the 64 bytes and must document them.

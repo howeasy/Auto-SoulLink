@@ -22,9 +22,10 @@ typedef struct {
 static inline int slink_panel_valid(const volatile SlinkInfoV2 *i,uint32_t epoch,
                                     const SlinkTextSpec *text)
 {
+    unsigned row;
     if (!epoch || i->session_epoch!=epoch || !i->request_seq || !i->enable
         || !i->lines || i->lines>SLINK_INFO_MAX_LINES) return 0;
-    for (unsigned row=0;row<SLINK_INFO_ROW_COUNT;row++) {
+    for (row=0;row<SLINK_INFO_ROW_COUNT;row++) {
         if (row>=i->lines && row!=SLINK_INFO_PAGE_SLOT) continue;
         if (slink_text_terminator_index(i->text[row],SLINK_INFO_LINE_WIDTH,text)<0) return 0;
     }
@@ -33,6 +34,14 @@ static inline int slink_panel_valid(const volatile SlinkInfoV2 *i,uint32_t epoch
 static inline void slink_panel_service(SlinkPanelProducer *s,volatile SlinkMailboxV2 *m,
     volatile SlinkInfoV2 *i,const SlinkPanelEngine *e,int menu_open)
 {
+    /* C89 wants every declaration ahead of the statements of its block. Each value is
+     * still read at the line it was read before, so no statement observes a mailbox or
+     * panel state different from the C99 spelling. */
+    int posted;
+    uint16_t seq;
+    const volatile uint8_t *source;
+    uint8_t *copy;
+    unsigned n;
     if (s->active) {
         uint8_t result=0;
         int phase=e->poll(e->context,&result);
@@ -43,17 +52,17 @@ static inline void slink_panel_service(SlinkPanelProducer *s,volatile SlinkMailb
         }
         if (phase==2) s->active=0;
     }
-    int posted=m->opcode==SLINK_OP_SHOW_INFO;
+    posted=m->opcode==SLINK_OP_SHOW_INFO;
     if (!posted && (!menu_open || m->opcode)) return;
-    uint16_t seq=m->seq;
+    seq=m->seq;
     if (s->active || !e->safe(e->context) || !slink_panel_valid(i,m->session_epoch,e->text)
         || (posted && i->request_seq!=seq)) {
         if (posted) tp_ack(m,seq,0,2);
         return;
     }
-    const volatile uint8_t *source=(const volatile uint8_t *)i;
-    uint8_t *copy=(uint8_t *)&s->snapshot;
-    for (unsigned n=0;n<sizeof(s->snapshot);n++) copy[n]=source[n];
+    source=(const volatile uint8_t *)i;
+    copy=(uint8_t *)&s->snapshot;
+    for (n=0;n<sizeof(s->snapshot);n++) copy[n]=source[n];
     if (!e->start(e->context,&s->snapshot)) {
         if (posted) tp_ack(m,seq,0,2);
         return;
