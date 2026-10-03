@@ -3,7 +3,13 @@
 > - **D-C2-4 ACCEPTED (provisional, to be proven at C2 MODEL).** The generation is a SESSION epoch: the boot generation plus the save-session identity (`PlayerProfile.id`). Verified: New Game re-enters no reset (`src/overlay_36.c`: the New Game app only registers the field app; `OS_ResetSystem` at `:247` is another path), so a boot-only generation cannot satisfy falsifier 1. The "stable for K polls" rule stays INFERRED until C2 MODEL measures it.
 > - **`gSystem.frameCounter` is FORBIDDEN as a liveness clock** (verified: `src/main.c:124` zeroes it every loop). Use `gSystem.vblankCounter`. This goes in the C2 review checklist.
 > - **The private cookie lives in the service SysTask's own heap data block** (allocated in NitroMain init every boot, freed by any reset, read only by the ROM), NOT in DTCM. C1 excluded the DTCM arena because it is the launcher stack (`lib/NitroSDK/src/os/os_thread.c:24-26`). No DTCM census rows are needed.
-> - **D-C2-1 (use `SLINK_RESERVED` for published state) is PENDING the ABI owner (Gen 5)**; the region is theirs to repurpose. Fallback: lay out inside the regions Gen 4 does not use (MENU/TEXT).
+> - **D-C2-1 RULED by the ABI owner (Gen 5, 2026-10-02): allowed, on terms.** Gen 4 may use ONLY 0xE00..0xE40 (64 B; absolute 0x01FFFA00..0x01FFFA40) as title-private, ROM-written / host-read published state. The terms:
+>   - shared code never touches it;
+>   - the title versions it itself (own magic/version/size in its first bytes);
+>   - it is NOT covered by the witness revision protocol, so publish-last / coherent-snapshot rules are the title's own, and the host treats it as untrusted-until-valid;
+>   - it never carries rules or write permission;
+>   - 0xE40..0x1000 stays free.
+>   - Follow-up (Gen 5): a named `SLINK_TITLE_OFFSET 0xE00 / SLINK_TITLE_SIZE 0x40` in abi.h; until then cite this ruling.
 > - **The link gate (`sub_02036144`):** C2 scope is single-player; the `vwaitTaskQueue` insurance site is not added now. Record it in the C8 checklist.
 > - **The host reads the header itself** in `lua/gen4/companion.lua` (no `lua/nds` edit at C2); a shared reader export waits for the C7 window.
 >
