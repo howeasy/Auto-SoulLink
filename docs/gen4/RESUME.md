@@ -1,5 +1,61 @@
 # Gen 4 resume note
 
+## Checkpoint 11 (2026-10-03) - committed-scenario run at FROZEN `108c025d`; row-n mechanisms landed; G1 still NOT qualified
+
+**Cut `108c025d`** = committed outdoor scenarios, no in-process harness overrides: the first run under the receipt rule from the evidence caveat below.
+
+**PHYSICAL at `108c025d`** (coordinator-verified; receipts under `F:/slink-work/lanes/g4/live108-1002220018/`; every combined.txt read back against the current surface/scenario parse; all three control-reds `missed=[]`):
+
+| Row | HG | hge | SS |
+|---|---|---|---|
+| a,c,d,e,g,h,i,j,k,l | PASS | PASS | PASS |
+| b | OPEN | FAIL | FAIL |
+| f (PERF) | OPEN (machine HOLD) | OPEN | OPEN |
+| m | FAIL (lost the wild fight) | FAIL (no battle reached) | FAIL (no battle reached) |
+| n | OPEN | FAIL | FAIL |
+| o (combined) | PASS | OPEN | OPEN |
+
+- Combined: `probes/heartgold-7a5a0a43970f`, `probes/heartgold_hge-ee1e528d388e`, `probes/soulsilver-58fa42635ae2` (each RESULT FAIL); detail in `{heartgold,heartgold_hge,soulsilver}-audit.json`.
+- Row o PHYSICAL x4, consume PASS (`F:/slink-work/lanes/g4/faint2/`): HG one `heartgold_seam_ufce_bit_220117`, HG two `..._p2_220209`, hge one `heartgold_hge_seam_ufce_bit_220245`, hge two `..._p2_220337`. **SS has no row-o faint receipt at all.**
+- **hge/SS b/m/n share one cause:** both committed saves predate the Pokegear, and New Bark coord event `T20_002` walks the player back on every pass (`tools/gen4_routes.py:496-508`). 12 bridge RESYNCs at map 60 x682 y399, no battle. In the same runs, the wrapper's `assert p is not None` aborted before consuming row o (pre-existing; fixed, see below).
+- **HG m is a real loss, not a timeout:** enemy HP 17->13 once while ours went 20->0 (outcome LOSE f2550). The A-only recipe cannot move the move cursor, so the cause is still open (misses vs foe vs input drift).
+- Not run (overlord machine HOLD): the HG PC-withdraw DIAGNOSTIC and PERF. Audit: 21 originals unchanged; PID census empty at 02:55:37Z.
+
+**On the branch since `108c025d`:**
+- `efc76dd9` shared trade gate: `tp_service` leaves foreign opcodes to the sound/panel producers. Its state machine still runs every visit for the async-save watchdog. Gen 5 imports it when the shared phase reopens.
+- `92863dd2` companion spec sweep: bodies match their decision blocks. `InitSoundData` bl at `0x02000D12` in HG/SS/hge (pinned-ROM read); the hge vehicle is an SLink armips `.org` patch with a five-writer-class census, not a `hooks` row.
+- Pokegear errand: `a2e98a22` (battle bridge), `b1f0c58b` (re-arm when walked back again), `f7da11e7` (PC bridge, before the Cherrygrove walk).
+- `60bb187f` missing CPU histograms are a named row-m OPEN, not a Lua nil-index.
+- `aee4966c` fight samples carry species/level/moves/PP for both battlers (pret BattleMon moves 0x0C, movePPCur 0x2C); pack label `gSystem+0x48` corrected to `newKeys`.
+- Row-n mechanisms (Codex `a994eca7` + `32f03f66`, OMP adversarial review cx-64491722):
+  - a `battle_close` case at `Battle_Exit` with a closing-frame oracle (seam-agnostic; frame parity explicitly OPEN);
+  - a deposit-only `pc` case with committed SYNTH party2 fixtures (scenario schema v3, `<title>_pc_case.json`, no baseline fallback);
+  - the hge `pc_place_arm9_entry` static placement trampoline (row n's, not C3's);
+  - `MIN_SITE_ANCHORS` 20 (HG/SS; hge stays hash-only);
+  - the n aggregate made reachable (it never was: pre-existing F1);
+  - hge/SS graded instead of aborting (F8);
+  - n split into strict per-case invariants vs aggregate coverage (static PC + reset + pending at close).
+- Closing-frame flag fails closed, and the aggregate requires a witnessed `battle_close` case (OMP cx-3d38711e).
+
+**Decision (coordinator):** C2-C5 are consolidated into ONE companion build before C6. A per-card build would force a C6 re-pin plus re-run receipts each time (`PLAN.md:73`, `C6_HGE_BUILD_SPEC.md:379-382`).
+
+**OPEN:**
+- **Owner ruling:** the G1 caller scope for row n. Is the deposit-only PC case enough, or are all PC callers required (delete-by-index, withdraw, release)? Today every unexercised caller is an explicit n OPEN.
+- Live-only: frame parity, the hge/SS settle policies, the HG fight cause, SS row o.
+- The C1 live mailbox canary; the C6 fork-branch approval.
+- Three local side branches (`claude/gen4-tp-gate`, `-companion-docs`, `-bridge-errand`) are fully cherry-picked (`git cherry`: 0 unpicked each). They are kept pending an owner OK for a force delete.
+- Empty dir `F:/slink-work/wt/g4-rown` is held open by a process; remove it later.
+
+**NEXT, on the overlord's slot release (one EmuHawk, sequential, at the freeze SHA):**
+- D1 HG fight DIAGNOSTIC (which move, which turn);
+- D2 hge then SS errand + settle DIAGNOSTIC (uncensored cold/pre-load start);
+- D3 HG `battle_close` boundary DIAGNOSTIC (frame parity);
+- D4 HG `pc_withdraw` DIAGNOSTIC;
+- then SS row o, row o x4, and a-n HG/hge/SS at the freeze.
+No unchanged failed run is repeated.
+
+> Checkpoint 10 below is superseded by this checkpoint (its next-cut list was executed or replaced).
+
 ## Checkpoint 10 (2026-10-02 18:40Z) - adoption milestone CLOSED; live re-run at FROZEN `feb6b9c4`; session WRAPPED
 
 **Cut `feb6b9c4`** = the shared NDS adoption (`8a36e6ee`, `36fd0615`, `b4e17db2`) + the hge row-k fixed-frame RTC fix (1200 = measured max 1035 + 165).
@@ -386,5 +442,5 @@ Session stopped at the owner timebox (2026-10-01, 22:09 EDT). HEAD is at the end
   - The committed `test_gen4_probe_gates.py` hash in each receipt is correct, but the runtime behaviour was narrowed by uncommitted code. The narrowing is disclosed in the receipt reasons ("indoor native PC-SAVE fixture...").
   - The effective configs are each run's `*/probe.json`.
   - OMP cx-6c26d2e1 F5 ("not producible by this tree's code") was therefore essentially RIGHT. The coordinator's rejection of it is withdrawn.
-- **Status of those rows:** their PASS rows stand as disclosed per-case evidence. They are NOT qualification evidence for the coverage the overrides removed: b, m, n and the phase cases on hge/SS.
+- **Status of those rows** (the FROZEN `108c025d` run is the first outside this caveat): their PASS rows stand as disclosed per-case evidence. They are NOT qualification evidence for the coverage the overrides removed: b, m, n and the phase cases on hge/SS.
 - **RULE from now on:** no in-process overrides of harness functions in any receipt-producing run. Every narrowing is a COMMITTED scenario file (path + sha256 bound in the receipt), and a scenario may only omit fields so the pack defaults hold. Codex's next-cut plan adopts this: committed scenario files, native OUTDOOR baseline saves, a separate PC-deposit/SAVE descendant for row i only, no `phase_case_plan` suppression.
