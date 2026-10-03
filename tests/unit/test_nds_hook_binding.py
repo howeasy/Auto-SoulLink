@@ -263,7 +263,7 @@ def test_strategy_covers_all_regions_and_epoch_is_only_the_current_main_view():
     assert strategy.epoch() == before  # explicitly NOT a persistent reset identity
 
 
-def test_arm_refuses_epoch_change_between_decision_and_contract_check():
+def test_arm_current_residency_is_rechecked_after_its_one_call_epoch():
     env = Env()
     env.load("battle_start_ov12")
     env.resident(12)
@@ -272,13 +272,14 @@ def test_arm_refuses_epoch_change_between_decision_and_contract_check():
     def changing(address, domain):
         nonlocal count
         count += 1
-        if count == 17:  # after the first bounded MAIN fold, before may_arm's fold
-            env.st.slot(7, 33, 1)
+        if count == 17:  # after the bounded MAIN fold, before may_arm's target scan
+            env.st.slot(0, 13, 1)
         return original(address, domain)
     env.st.io.read_u32 = changing
-    with pytest.raises(LuaError, match="nds-refused:stale_epoch"):
+    with pytest.raises(LuaError, match="nds-refused:not_resident"):
         env.binding.validate(env.binding, env.site("battle_start_ov12"))
     env.st.io.read_u32 = original
+    env.resident(12)
     assert env.binding.validate(env.binding, env.site("battle_start_ov12"))
 
 
@@ -303,12 +304,63 @@ def test_accept_and_residency_precede_full_pin_read_and_each_fire_reads_once():
     assert env.hit(site, site["fire"])[1] is None and len(reads) == 2
 
 
+@pytest.mark.parametrize("stage", ["arm", "fire"])
+def test_arm_folds_main_once_and_accepted_fire_scans_residency_once(stage):
+    env = Env()
+    env.load("battle_start_ov12")
+    env.resident(12)
+    site = env.binding.validate(env.binding, env.site("battle_start_ov12")) if stage=="fire" else None
+    original, reads = env.st.io.read_u32, []
+    start = PACK["overlay_table"]["address"]
+    def read(address, domain):
+        if start <= address < start + 64:
+            reads.append(address)
+        return original(address, domain)
+    env.st.io.read_u32 = read
+    if stage=="arm":
+        env.binding.validate(env.binding, env.site("battle_start_ov12"))
+        assert len(reads) == 18  # 16-word fold + MAIN slot0 active/id, no second fold.
+    else:
+        assert env.hit(site, site["fire"], accept=env.lua.eval("function() return true end"))[1] is None
+        assert len(reads) == 2
+
+
 def _binding_mutant(env, old, new):
     path = ROOT / "lua/nds/hook_binding.lua"
     source = path.read_text()
     assert source.count(old) == 1
     module = env.lua.eval("function(s,p) return assert(load(s,'@'..p))() end")(source.replace(old, new), path.as_posix())
     return module.new(env.st.io, env.cfg)
+
+
+@pytest.mark.parametrize("stage", ["arm", "fire"])
+def test_revert_call_local_view_duplicates_reads(stage):
+    env = Env()
+    env.load("battle_start_ov12")
+    env.resident(12)
+    good = env.binding
+    site = good.validate(good, env.site("battle_start_ov12"))
+    old, new = (("RC.may_arm(call_view(epoch),out,site_confirmed,epoch)", "RC.may_arm(strategy,out,site_confirmed,epoch)")
+                if stage == "arm" else
+                ("RC.may_fire(call_view(nil,site.overlay_id,resident),site,site_confirmed)", "RC.may_fire(strategy,site,site_confirmed)"))
+    mutant = _binding_mutant(env, old, new)
+    original, reads = env.st.io.read_u32, []
+    def read(address, domain):
+        reads.append(address)
+        return original(address, domain)
+    env.st.io.read_u32 = read
+    if stage == "arm":
+        mutant.validate(mutant, env.site("battle_start_ov12"))
+        assert len(reads) == 34
+        reads.clear()
+        good.validate(good, env.site("battle_start_ov12"))
+        assert len(reads) == 18
+    else:
+        env.binding = mutant
+        assert env.hit(site, site["fire"])[1] is None and len(reads) == 4
+        env.binding = good
+        reads.clear()
+        assert env.hit(site, site["fire"])[1] is None and len(reads) == 2
 
 
 @pytest.mark.parametrize("guard", ["fire", "static"])
@@ -318,7 +370,7 @@ def test_revert_full_pin_guards_accepts_corruption(guard):
     env.load(name)
     env.resident(12)
     site = env.binding.validate(env.binding, env.site(name))
-    old, new = (("local allowed,reason=RC.may_fire(strategy,site,site_confirmed)", "local allowed,reason=true,nil")
+    old, new = (("local allowed,reason=RC.may_fire(call_view(nil,site.overlay_id,resident),site,site_confirmed)", "local allowed,reason=true,nil")
                 if guard == "fire" else
                 ('assert(site_confirmed(out),"full registration pin mismatch: "..out.id)', 'assert(true)'))
     good = env.binding

@@ -108,7 +108,8 @@ end
 
 -- One consistent view: epoch first, then the entries, so a table change DURING the read can only make
 -- the view look stale (a refusal), never fresh. `read` is forwarded to assert_strategy, so the behavioural
--- validation runs on the arming path too. Returns { epoch = n, entries = array }.
+-- validation runs when a binder chooses to snapshot per attempt (optional: Gen 4 validates once at
+-- construction and relies on may_arm's live pin re-read). Returns { epoch = n, entries = array }.
 function M.snapshot(s, read)
     M.assert_strategy(s, read)
     local e = s.epoch()

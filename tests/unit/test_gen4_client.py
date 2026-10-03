@@ -236,6 +236,80 @@ def test_d7_loading_streak_ends_with_battle_even_before_a_lease_exists():
     assert w.signals.failure is None
 
 
+def test_two_active_pending_faints_get_the_full_frame_settle_window():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle(btype=2, local=((0, 0), (2, 1)))
+    w.advance(3)
+    addr, pin = w.seam_addr(), w.r(w.seam_addr(), 4)
+    w.w(addr, 0)
+    w.reply(*[{"cmd": "force_faint", "key": mon.key} for mon in w.party])
+    w.advance(8)
+    assert w.signals.status(w.signals)["failure"] is None
+    assert w.signals.status(w.signals)["settling"]["d7"] == 8
+    w.w(addr, pin)
+    w.advance(1)
+    assert len(w.hooks) == 1 and w.state.d7 is not None
+
+
+def test_settle_timeout_is_console_only_and_recovers_at_battle_end():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle()
+    w.advance(3)
+    addr, pin = w.seam_addr(), w.r(w.seam_addr(), 4)
+    w.w(addr, 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(20)
+    assert w.signals.status(w.signals)["failure"] is not None
+    assert w.signals.failure is None  # a recoverable timeout must not trigger the shared fatal HUD
+    assert len([line for line in w.logs if "settle timeout" in line]) == 1
+    assert not any("engine hooks stopped" in str(row).lower() for row in w.hud)
+    w.w(addr, pin)
+    w.advance(1)
+    assert not w.hooks  # still latched within this battle
+    w.leave_battle()
+    w.advance(2)
+    assert w.signals.status(w.signals)["failure"] is None
+    w.enter_battle(local=((0, 1),))
+    w.advance(3)
+    w.reply({"cmd": "force_faint", "key": w.party[1].key})
+    w.advance(1)
+    assert len(w.hooks) == 1
+
+
+def test_settle_recovers_on_no_app_even_when_core_cannot_flush_an_ending_entry():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle()
+    w.advance(3)
+    w.w(w.seam_addr(), 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(20)
+    assert w.signals.settle_failure is not None
+    w.session.driver.read_party = w.lua.eval("function() return nil end")
+    w.leave_battle()
+    w.advance(1)
+    assert w.signals.status(w.signals)["failure"] is None
+
+
+def test_settle_fault_does_not_recover_on_a_bad_pointer_inside_the_battle_app():
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle()
+    w.advance(3)
+    w.w(w.seam_addr(), 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(20)
+    assert w.signals.settle_failure is not None
+    w.w(BS + w.prof["battle"]["ctx_off"], 1)
+    w.advance(1)
+    assert w.signals.settle_failure is not None  # unreadable is not a proven phase-end
+    w.leave_battle()
+    w.advance(1)
+    assert w.signals.status(w.signals)["failure"] is None
+
+
 def test_renew_then_fire_writes_exactly_once_both_hp_copies_and_the_faint_bit():
     w = armed_world()
     assert len(w.hooks) == 1 and w.writes == []

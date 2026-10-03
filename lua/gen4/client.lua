@@ -544,7 +544,7 @@ function Client.new(p)
     end
     function drv.on_reset()
         pe:reset()
-        if signals then signals:disarm(Client.PHASE) end        -- never leave the seam armed for a save that is gone
+        if signals then signals:disarm(Client.PHASE,true) end   -- save/reset ends the old battle context
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
         st.party_sig = nil
         st.boxes = { gen = st.boxes.gen, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 }
@@ -556,6 +556,7 @@ function Client.new(p)
             -- HG serial diagnostic g1-settle-HG-1144-serial: table leads pins by 10/11 frames.
             -- One request per client poll: 16 = measured max 11 + 5 scheduling margin.
             settle_polls = 16,
+            framecount = now, log = log,
             phases = { [Client.PHASE] = d7_phase } })
         st.signals = signals
         return signals
@@ -588,7 +589,7 @@ function Client.new(p)
         if ending then
             st.d7_done[e] = nil
             -- End the loading-refusal streak too: it may exist before any lease/hook did.
-            if signals then signals:disarm(Client.PHASE) end
+            if signals then signals:disarm(Client.PHASE,st.battle_why=="no_app") end
             st.d7 = nil
             log("D7: no in-battle write landed before the battle ended; handed to the checkpoint queue: " .. tostring(e.key))
             return nil
@@ -663,6 +664,12 @@ function Client.new(p)
         local party = party_read()
         local battle, bwhy = R.battle(mem, prof)
         st.battle, st.battle_why = battle, bwhy
+        -- The core can defer an ending entry without calling battle_write when
+        -- its party read is unavailable. A proven no-app boundary must recover
+        -- the recoverable settle fault independently; bad pointers do not.
+        if bwhy=="no_app" and signals and signals.settle_failure then
+            signals:disarm(Client.PHASE,true)
+        end
         local app = bwhy == "not_battle"            -- another launched app: bag / party / PC / summary
         st.ck, st.ck_why = safety:checkpoint()
         st.ck_frame = frame

@@ -34,6 +34,7 @@ class World(Env):
             return {id=site.id,pc=ctx.pc,frame=ctx.frame}
         end end""")(binding)
         self.cfg_ps = self.lua.table_from({"Registry": wrapped, "binding": binding, "owner": "g4", "max_pending": 8, "settle_polls": 16,
+                                           "framecount": lambda: self.st.frame,
                                            "capture": capture, "phases": lua_phases, **cfg})
         self.sig = self.PS.new(self.cfg_ps)
 
@@ -353,9 +354,10 @@ def test_persistent_wrong_pin_latches_only_at_explicit_settle_bound():
     w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
     for _ in range(2):
         assert w.sig.arm(w.sig, "seam")[1].startswith("loading:")
-        assert w.sig.failure is None
+        assert w.status()["failure"] is None
+        w.st.frame += 1
     assert w.sig.arm(w.sig, "seam")[0] is None
-    assert "settle" in w.sig.failure and w.status()["refused"] == 3
+    assert "settle" in w.status()["failure"] and w.status()["refused"] == 3
     w.load("battle_start_ov12")
     assert w.sig.request(w.sig, "seam")[0] is None  # landing after the deadline cannot clear the latch
 
@@ -384,25 +386,29 @@ def test_revert_loading_refusal_or_bound_is_detected(guard):
     w = World({"seam": ["battle_start_ov12"]}, settle_polls=3)
     w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
     old, new = (("if retryable and clean then", "if false then") if guard == "retry" else
-                ("if settling[phase]>=cfg.settle_polls then", "if false then"))
+                ("if streak.frames>=cfg.settle_polls then", "if false then"))
     mutant = _mutant(w, old, new)
     for _ in range(3):
         mutant.request(mutant, "seam")
         if guard == "retry":
             assert mutant.failure is not None  # old permanent latch on first loading refusal
             break
+        w.st.frame += 1
     if guard == "bound":
-        assert mutant.failure is None  # unbounded corrupt pin is incorrectly still retryable
+        assert mutant.status(mutant)["failure"] is None  # unbounded corrupt pin is incorrectly still retryable
     for index in range(3):
         w.sig.request(w.sig, "seam")
-        assert (w.sig.failure is not None) == (index == 2)
+        assert (w.status()["failure"] is not None) == (index == 2)
+        w.st.frame += 1
 
 
 def test_settle_streak_is_per_phase_and_clears_on_inactive_or_success():
     w = World({"a": ["battle_start_ov12"], "b": ["battle_faint_cmd"]}, settle_polls=3)
     for name in ("battle_start_ov12", "battle_faint_cmd"):
         w.st.put(PACK["sites"][name]["address"], "00" * 16)
-    for name in ("a", "b", "a", "b"):
+    for index, name in enumerate(("a", "b", "a", "b")):
+        if index == 2:
+            w.st.frame += 1
         assert w.sig.request(w.sig, name)[1].startswith("loading:")
     assert w.status()["settling"]["a"] == w.status()["settling"]["b"] == 2
     w.sig.disarm(w.sig, "a")  # inactive poll calls disarm even with no live registry
@@ -421,3 +427,51 @@ def test_pin_reader_error_is_a_hard_fault_not_a_loading_refusal():
     assert w.sig.request(w.sig, "seam")[0] is None
     assert "pin_error" in w.sig.failure and w.status()["refused"] == 0
     assert w.status()["owned"] == 0
+
+
+def test_battle_end_recovery_clears_only_settle_faults():
+    w = World({"seam": ["battle_start_ov12"]}, settle_polls=2)
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
+    w.sig.request(w.sig, "seam")
+    w.st.frame += 1
+    w.sig.request(w.sig, "seam")
+    assert w.sig.settle_failure is not None
+    w.sig.disarm(w.sig, "seam")
+    assert w.sig.settle_failure is not None  # ordinary cleanup must not unlock the same battle
+    w.sig.disarm(w.sig, "seam", True)
+    assert w.status()["failure"] is None
+    w.load("battle_start_ov12")
+    assert w.sig.request(w.sig, "seam") is True
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"] + 9, "ff")
+    w.fire("battle_start_ov12")
+    w.ids()
+    assert w.sig.failure is not None
+    w.sig.disarm(w.sig, "seam", True)
+    assert w.sig.failure is not None  # resident-pin corruption stays a hard fault
+
+
+@pytest.mark.parametrize("guard", ["frame", "phase_end"])
+def test_revert_frame_window_and_battle_end_recovery(guard):
+    w = World({"seam": ["battle_start_ov12"]}, settle_polls=3)
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
+    old, new = (("streak.frames=frame-streak.first_frame+1", "streak.frames=(streak.frames or 0)+1")
+                if guard == "frame" else ("if end_phase==true and closed", "if false and closed"))
+    mutant = _mutant(w, old, new)
+    for _ in range(3):
+        mutant.request(mutant, "seam")
+        if guard == "phase_end":
+            w.st.frame += 1
+    assert mutant.status(mutant)["failure"] is not None
+    if guard == "phase_end":
+        mutant.disarm(mutant, "seam", True)
+        assert mutant.status(mutant)["failure"] is not None
+    # Good window does not count duplicate same-frame requests, and recovers
+    # only on the explicit battle-end boundary after a genuine elapsed timeout.
+    for _ in range(3):
+        w.sig.request(w.sig, "seam")
+    assert w.status()["failure"] is None and w.status()["settling"]["seam"] == 1
+    w.st.frame += 2
+    w.sig.request(w.sig, "seam")
+    assert w.status()["failure"] is not None
+    w.sig.disarm(w.sig, "seam", True)
+    assert w.status()["failure"] is None

@@ -112,6 +112,18 @@ function NDS.new(io,config)
     local function site_confirmed(site)
         return pin_matches(io,site.address,site.register_hex,c.bus_domain)==true
     end
+    local function call_view(epoch,id,resident)
+        -- ponytail: call-local view only, never retained over a yield/poll. ARM
+        -- decisions fold once, then recheck the target residency and full pin.
+        -- FIRE checks reuse the residency scan taken before the read-only accept
+        -- filter; may_fire still owns the full-pin check after accept succeeds.
+        return {entries=strategy.entries,
+            epoch=epoch~=nil and function() return epoch end or strategy.epoch,
+            resident=function(overlay)
+                if id~=nil and overlay==id then return resident end
+                return strategy.resident(overlay)
+            end}
+    end
     local self={}
     local accept_errors,accept_error=0,nil
     local hit=nil
@@ -146,7 +158,8 @@ function NDS.new(io,config)
         if out.image=="arm9" then
             assert(site_confirmed(out),"full registration pin mismatch: "..out.id)
         else
-            local allowed,reason=RC.may_arm(strategy,out,site_confirmed,strategy.epoch())
+            local epoch=strategy.epoch()
+            local allowed,reason=RC.may_arm(call_view(epoch),out,site_confirmed,epoch)
             if not allowed then
                 if reason=="pin_mismatch" or reason=="not_resident" or reason=="stale_epoch" then
                     error("nds-refused:"..reason..":"..out.id,0)
@@ -158,7 +171,8 @@ function NDS.new(io,config)
     end
     function self:context(site,accept)
         assert(hit,"NDS context outside a bus-exec callback: "..tostring(site.id))
-        if site.overlay_id and not self:resident(site.overlay_id) then return nil end
+        local resident=site.overlay_id and self:resident(site.overlay_id)
+        if site.overlay_id and not resident then return nil end
         if accept then
             local ok,accepted=pcall(accept)
             if not ok then
@@ -167,7 +181,7 @@ function NDS.new(io,config)
             end
             if not accepted then return nil end
         end
-        local allowed,reason=RC.may_fire(strategy,site,site_confirmed)
+        local allowed,reason=RC.may_fire(call_view(nil,site.overlay_id,resident),site,site_confirmed)
         if not allowed then
             if reason=="not_resident" then return nil end
             error("NDS fire fault: "..tostring(reason)..":"..tostring(site.id),0)
