@@ -148,6 +148,7 @@ def test_pret_enum_matches_the_pins():
 
 def test_rr_bytes_match_the_pins():
     import sys
+    pytest.importorskip("numpy", reason="tools/research needs numpy (not a runtime requirement)")
     sys.path.insert(0, str(REPO / "tools" / "research"))
     import rr_save_callers as r
     try:
@@ -177,6 +178,7 @@ def test_rr_bytes_match_the_pins():
 def test_rr_controller_detours_match_the_pins():
     """The second action-menu spelling, and where the hand-back really puts the slot in RR."""
     import sys
+    pytest.importorskip("numpy", reason="tools/research needs numpy (not a runtime requirement)")
     sys.path.insert(0, str(REPO / "tools" / "research"))
     import rr_battle_tuple as t
     try:

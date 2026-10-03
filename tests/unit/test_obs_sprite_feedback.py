@@ -40,6 +40,33 @@ def _browser() -> str:
     pytest.skip("Chromium absent; set SLINK_TEST_CHROMIUM to run the rendered OBS gate")
 
 
+def _dump_dom(browser: str, folder: Path, page_path: Path):
+    """Run headless Chromium; a hung browser is an environment fault, so skip with a name.
+
+    Modern Chromium's new headless mode can ignore --virtual-time-budget and never
+    exit on a display-less runner, so the second attempt dumps after a plain timeout.
+    """
+    base = [browser, "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+            "--disable-background-networking", f"--user-data-dir={folder / 'profile'}", "--dump-dom"]
+    attempts = (base[:-1] + ["--virtual-time-budget=2000", "--dump-dom"],
+                base[:-1] + ["--no-first-run", "--timeout=3000", "--dump-dom"])
+    for argv in attempts:
+        proc = subprocess.Popen(argv + [page_path.as_uri()], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                                start_new_session=os.name != "nt")
+        try:
+            out, err = proc.communicate(timeout=25)
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":
+                proc.kill()
+            else:
+                os.killpg(proc.pid, 9)
+            proc.communicate()
+            continue
+        return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+    pytest.skip(f"{browser} hung headless with and without virtual time (display-less runner)")
+
+
 @pytest.fixture(scope="module")
 def rendered_sizes(tmp_path_factory):
     adapter = Gen1PureRGBAdapter(artifact_kind="rand_overlay")
@@ -107,10 +134,7 @@ def rendered_sizes(tmp_path_factory):
     folder = tmp_path_factory.mktemp("obs-sprite-render")
     page_path = folder / "render.html"
     page_path.write_text('<!doctype html>' + ''.join(frames) + probe, encoding="utf-8")
-    run = subprocess.run([_browser(), "--headless", "--no-sandbox", "--disable-gpu",
-                          "--disable-background-networking", "--virtual-time-budget=2000",
-                          f"--user-data-dir={folder / 'profile'}", "--dump-dom", page_path.as_uri()],
-                         capture_output=True, text=True, encoding="utf-8", timeout=25)
+    run = _dump_dom(_browser(), folder, page_path)
     assert run.returncode == 0, run.stderr[-2000:]
     match = re.search(r'<pre id="measurements">(.*?)</pre>', run.stdout, re.S)
     assert match, "Browser did not return computed sprite geometry"

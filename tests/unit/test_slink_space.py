@@ -82,6 +82,14 @@ def real_processes(monkeypatch):
     monkeypatch.setattr(ss, "process_scan_problem", _REAL_PROBLEM)
     monkeypatch.setattr(ss, "_PROCS", None)
     monkeypatch.setattr(ss, "_CWDS", None)
+    if os.name != "nt":
+        # The tool fails closed when a live process's cwd is unreadable (root-owned pids on
+        # a Linux runner), so a real in-use scan can only be exercised where it is complete.
+        problem = ss.process_scan_problem()
+        monkeypatch.setattr(ss, "_PROCS", None)  # the test starts its sleeper after this scan
+        monkeypatch.setattr(ss, "_CWDS", None)
+        if problem:
+            pytest.skip(f"real process scan unusable on this host: {problem}")
 
 
 _REAL_PROCESSES = ss.processes
@@ -799,7 +807,8 @@ def test_other_reparse_points_are_counted_leaves(W, cloud_names):
     st = ss.tree_stats(d)
     assert st["links"] == []
     assert st["files"] == 2  # cloud.bin and clouddir counted as leaves; inside.bin not entered
-    assert 100 <= st["size"] < 1000 + 100
+    # cloud.bin plus the placeholder dir's own entry size; inside.bin's 1000 bytes not entered
+    assert st["size"] == 100 + os.lstat(d / "clouddir").st_size
     ss._relink(str(W.tmp / "dst"), st["links"])
     assert not (W.tmp / "dst").exists()
 
