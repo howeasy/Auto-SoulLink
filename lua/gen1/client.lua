@@ -2101,9 +2101,9 @@ function Client.new(p)
     -- .waitForReceipt), and its RAM party was never saved; the server then takes evidence only
     -- from the reloaded save (the post-reset hello). Mirror of lua/gen2/client.lua.
     local function trade_uncertain(st, why, after_reset)
+        if st.declared then return end
         hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
         log("[SLink-gen1] apply_trade uncertain: " .. why .. "; no release, no key claim")
-        if st.declared then return end
         st.declared = true
         self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
             fields = { token = st.token, uncertain = true, after_reset = after_reset or nil } }
@@ -2137,14 +2137,10 @@ function Client.new(p)
             owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
         elseif st.committing then
             trade_uncertain(st, "the server asked for a withdrawal")
-        elseif self.trade.phase == "picked_up" or self.trade.phase == "done" then
+        elseif self.trade.entry_observed or self.trade.phase == "picked_up" or self.trade.phase == "done" then
             -- Native owns the request. Acknowledge conservatively with the existing wire
             -- contract; never claim nothing changed or silently drop the withdrawal.
-            if not st.declared then
-                st.declared = true
-                log("[SLink-gen1] withdrawal acknowledged after pickup; awaiting native result")
-                owe("trade_done", { token = st.token, uncertain = true })
-            end
+            trade_uncertain(st, "withdrawal after committed request entry; awaiting native result")
         end
     end
 
@@ -2152,9 +2148,20 @@ function Client.new(p)
     function self:trade_tick()
         if not self.trade_enabled or not self.trade then return end
         local st = self.trade_state
+        if st and st.pickup_terminal then return end
         if st and (st.kind == "prompt" or st.kind == "apply") then
             local clobbered = self.trade:clobbered()
             if self.trade.pickup_error then
+                st.pickup_hold_frame = st.pickup_hold_frame or self.frame
+                if st.kind == "apply" and self.frame - st.pickup_hold_frame >= Client.TRADE_PICKUP_FRAMES then
+                    -- End the protocol wait conservatively; never release/restage native work.
+                    local ok, party = pcall(current_party)
+                    log("[SLink-gen1] pickup hold expired; party rescan=" ..
+                        tostring(ok and party and #party or "unavailable"))
+                    trade_uncertain(st, "consumption evidence missing after bounded hold")
+                    st.pickup_terminal = true
+                    return
+                end
                 st.pickup_hold_count = (st.pickup_hold_count or 0) + 1
                 local now = os.time()
                 if not st.pickup_notice or now - st.pickup_notice >= Client.HOLD_REMINDER_SECONDS then
@@ -2274,7 +2281,6 @@ function Client.new(p)
                 all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
                                             capture_offset = 0, expected_hex = hex_of(bytes),
                                             lease_address = assert(profile.ram.wSerialPartyMonsPatchList, "trade lease_address required"),
-                                            entry_observer = function() self.trade:observe_entry() end,
                                             client_accept = waiting_for_pickup,
                                             symbol = self.foundation == "gen1_purergb"
                                                 and "SlinkTradeService" or "SlinkForeground" }
@@ -2282,6 +2288,13 @@ function Client.new(p)
                 handlers.trade_service = logged("trade_service", function()
                     self.trade:picked_up()
                 end)
+                all_sites.trade_request = pickup.request_site
+                pickup.request_site = nil
+                all_sites.trade_request.entry_observer = function() self.trade:observe_entry() end
+                all_sites.trade_request.entry_accept = function()
+                    return self.trade.phase == "armed" and not self.trade.entry_observed
+                end
+                all_sites.trade_request.client_accept = function() return false end -- observation only, no token
                 all_sites.trade_consumed = pickup
                 all_sites.trade_consumed.client_accept = waiting_for_pickup
                 handlers.trade_consumed = logged("trade_consumed", function(sig)
@@ -2359,7 +2372,7 @@ function Client.new(p)
                 log("[SLink-gen1] frame hold: " .. self.frame_hold_error)
             end
             local hold = self.frame_hold_state
-            hold.count, hold.step = hold.count + 1, stage
+            hold.count = hold.count + 1
             if now < hold.last_report then hold.last_report = now end
             if now - hold.last_report >= Client.HOLD_REMINDER_SECONDS then
                 log("[SLink-gen1] frame hold reminder: step=" .. stage .. " count=" .. hold.count

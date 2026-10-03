@@ -39,6 +39,11 @@ function T.pickup_site(profile, read_rom_u8)
                            lease >> 8, 0x01, 0x10, 0x00, 0xCD}) do
         pattern[#pattern+1] = byte
     end
+    -- The request-state tail checks generation != completion before selecting the
+    -- outgoing slot. Require that straight-line predecessor as well as the stack save.
+    local prefix = {0xFA, (lease+6)&0xFF, (lease+6)>>8, 0x47,
+                    0xFA, (lease+7)&0xFF, (lease+7)>>8, 0xB8, 0xC8,
+                    0xFA, (lease+9)&0xFF, (lease+9)>>8, 0xEA}
     local found
     local first = svc.bank * 0x4000 + svc.addr - 0x4000
     for offset = first, math.min(first + 0x200, (svc.bank+1)*0x4000 - #pattern - 8) do
@@ -46,6 +51,11 @@ function T.pickup_site(profile, read_rom_u8)
         for i, byte in ipairs(pattern) do
             if read_rom_u8(offset+i-1) ~= byte then matches=false; break end
         end
+        for i, byte in ipairs(prefix) do
+            if read_rom_u8(offset-15+i-1) ~= byte then matches=false; break end
+        end
+        local slot_hi = read_rom_u8(offset-1)
+        matches = matches and slot_hi >= 0xC0 and slot_hi <= 0xDF
         -- CopyData is in ROM0 on both foundations; the call must return here.
         if matches and read_rom_u8(offset+#pattern+1) < 0x40 then
             assert(not found, "ambiguous native trade restore anchor")
@@ -55,6 +65,11 @@ function T.pickup_site(profile, read_rom_u8)
             found = {bank=svc.bank, address=0x4000+after%0x4000, rom_offset=after,
                      capture_offset=0, expected_hex=table.concat(hex),
                      symbol="SlinkTradeService (after lease restore)"}
+            local entry_hex = {}
+            for i = 0, 5 do entry_hex[#entry_hex+1] = string.format("%02X", read_rom_u8(offset+i)) end
+            found.request_site = {bank=svc.bank, address=0x4000+offset%0x4000, rom_offset=offset,
+                                  capture_offset=0, expected_hex=table.concat(entry_hex),
+                                  symbol="SlinkTradeService.requestState (before stack save)"}
         end
     end
     assert(found, "native trade restore anchor missing")
@@ -126,6 +141,10 @@ function T.new(profile, io, writes)
     --- its preimage back (arm backed it up); a clobbered frame is already the game's again.
     function self:withdraw()
         if self.phase ~= "armed" then return false end
+        if self.entry_observed then
+            self:hold_consumed("withdrawal after committed request entry")
+            return false -- acknowledgement only; never restore a native-owned union
+        end
         local clobbered = self:clobbered()
         if self.phase ~= "armed" then return false end -- an observed-entry ambiguity became a hold
         if not clobbered then

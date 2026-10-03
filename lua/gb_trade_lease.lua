@@ -31,7 +31,7 @@ local function same_token(a, b)
     return true
 end
 
---- spec (every field required, a missing one asserts):
+--- spec (lease, party_capacity, check and stage are required; pickup is optional):
 ---   lease          base address of the 16-byte frame
 ---   party_capacity slots; bounds offer/own slots and the eligibility mask (2^capacity)
 ---   check(payload, token4) -> nil | error string   (per-game payload validation, no writes)
@@ -171,7 +171,7 @@ function L.new(spec, io, writes)
     end
 
     function self:observe_entry()
-        if self.phase ~= "armed" or not self.expected then return false end
+        if self.phase ~= "armed" or not self.expected or self.entry_observed then return false end
         self.entry_observed = true -- reset only when a new request is successfully armed
         return true
     end

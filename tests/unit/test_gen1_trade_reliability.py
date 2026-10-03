@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.unit.gen1_trade_witness import enter_world
 from tests.unit.test_gen1_trade_poll import TITLES, _fire, _world
 
 
@@ -78,7 +79,7 @@ def test_refused_foreground_poll_keeps_an_armed_request_withdrawable(monkeypatch
     base, _backup, _published, preimage = _armed(world)
     world.bus[world.ram["wWalkCounter"]] = 1
     _fire(world)
-    assert world.client.trade.phase == "armed"
+    assert world.client.trade.phase == "armed" and not world.client.trade.entry_observed
     world.parts.writes.arm(world.parts.writes, "overworld")
     assert world.client.trade.withdraw(world.client.trade) is True
     assert bytes(world.bus[base:base + 16]) == preimage
@@ -146,7 +147,7 @@ def test_native_restore_anchor_is_required_and_unique(monkeypatch, fault):
         image[first:first + 0x200] = bytes(0x200)
     else:
         # The fixture's exact native block appears again within the bounded service.
-        image[first + 0x100:first + 0x100 + 61] = image[first + 0x28:first + 0x28 + 61]
+        image[first + 0xF1:first + 0xF1 + 76] = image[first + 0x19:first + 0x19 + 76]
     with pytest.raises(Exception, match="restore anchor"):
         world.client.trade.pickup_site(lambda addr: image[int(addr)])
 
@@ -168,7 +169,7 @@ def test_observed_entry_then_lost_consumption_witness_never_restages(monkeypatch
     world, _ = _world(monkeypatch, title)
     _applying_state(world)
     base, backup, published, preimage = _armed(world)
-    _fire(world)  # independent observation before the native restore
+    enter_world(world)  # committed request before the native restore
     world.client.signals.drain(world.client.signals)
     site = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)])
     sp = 0xDE80
@@ -210,7 +211,7 @@ def test_bad_trade_anchor_disables_only_trading(monkeypatch, fault):
     if fault == "missing":
         image[first:first + 0x200] = bytes(0x200)
     else:
-        image[first + 0x100:first + 0x100 + 61] = image[first + 0x28:first + 0x28 + 61]
+        image[first + 0xF1:first + 0xF1 + 76] = image[first + 0x19:first + 0x19 + 76]
     world.rom = bytes(image)
     ok, error = world.lua.eval("function(c) local ok,e=pcall(c.start,c); return ok,tostring(e) end")(world.client)
     assert ok, error
@@ -231,7 +232,7 @@ def test_late_precommit_withdraw_is_acknowledged_without_releasing_native_work(m
     assert len(owed) == 1 and owed[0].event == "trade_done"
     assert owed[0].fields.token == "late" and owed[0].fields.uncertain is True
     assert world.client.trade_state is not None and world.client.trade.phase == "picked_up"
-    assert world.hud == []
+    assert any(h[1] == "TRADE UNCERTAIN - CHECK PARTY" for h in world.hud)
 
 
 def test_frame_hold_has_periodic_console_reminders_and_no_hud(monkeypatch):
@@ -269,7 +270,7 @@ def test_entry_observation_survives_a_preexisting_registry_failure(monkeypatch):
     world.regs["PC"] = site.address + (site.capture_offset or 0) + 1
     world.hooks["SLink-gen1-save_witness"][0]()
     assert world.client.signals.status(world.client.signals).failed is not None
-    _fire(world)  # must still observe entry even though the queued stream has stopped
+    enter_world(world)  # committed entry remains visible after the queued stream stops
     world.bus[base:base + 16] = preimage
     writes = []
     world.parts.writes.write_enemy_party = lambda *_args: writes.append(True)

@@ -508,11 +508,14 @@ trade and cancellation reruns remain required for the current cut.
 
 | Kind | Red/Blue | pureRGB overlays | Meaning |
 |---|---|---|---|
-| `trade_service` | `3F:4500` (`SlinkForeground`) | `3F:41CB` (`SlinkTradeService`) | Qualified entry observation; the SLT1/version filter does not itself prove pickup. |
+| `trade_service` | `3F:4500` (`SlinkForeground`) | `3F:41CB` (`SlinkTradeService`) | Poll only; may precede caller, movement, publication and generation refusals. |
+| `trade_request` | `3F:4566` | `3F:41EE` | Reached the stack-save boundary after generation comparison; native handling has been selected, but no physical trade success is claimed. |
 | `trade_consumed` | `3F:459D` | `3F:4225` | Instruction after the native first CopyData restore; next bytes `F80A7EFE0320`. |
 
 The locator in `lua/gen1/trade_overlay.lua` recognizes the bounded straight-line
-save-overlay-on-stack/CopyData sequence, rejecting missing or ambiguous matches.
+save-overlay-on-stack/CopyData sequence and its generation-check predecessor,
+rejecting missing or ambiguous matches. The entry bytes are `2108C52A572A`;
+the predecessor is `FA0EC547FA0FC5B8C8FA11C5EA3DCD` on all five shipped builds.
 The post-restore hook checks the reversed retained request at SP and the restored
 backup. A dropped consumption hit cannot authorize re-staging: if a previously
 observed armed request now reads clobbered, the lease enters a conservative
@@ -522,3 +525,8 @@ during pickup/completion holds. Gen 2's owned-mailbox entry contract is unchange
 A missing/ambiguous trade anchor disables trading only and is reported to the
 console. Other engine signals remain active. Pickup-delay and persistent-hold
 diagnostics are console-only; neither condition invents a successful commit.
+
+A missing-consumption hold expires after 1800 held frames into one uncertain
+trade_done and a party rescan, with no union writes. Withdrawal after real
+request entry is acknowledgement-only. These actionable uncertainty outcomes
+show the check-party notice; diagnostic counters remain console-only.

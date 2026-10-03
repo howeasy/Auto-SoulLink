@@ -13,6 +13,8 @@ def plant_restore(rom, profile):
             + bytes.fromhex("F80A7EFE0320"))
     # Deliberately relocated within the service: tests must not assume a fixed PC.
     offset = service["bank"] * 0x4000 + service["addr"] - 0x4000 + 0x28
+    rom[offset-15:offset] = (b"\xfa" + word(lease+6) + b"\x47\xfa" + word(lease+7)
+                             + b"\xb8\xc8\xfa" + word(lease+9) + b"\xea" + word(0xCD3D))
     rom[offset:offset + len(code)] = code
     return bytes(rom)
 
@@ -29,3 +31,16 @@ def consume_world(world):
     world.bus[world.ram["hLoadedROMBank"]] = site.bank
     world.regs["PC"], world.regs["SP"] = site.address, sp
     world.hooks["SLink-gen1-trade_consumed"][0]()
+
+
+def enter_world(world):
+    # Exercise the old observer too when revert-checking against R2.
+    hook = world.hooks.get("SLink-gen1-trade_request")
+    if hook is None:
+        from tests.unit.test_gen1_trade_poll import _fire
+        _fire(world)
+        return
+    pickup = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)])
+    world.bus[world.ram["hLoadedROMBank"]] = pickup.bank
+    world.regs["PC"] = pickup.address - 55
+    hook[0]()

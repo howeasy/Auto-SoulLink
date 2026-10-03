@@ -45,7 +45,9 @@ not be verified. A thrown verifier error also holds the lease. The latter cases
 set `phase="picked_up"` plus `pickup_error`: this is a conservative hold, not a
 claim that a physical commit succeeded.
 
-`observe_entry()` records a qualified service-entry observation while armed.
+`observe_entry()` records the post-generation-check request boundary while armed,
+just before the ROM saves the request on its stack. Foreground/service polls do
+not count, including polls refused by caller, movement, publication or generation guards.
 Each successful `arm` resets it. For a binder with a consumption verifier, an
 armed frame that becomes clobbered after that observation is held as
 consumed-but-unwitnessed. It must not be re-staged or withdrawn: the precise
@@ -53,9 +55,13 @@ post-restore hook may have been dropped. A matching DONE remains stronger
 evidence. Binders without the optional verifier retain their existing
 owned-mailbox clobber behavior.
 
-Gen 1 acknowledges withdrawal after pickup with the existing
+Gen 1 refuses preimage restoration after that boundary and acknowledges withdrawal
+with the existing
 `trade_done{uncertain=true}` carrier, preserving the native lease and making no
-new-key claim while awaiting native completion. Its armed-too-long tripwire is
+new-key claim while awaiting native completion. After 1800 held frames with missing
+consumption evidence, it rescans the party and declares uncertainty exactly once
+without any lease write. Late withdrawal and terminal uncertainty show the
+player-actionable `TRADE UNCERTAIN - CHECK PARTY` notice. Its armed-too-long tripwire is
 a console diagnostic, not an automatic cancellation. Frame holds report the
 step and count periodically on the console; hold reasons/counters never go to
 the HUD.

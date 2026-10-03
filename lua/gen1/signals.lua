@@ -364,6 +364,7 @@ function S.bind(dependencies)
             specs[kind]={spec=spec,accept=accept}
         end
         local service,why,failed
+        local closed = false
         service,why,failed = registry.new({
             owner=owner,max_pending=factory.MAX_PENDING,sites=descriptors,
             validate=function(site) return binding:validate(site) end,
@@ -374,9 +375,9 @@ function S.bind(dependencies)
                     wrapped = function(...)
                         -- A stopped queue must not hide native work from the lease.
                         -- Retain bank/PC/byte validation and shutdown ownership.
-                        if service then
+                        if service and not closed and (not site.entry_accept or site.entry_accept()) then
                             local ok,context = pcall(binding.context,binding,site)
-                            if ok and context and not service:status().closed then
+                            if ok and context then
                                 site.entry_observer(context)
                             end
                         end
@@ -408,6 +409,11 @@ function S.bind(dependencies)
             error(why,0)
         end
         factory.failed_service=nil
+        local close = service.close
+        function service:close()
+            closed = true -- cache shutdown before unregister; leaked callbacks remain inert
+            return close(self)
+        end
         -- Read-only: a fresh copy of the binding's dropped-filter record ({accept_errors, accept_error}).
         function service:filter_status() return binding:status() end
         return service
