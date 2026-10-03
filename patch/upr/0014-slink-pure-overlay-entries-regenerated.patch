@@ -1,0 +1,44 @@
+From: slink <slink@local>
+Date: Fri, 02 Oct 2026 21:57:06 +0000
+Subject: [PATCH] slink: pure overlay entries regenerated (resource update (fixed-width pureRGB version field), 2026-10-02)
+
+---
+ src/com/dabomstew/pkrandom/config/gen1_offsets.ini | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1429,8 +1429,8 @@
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x702F
+-CRC32=2F76DA8F
++CRCInHeader=0x7036
++CRC32=2354BCD2
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1512,8 +1512,8 @@
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0xA779
+-CRC32=5A1A57BD
++CRCInHeader=0xA780
++CRC32=23CECE92
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1595,8 +1595,8 @@
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x9E1D
+-CRC32=255B8E45
++CRCInHeader=0x9E24
++CRC32=F7B5A293
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10

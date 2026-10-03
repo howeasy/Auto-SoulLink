@@ -107,6 +107,14 @@ def menu_bytes(version: str = DEFAULT_VERSION) -> bytes:
     return charmap_bytes(menu_text(version)) + bytes((_CHAR_EOS,))
 
 
+MENU_FIELD = 20        # patch/tools/rom_identity.py FIELD and native_menu.h SLM_FIELD: the version field is this wide for every version
+
+
+def menu_field(version: str = DEFAULT_VERSION) -> bytes:
+    """menu_bytes padded with zeros to MENU_FIELD: the exact bytes the compiler lays down for the payload's slm_text."""
+    return menu_bytes(version).ljust(MENU_FIELD, b"\x00")
+
+
 def menu_define(version: str = DEFAULT_VERSION) -> str:
     """The compiler define build.py hands the payload: -DSLINK_MENU_TEXT=<this>."""
     return "SLINK_MENU_TEXT=" + ",".join(f"0x{x:02X}" for x in menu_bytes(version))

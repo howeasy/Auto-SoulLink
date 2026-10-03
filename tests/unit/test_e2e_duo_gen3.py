@@ -135,6 +135,7 @@ from test_gen3_rr_save_layout import _compressed  # noqa: E402
 from test_gen3_scripted_play import _in_battle_cp, bag_stubbed  # noqa: E402,F401
 
 from server.adapters import gen3_codec as codec  # noqa: E402
+from tools import rr_companion  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
@@ -2642,6 +2643,7 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         end
     end
 end }
+emu.framecount = function() return M.frame end
 G = { spent = 0, budget = 1e9, shot = function() end,
       finish = function(_, why) error("G.finish: " .. tostring(why), 0) end }
 function G.advance() emu.frameadvance() end
@@ -4904,7 +4906,7 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
+    rr_companion.rom_sha1(): REPO / "patch" / "build" / "slink_RR.gba",     # patch/dist/companion_pins.json, written by the build
 }
 
 
@@ -5485,11 +5487,12 @@ def test_emerald_admission_is_production_only():
     profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
     assert profile["titles"]["emerald"]["admitted"] is True
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
-                      entry)
+    from lupa import LuaRuntime
+    routes = dict(LuaRuntime().execute(entry).ROUTED.items())
+    assert set(routes) == {"gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"}
+    assert all(value is True for value in routes.values())
     assert "test_admission_codec" not in entry
-    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
-    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():

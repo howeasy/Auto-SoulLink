@@ -1296,6 +1296,9 @@ function Client.new(p)
             -- P4.1f panel / P4.2b sound: per CARTRIDGE, only a live SLink build with the cap bit.
             panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,
             sfx = panel and panel:sfx_present() or false,
+            -- companion evidence for the server (GameRulesAdapter.companion_refusal): the live service's own
+            -- ABI byte, absent on a cartridge with no live SLNK service
+            companion_abi = panel and panel:companion_abi() or nil,
             -- MAJOR-1 (review e9d5e136): this client answers apply_prepare before any APPLY
             trade_prepare = self:trade_live(),
         }

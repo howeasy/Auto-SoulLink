@@ -89,6 +89,7 @@ def _companion_md5(slug: str) -> str:
     with open(_COMPANION_PINS, encoding="utf-8") as fh:
         return json.load(fh)["pins"][slug]["patched_md5"]
 
+
 # ── Targets ─────────────────────────────────────────────────────────────────
 # A REGISTRY, not a single file. There are three companion patches now and they are not
 # interchangeable: a UPS carries the CRC32 of the exact source it was diffed against, so

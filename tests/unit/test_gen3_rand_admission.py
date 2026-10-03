@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.test_gen3_rom_ingest import _clean, _payload
 
 
@@ -37,7 +38,7 @@ async def client(server):
 
 
 def hello(rom_type="firered", kind="rand", **fields):
-    return {"event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
+    return {**companion(rom_type), "event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
             "trainer_name": "A", "ot_id": "30B8", "has_pokeballs": True, "party": [], **fields}
 
 

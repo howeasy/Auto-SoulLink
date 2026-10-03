@@ -707,8 +707,8 @@ def test_the_real_overlay_proof_check_runs_the_lua_entry_and_refuses_an_unbound_
 def test_the_real_overlay_proof_check_accepts_the_shipped_round1_proofs():
     # the positive half: Entry.activation_proof returns (true, nil), which lupa hands back as a tuple; a check that
     # compared the whole result to True refused every passing proof (found running --promote-overlays for real)
-    if not (ROOT / "data/games/gen2_crystal/receipts/overlay").is_dir():
-        pytest.skip("overlay receipts not shipped yet (tools/gen2_ship_overlay_receipts.py --write)")
+    # the overlay rows are ADMITTED: absent receipts mean every Gen 2 cartridge is refused (wrong, not absent input)
+    assert (ROOT / "data/games/gen2_crystal/receipts/overlay").is_dir(),         "overlay receipts not shipped (tools/gen2_ship_overlay_receipts.py --write)"
     matrices = {}
     for title in ("crystal", "gold", "silver"):
         matrix = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())

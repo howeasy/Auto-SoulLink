@@ -86,7 +86,7 @@ local function a_side(ctx, linked)
         if not ctx.hunt("whiteout a") then error("no wild encounter", 0) end
         local lead = (ctx.party() or {})[1]
         if not lead then error("party unreadable in battle", 0) end
-        local fainted, lwhy = ctx.lose_active(lead.key, "whiteout a")
+        local fainted, lwhy = ctx.lose_active(lead.key, "whiteout a", {stop_on_faint = true})
         if not fainted then error("the lone starter did not faint: " .. tostring(lwhy), 0) end
     end)
     if not ok and not (type(err) == "table" and err.whiteout) then

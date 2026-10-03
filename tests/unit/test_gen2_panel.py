@@ -260,6 +260,8 @@ def _overlay_root(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True)
     for name in ["overlay_provenance.json", *PROVENANCE["symbols"]]:
         shutil.copy(REPO / "data/gen2" / name, tmp_path / "data/gen2" / name)
+    (tmp_path / "patch/gb").mkdir(parents=True)
+    shutil.copy(REPO / "patch/gb/slink_abi.inc", tmp_path / "patch/gb/slink_abi.inc")
     return tmp_path
 
 
@@ -274,6 +276,27 @@ def test_overlay_block_refuses_a_sym_that_is_not_the_pinned_one(tmp_path):
     sym = root / "data/gen2/crystal_slink.sym"
     sym.write_text(sym.read_text().replace("00:cfd8 wSlinkMailbox", "00:cfd0 wSlinkMailbox"))
     with pytest.raises(ValueError, match="differs from overlay provenance"):
+        gen_gen2_profile.overlay_block(_Ctx, "crystal", root)
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_profile_pins_the_mailbox_abi_the_server_checks_the_hello_against(title):
+    """The server admits a Gen 2 hello only when its companion_abi equals profile.overlay.abi, so that number
+    must be the build's own SLINK_ABI_VERSION (patch/gb/slink_abi.inc) and the Lua client's P.ABI_VERSION."""
+    from tests.unit.test_gb_panel import _abi
+    P = lupa.LuaRuntime(unpack_returned_tuples=True).eval(f'dofile("{PANEL}")')
+    assert type(profile(title)["overlay"]["abi"]) is int
+    assert profile(title)["overlay"]["abi"] == _abi()["SLINK_ABI_VERSION"] == P.ABI_VERSION
+
+
+def test_overlay_block_reads_the_abi_from_the_build_source_and_refuses_a_missing_one(tmp_path):
+    root = _overlay_root(tmp_path)
+    assert gen_gen2_profile.overlay_block(_Ctx, "crystal", root)["abi"] == 3
+    inc = root / "patch/gb/slink_abi.inc"
+    inc.write_text(inc.read_text().replace("DEF SLINK_ABI_VERSION EQU 3", "DEF SLINK_ABI_VERSION EQU 4"))
+    assert gen_gen2_profile.overlay_block(_Ctx, "crystal", root)["abi"] == 4
+    inc.write_text(inc.read_text().replace("DEF SLINK_ABI_VERSION EQU 4", ""))
+    with pytest.raises(ValueError, match="SLINK_ABI_VERSION"):
         gen_gen2_profile.overlay_block(_Ctx, "crystal", root)
 
 
@@ -320,6 +343,7 @@ def test_production_client_holds_link_panel_rows_and_paints_on_the_await_transit
     _service(w, state, 3)
     hello = w.hello()
     assert hello["panel"] is True and hello["panel_abi"] == 3 and hello["sfx"] is False
+    assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
     w.reply({"cmd": "link_panel", "rows": ["SOUL LINK", "PAIRED"]})
     _service(w, state, 2)                                    # rows held; CLOSED observed
     before = len(w.written())
@@ -466,3 +490,33 @@ def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
     _service_sfx(w, state, 3, caps=CAP_PANEL)
     hello = w.hello()
     assert hello["panel"] is True and hello["sfx"] is False
+
+
+# -- the server's evidence: hello.companion_abi is read from the cartridge's own LIVE mailbox -----------
+
+@NEEDS_OVERLAY
+@pytest.mark.parametrize("fault", ["live", "no_service", "wrong_abi", "wrong_beacon", "wrong_cookie", "stalled"])
+def test_hello_publishes_companion_abi_only_while_the_cartridges_own_service_is_live(fault):
+    """A clean cartridge has no live SLNK service, so the mailbox reads ABSENT and `companion_abi` is not sent;
+    a dead, stale, foreign-ABI or half-written mailbox is not evidence either (and `panel_abi` alone is raw RAM).
+    `live` is the known-positive control for the same harness: the same sequence without a fault publishes 3."""
+    w = World("crystal", production=True)
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    state = {"counter": 0}
+    if fault != "no_service":
+        _service(w, state, 3)
+        if fault == "wrong_abi":
+            w.emu.poke("System Bus", mb + 4, w.lua.table_from([4]))
+        elif fault == "wrong_beacon":
+            w.emu.poke("System Bus", mb, w.lua.table_from([0x53, 0x4C, 0x4E, 0x00]))
+        elif fault == "wrong_cookie":
+            w.emu.poke("System Bus", mb + 31, w.lua.table_from([0x00]))
+        elif fault == "stalled":
+            w.frames(120)                                     # the counter stops moving: last session's bytes
+        if fault != "live":
+            w.frames(1)
+    hello = w.hello()
+    if fault == "live":
+        assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
+    else:
+        assert hello.get("companion_abi") is None, hello

@@ -83,7 +83,7 @@ def test_the_binder_refuses_what_is_not_an_admitted_gen2_title(kwargs):
         get_adapter("gen2_gsc", **kwargs)
 
 
-def test_the_binder_accepts_the_overlay_kind_but_admission_keeps_it_future():
+def test_overlay_with_the_cartridges_own_evidence_is_the_only_admitted_gen2_kind():
     """P4.3d (d5697cfb): the adapter binds the overlay kind (native trade UI / info panel on).
 
     The claim's second half used to be "admission keeps it future", written while the overlay
@@ -93,7 +93,10 @@ def test_the_binder_accepts_the_overlay_kind_but_admission_keeps_it_future():
     """
     adapter = get_adapter("gen2_gsc", rom_type="Gold", artifact_kind="overlay")
     assert adapter.native_trade_ui() and adapter.supports_info_panel()
-    assert Gen2GSCAdapter.companion_refusal({"rom_type": "Gold", "artifact_kind": "overlay"}) is None
+    assert Gen2GSCAdapter.companion_refusal({"rom_type": "Gold", "artifact_kind": "overlay", "companion_abi": 3}) is None
+    # the kind alone is a claim, not evidence: the cartridge's own live mailbox ABI must come with it
+    assert "needs the SLink companion patch" in Gen2GSCAdapter.companion_refusal(
+        {"rom_type": "Gold", "artifact_kind": "overlay"})
     assert "needs the SLink companion patch" in Gen2GSCAdapter.companion_refusal(
         {"rom_type": "Gold", "artifact_kind": "clean"})
 

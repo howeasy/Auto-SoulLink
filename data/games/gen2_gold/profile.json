@@ -345,6 +345,7 @@
         "hWY": 65492
       },
       "overlay": {
+        "abi": 3,
         "artifact": "gold_overlay",
         "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
         "md5": "527a3dc71c8afc25f710fba36efc1d5e",

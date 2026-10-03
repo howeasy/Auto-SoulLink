@@ -82,6 +82,7 @@ PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
 PHONE_FILES = ("phone_flags.asm", "phone.asm")
 VERSION_FILE = "version.asm"
+GEN2_MENU_PREFIX = bytes([0x92, 0xAE, 0xB4, 0xAB, 0x8B, 0xA8, 0xAD, 0xAA, 0x7F])   # "SoulLink " (pokecrystal charmap: A=$80, a=$A0, space=$7F)
 STADIUM_BYTES = 544   # tools/stadium: the "base" table (24 bytes) + the N64PS3 table (520 bytes) at the end of the ROM
 MENU_PREFIX = "SoulLink "   # what patch/gen2/src/version.asm prints before the version (the row holds 19 characters from column 1)
 # TITLE: the SoulLink logo and the version on the real title screen. title.asm is shared; the art is per repo and is
@@ -695,7 +696,12 @@ def version_identity(data: bytes, sym: pathlib.Path, version: str, previous: dic
     if data[len(data) - 520:len(data) - 514] != b"N64PS3":
         raise RuntimeError("the Stadium checksum table is not where tools/stadium puts it (the last 520 bytes)")
     canonical_slots = [slot, stadium]
-    canonical = rom_identity.canonical_sha1(data, canonical_slots, gb=True)
+    # Gen 2's published canonical hashes mask the WHOLE 20-byte field (narrow=False), and receipts and the signed G4 row are bound
+    # to them; so the wordmark is pinned here instead: the field must start with "SoulLink " in this game's charmap, or the build
+    # fails (a wordmark / charmap change can then never ride as a version stamp).
+    if field[:rom_identity.PREFIX] != GEN2_MENU_PREFIX:
+        raise RuntimeError(f"the version field at {slot['offset']:#x} does not start with 'SoulLink ': {field[:rom_identity.PREFIX].hex()}")
+    canonical = rom_identity.canonical_sha1(data, canonical_slots, gb=True, narrow=False)
     exact = hashlib.sha1(data).hexdigest()
     equivalents: list[str] = []
     if previous and previous.get("canonical_sha1") == canonical:

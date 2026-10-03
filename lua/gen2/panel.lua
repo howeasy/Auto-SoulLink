@@ -142,6 +142,14 @@ function P.new(profile, charmap, io, writes, sanitize)
 
     function self:fresh() return fresh end
 
+    --- The mailbox ABI for the server's companion evidence, or nil. `fresh` already means the beacon, the
+    --- version byte and the init cookie all read right AND the frame counter moved within STALL frames, so a
+    --- clean cartridge (no live SLNK service), a stale mailbox and a foreign ABI all read ABSENT.
+    function self:companion_abi()
+        if fresh then return self:abi() end
+        return nil
+    end
+
     local base_present, base_sfx_present, base_service = self.present, self.sfx_present, self.service
     local base_request, base_clear, base_clear_sfx, base_code_for =
         self.request_sfx, self.clear, self.clear_sfx, self.sfx_code_for

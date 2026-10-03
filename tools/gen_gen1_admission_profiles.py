@@ -25,7 +25,9 @@ import zlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "patch" / "tools"))
 import gen1_foundation as F  # noqa: E402
+import rom_identity  # noqa: E402
 
 FOUNDATION = "purergb"
 
@@ -53,6 +55,14 @@ def build(foundation: str = FOUNDATION) -> dict:
         if kind == "overlay":
             row["base_sha1"] = want["base_sha1"]  # the clean ROM the UPS in patch/dist applies to
             row["ups"] = want["ups"]["file"]
+            # version-masked identity: the sha1 with the version field + checksum zeroed (patch/tools/rom_identity.py),
+            # recomputed here from the ROM so a stale provenance cannot slip through
+            row["canonical_sha1"] = want["canonical_sha1"]
+            row["version_slot"] = want["version_slot"]
+            if rom_identity.canonical_sha1(rom, [row["version_slot"]], gb=True) != row["canonical_sha1"]:
+                raise SystemExit(f"{title}: canonical_sha1 in the provenance is not the ROM's canonical identity")
+            if want.get("equivalent_sha1s"):  # earlier exact builds the stamp tool proved canonical-equal
+                row["equivalent_sha1s"] = want["equivalent_sha1s"]
         for key in ("sha1", "header_crc", "crc32"):
             got = sha1 if key == "sha1" else row[key]
             if got != want[key]:

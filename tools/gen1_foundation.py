@@ -121,6 +121,15 @@ def lock(name: str) -> dict | None:
     return json.loads((REPO / f["lock"]).read_text(encoding="utf-8")) if f["lock"] else None
 
 
+def accepted_sha1s(sha1: str, row: dict | None) -> set[str]:
+    """The exact ROM hashes a qualification receipt may name for one published build: its `sha1` (the key of an
+    admission_overlay.json row, the `sha1` of an overlay_provenance.json output) and every earlier exact hash the builder
+    proved version-equivalent (the row's `equivalent_sha1s`, absent = none; patch/tools/rom_identity.py), so a release stamp
+    that only changes the version field does not strand evidence bound to the build that was qualified. Launch and
+    admission checks stay exact; this is for evidence only."""
+    return {sha1, *((row or {}).get("equivalent_sha1s") or ())}
+
+
 def source_root(name: str) -> pathlib.Path:
     """The foundation's source checkout; for a locked foundation HEAD must equal the lock."""
     f = foundation(name)

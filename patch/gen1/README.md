@@ -34,6 +34,9 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
   the credits' copyright text are untouched. The title's mon swap used to scroll from tile row 9, so its start line
   is moved to row 10 (one byte) and the band stays still. `inject.py --version` stamps randomized builds the same way;
   the Manager's randomized runs are stamped `dev` until it passes a release version.
+  The text is a fixed-width 20-byte field at `0x3FE2` (text, `$50`, zero padding), so a release stamp changes only that
+  field and the global checksum: the build's canonical identity (sha1 with both zeroed, `patch/tools/rom_identity.py`,
+  recorded per title in `patch/dist/companion_pins.json` by `tools/gen_companion_pins.py`) is the same for every version.
 * **The SLINK TRADE receptionist.** The Cable Club receptionist in every Pokémon Center now
   opens a `SLINK TRADE` menu (`trade_receptionist.asm`), fed by a foreground service that runs
   from the `DelayFrame` bridge in the reserved RST padding (`trade_service.asm`). Three

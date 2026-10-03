@@ -47,9 +47,31 @@ Measured facts: `tests/fixtures/gen3/title_*.json` (`lua/tests/probe_gen3_title_
 `tests/fixtures/gen3/menu_*.json` (`lua/tests/probe_gen3_menu_plan.lua`, vanilla menus in every layout); tests:
 `tests/unit/test_gen3_title_screen.py`, `tests/unit/test_gen3_menu_version.py` (the ROM checks need `SLINK_GEN3_ROMS`, the
 compile checks a toolchain).
-**Not promoted:** the published UPS files and `gen3_companions.json` are still the build without the title wordmark or the
-menu line, so `build.py --check` differs until the owner regenerates them (every companion ROM hash, and the pins built on
-it, moves); `tools/make_release.py` does not yet re-stamp the version.
+**Version-masked identity** (owner ruling 2026-10-02). The version is a FIXED-WIDTH field: `slm_text` in `native_menu.h` is always
+`SLM_FIELD` = 20 bytes (the charmap text, its 0xFF terminator, zero padding the compiler adds), so a release stamp changes those bytes
+and nothing else: not one address, not the payload size (`tests/unit/test_gen3_canonical_identity.py` builds two versions and diffs
+them, with a control that fails on the old variable-width array). `build.py` finds the field in the payload by its own bytes
+(`patch/tools/rom_identity.py`) and records, per companion, `version_slot` {offset,length} (in the ROM), `payload_version_slot` (in the
+payload), `canonical_sha1` (the ROM with the field zeroed) and, for the native ones, `canonical_payload_sha256`: in `gen3_companions.json`
+for FR / LG / Emerald, in the `rr` row of `companion_pins.json` (with `patched_md5` and `rom_sha1`; `build.py` read-modify-writes only
+that row through `patch/tools/companion_pins.py`) for Radical Red. Qualification and evidence key on the canonical identity; the exact hash
+still names the cartridge on disk (admission rows, the UPS, the web patcher's md5). A hash is accepted for a record if it is the published
+exact value or is listed in the record's `equivalent_sha1s` / `equivalent_payload_sha256` (earlier exact builds proven canonical-equal;
+absent = none; `build.py` extends the lists on a version-only rebuild and retires them on a real change). Nothing carries the Radical Red
+companion's sha1 as a literal: `tools/rr_companion.py` reads the `rr` row.
+
+**Releasing (every family).** `python tools/stamp_release.py --version vX.Y.Z` rebuilds Red/Blue, pureRGB, Gen 2 and Gen 3 with that version,
+regenerates everything that names the exact bytes (UPS, sym/map, provenance, admission rows, `companion_pins.json`, the UPR ini and, unless
+`--no-jar`, the fork jar's overlay entries via `tools/upr_resource_update.py`, the Gen 2 grant when the overlay rows are ADMITTED, the md5
+tables in the READMEs), stops with exit 2 if any family's canonical identity moved (that is a code change, not a stamp), and writes
+`patch/dist/companion_version.json` (version + sha256 of every shipped companion file). Commit the result, tag, then
+`python tools/make_release.py --version X.Y.Z --with-patch`, which refuses companions that record does not vouch for. `--plan` prints the
+steps. `python tools/stamp_release.py --version dev` restores the committed dev builds.
+
+**Published:** `SLink-{FireRed,LeafGreen,Emerald,RR}.ups`, `gen3_companions.json` and `companion_pins.json` are the default `dev` build with
+the title wordmark and the fixed-width menu line (2026-10-02), and `build.py --check` reproduces them (the Radical Red `--check` also
+verifies the `rr` row). The frozen-cut receipts under `docs/gen3/probes` are bound to earlier exact hashes (see docs/gen3_requirements.md).
+`tools/make_release.py` does not yet re-stamp the version.
 
 > The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
 > `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
@@ -96,7 +118,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `70e7e746e573a2d00df5d3ef41d19d61`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `567eaeeae74f0e8ea412097cf9fda42f`.
 Then load the patched ROM in BizHawk as usual.
 
 UPS only — no IPS is provided. The patch now bundles the **Battle Calc** (the in-battle

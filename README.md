@@ -104,6 +104,7 @@ features matter, so use the game's setup options when preparing a run.
 | **Gold, Silver, Crystal** | Two games from this family |
 | **FireRed, LeafGreen** | Two games from this family |
 | **Emerald** | Emerald on both sides |
+| **Emerald Expansion** | The prebuilt Emerald Expansion reference ROM on both sides. It is built by `tools/build_expansion.py` from the pinned pokeemerald-expansion source (it cannot be built on a Windows host, and no patch exists); no randomizer, no companion patch |
 | **Radical Red 4.1** | Radical Red on both sides |
 | **Archipelago Red/Blue** | Compatible Archipelago builds |
 
@@ -122,9 +123,11 @@ For game families that support randomization, the Manager can build a pair with
 difficulty settings in the form. The available settings keep both games compatible
 with the Soul Link rules.
 
-Optional **companion patches** add game-specific features such as in-game run panels
-and native Soul Link trades. Availability depends on the title; the new-run form
-shows which options you can use. They are separate from the core linking rules.
+The **companion patch is required** for every title that has one (Red/Blue, pureRGB, Gold/Silver/Crystal,
+FireRed/LeafGreen/Emerald, Radical Red): the Manager patches your cartridge for you, and the launcher and server
+refuse an unpatched one. It adds the in-game run panel and native Soul Link trades. Yellow, Archipelago and the
+Emerald Expansion have no companion yet and still run clean. The new-run form shows which options you can use;
+they are separate from the core linking rules.
 
 More detail: [pureRGB](docs/purergb/README.md) · [Companion patches](patch/README.md).
 

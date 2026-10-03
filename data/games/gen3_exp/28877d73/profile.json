@@ -120,7 +120,7 @@
         "rom.SE_SONG_HEADERS.31": "build:pokemon.sym:98319 se_success; facts.constants.SE_SUCCESS",
         "rom.SE_SONG_HEADERS.32": "build:pokemon.sym:97772 se_failure; facts.constants.SE_FAILURE"
       },
-      "admitted": false,
+      "admitted": true,
       "derived": {
         "ABILITY_NUM_FIELD": {
           "shift": 5,
@@ -216,9 +216,7 @@
         },
         "TASK_STRUCT_SIZE": 40
       },
-      "open": [
-        "Runtime admission/CPU census and write safety qualification pending"
-      ],
+      "open": [],
       "ram": {
         "BATTLERS_COUNT_ADDR": 33554640,
         "BATTLER_CONTROLLER_FUNCS_ADDR": 50340844,

@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "9eabff699cd807a0d3a6dce8e97ea860edf982cde965b792378cf522d8c137d4",
+  "sha256": "2e8fa43616003a571814cdb5c078555a242ff33cf5bb2e4f461abe57523f6b6c",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -857,8 +857,8 @@
         },
         "companion": {
           "production": true,
-          "rom_md5": "70e7e746e573a2d00df5d3ef41d19d61",
-          "rom_sha1": "da579690db7d6933a0952a1f490312842793f71a",
+          "rom_md5": "567eaeeae74f0e8ea412097cf9fda42f",
+          "rom_sha1": "e87a6a7e4fc98a8840ef9ea0511e443ef4659219",
           "sites": {
             "battle_begin": {
               "address": 134282652,

@@ -27,10 +27,16 @@ build.py and inject.py both call title_spans().
 from __future__ import annotations
 
 import re
+import string
+import sys
+from pathlib import Path
 
 try:  # imported as patch.gen1.tools.title_screen (tests, server) or as a bare module (build.py, inject.py)
+    from ...tools.rom_identity import FIELD
     from .title_art import FIRST_ID, ROW0, ROW1, TILE_COUNT, TILES
 except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    from rom_identity import FIELD
     from title_art import FIRST_ID, ROW0, ROW1, TILE_COUNT, TILES
 
 BANK = 0x3F
@@ -59,7 +65,9 @@ assert FIRST_ID + TILE_COUNT <= 0x7F                                     # the f
 MENU_CONTEXT_SITE, MENU_CONTEXT = 0x5B5F, bytes.fromhex("2130d7cbb6cd2924")
 MENU_SITE = MENU_CONTEXT_SITE + 5                                        # the call's 3 bytes
 MENU_SITE_BEFORE = MENU_CONTEXT[5:]
-# ROM0's free tail, straight after SlinkJoypadStub (manifest.JOYPAD_STUB_ADDR + 23): the stub, then its string
+# ROM0's free tail, straight after SlinkJoypadStub (manifest.JOYPAD_STUB_ADDR + 23): the stub, then its string.
+# The string is a FIXED-WIDTH field of rom_identity.FIELD bytes (text, $50, zero padding), so a version stamp changes
+# only that field (and the cartridge checksum) and the build's canonical identity does not move.
 MENU_STUB_ADDR, MENU_STUB_LEN = 0x3FD5, 13
 MENU_TEXT_ADDR = MENU_STUB_ADDR + MENU_STUB_LEN
 MENU_ROW = 17                            # the only tile row no menu box and not the Continue info box (rows 7-16) covers
@@ -68,7 +76,7 @@ MENU_PREFIX = "SoulLink "
 DEFAULT_VERSION = "dev"
 VERSION_MAX = 10                         # "v0.3.0-dev"; keeps the menu line inside the screen's 20 cells
 _VERSION_RE = re.compile(r"dev|v\d+\.\d+\.\d+(-dev)?")
-assert len(MENU_PREFIX) + VERSION_MAX <= 20
+assert len(MENU_PREFIX) + VERSION_MAX <= 20 and len(MENU_PREFIX) + VERSION_MAX + 1 <= FIELD
 
 
 def check_version(version: str) -> str:
@@ -78,23 +86,38 @@ def check_version(version: str) -> str:
 
 
 def menu_text(version: str) -> bytes:
-    """"SoulLink <version>" as the game's tile ids, $50-terminated: the font is resident on the main menu, so no tiles are copied.
+    """"SoulLink <version>" as the game's tile ids, $50-terminated and zero-padded to FIELD bytes: the font is resident on
+    the main menu, so no tiles are copied.
 
     Gen 1's charset puts 'A' at $80, 'a' at $A0, '0' at $F6, space at $7F, '-' at $E3 and '.' at $E8
     (constants/charmap.asm; manifest.SLINK_TEXT is the same mapping)."""
-    out = bytearray()
-    for c in MENU_PREFIX + check_version(version):
-        if c == " ":
-            out.append(0x7F)
-        elif "A" <= c <= "Z":
-            out.append(0x80 + ord(c) - ord("A"))
-        elif "a" <= c <= "z":
-            out.append(0xA0 + ord(c) - ord("a"))
-        elif "0" <= c <= "9":
-            out.append(0xF6 + ord(c) - ord("0"))
-        else:
-            out.append({"-": 0xE3, ".": 0xE8}[c])
-    return bytes(out) + bytes((END,))
+    out = bytes(_tile(c) for c in MENU_PREFIX + check_version(version))
+    return (out + bytes((END,))).ljust(FIELD, b"\x00")
+
+
+def _tile(c: str) -> int:
+    if c == " ":
+        return 0x7F
+    if "A" <= c <= "Z":
+        return 0x80 + ord(c) - ord("A")
+    if "a" <= c <= "z":
+        return 0xA0 + ord(c) - ord("a")
+    if "0" <= c <= "9":
+        return 0xF6 + ord(c) - ord("0")
+    return {"-": 0xE3, ".": 0xE8}[c]
+
+
+def menu_version(field: bytes) -> str:
+    """The version a built menu field carries (the inverse of menu_text); ValueError for any field menu_text never emits."""
+    back = {_tile(c): c for c in " -.0123456789" + string.ascii_letters}
+    try:
+        text = "".join(back[b] for b in field.split(bytes((END,)))[0])
+        version = check_version(text.removeprefix(MENU_PREFIX))
+    except (KeyError, ValueError):
+        raise ValueError(f"not a SoulLink menu field: {field.hex()}") from None
+    if not text.startswith(MENU_PREFIX) or menu_text(version) != field:
+        raise ValueError(f"not a SoulLink menu field: {field.hex()}")
+    return version
 
 
 def _w(v: int) -> bytes:

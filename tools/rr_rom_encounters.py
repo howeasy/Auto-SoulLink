@@ -17,9 +17,15 @@ import struct
 from collections import Counter
 from pathlib import Path
 
+try:
+    from tools import rr_companion
+except ImportError:                    # run as a script: tools/ is sys.path[0]
+    import rr_companion
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 0x08000000
-ROM_PINS = {"964f951a0fdaf209e4ea1344883ef0d557bb3a80", "da579690db7d6933a0952a1f490312842793f71a"}
+# the clean 4.1 dump, and the companion (exact, or an earlier build its pin row lists as canonical-equal: the tables read are vanilla's)
+ROM_PINS = {"964f951a0fdaf209e4ea1344883ef0d557bb3a80", *rr_companion.accepted_sha1s()}
 HEADER_SIZE = 20
 HABITATS = (("land", 4, 12), ("water", 8, 5), ("rock_smash", 12, 5), ("fishing", 16, 10))
 LOADS = {"Night": (0x090C356E, 0x4A24), "Day": (0x090C3590, 0x4A1D),

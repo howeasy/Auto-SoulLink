@@ -1,18 +1,39 @@
 {
-  "evidence": "FR/LG payload bytes retained from native candidate receipts through production commit 3cb4bd72; private whole-ROM live receipts documented in fr_native_trade_abi.md",
+  "evidence": "FR/LG/Emerald payload bytes, each re-derived from its published UPS (the payload region is 0xFF in the base ROM, so the XOR delta is the payload) and the clean ROM when the title wordmark and the main-menu SoulLink line were promoted, and again when that line became a fixed-width version field (patch/tools/build.py, default dev version). FR/LG began as bytes retained from native candidate receipts through production commit 3cb4bd72. canonical_payload_sha256 is the payload with the version part of the field zeroed (patch/tools/rom_identity.py, the SoulLink prefix stays in the identity); a record may list earlier exact payload digests proven canonical-equal in equivalent_payload_sha256 (absent = none). Private whole-ROM live receipts documented in fr_native_trade_abi.md",
   "source_region_byte": 255,
   "titles": {
     "firered": {
       "offset": 15403808,
-      "size": 8625,
-      "payload_sha256": "bce6a8eaba3ea0bd6aadd147643eac8deb0b3d610a79e80b6e3bf1e6d70f0dd1",
-      "rom_sha256": "421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007"
+      "size": 8983,
+      "payload_sha256": "8e22b66e7a6a0676bfaa8038c48b22f9ef61accf5429cb64034fe2f075a3c3ba",
+      "rom_sha256": "e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718",
+      "canonical_payload_sha256": "d0429c104bdbcbac9a99d00c74e7020c5fc76e9eb69c81d13764ee0fc520e7e9",
+      "payload_version_slot": {
+        "offset": 8948,
+        "length": 20
+      }
     },
     "leafgreen": {
       "offset": 15404564,
-      "size": 8625,
-      "payload_sha256": "f078482f26a8637977b23f013438ff8467e00b38b3ad67f6f5d82104e06670a7",
-      "rom_sha256": "a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0"
+      "size": 8983,
+      "payload_sha256": "5e13e053aa8dedae8557f580276d93cba6aabf0b53e8c59cb3cf1bfaa9ba205b",
+      "rom_sha256": "0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569",
+      "canonical_payload_sha256": "10a3eed05837802785706e8039f27a5c96feee127615e71c150406bb967c5084",
+      "payload_version_slot": {
+        "offset": 8948,
+        "length": 20
+      }
+    },
+    "emerald": {
+      "offset": 14929764,
+      "size": 11474,
+      "payload_sha256": "73fb7f8428556ff6d627be7702cc0ca1162eee1cf4da17a619d3f2f8b66818eb",
+      "rom_sha256": "d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5",
+      "canonical_payload_sha256": "fe39393aa35f338d8cdadc8c1ce233bfc7076b1e17a914acda8f664ba90ebc53",
+      "payload_version_slot": {
+        "offset": 11012,
+        "length": 20
+      }
     }
   }
 }

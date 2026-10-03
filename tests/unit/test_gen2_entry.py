@@ -159,8 +159,8 @@ def _without_digest(path):
 def test_shipped_overlay_receipts_equal_the_captured_ones(title):
     """D6 step 3, the analogue of the clean check above: qualifications and O-33 disclosures are byte-equal,
     engine_sites / write_window equal modulo the top-level code_digest (the shipped copy is digest-free)."""
-    if not (ROOT / f"data/games/gen2_{title}/receipts/overlay").is_dir():
-        pytest.skip(f"gen2_{title} overlay receipts not shipped yet (tools/gen2_ship_overlay_receipts.py --write)")
+    # the overlay rows are ADMITTED: absent receipts mean the launcher refuses the title (wrong, not absent input)
+    assert (ROOT / f"data/games/gen2_{title}/receipts/overlay").is_dir(),         f"gen2_{title} overlay receipts not shipped (tools/gen2_ship_overlay_receipts.py --write)"
     entry = LuaRuntime(unpack_returned_tuples=True).eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
     overlay = entry.RECEIPT_FILES[f"gen2_{title}"].overlay
     paths = [overlay.engine_sites, overlay.write_window, *dict(overlay.qualifications.items()).values()]

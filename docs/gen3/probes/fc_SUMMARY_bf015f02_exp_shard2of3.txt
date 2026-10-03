@@ -1,0 +1,14 @@
+# G4 final cut bf015f02aaf69271b10e7e387e05012405182788 -- tools/gen3_final_cut.py summary (written 2026-10-02T18:49:49Z)
+# RUN 6 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_run_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_run_gen3_exp_as_a_bf015f02.txt |
+| 2 | exp_static_rock_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_rock_gen3_exp_as_a_bf015f02.txt |
+| 3 | exp_static_altering1_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering1_gen3_exp_as_a_bf015f02.txt |
+| 4 | choice_gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_choice_gift_gen3_exp_as_a_bf015f02.txt |
+| 5 | boxsync_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_boxsync_gen3_exp_as_a_bf015f02.txt |
+| 6 | whiteout_gen3_exp_as_a | XG3 production duo | FAIL exit=1 | 1 | fc_whiteout_gen3_exp_as_a_bf015f02.txt |
+| 7 | release_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_release_gen3_exp_as_a_bf015f02.txt |
+
+OVERALL: FAIL (6/7 rows)

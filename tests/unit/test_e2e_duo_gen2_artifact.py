@@ -21,9 +21,11 @@ def test_native_trade_never_falls_back_to_clean():
         duo.gen2_selected_artifact(SimpleNamespace(gen2_artifact="clean"), "gen2_trade_new")
 
 
-def test_legacy_default_is_clean_for_gameplay_and_overlay_for_native_trade(monkeypatch):
+def test_default_is_the_overlay_for_every_scenario_and_clean_stays_selectable(monkeypatch):
+    # patch-first (owner 2026-10-02): the launcher refuses a clean Gen 2 cartridge, so no scenario defaults to one
     monkeypatch.delenv("SLINK_GEN2_ARTIFACT", raising=False)
-    assert duo.gen2_selected_artifact(SimpleNamespace(), "link") == "clean"
+    assert duo.gen2_selected_artifact(SimpleNamespace(), "link") == "overlay"
+    assert duo.gen2_selected_artifact(SimpleNamespace(gen2_artifact="clean"), "link") == "clean"
     assert duo.gen2_selected_artifact(SimpleNamespace(), "gen2_trade_new") == "overlay"
 
 

@@ -82,11 +82,11 @@ Entry.PACKS = {
         header_code = { BPEE = "emerald" },
     },
     -- X3: the pokeemerald-expansion reference build (ROM 28877d73), registered so its hash names
-    -- its own pack (never gen3_emerald's) -- NOT routed and its profile NOT admitted until the
-    -- owner's XG gates (docs/gen3_emerald/PLAN.md X3). No header_code: an unknown-hash expansion
-    -- build is admitted by exact sha1 only, never by name.
+    -- its own pack (never gen3_emerald's). Only the known reference digest is admitted;
+    -- no header_code or anchor fallback can admit another expansion build.
     gen3_exp = {
         rom_type = { emerald_expansion_28877d73 = "emerald_expansion_28877d73" },
+        hash_only = true,
     },
 }
 -- Every pack file Entry.build/Entry.admit reads, as literal repo-relative paths: the release
@@ -130,7 +130,7 @@ Entry.PACK_FILES = {
 -- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6), gen3_emerald at EG4
 -- (owner ruling 24): every admitted pack is routed, and anything else on a GBA core is
 -- refused by the launcher.
-Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true }
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true, gen3_exp = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
@@ -246,7 +246,10 @@ function Entry.admit(args)
     end
     local code = tostring(args.header_code or "")
     if args.rom_read then
-        local matches = Entry.anchor_matches(args)
+        local matches = {}
+        for _, match in ipairs(Entry.anchor_matches(args)) do
+            if not Entry.PACKS[match.pack].hash_only then matches[#matches + 1] = match end
+        end
         if #matches == 1 then
             local m = matches[1]
             if m.production == false then return nil, "non-production cartridge is not admitted" end
@@ -462,6 +465,9 @@ local function build_production(deps, c)
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = (c.parts.kind == "rand" or c.parts.kind == "rand_companion") and c.parts.kind or c.artifact_kind,
         native = native, log = deps.log, core = core,
+        -- the hello's companion evidence (server companion_refusal): the pack's pinned ABI when this
+        -- cartridge's own mailbox is live, whatever the launcher's artifact kind says
+        companion_abi = function() return L("lua/gen3/native.lua").companion_live(full_profile.native, io_) end,
         trade_policy = Entry.PACKS[pack].trade_policy,
         rom_size = deps.rom_size,
         rom_content_new = deps.rom_content_new or function(tbl, rom_io)

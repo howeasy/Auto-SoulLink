@@ -21,12 +21,19 @@ def companion(rom_type: str) -> dict:
     if name in _PURE:
         return {"artifact_kind": "overlay"}
     if name in _GEN3:
-        return {"artifact_kind": "companion"}
+        # the pack-pinned mailbox ABI the cartridge's own mailbox reports (Radical Red ABI1, the rest ABI2)
+        return {"artifact_kind": "companion", "companion_abi": 1 if name == "firered_rr" else 2}
     if name in _GEN2:
-        return {"artifact_kind": "overlay"}
+        # the mailbox ABI the overlay's live service publishes (profile.overlay.abi == SLINK_ABI_VERSION)
+        return {"artifact_kind": "overlay", "companion_abi": 3}
     return {}
 
 
 def patched(hello: dict) -> dict:
-    """`hello` with the companion evidence for its rom_type merged under any field it already sets."""
+    """`hello` with the companion evidence for its rom_type merged under any field it already sets.
+
+    The caller's artifact_kind always wins: a "clean" Gen 1/Gen 3 half keeps committing "clean" (its evidence is
+    the panel / `companion_abi` field), and a "clean" pureRGB hello stays clean and is REFUSED (its evidence
+    IS the kind). A pureRGB caller that means a patched cartridge says "overlay" itself.
+    """
     return {**companion(hello.get("rom_type", "")), **hello}

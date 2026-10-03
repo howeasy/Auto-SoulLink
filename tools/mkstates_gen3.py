@@ -10,7 +10,7 @@ SLINK_STATE_DIR.
 
     python tools/mkstates_gen3.py --title firered --kind town --out-dir patch/build/gen3_probe_states/firered
     python tools/mkstates_gen3.py --title leafgreen --kind battle --out-dir patch/build/gen3_probe_states/leafgreen
-    python tools/mkstates_gen3.py --title emerald --kind town --out-dir C:/slink-wt/emerald-e2/states
+    python tools/mkstates_gen3.py --title emerald --kind town --out-dir F:/slink-work/lanes/gen3/states
 
 Emerald (card E2-CKPT) boots tests/fixtures/gen3/emerald_<kind>.sav under the Emerald pack: town ->
 slink_overworld/slink_door (Oldale heal tile, one step S of the Center door), slink_pokecenter

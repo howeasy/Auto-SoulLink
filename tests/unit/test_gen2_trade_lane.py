@@ -84,7 +84,8 @@ def test_manifest_validates_actual_bytes_not_only_declared_hashes(monkeypatch, a
 
     def changed(path):
         raw = original(path)
-        return bytes([raw[0] ^ 1]) + raw[1:] if path == target else raw
+        # compare RESOLVED paths: the lane reads through a (possibly junctioned) .cache's real target
+        return bytes([raw[0] ^ 1]) + raw[1:] if path.resolve() == target.resolve() else raw
 
     monkeypatch.setattr(Path, "read_bytes", changed)
     with pytest.raises(ValueError, match="differ"):

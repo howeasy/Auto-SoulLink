@@ -104,7 +104,8 @@ def test_hello_tick_reconnect_and_identity_refusal_keep_gender_per_player(tmp_pa
     world.step_to(60)
     hello, = world.events("hello")
     # the harness builds the clean artifact; the server refuses a clean Emerald (patch-first, 2026-10-02)
-    hello = dict(hello, artifact_kind="companion")
+    from tests.unit.companion_evidence import companion
+    hello = {**hello, **companion("emerald")}
     server = SLinkServer(data_dir=str(tmp_path))
     server._dispatch("a", dict(hello))
     server._dispatch("b", dict(hello, player="b", player_gender=1))

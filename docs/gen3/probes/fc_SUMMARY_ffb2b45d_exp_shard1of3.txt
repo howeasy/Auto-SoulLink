@@ -1,0 +1,10 @@
+# G4 final cut ffb2b45d4333f04bb188ff2775b98e8d3703b144 -- tools/gen3_final_cut.py summary (written 2026-10-02T19:47:53Z)
+# RUN 3 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | egg_receive_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_egg_receive_gen3_exp_as_a_ffb2b45d.txt |
+| 2 | boxsync_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_boxsync_gen3_exp_as_a_ffb2b45d.txt |
+| 3 | whiteout_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_whiteout_gen3_exp_as_a_ffb2b45d.txt |
+
+OVERALL: PASS (3/3 rows)

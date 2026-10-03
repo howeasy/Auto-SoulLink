@@ -368,6 +368,7 @@
         "hWY": 65490
       },
       "overlay": {
+        "abi": 3,
         "artifact": "crystal_overlay",
         "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
         "md5": "0477a77b6383862615dc0c45a9fb9592",

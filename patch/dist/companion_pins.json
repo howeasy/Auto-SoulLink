@@ -3,7 +3,7 @@
   "pins": {
     "rr": {
       "patched_md5": "567eaeeae74f0e8ea412097cf9fda42f",
-      "canonical_sha1": "65c68918913697df559c079ea06a8ed9cb68d339",
+      "canonical_sha1": "6fb65ecb1d1d592891ede494ebc6547c26194eb7",
       "version": "dev",
       "version_slot": {
         "offset": 3653128,
@@ -14,7 +14,7 @@
     "rb-red": {
       "patched_md5": "a9a70f99008559734ba01a9a80d78d5c",
       "version": "dev",
-      "canonical_sha1": "36faab5d0a5f0181d27786e2b957c1d21382ea1c",
+      "canonical_sha1": "2b8a52771ae6b0c919d0c65ef81d851f448c4729",
       "version_slot": {
         "offset": 16354,
         "length": 20
@@ -23,7 +23,7 @@
     "rb-blue": {
       "patched_md5": "fa47b8ba0c10e82f2545791abd157ad3",
       "version": "dev",
-      "canonical_sha1": "f04dc21894d418602f344d4964772a0f98125229",
+      "canonical_sha1": "d0472834f6d2c6118d2e825c0970a7834756f947",
       "version_slot": {
         "offset": 16354,
         "length": 20

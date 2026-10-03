@@ -327,7 +327,7 @@ def test_provision_refuses_a_stock_jar_for_frlg(tmp_path, monkeypatch):
     settings = tmp_path / "default.rnqs"
     settings.write_bytes(U.build_spec(U.default_spec(FRLG), family=FRLG))
     with pytest.raises(cartridges.CartridgeError, match="fork jar"):
-        cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=False,
+        cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=True,
                              randomize={"settings_path": str(settings)}, jar=str(jar))
 
 
@@ -353,7 +353,8 @@ def test_default_spec_provisions_a_contracted_frlg_pair(tmp_path, spec):
     settings = tmp_path / "settings.rnqs"
     settings.write_bytes(U.build_spec(U.default_spec(FRLG) if spec == "default" else _wide_allowed_spec(),
                                       family=FRLG))
-    result = cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=False,
+    # patch-first: a randomized FR/LG pair is always prepared WITH its companion
+    result = cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=True,
                                   randomize={"settings_path": str(settings)}, jar=jar)
     contract = json.loads((tmp_path / "rom_contract.json").read_text())
     assert contract["upr_version"] == "4.6.1-slink3"
@@ -365,9 +366,11 @@ def test_default_spec_provisions_a_contracted_frlg_pair(tmp_path, spec):
         row = contract["players"][pid]
         assert row["rom_sha1"] == hashlib.sha1(rom).hexdigest() == result["players"][pid]["rom_sha1"]
         assert row["fingerprint"] == upr_pipeline.gen3_fingerprint_rom(rom)
-        assert upr_pipeline.gen3_site_mismatches(rom, title) == [], "sites and anchors intact"
+        # the randomizer output (before the companion hooks its engine sites) keeps every site and anchor
+        randomized = (tmp_path / "roms" / f"{pid}_randomized.gba").read_bytes()
+        assert upr_pipeline.gen3_site_mismatches(randomized, title) == [], "sites and anchors intact"
         assert result["randomizer"]["players"][pid]["sites_intact"] is True
-        assert result["players"][pid]["kind"] == "rand"
+        assert result["players"][pid]["kind"] == "rand_companion"
     assert contract["players"]["a"]["fingerprint"] != contract["players"]["b"]["fingerprint"]
 
 

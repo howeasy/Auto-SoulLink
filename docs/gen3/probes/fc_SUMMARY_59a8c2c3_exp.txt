@@ -1,0 +1,37 @@
+# G4 final cut 59a8c2c3846b514acc5b22451dfedc56716a3d80 -- tools/gen3_final_cut.py summary (written 2026-10-02T20:31:22Z)
+# RUN 30 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | profile_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_profile_generated_check_exp_59a8c2c3.txt |
+| 2 | write_checkpoint_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_write_checkpoint_generated_check_exp_59a8c2c3.txt |
+| 3 | engine_signals_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_engine_signals_generated_check_exp_59a8c2c3.txt |
+| 4 | area_map_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_area_map_generated_check_exp_59a8c2c3.txt |
+| 5 | gift_census_check_exp | XG3 SOURCE | PASS | 1 | fc_gift_census_check_exp_59a8c2c3.txt |
+| 6 | wild_rom_check_exp | XG3 SOURCE | PASS | 1 | fc_wild_rom_check_exp_59a8c2c3.txt |
+| 7 | shadow_negatives_exp | XG3 SOURCE | PASS | 1 | fc_shadow_negatives_exp_59a8c2c3.txt |
+| 8 | unit_exp | XG3 MODEL | PASS | 1 | fc_unit_exp_59a8c2c3.txt |
+| 9 | exp_static_static_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_gen3_exp_as_a_59a8c2c3.txt |
+| 10 | exp_static_static_run_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_run_gen3_exp_as_a_59a8c2c3.txt |
+| 11 | exp_static_grass_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_grass_gen3_exp_as_a_59a8c2c3.txt |
+| 12 | exp_static_surf_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_surf_gen3_exp_as_a_59a8c2c3.txt |
+| 13 | exp_static_rock_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_rock_gen3_exp_as_a_59a8c2c3.txt |
+| 14 | exp_static_fish_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_fish_gen3_exp_as_a_59a8c2c3.txt |
+| 15 | exp_static_altering0_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering0_gen3_exp_as_a_59a8c2c3.txt |
+| 16 | exp_static_altering1_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering1_gen3_exp_as_a_59a8c2c3.txt |
+| 17 | gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_gen3_exp_as_a_59a8c2c3.txt |
+| 18 | egg_hatch_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_egg_hatch_gen3_exp_as_a_59a8c2c3.txt |
+| 19 | egg_receive_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_egg_receive_gen3_exp_as_a_59a8c2c3.txt |
+| 20 | choice_gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_choice_gift_gen3_exp_as_a_59a8c2c3.txt |
+| 21 | gift_box_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_box_gen3_exp_as_a_59a8c2c3.txt |
+| 22 | faint_cmd_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_faint_cmd_gen3_exp_as_a_59a8c2c3.txt |
+| 23 | linked_faint_active_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_linked_faint_active_gen3_exp_as_a_59a8c2c3.txt |
+| 24 | boxsync_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_boxsync_gen3_exp_as_a_59a8c2c3.txt |
+| 25 | whiteout_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_whiteout_gen3_exp_as_a_59a8c2c3.txt |
+| 26 | link_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_link_gen3_exp_as_a_59a8c2c3.txt |
+| 27 | release_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_release_gen3_exp_as_a_59a8c2c3.txt |
+| 28 | exp_zip_build | §9 item5 EXP | PASS | 1 | fc_exp_zip_build_59a8c2c3.txt |
+| 29 | exp_zip_check | §9 item5 EXP | PASS | 1 | fc_exp_zip_check_59a8c2c3.txt |
+| 30 | zip_boot_exp | §9 item5 EXP | PASS | 1 | fc_zip_boot_exp_59a8c2c3.txt |
+
+OVERALL: PASS (30/30 rows)

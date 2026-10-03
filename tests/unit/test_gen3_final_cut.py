@@ -1672,3 +1672,21 @@ def test_no_emerald_row_is_carried_on_frlg_shaped_deps():
     for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
         deps = fc.row_deps(r)
         assert deps is None or any("gen3_emerald" in d or "emerald" in d for d in deps), r.id
+
+
+def test_default_lanes_follow_slink_work_root(tmp_path):
+    """Owner space rule: with SLINK_WORK_ROOT set the lane/master defaults live under
+    <root>/lanes/gen3 (not on the Drive or C:); without it the old default is unchanged."""
+    import os
+    import subprocess
+    import sys
+
+    def dry(env_extra, drop=()):
+        env = {k: v for k, v in os.environ.items() if k not in drop}
+        env.update(env_extra)
+        out = subprocess.run([sys.executable, "tools/gen3_final_cut.py", "--cut", "HEAD", "--title", "exp",
+                              "--dry-run"], cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), env=env, capture_output=True, text=True, timeout=120)
+        return out.stdout.splitlines()[0]
+    root = tmp_path.as_posix()
+    assert f"lane={root}/lanes/gen3/gen3-lane-clean" in dry({"SLINK_WORK_ROOT": root})
+    assert ".claude/worktrees/gen3-lane-clean" in dry({}, drop=("SLINK_WORK_ROOT",))

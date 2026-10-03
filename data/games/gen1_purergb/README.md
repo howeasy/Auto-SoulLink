@@ -98,7 +98,9 @@ real catchable species), so National Dex is not a stable key here the way it is 
   so Explode Mode drops the battler under `max/3` and makes it move first; vanilla has no such field).
 - `*_overlay.json` — `profile_overlay.json` (adds the `trade` block: mailbox `$DEEA`, service bank `$3F`,
   receptionist hook, ABI 3, anchors), `engine_signals_overlay.json`, `write_checkpoint_overlay.json`,
-  `admission_overlay.json` (`{sha1 -> {…, kind: "overlay", base_sha1}}`): the same generators run with
+  `admission_overlay.json` (`{sha1 -> {…, kind: "overlay", base_sha1, canonical_sha1, version_slot[, equivalent_sha1s]}}`;
+  the sha1 names the exact cartridge, `canonical_sha1` is the same build with the version field and checksum zeroed, and
+  `equivalent_sha1s` lists earlier exact builds a stamp proved canonical-equal): the same generators run with
   `--kind overlay` on the companion-overlay build (`tools/build_purergb_overlay.py`); the client selects
   them by the admitted artifact kind (`Entry.pack_file`). Randomized artifacts (`rand` / `rand_overlay`) read
   their base kind's files.

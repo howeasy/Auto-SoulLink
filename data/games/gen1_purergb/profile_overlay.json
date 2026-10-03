@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "869faad4030c2f9c5583e0ace192c91a9e7e7605d537adefd58d7977d094bf00"
+   "sha256": "b7a224a7fb84f0ae859063479cb19fb9a51f298f1e5f9e64848424b0a5717d08"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "0206b9c206b2e6cca09b46a98cdd0779a18fdd57efd19e11b81decf56594a68e"
+   "sha256": "9aed6b717234f864d34ea62c21cc3d3afa247a3c5c4a79e41cca6ea3bedf2e08"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "b6f309bf0b49d1dc180059165403c1e8d04846585dcbc6507800e2cf10807939"
+   "sha256": "59d4a05e055d650bcaa4a1a0b5fa2070d4b7f44831d7d2932b9c1a466448312c"
   }
  },
  "titles": {
@@ -601,7 +601,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "fe62598a6834b0e88d0e879aafcab39876ec988c",
+   "rom_sha1": "a297c93bb26d54105cfc540cd3554ac232c3d00b",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1262,7 +1262,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554",
+   "rom_sha1": "49497bdacb2543d9c2689c450ae50b9026e51dba",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1923,7 +1923,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "999a702c4027db9e522486fd6330c86ff6932d4b",
+   "rom_sha1": "af199b7cc168853cfed6ab1950525b0a434d569a",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,

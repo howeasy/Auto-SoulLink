@@ -45,6 +45,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from tools import rr_companion  # noqa: E402
+
 SYM_DIR = ROOT / "data" / "gen3" / "pret"
 VERSION = "gen3-overworld-v1"
 ROM_BASE = 0x08000000
@@ -63,7 +65,7 @@ ROMS = {
         "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     ("gen3_rr", "radical_red", "companion"): (
         ROOT / "patch" / "build" / "slink_RR.gba",
-        "da579690db7d6933a0952a1f490312842793f71a"),
+        rr_companion.rom_sha1()),      # exact cartridge; patch/dist/companion_pins.json (tools/gen3_final_cut.py rom_pins reads it there)
     ("gen3_emerald", "emerald", "clean"): (
         pathlib.Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
         "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),
@@ -1523,7 +1525,7 @@ def build_expansion(context):
     sound["se_ids"] = {str(wire): const[name] for wire, name in ((16, "SE_FAINT"), (17, "SE_FLEE"), (22, "SE_BOO"),
                                                                  (25, "SE_SUCCESS"), (26, "SE_FAILURE"), (95, "SE_SHINY"))}
     return {EXPANSION_TITLE: {
-        "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
+        "version": VERSION, "title": EXPANSION_TITLE, "admitted": True, "source": context["source"],
         "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
         "tasks": tasks,
         "cpu": json.loads(json.dumps(EXP_CPU)),

@@ -1,0 +1,15 @@
+# G4 final cut ffb2b45d4333f04bb188ff2775b98e8d3703b144 -- tools/gen3_final_cut.py summary (written 2026-10-02T19:51:01Z)
+# RUN 7 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_gen3_exp_as_a_ffb2b45d.txt |
+| 2 | exp_static_grass_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_grass_gen3_exp_as_a_ffb2b45d.txt |
+| 3 | exp_static_fish_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_fish_gen3_exp_as_a_ffb2b45d.txt |
+| 4 | gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_gen3_exp_as_a_ffb2b45d.txt |
+| 5 | choice_gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_choice_gift_gen3_exp_as_a_ffb2b45d.txt |
+| 6 | gift_box_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_box_gen3_exp_as_a_ffb2b45d.txt |
+| 7 | linked_faint_active_gen3_exp_as_a | XG3 production duo | FAIL exit=1 | 1 | fc_linked_faint_active_gen3_exp_as_a_ffb2b45d.txt |
+| 8 | release_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_release_gen3_exp_as_a_ffb2b45d.txt |
+
+OVERALL: FAIL (7/8 rows)

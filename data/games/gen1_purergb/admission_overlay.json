@@ -1,38 +1,53 @@
 {
-  "999a702c4027db9e522486fd6330c86ff6932d4b": {
-    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-    "crc32": "2F76DA8F",
-    "header_crc": "702F",
-    "header_title": "POKEMON RED",
-    "kind": "overlay",
-    "md5": "9b0bd404c97ad1f6bccb94e27019dba7",
-    "profile_id": "gen1_purergb/purered",
-    "size": 1048576,
-    "title": "purered",
-    "ups": "patch/dist/SLink-PureRed.ups"
-  },
-  "c9d44bac61a3f88b6ea9a5f3439cf5ad02e59554": {
+  "49497bdacb2543d9c2689c450ae50b9026e51dba": {
     "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-    "crc32": "255B8E45",
-    "header_crc": "9E1D",
+    "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
+    "crc32": "F7B5A293",
+    "header_crc": "9E24",
     "header_title": "POKEMON GREEN",
     "kind": "overlay",
-    "md5": "0c65eb9e5b54ca76444e2445b881baa6",
+    "md5": "e9ffaffba8785143b20829767636168b",
     "profile_id": "gen1_purergb/puregreen",
     "size": 1048576,
     "title": "puregreen",
-    "ups": "patch/dist/SLink-PureGreen.ups"
+    "ups": "patch/dist/SLink-PureGreen.ups",
+    "version_slot": {
+      "length": 20,
+      "offset": 1036545
+    }
   },
-  "fe62598a6834b0e88d0e879aafcab39876ec988c": {
+  "a297c93bb26d54105cfc540cd3554ac232c3d00b": {
     "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-    "crc32": "5A1A57BD",
-    "header_crc": "A779",
+    "canonical_sha1": "11138e23a8d3d7339a9200becba920e6b5d143bf",
+    "crc32": "23CECE92",
+    "header_crc": "A780",
     "header_title": "POKEMON BLUE",
     "kind": "overlay",
-    "md5": "ef168497dea7ee8214a651ee6b0d311a",
+    "md5": "c07e45c4f4e9598f8c8f2e19fd83bbb6",
     "profile_id": "gen1_purergb/pureblue",
     "size": 1048576,
     "title": "pureblue",
-    "ups": "patch/dist/SLink-PureBlue.ups"
+    "ups": "patch/dist/SLink-PureBlue.ups",
+    "version_slot": {
+      "length": 20,
+      "offset": 1036545
+    }
+  },
+  "af199b7cc168853cfed6ab1950525b0a434d569a": {
+    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+    "canonical_sha1": "e913bef00cc5d05dcfda1ca26af32defe42093f7",
+    "crc32": "2354BCD2",
+    "header_crc": "7036",
+    "header_title": "POKEMON RED",
+    "kind": "overlay",
+    "md5": "fdf96ea4c25b9d4f7320394215c538a7",
+    "profile_id": "gen1_purergb/purered",
+    "size": 1048576,
+    "title": "purered",
+    "ups": "patch/dist/SLink-PureRed.ups",
+    "version_slot": {
+      "length": 20,
+      "offset": 1036545
+    }
   }
 }

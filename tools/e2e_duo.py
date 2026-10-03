@@ -2903,7 +2903,7 @@ def gen2_frame_scale(speed):
 def gen2_selected_artifact(args, scenario):
     """One explicit artifact decision for every Gen 2 scenario, including relaunches."""
     kind = getattr(args, "gen2_artifact", None) or os.getenv("SLINK_GEN2_ARTIFACT")
-    kind = kind or ("overlay" if scenario in GEN2_TRADE_SCENARIOS else "clean")
+    kind = kind or "overlay"   # patch-first (owner 2026-10-02): the launcher refuses a clean Gen 2 cartridge
     if kind not in ("clean", "overlay"):
         raise ValueError("Gen 2 artifact must be clean or overlay")
     if scenario in GEN2_TRADE_SCENARIOS and kind != "overlay":
@@ -3173,9 +3173,8 @@ GAMES = {
         "save_witness": "check_save_witness_gen3",
     },
     # X3: the pokeemerald-expansion reference build (ROM 28877d73), E<->E on its own make-exp
-    # fixtures (tests/fixtures/gen3/exp_*.sav); same maps and hunts as gen3_emerald. Pre-XG the
-    # driver admits it through a TEST-ONLY seam (duo_gen3_main.lua test_admission_codec), logged
-    # in every receipt; production refuses it (unrouted, unadmitted).
+    # fixtures (tests/fixtures/gen3/exp_*.sav); the ordinary production route is verified
+    # from accepted server HELLOs and each client's unwrapped admission result.
     "gen3_exp": {
         "main": "lua/tests/duo/duo_gen3_main.lua",
         "game": "gen3_exp",
@@ -3187,13 +3186,6 @@ GAMES = {
         "scenario_prefix": "gen3_",
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
-        # The SERVER's half of the same TEST-ONLY seam, for the same reason and the same
-        # receipt rule (ruling 39): production refuses this rom_type by name, so the server
-        # has to be told to route it, and the only process told is this one. It is a CLI
-        # flag, not an env var, so no other lane sharing this machine's environment can
-        # inherit it; no game row but this one carries one, and the run fails unless the
-        # server's own log carries the `production:false` line it logs on startup.
-        "server_rom_routes": ["--test-only-route", GEN3_EXP_TITLE],
     },
 }
 
@@ -3597,6 +3589,25 @@ def gen3_rand_server_main():
                             reset=True, data_dir=sys.argv[3]))
 
 
+def gen3_production_route_lines(server_text, client_text, side, pack, title, rom_hash):
+    """One accepted server route and the client's actual admit_routed identity, or None.
+
+    Shared by duo and extracted-ZIP evidence. A requested route, old override receipt,
+    wrong player/title/hash, or TCP connection alone cannot qualify production routing.
+    """
+    if side not in ("a", "b") or any("TEST-ONLY" in text for text in (server_text, client_text)):
+        return None
+    server_pattern = re.compile(rf"^.*\[{side}\] route {re.escape(title)} -> {re.escape(pack)} \(production\)$")
+    client_pattern = re.compile(
+        rf"^.*\[SLink-gen3\] {re.escape(pack)}/{re.escape(title)} \(clean by hash\) "
+        rf"player {side} -> \S+:\d+ \(rom ([0-9a-fA-F]{{8}})\)$")
+    server_line = next((line for line in server_text.splitlines() if server_pattern.fullmatch(line)), None)
+    client_line = next((line for line in client_text.splitlines()
+                        if (match := client_pattern.fullmatch(line))
+                        and match[1].lower() == rom_hash[:8].lower()), None)
+    return (server_line, client_line) if server_line and client_line else None
+
+
 class DuoRun:
     def __init__(self, scenario, args, attempt=1):
         self.scenario = scenario
@@ -3941,7 +3952,7 @@ class DuoRun:
         """Manager-equivalent run identity, stable across this run's reconnects."""
         if any(flag == "--test-only-route" or flag.startswith("--test-only-route=")
                for flag in self.args.server_flags):
-            raise ValueError("TEST-ONLY route is reserved for the configured game row")
+            raise ValueError("test-only route flags are not supported")
         if not getattr(self, "_server_run_id", None):
             self._server_run_id = "duo-" + uuid.uuid4().hex
         cmd = [sys.executable, "-m", "server.server",
@@ -3951,11 +3962,6 @@ class DuoRun:
                "--data-dir", self.data_dir, "--run-id",
                ("t5-" + self._native_candidate["nonce"]) if self.cfg.get("gen3_native_trade")
                else self._server_run_id] + self.cfg["flags"] + self.args.server_flags
-        # A game row may ask the server for a TEST-ONLY route (the expansion, ruling 39) --
-        # after --server-flags and before --wire-log, so the wire-log pair stays the tail the
-        # argv tests pin. getattr: a unit test builds a DuoRun with only the fields its own
-        # case reads, and a run with no row carries no routes at all.
-        cmd += list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -4030,48 +4036,41 @@ class DuoRun:
             stderr=subprocess.STDOUT)
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
-        self._require_test_only_route_receipt()
 
-    def _require_test_only_route_receipt(self, timeout: float = 15):
-        """The TEST-ONLY route this row asked for must be VISIBLE in the run's own evidence.
+    def _require_production_route_receipt(self, timeout: float = 15):
+        """Expansion-only receipt: accepted HELLOs and native admission after both connect.
 
-        The server logs every route it is told to open with `production:false` (see
-        server/adapters/__init__.py set_test_only_routes), and this run copies that exact line
-        into the pydec receipt that ships with the attempt, so a receipt can always be read
-        for whether the cartridge was routed or merely admitted. It is CHECKED, not assumed: a
-        run whose server never logged the seam it was launched with did not test what it
-        claims to, and fails here instead of passing quietly. A row with no routes is silent.
+        Other game rows deliberately keep their existing evidence contracts.
         """
-        routes = list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
-        if not routes:
+        if getattr(self, "game", None) != "gen3_exp":
             return []
-        if len(routes) != 2 or routes[0] != "--test-only-route":
-            raise RuntimeError(f"malformed configured TEST-ONLY route: {routes!r}")
-        expected = (f"TEST-ONLY route of {routes[1]} -> {self.game} enabled "
-                    "(production refuses it by name; production:false)")
-        log_path = os.path.join(self.data_dir, "server.log")
+        title = GEN3_EXP_TITLE
+        profile = json.loads(Path(gen3_profile_path(title)).read_text(encoding="utf-8"))
+        rom_hash = profile["titles"][title]["rom_sha1"]
         deadline = time.time() + timeout
-        while True:
+
+        def complete_lines(path):
             try:
-                with open(log_path, encoding="utf-8", errors="replace") as handle:
-                    text = handle.read()
+                text = Path(path).read_text(encoding="utf-8", errors="replace")
             except OSError:
-                text = ""
-            line = next((row for row in text.splitlines()
-                         if row.partition("TEST-ONLY route of ")[2] ==
-                         expected[len("TEST-ONLY route of "):]), "")
-            if line or time.time() >= deadline:
+                return ""
+            return text[:text.rfind("\n") + 1]
+
+        while True:
+            server = complete_lines(Path(self.data_dir) / "server.log")
+            proofs = [gen3_production_route_lines(server, complete_lines(self._result_path(side)),
+                                                  side, "gen3_exp", title, rom_hash)
+                      for side in ("a", "b")]
+            if all(proofs):
                 break
+            if time.time() >= deadline:
+                missing = ", ".join(side for side, proof in zip("ab", proofs, strict=True) if not proof)
+                raise RuntimeError(f"gen3_exp: missing production route/client admission for {missing}")
             time.sleep(0.2)
-        if not line:
-            raise RuntimeError(
-                f"{getattr(self, 'game', '?')}: the server logged no TEST-ONLY route, but this "
-                f"row launched it with {' '.join(routes)} — this run cannot be a receipt")
-        note = (f"TEST_ONLY_ROUTE game={getattr(self, 'game', '?')} "
-                f"argv={' '.join(routes)} production:false server={line}")
-        print(f"[duo] {note}")
-        self._pydec_note(note)
-        return [line]
+        for side, (server_line, client_line) in zip("ab", proofs, strict=True):
+            self._pydec_note(f"PRODUCTION_ROUTE side={side} server={server_line}")
+            self._pydec_note(f"PRODUCTION_ADMISSION side={side} client={client_line}")
+        return proofs
 
     def _saveram_dir(self, inst: str) -> str:
         """A SaveRAM directory unique to this SCENARIO and this instance.
@@ -5223,6 +5222,7 @@ class DuoRun:
             print("[duo] CONNECT_TIMEOUT " + json.dumps(diagnostic, sort_keys=True))
             raise
         print("[duo] both players connected")
+        self._require_production_route_receipt()
 
     def inject_link(self, a_key, b_key, area_id="duo"):
         def linked():

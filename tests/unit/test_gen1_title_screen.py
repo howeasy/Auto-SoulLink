@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import re
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from patch.gen1.tools import inject, manifest, title_art as art, title_screen as ts
+from patch.tools import rom_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 # the copyright/GAME FREAK tiles the title's bottom line draws from, and LoadCopyrightTiles +
@@ -48,8 +50,10 @@ def test_menu_text_is_the_games_own_tile_ids(version, shown):
     glyph.update({chr(ord("a") + i): 0xA0 + i for i in range(26)})
     glyph.update({str(d): 0xF6 + d for d in range(10)})
     text = ts.menu_text(version)
-    assert text == bytes(glyph[c] for c in shown) + bytes((0x50,))
-    assert min(text[:-1]) >= 0x60 and len(text) - 1 <= 20                   # PlaceString treats everything below $60 as a command
+    body = bytes(glyph[c] for c in shown)
+    assert text == (body + bytes((0x50,))).ljust(rom_identity.FIELD, bytes(1))      # a FIXED-WIDTH field: text, $50, zero padding
+    assert len(text) == rom_identity.FIELD == 20
+    assert min(body) >= 0x60                                                # PlaceString treats everything below $60 as a command
 
 
 def test_the_charmap_agrees_with_the_roms_own_strings(clean):
@@ -164,6 +168,13 @@ def test_no_span_overlaps_another(clean):
     assert all(a_end <= b_start for (_s, a_end), (b_start, _e) in zip(ranges, ranges[1:], strict=False))
 
 
+def test_the_menu_text_span_is_the_same_length_for_every_version(clean):
+    """A fixed-width field: the span (and so the UPS hunk) never grows or shrinks with the version text."""
+    lengths = {len(next(sp for sp in ts.title_spans(clean, v) if sp[0] == ts.MENU_TEXT_ADDR)[2])
+               for v in ("dev", "v0.3.0", "v0.3.0-dev", "v10.20.30")}
+    assert lengths == {rom_identity.FIELD}
+
+
 def test_spans_apply_to_both_clean_roms(clean):
     for off, before, after, why in ts.title_spans(clean, "v0.2.6"):
         assert clean[off:off + len(before)] == before, why
@@ -187,6 +198,61 @@ def test_injected_rom_prints_the_version_on_the_main_menu_not_the_title(clean):
     assert out[ts.MENU_TEXT_ADDR:ts.MENU_TEXT_ADDR + len(text)] == text
     # no pixel font on the title any more: bank $3F holds the logo tiles and nothing after them
     assert not any(out[ts.TILES_OFFSET + len(art.TILES):ts.TILES_OFFSET + 0x300])
+
+
+SLOT = {"offset": ts.MENU_TEXT_ADDR, "length": rom_identity.FIELD}
+
+
+def _build_gen1(tmp_path, monkeypatch, clean, version):
+    """What `build.py --rom <this dump> --version <version>` writes, run on a temp copy so patch/gen1/build is never touched."""
+    key = next(k for k, (_name, sha1) in manifest.ROMS.items() if sha1 == hashlib.sha1(clean).hexdigest())
+    spec = importlib.util.spec_from_file_location("gen1_build_for_stamp_test", ROOT / "patch/gen1/tools/build.py")
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    (tmp_path / build.ROMS[key][0]).write_bytes(clean)
+    monkeypatch.setattr(build, "REPO", str(tmp_path))
+    monkeypatch.setattr(build, "BUILD", str(tmp_path / "out"))
+    payload = (ROOT / "patch/gen1/dist/slink_bank3f.bin").read_bytes().ljust(build.BANK_SIZE, bytes(1))
+    build.patch_rom(key, payload, version=version)
+    return key, (tmp_path / "out" / f"slink_{key}.gb").read_bytes()
+
+
+@pytest.mark.parametrize("stamp", ["v0.3.0-dev", "v1.10.3"])
+def test_a_version_stamp_changes_only_the_field_and_the_checksum(tmp_path, monkeypatch, clean, stamp):
+    """The stamp guarantee, for real: two builds of the same ROM differ in the version field and the global checksum only."""
+    _key, dev = _build_gen1(tmp_path, monkeypatch, clean, "dev")
+    _key, rel = _build_gen1(tmp_path, monkeypatch, clean, stamp)
+    assert hashlib.md5(dev).hexdigest() != hashlib.md5(rel).hexdigest()                  # the exact cartridge moved...
+    assert dev[SLOT["offset"]:][:SLOT["length"]] == ts.menu_text("dev")
+    assert ts.menu_version(rel[SLOT["offset"]:][:SLOT["length"]]) == stamp
+    rom_identity.assert_version_only_difference(dev, rel, [SLOT], gb=True)             # ...and nothing but the field and the checksum did
+    assert rom_identity.canonical_sha1(dev, [SLOT], gb=True) == rom_identity.canonical_sha1(rel, [SLOT], gb=True)
+    changed = {i for i in range(len(dev)) if dev[i] != rel[i]}
+    # the Gen 1 builders never rewrite the global checksum (the header keeps the clean dump's), so only the field moves
+    assert changed and changed <= set(range(SLOT["offset"], SLOT["offset"] + SLOT["length"]))
+    # the injector (randomized cartridges) obeys the same rule
+    rom_identity.assert_version_only_difference(
+        inject.inject(clean, version="dev"), inject.inject(clean, version=stamp), [SLOT], gb=True)
+
+
+def test_a_change_outside_the_field_moves_the_canonical_identity(tmp_path, monkeypatch, clean):
+    """Revert check: the canonical sha1 is not blind to the build -- one stub byte, and it differs."""
+    _key, dev = _build_gen1(tmp_path, monkeypatch, clean, "dev")
+    bad = bytearray(dev)
+    bad[ts.MENU_STUB_ADDR] ^= 0x01
+    assert rom_identity.canonical_sha1(dev, [SLOT], gb=True) != rom_identity.canonical_sha1(bytes(bad), [SLOT], gb=True)
+    with pytest.raises(ValueError, match="outside the version field"):
+        rom_identity.assert_version_only_difference(dev, bytes(bad), [SLOT], gb=True)
+
+
+def test_the_pinned_companion_pins_match_a_fresh_build(tmp_path, monkeypatch, clean):
+    """patch/dist/companion_pins.json (tools/gen_companion_pins.py) names the build this tree produces, exact and canonical."""
+    key, rom = _build_gen1(tmp_path, monkeypatch, clean, "dev")
+    pin = json.loads((ROOT / "patch/dist/companion_pins.json").read_text())["pins"][f"rb-{key}"]
+    assert pin["version"] == "dev"
+    assert hashlib.md5(rom).hexdigest() == pin["patched_md5"]
+    assert pin["version_slot"] == SLOT
+    assert rom_identity.canonical_sha1(rom, [SLOT], gb=True) == pin["canonical_sha1"]
 
 
 def test_a_rom_whose_title_line_is_not_plain_tile_ids_is_refused_cleanly(clean):
