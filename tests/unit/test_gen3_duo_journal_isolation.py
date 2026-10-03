@@ -31,21 +31,30 @@ def _launch_pair(monkeypatch, tmp_path, attempt):
                               server_flags=[], wire_log=False)
     run = duo.DuoRun("linked_faint_active_whiteout_gen3", args, attempt=attempt)
     monkeypatch.setattr(run, "_rom_for", lambda inst: f"fake-{inst}.gba")
-    for inst, phase in (("a", "initial"), ("b", "initial"), ("a", "reload")):
-        run.launch_instance(inst, phase=phase, seed=False)
     def path(inst):
         stub = Path(run.stub_path(inst)).read_text(encoding="utf-8")
         match = re.search(r'^  journal_path = "([^"]+)",$', stub, re.M)
         return match.group(1) if match else (ROOT / "slink_gen3_trade").as_posix()
+    run.phase_paths = []                                         # [(inst, phase, journal_path)] as each launch wrote it into its stub
+    for inst, phase in (("a", "initial"), ("b", "initial"), ("a", "reload"), ("b", "reload")):
+        run.launch_instance(inst, phase=phase, seed=False)
+        run.phase_paths.append((inst, phase, path(inst)))
     return run, path("a"), path("b")
 
 
-def test_two_attempts_share_only_within_the_attempt(monkeypatch, tmp_path):
+def test_each_instance_has_its_own_journal_kept_across_its_phases_and_attempts_stay_isolated(monkeypatch, tmp_path):
+    """Production has one journal per player: A and B never share a file or its OS guard (shared, one client's read made the other's
+    journal 'busy' and hid its captures), the same instance keeps its path across relaunch phases, and attempts stay apart."""
     first, a1, b1 = _launch_pair(monkeypatch, tmp_path, 1)
     second, a2, b2 = _launch_pair(monkeypatch, tmp_path, 2)
-    assert a1 == b1 == (Path(first.data_dir) / "slink_gen3_trade").as_posix()
-    assert a2 == b2 == (Path(second.data_dir) / "slink_gen3_trade").as_posix()
-    assert a1 != a2
+    assert a1 == (Path(first.data_dir) / "slink_gen3_trade_a").as_posix()
+    assert b1 == (Path(first.data_dir) / "slink_gen3_trade_b").as_posix()
+    assert a2 == (Path(second.data_dir) / "slink_gen3_trade_a").as_posix()
+    assert b2 == (Path(second.data_dir) / "slink_gen3_trade_b").as_posix()
+    assert len({a1, b1, a2, b2}) == 4                                   # four distinct files: per instance AND per attempt
+    for run, a, b in ((first, a1, b1), (second, a2, b2)):
+        assert [p for i, _ph, p in run.phase_paths if i == "a"] == [a, a]       # initial and reload: the same journal
+        assert [p for i, _ph, p in run.phase_paths if i == "b"] == [b, b]
 
 
 def test_actual_duo_lua_wrapper_redirects_only_the_store_path(tmp_path):
@@ -121,23 +130,46 @@ def test_real_guarded_journal_keeps_attempt_one_intent_out_of_attempt_two(tmp_pa
 def test_existing_journal_owners_keep_their_paths(scenario, cfg, tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario, run.cfg, run.data_dir = scenario, cfg, str(tmp_path)
-    assert run._gen3_duo_journal_path() is None
+    assert run._gen3_duo_journal_path("a") is None and run._gen3_duo_journal_path("b") is None
 
 
 def test_journal_probe_flag_survives_scenario_rename(tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario, run.cfg, run.data_dir = "renamed_probe", {"journal_lock_probe": True}, str(tmp_path)
-    assert run._gen3_duo_journal_path() is None
+    assert run._gen3_duo_journal_path("a") is None
 
 
 def test_new_private_server_data_identity_gets_its_own_journal(tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario, run.cfg, run.data_dir = "admit_randomized_frlg", {"gen3_rand": True}, str(tmp_path / "controls")
-    controls = run._gen3_duo_journal_path()
+    controls = {inst: run._gen3_duo_journal_path(inst) for inst in "ab"}
     run.data_dir = str(tmp_path / "controls" / "randomized_pair")
-    randomized = run._gen3_duo_journal_path()
-    assert controls != randomized
-    assert controls.parent.name == "controls" and randomized.parent.name == "randomized_pair"
+    randomized = {inst: run._gen3_duo_journal_path(inst) for inst in "ab"}
+    assert len({*controls.values(), *randomized.values()}) == 4          # a new data identity: new files for BOTH instances
+    assert all(p.parent.name == "controls" for p in controls.values())
+    assert all(p.parent.name == "randomized_pair" for p in randomized.values())
+    assert controls["a"].name.endswith("_a") and controls["b"].name.endswith("_b")
+
+
+def test_the_rr_reset_archive_keeps_both_instances_journals_under_distinct_names(tmp_path):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario, run.cfg, run.data_dir = "rr_trade_reset_gen3", {}, str(tmp_path / "data")
+    (tmp_path / "data").mkdir(exist_ok=True)
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    for inst in "ab":
+        for suffix in ("log", "guard"):
+            Path(run._gen3_duo_journal_path(inst).as_posix() + "." + suffix).write_bytes(f"{inst}-{suffix}".encode())
+    run._archive_gen3_duo_journals(archive)
+    assert sorted(p.name for p in archive.iterdir()) == ["slink_gen3_trade_a.guard", "slink_gen3_trade_a.log",
+                                                         "slink_gen3_trade_b.guard", "slink_gen3_trade_b.log"]
+    assert (archive / "slink_gen3_trade_b.log").read_bytes() == b"b-log"
+    Path(run._gen3_duo_journal_path("b").as_posix() + ".guard").unlink()
+    with pytest.raises(RuntimeError, match="RR reset missing durable trade journal"):          # the old check survives, per instance
+        run._archive_gen3_duo_journals(tmp_path / "again")
+    run.cfg = {"gen3_native_trade": True}
+    with pytest.raises(RuntimeError, match="no private durable journal path"):
+        run._archive_gen3_duo_journals(archive)
 
 
 def test_actual_dofile_interception_reaches_run_lua_journal_load(tmp_path):
