@@ -3,14 +3,24 @@
 > - **No SE handle is reservable (ACCEPTED, verified):** `PlaySE` (`asm/unk_02005D10.s` @0x0200604C) resolves its handle via `GF_GetPlayerNoBySeq` -> `GF_GetSndHandleByPlayerNo` from the sound-archive data. C3 resolves the handle at runtime and polls it. FEATURE_BAR's "reserves one handle" line is corrected.
 > - **C3 does NOT use the shared `sound_producer.h`** (verified: it acks on the same visit, `:22-23`, so it cannot hold), but reuses `tp_ack` only. The hold state lives in the C2 SysTask heap block, not the 0xE00 title window.
 > - **C2 review checklist gains:**
->   1. Route producers by opcode before any producer runs (`trade_producer.h:300-302` acks every opcode it does not own; verified).
+>   1. The dispatcher calls **every** producer on **every** visit, and each producer ignores
+>      foreign opcodes. The shared trade producer now does exactly that (Gen 4 commit
+>      `6c76265c`, branch `claude/gen4-tp-gate`): its state machine still runs each visit for the
+>      save watchdog, and only the trade opcodes `{29 PREPARE, 21 SCENE, 30 WITHDRAW, 31 STATUS}`
+>      reach dispatch. **Neither producer gates the other.**
 >   2. Leave `status = BUSY` while a request is held.
 >   3. `capabilities` stays ROM-owned.
+>   (corrected 2026-10-03: "Route producers by opcode before any producer runs" is retired — that
+>   was the C2 workaround for the trade producer's catch-all `else` ack, and the `else` arm is now
+>   gated on trade-owned opcodes. Producer isolation is per producer, not in the dispatcher.)
 > - **Host depth for sound = 1 in flight** (one opcode slot); the GB queue of 4 does not port.
 > - **D-C3-1 / D-C3-2 RULED by the ABI owner (Gen 5, 2026-10-02):**
 >   - Title-private capability bits are **16..31** (bits 7..15 are reserved for future shared caps), so Gen 4 gates NOTIFY on its own title bit **1<<16** in its host adapter, and NATIVE_SOUND (1<<2) keeps its shared meaning.
 >   - Title-private reason codes are **32..63** (16..31 are reserved for future shared reasons), so Gen 4 refuses sound code 2 with reason **32 = SOUND_CODE_REFUSED**, decoded only by the Gen 4 adapter.
->   - The trade_producer else-ack issue is confirmed; Gen 5 queues a fix (gate the else on trade-owned opcodes). Until then the C2 dispatcher routes by opcode.
+>   - The trade_producer else-ack issue is confirmed and is now **fixed** in the shared header on the Gen 4 branch, for Gen 5 to import (commit
+>     `6c76265c`, branch `claude/gen4-tp-gate`): the `else` arm is gated on the trade-owned opcode
+>     set, so a foreign opcode is left alone instead of acked. The C2 dispatcher does **not** route.
+>     (corrected 2026-10-03: "Until then the C2 dispatcher routes by opcode" is obsolete.)
 >   - Cite this ruling until the abi.h comments land.
 > 
 > **Status: DRAFT** (OMP cx-95e28acd, 2026-10-02). Peer spec draft for coordinator review and
@@ -64,8 +74,11 @@ dedicated request byte at mailbox `+7` (`slink_abi.inc:14`, `gb_panel.lua:18`). 
 opcode slot (`abi.h:150`, `opcode` u16 @`0x06`). That single difference drives most of §3.
 
 **This spec ships with code 2 unwired.** The ROM's code table has three entries and a hole at
-index 2. The ROM **refuses** code 2 with a named reason (§4 F5) rather than playing something
-else; `SEQ_SE_DP_DECIDE2` 1694 (`include/constants/sndseq.h:692`) is **not** used as a stand-in
+index 2. The ROM **refuses** code 2 with title-private reason **32 = `SOUND_CODE_REFUSED`**
+(§4 F5) rather than playing something else. (corrected 2026-10-03: the decision block pins the
+refusal at reason 32; the draft's "title-private reason ≥ 16" phrasing is superseded — the title
+range is 32..63.)
+`SEQ_SE_DP_DECIDE2` 1694 (`include/constants/sndseq.h:692`) is **not** used as a stand-in
 (`FEATURE_BAR.md:175` offers it only as a *recorded substitution*, which requires an owner
 ruling that does not exist). Until the owner rules, the host has no code 2 to send either, and a
 code-2 request is a client bug, not a missing feature.
@@ -132,16 +145,21 @@ Gen-5-owned shared edit (`PLAN.md:41`) and is out of scope at C3.
 **`tp_ack` writes `m->opcode = 0` (`trade_producer.h:103`)**, so an ack *consumes* the request.
 That gives the hold its shape: while holding, the ROM leaves `opcode = 19` and `seq` published
 and leaves `status = SLINK_ST_BUSY` — which is exactly what C2 already reserves for an
-outstanding request (`C2_BEACON_SPEC.md:231-233`). C3 must not set `status` itself; C2 owns it.
+outstanding request (`C2_BEACON_SPEC.md:249-252`). C3 must not set `status` itself; C2 owns it.
 
-**Multi-producer hazard, raised against C2 (not C3's to fix, but C3 trips it).**
-`tp_service` acks **every** opcode it does not own with reason 2 —
-`} else { tp_ack(m,seq,0,2); }` (`trade_producer.h:300-302`). If the C5 trade producer runs in
-the same SysTask over the same mailbox with no opcode routing, it will ack a held
-`SLINK_OP_PLAY_SE` request as `SLINK_ST_FAIL/BAD_ARGS` while the sound service is still holding
-it, and `tp_ack` will zero the opcode out from under the hold. The C2 dispatcher **must** route
-by opcode (or gate the trade producer on its `SLINK_OP_TRADE_*` set) before C5 lands. Falsifier
-F6 is this.
+**Multi-producer hazard — CLOSED in the shared header (was: C2 routes by opcode).**
+The hazard was real: `tp_service`'s `} else { tp_ack(m,seq,0,2); }` (`trade_producer.h:300-302`)
+acked **every** opcode it did not own, so a held `SLINK_OP_PLAY_SE` would be acked
+`SLINK_ST_FAIL/BAD_ARGS` while C3 was still holding it, and `tp_ack` would zero the opcode out
+from under the hold. That arm is now gated on the trade-owned opcode set (Gen 4 commit
+`6c76265c`, `claude/gen4-tp-gate`): the shared producer **leaves foreign opcodes alone**. Its
+state machine still runs on **every** visit — it must, for the save watchdog
+(`trade_producer.h:160-171`) — but only `{29, 21, 30, 31}` reach dispatch. **The dispatcher calls
+every producer every visit and each producer ignores foreign opcodes.** C3 is already symmetric:
+`slink_sound_service` returns without acking anything that is not `SLINK_OP_PLAY_SE` /
+`SLINK_OP_PLAY_FANFARE` (`sound_producer.h:17`). Falsifier F6 pins this.
+(corrected 2026-10-03: the "The C2 dispatcher **must** route by opcode … before C5 lands" wording
+is retired.)
 
 ### 2.2 Which SE handle, and how busy is polled
 
@@ -253,7 +271,7 @@ the discipline one-for-one, changing only the predicate sources.
    the first service visit of the new one. Belt-and-braces: C3 also consumes-and-refuses a
    request whose `session_epoch` is zero or differs from the configured epoch — the identical
    gate `sound_producer.h:18-19` uses — and the C2 boot generation at mailbox `+0x4C`
-   (`C2_BEACON_SPEC.md:115,230`) is the witness. The `InitSoundData` latch is the primary guard;
+   (`C2_BEACON_SPEC.md:115,248`) is the witness. The `InitSoundData` latch is the primary guard;
    the epoch gate is the invariant that holds if registration order ever changes.
 
 **No `Sound_Stop()` latch.** `Sound_Stop` is called from six places
@@ -277,9 +295,12 @@ The last row is why the vanilla plan stands for all three: hge does not replace 
 (`FEATURE_BAR.md:182-185`), so `PlaySE`, `GF_GetPlayerNoBySeq`, `GF_GetSndHandleByPlayerNo` and
 `GF_SndGetFadeTimer` are the same code everywhere.
 
-**HG/SS (pret source rebuild, C6 re-pins).** One new file `patch/src/nds/gen4/sound.c`, plus two
-static-ARM9 hook rows, all inside the C2 overlay model (`C2_BEACON_SPEC.md:154-181`; the pret tree
-is copied to a cache dir, never edited in place, `PLAN.md:34`):
+**HG/SS (pret source rebuild, C6 re-pins).** One new file `patch/src/nds/gen4/sound.c` plus a
+**source** edit at `src/main.c:66`, all inside the C2 overlay model
+(`C2_BEACON_SPEC.md:154-181`; the pret tree is copied to a cache dir, never edited in place,
+`PLAN.md:34`): (corrected 2026-10-03: "plus two static-ARM9 hook rows" was wrong — the pret build
+has no `hooks` table; the latch is a source edit, and hge's equivalent is an armips `.org`, not a
+row either.)
 
 - the service body — folded into the **existing C2 `SysTask`** (`C2_BEACON_SPEC.md:166`), not a
   second task;
@@ -291,11 +312,39 @@ neither moves `SDK_STATIC_BSS_END = 0x021E5900` — the constraint that killed t
 (`C2_BEACON_SPEC.md:5`). **This must be asserted in the C3 build, not assumed** — it is the same
 class of hazard as `sfx.asm:10-11` (`ASSERT wAudioEnd <= wSlinkMailbox`).
 
-**hge (in-fork, C6).** Registration rides `load_arm9_expansion` (C2 D-C2-2,
-`C2_BEACON_SPEC.md:213-218`) or a `hooks` row; the C3-specific work is one more `hooks` row for
-the `InitSoundData` latch. Static-ARM9 sites are byte-identical in HG and hge
-(`FEATURE_BAR.md:122-126`), so one latch row serves both. **The hge `InitSoundData` row address
-is UNVERIFIED** — it must be read off the hge nm/xMAP at C6, not copied from the pret.
+**hge (in-fork, C6).** Registration rides hge's own `SaveData_New` replacement, **not**
+`load_arm9_expansion` and **not** a `hooks` row — see the C2 decision block
+(`C2_BEACON_SPEC.md:15-19`), which supersedes D-C2-2.
+
+**The `InitSoundData` latch vehicle on hge — RESOLVED (Q7).** Two facts, both measured:
+
+1. **The call site is 0x02000D12 on all three artifacts.** The pret Thumb `bl InitSoundData` whose
+   target is `0x02004174` resolves to call-site `0x02000D12` in HG, SS **and** hge (pinned-ROM
+   read, `ndspy` loadArm9; hge's static ARM9 keeps the vanilla addresses, `FEATURE_BAR.md:122-126`).
+   (corrected 2026-10-03: the draft recorded this as "the hge `InitSoundData` row address is
+   UNVERIFIED"; it is measured, and it is a `bl` — not the function.)
+2. **The vehicle is a SLink-owned armips patch, not a `hooks` row.** A `hooks` row *replaces* the
+   function (`scripts/make.py:151-155` for the 4-field form) and has no call-through, so it cannot
+   latch after a call that must still happen. hge's `armips/asm/*.s` files are SLink-owned and
+   already carry `.org` patches (`hg-engine/armips/asm/syntheticoverlay.s:8-10` is the precedent
+   shape). So: `.org 0x02000D12` in a new SLink armips file, replacing the 4 B `bl` with a `bl` to
+   a **pinned stub** that calls `InitSoundData` and then latches.
+
+**Collision census (C6 SOURCE, blocking).** Because the latch is an `.org` write and not a table
+row, it is invisible to any check that only reads `hooks`. The census must therefore cover **all
+five writer classes** — `hooks`, `repoints`, `routinepointers`, `bytereplacement` and armips
+`.org` — and assert that `0x02000D12` is claimed by at most one of them.
+(corrected 2026-10-03: a `hooks`/`repoints`-only census would have passed while this write
+collided.)
+
+**Known baseline for the census:** in a default hge build the only NitroMain write is
+`0x02000CD0`, 4 B. (corrected 2026-10-03: added as the census's starting datum.)
+
+**OPEN design alternative, not decided:** replace the latch with a **read-only** check of a
+`sSoundWork` field that only `InitSoundData` sets (e.g. `GF_SndHandleInitAll`'s handle
+initialisation, or the arc's player-count table). That costs zero writes and removes the hge
+collision problem entirely, but it needs a field proven set-and-only-set by `InitSoundData`.
+Tracked as **Q10** (§6); it is an alternative to the latch, not a decision.
 
 ---
 
@@ -379,20 +428,29 @@ generic (`lua/sfx_arbiter.lua:19,32-33`).
 > | 6 | — | `SLINK_CAP_MATCH_CALL` |
 >
 > Reusing `G.CAP_SFX`/`G.CAP_SFX_NOTIFY` against an NDS mailbox would read **durable trade** as
-> "sound present" and **native sound** as "notify available". NDS caps bits 7..31 are undefined
-> (`capabilities` is a `u32`, `abi.h:155`).
+> "sound present" and **native sound** as "notify available". The NDS *shared* vocabulary stops at
+> bit 6 (`abi.h:88-96`); bits 7..31 carry no shared meaning, and of those **16..31 are the
+> title-private range** (7..15 stay reserved for future shared caps) per the ABI owner's ruling.
+> (`capabilities` is a `u32`, `abi.h:155`.)
+>
+> **DECISION (D-C3-1, RULED — no longer a proposal):** NOTIFY is gated on
+> `capabilities & (1u << 16)`, the **title-private** bit declared in
+> `patch/src/nds/gen4/sound.h` as `SLINK_GEN4_CAP_SE_NOTIFY`. No `abi.h` edit, no Gen 5
+> coordination, and it stays inside the C2 ruling that Gen 4 may add no shared field
+> (`C2_BEACON_SPEC.md:47-49`).
+> (corrected 2026-10-03: the draft proposed `1u << 7` and left the gate itself open. Both are
+> closed — the bit is `1<<16`, inside 16..31, and the gate is kept. The
+> "alternative: drop the NOTIFY gate entirely" option below is **not chosen**; recorded here
+> because it was a live question, not because it survived.)
+> **Alternative considered and NOT chosen:** drop the NOTIFY gate entirely for Gen 4 — 1500 exists
+> on all three artifacts and there is exactly one build shape, so the Gen 1/2 rationale ("an older
+> cartridge drops code 4 unplayed") does not apply. Rejected: the bar asks for the gate
+> (`FEATURE_BAR.md:181`) and the owner ruled it in.
 
-**DECISION (D-C3-1, proposed):** NOTIFY is gated on `capabilities & (1u << 7)`, a **title-private**
-bit declared in `patch/src/nds/gen4/sound.h` as `SLINK_GEN4_CAP_SE_NOTIFY`. No `abi.h` edit, no
-Gen 5 coordination, and it stays inside the C2 ruling that Gen 4 may add no shared field
-(`C2_BEACON_SPEC.md:47-49`). `0x100` is otherwise unassigned in both vocabularies.
-**Alternative for the coordinator to pick:** drop the NOTIFY gate entirely for Gen 4 — 1500 exists
-on all three artifacts and there is exactly one build shape, so the Gen 1/2 rationale ("an older
-cartridge drops code 4 unplayed") does not apply. The bar asks for the gate
-(`FEATURE_BAR.md:181`), so this needs an explicit ruling either way. Listed again in §6.
-
-**`SLINK_CAP_NATIVE_SOUND` (bit 2, `abi.h:91`) is set by the ROM build**, and it is the only
-sound cap C3 sets. `capabilities` is ROM-owned (`FEATURE_BAR.md:258`).
+**C3 sets two capability bits:** the shared `SLINK_CAP_NATIVE_SOUND` (bit 2, `abi.h:91`) and the
+title-private NOTIFY bit **16** (D-C3-1, above). `capabilities` is ROM-owned
+(`FEATURE_BAR.md:258`). (corrected 2026-10-03: the draft said NATIVE_SOUND was "the only sound cap
+C3 sets", which contradicted the NOTIFY gate three lines above it.)
 
 ### 3.4 What C3 does **not** do host-side
 
@@ -430,8 +488,8 @@ Class per `PLAN.md:64`: **S** = SOURCE, **M** = MODEL (a lupa/host world), **P**
 | **F2** | **A request during fade/reset is dropped, not queued forever.** | P + S | (a) Start a BGM fade, post code 3, assert no `PlaySE` and the request still held; (b) let the fade end, assert it plays; (c) with the request held, soft-reset, assert the post-boot service refuses and clears it (`src/main.c:66` latch) and never plays it; (d) let a hold run past 240 visits and assert it is consumed unplayed. | Every case terminates; no request survives a reset; no hold exceeds the bound. |
 | **F3** | **No `PlaySE` off the main thread.** | S | Static: assert the companion adds no task on `gSystem.vwaitTaskQueue` (`src/main.c:131`) or `gSystem.vBlankIntr` (`src/main.c:127-128`), no `hooks` row on either, and that the only `PlaySE` call site is inside the `mainTaskQueue` SysTask. Runtime: a breakpoint/log gate on `PlaySE` recording the caller — only `Slink_NDS_Service`. | The only caller of `0x0200604C` is the C2 service. |
 | **F4** | **An unknown code is refused.** | S + M | Post `args[0] = 0`, `5`, `255`, and `0xFFFF`; assert each is consumed unplayed with `status = SLINK_ST_FAIL`, `reason = SLINK_REASON_BAD_ARGS` (2, `abi.h:101`), and `opcode` cleared (`trade_producer.h:103`) — never held, never played. Model: a fake `SlinkSoundEngine` + a fake handle word. | Same as Gen 2's `cp SLINK_SFX_NOTIFY + 1 ; jr nc` (`sfx.asm:40-41`), with an ack. |
-| **F5** | **Code 2 is refused with a named reason.** | S + M + P | Post `args[0] = 2` on each artifact. Assert: `SLINK_ST_FAIL`; a **distinct, recorded** reason value (not the generic 2 — see D-C3-2); `opcode` cleared; no `PlaySE`; handle word unchanged; **no audible sound**. Additionally assert the *host* never emits code 2, and that the code table in `patch/src/nds/gen4/sound.h` has a hole at index 2 rather than a placeholder id. | Refused, named, silent, and the reason is distinguishable in `mailbox.reason`. **This is the falsifier that proves the owner ruling (`DECISIONS_2026-10-02_companion.md:16`) is honoured rather than quietly filled.** |
-| **F6** | **Two producers do not steal each other's acks.** | S + M | With the C5 trade producer present in the same SysTask: hold a sound request across ≥ 1 visit, and assert the trade producer has not acked it (`trade_producer.h:300-302`). Then post a `TRADE_PREPARE` and assert the sound producer ignores it (returns without acking — `sound_producer.h:17`). | Exactly one producer acks each request. **Fails against the C2 dispatcher as currently drafted; the fix belongs to C2.** |
+| **F5** | **Code 2 is refused with a named reason.** | S + M + P | Post `args[0] = 2` on each artifact. Assert: `SLINK_ST_FAIL`; `reason = 32` (`SOUND_CODE_REFUSED`, title-private per the ABI owner: 32..63 are title reasons, 16..31 are reserved for shared reasons); `opcode` cleared; no `PlaySE`; handle word unchanged; **no audible sound**. Additionally assert the *host* never emits code 2, and that the code table in `patch/src/nds/gen4/sound.h` has a hole at index 2 rather than a placeholder id. | Refused, named, silent, and `mailbox.reason == 32`. **This is the falsifier that proves the owner ruling (`DECISIONS_2026-10-02_companion.md:16`) is honoured rather than quietly filled.** (corrected 2026-10-03: "a **distinct** reason (not the generic 2)" → pinned at 32.) |
+| **F6** | **Two producers do not steal each other's acks.** | S + M | With the C5 trade producer present in the same SysTask: hold a sound request across ≥ 1 visit, and assert the trade producer has not acked it. Then post a `TRADE_PREPARE` and assert the sound producer ignores it (returns without acking — `sound_producer.h:17`). Then assert the trade producer's save watchdog still advances with no trade request outstanding (its state machine runs every visit; only `{29,21,30,31}` reach dispatch). | Exactly one producer acks each request; no producer's watchdog stalls. **Passes only with the foreign-opcode gate in place** (`6c76265c`); it failed against the C2-routed dispatcher the draft proposed. |
 
 **What F1 cannot prove:** *which* SE handle an id maps to, statically. It resolves it at runtime on
 the artifact under test, and that per-artifact result is what C3 records — it is the "the SE id
@@ -448,17 +506,17 @@ Mailbox span `0x01FFEC00 .. 0x01FFFC00` (`C2_BEACON_SPEC.md:62`). One writer per
 
 | Offset (abs) | Field | Writer | C3 rule |
 |---|---|---|---|
-| `+0x00` | `signature` | ROM | C2 re-stamps every tick; C3 never touches (`C2_BEACON_SPEC.md:224-226`). |
+| `+0x00` | `signature` | ROM | C2 re-stamps every tick; C3 never touches (`C2_BEACON_SPEC.md:242-244`). |
 | `+0x04` | `abi_version` | ROM | C2. |
 | `+0x06` | `opcode` | **host** | host writes `19` LAST; **ROM clears it via `tp_ack` only** (`trade_producer.h:103`). C3 never writes this byte. |
 | `+0x08` | `seq` | host | reserved for the whole hold window (§3.2). |
-| `+0x0A` | `status` | ROM | **C2 owns it.** `SLINK_ST_BUSY` while C3 holds (`C2_BEACON_SPEC.md:231-233`); `OK`/`FAIL` from `tp_ack`. C3 never writes this byte. |
+| `+0x0A` | `status` | ROM | **C2 owns it.** `SLINK_ST_BUSY` while C3 holds (`C2_BEACON_SPEC.md:249-252`); `OK`/`FAIL` from `tp_ack`. C3 never writes this byte. |
 | `+0x0C` | `ack_seq` | ROM | `tp_ack` only. |
 | `+0x0E` | `reason` | ROM | `tp_ack` only. F5's named reason lands here. |
 | `+0x10` | `args[0]` | host | the semantic code, written **before** `opcode`. |
 | `+0x11 .. +0x2F` | `args[1..31]` | host | C3 must zero them; a stale `args[1]` from a previous request is harmless here (C3 reads `args[0]` only) but F4 requires the ROM to ignore them. |
 | `+0x30` | `result[16]` | ROM | untouched by C3. |
-| `+0x40` | `capabilities` | ROM | C3's build sets `SLINK_CAP_NATIVE_SOUND` (`abi.h:91`) and, per D-C3-1, bit 7. Never host-written (`FEATURE_BAR.md:258`). |
+| `+0x40` | `capabilities` | ROM | C3's build sets `SLINK_CAP_NATIVE_SOUND` (`abi.h:91`) and, per D-C3-1, the title-private bit **16** (`1u << 16`). Never host-written (`FEATURE_BAR.md:258`). |
 | `+0x44` | `session_epoch` | host | C3 **reads** it (`sound_producer.h:18-19`); never writes. |
 | `+0x48` | `producer_phase` | ROM | C5's; C3 leaves it at `SLINK_PHASE_IDLE` (`abi.h:110`). |
 | `+0x4C` | `reserved` = boot generation | ROM | C2's (`C2_BEACON_SPEC.md:115`); C3 uses it as the soft-reset witness (§2.3). |
@@ -490,15 +548,16 @@ a measurement.
 
 | # | Question | Status |
 |---|---|---|
-| **Q1** | **D-C3-1 — NOTIFY gate.** Title-private bit 7 of `capabilities`, or no separate NOTIFY gate at all? | **Decision needed.** §3.3. The bar asks for the gate (`FEATURE_BAR.md:181`); the Gen 1/2 rationale does not transfer to a single-build artifact. |
-| **Q2** | **D-C3-2 — the named reason for code 2.** `SLINK_REASON_BAD_ARGS` (2, `abi.h:101`) is generic and shared. A distinct value would need an `abi.h` edit (Gen 5-owned, `PLAN.md:41`) — **or** a title-private reason code ≥ 16 (undefined on NDS, `README.md:108`) documented in `patch/src/nds/gen4/sound.h`. **Recommend the title-private code**, for the same reason as Q1. | **Decision needed.** F5 needs a *distinguishable* reason. |
+| **Q1** | **D-C3-1 — NOTIFY gate.** | **RULED.** Title-private bit **16** (`1u << 16`), gate kept (`C3_SOUND_SPEC.md:1-24`). The draft's `1u << 7` and its "drop the gate" alternative are both closed. (corrected 2026-10-03.) |
+| **Q2** | **D-C3-2 — the named reason for code 2.** | **RULED.** Reason **32 = `SOUND_CODE_REFUSED`**, a title-private code (32..63), declared in `patch/src/nds/gen4/sound.h` and decoded only by the Gen 4 adapter. No `abi.h` edit; cite the ruling until the comments land. (corrected 2026-10-03: the draft offered "a title-private reason ≥ 16" and named `SLINK_REASON_BAD_ARGS` (2) as the alternative — 16 is in the reserved shared range and 2 is generic. Both retired.) |
 | **Q3** | **Which SE handle does each id map to?** | **UNVERIFIED.** ROM archive data (`asm/unk_02004A44.s:1515`). Resolved at runtime by F1 and recorded per artifact. |
 | **Q4** | **Is `SEQ_SE_DP_WALL_HIT` 1536 acceptable as BOO?** | **Provisional** (`FEATURE_BAR.md:176`) — no C caller; needs the C3 listen test in F1. |
 | **Q5** | **Is `GF_SndGetAfterFadeDelayTimer()` a required second fade guard?** | **INFERRED.** It is the after-fade delay attribute (`src/sound.c:231-232`) and the name says what it says, but no call site was read. Cheap; keep it, revisit if it costs plays. |
 | **Q6** | **Hold bound in visits or vblanks?** | **Visits**, by the Gen 2 rule (`sfx.asm:1-5`). A vblank-based bound is forbidden while `gSystem.frameCounter` is zeroed per loop (`src/main.c:124`; `C2_BEACON_SPEC.md:4`). |
-| **Q7** | **hge `InitSoundData` hook address.** | **UNVERIFIED** — must be read off the hge nm/xMAP at C6, not copied from the pret (§2.4). |
-| **Q8** | **F6's fix lands in C2 or C5?** | C2 owns the dispatcher (`C2_BEACON_SPEC.md:166`); the trade producer's catch-all ack is at `trade_producer.h:300-302`. **Recommend C2**, as a routing-by-opcode rule, because C5 will otherwise inherit the hazard silently. |
+| **Q7** | **hge `InitSoundData` hook address.** | **RESOLVED.** Not a hook. The call site is `0x02000D12` in HG, SS and hge (pinned-ROM read, `ndspy`), the pret Thumb `bl` targeting `0x02004174`; hge keeps vanilla static-ARM9 addresses. On hge the vehicle is a SLink-owned armips `.org 0x02000D12` patch replacing that 4 B `bl` with a `bl` to a pinned stub that calls `InitSoundData` then latches, following `hg-engine/armips/asm/syntheticoverlay.s:8-10`. Not a `hooks` row: `hooks` replaces the function and cannot call through. Collision census must cover all five writer classes (§2.4). (corrected 2026-10-03: was "UNVERIFIED — must be read off the hge nm/xMAP at C6".) |
+| **Q8** | **F6's fix lands in C2 or C5?** | **Answered: neither.** It landed in the shared producer (Gen 4 `6c76265c`, `claude/gen4-tp-gate`), which now ignores foreign opcodes, so the dispatcher does not route and no C2/C5 file carries the gate. (corrected 2026-10-03: the draft recommended "C2, as a routing-by-opcode rule".) |
 | **Q9** | **Should the host replace or drop a superseded sound request?** | **Recommend replace-in-place, same `seq`** (§3.2), so the host never has two live sound `seq`s. Not yet exercised by any Gen 1/2 precedent — the GB byte mailbox has no seq. |
+| **Q10** | **Latch vs a read-only sound-work check on hge.** | **OPEN — design alternative, undecided.** Instead of writing a latch through an armips `.org`, the service could read a `sSoundWork` field that only `InitSoundData` sets, and refuse until it is set. Zero writes, no collision with any writer class, but it needs a field proven set-and-only-set by `InitSoundData` on all three artifacts. §2.4. |
 
 ### §9. Citation drifts against `FEATURE_BAR.md` (all found by reading the pinned pret / the fork)
 

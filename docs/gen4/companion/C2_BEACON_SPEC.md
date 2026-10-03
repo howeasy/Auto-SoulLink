@@ -176,10 +176,12 @@ Registration site — **one call, `NitroMain`, before the first app**:
 - `NitroMain` starts at `src/main.c:50`; `InitSystemForTheGame()` is the first statement
   (`src/main.c:51`) and is what creates `gSystem.mainTaskQueue`
   (`src/system.c:123-126`, arena-allocated via `OS_AllocFromArenaLo(OS_ARENA_MAIN, …)`).
-- The first app is registered at `src/main.c:83`
+- The first app is registered at `src/main.c:77`
   (`RegisterMainOverlay(FS_OVERLAY_ID(OVY_36), &ov36_App_MainMenu_SelectOption_Continue)`).
-- Therefore `Slink_NDS_Register()` goes **after `src/main.c:51` and before `src/main.c:83`**,
-  so the queue exists and the service is live before any overlay can run.
+- Therefore `Slink_NDS_Register()` goes **after `src/main.c:51` and before `src/main.c:77`**, so
+  the queue exists and the service is live before any overlay can run.
+  (corrected 2026-10-03: the decision block pins the site at the **first** `RegisterMainOverlay`,
+  `main.c:77`; the draft's `:83` was the wrong call.)
 - `SysTask_CreateOnMainQueue(func, data, priority)` is
   `SysTaskQueue_InsertTask(gSystem.mainTaskQueue, func, data, priority)`
   (`src/sys_task_api.c:7-9`) — a static-ARM9 function, already `.public` in overlay symbol
@@ -205,7 +207,8 @@ one-shot app.
   callbacks (`FEATURE_BAR.md:214`), so the vanilla `mainTaskQueue` drain at `src/main.c:111`
   is still the drain point on hge. A task created on `gSystem.mainTaskQueue` therefore runs on
   hge too — **INFERRED**, and it must be measured (it is falsifier 4, §6).
-- Two admissible registration routes, both from `FEATURE_BAR.md:215,245`:
+- Two **former** registration routes, both from `FEATURE_BAR.md:215,245`, **both now superseded**
+  by the `SaveData_New` ruling below (corrected 2026-10-03: this list was live; it is history):
   1. a `hooks` row in the fork; or
   2. ride hge's own boot path `load_arm9_expansion`, called from `Main` at frame 9
      (`FEATURE_BAR.md:215`; the symbol row is `load_arm9_expansion` at `0x02110334`, Thumb,
@@ -215,12 +218,22 @@ one-shot app.
   **and** our hge-discriminating admission anchor (`tests/unit/test_gen4_pack.py:1072-1073`).
   Breaking it would make an hge ROM pass as vanilla (`tools/gen_gen4_pack.py:2336-2340`).
 
-**DECISION (D-C2-2, owner):** route 2 (ride `load_arm9_expansion`) is my recommendation — it
-is the owner's own code, it needs no new `hooks` row, and it runs before the first overlay
-load. Route 1 is the fallback if the owner refuses to modify that routine. **INFERRED**: that
-`load_arm9_expansion` at frame 9 runs *after* `InitSystemForTheGame()` (it is branched to from
-inside `Main`), so `gSystem.mainTaskQueue` already exists. This must be read in the fork
-before C6.
+**DECISION (D-C2-2, owner) — SUPERSEDED, retained for history.** The draft recommended route 2
+(ride `load_arm9_expansion`). That recommendation is **void**. The decision block
+(`C2_BEACON_SPEC.md:15-19`) rules: **hge already replaces `SaveData_New`** (its only vanilla
+caller is `src/main.c:64`, during boot; `hooks:402`) with its own `src/save.c:139`, so the
+register call is appended before its `return`, and there is **no new `hooks` row**. That code
+calls `CreateSysTask`, which the fork already binds to `0x0200E320|1` = vanilla
+`SysTask_CreateOnMainQueue` (`rom.ld:477`, `include/task.h:51`).
+(corrected 2026-10-03: D-C2-2 and every `load_arm9_expansion` passage in this section are
+superseded by the `SaveData_New` ruling. It is a one-line fork source edit, like the accepted C5
+commonscript edit, and it beats both former options: it needs no new row, no new hook-budget line,
+and it runs on every boot including a soft reset.)
+
+**Also void:** the "**INFERRED** that `load_arm9_expansion` at frame 9 runs *after*
+`InitSystemForTheGame()`" reasoning, and the open question built on it (§8 Q3). `SaveData_New` is
+called from `src/main.c:64`, which is unconditionally after `:51`, so the premise is stronger
+there, not weaker.
 
 ### 3.3 Exact fields written per tick
 
@@ -256,44 +269,53 @@ Three independent facts, three independent failure modes. This is the Gen 2 rule
 `FEATURE_BAR.md:255` — *"a private per-boot cookie plus an engine-clock delta … MORE necessary
 here, because ITCM survives soft reset."*
 
-### 4.1 The per-boot private cookie — DTCM, NOT ITCM
+### 4.1 The per-boot private cookie — the service SysTask's own heap data block, NOT DTCM
 
-**Requirement:** a latch whose value at the start of every boot is a known constant, so the ROM
-can tell "first service visit of this boot" from "mid-boot".
+**Requirement (unchanged):** a latch whose value at the start of every boot is a known constant,
+so the ROM can tell "first service visit of this boot" from "mid-boot".
 
-**The only RAM cleared at every boot in HG/SS** (verified at the pinned pret, `ad7a3afa`):
+**The ruling (decision block, `C2_BEACON_SPEC.md:5`):** the private cookie lives in the **service
+SysTask's own heap data block** — allocated in NitroMain init **every boot**, freed by any reset,
+read only by the ROM. It is **NOT in DTCM.**
 
-| Region | Mechanism | Evidence |
-|---|---|---|
-| DTCM, `0x4000` bytes at `SDK_AUTOLOAD_DTCM_START` | `INITi_CpuClear32` | `lib/asm/crt0.s:44-47` |
-| palette `0x05000000 + 0x400` | `INITi_CpuClear32` | `lib/asm/crt0.s:48-51` |
-| OAM `0x07000000 + 0x400` | `INITi_CpuClear32` | `lib/asm/crt0.s:52-55` |
-| static ARM9 BSS (`SDK_STATIC_BSS_START..END`, ends `0x021E5900`) | word loop from the module params | `lib/asm/crt0.s:60-72`; bounds in `gen4_mailbox_census.py:365-369` |
-| three hardware blocks (`OSi_HW_DTCM`, PXI, `HW_COMPONENT_PARAM`) | `OSi_CpuClear32` in `OSi_DoBoot` | `lib/NitroSDK/src/os/os_reset.c:96-126` |
+**Why DTCM is excluded.** C1 excluded the DTCM arena because it is the **launcher stack**
+(`lib/NitroSDK/src/os/os_thread.c:24-26`). The arena tail
+`SDK_SECTION_ARENA_DTCM_START` (`0x027E0080`, `FEATURE_BAR.md:146`) is therefore not a candidate
+for the latch either.
 
-Two consequences:
+**The heap block is strictly better than the DTCM row this replaces,** on every axis the old
+reasoning cared about:
 
-1. **Static ARM9 BSS is forbidden for the latch.** Adding a static `.bss` symbol moves
-   `0x021E5900` and therefore every overlay address and every pinned hook site
-   (`FEATURE_BAR.md:145`). The C0 result is explicit: *"There is no free static RAM … The
-   'proven-free static span' mailbox route is dead."* (`FEATURE_BAR.md:140-144`).
-2. **DTCM is the right home.** It is cleared at every boot, it is CPU-local (no bus coherency
-   question), and it is not the arena. The clear happens *before* `do_autoload`
-   (`lib/asm/crt0.s:47` then `:59`), so the post-boot content of a DTCM address is exactly
-   the ROM's DTCM autoload image (size + bss) at that offset — a deterministic constant.
+1. **Freshness is structural, not argued.** The block is `OS_AllocFromArenaLo`-allocated inside
+   `Slink_NDS_Register()` in `NitroMain`, so it cannot exist before the first boot tick and is
+   destroyed by `OS_ResetSystem`. "Zero at the start of every boot" is a lifetime fact, not a
+   link-order fact.
+2. **No DTCM census rows are needed.** The old §4.1 carried an **Open/UNVERIFIED** note that the
+   C1 census does not cover DTCM (`span_check` accepts only ITCM-arena spans,
+   `gen4_mailbox_census.py:120-124`; the W3 reset analysis checks the ITCM autoload bss but not
+   the DTCM block, `:373-375`). That entire open item disappears: there is no DTCM address to
+   prove free.
+3. **It is ROM-private by construction.** The host never sees it, so it cannot be confused with
+   the published half (§2.4) and needs no `D-C2-1` carve-out.
+4. **It costs one arena allocation** at registration, and the allocation is already made for the
+   service task itself.
 
-**DECISION (D-C2-3):** the private cookie latch is one `u32` in DTCM, at an address chosen so
-that it lies inside the DTCM autoload image cleared by `crt0.s:44-47`, at an offset with no
-pinned DTCM symbol, and whose ROM-image byte value is provably constant.
+**What survives from the old §4.1, and is still load-bearing:** static ARM9 `.bss` is forbidden
+for any of this state. Adding a static `.bss` symbol moves `0x021E5900` and therefore every
+overlay address and every pinned hook site (`FEATURE_BAR.md:145`). The C0 result is explicit:
+*"There is no free static RAM … The 'proven-free static span' mailbox route is dead."*
+(`FEATURE_BAR.md:140-144`). The heap block is on the right side of that line; DTCM was on the
+wrong one.
 
-> **Open / UNVERIFIED:** the C1 census does **not** cover DTCM. `span_check` accepts only
-> spans inside the ITCM arena (`gen4_mailbox_census.py:120-124`) and the W3 reset analysis
-> checks the ITCM autoload's bss but not the DTCM block
-> (`gen4_mailbox_census.py:373-375`). C1 must therefore add the DTCM rows (W1: no symbol or
-> sized object covers it; W2: no literal/symbol/arena-allocation reaches it; W3: it is inside
-> the `crt0` clear) before D-C2-3 is safe. The alternative — put the latch in the DTCM arena
-> tail `SDK_SECTION_ARENA_DTCM_START` (`0x027E0080`, `FEATURE_BAR.md:146`) — needs the same
-> three rows.
+**VOIDED in this section** (retained here as history, not as live reasoning): the
+`lib/asm/crt0.s:44-47` DTCM-clear row and every falsifier built on it. The ruling is that the
+DTCM block is the **launcher stack**, i.e. live across a soft reset, so "cleared at every boot by
+`crt0`" was not a property the latch could rely on. The heap block needs no such claim.
+(corrected 2026-10-03: the DTCM cookie latch, D-C2-3 and the `crt0.s:44-47` falsifier reasoning
+are removed as decisions; only the static-`.bss`-forbidden consequence is kept.)
+
+**DECISION (D-C2-3): SUPERSEDED by the heap-block ruling above.** The private cookie latch is one
+`u32` inside the service SysTask's heap data block, read only by the ROM, re-created each boot.
 
 ### 4.2 Boot generation
 
@@ -502,7 +524,7 @@ request across a generation change.
 | # | Falsifier | Passes when | Evidence |
 |---|---|---|---|
 | 1 | **A stale cookie after New Game is NOT live.** | Run the New Game route (`docs/gen4/research/new_game_route.md:67-80`) with the host attached. The id is wiped and re-set (`src/overlay_36.c:104,129,251-254`), so the generation changes, the cookie is re-minted, and the host reports **not live**, drops the bound epoch and refuses to publish. A host that stays live here is the defect. | `PLAN.md:63`; §4.2, §4.3 |
-| 2 | **After a soft reset the generation changes.** | Trigger START+SELECT+L+R (`src/main.c:101-105`). `OS_ResetSystem` (`src/main.c:182`) re-runs `crt0`, which clears DTCM (`lib/asm/crt0.s:44-47`), so the latch is back at its ROM constant, the ROM re-registers in `NitroMain` (`src/main.c:50-83`) and `generation` is strictly greater than before. The host must see the change within one post-reset poll. | §3.1, §4.1, §4.2 |
+| 2 | **After a soft reset the generation changes.** | Trigger START+SELECT+L+R (`src/main.c:101-105`). `OS_ResetSystem` (`src/main.c:182`) re-runs `crt0` and tears down the process, so the service SysTask's heap data block — which held the cookie latch — is freed and the latch is gone; the ROM re-registers in `NitroMain` (`src/main.c:50-77`) and `generation` is strictly greater than before. The host must see the change within one post-reset poll. | §3.1, §4.1, §4.2 | (corrected 2026-10-03: the old pass condition leaned on `crt0` clearing DTCM (`crt0.s:44-47`); that reasoning is void — DTCM is the launcher stack. The heap block is freed by the reset regardless.) |
 | 3 | **A host write into a ROM-owned field is refused.** | Two halves. (a) *Host*: `lua/gen4/companion.lua` exposes no write path at all — an attempted write is a MODEL failure, not a runtime no-op. (b) *ROM*: a watch/canary that flips one ROM-owned byte (`capabilities`, `status`, `producer_phase`, `generation`, `cookie`) must observe it **restored within one service visit** and the change **visible to the host** as a liveness violation, because the header is re-stamped every tick (`patch/gen2/src/slink.asm:56-67`). A surviving write is a fail, not a soft repair. | §3.3, §7 |
 | 4 | **The tick advances in field / every START-menu app / battle / SAVE / a fade / an overlay load / after a soft reset.** | The published delta advances in each of those states. This is the recorded C2 falsifier (`FEATURE_BAR.md:216`) and it is the only evidence that the `mainTaskQueue` site is app-independent (`src/main.c:109-111`) and arena-allocated so it survives app and overlay switches (`src/system.c:123-126`). | `FEATURE_BAR.md:203-216` |
 
@@ -545,9 +567,11 @@ later.
 | identity latch | `0x01FFFA0C` | **ROM** | *nobody* | |
 | cookie latch | `0x01FFFA10` | **ROM** | *nobody* | |
 | clock sample | `0x01FFFA14` | **ROM** | *nobody* | |
-| DTCM cookie latch | DTCM (§4.1) | **ROM** | *nobody* | cleared every boot |
+| boot cookie latch | SysTask heap data block (§4.1) | **ROM** | *nobody* | re-allocated every boot, freed by any reset |
 
-Source of the split: `FEATURE_BAR.md:258`. The last three rows are the reason "ROM only" must
+(The former "DTCM cookie latch" row is void — see §4.1 and the decision block.)
+
+Source of the split: `FEATURE_BAR.md:258`. The last four rows are the reason "ROM only" must
 mean *ROM only*: a host write into a latch is indistinguishable from a ROM write, which is why
 D-C2-1 splits published from private cells inside the same region.
 
@@ -558,13 +582,17 @@ D-C2-1 splits published from private cells inside the same region.
 1. **D-C2-1 (§2.4):** is `SLINK_RESERVED` (`0x01FFFA00..0x01FFFC00`) sanctioned for C2
    published + private state, or must it stay zero? There is no roomier alternative inside the
    4 KiB span.
-2. **DTCM latch proof (§4.1).** The C1 census covers only the ITCM arena
-   (`gen4_mailbox_census.py:120-124`). C1 must add DTCM W1/W2/W3 rows, or the latch moves to
-   the DTCM arena tail (`0x027E0080`, `FEATURE_BAR.md:146`) with the same rows.
-3. **D-C2-2 (§3.2):** does the owner accept `Slink_NDS_Register` riding hge's
-   `load_arm9_expansion`, or must it be a `hooks` row? Riding it edits the owner's routine; a
-   `hooks` row is more surgical but needs a new hook-budget line. **Also UNVERIFIED** that
-   `gSystem.mainTaskQueue` exists at frame 9 (`FEATURE_BAR.md:215`).
+2. ~~**DTCM latch proof (§4.1).**~~ **CLOSED / VOID.** The latch is not in DTCM, so the DTCM
+   W1/W2/W3 census rows are not needed. The reasoning that required them assumed
+   `crt0.s:44-47` cleared a usable block; the ruling is that DTCM is the launcher stack
+   (`lib/NitroSDK/src/os/os_thread.c:24-26`) and the latch lives in the SysTask heap block
+   (`C2_BEACON_SPEC.md:5`). (corrected 2026-10-03: removed as an open question.)
+3. ~~**D-C2-2 (§3.2):** does the owner accept `Slink_NDS_Register` riding hge's
+   `load_arm9_expansion`, or must it be a `hooks` row?~~ **CLOSED — SUPERSEDED.** Neither.
+   Registration is appended to hge's own `SaveData_New` replacement at `src/save.c:139`
+   (`hooks:402`), with no new row of any class. (corrected 2026-10-03: replaced by the
+   `SaveData_New` ruling; the "UNVERIFIED that `gSystem.mainTaskQueue` exists at frame 9" tail is
+   moot, because `SaveData_New` is called from `src/main.c:64`, after `:51`.)
 4. **Session epoch vs boot generation (§4.2).** I widened the coordinator's "which boot" to
    "which boot **or** which save session". Without the widening, falsifier 1 is unsatisfiable.
    Needs an explicit accept or reject.
@@ -577,11 +605,12 @@ D-C2-1 splits published from private cells inside the same region.
    registration or a stronger mixer. `OS_GetTick` is available (`src/main.c:96,108,110`); the
    choice is **INFERRED** and cheap to change at C2 SOURCE.
 8. **BizHawk read window (§4.5.3).** The host reads the `"Instruction TCM"` domain
-   (`lua/tests/probe_gen4_hooks.lua:539`). ARM9 CPU-local DTCM/ITCM access is coherent by
-   construction, but "ARM9/ARM7 cache coherence" is listed as *not* proven by the shared stack
+   (`lua/tests/probe_gen4_hooks.lua:539`). ARM9 CPU-local ITCM access is coherent by construction,
+   but "ARM9/ARM7 cache coherence" is listed as *not* proven by the shared stack
    (`patch/src/nds/common/README.md:154`). Probe row `a` covers the ITCM window
-   (`lua/tests/probe_gen4_mailbox.lua:8,105`); the DTCM latch is never read by the host, so it
-   does not need a domain receipt.
+   (`lua/tests/probe_gen4_mailbox.lua:8,105`); the cookie latch is a heap-block cell the host
+   never reads, so it needs no domain receipt. (corrected 2026-10-03: the sentence no longer says
+   "DTCM/ITCM" — DTCM is not part of the companion's footprint.)
 9. **Citation drift (§3.1).** `FEATURE_BAR.md:208` cites `src/main.c:203-210` for
    `DoSoftReset -> OS_ResetSystem`; at `ad7a3afa` that is `src/main.c:205-215` with the call at
    `:182`. Also `docs/gen4/research/new_game_route.md:24` cites `overlay_36.c:145` for the

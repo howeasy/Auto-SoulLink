@@ -3,22 +3,31 @@
 > - **Q1 (MUTATES_INPUT on the PK4 binding): no owner call needed.** My ruling summary was imprecise. The flag stays set (a harmless scratch copy for the party raw copy); DECISIONS is corrected. No shared edit.
 > - **D1:** PLAN.md's stale box-delivery lines are fixed (C5 row + open question 3 closed by the party-only ruling).
 > - **F5:** the hge fork is at `E:/Howard/HGEngine_ROMHack/hg-engine` (not under hgss_archipelago-master). The hge citations go through FEATURE_BAR until C6 re-reads them there.
-> - The C2 dispatcher routes by opcode before `tp_service` (Gen 5 ruling; `trade_producer.h:300-302`).
+> - The shared trade producer leaves foreign opcodes alone (Gen 4 commit `6c76265c`,
+>   `claude/gen4-tp-gate`): its state machine still runs every visit for the save watchdog, and
+>   only `{29, 21, 30, 31}` reach dispatch. The C2 dispatcher calls every producer every visit and
+>   each producer ignores foreign opcodes. (corrected 2026-10-03: "The C2 dispatcher routes by
+>   opcode before `tp_service`" is retired.)
 >
 > **Status: DRAFT** (OMP cx-52e45b38, 2026-10-02). Peer spec draft for coordinator review and owner
 > sign-off. Nothing here is built.
 >
-> - Reads the coordinator decision blocks of `docs/gen4/companion/C2_BEACON_SPEC.md:1-14` and
->   `docs/gen4/companion/C3_SOUND_SPEC.md:1-14`; those decisions WIN over anything below.
+> - Reads the coordinator decision blocks of `docs/gen4/companion/C2_BEACON_SPEC.md:1-19` and
+>   `docs/gen4/companion/C3_SOUND_SPEC.md:1-24`; those decisions WIN over anything below.
 > - **`DECISIONS_2026-10-02_companion.md:12` — "It should not. In party only."** The box arm is
 >   dropped. No `PCStorage_PlaceMonInFirstEmptySlotInAnyBox`, no `CountPCEmptySpace` gate, no
 >   writable 0x88 scratch. This closes `FEATURE_BAR.md:201`.
 > - The shared ABI is used **UNMODIFIED** (`C2_BEACON_SPEC.md:47-49`). Every static assert at
 >   `patch/src/nds/common/abi.h:261-286` still holds.
-> - **The dispatcher routes by opcode** (`C3_SOUND_SPEC.md:13`, `C2_BEACON_SPEC.md:5`): the C2
->   service SysTask must never hand `SLINK_OP_PLAY_SE` to `tp_service`, because
->   `trade_producer.h:300-302` acks every opcode it does not own. C5 is the second producer in
->   that SysTask and inherits the routing requirement.
+> - **Producer isolation is per producer, not in the dispatcher** (Gen 4 `6c76265c`,
+>   `claude/gen4-tp-gate`): the C2 service SysTask calls **every** producer on **every** visit, and
+>   each producer ignores opcodes it does not own. The trade producer's old catch-all
+>   `} else { tp_ack(m,seq,0,2); }` (`trade_producer.h:300-302`) is gated on the trade-owned set;
+>   the sound producer already returned without acking anything that was not
+>   `SLINK_OP_PLAY_SE`/`PLAY_FANFARE` (`sound_producer.h:17`). C5 is the second producer in that
+>   SysTask and inherits nothing but the call order.
+>   (corrected 2026-10-03: the draft's "must never hand `SLINK_OP_PLAY_SE` to `tp_service`" is
+>   obsolete; the dispatcher routing requirement is void.)
 > - The trade's hold/state lives in the **service SysTask's own heap data block**
 >   (`C2_BEACON_SPEC.md:5`), NOT in the 0xE00 title window (`C2_BEACON_SPEC.md:6-12`) and not in
 >   the ABI.
@@ -250,7 +259,7 @@ The ScrCmd's single job, in order:
 
 | # | Action | Contract |
 |---|---|---|
-| 1 | `slot == Slink_Gen4_SelectedSlot()` (the script's chosen party slot) | the one and only slot the player may be shown |
+| 1 | `slot == Slink_Gen4_ChosenSlot(ctx)` — the slot the **script variable** carries | the one and only slot the player may be shown. **The chosen slot travels in a script variable, never in static ROM storage**: `GetPartySelection VAR_SPECIAL_RESULT` (§2.2) leaves the slot in `VAR_SPECIAL_RESULT`, and the ScrCmd reads it out of the `ScrCmdContext` it is handed. (The exact context field is a C5 SOURCE detail; I have not read the struct.) There is **no `Slink_Gen4_SelectedSlot` symbol**. (corrected 2026-10-03: the draft named a `Slink_Gen4_SelectedSlot()` accessor as if it were storage. Two reasons that shape is forbidden: **static `.bss` is forbidden on HG/SS** — it moves `SDK_STATIC_BSS_END = 0x021E5900` and every pinned address above it (`C2_BEACON_SPEC.md:629`, `FEATURE_BAR.md:145`) — and **hge writes `bsssize = 0` for every generic overlay** (`make.py:454`), so a static there is uninitialised (`C6_HGE_BUILD_SPEC.md:482-486`). The script variable is the only carrier that works on all three artifacts.) |
 | 2 | `slot < Party_GetCount(saveData)` **and** `slot < 6` | **mandatory** — see below |
 | 3 | `slink_trade_commit_entered(producer, witness, slot, engine)` | `trade_producer.h:121-132`; marks `SLINK_COMMIT_ENTERED` (`:130`) |
 | 4 | `Party_SafeCopyMonToSlot_ResetAprijuiceModifiers(SaveArray_Party_Get(fs->saveData), slot, (Pokemon *)record)` | `src/party.c:97`; the same call the native trade makes (`src/npc_trade.c:153-156`) |
@@ -405,7 +414,7 @@ cancel, which is only true because nothing is published before consent.
 | **F4** | An out-of-range or stale slot is refused, **never asserted** | S+M+P | Force `slot >= Party_GetCount` (a party of 3, slot chosen as 5 by a synthetic script path) and a `locate()` that disagrees with the chosen slot | No `GF_AssertFail`; `SLINK_TRADE_UNCHANGED`; party byte-identical. Pins `src/party.c:9-12` + `config.mk:36-37` |
 | **F5** | SAVE + cold reload keep it | P | Commit, let the save poll reach OK, power-cycle (no soft reset), reload | The slot still holds the record; `POST_SAVE_OK` was set only after the polled OK, never at begin (`trade_producer.h:233-243`) |
 | **F6** | **Opcode 1 is executed by no vanilla script** | S | Re-run `FEATURE_BAR.md:158-165`: zero `Dummy` uses in `files/fielddata/script`; zero `dummy` uses in hge `armips/scr_seq`; C0 sha1 + `a/0/1/2` member diff (965 members, `filesystem.mk:406`) | Zero uses on HG, SS and hge; re-run on every pin (`FEATURE_BAR.md:165`) |
-| **F7** | Two producers do not steal each other's acks | S+M | C3's **F6** (`C3_SOUND_SPEC.md:434`) with C5 present: hold a `SLINK_OP_PLAY_SE` across ≥1 visit; post a `TRADE_PREPARE`; assert each producer acks only its own opcodes (`trade_producer.h:300-302`) | Exactly one producer acks each request. **Fails against an unrouted dispatcher** |
+| **F7** | Two producers do not steal each other's acks | S+M | C3's **F6** (`C3_SOUND_SPEC.md:487`) with C5 present: hold a `SLINK_OP_PLAY_SE` across ≥1 visit; post a `TRADE_PREPARE`; assert each producer acks only its own opcodes (`trade_producer.h:300-302`, gated). Then, with no trade request outstanding, assert the trade producer's save watchdog still advances — its state machine runs **every** visit and only `{29,21,30,31}` reach dispatch. | Exactly one producer acks each request, and the watchdog does not stall. **This is what the shared else-arm fix buys** (`6c76265c`); it failed against the unrouted dispatcher the draft proposed. |
 | **F8** | The committed identity is observed, not assumed | S+M | Mutant: `received_key` decodes the staging buffer instead of the party slot. It must stay **RED** | `README.md:138-141` |
 
 **What no falsifier here can prove:** flash durability (the ABI says so itself,
@@ -420,14 +429,14 @@ One owner per field, per artifact. "ROM" = the C5 companion module; "engine" = v
 
 | Cell | Owner | Evidence |
 |---|---|---|
-| mailbox `signature`, `abi_version` (0x00/0x04) | **ROM** (C2, per tick) | `abi.h:149-150`; `C2_BEACON_SPEC.md:224-225` |
+| mailbox `signature`, `abi_version` (0x00/0x04) | **ROM** (C2, per tick) | `abi.h:149-150`; `C2_BEACON_SPEC.md:242-243` |
 | `opcode`, `seq`, `args[]` (0x06/0x08/0x10) | **host**, published last | `abi.h:150-153`; `FEATURE_BAR.md:258` |
 | `status`, `ack_seq`, `reason` | **ROM** (C5, via `tp_ack`) | `abi.h:151-152`; `trade_producer.h:93-104` |
 | `result[16]` (0x30) | untouched by C5 | `abi.h:154` |
 | `capabilities` (0x40) | **ROM** (C5 sets `SLINK_CAP_DURABLE_TRADE`; C2 stamps it per tick) | `abi.h:155`; `trade_producer.h:28-33` |
-| `session_epoch` (0x44) | **host**; ROM only checks | `abi.h:156`; `C2_BEACON_SPEC.md:228` |
-| `producer_phase` (0x48) | **ROM** (C5 only; 0 until C5 lands) | `abi.h:157`; `C3_SOUND_SPEC.md:463` |
-| `reserved` = boot generation (0x4C) | **ROM** (C2) | `C2_BEACON_SPEC.md:230` |
+| `session_epoch` (0x44) | **host**; ROM only checks | `abi.h:156`; `C2_BEACON_SPEC.md:246` |
+| `producer_phase` (0x48) | **ROM** (C5 only; 0 until C5 lands) | `abi.h:157`; `C3_SOUND_SPEC.md:519` |
+| `reserved` = boot generation (0x4C) | **ROM** (C2) | `C2_BEACON_SPEC.md:248` |
 | witness (0x50, 0x50 B) | **ROM** (C5 producer only) | `abi.h:169-182`; `trade_producer.h:66-83` |
 | `SlinkRecordStageV1` at 0x100 | **host** writes; **ROM** reads and snapshots | `abi.h:192-201`; `trade_producer.h:139-158` |
 | title window 0xE00..0xE40 | **ROM** published / **host** read; **neither** trade state | `C2_BEACON_SPEC.md:6-12` |

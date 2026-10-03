@@ -285,7 +285,7 @@ Behaviour to copy, read from `asm/overlay_trainer_card_main.s`:
 
 ```
 1869  ldr r1, _021E6A9C ; =gSystem
-1871  ldr r1, [r1, #0x48]        ; heldKeys
+1871  ldr r1, [r1, #0x48]        ; newKeys  (NOT heldKeys, which is +0x44)
 1872  tst r2, r1  (r2 = 1)       ; bit 0 -> SELECT arm
 1888  mov r0, #2
 1889  tst r0, r1                  ; bit 1 -> B
@@ -308,7 +308,14 @@ and the fade the caller runs on that return value:
 
 **C4's exit, in C:**
 
-1. poll `gSystem->heldKeys` (`gSystem + 0x48`) for B, mirroring `:1869-1889`;
+1. poll `gSystem->newKeys` (`gSystem + 0x48`) for B, mirroring `:1869-1889`. **`newKeys`, not
+   `heldKeys`:** `+0x48` is the fresh-press word the trainer card tests — and which is what a
+   "close the panel" gesture wants — while `heldKeys` is `+0x44` (`include/system.h:20-42`). A held
+   read would close the panel the frame the button went down and make the B-exit untestable.
+   (corrected 2026-10-03: the draft labelled `gSystem + 0x48` as `heldKeys` in both the asm
+   excerpt and the C step, and told the panel to poll `heldKeys`. Repo data agrees with the
+   correction — `data/games/gen4_hgss/profile.json:5223` and `data/games/gen4_hge/profile.json:5826`
+   both record `gSystem+0x48 = newAndRepeatedKeys`.)
 2. on B: `PlaySE(SEQ_SE_GS_GEARCANCEL)` — the same id, so the cancel sound is the engine's, not a
    companion guess (`FEATURE_BAR.md:175-177` left the *FAILURE* SE undecided; the cancel SE is a
    different, already-sourced id);
@@ -399,16 +406,21 @@ Overlay slink_panel
 Overlay groups carry no `Address` and are name-keyed, so `FS_OVERLAY_ID(slink_panel)` resolves the
 id at link time (`FEATURE_BAR.md:225-226`).
 
-**Why `After main` and not `After trainer_card`.** `FEATURE_BAR.md:223` corrects OMP F2: in the HG
-ROM overlay table `field` (ov1) and `trainer_card` (ov50) **both** load at `0x021E5900`, so loading
-the app overlay evicts the field overlay by region conflict, which is why the return path reloads
-it. A panel in the same region is therefore mutually exclusive with both — which is what we want,
-and it is also why the panel must be small: ov1 is `0x60280` and *"a panel far smaller than ov1
-cannot move the arena"* (`FEATURE_BAR.md:227`; the largest overlay end equals
-`SDK_SECTION_ARENA_START` = `0x0226EC40`, and `SDK_STATIC_BSS_END` = `0x021E5900` is the load base
-— `FEATURE_BAR.md:143`). **Constraint on C4: the panel overlay's `ramSize` must stay well under
-ov1's `0x60280`.** That is a number to check at build time, not now — **UNVERIFIED** what the panel
-costs once `AddWindow`/`TextPrinter`/frame gfx are linked in.
+**Why `After main` and not `After trainer_card`.** `After main` is a **predecessor constraint**, not
+a placement choice: the group must be ordered after `main` or the linker may place it anywhere in
+the overlay ordering. Within that constraint the draft's reasoning was: `FEATURE_BAR.md:223` claims
+`field` (ov1) and `trainer_card` (ov50) **both** load at `0x021E5900` on HG, so loading the app
+overlay evicts the field overlay by region conflict, which is why the return path reloads it — and a
+panel in the same region is therefore mutually exclusive with both, which is what we want.
+(corrected 2026-10-03: the 0x021E5900 sharing behind that sentence was measured on **hge only**.
+The HG/SS statement is not yet measured, and the panel's own placement on HG/SS is not yet proven —
+see §8-Q9, which gates it on one `main.elf` read. Treat the HG overlap as a hypothesis until then.)
+It is also why the panel must be small: ov1 is `0x60280` and *"a panel far smaller than ov1 cannot
+move the arena"* (`FEATURE_BAR.md:227`; the largest overlay end equals `SDK_SECTION_ARENA_START` =
+`0x0226EC40`, and `SDK_STATIC_BSS_END` = `0x021E5900` is the load base — `FEATURE_BAR.md:143`).
+**Constraint on C4: the panel overlay's `ramSize` must stay well under ov1's `0x60280`.** That is a
+number to check at build time, not now — **UNVERIFIED** what the panel costs once
+`AddWindow`/`TextPrinter`/frame gfx are linked in.
 
 ### 4.2 hge — a `src/<dir>` overlay at `0x021E5900`
 
@@ -424,14 +436,14 @@ costs once `AddWindow`/`TextPrinter`/frame gfx are linked in.
   a `hooks` row.
 - **Forbidden:** the hge registration must not hook `0x02000CD0` — it is hge's own
   `bl load_arm9_expansion` *and* our admission anchor (`FEATURE_BAR.md:245`,
-  `C2_BEACON_SPEC.md:208-211`). That concerns the C2 service registration, not C4's row, but the
+  `C2_BEACON_SPEC.md:216-219`). That concerns the C2 service registration, not C4's row, but the
   rule stands for any C4 hge hook.
-- **The msgdata edit on hge.** The row's label is a message-bank change, and hge does not rebuild
-  the msgdata NARC from `files/msgdata/**` the way the pret source build does. **UNVERIFIED**, and
-  it is the largest open risk on hge: either hge's `armips` rebuilds that NARC member, or the label
-  must be delivered another way. Options, none chosen: (a) ship the msgdata patch for hge as a
-  second byte replacement; (b) draw the label without the message bank. **Settled in C6 SOURCE,
-  before building** — this is §8-Q2.
+- **The msgdata edit on hge — SETTLED by the decision block, not open.** The route is a new
+  `hg-engine/data/text/196.txt` holding the decoded member with row 7 filled, **CRLF**, with the
+  round-trip `cmp` gate run **before** the edit (`C4_PANEL_SPEC.md:16-18`). (corrected 2026-10-03:
+  this bullet said "**UNVERIFIED**, and it is the largest open risk on hge" and offered three
+  unchosen options. The owner/coordinator has ruled; the only remaining work is executing the
+  decided route and its gate — C6 §3.4 and C6 falsifiers F5/F6.)
 
 ### 4.3 The launch and return chain, once
 
@@ -533,7 +545,7 @@ published **last**):
 | 8 | (optional) `m->opcode = SLINK_OP_SHOW_INFO`, `m->seq` | mailbox | `abi.h:83`; only needed to *force* an open — with `menu_open` the panel starts un-posted (`panel_producer.h:47`) |
 
 `SLINK_OP_SHOW_INFO` is `27` (`abi.h:83`). `SLINK_CAP_INFO_PANEL` is `1 << 1` (`abi.h:90`); C2
-advertises `0` and this is the card that adds the bit (`C2_BEACON_SPEC.md:405-408`).
+advertises `0` and this is the card that adds the bit (`C2_BEACON_SPEC.md:427-430`).
 
 Waiting on close: the host reads `state`, `drawn_seq` and `closed_seq` at `+0x0E`, `+0x06`, `+0x0C`
 and resumes when `closed_seq == request_seq` and `result` says stop (`abi.h:212-214`). Gen 3's loop
@@ -563,6 +575,7 @@ Each is a check with a named failure. S = SOURCE, M = MODEL (lupa), P = PHYSICAL
 | **F7** | **`closed_seq` handshake.** | M | Same harness: after `poll` returns 2, assert `closed_seq == request_seq`, `result` is the app's byte, `state == 0`, and a **second** `poll` 2 does not re-publish (the `s->active` latch, `panel_producer.h:44`). | Any of the three is wrong, or the second close double-publishes. |
 | **F8** | **Refusals never half-draw.** | M | Post a payload with `lines = 0`, `lines = 7`, a row with no terminator, a mismatched `session_epoch`, `request_seq = 0`. Assert `tp_ack(m, seq, 0, 2)` (`panel_producer.h:51`) and `state` untouched. | Any payload is accepted, or the app opens with a torn payload. |
 | **F9** | **Capability gating is real at both ends.** | M | A build advertising `0` capabilities: the host's step 0 refuses; no row is drawn. A build advertising `SLINK_CAP_INFO_PANEL` with no host: the panel opens on the §3.5 fallback and B closes. | The host stages into a build that says no, or the ROM draws a payload that was never validated. |
+| **F10** | **The appended `slink_panel` group lands where the linker says, and the arena has not moved.** | S | One `main.elf` read after the first HG/SS link, before any panel code is written: (a) the group's load address from the linked section headers, and (b) the resulting `SDK_SECTION_ARENA_START`. Assert the load address is inside the app-overlay base and the arena is still `0x0226EC40`. | The group loads elsewhere, or `SDK_SECTION_ARENA_START` moves. Either means §4.1's placement argument is wrong and the group must be re-planned before C4 SOURCE proceeds. |
 
 **F4 is the one that cannot be faked by static analysis** — an unreleased overlay region, a
 surviving `unk0->unk4`, and a grown `HEAP_ID_FIELD2` heap all present as a *working-looking* screen.
@@ -613,13 +626,14 @@ The mailbox-vs-info **epoch and request** agreement is checked twice, inside the
 | # | Question | Why it matters | What settles it |
 |---|---|---|---|
 | **Q1** | **`result = 0x7F` on A-on-last-page.** `abi.h:213-214` documents `result` as *"`0` A/more, `0x7F` B/close"*. Gen 2's accepted UX closes on A-at-last-page with no wrap (`patch/gen2/src/panel.asm:66`), which is not "B". Either (a) the ABI comment is widened to "`0x7F` = close, cause not distinguished", or (b) the host is taught to wrap, which **rejects Gen 2's no-wrap rule** and must be an owner ruling. I chose (a) and flagged it rather than deciding it. | The Gen 3 host tolerates any non-zero result as "done" (`lua/gen3/native.lua:1151-1155`), so (a) is backward compatible — but the ABI header is shared with Gen 3 and Gen 5, and C4 may not edit it (`C2_BEACON_SPEC.md:47-49`). | The ABI owner. One comment line in `abi.h:213`. |
-| **Q2** | **hge's msgdata.** The label needs `msg_0196.gmm:33`. Does hge's build rebuild that NARC member, or must C6 ship a byte replacement? | Without it, the hge row renders blank or with `RETIRE`'s neighbours. This is the largest open risk on hge. | Read hge's `filesystem.mk` / `overlays.mk` for the msgdata path, or patch the compiled NARC member as a second byte replacement in C6 SOURCE. |
+| **Q2** | ~~**hge's msgdata.**~~ **RESOLVED by the decision block.** The label route is settled: new `hg-engine/data/text/196.txt`, **CRLF**, decoded member 196 with row 7 filled, gated on a no-edit decode → re-encode round-trip `cmp` on an output file named exactly `7_196` before the edit, then a NARC diff proving only member 196 and only row 7 changed (`C4_PANEL_SPEC.md:16-18`). The "largest open risk on hge" framing is void. | Carried into C6 SOURCE as falsifiers F5 and F6 (`C6_HGE_BUILD_SPEC.md:498-499`), not as an open question. (corrected 2026-10-03.) |
 | **Q3** | **Launch-always vs launch-on-valid.** §3.5 recommends always launching (fallback inside the app). The alternative is a row handler that skips the launch when `slink_panel_valid` fails, so no window ever appears without a payload. | Gen 2 shows a fallback (`panel.asm:21-46`), which favours launch-always. But a Gen 4 window that appears with host-absent text may read as a bug to a player. | An owner UX ruling. Cheap to flip: the two shapes differ by one branch in the row handler. |
 | **Q4** | **The panel overlay's `ramSize`.** ov1 is `0x60280` and the arena cannot move (`FEATURE_BAR.md:227`). | If the panel with `AddWindow` + `TextPrinter` + frame gfx exceeds what fits under ov1's end, the whole placement is wrong. | Read the linked `ramSize` of `slink_panel` out of the C0 ELF after the first link. One number. |
 | **Q5** | **`parentWork = NULL`.** §4.3's assumption that no engine path dereferences the manager's args before the app's `Init`. | A null deref on the first open is an immediate, loud failure — cheap to find, expensive to find late. | Read `OverlayManager_New` / `OverlayManager_GetArgs` (`src/overlay_manager.c`) and confirm nothing touches args before `Init`. |
 | **Q6** | **The row's display position.** `ACTION_7` lands at display position 1 (`start_menu.c:487-489`), i.e. **second**, behind `RETIRE` — which is always inhibited — so in practice it is the **top** visible row in an ordinary save (Pokedex is not yet unlocked early on, `:490-492`). | Cosmetic, but it is the one thing a player sees first. If the owner wants SLINK below Pokédex, that needs a display-position edit, which brushes the §2.5 never-move rule. | Owner preference. The rule in §2.5 is satisfied either way as long as no explicit position ≥ 7 is used. |
 | **Q7** | **Charset for the `SlinkTextSpec`.** `record_binding.h:44` wants `width`, `charset`, `terminator`. Width 2 and terminator `0xFFFF` are settled (`panel_producer.h:3-5`). The `charset` value is HGSS font-specific and I did not read it. | `slink_panel_valid` rejects the payload outright if the spec is wrong (`panel_producer.h:29`). | Read `patch/src/nds/gen4/record_binding_gen4.c` when it exists, or the HGSS font id enum. |
 | **Q8** | **`safe()` predicate.** `panel_producer.h:49` calls `e->safe(ctx)` before every start. The trainer card's own precondition is a fade helper plus the `state = 2` transition (`asm/overlay_trainer_card_main.s:379-398`). C4's predicate is **INFERRED**: "fade finished and no text window active". | Too loose and the panel opens over a fade; too tight and the row silently does nothing. | Trace the trainer card's WAIT_FADE entry conditions; mirror them verbatim. |
+| **Q9** | **HG/SS placement of the appended `slink_panel` overlay group is not yet proven.** §4.1 reasons from `field` and `trainer_card` both loading at `0x021E5900` on HG, but that sharing was **measured on hge only**; the HG/SS overlay table has not been read for it. `After main` is a predecessor constraint (the group is ordered after `main`; it is not a free placement choice), and the whole §4.1 argument — mutual exclusion with the field overlay, hence the reload-on-return path — rests on a number that has one artifact of evidence, not three. | If `slink_panel` lands outside `0x021E5900` on HG/SS, the app may coexist with `field` rather than evict it, and `FieldSystem_LoadFieldOverlay` on the return path could then assert or double-load (`field_system.c:90-91`). Conversely a load *inside* the arena would move `SDK_SECTION_ARENA_START` and invalidate every pinned address. | **One `main.elf` read, before any panel code:** the appended group's load address and the new `SDK_SECTION_ARENA_START`. Falsifier F10. Two numbers, one link — this must close before C4 SOURCE, because both the return path and Q4's `ramSize` budget depend on the answer. (corrected 2026-10-03: added as an OPEN item; the draft presented the HG 0x021E5900 overlap as established.) |
 
 ---
 

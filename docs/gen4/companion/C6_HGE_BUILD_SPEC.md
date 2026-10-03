@@ -16,8 +16,8 @@ Anything I could not establish is marked **UNVERIFIED**.
 
 **Card:** C6 (`docs/gen4/companion/PLAN.md:67`).
 
-**Authority.** The coordinator decision blocks at the top of `C2_BEACON_SPEC.md:1-14`,
-`C3_SOUND_SPEC.md:1-14`, `C4_PANEL_SPEC.md:1-18` and `C5_TRADE_SPEC.md:1-6` WIN over anything
+**Authority.** The coordinator decision blocks at the top of `C2_BEACON_SPEC.md:1-19`,
+`C3_SOUND_SPEC.md:1-24`, `C4_PANEL_SPEC.md:1-18` and `C5_TRADE_SPEC.md:1-16` WIN over anything
 below, and over any conflicting sentence in `FEATURE_BAR.md`. Where this draft cites
 `FEATURE_BAR.md`, that is the *reconciled* text, not the original OMP draft.
 
@@ -42,12 +42,13 @@ facts** in the lock (`artifacts.heartgold_hge.sha1` at `data/gen4_sources.lock.j
 |---|---|---|---|
 | F1 | `hg-engine/src/slink/` — a new C overlay: the C2 service SysTask, the mailbox writer, the C3 sound table, the C4 row handler and panel app, the C5 `ScrCmd` | new directory, auto-discovered | `overlays.mk:7` (`OVERLAYS := … $(shell cd $(C_SUBDIR); ls)`), `:21-26` (wildcard `*.c`/`*.s` + `-T $(C_SUBDIR)/$1/linker.ld`), `:34` (`$(foreach overlay, $(OVERLAYS), $(eval …))`) |
 | F2 | `hg-engine/src/slink/linker.ld` — **required**, first line `/* Overlay <id> */` | new file | `make.py:435-438` parses `line.split(" ")[2]` off the first line; `make.py:441-443` parses the first `ORIGIN` line |
-| F3 | `hg-engine/hooks` rows (service entry, inhibit-bit filter) | append rows | `make.py:341-369` |
+| F3 | `hg-engine/hooks` rows (**inhibit-bit filter only** — the service entry is NOT a row; see §3.1) | append rows | `make.py:341-369` |
 | F4 | `hg-engine/repoints` rows (the `START_MENU_ACTION_7` `.func`/`.ident`, `gScriptCmdTable[1]`) | append rows | `make.py:537-571`, `Repoint()` `:196-201`; precedent `repoints:44-46` |
 | F5 | `hg-engine/armips/scr_seq/scr_seq_00003_commonscript.s` — the nurse branch (C5) | source edit | `FEATURE_BAR.md:166`; the nurse entry is this file at `:93` |
 | F6 | `hg-engine/data/text/196.txt` — the START label (C4 decision) | new file, **CRLF** | `data/text/.gitattributes:1-2` (`* text eol=crlf`); `narcs.mk:21` (`MSGDATA_DEPENDENCIES := $(wildcard data/text/*)`) |
 | F7 | `hg-engine/data/text/040.txt` — the trade consent string (C5) | edit, **append a row** | `armips/scr_seq/scr_seq_00003_commonscript.s:12` (`// text archive to grab from: 040.txt`); the archive the nurse's messages come from |
-| F8 | `hg-engine/bytereplacement` rows | only if a hook site lacks room | `make.py:282-329`; precedent `bytereplacement:14-18,23-24` ("it's not even 0x1C bytes long") |
+| F8 | `hg-engine/bytereplacement` rows | only if a table-row site lacks room | `make.py:282-329`; precedent `bytereplacement:14-18,23-24` ("it's not even 0x1C bytes long") |
+| F9 | `hg-engine/armips/asm/slink_sound_latch.s` (new) — `.org 0x02000D12` + `bl` to a pinned stub, for the C3 `InitSoundData` latch (§3.3) | armips source edit | `C3_SOUND_SPEC.md:2.4`; the `.org`-patch precedent is `armips/asm/syntheticoverlay.s:8-10`; **not** a `hooks` row — `hooks` replaces the function and has no call-through (`make.py:151-155`) |
 
 **Explicitly NOT a C6 change:** any `armips/asm/*.s` addition at `0x02000CD0`. That site is hge's own
 boot branch to `load_arm9_expansion` (`armips/asm/syntheticoverlay.s:8-10`) and is SLink's hge
@@ -108,6 +109,16 @@ records the same as an owner question ("a SLink branch of it"). Until that appro
 | raw bytes | `bytereplacement` | `<arm9\|NNNN> <addr at columns 4..12> <hex bytes>` — **the address is a fixed column slice, not a split**; bytes are written in the order given | exactly what you list | `make.py:299-309`, `ReplaceBytes` `:204-211` |
 | pointer repoint | `repoints` | `<arm9\|NNNN> <symbol>[+N] <address of the pointer>` | 4 B, little-endian | `make.py:537-571`, `Repoint` `:196-201`; precedent `repoints:44-46` (`sItemFieldUseFuncs`, `+4`, `+8` — a 3-entry ARM9 table) |
 | pointer repoint (+1 slide) | `routinepointers` | `<arm9\|NNNN> <symbol> <address>` | 4 B, pointing at `symbol+1` | `make.py:504-534`, `Repoint(..., 1)` `:533`; precedent `routinepointers:7-8` |
+| armips `.org` patch | `armips/asm/*.s` (SLink-owned, new file) | `.org <addr>` + the replacement bytes/instructions | exactly what is emitted — **invisible to every table-row check** | precedent `armips/asm/syntheticoverlay.s:8-10`; no parser reads these files |
+
+**Writer-class census is mandatory (C6 SOURCE, blocking).** Four of the six vehicles above are
+table rows; the armips `.org` class is not, so a census that reads only `hooks`/`repoints`/
+`routinepointers`/`bytereplacement` will pass while a `.org` write collides with it. The census
+must therefore enumerate **all five writer classes** — `hooks`, `repoints`, `routinepointers`,
+`bytereplacement` and armips `.org` — and assert each patched address is claimed at most once.
+(corrected 2026-10-03: added with the C3 latch; §1.1 F9 is the first write in the project that no
+table-row check can see.) **Baseline:** in a default build the only NitroMain write is `0x02000CD0`,
+4 B — so `0x02000D12` starts free.
 
 **Correction to `FEATURE_BAR.md:126`** ("on hge it is a `hooks` line" for the START row). A
 `StartMenuAction` row's `.func`/`.ident` are **data pointers**, not a call site. A `hooks` row
@@ -132,18 +143,34 @@ order; not exercised.
 
 ### 3.1 C2 — the service SysTask registration
 
-**Decision: a `hooks` row at a vanilla ARM9 site, NOT a `hooks` row at `0x02000CD0`, and NOT a
-`load_arm9_expansion` body edit.** Two reasons, both load-bearing:
+**Decision: SUPERSEDED by the decision block's `SaveData_New` ruling. There is no service-entry
+`hooks` row, no `0x02000CD0` write and no `load_arm9_expansion` body edit.**
+(corrected 2026-10-03: the header decision block
+(`hg-engine/hooks:402`, `arm9 SaveData_New 020271B0 0`) rules this section's "Decision" line void.
+The reasoning below is kept because the `0x02000CD0` prohibition it establishes is still live — it
+is hge's own `bl load_arm9_expansion` from `Main` (`armips/asm/syntheticoverlay.s:8-10`) **and**
+SLink's hge-discriminating admission anchor (`FEATURE_BAR.md:245`, `profile.json:65`), so hooking
+there would let an hge ROM pass as vanilla.)
 
-1. `0x02000CD0` is hge's own `bl load_arm9_expansion` from `Main` (`armips/asm/syntheticoverlay.s:8-10`),
-   and it is SLink's hge-discriminating admission anchor (`FEATURE_BAR.md:245`:
-   `hge_differs`, `profile.json:65`). Hooking there would collide with admission. The ruling is
-   explicit: *"The companion's hge registration must NOT hook this site; use a `hooks` row or ride
-   `load_arm9_expansion`."*
-2. Riding `load_arm9_expansion` means editing fork-owned assembly in
-   `armips/asm/syntheticoverlay.s:17-28` — a second, more invasive SLink-owned edit surface than
-   the table rows, and it couples the service to overlay 129's no-init load path
-   (`syntheticoverlay.s:21-23`, `HandleLoadOverlay(129, 2)`). **`hooks` is the cheaper vehicle.**
+**What replaces it.** hge already replaces `SaveData_New` — its only vanilla caller is
+`src/main.c:64`, during boot (`hooks:402`) — with its own `src/save.c:139`. The C2 register call is
+appended before that function's `return`. It is a **one-line fork source edit**, the same shape as
+the accepted C5 commonscript edit, and it costs **no row of any class**. That code calls
+`CreateSysTask`, which the fork already binds to `0x0200E320|1` = vanilla
+`SysTask_CreateOnMainQueue` (`rom.ld:477`, `include/task.h:51`), so no new plumbing is needed.
+
+**Why this beats the two former options** (both were live in the draft, both now void):
+
+1. A new `hooks` row costs 8 bytes at a site that must have `ldr` slack, needs a new hook-budget
+   line, and lands on a vanilla function hge does not otherwise replace. The 36 B
+   `syntheticoverlay` stub cannot absorb it anyway (§5.1).
+2. `load_arm9_expansion` is fork-owned **assembly** (`armips/asm/syntheticoverlay.s:17-28`) — a
+   more invasive SLink-owned edit surface than a C source line, and it couples the service to
+   overlay 129's no-init load path (`syntheticoverlay.s:21-23`, `HandleLoadOverlay(129, 2)`).
+3. `src/save.c:139` is C in the fork's own tree, already inside the boot path, already calling
+   `CreateSysTask`. One line, no row budget, no new surface.
+
+The facts that supported the former `hooks` answer are unchanged and still true:
 
 | Fact | Evidence |
 |---|---|
@@ -160,10 +187,12 @@ mainTaskQueue`), so `src/slink/slink.c` declares the prototype itself. **INFERRE
 resolves through `offsets.ini` / `nm_all.txt` exactly as the raw-address cast at
 `battle_input.c:345` implies it does.
 
-**Row budget.** One `hooks` row, 8 bytes, at a site with a `ldr rN` of slack. **Which site is
-OPEN** — hge has no `NitroMain` source, so the candidate is whatever vanilla ARM9 function runs
-once per outer loop and is hookable with 8 bytes of room. `hooks` already claims many of those.
-**This is the one C6 item that must be measured, not assumed** (§5.1).
+**Row budget: zero rows.** The registration is a source edit in `src/save.c:139`, so there is no
+8-byte site to measure and no hook-budget line to consume. The row budget this section used to
+reserve is released. **What C6 must still measure** is the two things no ruling can supply: that
+the appended call actually runs (falsifier: the published `registrations` counter goes 1 → 2
+across a soft reset, `C2_BEACON_SPEC.md:19`) and that nothing else collides (§2.2's writer-class
+census).
 
 ### 3.2 C2 — the beacon / ITCM mailbox writer
 
@@ -186,7 +215,9 @@ span on hge (`C2_BEACON_SPEC.md:70-82`). A re-pin invalidates every build-bound 
 **C3's decision block wins:** no SE handle is reservable; the handle is resolved at runtime and
 polled with `NNS_SndPlayerReadDriverTrackInfo` (`C3_SOUND_SPEC.md:3`). The C3 service runs on the
 **C2 SysTask** — there is no second service and no extra hook (`C3_SOUND_SPEC.md:89-90`, `:97-99`).
-So C3 costs **zero new rows**; it is C source in `src/slink/`.
+**C3 costs no table row**, but it is **not** zero writes on hge: it needs the armips
+`InitSoundData` latch patch described below. (corrected 2026-10-03: "C3 costs **zero new rows**"
+was true of the *table* vehicles and false of the build — the latch is an `.org` write.)
 
 | Fact | Evidence |
 |---|---|
@@ -195,8 +226,28 @@ So C3 costs **zero new rows**; it is C source in `src/slink/`.
 | The SE id table is value-identical across 1373 shared ids, so the vanilla poll plan stands | `FEATURE_BAR.md:185` |
 | `PlaySE` is never called from IRQ context | `FEATURE_BAR.md:212`; C3 falsifier F3 (`C3_SOUND_SPEC.md:78`) |
 
-**Owner deferral honoured verbatim:** code 2 FAILURE stays **unwired** and is *refused* with reason
-32, not guessed (`C3_SOUND_SPEC.md:57,67-71`, `:12`).
+**Owner deferral honoured verbatim:** code 2 FAILURE stays **unwired** and is *refused* with
+title-private **reason 32** (`SOUND_CODE_REFUSED`), with no substitute sound
+(`C3_SOUND_SPEC.md:57,76-80`, `:19`). (corrected 2026-10-03: the body previously left the value
+implicit and could be read as "some reason"; it is 32, in the 32..63 title range.)
+
+**The `InitSoundData` latch — RESOLVED (Q7), and it is a fork write.** Facts, both measured on the
+pinned ROMs:
+
+| Fact | Value | Note |
+|---|---|---|
+| pret Thumb `bl InitSoundData` target | `0x02004174` | the function, not the site |
+| **call site** | **`0x02000D12` in HG, SS and hge** | pinned-ROM read, `ndspy` loadArm9; hge keeps vanilla static-ARM9 addresses |
+| vehicle | armips `.org 0x02000D12` + `bl` to a **pinned stub** that calls `InitSoundData` and then latches | **not** a `hooks` row: `hooks` replaces the function and has no call-through (`make.py:151-155`), so it cannot latch after a call that must still happen |
+| shape precedent | `armips/asm/syntheticoverlay.s:8-10` | the same `.org`-patch idiom, SLink-owned file |
+
+(corrected 2026-10-03: C3 Q7 was "UNVERIFIED — must be read off the hge nm/xMAP at C6". It is
+read, and the answer is a call site shared by all three artifacts.)
+
+**OPEN design alternative, not decided:** skip the write entirely and have the service do a
+**read-only** check of a `sSoundWork` field that only `InitSoundData` sets. Zero writes, no
+collision to census — but it needs a field proven set-and-only-set by `InitSoundData` on all
+three artifacts. Tracked as `C3_SOUND_SPEC.md` Q10.
 
 ### 3.4 C4 — the START row, the label, and the inhibit bit
 
@@ -246,14 +297,17 @@ slot exclusive with `field`, as hge's own ov142/ov147 do — and **not** the unp
 | hge has **no ArenaHi lowering**; its only `OS_SetArenaHi` restores the initial value, so nothing proven keeps the main arena out of `0x023C0000..0x023E0000` | `FEATURE_BAR.md:243` |
 
 **Choosing the overlay id is an OPEN item** (§6 Q1). `0x021E5900` is also the shared
-`SDK_STATIC_BSS_END` on HG/SS (`FEATURE_BAR.md:143`), i.e. the vanilla app-overlay base — which is
-exactly why it is mutually exclusive with `field` and `trainer_card` there
-(`FEATURE_BAR.md:223-226`) and why hge's own ov142/147 use it.
+`SDK_STATIC_BSS_END` on HG/SS (`FEATURE_BAR.md:143`), i.e. the vanilla app-overlay base.
+(corrected 2026-10-03: the previous text claimed this is "exactly why it is mutually exclusive
+with `field` and `trainer_card` **there** (HG/SS)". The 0x021E5900 sharing was measured on **hge
+only**; the HG/SS statement is not yet measured and needs its own `main.elf` read — see
+`C4_PANEL_SPEC.md` §8-Q9. What *is* measured on hge is why hge's own ov142/147 use it.) It is also
+why the HG/SS panel placement stays gated on one `main.elf` read.
 
 ### 3.6 C5 — the trade
 
 **C5's decisions win:** party-only slot overwrite; no box arm; opcode **1**, never 486; the hge
-route is a **source edit** to the common script (`C5_TRADE_SPEC.md:3-6,13-15,25-27`).
+route is a **source edit** to the common script (`C5_TRADE_SPEC.md:17-19,34-38`).
 
 | Step | Fork change | Evidence (all re-read here at the pinned commit) |
 |---|---|---|
@@ -348,11 +402,13 @@ artifact. That is an owner escalation, not a C6 workaround.
   room for a service call there**, which is why real code goes in overlay 129
   (`FEATURE_BAR.md:59`) — i.e. in `src/*.c`, i.e. `src/slink/`. Confirms the F1 shape.
 - **A register hook costs 8 bytes at the site** (`make.py:151-155`), a whole-function jump 0x14+4
-  (`make.py:165-176`). The 36 B stub cannot absorb even one. If §3.1's candidate site has less
-  than 8 bytes of slack, the escape hatch is a hand-written `bytereplacement` row, exactly as
-  `bytereplacement:14-18,23-24` does for `Bag_HasSpaceForItem` and `CanUseItemOnMonInParty`.
-- **Mitigation:** measure the chosen site against `offsets.ini` before writing the row, and record
-  the byte count in the C6 receipt.
+  (`make.py:165-176`). The 36 B stub cannot absorb even one — which is one of the reasons the
+  registration moved to a `src/save.c:139` source edit rather than a row (§3.1). The `bytereplacement`
+  escape hatch still exists for any *remaining* row site, exactly as `bytereplacement:14-18,23-24`
+  does for `Bag_HasSpaceForItem` and `CanUseItemOnMonInParty`.
+- **Mitigation:** the table-row census of §2.2 must run before any row is written, and the armips
+  `.org` writes must be enumerated in the same pass. Record every patched address and its class in
+  the C6 receipt.
 
 ### 5.2 ov129 / ov130 adjacency — **medium**
 
@@ -411,9 +467,12 @@ assert the written entry's `memaddress` equals the linker ORIGIN (§6 Q2).
    measurement is stale.** **UNVERIFIED.** Settled by one build: read the new overlay's
    `memaddress` back out of `base/overarm9.bin` and compare it with the linker ORIGIN. Until then,
    treat "my new overlay loads at the right address" as an assertion to *check*, not a fact.
-3. **The §3.1 registration site.** Which vanilla ARM9 function gives an 8-byte hook on a
-   once-per-loop path, and is it already claimed by an existing `hooks` row? **UNVERIFIED** — needs
-   an `offsets.ini` read plus a collision check against all 636 lines of `hooks`.
+3. ~~**The §3.1 registration site.** Which vanilla ARM9 function gives an 8-byte hook on a
+   once-per-loop path?~~ **CLOSED — there is no registration site to find.** Registration is a
+   source edit in hge's own `SaveData_New` replacement (`hooks:402`, `src/save.c:139`), so the
+   8-byte-slack search is void. (corrected 2026-10-03.) **What replaces it:** the
+   **five-class writer-class census** of §2.2, which must also see the armips `.org` writes
+   (`0x02000D12` for C3, and `0x02000CD0` if anything ever touches it).
 4. **Does the trade consent prompt need a new row at all?** C5 prefers the visit-gate shape, which
    still needs *some* string for the Yes/No box (`data/text/040.txt`). If the owner would rather
    the gate be silent, F7 drops out and the trade becomes a one-press action. Owner call.
@@ -442,6 +501,8 @@ assert the written entry's `memaddress` equals the linker ORIGIN (§6 Q2).
 | F8 | Opcode 1 now has an emitter in the rebuilt `a/0/1/2` member 3 | S | `FEATURE_BAR.md:165` re-run gate; grep for `dummy` in `armips/scr_seq` |
 | F9 | A start menu in a save with no panel capability shows no SLINK row | P | `C4_PANEL_SPEC.md` capability gate |
 | F10 | A trade on hge-hge leaves the party byte-identical on refusal | P | `PLAN.md:66` |
+| F11 | Any patched address is claimed by more than one writer class | S | §2.2's five-class census (`hooks`, `repoints`, `routinepointers`, `bytereplacement`, armips `.org`); baseline: `0x02000CD0` is the only NitroMain write in a default build |
+| F12 | The armips latch patch does not fire, or fires twice | S + P | `0x02000D12` decodes to one `bl` to the pinned stub; the stub calls `InitSoundData` and latches exactly once per boot. PHYSICAL: the sound-ready bit goes set on the first post-boot service visit and a code-4 request played before it is refused |
 
 ---
 
