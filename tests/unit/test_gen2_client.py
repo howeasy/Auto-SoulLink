@@ -1657,6 +1657,83 @@ def test_a_repeated_memorialize_while_the_burial_waits_for_the_save_never_acks_e
     assert len(world.sent("memorialize_done")) == 2   # re-acked on request (the lone durable copy is done)
 
 
+def test_a_repeated_memorialize_also_matches_its_waiting_burial_by_the_servers_own_key():
+    """Review M1 of c8db5a92: `phys` is re-derived per command (retired_alias), the waiting settle is parked under the
+    physical key. If the alias is reset while the burial waits (a boundary resets it), the duplicate resolves to the
+    server's OLD key, misses a phys-only guard, and the box executor refuses it ('key not in party or boxes'):
+    memorialize_failed, which the server treats as done, so the same non-durable finalization returns through the
+    failure branch."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    old = "BEEF:0001:07"                                           # the key the server tracks (stale)
+    world = box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.client.retired_alias[old] = codec_key(dead)
+    world.reply({"cmd": "memorialize", "key": old})
+    world.frames(3)
+    world.client.retired_alias[old] = None                         # the alias is gone, the settle still waits
+    world.reply({"cmd": "memorialize", "key": old})
+    world.frames(3)
+    assert world.sent("memorialize_failed") == [] and world.sent("memorialize_done") == []
+    world.fire("save_completed")
+    world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == old and done["box"] == 13
+
+
+def test_a_repeated_party_mon_inside_the_deferred_backing_window_never_deletes_the_durable_box_copy():
+    """Review M2 of c8db5a92: a duplicate party_mon while the withdraw's backing removal waits for the save passed the
+    box executor's same() check and committed plan_withdraw, deleting the DURABLE box copy before the save persisted the
+    party; a reset in that window loses the mon. Every command is still acked (the mon IS in the party)."""
+    lead, boxed = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead])
+    flat = world.profile["storage_boxes"][4]["flat"]
+    world.emu.poke("CartRAM", flat, world.lua.table_from(list(collection([boxed], 20, 32))))
+    world.checkpoint_ok = True
+    for _ in range(3):
+        world.reply({"cmd": "party_mon", "key": codec_key(boxed)})
+        world.frames(3)
+    assert storage(world, 4)[0] == 1, "the durable box copy must stay until the native save"
+    assert party_count(world) == 2
+    assert [m["key"] for m in world.sent("sync_retrieve_done")] == [codec_key(boxed)] * 3
+    world.fire("save_completed")
+    world.frames(3)
+    assert storage(world, 4)[0] == 0 and party_count(world) == 2
+
+
+def test_a_parked_burial_with_no_save_stays_visible_and_never_acks_however_long_it_waits():
+    """Review m2: the policy is pinned: MAX_PENDING_FRAMES bounds faint latches, not a burial; it waits for the save."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(3)
+    world.frames(1300)                                             # more than 2 x Client.MAX_PENDING_FRAMES (600)
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    assert world.sent("tick")[-1].get("awaiting_save") is True
+
+
+def test_a_repeated_memorialize_with_the_memorial_box_active_also_acks_exactly_once_after_the_save():
+    """Review m3: the other half of BOX-MEMORIAL-2: the memorial copy lands in the ACTIVE box 14 (current box 13), so
+    its durable source waits for the save; duplicates before the save must stay silent and one ack follows."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead])
+    flat = world.profile["storage_boxes"][4]["flat"]
+    world.emu.poke("CartRAM", flat, world.lua.table_from(list(collection([dead], 20, 32))))
+    world.field("wCurBox", 13)
+    world.checkpoint_ok = True
+    for _ in range(4):
+        world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+        world.frames(3)
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    world.fire("save_completed")
+    world.frames(6)
+    if not world.sent("memorialize_done"):                         # a second witness if the removal also waited
+        world.fire("save_completed")
+        world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and done["box"] == 13
+
+
 def test_memorialize_follows_the_dead_mon_through_its_evolution():
     """O-30: the linked mon evolved after its death (no Gen 2 key_change): the memorial still buries it
     and acks under the key the server tracks."""

@@ -1038,6 +1038,24 @@ function Client.new(p)
         local _, mon = find_party_slot(cmd.key, cmd.cmd == "memorialize" and cmd.cmd or nil)
         if mon and cmd.cmd == "memorialize" then phys = mon_key(mon) end
         local name = nick_label(cmd.key, cmd.nickname or (mon and mon.nickname))
+        -- INVARIANT (gen2-box-durability, BOX-MEMORIAL-2): a settle already waiting for a key owns it until the next
+        -- native save. The server re-sends a command until it is acked, and a duplicate that reached the box executor
+        -- would act on the half-done state: a memorial would report done (memorial copy made, volatile active source
+        -- gone) and ack before the save made it durable; a withdraw would delete its DURABLE backing copy before the
+        -- save persisted the party (a reset then loses the mon). Matched by the resolved physical key AND, for a
+        -- memorial, by the server's own key (the alias that resolved `phys` can be reset while the settle waits).
+        local function waiting(memorial)
+            for _, s in ipairs(self.settle) do
+                if memorial and s.memorial and (s.key == phys or s.memorial.key == cmd.key) then return s end
+                if not memorial and not s.memorial and s.key == phys then return s end
+            end
+        end
+        local function note_duplicate(s)
+            if not s.duplicate_logged then
+                s.duplicate_logged = true
+                log("[SLink-gen2] " .. cmd.cmd .. " " .. cmd.key .. ": a settle for this key is already waiting for the save")
+            end
+        end
         if cmd.cmd == "box_mon" then
             if mon then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
             local done, why = boxes.deposit(phys)
@@ -1053,6 +1071,12 @@ function Client.new(p)
                 hud.show("X Box fail: " .. name, 255, 80, 80, 240)
             end
         elseif cmd.cmd == "party_mon" then
+            local pending = waiting(false)
+            if pending then
+                note_duplicate(pending)
+                send("sync_retrieve_done", { key = cmd.key })   -- re-acked (the mon IS in the party); nothing re-run
+                return
+            end
             local done, why = boxes.withdraw(phys, { defer_backing = true })
             if done and why then
                 -- F1: the backing copy stays until a native SAVE persists the party (never a loss)
@@ -1076,11 +1100,11 @@ function Client.new(p)
                 send("sync_retrieve_failed", { key = cmd.key, reason = tostring(why) })
             end
         else
-            -- BOX-MEMORIAL-2: a burial already waiting for its save owns this key. A repeated command (the server
-            -- re-sends memorialize until it is acked) must NOT reach the box executor: with the memorial copy made
+            -- a repeated memorialize must NOT reach the box executor while its burial waits: with the memorial copy made
             -- and the volatile active-box source already removed it reports a plain done, and the client would ack
-            -- memorialize_done before the native save made the removal durable (sweep ffd54b44, gen2_pc_ops).
-            for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
+            -- memorialize_done before the native save made the removal durable (sweep ffd54b44, gen2_pc_ops)
+            local pending = waiting(true)
+            if pending then return note_duplicate(pending) end
             local done, why = boxes.memorialize(phys)
             if done and why then
                 -- a boxed memorial that touched the volatile active sBox is not durable until
