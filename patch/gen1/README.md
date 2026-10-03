@@ -1,7 +1,7 @@
 # Gen 1 companion patch — the panel, and the SLINK TRADE receptionist
 
-**Status: shipping. It carries the in-game SLINK panel and the SLINK TRADE receptionist, and
-it does NOT play sound.**
+**Status: shipping. It carries the in-game SLINK panel, the SLINK TRADE receptionist and native
+sound (semantic codes at mailbox `+7`, played on the main thread; see "How sound is played" below).**
 
 > **pureRGB:** this binary patch does not apply to pureRGB (ROM0 is full, the RST vectors are live
 > code, `$DEE2` is inside pureRGB's box data). The same panel, receptionist and an APEX collision
@@ -48,7 +48,8 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
   service picks a request up only on an overworld frame where START could open (review
   1b33bc31, `tests/unit/test_gen1_trade_save.py`).
 
-**The receptionist is driven live on Red and Blue** (`2bab8bc`), and the trade duos
+**The receptionist is driven live on Red and Blue** (`2bab8bc`; `docs/gen1_requirements.md` row T-1, receipts
+`tests/fixtures/gen1/receipts/test_gen1_receptionist_gate_{red,blue}_result.txt`), and the trade duos
 `trade_new`/`trade_decline_new` run on this build (`docs/gen1_gen2_runtime_checks.md` T-1..T-4).
 Physical coverage is one Center, not all 12 + Indigo; trade evolution and save reload stay MODEL.
 
@@ -58,7 +59,7 @@ Unlike Gen 3, **Gen 1 needs no patch for correctness**. Radical Red required the
 patch for Rival Team Swap because `gEnemyParty` is encrypted and checksummed. Gen 1's enemy
 party is plaintext at a fixed address, so the swap, Explode Mode, memorialize and party
 sync are all plain RAM writes on an unmodified cartridge — and they are live-tested that
-way (`tests/e2e/test_duo_gen1.py`).
+way (`tests/e2e/test_duo_gen1_new.py`).
 
 So the patch buys **zero additional rules**. What it buys is what the cartridge's screen can
 show: the panel, and a trade that happens with the game's own UI.
@@ -154,8 +155,9 @@ being silently corrupted.
 
 ## What the mailbox carries
 
-Mailbox `+7` is a sound-request byte, kept for compatibility and **drained without being
-played** — see "Why there is no sound" above. `+8` is the capability byte a client reads to
+Mailbox `+7` is the sound-request byte: a semantic code (1 success, 2 failure, 3 boo) that
+`SlinkSfxService` plays on the main thread — see "How sound is played (and why not from VBlank)"
+above. `+8` is the capability byte a client reads to
 learn what this build can actually do, rather than inferring it from the ABI number; `+9`,
 `+10` and `+11` are the panel handshake, the page the patch wants painted, and the page count
 the client publishes back. The trade runs over its own lease (16 bytes at

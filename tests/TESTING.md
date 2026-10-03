@@ -10,7 +10,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1), or both with an Emerald (US) save loaded (Emerald pairs only with Emerald, never with FRLG/RR); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
+| BizHawk 2.11+ | Both instances open, each with a companion-patched FireRed, LeafGreen or Radical Red 4.1 save loaded, or both with a companion-patched Emerald (US) save loaded (Emerald pairs only with Emerald, never with FRLG/RR). Clean and randomized-clean cartridges are refused (`lua/gen3/entry.lua` `admit_routed`; server `gen3_frlge` `companion_refusal`); build the patched cartridge through the Manager, or apply the shipped UPS from `/patcher` (`?game=firered`, `leafgreen` or `emerald`; Radical Red is the default target); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 4 onward — Tests 1-3 were the old client's and are removed) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
@@ -155,7 +155,7 @@ Let all of Player A's party mons faint at once. Expect: B's **party** linked mon
 
 ### Trade (Radical Red / companion patch only)
 
-Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). FireRed, LeafGreen and Emerald do have published companions (`patch/dist/gen3_companions.json`, ABI2, durable trade capability) whose native trade binds only on the `companion` artifact; on a clean cartridge they cancel trade prompts the same way. The vanilla trade duo (FR<->FR and E<->E) is tracked as `docs/gen3_emerald/REQUIREMENTS.md` ED-3. On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`); `clean_rr_refused_gen3` is no longer a trade check but the clean-RR refusal proof (the companion patch is required, a clean RR is refused at launch). This manual walkthrough is therefore the only end-to-end trade check.
+FireRed, LeafGreen and Emerald have published companions (`patch/dist/SLink-{FireRed,LeafGreen,Emerald}.ups`, `patch/dist/gen3_companions.json` `production: true`, ABI2, durable trade capability) whose native trade binds only on the `companion` artifact. A clean FR/LG/E cartridge is refused at launch, so it never reaches a trade; an AP FireRed/LeafGreen build (exempt, allowed clean) has no native trade scene and server-driven trade prompts are cancelled outright there (`docs/gen3/PLAN.md`). The vanilla trade duo (FR<->FR and E<->E) is tracked as `docs/gen3_emerald/REQUIREMENTS.md` ED-3. On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`); `clean_rr_refused_gen3` is no longer a trade check but the clean-RR refusal proof (the companion patch is required, a clean RR is refused at launch). This manual walkthrough is therefore the only end-to-end trade check.
 
 ---
 
@@ -272,7 +272,7 @@ against its pin file after any cross-lane merge — pins move when another lane 
 ## Unit + integration tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit tests/integration -q            # ~1370 tests, a few seconds
+pytest tests/unit tests/integration -q            # live count: pytest tests/unit -q --collect-only | tail -1
 pytest tests/unit/test_state.py -q                # the SoulLinkState FSM
 pytest tests/unit/test_routes_smoke.py -q         # every registered GET route renders
 pytest tests/unit/test_explode_mode_gate.py -q    # explode-mode adapter gate + death predicate
@@ -286,7 +286,7 @@ pytest tests/unit/test_gen{1,2,3,4,5}_adapter.py -q
 **every** test, so a test cannot write over live run state (three used to write over
 `data/memorial.json`). No server, no emulator, no network.
 
-### test_state.py — State Machine Tests (318 tests)
+### test_state.py — State Machine Tests
 
 Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
 
@@ -558,9 +558,9 @@ This deletes `data/links.json` and clears all in-memory state. The Lua clients w
 | Overworld full-party wipe does not auto-whiteout | No game engine hook for this without a ROM patch | Server detects it via snapshot diff; player must manually visit Pokémon Center |
 | Party HP values on status page not live | Server only receives HP on faint or hello — no per-frame HP stream | Shows 0 for fainted mons; non-zero for others reflects last-seen value, not current |
 | Pokéball count updates at tick rate | Sent with each tick event | Brief lag between bag change and status page update (~1 s) |
-| Party sync executes on next safe state tick (**unpatched ROMs** — patched ROMs run box/party sync natively via the companion patch's `DEPOSIT_MON`/`WITHDRAW_MON` opcodes) | Sync writes deferred until fresh `isInOverworld()` check at execution point | Up to ~0.5 s delay after a party/box action before partner's game updates |
+| Party sync executes on next safe state tick (box/party moves always go through the armed Lua write sink in `lua/gen3/boxes.lua`; the companion's `DEPOSIT_MON`/`WITHDRAW_MON` opcodes are built and reserved in the ABI but not wired) | Sync writes deferred until fresh `isInOverworld()` check at execution point | Up to ~0.5 s delay after a party/box action before partner's game updates |
 | Party sync may require manual PC action | `party_mon` fails closed if partner's party is full or stats are missing | Player sees persistent HUD notice and must manually withdraw from PC |
-| Memorial box write requires safe state (**unpatched ROMs** — patched ROMs memorialize natively via the companion patch's `MEMORIALIZE` opcode) | `memorialize` command deferred until overworld | Brief delay between faint confirmation and Box 13 move; mon may still appear at 0 HP in party during that window |
+| Memorial box write requires safe state (memorialize always goes through the armed Lua write sink in `lua/gen3/boxes.lua`; the companion's `MEMORIALIZE` opcode is built and reserved in the ABI but not wired) | `memorialize` command deferred until overworld | Brief delay between faint confirmation and Box 13 move; mon may still appear at 0 HP in party during that window |
 | AP starter location varies | AP randomized start puts player in random town | Starter capture uses `"intro"` area_id — both players link even if they start in different towns |
 | Quarantine enforcement on reconnect | Server re-quarantines pending keys from hello party snapshot | Brief window (~1 tick) where quarantined mon may be in party before re-deposit |
 | `party_size` tracking ~1s stale | Updated from tick events, not real-time | Reactive `sync_retrieve_failed` catches cases where stale data caused incorrect proactive decisions |

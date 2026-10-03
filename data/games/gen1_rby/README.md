@@ -114,10 +114,14 @@ Archipelago variants have never been launched. See
   `9969845`) — instead `lua/gen1/boxes.lua` refuses to write an SRAM box until the game's own
   `ChangeBox` has initialised it, logging "saved boxes not initialized" rather than writing.
   Box-bank checksums are recomputed for consistency, but vanilla never reads them.
-- Sound: **requires the companion patch.** Gen 1 has no RAM-writable sound trigger —
-  `wNewSoundID` is `PlaySound`'s internal scratch, not a polled mailbox — so unpatched Red/Blue,
-  Yellow and AP builds are silent and `playSfx` is a no-op. Ids are bank-relative; the defaults
-  use only the 64 SFX that resolve identically in all three audio banks.
+- Sound: **requires the companion patch** (required for Red/Blue; Yellow and AP are exempt and
+  have none, so they are silent). Gen 1 has no RAM-writable sound trigger — `wNewSoundID` is
+  `PlaySound`'s internal scratch, not a polled mailbox — so the client posts a semantic code
+  (1 success, 2 failure, 3 boo, 4 notify) at mailbox `+7` and the patch's `SlinkSfxService`
+  (`patch/gen1/src/slink.asm`, capability `SLINK_CAP_SFX`) plays it on the main thread,
+  resolving the id against the audio bank loaded at play time. The client requests it only when
+  the panel reports the capability and the run's `native_sounds` toggle is on
+  (`request_sfx_local` in `lua/gen1/client.lua`, `panel:sfx_present()`).
 - **Rival Team Swap and Explode Mode need no ROM patch.** Gen 3 required the companion
   patch for the swap because `gEnemyParty` is encrypted and checksummed; Gen 1's enemy party
   is plaintext at a fixed address, so the rewritten client's `self:replace_rival_team`

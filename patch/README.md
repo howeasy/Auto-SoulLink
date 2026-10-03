@@ -96,7 +96,7 @@ player-facing reason: this cartridge needs the SLink companion patch, so prepare
 or `/patcher`.
 
 **Exempt, still admitted clean:** Yellow (zero free WRAM, so no companion exists), the Archipelago
-builds (permitted by policy, but the Manager lists no Archipelago game until a client supports one),
+builds (allowed clean, but not offered by the Manager until a client supports them),
 the Emerald Expansion (`gen3_exp`, its companion does not exist yet) and Gen 4/5 (never run against a
 real game). Those keep sharing the Lua rule paths, which is why those paths stay.
 
@@ -165,8 +165,9 @@ set per run in the run manager's **New run** form or via server CLI flags):
 Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
 `--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC
 box⇄party storage (24/25), the native trade scene (21), memorialize (26), party freeze and the
-peer-interact plumbing — they're correctness paths, not preferences (the Lua fallbacks remain
-for unpatched ROMs only).
+peer-interact plumbing — they're correctness paths, not preferences. (Storage 24/25 and
+memorialize 26 are built and reserved in the ABI but not wired: box, party and memorial moves
+always go through the armed Lua write sink in `lua/gen3/boxes.lua`.)
 
 ## What's wired into a real run TODAY
 
@@ -198,12 +199,6 @@ for unpatched ROMs only).
 - **Native sound.** Server `play_sound` cues (link formed, KO, shiny, …) play through the patch
   (`PlaySE`) when present **and the `native_sounds` toggle is ON**, instead of the Lua m4a
   RAM-poke — fallback keeps unpatched ROMs (and toggled-off runs) working.
-- **Native PC box ⇄ party storage** (`DEPOSIT_MON` 24 / `WITHDRAW_MON` 25) — server-driven
-  box/party sync runs through CFRU's own compressed-box conversion (async, settled in the
-  client's storage poll; Lua RAM-poke path remains the unpatched fallback).
-- **Native memorialize** (`MEMORIALIZE` 26) — dead linked mons move to the memorial box in one
-  frame-hook pass (compress + zero + swap-with-last, survivors keep their slot indices). Async
-  like storage; on any failure the client reverts to the Lua path for the rest of the session.
 - **Event-push ring** (`EvRing 0x0203FD10`) — the patch pushes faint-settled (gBattleResults
   counter deltas) and battle-outcome edges; the client drains them each frame
   (`MB.events_drain`). Foundation: today they're logged alongside the proven Lua detection;
@@ -219,6 +214,10 @@ production client doesn't invoke them yet — each needs its own server/client i
   (`lua/tests/test_live_forcemove.lua`) but **deliberately never sent by the client**: the
   controller swap softlocked in real play, so the Lua Variant-3 RAM path is the single
   production mechanism.  Reserved in the ABI; see `patch/ROADMAP.md` §2.
+- Storage: `DEPOSIT_MON` 24 / `WITHDRAW_MON` 25 (CFRU's own compressed-box conversion) and
+  `MEMORIALIZE` 26 (compress + zero + swap-with-last, survivors keep their slot indices).
+  `lua/gen3/boxes.lua` reads `io.native_executor`, which only tests inject, so server-driven
+  box/party sync and memorialize always run the armed Lua write path. Reserved in the ABI.
 - Mon: `CREATE_MON`, `GIVE_MON` (`SET_ENEMY_PARTY` rival-team-swap and `SET_PARTY_MON` trade ARE wired)
 - Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
 - Rules/UI: `PLAY_FANFARE` (`SHOW_MENU`, `PLAY_SE` ARE wired)
