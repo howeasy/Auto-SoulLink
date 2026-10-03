@@ -55,24 +55,33 @@ Nothing outside that set is touched. "Merged" means merged into `master`; the re
 master-based, so the branch name is fixed.
 
 A process counts as using a path when its command line names the path (whole path components)
-or its current directory is inside it. Current directories are read from the process PEB on
-64-bit Windows (from the 32-bit PEB for WOW64 processes) and from `/proc` elsewhere. The scan
-fails closed. If the process list errors or comes back empty, or there is no cwd scan, or a live
-process's cwd can't be read, every item that would be removed or moved is refused.
+or its current directory is inside it. Only processes whose command line is visible to the
+current user are scanned; open file handles are not. Current directories are read from the
+process PEB on 64-bit Windows (from the 32-bit PEB for WOW64 processes) and from `/proc`
+elsewhere. The scan fails closed. If the process list errors or comes back empty, or there is
+no cwd scan, or a live process's cwd can't be read, every item that would be removed or moved
+is refused. `--apply` takes a fresh process snapshot right before each action and refuses that
+action if anything now uses the target.
 
 ## Retention rules
 
+**`lanes/` under the work root is never pruned.** Each lane belongs to the thread that runs it
+(Gen 4's 46 GB `lanes/g4`, Gen 3's `lanes/gen3`). Like `cache/` and `evidence/`, it is report
+only. The tool's own lock and plan files in `tmp/` are never aged out either.
+
 **C: content is moved, not deleted.** On C:, prune deletes only pytest temps and pure junk:
 orphan admin dirs, Drive conflict copies, and the two known restored files. Everything else on
-C: goes to the work root through move-to-work-root. Registered worktrees go to `wt/` and pinned
-inputs to `cache/`. Lanes, state dirs, unregistered checkouts and loose files go to
-`evidence/<label>/` at any age, because prune never touches `evidence/`.
+C: goes to the work root through move-to-work-root, including recent items that prune would
+keep. Registered worktrees go to `wt/` and pinned inputs to `cache/`. Lanes, state dirs,
+unregistered checkouts and loose files go to `evidence/<label>/` at any age, because prune
+never touches `evidence/`. Two items that would land on the same destination are refused.
 
 Off C:, prune also removes:
 
 - worktrees that are merged into master, clean, and untouched for `--older-than`. Their branches
   go with `git branch -d`, never `-D`.
-- lanes and state dirs untouched for `--older-than`, when no process uses them.
+- lanes and state dirs outside the work root (for example in Temp) untouched for
+  `--older-than`, when no process uses them.
 - pytest and tool temps older than `--tmp-older-than`, when no process uses them.
 
 Every worktree removal re-checks registration, lock and `git status` at execution time.
@@ -82,7 +91,7 @@ prune never removes:
 - a dirty or unmerged worktree
 - a worktree locked by a live pid, or locked with no pid
 - an unregistered checkout, or a lane or temp dir that holds a `.git` entry
-- `cache/`, `evidence/`, or anything whose name says evidence, receipt or proof
+- `lanes/`, `cache/`, `evidence/`, or anything whose name says evidence, receipt or proof
 - an admin dir that a checkout still points at
 - a conflict ref holding commits no branch contains
 
@@ -94,8 +103,9 @@ move-to-work-root moves each kind of item a different way:
   volumes with "Improper link".
 - **Dirty worktree:** `robocopy /E /XJ`, then `git worktree repair`. The old dir is removed only
   if `git status` matches.
-- **Plain dirs:** `robocopy /E /XJ`, then the source is deleted only if the copy holds the
-  same file count and bytes.
+- **Plain dirs:** `robocopy /E /XJ`, check the copy holds the same file count and bytes,
+  recreate the links, and only then delete the source.
+- **Loose files:** copy, check the size, then delete the source.
 
 Junctions are never followed. They are recreated at the new path. Link detection reads reparse
 attributes off `lstat`; where those are unavailable, nothing is deleted or copied. Only the
@@ -104,9 +114,8 @@ placeholder, a dedup file) is counted as a file and never entered or recreated a
 tree holding such a directory is never deleted.
 
 `--apply` prints each action as it completes. On a failure it names the failed action and every
-action already done. The move
-refuses anything locked by a live pid or used by a running process, and it lists the tracked
-lines that still name an old path.
+action already done. The move refuses anything locked by a live pid or used by a running
+process, and it lists the tracked lines that still name an old path.
 
 ## Known gaps
 
