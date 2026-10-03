@@ -75,15 +75,21 @@
       "id": "silver_overlay",
       "kind": "overlay",
       "revision": "US",
-      "selection": "FUTURE",
-      "status": "BUILT",
+      "selection": "SELECTED",
+      "status": "ADMITTED",
       "sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
       "md5": "744bf338c01de75c07734fb4b7264dfb",
       "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
       "ups": {
         "file": "patch/dist/SLink-Silver.ups",
         "sha256": "408f8a576c252ba7366056f750812db4d1b738c2ff38bb0b911de58936ad5025"
-      }
+      },
+      "runtime_gate": {
+        "id": "G4",
+        "state": "ADMITTED",
+        "grant_fingerprint": "c199c08fe40a6d8cb2658aabfa190fcddb0651ec924eb734daaa134f4190b483"
+      },
+      "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19"
     },
     {
       "id": "silver_ghost",

@@ -85,15 +85,21 @@
       "id": "crystal_overlay",
       "kind": "overlay",
       "revision": "1.0",
-      "selection": "FUTURE",
-      "status": "BUILT",
+      "selection": "SELECTED",
+      "status": "ADMITTED",
       "sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
       "md5": "0477a77b6383862615dc0c45a9fb9592",
       "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
       "ups": {
         "file": "patch/dist/SLink-Crystal.ups",
         "sha256": "473cf2ba869442c52a472ac2c6d620d5cab2f8270c9a5bff72e79355dc5cb6ca"
-      }
+      },
+      "runtime_gate": {
+        "id": "G4",
+        "state": "ADMITTED",
+        "grant_fingerprint": "c199c08fe40a6d8cb2658aabfa190fcddb0651ec924eb734daaa134f4190b483"
+      },
+      "binding_sha256": "6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450"
     },
     {
       "id": "crystal_ghost",
