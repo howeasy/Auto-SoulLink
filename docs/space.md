@@ -56,7 +56,9 @@ master-based, so the branch name is fixed.
 
 A process counts as using a path when its command line names the path (whole path components)
 or its current directory is inside it. Current directories are read from the process PEB on
-64-bit Windows and from `/proc` elsewhere. Without a cwd scan, temps get a 24 h floor.
+64-bit Windows (from the 32-bit PEB for WOW64 processes) and from `/proc` elsewhere. The scan
+fails closed. If the process list errors or comes back empty, or there is no cwd scan, or a live
+process's cwd can't be read, every item that would be removed or moved is refused.
 
 ## Retention rules
 
@@ -96,7 +98,13 @@ move-to-work-root moves each kind of item a different way:
   same file count and bytes.
 
 Junctions are never followed. They are recreated at the new path. Link detection reads reparse
-attributes off `lstat`; where those are unavailable, nothing is deleted or copied. The move
+attributes off `lstat`; where those are unavailable, nothing is deleted or copied. Only the
+symlink, WSL-symlink and mount-point tags count as links. Any other reparse point (a cloud
+placeholder, a dedup file) is counted as a file and never entered or recreated as a link, and a
+tree holding such a directory is never deleted.
+
+`--apply` prints each action as it completes. On a failure it names the failed action and every
+action already done. The move
 refuses anything locked by a live pid or used by a running process, and it lists the tracked
 lines that still name an old path.
 
