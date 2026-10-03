@@ -379,3 +379,11 @@ Session stopped at the owner timebox (2026-10-01, 22:09 EDT). HEAD is at the end
 - Commit the scenario files (path + sha256) so the narrowing stops living only in receipt text.
 - The best outcome for hge/SS b is OPEN, not PASS: the collision row is unobserved on HG too.
 - SS row o needs its own route lane + harness entry (`test_gen4_battle_faint.py:56` PACK lacks soulsilver).
+
+### EVIDENCE CAVEAT + RULE (Codex disclosure, 2026-10-02)
+- **What happened:** the hge/SS a–n receipts (c935 `g1probeHGE-1058`, 6290 `g1bprobeHGE-1135`, aa45 `g1cprobeHGE-1215`/`g1cprobeSS-1227`, feb6 `g1dprobeHGE-1417`/`g1dprobeSS-1425`) were produced by a host harness that overrode `scenario_input` (route: []) and `phase_case_plan` IN-PROCESS, from tool-executed text that is not in the repo.
+  - The committed `test_gen4_probe_gates.py` hash in each receipt is correct, but the runtime behaviour was narrowed by uncommitted code. The narrowing is disclosed in the receipt reasons ("indoor native PC-SAVE fixture...").
+  - The effective configs are each run's `*/probe.json`.
+  - OMP cx-6c26d2e1 F5 ("not producible by this tree's code") was therefore essentially RIGHT. The coordinator's rejection of it is withdrawn.
+- **Status of those rows:** their PASS rows stand as disclosed per-case evidence. They are NOT qualification evidence for the coverage the overrides removed: b, m, n and the phase cases on hge/SS.
+- **RULE from now on:** no in-process overrides of harness functions in any receipt-producing run. Every narrowing is a COMMITTED scenario file (path + sha256 bound in the receipt), and a scenario may only omit fields so the pack defaults hold. Codex's next-cut plan adopts this: committed scenario files, native OUTDOOR baseline saves, a separate PC-deposit/SAVE descendant for row i only, no `phase_case_plan` suppression.
