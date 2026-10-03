@@ -30,6 +30,7 @@ from tests.live.test_gen2_frame_align import (
     POISON_PARK,
     POISON_ROUTE,
     POISON_TRAINER,
+    SYNTH_PSN_FIXTURE,
     SYNTH_PSN_HUNT,
     SYNTH_PSN_PARK,
     poison_facts,
@@ -161,13 +162,39 @@ def test_gold_poison_facts_start_in_tick_on_its_own_catch_map_when_synth_psn():
         assert route29["grid"][tile["y"] * route29["width"] + tile["x"]] == 1
 
 
-def test_synth_psn_is_refused_for_crystal_and_silver():
-    for title in ("crystal", "silver"):
-        ctx = gen2_source_data.load_context(title, root=ROOT)
-        with pytest.raises(ValueError, match="Gold-only"):
-            poison_facts(ctx, synth_psn=True)
+def test_synth_psn_is_refused_for_silver():
+    ctx = gen2_source_data.load_context("silver", root=ROOT)
+    with pytest.raises(ValueError, match="Gold/Crystal-only"):
+        poison_facts(ctx, synth_psn=True)
 
 
-def test_gate_call_site_passes_synth_psn_only_for_gold():
+def test_crystal_poison_facts_start_in_tick_on_the_same_route29_catch_map_when_synth_psn():
+    """Crystal's own natural Route 30 Weedle hunt was a lottery (sweeps gen2-fsw-1003-0029/-rerun1: one Sting candidate
+    in 64 encounters, the lead faints first, bit-for-bit on attempts 1 and 2), so its U1 now boots the disclosed SYNTH
+    poisoned lead like Gold. Its catch ends on the same Route 29 patch, so the same park pair serves."""
+    ctx = gen2_source_data.load_context("crystal", root=ROOT)
+    facts = poison_facts(ctx, synth_psn=True)
+    assert facts["start_phase"] == "tick" and facts["hunt_map"] == "Route29" and facts["legs"] == []
+    assert facts["park"] == list(SYNTH_PSN_PARK)
+    route29 = facts["maps"]["Route29"]
+    for tile in facts["park"]:
+        assert route29["grid"][tile["y"] * route29["width"] + tile["x"]] == 1
+
+
+def test_the_duo_shaped_call_keeps_crystals_natural_hunt():
+    facts = poison_facts(gen2_source_data.load_context("crystal", root=ROOT))
+    assert "start_phase" not in facts and facts["hunt_map"] == "Route30" and facts["legs"]
+
+
+def test_gate_call_site_passes_synth_psn_for_exactly_the_synth_titles():
     source = (ROOT / "tests/live/test_gen2_frame_align.py").read_text(encoding="utf-8")
-    assert 'synth_psn=title == "gold"' in source
+    assert "synth_psn=title in SYNTH_PSN_FIXTURE" in source
+    assert SYNTH_PSN_FIXTURE == {"gold": "gold_synth_psn", "crystal": "crystal_synth_psn_u1"}
+
+
+def test_the_crystal_fixture_is_committed_as_the_builders_output_on_the_u1_fixture():
+    raw, disclosure = synth.build_named("crystal_synth_psn_u1")
+    assert (FIX / "crystal_synth_psn_u1.SaveRAM").read_bytes() == raw
+    assert json.loads((FIX / "crystal_synth_psn_u1.synth.json").read_text(encoding="utf-8")) == disclosure
+    assert disclosure["base_fixture"] == "crystal_battle"
+    assert disclosure["edits"] == synth.PSN_RECIPES["psn"][1], "the same disclosed edits as Gold's recipe"

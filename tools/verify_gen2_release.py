@@ -936,6 +936,8 @@ TRADE_MODEL_ONLY = {
         "tests/unit/test_gen2_trade_service.py::test_compiled_never_saved_responder_is_saved_then_trades",
     ),
 }
+# O-33 SYNTH poisoned-lead setups a U1 leg may disclose: (title, base fixture) -> tools/gen2_synth_fixtures.PSN_RECIPES key
+POISON_SETUP_RECIPE = {("gold", "gold_battle_errand"): "psn", ("crystal", "crystal_battle"): "psn_u1"}
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
 # O-33 (post-RC card TRADE-EVOLVE-CATCH): the only synthetic trade boot seed, gen2_trade_evolve's a (its errand base
 # with Master Balls, tools/gen2_synth_fixtures.TRADE_RECIPES; gen2_trade_oracles.SEEDED). axes.scenario_fixtures names it.
@@ -1421,11 +1423,12 @@ def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
                 raise ValueError("u1_attempt differs from the disclosed clock schedule")
         raw = (root / "tests/fixtures/gen2" / f"{leg['fixture']}.SaveRAM").read_bytes()
         if "poison_setup" in leg:
-            if title != "gold" or leg["fixture"] != "gold_battle_errand":
-                raise ValueError("poison setup is only the Gold errand recipe")
+            recipe = POISON_SETUP_RECIPE.get((title, leg["fixture"]))
+            if recipe is None:
+                raise ValueError("poison setup is only the Gold errand / Crystal battle recipe")
             # Rebuild from THIS root's base bytes using the pinned synthesis rules,
             # as day_clock does for its source layout; never trust disclosed edits.
-            raw, poison = synth.build(title, raw, synth.PSN_RECIPES["psn"][1], base_name=leg["fixture"])
+            raw, poison = synth.build(title, raw, synth.PSN_RECIPES[recipe][1], base_name=leg["fixture"])
             if leg["poison_setup"] != poison:
                 raise ValueError("poison setup differs from its named recipe re-derivation")
         out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title,

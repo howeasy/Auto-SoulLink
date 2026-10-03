@@ -2585,6 +2585,35 @@ def test_gold_clock_rebuilds_its_poison_setup_first(mutation):
     assert bool(errors) == (mutation is not None), errors
 
 
+def _crystal_synth_run(attempt=1):
+    """A U1 leg the way the gate records it: SYNTH poisoned lead on crystal_battle, then the pinned clock."""
+    import gen2_synth_fixtures as synth
+    raw, poison = synth.build_named("crystal_synth_psn_u1", root=REPO)
+    minute = (0, 23, 46)[attempt - 1]
+    _, clock = synth.day_clock(raw, title="crystal", hour=11, minute=minute, now=1790952666)
+    clock.update(game_minute=minute, game_second=0)
+    return {"fixture": "crystal_battle", "poison_setup": poison, "clock_setup": clock, "u1_attempt": attempt}
+
+
+@pytest.mark.parametrize("mutation", [None, "missing", "edited", "other_fixture", "silver", "gold_recipe_on_crystal"])
+def test_crystal_clock_rebuilds_its_synth_poison_setup_first(mutation):
+    run = _crystal_synth_run()
+    assert run["clock_setup"]["base_sha256"] == run["poison_setup"]["sha256"]
+    title = "crystal"
+    if mutation == "missing":
+        run.pop("poison_setup")
+    elif mutation == "edited":
+        run["poison_setup"]["edits"]["party_status"]["hp"] = 9
+    elif mutation == "other_fixture":
+        run["fixture"] = "crystal_battle_errand"
+    elif mutation == "silver":
+        title, run["fixture"] = "silver", "silver_battle"
+    elif mutation == "gold_recipe_on_crystal":
+        run["poison_setup"]["recipe"] = "psn"     # a disclosure naming another recipe never re-derives
+    errors = gate._clock_setup_errors(REPO, title, run)
+    assert bool(errors) == (mutation is not None), errors
+
+
 @pytest.mark.parametrize("mutation", ["game_minute", "new_hex"])
 def test_engine_site_lane_checks_each_runs_clock_disclosure(tmp_path, mutation):
     doc = _copy_new_gates_tree(tmp_path)

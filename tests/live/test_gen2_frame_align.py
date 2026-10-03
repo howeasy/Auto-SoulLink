@@ -127,6 +127,10 @@ POISON_HEAL = dict.fromkeys(("crystal", "gold", "silver"), ("CherrygroveCity", "
 # pair on the FAR side of the 60-wide map (x=4) and the long walk back there crossed enough Route 29 grass to
 # trigger a wild encounter mid-tick (fsw-postrc-psn2: "a battle started on the park tiles"); both re-asserted
 # floor at runtime below like every other title's pair.
+# Titles whose U1 poison leg boots a disclosed SYNTH poisoned lead (tools/gen2_synth_fixtures.py PSN_FIXTURES) instead
+# of hunting a poisoner: Gold (its Wade fight is a deterministic loss) and Crystal (its Weedle hunt is a lottery).
+# Silver still hunts. Both catch on the SAME Route 29 patch (xy 52-53,12), so the park pair below serves both.
+SYNTH_PSN_FIXTURE = {"gold": "gold_synth_psn", "crystal": "crystal_synth_psn_u1"}
 SYNTH_PSN_HUNT = "Route29"
 SYNTH_PSN_PARK = ({"x": 53, "y": 11}, {"x": 52, "y": 11})
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
@@ -361,8 +365,8 @@ def poison_facts(ctx, *, synth_psn=False) -> dict:
     boot fixture is already poisoned; card gen2-u1e-poison, regression fix re-sweep 7ba4d552)."""
     title = ctx.title
     if synth_psn:
-        if title != "gold":
-            raise ValueError("synth_psn facts are Gold-only (gold_synth_psn)")
+        if title not in SYNTH_PSN_FIXTURE:
+            raise ValueError(f"synth_psn facts are Gold/Crystal-only ({sorted(SYNTH_PSN_FIXTURE.values())})")
         route, hunt_name, park, heal, trainer = (), SYNTH_PSN_HUNT, SYNTH_PSN_PARK, None, None
     else:
         route, hunt_name, park = POISON_ROUTE[title], POISON_HUNT[title], POISON_PARK[title]
@@ -672,14 +676,14 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     env = live.inspect_env(spec, staged)
     qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind=kind),
-                                                     qualification["attempt_id"], synth_psn=title == "gold"))
+                                                     qualification["attempt_id"], synth_psn=title in SYNTH_PSN_FIXTURE))
     source_path, clock, psn_setup = fixture, None, None
     boot = staged
-    if title == "gold":
-        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (a benched Sentret appended at
-        # PSN+12/18HP) instead of the played gold_battle_errand bytes; `staged`/`fixture` above stay the PLAYED
-        # base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
-        boot, psn_setup = gen2_synth_fixtures.build_named("gold_synth_psn", root=REPO)
+    if title in SYNTH_PSN_FIXTURE:
+        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (the lead poisoned at 8 HP, 5 Master
+        # Balls) instead of the played bytes; `staged`/`fixture` above stay the PLAYED base for
+        # qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
+        boot, psn_setup = gen2_synth_fixtures.build_named(SYNTH_PSN_FIXTURE[title], root=REPO)
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
         boot, clock = u1_clock_setup(boot, title, now=int(time.time()))
     if boot != staged:
