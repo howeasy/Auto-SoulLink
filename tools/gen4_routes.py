@@ -1342,12 +1342,15 @@ BOUND_MODULES = (
 )
 # Per receipt kind: the Lua script that must have run, the modules whose hashes MUST be present (a trimmed
 # receipt is refused), and the statuses that count as a pass. A receipt of one kind never passes as the other.
+# `save_pass` are the passing statuses whose evidence is a native SAVE + cold reload; the rest (BATTLE, the
+# wild-battle leg) persists nothing and is judged by its own battle witness instead.
 RECEIPT_KINDS = {
     "route": {
         "script": "lua/tests/gen4_route_play.lua",
         "modules": BOUND_MODULES,
         "status_key": "final_status",
-        "pass": ("PC_DEPOSIT", "PC_WITHDRAW", "HATCH_OK"),
+        "pass": ("BATTLE", "PC_DEPOSIT", "PC_WITHDRAW", "HATCH_OK"),
+        "save_pass": ("PC_DEPOSIT", "PC_WITHDRAW", "HATCH_OK"),
     },
     "catch": {
         "script": "lua/tests/probe_gen4_catch.lua",
@@ -1410,31 +1413,115 @@ def verify_receipt(path, kind: str, *, head: str | None = None, want: str | None
             return "FAIL", f"receipt status {status} (battery op {op}) is not the wanted {want}"
     if status in spec["pass"]:
         if kind == "route":
-            try:
-                assert_save_progress(doc["before_save"], doc["battery"], doc["reload"]["witness"])
-            except (KeyError, TypeError):
-                return "STALE", "missing independent counter/key witnesses"
-            except RouteError as exc:
-                return "FAIL", str(exc)
+            if status in spec.get("save_pass", spec["pass"]):
+                try:
+                    assert_save_progress(doc["before_save"], doc["battery"], doc["reload"]["witness"])
+                except (KeyError, TypeError):
+                    return "STALE", "missing independent counter/key witnesses"
+                except RouteError as exc:
+                    return "FAIL", str(exc)
+            else:  # BATTLE persists nothing: the leg's own bindings are the evidence instead
+                gap = battle_receipt_gap(doc)
+                if gap:
+                    return "STALE", gap
+                witness = doc["battle"]["witness"]
+                if not witness["entered"]:
+                    return "FAIL", witness["reason"] or "the leg recorded no battle witness"
         elif not isinstance(doc.get("battery_mon"), dict) or not {"pid", "species", "key"} <= doc["battery_mon"].keys():
             return "STALE", "missing independently decoded battery_mon"
         return "PASS", "bound to the current evidence surface"
     return ("OPEN" if status == "OPEN" else "FAIL"), f"{kind} receipt status {status}"
 
 
+# --- the wild-battle leg's witness (no native SAVE: the battle itself is the evidence) ------------------
+# `RESULT BATTLE` is written only once `battle()` returned a live chain (overlay 12 and a non-zero enemy
+# species at ctx+0x2D40+0xC0 -- lua/tests/gen4_route_play.lua:124-137), so the species the detail names IS
+# the entry witness. The frame counts beside it (`paceSteps`, `framesInGrass`) say how long the leg waited,
+# never what it saw, and are deliberately not read here.
+BATTLE_WITNESS_RE = re.compile(
+    r"phase=(?P<phase>\w+) species=(?P<name>[^()\s]+)\((?P<species>-?\d+)\) level=(?P<level>-?\d+)"
+    r" player=(?P<player>-?\d+) map=(?P<map>-?\d+) x=(?P<x>-?\d+) y=(?P<y>-?\d+)"
+)
+SETTLED_STATE_RE = re.compile(r"^.*\bsavestate battle_settled ok (.+)$", re.MULTILINE)
+
+
+def battle_witness(result: dict) -> dict:
+    """Judge the wild-battle leg from what its own RESULT line reported. `entered` is the battle CHAIN
+    (a non-zero enemy species and the player's mon, the `battle()` guard), never a frame count: a leg
+    that paced 4000 steps and met nothing must not read as a battle."""
+    detail = result.get("detail") or ""
+    m = BATTLE_WITNESS_RE.search(detail)
+    if m is None:
+        return {"entered": False,
+                "reason": f"leg status {result.get('status')} names no battle chain: {detail!r}"}
+    w = m.groupdict()
+    entered = int(w["species"]) > 0 and int(w["player"]) > 0
+    return {
+        "entered": entered,
+        "reason": ""
+        if entered
+        else f"enemy species {w['species']} / player {w['player']} is no live battle chain",
+        "phase": w["phase"],
+        "species": int(w["species"]),
+        "level": int(w["level"]),
+        "player": int(w["player"]),
+        "map": int(w["map"]),
+        "x": int(w["x"]),
+        "y": int(w["y"]),
+    }
+
+
+def settled_state(lines) -> dict | None:
+    """The `<tag>_leg<N>_battle_settled.State` the Lua leg wrote, hashed. The path comes from the leg's own
+    `savestate battle_settled ok` line, so a leg whose `savestate.save` failed is absent here rather than
+    guessed at; a state file that is not there hashes to None, which verify_receipt refuses."""
+    m = SETTLED_STATE_RE.search("\n".join(lines or ()))
+    if m is None:
+        return None
+    path = Path(m.group(1).strip())
+    return {"path": str(path), "sha256": _sha256(path) if path.is_file() else None}
+
+
+def battle_receipt_gap(doc: dict) -> str | None:
+    """The bindings a wild-battle receipt must carry: the staged battery it ran from, the plan it ran and
+    the settled state it left. A receipt missing one is trimmed (STALE), never a pass."""
+    battle = doc.get("battle")
+    if not isinstance(battle, dict):
+        return "missing the battle block"
+    if not isinstance(battle.get("witness"), dict):
+        return "missing the battle witness"
+    for what, holder in (
+        ("staged battery", doc.get("staged_save")),
+        ("plan", doc.get("plan")),
+        ("settled battle state", battle.get("settled_state")),
+    ):
+        if not isinstance(holder, dict) or not isinstance(holder.get("sha256"), str):
+            return f"missing the {what} sha256"
+    return None
+
+
 def build_receipt(
-    game, save, synth: dict, legs: list[dict], final: dict, rom_sha1: str | None = None, *, binding=None
+    game, save, synth: dict | None, legs: list[dict], final: dict, rom_sha1: str | None = None, *, binding=None
 ) -> dict:
-    """The run's receipt: SYNTH label + sidecar hash first, then each leg's status line."""
+    """The run's receipt: the setup label + sidecar hash first, then each leg's status line. `synth` is
+    None for a leg with no SYNTH fixture behind it (the wild-battle route runs on the owner's own
+    battery): that is disclosed NATIVE with no sidecar, never an invented one."""
+    setup = synth or {"setup": "NATIVE", "sidecar": None, "sidecar_sha256": None, "out_sha1": None}
     return {
         **(binding or receipt_binding(title=GAMES[game][1])),
         "title": GAMES[game][1],  # the pinned-ROM key (tools/gen4_pins.py ROM_SPECS)
         "rom_sha1": rom_sha1,
-        "setup": synth["setup"],
-        "sidecar": synth["sidecar"],
-        "sidecar_sha256": synth["sidecar_sha256"],
+        "setup": setup["setup"],
+        "sidecar": setup["sidecar"],
+        "sidecar_sha256": setup["sidecar_sha256"],
         "save": str(save),
-        "save_sha1": synth["out_sha1"],
+        "save_sha1": setup["out_sha1"],
+        # the battery the lane booted from, hashed AS STAGED (the game rewrites the file, so only the
+        # stage-time digest names the battery a battle-derived state came from)
+        "staged_save": final.get("staged_save"),
+        # the route JSON this leg ran, and the settled state the Lua leg wrote for it
+        "plan": final.get("plan"),
+        "battle": final.get("battle"),
         "game": game,
         "legs": [
             {k: v for k, v in leg.items() if k in ("leg", "kind", "phase", "status", "detail", "pc_witnesses")}
@@ -1579,6 +1666,9 @@ def run_lane(
     rom_staged = stage_rom(rom, ld)
     rom_sha1 = sha1_of(rom_staged)
     saved_path = stage_save(save, ld, rom_sha1, rom_basename=rom_staged.name)
+    # hash the staged battery as the lane received it, BEFORE any leg runs: the game rewrites the file
+    # during the run, so only the stage-time digest identifies what a battle state came from
+    staged_save = {"path": str(saved_path), "sha256": _sha256(saved_path) if Path(saved_path).is_file() else None}
     world = load_world(rom, pret)
     start = save_position(save, game)
     err = load_errand(rom, pret, errand, start["map"]) if errand else None
@@ -1659,6 +1749,15 @@ def run_lane(
             kill_our_emuhawk(ld)
         result = parse_result(log.read_text(encoding="utf-8") if log.exists() else "")
         result.update(leg=leg, wall=round(time.time() - t0, 1), route=route, log=str(log))
+        if target == "grass":  # the wild-battle leg's own evidence: no SAVE, no reload
+            result.update(
+                staged_save=staged_save,
+                plan={"path": str(rpath), "sha256": _sha256(rpath)},
+                battle={
+                    "witness": battle_witness(result),
+                    "settled_state": settled_state(result["lines"]),
+                },
+            )
         history.append({**result, "kind": route.get("kind"), "phase": route.get("phase")})
         if kind and result["status"] == final_ok:
             # the lane's battery file, decoded by the independent PYDEC oracle, then a COLD RELOAD:
@@ -1688,7 +1787,7 @@ def run_lane(
                     assert_save_progress(before_save, result["save_witness"], result["reload"]["witness"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
-        if kind:
+        if kind or target == "grass":
             gen4_evidence.bind({**binding, "rom_sha1": rom_sha1}, receipt_binding(title=GAMES[game][1]),
                                title=GAMES[game][1], rom_sha1=rom_sha1)
             result["receipt"] = build_receipt(game, save, synth, history, result, rom_sha1, binding=binding)
