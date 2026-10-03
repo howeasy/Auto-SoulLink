@@ -248,6 +248,13 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     }
     uint16_t op=m->opcode,seq=m->seq;
     if (!op) return;
+    /* Mailbox ownership: the sound and panel producers share this mailbox, so only
+     * the four trade opcodes dispatched below are ours. FAIL-acking a foreign opcode
+     * consumes that command and publishes a status/ack_seq it never earned. The
+     * polls above must still run on every visit, so the gate sits after them, never
+     * around them. Same predicate as rr_trade_owned() (patch/src/rr_trade_relay.h). */
+    if (op!=SLINK_OP_TRADE_PREPARE && op!=SLINK_OP_TRADE_SCENE
+        && op!=SLINK_OP_TRADE_WITHDRAW && op!=SLINK_OP_TRADE_STATUS) return;
     if ((s->phase==TP_PRE_SAVE && op==SLINK_OP_TRADE_PREPARE && seq==s->prepare_seq)
         || (s->phase==TP_SCENE && op==SLINK_OP_TRADE_SCENE && seq==s->scene_seq)) return;
     if (op==SLINK_OP_TRADE_PREPARE) {

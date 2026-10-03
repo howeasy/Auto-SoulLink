@@ -16,10 +16,30 @@ enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/ge
 | File | Role |
 |---|---|
 | `abi.h` | mailbox, witness, revision protocol, milestone model, success predicate, `SlinkRecordStageV1`, static asserts |
+| `compat.h` | toolchain shim: fixed-width types and `SLINK_STATIC_ASSERT` (mwccarm 2.0/sp2p2), `<stdint.h>`/`_Static_assert` elsewhere |
 | `record_binding.h` | `SlinkRecordBinding`, `SlinkDecoder`, text spec, PK3/PK4/PK5 reference bindings, bounded text copy |
 | `trade_producer.h` | PREPARE / SCENE / WITHDRAW / STATUS state machine, async post-save with watchdog |
 | `panel_producer.h` | owned info-panel lifecycle, terminator from the binding |
 | `sound_producer.h` | SE / fanfare dispatch |
+
+## Toolchains
+
+* **Host gcc / clang — plain C11.** `abi.h` includes `compat.h`, which includes
+  `<stdint.h>` and maps `SLINK_STATIC_ASSERT(cond, msg)` onto `_Static_assert`.
+  Nothing else about the stack changes.
+* **mwccarm 2.0/sp2p2 — the NDS titles.** This toolchain predates C99
+  `<stdint.h>` and parses C11 `_Static_assert` as a declaration, so `abi.h` could
+  not be compiled on target at all. `compat.h` supplies the fixed-width types
+  itself, using the Nitro SDK spellings so `uint32_t` *is* `u32`, and maps
+  `SLINK_STATIC_ASSERT` onto the C89 negative-array-size typedef. It is included
+  with a quoted, relative `#include "compat.h"`, so it travels with `abi.h` and
+  needs no include path of its own.
+* **The per-title build still has to glue the include dir.** Its mwcc compile line
+  needs `-I<dir containing patch/src/nds/common>` so `#include "abi.h"` resolves
+  from the per-title sources, exactly as the host build passes `-I`.
+* **Still C11-only outside `abi.h`'s own path** (not this directory's other
+  headers' card): `record_binding.h` uses `_Static_assert` three times and
+  `trade_producer.h` uses `_Alignas`; mwccarm will reject both.
 
 ## ABI version 3 and the reader rule
 
@@ -107,6 +127,34 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
 9. **Not lifted**: Emerald-only call/Match Call records and reasons 16..18, and
    rival/carrier/call producers. Opcode 32 keeps its id, never advertised.
 
+## Title-private space
+
+The arena tail is split so a title can own state that shared code never touches.
+`SLINK_TITLE_OFFSET 0xE00` / `SLINK_TITLE_SIZE 0x40` are the first 64 bytes of the
+former reserved region — asserted to start exactly at `SLINK_RESERVED_OFFSET` and
+to fit inside `SLINK_ARENA_SIZE` — and `0xE40..0x1000` stays free for a future
+shared region.
+
+* **Ownership.** The per-title ROM writes the region, the host reads it. Its
+  layout and its version number are owned per title and documented there: version
+  the field yourself, then publish it **last**, so a reader can never meet a new
+  layout under an old version.
+* **What it is not.** Never a rules channel and never a write permission. Shared
+  code — producers, bindings, `abi.h` — never reads or writes it. It is state, not
+  authority.
+* **Capability bits.** 0..6 are the shared set defined in `abi.h`. 7..15 are
+  reserved for future *shared* capabilities and read 0 until a shared id is added
+  there. 16..31 are *title-private*: ROM-owned, documented per title, never read by
+  shared code.
+* **Failure reasons.** 2..15 are the shared set. 16..31 are reserved for future
+  *shared* reasons and read 0 until a shared id is added there. 32..63 are
+  *title-private* and decoded through the title adapter only.
+
+A title dispatcher **must route by opcode**: a producer acks only an opcode it
+owns, and an opcode it does not own is not a command to reject — it is not its
+command. A dispatcher that acks everything it is handed turns an unimplemented
+title opcode into a false OK.
+
 ## Reference bindings
 
 | binding | stored | party | raw-staged | OT access | extra/slot | text |
@@ -154,3 +202,15 @@ remove/compact. The party commit primitive resets the slot's extra itself.
   durability, ARM codegen, volatile access widths, or ARM9/ARM7 cache coherence.
 - The shared Lua witness reader (NDS-3) has not been shown to implement the
   reader rule above.
+- **`abi.h` has never been through a real mwccarm 2.0/sp2p2.** The MWERKS path is
+  walked on host gcc with `-D__MWERKS__` (`tests/unit/test_nds_abi_compat.py`),
+  which proves no `<stdint.h>` include, that the asserts still evaluate and that
+  the layouts survive. It cannot prove that compiler accepts the
+  negative-array-size typedef, nor that `<stddef.h>` (for `offsetof`) exists in
+  the pret lib/include — `<stdint.h>`'s absence is the ruling, `<stddef.h>`'s
+  presence is inferred. If the first on-target build rejects `<stddef.h>`,
+  `compat.h` is where `size_t`/`offsetof` must be provided.
+- **`record_binding.h` and `trade_producer.h` are still unconverted for mwcc**
+  (three `_Static_assert`s, two `_Alignas`): C11 spellings mwccarm rejects.
+- **The title-private region's layout is undefined.** Only its extent is pinned;
+  a title card owns the 64 bytes and must document them.

@@ -402,6 +402,7 @@ GEN3_ONLY = {
 }
 NDS_ONLY = {
     "SLINK_MAX_RECORD", "SLINK_NDS_STAGE_LAYOUT", "SLINK_RESERVED_OFFSET", "SLINK_SAVE_PENDING",
+    "SLINK_TITLE_OFFSET", "SLINK_TITLE_SIZE",
     "SLINK_SAVEPOLL_PENDING", "SLINK_SAVEPOLL_OK", "SLINK_SAVEPOLL_FAIL", "SLINK_STAGE_RAW_ENCRYPTED",
 }
 # Shared names whose VALUE deliberately differs. Anything else that drifts fails the identical-subset test.
@@ -874,6 +875,55 @@ static int sc_stagelen(int var) {
   return 0;
 }
 
+/* The mailbox is shared with the sound and panel producers. A command that is not
+ * ours must survive a trade visit completely untouched -- not acked, not cleared,
+ * no status/reason/ack_seq invented -- while the polls still run, so an in-flight
+ * save keeps advancing and the watchdog still fires. */
+static int sc_foreign(int var) {
+  static const uint16_t foreign_op[4] = { SLINK_OP_PLAY_SE, SLINK_OP_SHOW_INFO,
+                                         SLINK_OP_PLAY_FANFARE, SLINK_OP_PLAY_SE };
+  if (var<0 || var>3) return 2;
+  uint16_t op = foreign_op[var];
+  reset();
+  if (var==3) {                        /* nothing of ours in flight at all */
+    m.session_epoch=7;m.seq=4;m.opcode=op;m.args[0]=0x2d;m.args[1]=0;
+    svc();
+    CHECK(m.opcode==op && m.seq==4 && !m.ack_seq && !m.status && !m.reason);
+    CHECK(m.producer_phase==SLINK_PHASE_IDLE && s.phase==TP_IDLE);
+    svc();
+    CHECK(m.opcode==op && m.seq==4 && !m.ack_seq && !m.status && !m.reason);
+    return 0;
+  }
+  e.save_timeout_frames=50u;frame_step=0;frame=0;   /* deterministic watchdog timeline */
+  if (prep()) return 1;
+  scene(2);CHECK(starts==1);
+  CHECK(slink_trade_commit_entered(&s,&w,0,&e));
+  script_n=3;for (int i=0;i<3;i++) script[i]=SP_PEND;   /* this save never completes */
+  scene_result=1;svc();
+  CHECK(begins==1 && polls==1);
+  if (still_saving()) return 1;
+  uint16_t ack=m.ack_seq,st=m.status;      /* last ACK is the PREPARE's; SCENE is still BUSY */
+  CHECK(ack==1 && st==SLINK_ST_BUSY && !m.reason && m.opcode==SLINK_OP_TRADE_SCENE);
+  for (unsigned i=0;i<3u;i++) {            /* elapsed 10, 20, 30: inside the bound */
+    frame=10u*(i+1u);m.seq=4;m.opcode=op;m.args[0]=0x2d;m.args[1]=0;svc();
+    CHECK(m.opcode==op && m.seq==4 && m.ack_seq==ack && m.status==st && !m.reason);
+    CHECK(m.args[0]==0x2d && !m.args[1]);
+    CHECK(polls==(int)i+2 && s.phase==TP_SCENE && m.producer_phase==SLINK_PHASE_SCENE);
+    if (still_saving()) return 1;
+  }
+  frame=50u;m.seq=4;m.opcode=op;svc();      /* elapsed == bound: still PENDING */
+  CHECK(polls==5 && m.opcode==op && m.seq==4 && m.ack_seq==ack && m.status==st);
+  if (still_saving()) return 1;
+  frame=51u;m.seq=4;m.opcode=op;svc();      /* elapsed > bound: the native watchdog fires */
+  CHECK(polls==6 && w.final_result==SLINK_TRADE_UNCERTAIN && w.save_status==SLINK_SAVE_FAILED);
+  CHECK(!(w.milestones&(1u<<SLINK_POST_SAVE_OK)) && s.phase==TP_UNCERTAIN
+      && m.producer_phase==SLINK_PHASE_UNCERTAIN);
+  CHECK(!slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  /* tp_ack cannot even see it: the finished save acks the SCENE sequence, not 4 */
+  CHECK(m.opcode==op && m.seq==4 && m.ack_seq==ack && m.status==st && !m.reason);
+  return 0;
+}
+
 int main(int argc,char **argv) {
   int sc=argc>1?atoi(argv[1]):1,var=argc>2?atoi(argv[2]):0;
   switch (sc) {
@@ -887,6 +937,7 @@ int main(int argc,char **argv) {
     case 8: return sc_badbinding(var);
     case 9: return sc_mutate(var);
     case 10: return sc_stagelen(var);
+    case 11: return sc_foreign(var);
   }
   return 99;
 }
@@ -904,6 +955,8 @@ SCENARIOS = (
     + [(f"badbinding{v}", 8, v) for v in range(5)]
     + [(f"mutates-input{v}", 9, v) for v in range(2)]
     + [(f"stage-len-arm{v}", 10, v) for v in range(2)]
+    + [(f"foreign-{n}", 11, v) for v, n in enumerate(
+        ["play-se", "show-info", "play-fanfare", "play-se-idle"])]
 )
 
 
@@ -920,6 +973,10 @@ def test_pk45_lifecycle(pk45, binding, name, sc, var):
 
 
 TP = "trade_producer.h"
+# The mailbox-ownership gate in tp_service. Deleting it restores the unconditional
+# tp_ack(m,seq,0,2) catch-all that consumed every opcode the trade producer does not own.
+FOREIGN_GATE = ("    if (op!=SLINK_OP_TRADE_PREPARE && op!=SLINK_OP_TRADE_SCENE\n"
+                "        && op!=SLINK_OP_TRADE_WITHDRAW && op!=SLINK_OP_TRADE_STATUS) return;")
 HARNESS = "<harness>"  # edit target is the PK45 scenario C source, not a header
 MUTANTS = {
     "truncate-to-100": ((1, 0), [(TP, "i < len ? st->record[i] : 0", "i < 100 ? st->record[i] : 0")]),
@@ -942,6 +999,8 @@ MUTANTS = {
                                                     "static int dec_read(void *p,const uint8_t *r,uint16_t n,uint16_t off,uint32_t *out); "
                                                     "static int received(void *p,unsigned slot,uint32_t *pid,uint32_t *ot) { (void)p;(void)slot;(void)recv_pid;(void)recv_ot; uint32_t ot_; "
                                                     "  if (!recv_ok || !dec_read(0,last_rec,B->party_len,B->otid_logical_off,&ot_)) return 0; memcpy(pid,last_rec,4);*ot=ot_;return 1; }")]),
+    # sound/panel opcodes posted while a trade save is in flight must survive the visit
+    "ack-foreign-opcode": ((11, 0), [(TP, FOREIGN_GATE, "")]),
 }
 
 
@@ -975,7 +1034,7 @@ def test_producer_falsifiers_fail_on_known_bad_mutants(tmp_path, mutation):
 
 # --------------------------------------------------------------------------- (c) source guards
 
-HEADERS = ["abi.h", "record_binding.h", "trade_producer.h", "panel_producer.h", "sound_producer.h"]
+HEADERS = ["abi.h", "compat.h", "record_binding.h", "trade_producer.h", "panel_producer.h", "sound_producer.h"]
 
 
 def _strip_comments(text):
@@ -996,7 +1055,7 @@ def test_nds_headers_have_no_gba_addresses_and_do_not_include_gen3(header):
 def test_readme_exists_and_static_assert_blocks_are_pinned():
     assert (COMMON / "README.md").exists()
     # exact counts: adding or dropping an ABI/record invariant is a deliberate, reviewed change
-    pinned = {"abi.h": 26, "record_binding.h": 3, "trade_producer.h": 0, "panel_producer.h": 0, "sound_producer.h": 0}
+    pinned = {"abi.h": 0, "compat.h": 1, "record_binding.h": 3, "trade_producer.h": 0, "panel_producer.h": 0, "sound_producer.h": 0}
     actual = {h: _strip_comments((COMMON / h).read_text()).count("_Static_assert(") for h in pinned}
     assert actual == pinned
 
