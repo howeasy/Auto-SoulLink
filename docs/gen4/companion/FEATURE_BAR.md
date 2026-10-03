@@ -41,7 +41,7 @@ Coordinated with the Gen 5 session (`DECISIONS_2026-10-01.md`): `patch/src/nds/c
 
 **Sound (item 2): feasible from source.**
 - Entry: `PlaySE(u16)` (`include/unk_02005D10.h:6`); the SE ids are flat `#define`s from 1500 (`include/constants/sndseq.h:498`).
-- Four dedicated SE handles exist (`include/sound.h:19-25`, in `sSoundWork` @0x02111958). The companion reserves one and polls it with `NNS_SndPlayerReadDriverTrackInfo`, the game's own pattern at `src/sound.c:123`.
+- Four dedicated SE handles exist (`include/sound.h:19-25`, in `sSoundWork` @0x02111958). ~~The companion reserves one~~ CORRECTED (C3 spec): no handle can be reserved. `PlaySE` picks it from the sound-archive data (`GF_GetPlayerNoBySeq` -> `GF_GetSndHandleByPlayerNo`), so the companion resolves it at runtime and polls it with `NNS_SndPlayerReadDriverTrackInfo` (`src/sound.c:123`).
 - Service tick: the field task frame (FieldSystem.taskman +0x10), which is PHYSICAL-proven to run.
 - Carry over the GB hold and reset-latch discipline.
 - Open: which SEQ_SE ids map to success/failure/boo/notify (a content choice).
@@ -206,7 +206,7 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
   - It drains every frame in `NitroMain` right after the active app (`src/main.c:109-111`). It is app-independent, so the field, START-menu apps and battle are all covered by one site. This is not Gen 1's two-site problem.
   - The queues are arena-allocated (`src/system.c:123-126`), so the task survives app and overlay switches.
   - It does NOT survive a soft reset (`DoSoftReset`, called at `src/main.c:103` -> `OS_ResetSystem` at `:182`). Register it on every boot.
-- **The `if (sub_02036144())` guard** (`main.c:106`) is the wireless/link frame-sync gate (`asm/unk_02035900.s`).
+- **The `if (sub_02036144())` guard** (`main.c:106`) is the wireless/link frame-sync routine (`asm/unk_02035900.s`); it returns 1 on every path (`:1139-1144`), so the main queue drains every iteration (C3 spec, verified).
   - With no comm session (`[_021D4140+8] == 0`) it branches straight out, so single-player always drains.
   - Insurance, if a link state matters: `gSystem.vwaitTaskQueue`, which drains outside the guard at `main.c:131`.
 - **Forbidden:** the vblank queue (IRQ context, `src/system.c:20-25`) and `gSystem.vBlankIntr` (`main.c:127-128`). Never `PlaySE` there.
