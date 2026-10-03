@@ -1,0 +1,55 @@
+# gen3_final_cut row=frlgc_faint_cmd_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario faint_cmd_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:47:54 cpu=26% emuhawk=1 python=8
+start_utc=2026-10-03T07:47:52Z tracked_clean_before=True
+
+========== scenario: faint_cmd_gen3 ==========
+[duo] faint_cmd_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=51777 http=51778 data=F:\slink-work\tmp\duo_c6v84q1y
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_c6v84q1y path=F:\slink-work\tmp\duo_c6v84q1y\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_c6v84q1y path=F:\slink-work\tmp\duo_c6v84q1y\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': '263620B6:99DE0D8A'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint 263620B6:99DE0D8A -> force_faint B F6B6A64D:1C600D89; re-queued to A: ['memorialize', 'game_over']
+[duo] timing orchestrate 5.7s
+[duo] timing results 3.9s
+[duo] RESULT_LINE a: RESULT: PASS (memorialized 263620B6:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized F6B6A64D:1C600D89)
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:51777 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:51777 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=af4b3c055df7177fd9b752f84893cb1d81ad6e66367f0e8e4d1eeb70eeb32c99 file=af4b3c055df7177fd9b752f84893cb1d81ad6e66367f0e8e4d1eeb70eeb32c99 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=0a1472c07b717023fc79579a87317a3d9bcd2e9fe3d0e332e031a47094c44ec4 file=0a1472c07b717023fc79579a87317a3d9bcd2e9fe3d0e332e031a47094c44ec4 match=true saves=1 counter=3->4 rtc=normalized
+[duo] faint_cmd: 263620B6:99DE0D8A and F6B6A64D:1C600D89 saved once each in box 14; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: RX memorialize key=263620B6:99DE0D8A
+[duo] MARKER a: TX memorialize_done 263620B6:99DE0D8A {"box":13,"event":"memorialize_done","key":"263620B6:99DE0D8A","player":"a","seq":3}
+[duo] MARKER b: RX force_faint key=F6B6A64D:1C600D89
+[duo] MARKER b: FORCED_HP0 F6B6A64D:1C600D89 frame=913 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F6B6A64D:1C600D89
+[duo] MARKER b: TX memorialize_done F6B6A64D:1C600D89 {"box":13,"event":"memorialize_done","key":"F6B6A64D:1C600D89","player":"b","seq":3}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 913
+[duo] timing oracle 0.6s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+
+========== summary ==========
+  faint_cmd_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-03T07:48:07Z tracked_clean_after=True classification=pass

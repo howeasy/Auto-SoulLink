@@ -1,0 +1,74 @@
+# gen3_final_cut row=frlgc_save_then_write_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario save_then_write_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:12:38 cpu=65% emuhawk=1 python=11
+start_utc=2026-10-03T08:12:37Z tracked_clean_before=True
+
+========== scenario: save_then_write_gen3 ==========
+[duo] save_then_write_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=64522 http=64523 data=F:\slink-work\tmp\duo_gcsqmwov
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_gcsqmwov path=F:\slink-work\tmp\duo_gcsqmwov\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_gcsqmwov path=F:\slink-work\tmp\duo_gcsqmwov\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'box_mon', 'key': '263620B6:99DE0D8A'}
+[duo] queued for a: {'cmd': 'party_mon', 'key': '263620B6:99DE0D8A', 'stats': {'attack': 8, 'defense': 7, 'level': 4, 'maxHP': 17, 'pp1': 35, 'pp2': 0, 'pp3': 0, 'pp4': 0, 'spAtk': 8, 'spDef': 8, 'speed': 9}}
+[duo] timing orchestrate 13.1s
+[duo] timing results 8.6s
+[duo] RESULT_LINE a: RESULT: PASS (a keyed box_mon landed on an idle field after an in-game save; the save-dialog witness stayed false off SAVE; the probe was held at the overwrite prompt and the redrawn menu, and landed once B freed the field)
+[duo] RESULT_LINE b: RESULT: PASS (idle (save_then_write drives only A))
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:64522 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:64522 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=9f94aaa469cc65a8fc49028d831f8eb9fe463e927d907fea97397d5a74d9aaa4 file=9f94aaa469cc65a8fc49028d831f8eb9fe463e927d907fea97397d5a74d9aaa4 match=true saves=2 counter=4->6 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] save_then_write: 263620B6:99DE0D8A boxed by a keyed write on an idle field after an in-game save (stale sSaveDialogCB observed); saved twice
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_save_then_write_gen3_a_1_witness.bin bytes=131072 saves=1 frame=1764 counter=5
+[duo] MARKER a: SAVE_DISMISSAL save_then_write_1 by=a_press delay=55
+[duo] MARKER a: STALE_SAVE_DIALOG save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)
+[duo] MARKER a: WRITE_PROBE_READY 263620B6:99DE0D8A map=3.1 at=(24,39) frame=1985 tasks=[08079E0D,0806E811,0806E83D] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008AE,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: RX box_mon key=263620B6:99DE0D8A
+[duo] MARKER a: TX stats_cache 263620B6:99DE0D8A {"event":"stats_cache","key":"263620B6:99DE0D8A","player":"a","seq":53,"stats":{"attack":8,"defense":7,"level":4,"maxHP":17,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":9}}
+[duo] MARKER a: BOXED_OBSERVED 263620B6:99DE0D8A box=0:0
+[duo] MARKER a: WRITE_LANDED box_mon 263620B6:99DE0D8A map=3.1 at=(24,39) frame=2012 tasks=[08079E0D,0806E811,0806E83D] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_save_then_write_gen3_a_1_witness.bin bytes=131072 saves=2 frame=2803 counter=6
+[duo] MARKER a: SAVE_DISMISSAL save_then_write_2 by=a_press delay=47
+[duo] MARKER a: DIALOG_WITNESS_FALSE cursor=3 action=3 save_row=4 menu=open stale=0x0806F9E1
+[duo] MARKER a: CONTROL_LIVE dialog_witness 263620B6:99DE0D8A map=3.1 at=(24,39) frame=3001 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=3 cpu=[R15=0x080008B0,CPSR=0x0000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: RX party_mon key=263620B6:99DE0D8A
+[duo] MARKER a: CONTROL_REFUSED dialog_witness party_mon 263620B6:99DE0D8A clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=3.1 at=(24,39) frame=3632 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=3 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: SAVE_CANCEL_PROMPT 263620B6:99DE0D8A row=save prompt=overwrite
+[duo] MARKER a: CONTROL_LIVE save_prompt 263620B6:99DE0D8A map=3.1 at=(24,39) frame=4019 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_REFUSED save_prompt party_mon 263620B6:99DE0D8A clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=3.1 at=(24,39) frame=4619 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: SAVE_CANCEL_MENU_REDRAWN 263620B6:99DE0D8A cursor=4 sSaveDialogCB=0x0806F8DD
+[duo] MARKER a: CONTROL_LIVE save_cancel_menu 263620B6:99DE0D8A map=3.1 at=(24,39) frame=4635 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=4 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_REFUSED save_cancel_menu party_mon 263620B6:99DE0D8A clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=3.1 at=(24,39) frame=5235 tasks=[08079E0D,0806E811,0806E83D,0806F1F1] storage_state=-1 script_status=2 result=0 menu_cursor=4 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202934C,gSaveBlock1Ptr=0x02025564,gSaveBlock2Ptr=0x020245C0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_RELEASED save_cancel party_mon 263620B6:99DE0D8A
+[duo] MARKER a: TX sync_retrieve_done 263620B6:99DE0D8A {"event":"sync_retrieve_done","key":"263620B6:99DE0D8A","player":"a","seq":161}
+[duo] MARKER a: RETURNED_OBSERVED 263620B6:99DE0D8A slot=1
+[duo] MARKER a: SAVE_CANCEL_WRITE_FRAME 263620B6:99DE0D8A frame=5238 field_free=true start_menu_task=false
+[duo] MARKER a: CONTROL_SETTLED save_cancel party_mon 263620B6:99DE0D8A
+[duo] MARKER a: SAVE_COUNTER_UNCHANGED before=6 after=6
+[duo] MARKER a: SAVE_CANCEL_FIELD_FREE 263620B6:99DE0D8A
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] save_then_write_gen3: a=PASS b=PASS
+
+========== summary ==========
+  save_then_write_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-03T08:13:02Z tracked_clean_after=True classification=pass

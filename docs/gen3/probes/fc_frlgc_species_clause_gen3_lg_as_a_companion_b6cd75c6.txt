@@ -1,0 +1,47 @@
+# gen3_final_cut row=frlgc_species_clause_gen3_lg_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_lgfr --scenario species_clause_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:27:07 cpu=35% emuhawk=1 python=9
+start_utc=2026-10-03T08:27:06Z tracked_clean_before=True
+
+========== scenario: species_clause_gen3 ==========
+[duo] species_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b b=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=65373 http=65374 data=F:\slink-work\tmp\duo_qyozzr02
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_1_witness.bin, e2e_species_clause_gen3_a_attempt1_result.txt, e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_1_witness.bin, e2e_species_clause_gen3_b_attempt1_result.txt, e2e_species_clause_gen3_b_result.txt, e2e_species_clause_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_qyozzr02 path=F:\slink-work\tmp\duo_qyozzr02\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_qyozzr02 path=F:\slink-work\tmp\duo_qyozzr02\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 26.8s
+[duo] timing results 3.5s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player a -> 127.0.0.1:65373 (rom 55fb6e9b)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player b -> 127.0.0.1:65373 (rom 96df1dd0)
+[duo] SAVE_WITNESS_SHA256 inst=a site=e60fe3c6c432d847a8a2059a8b74071725cdc6a33d3559a60bec3d276aa42bac file=e60fe3c6c432d847a8a2059a8b74071725cdc6a33d3559a60bec3d276aa42bac match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=2ca928a92a6c9c2545d72e2e662f0169ef97ca8640ac85e1a76f89a89989ed21 file=2ca928a92a6c9c2545d72e2e662f0169ef97ca8640ac85e1a76f89a89989ed21 match=true saves=1 counter=7->8 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=b native_grant=0
+[duo] link: 748A06A4:1C600D89 <-> EA6A1DF3:99DE0D8A alive on route_1 and saved once in each party
+[duo] species: alive pair after 1 native rerolls
+[duo] timing oracle 0.8s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] species_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  species_clause_gen3: PASS (attempt 1 of 8)
+exit=0 end_utc=2026-10-03T08:27:40Z tracked_clean_after=True classification=pass

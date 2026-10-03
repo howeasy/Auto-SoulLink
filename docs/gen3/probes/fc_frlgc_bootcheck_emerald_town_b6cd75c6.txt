@@ -1,0 +1,24 @@
+# gen3_final_cut row=frlgc_bootcheck_emerald_town item=FRLGC-BOOT cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_fixtures.py boot-check --rom patch/build/slink_Emerald.gba --fixture tests/fixtures/gen3/emerald_town.sav --title emerald --saveram-name 'gen3 slink Emerald.SaveRAM' --companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:47:27 cpu=40% emuhawk=1 python=8
+start_utc=2026-10-03T07:47:26Z tracked_clean_before=True
+seeded F:\slink-work\lanes\gen3\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_emerald_town\gen3 slink Emerald.SaveRAM from tests\fixtures\gen3\emerald_town.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_slink_Emerald.gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (4s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+emerald_fixture_problems(town): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_town.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0 end_utc=2026-10-03T07:47:32Z tracked_clean_after=True classification=pass

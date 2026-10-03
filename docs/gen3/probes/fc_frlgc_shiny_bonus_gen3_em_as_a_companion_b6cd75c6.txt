@@ -1,0 +1,50 @@
+# gen3_final_cut row=frlgc_shiny_bonus_gen3_em_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario shiny_bonus_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:40:00 cpu=43% emuhawk=0 python=9
+start_utc=2026-10-03T08:39:58Z tracked_clean_before=True
+
+========== scenario: shiny_bonus_gen3 ==========
+[duo] shiny_bonus_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=64961 http=64962 data=F:\slink-work\tmp\duo_6_q0hp0z
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for shiny_bonus_gen3: e2e_shiny_bonus_gen3_a_1_witness.bin, e2e_shiny_bonus_gen3_a_attempt1_result.txt, e2e_shiny_bonus_gen3_a_result.txt, e2e_shiny_bonus_gen3_b_1_witness.bin, e2e_shiny_bonus_gen3_b_attempt1_result.txt, e2e_shiny_bonus_gen3_b_result.txt, e2e_shiny_bonus_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_6_q0hp0z path=F:\slink-work\tmp\duo_6_q0hp0z\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_6_q0hp0z path=F:\slink-work\tmp\duo_6_q0hp0z\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=B0ED4C92:20250925 b=B0ED4C92:DFDAF6DA
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): B0ED4C92:20250925 <-> B0ED4C92:DFDAF6DA on route_102, alive
+[duo] SYNTH_SHINY_SETUP {"after": "ae01a92825092520d1cfccc7cac6bfff00000202bfc7bfccffffff00ff890000aa08dd088b088c08a8208c08a9098c08cb088c088b4e8c088b088c088b088c088b088c088b190829aac0ef178b088c080000000004ff1100110008000800060007000700", "after_key": "28A901AE:20250925", "after_sha256": "ef2422daff40ceca58fbae134e3f05a783dcd671b390c44c445d4aa4733fcb16", "before": "aee1e15025092520d1cfccc7cac6bfff00000202bfc7bfccffffff00ff8900008be8c4708be8c4708be8c470aae895708be8c470a8c0c470a9e9c470cbe8c4708baec4708bf94051aa20a76f8be8c4700000000004ff1100110008000800060007000700", "before_key": "50E1E1AE:20250925", "before_sha256": "8c20d13cdb29d90223b926f0256e4ff5d02f213c1fdcf6ae6193810c251676cf", "label": "SYNTH wild PID before native capture", "level": 4, "rr": false, "species": 290}
+[duo] SHINY_PENDING {"area_states": {"route_102": "linked"}, "bonus_keys": {"a": ["28A901AE:20250925"], "b": []}, "links": [{"a": {"is_shiny": false, "key": "B0ED4C92:20250925", "level": 3, "nickname": "LOTAD", "species": 295}, "area_id": "route_102", "b": {"is_shiny": false, "key": "B0ED4C92:DFDAF6DA", "level": 3, "nickname": "LOTAD", "species": 295}, "cause": "", "encounter_a": null, "encounter_b": null, "initiating_player": "", "killed_at": null, "killer": null, "status": "alive"}], "pending_bonus": {"a": [], "b": ["28A901AE:20250925"]}}
+[duo] timing orchestrate 58.4s
+[duo] timing results 2.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:64961 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:64961 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=68d38711aae7a4260b20f19837c16c713c85e805783288096b2f064c758a78c4 file=68d38711aae7a4260b20f19837c16c713c85e805783288096b2f064c758a78c4 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=c274bd22af1c5538f6e42e889eae144c52deb9987787ad3d6d5a72af9cba625e file=c274bd22af1c5538f6e42e889eae144c52deb9987787ad3d6d5a72af9cba625e match=true saves=1 counter=2->3 rtc=normalized
+[duo] SHINY_BALLS side=a baseline=20 final=11 throws=9
+[duo] SHINY_BALLS side=b baseline=20 final=18 throws=2
+[duo] shiny exception: native catch bypassed linked area; next native partner catch formed and saved the bonus pair
+[duo] timing oracle 1.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] shiny_bonus_gen3: a=PASS b=PASS
+
+========== summary ==========
+  shiny_bonus_gen3: PASS (attempt 1 of 8)
+exit=0 end_utc=2026-10-03T08:41:05Z tracked_clean_after=True classification=pass

@@ -1,0 +1,13 @@
+# gen3_final_cut row=frlgc_zip_check item=FRLGC-ZIP cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/check_release_zip.py F:/slink-work/lanes/gen3/gen3-lane-clean/dist/SLink-player-g4-b6cd75c6.zip --rev b6cd75c670eef0911e56c8f056649dcbd192d31a   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5 rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:43:20 cpu=46% emuhawk=1 python=11
+start_utc=2026-10-03T08:43:19Z tracked_clean_before=True
+check_release_zip: SLink-player-g4-b6cd75c6.zip  rev=b6cd75c670eef0911e56c8f056649dcbd192d31a  members=182  mode=manifest
+  note: prefix 'SLink-player-g4-b6cd75c6/' stripped from every member
+PASS: 182 members, all blobs equal, no dev-only paths, 23/23 closure files present
+exit=0 end_utc=2026-10-03T08:43:25Z tracked_clean_after=True classification=pass

@@ -1,0 +1,42 @@
+# gen3_final_cut row=frlgc_zip_boot_leafgreen item=FRLGC-ZIP cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_final_cut.py zip-boot --zip F:/slink-work/lanes/gen3/gen3-lane-clean/dist/SLink-player-g4-b6cd75c6.zip --lane F:/slink-work/lanes/gen3/gen3-lane-clean --title leafgreen_companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:43:38 cpu=63% emuhawk=1 python=11
+start_utc=2026-10-03T08:43:36Z tracked_clean_before=True
+zip=F:/slink-work/lanes/gen3/gen3-lane-clean/dist/SLink-player-g4-b6cd75c6.zip
+extract=F:\slink-work\tmp\gen3\slink_zipboot_9xpe4mt_\extract entry=F:\slink-work\tmp\gen3\slink_zipboot_9xpe4mt_\extract\SLink-player-g4-b6cd75c6\lua\slink.lua
+fixture=F:/slink-work/lanes/gen3/gen3-lane-clean\tests\fixtures\gen3\leafgreen_party_town.sav
+server: python -m server.server --port 50253 --http-port 50254 (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua slink_LeafGreen.gba  (cwd=F:\slink-work\tmp\gen3\slink_zipboot_9xpe4mt_)
+--- F:\slink-work\tmp\gen3\slink_zipboot_9xpe4mt_\extract\SLink-player-g4-b6cd75c6\slink_lua.log ---
+=== SLink Lua boot Sat Oct  3 04:43:45 2026 ===
+[SLink] Console tee -> F:/slink-work/tmp/gen3/slink_zipboot_9xpe4mt_/extract/SLink-player-g4-b6cd75c6/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:50253 (non-blocking)…
+[SLink-gen3] gen3_frlg/leafgreen (companion by hash) player a -> 127.0.0.1:50253 (rom 55fb6e9b)
+[SLink] TCP connected to 127.0.0.1:50253
+[SLink-gen3] baseline(hello): boxes ok=true n=0 gen=1 party=2
+[SLink-gen3] trade journal binding refused: server run identity or trainer unavailable
+[SLink-gen3] unhandled command dead_keys
+[SLink-gen3] writes ENABLED
+
+--- server log ---
+2026-10-03 04:43:39,425 [INFO] Logging to F:\slink-work\tmp\gen3\slink_zipboot_9xpe4mt_\data\slink.log
+2026-10-03 04:43:39,427 [INFO] SLink TCP server listening on ('127.0.0.1', 50253)
+2026-10-03 04:43:39,433 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-10-03 04:43:39,433 [INFO] SLink status page at http://127.0.0.1:50254/
+2026-10-03 04:43:45,696 [INFO] Client connected: ('127.0.0.1', 50347)
+2026-10-03 04:43:45,941 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-10-03 04:43:45,941 [INFO] [a] hello rom=leafgreen area='viridian_city' party=2
+2026-10-03 04:43:45,942 [INFO] [a] Identity locked: MAX (OT 47605696)
+2026-10-03 04:43:45,945 [INFO] Adapter switched to gen3_frlge (rom_type=leafgreen)
+2026-10-03 04:43:45,946 [INFO] [a] route leafgreen -> gen3_frlge (production)
+2026-10-03 04:43:45,946 [INFO] Committed ROM type 'leafgreen' for this run
+2026-10-03 04:43:45,946 [INFO] Committed trainer name 'MAX' for player a
+2026-10-03 04:43:47,783 [INFO] Client disconnected: ('127.0.0.1', 50347)
+
+RESULT: PASS the extracted zip booted leafgreen_companion on the new client
+exit=0 end_utc=2026-10-03T08:43:48Z tracked_clean_after=True classification=pass
