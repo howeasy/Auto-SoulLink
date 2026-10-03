@@ -1010,16 +1010,7 @@ class BridgePlanner:
             errand = self._pokegear_errand(position)
             if errand:
                 return errand
-            route = plan_route(self.world, position, wild_land_day(Path(self.pret)), self.game)
-            self.gate = next(
-                (
-                    (position["map"], e["x"])
-                    for e in route.get("soft_events", ())
-                    if any("T20_002" in sid for sid in e["scriptIds"])
-                ),
-                None,
-            )
-            return route
+            return self._track_gate(position, plan_route(self.world, position, wild_land_day(Path(self.pret)), self.game))
         if self.synth is None:
             raise RomAbsent("OPEN PC bridge requires a disclosed SYNTH party2 input")
         if self.pc is None:
@@ -1029,7 +1020,22 @@ class BridgePlanner:
                  "synth": self.synth, "profile": pack_profile_slice(self.game)}
         if position["map"] == self.pc.house_id:
             return {**plan_pc(self.pc, position, self.game), **extra}
-        return {**plan_errand(self.world, self.pc, "enter", position, self.game), **extra}
+        errand = self._pokegear_errand(position)  # the walk to Cherrygrove crosses the same gate
+        if errand:
+            return {**errand, **extra}
+        return {**self._track_gate(position, plan_errand(self.world, self.pc, "enter", position, self.game)), **extra}
+
+    def _track_gate(self, position, plan):
+        """Remember the T20_002 coord event this plan crosses (the Pokegear gate), else None."""
+        self.gate = next(
+            (
+                (position["map"], e["x"])
+                for e in plan.get("soft_events", ())
+                if any("T20_002" in sid for sid in e["scriptIds"])
+            ),
+            None,
+        )
+        return plan
 
 
 SYNTH_SCHEMA = "gen4-synth-v1"

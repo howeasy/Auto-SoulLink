@@ -1113,6 +1113,31 @@ def test_bridge_errand_needs_the_return_to_the_same_map(monkeypatch):
     assert seen and seen[0]["map"] == 9
 
 
+def test_pc_bridge_runs_the_pokegear_errand_before_cherrygrove(monkeypatch):
+    # Codex cx-e759a0f4: the hge/SS party2 fixtures have no Pokegear, and the PC bridge walked to
+    # Cherrygrove without the errand, so New Bark would loop the PC case too.
+    from types import SimpleNamespace as NS
+    gear, pc = NS(name="pokegear", house_id=8, npc=(6, 7)), NS(name="cherrygrove_pc", house_id=20, npc=(3, 3))
+    monkeypatch.setattr(gr, "load_world", lambda *a: object())
+    monkeypatch.setattr(gr, "load_errand", lambda rom, pret, name, outer_id: gear if name == "pokegear" else pc)
+    monkeypatch.setattr(gr, "pack_legs", lambda game, legs: {"run_from_wild": {}})
+    monkeypatch.setattr(gr, "pack_ram", lambda game: {})
+    monkeypatch.setattr(gr, "pack_profile_slice", lambda game: {})
+    crossing = [{"x": 5, "y": 2, "scriptIds": [T20]}]
+    monkeypatch.setattr(gr, "plan_errand", lambda w, e, phase, start, game="HG": {
+        "kind": "errand", "phase": phase, "which": e.name, "soft_events": crossing if e is pc else []})
+    planner = gr.BridgePlanner("rom", "HG", synth={"kind": "party2"})
+    leg = lambda m, x, y: {"leg": "gen4_pc:reach_pc_terminal", "position": {"map": m, "x": x, "y": y, "dir": 1}}
+    first = planner.plan(leg(7, 7, 2))
+    assert (first["which"], first["phase"]) == ("cherrygrove_pc", "enter") and "synth" in first
+    walked_back = planner.plan(leg(7, 7, 2))  # T20_002 fired: no Pokegear
+    assert (walked_back["which"], walked_back["phase"]) == ("pokegear", "enter") and "synth" in walked_back
+    assert planner.plan(leg(8, 2, 2))["phase"] == "talk"
+    assert planner.plan(leg(8, 6, 6))["phase"] == "exit"  # beside Mom
+    after = planner.plan(leg(7, 4, 4))
+    assert (after["which"], after["phase"]) == ("cherrygrove_pc", "enter")
+
+
 def test_the_lua_pc_leg_retries_a_cursor_that_only_woke_up(tmp_path, monkeypatch):
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, wake_first=True)
     # first Right is swallowed: slot 0 is selected, cancelled with B, then Right+A picks slot 1
