@@ -60,6 +60,10 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .mk-connlost { margin: var(--space-2) var(--space-5) 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--c-pend); background: color-mix(in srgb, var(--c-pend) 12%, transparent); color: var(--c-txt); border-radius: 4px; font-size: var(--fs-sm); }
 .mk-connlost:empty { display: none; }
 body.conn-lost #content { opacity: .6; transition: opacity .3s; }
+.trade-resolve { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.trade-resolve-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; border: 0; font-size: var(--fs-sm); }
+.trade-resolve select { font: inherit; }
+.trade-resolve-out:empty { display: none; }
 .trade-last-note { margin-bottom: var(--space-3); font-size: var(--fs-sm); opacity: .75; }
 
 :root {

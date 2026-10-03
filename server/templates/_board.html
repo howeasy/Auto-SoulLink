@@ -136,7 +136,29 @@
       <span class="trade-problem-verdict">A: {{ tp.verdict.get('a') or 'awaiting' }} &middot; B: {{ tp.verdict.get('b') or 'awaiting' }}</span>
       {% if tp.problem %}<span class="trade-problem-text">{{ tp.problem }}</span>{% endif %}
       {% if status.trade_held %}<span class="trade-problem-text trade-problem-held">Waiting on this trade: {% for h in status.trade_held %}{{ h.player | upper }} {{ h.event }} {{ h.key }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-      <span class="trade-problem-hint">Resolve after checking both parties: POST /api/debug/resolve_trade {"token": "{{ tp.token }}", "action": "adopt", "commit" or "rollback"} (a side's known traded/none stands; name a contradicted side with "sides": {"a": "traded"|"none"})</span>
+      {# Settles it through POST /api/debug/resolve_trade (trade-resolve.js). data-morph-keep: the
+         2 s refresh leaves the choices alone; a new token is a new form. #}
+      <form class="trade-resolve" id="trade-resolve-{{ tp.token }}" data-token="{{ tp.token }}" data-morph-keep>
+        <span class="trade-problem-text">Resolve by hand, after checking both parties (trade <code>{{ tp.token }}</code>). A side whose outcome is known keeps it; the action decides the sides the server cannot.</span>
+        <fieldset class="trade-resolve-row">
+          <legend class="sr-only">Action</legend>
+          <label><input type="radio" name="action" value="adopt"> Adopt <span class="mk-sub">— keep what each side reported</span></label>
+          <label><input type="radio" name="action" value="commit"> Commit <span class="mk-sub">— undecided sides traded</span></label>
+          <label><input type="radio" name="action" value="rollback"> Roll back <span class="mk-sub">— undecided sides did not</span></label>
+        </fieldset>
+        <div class="trade-resolve-row">
+          {% for pid in ('a', 'b') %}
+          <label>Player {{ pid | upper }}
+            <select name="side_{{ pid }}">
+              <option value="">as reported ({{ tp.verdict.get(pid) or 'awaiting' }})</option>
+              <option value="traded">traded</option>
+              <option value="none">did not trade</option>
+            </select></label>
+          {% endfor %}
+          <button type="submit" class="mk-btn">Resolve…</button>
+        </div>
+        <output class="trade-resolve-out trade-problem-text" role="status"></output>
+      </form>
     </div>
   {% elif status.trade_last %}
     {# Quiet by design: a settled trade is not a banner-worthy event once trade_problem
