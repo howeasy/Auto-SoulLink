@@ -148,14 +148,7 @@ ITEMS: list[Item] = [
     Item("18", "pc_boxes entries have 0-based box/slot; client memorial box index == adapter.memorial_box_index",
          "world", "test_world_pc_boxes_are_zero_based_and_the_memorial_box_matches_the_adapter"),
     Item("19", "safe is sent on the first overworld frame after a battle", "world",
-         "test_open_gen4_never_sends_safe_because_the_driver_never_arms_pending_safe",
-         open="GAP (not yet implemented): lua/core/session.lua:451-453 emits `safe` only when the "
-              "DRIVER sets state.pending_safe ('set it on battle end', session.lua:14). The string "
-              "`pending_safe` occurs NOWHERE under lua/gen4/, so the Gen 4 client never arms it and "
-              "never sends a `safe` line. Item 19 is therefore NOT satisfied today. The conformance "
-              "suite pins the current behaviour as a named-OPEN "
-              "(test_open_gen4_never_sends_safe_because_the_driver_never_arms_pending_safe) rather "
-              "than a green test that would be a silent pass."),
+         "test_world_safe_is_sent_exactly_once_per_battle_end"),
 
     # -- encounter events (world) --
     Item("20", "area_enter{area_id, loc_name} fires on map change; area_id is a known id or \"\"", "world",

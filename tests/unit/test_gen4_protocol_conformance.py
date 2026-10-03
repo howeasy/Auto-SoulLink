@@ -240,25 +240,20 @@ def test_world_pc_boxes_are_zero_based_and_the_memorial_box_matches_the_adapter(
 
 
 @world_item("19")
-def test_open_gen4_never_sends_safe_because_the_driver_never_arms_pending_safe():
-    """OPEN / GAP (docs/protocol.md §9 item 19): the Gen 4 client never sends `safe`.
-
-    lua/core/session.lua:451-453 emits `safe` only when the DRIVER sets state.pending_safe
-    ("set it on battle end", session.lua:14), and the token `pending_safe` occurs NOWHERE under
-    lua/gen4/. So item 19 is NOT satisfied today.
-
-    This test pins the CURRENT behaviour on purpose: it asserts `safe` is NOT sent, so the gap is a
-    named, checkable OPEN instead of a missing assertion. When the Gen 4 driver is wired to arm
-    pending_safe on battle end, THIS test must be inverted to require a `safe` line (and the map row
-    for item 19 drops its `open` note).
-    """
-    w = ready()
-    w.enter_battle()
-    w.advance(6)
+@pytest.mark.parametrize("title", TITLES)
+def test_world_safe_is_sent_exactly_once_per_battle_end(title):
+    """Item 19: the production driver arms the core's wire event after each debounced end."""
+    w = ready(title)
     assert w.events("safe") == []
-    w.leave_battle()
-    w.advance(20)
-    assert w.events("safe") == [], "OPEN resolved: the Gen 4 driver now arms pending_safe; invert this test"
+    for ended in (1, 2):
+        w.enter_battle()
+        w.advance(6)
+        assert len(w.events("safe")) == ended - 1
+        w.leave_battle()
+        w.advance(6)
+        assert len(w.events("safe")) == ended
+        w.advance(20)
+        assert len(w.events("safe")) == ended
 
 
 @world_item("25")
