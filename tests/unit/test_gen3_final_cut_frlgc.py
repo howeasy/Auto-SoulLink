@@ -321,3 +321,19 @@ def test_companion_check_composes_the_real_staged_roms_when_the_dumps_are_reacha
                 shutil.copyfile(os.path.join(fc.REPO, rel), os.path.join(lane, rel))
             shutil.copyfile(dump, os.path.join(lane, fc.ROOT_DUMPS[t]))
             assert fc.companion_check(lane, t) == 0, capsys.readouterr().out
+
+
+def test_zip_boot_refuses_a_companion_title_whose_staged_rom_is_not_the_pin(tmp_path, monkeypatch, capsys):
+    import zipfile
+    zpath = tmp_path / "z.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("SLink/lua/slink.lua", "-- entry")
+    lane = tmp_path / "lane"
+    (lane / "patch/build").mkdir(parents=True)
+    (lane / fc.COMPANION_ROMS["firered"]).write_bytes(b"not the pinned companion")
+    monkeypatch.setattr(fc, "rom_pins", lambda tree, **kw: dict(PINS))
+    boom = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: boom.append(a))
+    assert fc.zip_boot(str(zpath), str(lane), 5, "firered_companion") == 1
+    out = capsys.readouterr().out
+    assert "RESULT: FAIL" in out and "not the firered companion pin" in out and not boom       # nothing was launched

@@ -9,6 +9,7 @@
     python tools/gen3_final_cut.py --cut <sha> --title rr          # the G5 (Radical Red) plan
     python tools/gen3_final_cut.py --cut <sha> --title emerald     # the E4b (Emerald) plan
     python tools/gen3_final_cut.py --cut <sha> --title exp         # test-only expansion plan
+    python tools/gen3_final_cut.py --cut <sha> --title frlgc       # the PATCHED FR/LG/Emerald re-cut
 
 docs/gen3/G4_final_cut_runbook.md §0-§11 is the source of every row; §12 names the gaps this closes.
 --title rr (card G5-RUNNER-RR) is a separate, opt-in plan: the RR duo rows (every
@@ -31,6 +32,13 @@ EXTRACTED zip's own entry.lua before attempting the boot (emerald_admission_bloc
 SKIP-ALLOWED BLOCKED-EG4 (not a silent skip, not a PASS) if that particular zip predates EG4 --
 a real possibility when re-running an old --cut, just no longer the expected outcome on a current
 one. --title defaults to "frlg", so the default plan and its row ids are unchanged.
+--title frlgc is the PATCHED (companion) FR/LG/Emerald re-cut (owner decision: one cut on the companion ROMs, adding the
+clause / ball-gate / shiny rows): 65 rows, ALL always RUN (frlgc_ ids, never carried or cached), summary fc_SUMMARY_<cut8>_frlgc.txt.
+Per title a companion-check row proves the staged patch/build/slink_*.gba is the pinned composition of the clean dump and the
+shipped UPS; the duo rows are the frlg and emerald plans' duo rows run with e2e_duo.py --gen3-companion plus the species / gender /
+type clause, ball-gate, shiny-bonus and species-family rows on FR, LG and Emerald; a green duo or zip-boot receipt must carry the
+CLIENT's own `<title> (companion by hash)` admission line with the pinned rom prefix (companion_attempt_problem, in run_row and
+fc_check). Not in it: states_/tutorials_/checkpoint_ (the probe wrapper is wired to the clean dump), probe_gates, item6.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass
