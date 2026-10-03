@@ -904,6 +904,8 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     args = argparse.Namespace(game="gen3_frlg", lane="t", scenario=scenario, idle_jitter=0)
     run = duo.DuoRun(scenario, args, attempt=1)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"patch/build/gen3_{inst}.gba")
+    # a clean dump (the fake ROM path is no file): the cartridge-kind decision is tested in test_e2e_duo_gen3_companion_battery.py
+    monkeypatch.setattr(run, "_gen3_companion_cart", lambda inst, title: False)
     run.launch_instance("a")
     battery = Path(run._saveram_dir("a")) / "Pokemon - FireRed Version (USA).SaveRAM"
     assert battery.read_bytes() == fixture
