@@ -2039,6 +2039,40 @@ end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
 if EMERALD_ENGINE then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
+-- The Emerald companion's wandering trade NPC can stand on the Center route; a blocked step waits
+-- it out and never taps A (lua/tests/em_carrier_walk.lua has the why). ONE helper for the walk
+-- in (walk_to_pc) and the walk back out (walk_pc_to_grass).
+local EMW = load_or_die("/lua/tests/em_carrier_walk.lua", "em_carrier_walk.lua")
+local function em_carrier_tile()
+    local base = SP.OBJ_EVENTS_ADDR
+    if not base then return nil end
+    local g, n = G.map(cp)
+    for i = 1, 15 do
+        local o = base + i * 0x24
+        if (memory.read_u8(o) & 1) ~= 0 and memory.read_u8(o + 8) == EMW.CARRIER_LOCAL_ID
+           and memory.read_u8(o + 9) == n and memory.read_u8(o + 10) == g then
+            return memory.read_s16_le(o + 0x10) - 7, memory.read_s16_le(o + 0x12) - 7
+        end
+    end
+end
+local function em_center_walk(path_name, label)
+    local p = assert(SP.PATHS[path_name], "no PATHS entry " .. path_name)
+    EMW.new({
+        pos = function() return G.pos(cp) end,
+        map = function() return play.map(cp) end,
+        hold = function(dir, n) for _ = 1, n do joypad.set({ [dir] = true }); G.advance() end end,
+        idle = G.idle,
+        tap_b = function() G.tap("B", 3, 13) end,
+        quiet = function()
+            return play.on_field(cp) and G.pred_ok(cp, "script_context_status")
+                and G.pred_ok(cp, "field_controls_locked")
+        end,
+        carrier = em_carrier_tile,
+        wait_at = function(x, y) return play.wait_at(cp, x, y, 120) end,
+        finish = G.finish,
+    }).walk(p, label, path_name)
+end
+
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
     if EMERALD_ENGINE then
@@ -2047,7 +2081,7 @@ function ctx.walk_to_pc(label)
         local ok, why = play.enter_warp(cp, "Up", 20)
         if not ok then error(label .. ": the Oldale Center door never fired a warp: " .. tostring(why)) end
         SP.verify_destination(cp, label, { group = 2, num = 2, x = 7, y = 8 })
-        play.follow(cp, "em_oldale_center_to_pc", label)
+        em_center_walk("em_oldale_center_to_pc", label)
         G.tap("Up", 2, 13)
         return
     end
@@ -2065,7 +2099,7 @@ function ctx.walk_pc_to_grass(label)
     if EMERALD_ENGINE then
         -- E4c: the PC -> the Center door landing (7,8) -> out through Oldale's door; the exit
         -- lands on (6,17), the pinned `from` of the Route 103 walk ctx.hunt takes next
-        play.follow(cp, "em_pc_to_center_door", label)
+        em_center_walk("em_pc_to_center_door", label)
         local ok, why = play.enter_warp(cp, "Down", 20)
         if not ok then error(label .. ": the Oldale Center exit never fired a warp: " .. tostring(why)) end
         return
