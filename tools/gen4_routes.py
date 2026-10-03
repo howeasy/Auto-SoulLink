@@ -969,6 +969,32 @@ class BridgePlanner:
         self.rom, self.game, self.pret, self.synth = rom, game, pret, synth
         self.world = None
         self.pc = None
+        self.gate = None  # (map, x) of the T20_002 coord event the last battle plan crossed
+        self.pokegear = None  # the errand once the gate is live
+        self.phase = None  # the errand leg last sent: enter / talk / exit / done
+
+    def _pokegear_errand(self, position):
+        """The Pokegear errand leg for this request, or None to plan the normal route. The coord
+        event T20_002 walks a save with no Pokegear back east of it on every pass: a request that
+        returns to the same map still east of the event proves the gate is live (run_lane's
+        `--errand pokegear`, enter -> talk -> exit, each leg re-planned from the logged position)."""
+        here = self.pokegear is not None and position["map"] == self.pokegear.house_id
+        if self.phase is None:
+            if self.gate is None or position["map"] != self.gate[0] or position["x"] <= self.gate[1]:
+                return None
+            self.pokegear = load_errand(self.rom, self.pret, "pokegear", position["map"])
+            self.phase = "enter"
+        elif self.phase == "enter" and here:
+            self.phase = "talk"
+        elif self.phase == "talk" and here and (
+            abs(position["x"] - self.pokegear.npc[0]) + abs(position["y"] - self.pokegear.npc[1]) == 1
+        ):
+            self.phase = "exit"  # beside Mom: the talk leg ran
+        elif self.phase == "exit" and not here:
+            self.phase = "done"
+        if self.phase == "done":
+            return None
+        return plan_errand(self.world, self.pokegear, self.phase, position, self.game)
 
     def plan(self, request):
         name, position = request["leg"], request["position"]
@@ -977,7 +1003,19 @@ class BridgePlanner:
         if self.world is None:
             self.world = load_world(self.rom, self.pret)
         if name == "gen4_routes:battle_settled":
-            return plan_route(self.world, position, wild_land_day(Path(self.pret)), self.game)
+            errand = self._pokegear_errand(position)
+            if errand:
+                return errand
+            route = plan_route(self.world, position, wild_land_day(Path(self.pret)), self.game)
+            self.gate = next(
+                (
+                    (position["map"], e["x"])
+                    for e in route.get("soft_events", ())
+                    if any("T20_002" in sid for sid in e["scriptIds"])
+                ),
+                None,
+            )
+            return route
         if self.synth is None:
             raise RomAbsent("OPEN PC bridge requires a disclosed SYNTH party2 input")
         if self.pc is None:

@@ -1041,6 +1041,76 @@ def test_bridge_uses_observed_position_unknown_leg_fails_and_pc_needs_fixture(mo
     assert planner.plan(request) == route
 
 
+T20 = "_EV_scr_seq_T20_002 + 1"
+
+
+def _pokegear_bridge(monkeypatch, scripts):
+    """A New Bark strip (map 7): grass in the west, the coord event on the x=5 column, a door at
+    (4,3) into the house (map 8). The pokegear errand data is the stub from _errand()."""
+    outer = _world(
+        ["#########", "#gg.....#", "#.......#", "#########"],
+        soft={(5, 1), (5, 2)},
+        blocked={(4, 3)},
+        scripts=scripts,
+    )
+    _, err = _errand()
+    monkeypatch.setattr(gr, "load_world", lambda *a: outer)
+    monkeypatch.setattr(gr, "wild_land_day", lambda *a: {})
+    monkeypatch.setattr(gr, "load_errand", lambda rom, pret, name, outer_id: err)
+    return gr.BridgePlanner("rom", "HG")
+
+
+def _settled(map_, x, y):
+    return {"leg": "gen4_routes:battle_settled", "position": {"map": map_, "x": x, "y": y, "dir": 1}}
+
+
+def _ident(route):
+    return route.get("kind"), route.get("phase")
+
+
+def test_bridge_runs_the_pokegear_errand_when_the_t20_event_walked_the_player_back(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    first = planner.plan(_settled(7, 7, 1))
+    assert _ident(first) == (None, None) and first["soft_events"][0]["scriptIds"] == [T20]
+    # the event fired and walked the player back east of x=5: the save has no Pokegear
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")  # inside the house
+    assert _ident(planner.plan(_settled(8, 4, 2))) == ("errand", "exit")  # beside Mom: talked
+    assert _ident(planner.plan(_settled(7, 4, 2))) == (None, None)  # outside again: the route
+    assert _ident(planner.plan(_settled(7, 7, 2))) == (None, None)  # and the errand never repeats
+
+
+def test_bridge_errand_repeats_a_phase_until_the_position_advances(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    planner.plan(_settled(7, 7, 1))
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
+    assert _ident(planner.plan(_settled(7, 6, 2))) == ("errand", "enter")  # a script cut it short
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")  # not beside Mom yet
+    assert _ident(planner.plan(_settled(8, 4, 2))) == ("errand", "exit")
+    assert _ident(planner.plan(_settled(8, 3, 2))) == ("errand", "exit")  # still inside
+
+
+def test_bridge_never_runs_the_errand_unprompted(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    # a save with the Pokegear walks west past the event: it never returns east of it
+    assert _ident(planner.plan(_settled(7, 7, 1))) == (None, None)
+    assert _ident(planner.plan(_settled(7, 3, 1))) == (None, None)
+    # control: a crossed event that is not T20_002 is not the Pokegear gate
+    other = _pokegear_bridge(monkeypatch, {(5, 1): ("_EV_other",), (5, 2): ("_EV_other",)})
+    other.plan(_settled(7, 7, 1))
+    assert _ident(other.plan(_settled(7, 7, 2))) == (None, None)
+
+
+def test_bridge_errand_needs_the_return_to_the_same_map(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    planner.plan(_settled(7, 7, 1))
+    seen = []
+    monkeypatch.setattr(gr, "plan_route", lambda w, pos, *a: seen.append(pos) or {"soft_events": []})
+    assert planner.plan(_settled(9, 7, 2))["soft_events"] == []  # another map east of x=5: no errand
+    assert seen and seen[0]["map"] == 9
+
+
 def test_the_lua_pc_leg_retries_a_cursor_that_only_woke_up(tmp_path, monkeypatch):
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, wake_first=True)
     # first Right is swallowed: slot 0 is selected, cancelled with B, then Right+A picks slot 1
