@@ -29,6 +29,7 @@
 
 **NEXT SESSION, in order:**
 0. **Cut item 0:** replace the ~14 hardcoded `C:/slink/g4` paths (tools/gen4_fixtures.py `LANE_ROOT`, gen4_routes.py, test_gen4_{probe_gates,battle_faint,catch,perf,mailbox}.py, the packs' evidence strings, unit tests) with ONE lane root derived from `SLINK_WORK_ROOT` (`<root>/lanes/g4`). Keep the BizHawk MAX_PATH preflight. It rides the fight-budget cut, which stales receipts anyway. Then retire the junction.
+0b. **Re-import the shared NDS stack** at `claude/nds-shared-stack` 364203be (the docs + `residency_contract.lua` comment now describe Gen 4's real wiring; comment-only, but `lua/nds` is on the evidence surface, so it rides the next cut).
 1. Add per-turn enemy HP + frames-used telemetry to the fight leg; size the budget from the measurement (pack). Then re-run HG m/i.
 2. b on hge/SS: a battle route on those fixtures.
 3. n: PC withdraw leg (live Right+A trial, G2_PRODUCER_PLAN §6b) + a queued-event-at-close witness.
