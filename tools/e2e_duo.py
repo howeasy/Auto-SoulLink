@@ -515,7 +515,7 @@ SCENARIOS = {
     #                refused with stale_battle_id -- the C5-10 battle-identity gate (2dc1b750;
     #                docs/gen3/research/rival_swap_refresh_window.md §3.3: missing session /
     #                battle_id -> refuse, nothing written) answers before any refresh window.
-    #   native_absent REFUSAL PROOF (patch-first, owner 2026-10-02: the companion patch is
+    #   clean_rr_refused REFUSAL PROOF (patch-first, owner 2026-10-02: the companion patch is
     #                REQUIRED, a clean RR is refused at launch): B boots the CLEAN RR dump
     #                (rom_kind clean/companion split) and `expect_refused` makes the driver PASS
     #                B only on lua/gen3/run.lua's own "needs the SLink companion patch" refusal --
@@ -546,10 +546,10 @@ SCENARIOS = {
     "rival_swap_real_gen3": {"flags": ["--rival-team-swap"], "timeout": 900, "games": ("gen3_rr",),
                              "target": {"a": "rival", "b": "battle2"}, "frames": 900000,
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
-    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
+    "clean_rr_refused_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "expect_refused": ("b",),
-                           "no_save": ("a", "b"), "oracle": "assert_native_absent_gen3_saved"},
+                           "no_save": ("a", "b"), "oracle": "assert_clean_rr_refused_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
     # (slot 1 is the linked/traded mon); the oracle reads both flashes (PYDEC) + links.json.
@@ -595,7 +595,7 @@ SCENARIOS = {
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
     # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
     #   R2 clean   RETIRED 2026-10-03 (patch-first): a clean RR is refused at launch, so there is
-    #              no clean-side link row; native_absent_gen3 is the single refusal proof
+    #              no clean-side link row; clean_rr_refused_gen3 is the single refusal proof
     #              (docs/gen3/RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
     #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
     #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
@@ -1507,7 +1507,7 @@ GEN3_TITLES = {
     GEN3_EXP_TITLE: {"artifact": "pokeemerald.gba", "saveram": "gen3 pokeemerald.SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
-# for native_absent_gen3's refusal-proof side only (`rom_kind`: "clean"). It resolves through the
+# for clean_rr_refused_gen3's refusal-proof side only (`rom_kind`: "clean"). It resolves through the
 # ORDINARY repo-root/parents dump search (no `staged` entry), same as firered/leafgreen, because
 # unlike the companion build it genuinely is a raw dump to stage; its battery name is computed
 # from the staged path at resolve time (_gen3_battery_path), not pinned here, since stage_rom's
@@ -1525,8 +1525,55 @@ GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carr
 GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
 # lua/gen3/entry.lua Entry.admit_routed's refusal of a clean companion-required cartridge, as run.lua
 # logs it (console.log "[SLink-gen3] refused: <why>", teed with the "[client] " prefix by the driver).
-GEN3_CLEAN_REFUSAL_RE = (r"(?m)^\[client\] \[SLink-gen3\] refused: this radical_red cartridge needs the SLink "
-                         r"companion patch; prepare it through the Manager or /patcher$")
+def gen3_clean_refusal_re(title="radical_red"):
+    """The refusal line for a CLEAN `title` cartridge, as the driver tees it (`[client] ` prefix)."""
+    return (rf"(?m)^\[client\] \[SLink-gen3\] refused: this {re.escape(title)} cartridge needs the SLink "
+            r"companion patch; prepare it through the Manager or /patcher$")
+
+
+GEN3_CLEAN_REFUSAL_RE = gen3_clean_refusal_re()
+
+
+def gen3_refused_side_problems(label, text, title="radical_red"):
+    """A side that was REFUSED at launch (`expect_refused`): the companion-patch refusal line, the driver's
+    REFUSED_AT_LAUNCH and WRITES 0, and nothing a working client leaves behind."""
+    return gen3_receipt_problems(
+        label, text,
+        required=[gen3_clean_refusal_re(title), r"(?m)^REFUSED_AT_LAUNCH \[SLink-gen3\] refused: ", r"(?m)^WRITES 0$"],
+        forbidden=[r"(?m)^MYKEY ", r"(?m)^TX ", r"(?m)^RX ", r"(?m)^\[client\] \[SLink-gen3\] write ",
+                   r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player ", r"(?m)^SAVE_WITNESS_DUMP"])
+
+
+def gen3_refused_server_problems(status, side, links=()):
+    """The server never saw the refused side: it is not connected and nothing is linked."""
+    problems = []
+    if status is None:
+        problems.append(f"server: /api/status unavailable, cannot show {side} never connected")
+    elif (status.get("players") or {}).get(side, {}).get("connected"):
+        problems.append(f"server: {side} connected -- the refused cartridge reached the server")
+    if links:
+        problems.append(f"server: a persisted link exists: {list(links)}")
+    return problems
+
+
+def gen3_expect_refused_problems(cfg):
+    """`expect_refused` must be a collection of sides (a bare string would match by substring), and each
+    refused side must boot a cartridge the launcher refuses: rom_kind clean or rand."""
+    refused = cfg.get("expect_refused", ())
+    if not refused:
+        return []
+    if not isinstance(refused, (tuple, list, set, frozenset)):
+        return [f"expect_refused must be a tuple/set of sides, not {type(refused).__name__} {refused!r}"]
+    kinds, problems = cfg.get("rom_kind", "companion"), []
+    for side in sorted(refused, key=str):
+        if side not in ("a", "b"):
+            problems.append(f"expect_refused names {side!r}, not a side")
+            continue
+        kind = kinds.get(side, "companion") if isinstance(kinds, dict) else kinds
+        if kind not in ("clean", "rand"):
+            problems.append(f"expect_refused side {side} has rom_kind {kind!r}: only a clean/rand cartridge is "
+                            f"refused at launch")
+    return problems
 # duo_gen3_main.lua dump_witness: one per extension RAM copy, right after its save's DUMP line.
 GEN3_EXT_RE = re.compile(r"SAVE_WITNESS_EXT path=(\S+) bytes=(\d+) saves=(\d+)\s*$")
 
@@ -3155,9 +3202,13 @@ GEN3_RAND_SCENARIOS = GEN3_RAND_ADMISSION | {"link_gen3_rand", "trainer_panel_ge
 GEN3_RAND_PHASES = {
     "pair": {"a": ("a", "rand"), "b": ("b", "rand")},
     "wrong_rom": {"a": ("b", "rand")},
-    "mixed_kind": {"b": ("clean_b", "clean")},
+    # patch-first (owner 2026-10-02): a clean or randomized-clean cartridge never reaches a server verdict, it
+    # is refused at launch. Every randomized cartridge here carries the companion (kind `rand` on the wire,
+    # plus companion_abi), and the partner of the mixed-kind / clean-equivalent legs is the plain COMPANION
+    # (hello kind `companion`, which pairs as clean). The clean cartridge itself is the `clean_refused` leg.
+    "mixed_kind": {"b": ("companion_b", "companion")},
     "rules_changed": {"a": ("forbidden_a", "rand")},
-    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("clean_b", "clean")},
+    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("companion_b", "companion")},
 }
 # The randomized ROMs are never committed: point SLINK_GEN3_RAND_ROMS at a directory holding
 # {FireRed,LeafGreen}_allowed.gba, or Emerald_allowed.gba and Emerald_allowed_b.gba.
@@ -3306,6 +3357,17 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
                               for i in range(0, size, 11)}}
 
 
+def gen3_rand_equivalent_rom(patched, protected_spans):
+    """SYNTH 32(b) on the COMPANION cartridge: an unknown hash whose tables and engine/companion sites are
+    byte-identical to the published companion -- the last 0xFF padding byte outside every protected span is
+    changed to 0xFE."""
+    spans = [(s["offset"], s["offset"] + s["size"]) for s in protected_spans]
+    for at in range(len(patched) - 1, -1, -1):
+        if patched[at] == 0xFF and not any(lo <= at < hi for lo, hi in spans):
+            return patched[:at] + b"\xFE" + patched[at + 1:]
+    raise ValueError("no unused 0xFF padding byte outside the companion's protected spans")
+
+
 def gen3_rand_hello(text):
     rows = re.findall(r"(?m)^RAND_HELLO (.+)$", text or "")
     if len(rows) != 1:
@@ -3354,7 +3416,7 @@ def gen3_rand_admission_problems(phase, status, hellos, facts):
             if phase == "wrong_rom" and any(facts[p]["content_fingerprint"][:12] not in reason
                                              for p in ("a", "b")):
                 problems.append("wrong-ROM rejection lacks expected/reported fingerprints")
-            if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'clean'")):
+            if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'companion'")):
                 problems.append("mixed-kind rejection does not name both kinds")
             if player.get("party_keys") or player.get("trainer_name") or player.get("current_area_id"):
                 problems.append(f"{side}: rejected cartridge adopted party/identity/area")
@@ -3723,7 +3785,7 @@ class DuoRun:
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
     def _gen3_rom_kind(self, inst) -> str:
-        """native_absent_gen3's per-instance ROM selection (a scenario field, like `target`):
+        """clean_rr_refused_gen3's per-instance ROM selection (a scenario field, like `target`):
         "companion" (default, the ROM every other RR scenario boots) or "clean" (the raw,
         unpatched dump, GEN3_CLEAN_RR_ROM). Titles other than radical_red ignore this."""
         kind = self.cfg.get("rom_kind", "companion")
@@ -3732,7 +3794,28 @@ class DuoRun:
     def _gen3_expect_refused(self, inst) -> bool:
         """True when this side is a REFUSAL PROOF (scenario field `expect_refused`, like `rom_kind`):
         the driver passes it only on lua/gen3/run.lua's companion-patch refusal, never as a client."""
-        return inst in self.cfg.get("expect_refused", ())
+        problems = gen3_expect_refused_problems(self.cfg)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        leg = (getattr(self, "_rand_current", None) or {}).get(inst) or {}     # a randomized row's clean leg
+        return inst in set(self.cfg.get("expect_refused", ())) or bool(leg.get("expect_refused"))
+
+    def _gen3_launch_refusal_problems(self):
+        """Patch-first preflight: a side that would boot a CLEAN companion-required cartridge as a working
+        client dies at launch (Entry.admit_routed), so refuse the run up front and name why. The clean
+        FR/LG/Emerald plans land here; --gen3-companion, a companion rom_kind and `expect_refused` clear it."""
+        if not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
+            return []
+        problems = []
+        for inst in ("a", "b"):
+            title = self._gen3_title(inst)
+            clean = ((title in ("firered", "leafgreen", "emerald") and not getattr(self, "gen3_companion", False))
+                     or (title == "radical_red" and self._gen3_rom_kind(inst) == "clean"))
+            if clean and not self._gen3_expect_refused(inst):
+                problems.append(f"{inst}: this row would boot a clean {title} as a working client, but a clean {title} is "
+                                f"refused at launch (patch-first, owner 2026-10-02); run it with --gen3-companion, or "
+                                f"mark the side expect_refused")
+        return problems
 
     def _gen3_rom(self, inst) -> str:
         """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
@@ -3740,7 +3823,7 @@ class DuoRun:
         itself is not reachable from this checkout.
 
         radical_red's entry carries `staged` (ROM_REL, the already-built companion patch) for
-        the ordinary "companion" kind, bypassing the dump search below entirely; native_absent_
+        the ordinary "companion" kind, bypassing the dump search below entirely; clean_rr_refused_
         gen3's "clean" kind instead searches for the raw dump (GEN3_CLEAN_RR_ROM), same as
         firered/leafgreen.
         """
@@ -3859,7 +3942,12 @@ class DuoRun:
             # The seed is written before the launch: only a file the emulator wrote after it is an oracle input, under the
             # derived name alone (no 'any other *.SaveRAM' fallback: a stale file of another name must not be adopted).
             launched = self._launch_times.get(inst)
-            if not launched or not seeded.is_file() or seeded.stat().st_mtime < launched:
+            # A NO-WRITE half (`no_save`: the cartridge is expected to leave its battery as the harness seeded it, e.g.
+            # reconnect_gen3's A, active_end_gen3's idle B) may be an untouched seed: BizHawk need not flush an SRAM
+            # nothing wrote. Its caller compares the bytes against the seeded/expected ones, which is the real proof;
+            # every other half still needs a battery the emulator wrote after the launch.
+            no_write = inst in self.cfg.get("no_save", ())
+            if not seeded.is_file() or (not no_write and (not launched or seeded.stat().st_mtime < launched)):
                 raise RuntimeError(f"{inst}: companion cartridge has no fresh flushed battery at {rel_to_repo(seeded)} "
                                    f"(only the seed, or nothing, is there)")
             return seeded.read_bytes()
@@ -8898,8 +8986,31 @@ class DuoRun:
         stage = Path(BUILD) / f"rand_{self.lane}"
         stage.mkdir(parents=True, exist_ok=True)
         self._rand_facts, self._rand_inputs, self._rand_evidence = {}, {}, {}
-        self._rand_negative_saves = {}
+        self._rand_negative_saves, self._rand_refusals = {}, {}
         pins = rom_pins(REPO)
+        from tools.gen3_companions import overlay_randomized, published
+
+        pristine = {}
+
+        def pinned_clean(title):
+            # the pinned clean dump: the base every companion overlay is built on and the pret-table reference
+            if title not in pristine:
+                clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
+                              if (base / STAGED[title]).is_file()), None)
+                if clean is None:
+                    raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for the companion overlays")
+                pristine[title] = clean.read_bytes()
+                if hashlib.sha1(pristine[title]).hexdigest() != pins[title]:
+                    raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            return pristine[title]
+
+        def companion_of(title, randomized):
+            # patch-first: the launched cartridge is the randomized ROM WITH the companion overlay
+            try:
+                return overlay_randomized(title, pinned_clean(title), randomized)
+            except ValueError as exc:
+                raise RuntimeError(f"BLOCKED: companion overlay for {title}: {exc}") from exc
+
         for side in ("a", "b"):
             title = self.gcfg["sides"][side][0]
             if self.scenario == "link_gen3_rand":
@@ -8916,36 +9027,40 @@ class DuoRun:
                 raise RuntimeError(f"randomized input is wrong-title or clean: {path}")
             if gen3_rand_site_problems(raw, title):
                 raise RuntimeError(f"randomized input changes engine sites: {path}")
+            raw = companion_of(title, raw)
             facts = gen3_rand_rom_facts(raw, title)
             dest = stage / f"{side}_{title}.gba"
             dest.write_bytes(raw)
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
-            self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} "
+            self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} companion=overlay "
                              f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
                              f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:
             raise RuntimeError("randomized pair has identical fingerprints; swap control invalid")
         for side in ("a", "b"):
             title = self._rand_inputs[side]["title"]
-            clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
-                          if (base / STAGED[title]).is_file()), None)
-            if clean is None:
-                raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for clean-kind controls")
-            raw = clean.read_bytes()
-            if hashlib.sha1(raw).hexdigest() != pins[title]:
-                raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            raw = pinned_clean(title)
+            # the CLEAN cartridge: never launched as a client (it is refused at launch -- the clean_refused leg
+            # on B); its facts are the pret-table reference the clean-equivalent control is compared with
             clean_dest = stage / f"clean_{title}.gba"
             clean_dest.write_bytes(raw)
-            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True,
+            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True, "expect_refused": True,
                                                  "rom": clean_dest.relative_to(REPO).as_posix()}
             self._rand_facts[f"clean_{side}"] = gen3_rand_rom_facts(raw, title)
+            if side == "b":
+                # the plain COMPANION partner of the mixed-kind and clean-equivalent legs: the byte-pinned build
+                companion = self._gen3_companion_rom(title)
+                self._rand_inputs["companion_b"] = {"title": title, "rom": companion}
+                self._rand_facts["companion_b"] = gen3_rand_rom_facts(Path(REPO, companion).read_bytes(), title)
             if side == "a" and self.scenario in GEN3_RAND_ADMISSION:
-                # SYNTH 32(b): one unused trailing padding byte changes the ROM hash, while
-                # every shipped table and every engine/site anchor stays byte-identical.
-                if raw[-1] != 255:
-                    raise RuntimeError("clean-equivalent control needs trailing 0xFF padding")
-                equivalent = raw[:-1] + b"\xFE"
+                # SYNTH 32(b): one unused trailing padding byte of the COMPANION build changes the ROM hash,
+                # while every shipped table and every engine/companion site stays byte-identical.
+                companion_row = published(title, raw)
+                if companion_row is None:
+                    raise RuntimeError(f"BLOCKED: no published companion for {title} (patch/dist/gen3_companions.json)")
+                patched, row = companion_row
+                equivalent = gen3_rand_equivalent_rom(patched, row["protected_spans"])
                 dest = stage / f"equivalent_{title}.gba"
                 dest.write_bytes(equivalent)
                 self._rand_inputs["equivalent_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
@@ -8957,15 +9072,15 @@ class DuoRun:
                 if not widest.is_file():
                     raise RuntimeError(f"BLOCKED: rule-changed control absent: {widest}")
                 forbidden = widest.read_bytes()
+                if gen3_rand_site_problems(forbidden, title):
+                    raise RuntimeError("control changes engine sites, so cannot isolate table admission")
+                forbidden = companion_of(title, forbidden)
                 dest = stage / f"forbidden_{title}.gba"
                 dest.write_bytes(forbidden)
                 self._rand_inputs["forbidden_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
                 self._rand_facts["forbidden_a"] = gen3_rand_rom_facts(forbidden, title)
                 if self._rand_facts["forbidden_a"]["tables"]["evolutions"] == self._rand_facts["clean_a"]["tables"]["evolutions"]:
                     raise RuntimeError("rule-changed control has no changed evolution table")
-                for control in (equivalent, forbidden):
-                    if gen3_rand_site_problems(control, title):
-                        raise RuntimeError("control changes engine sites, so cannot isolate table admission")
                 self._pydec_note(f"RAND_32B_INPUT equivalent_sha1={hashlib.sha1(equivalent).hexdigest()} "
                                  f"clean_sha1={pins[title]} SYNTH=one_unused_tail_byte tables_identical=true "
                                  f"forbidden_sha1={hashlib.sha1(forbidden).hexdigest()}")
@@ -9018,6 +9133,23 @@ class DuoRun:
         if os.path.exists(self.go_files[side]):
             os.remove(self.go_files[side])
 
+    def _observe_gen3_rand_refused(self, side, phase):
+        """A CLEAN cartridge in a randomized run: the launcher refuses it before any hello, so the proof is the
+        companion-patch refusal on its own receipt (nothing sent, nothing written, no save) and a server that
+        never saw it -- not a server-side verdict."""
+        title = self._rand_inputs[f"clean_{side}"]["title"]
+        self.wait_for(f"{side}: clean {title} refused at launch",
+                      lambda: re.search(gen3_clean_refusal_re(title), self._read_receipt(side)), 120)
+        self.emu_by_inst[side].wait(timeout=45)
+        status = self._status()
+        problems = gen3_refused_side_problems(side, self._read_receipt(side), title)
+        problems += gen3_refused_server_problems(status, side, (status or {}).get("links"))
+        if problems:
+            raise RuntimeError(f"{phase}: " + "; ".join(problems))
+        self._rand_refusals[phase] = side
+        self._expected_exit.add(side)
+        self._pydec_note(f"RAND_REFUSED phase={phase} side={side} title={title} at=launch")
+
     def _gen3_rand_fresh_flushed(self, side):
         battery = Path(self._gen3_battery_path(side))
         launched = self._launch_times.get(side)
@@ -9042,10 +9174,16 @@ class DuoRun:
         self.wait_for("randomized A commits rand before clean B", lambda:
                       ((self._status() or {}).get("players") or {}).get("a", {}).get(
                           "admission_reason") == "cartridge matches the contract", 180)
-        self._rand_current["b"] = self._rand_inputs["clean_b"]
+        # a plain COMPANION partner in a randomized run: the server's mixed-kind refusal (a clean one cannot
+        # get that far, it is refused at launch -- the next leg)
+        self._rand_current["b"] = self._rand_inputs["companion_b"]
         self.launch_instance("b", phase="mixed_kind")
         self._observe_gen3_rand_admission("mixed_kind")
         self._finish_gen3_rand_negative("b", "mixed_kind")
+        self._rand_current["b"] = self._rand_inputs["clean_b"]
+        self._expected_exit.discard("b")
+        self.launch_instance("b", phase="clean_refused")
+        self._observe_gen3_rand_refused("b", "clean_refused")
         self._rand_current["b"] = self._rand_inputs["b"]
         self._expected_exit.discard("b")
         self.launch_instance("b")
@@ -9057,7 +9195,7 @@ class DuoRun:
         self._observe_gen3_rand_admission("rules_changed")
         self._finish_gen3_rand_negative("a", "rules_changed")
         Path(self.data_dir, "rom_contract.json").unlink()
-        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "clean_b", "clean_partner")):
+        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "companion_b", "companion_partner")):
             self._rand_current[side] = self._rand_inputs[source]
             self._expected_exit.discard(side)
             self.launch_instance(side, phase=phase)
@@ -9115,6 +9253,8 @@ class DuoRun:
 
     def assert_admit_randomized_frlg_saved(self, results):
         self._check_gen3_rand_pair()
+        if self._rand_refusals.get("clean_refused") != "b":
+            raise RuntimeError("randomized clean_refused live leg missing (the clean cartridge must be refused at launch)")
         problems = []
         for phase in ("wrong_rom", "mixed_kind"):
             if phase not in self._rand_evidence or phase not in self._rand_negative_saves:
@@ -9137,8 +9277,9 @@ class DuoRun:
                 problems.append(f"{side}: final admission client did not remain passive")
             problems += gen3_rand_saved_problems(self._gen3_rand_fresh_flushed(side), self._gen3_fixture_bytes(side),
                                                  unchanged_bytes=True)
-        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind/rule-changed ROMs refused; "
-                                  "32(b) declared-rand clean-equivalent pair effective=clean; flash unchanged")
+        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind(companion)/rule-changed ROMs refused; "
+                                  "a clean cartridge refused at launch; 32(b) declared-rand companion-equivalent pair "
+                                  "effective=clean; flash unchanged")
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
@@ -9217,7 +9358,7 @@ class DuoRun:
         at = codec._TITLE_PARTY_OFFSETS[codec._title(layout)][1] + slot * codec.PARTY_MON_SIZE
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
-    def orchestrate_native_absent_gen3(self):
+    def orchestrate_clean_rr_refused_gen3(self):
         """Clean-RR REFUSAL PROOF (patch-first, owner 2026-10-02). B boots the raw dump and the
         driver (`expect_refused`) must see lua/gen3/run.lua refuse it: no MYKEY, no hello. So only A
         is waited on for keys and a hello; B is waited on for its refusal line; then A is released
@@ -9985,8 +10126,8 @@ class DuoRun:
         self._gen3_raise(problems, "rival_swap NEGATIVE CONTROL (not qualification): the dummy, "
                                    "identity-less team was refused with stale_battle_id")
 
-    def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3: the clean-RR REFUSAL PROOF. B (raw dump): lua/gen3/run.lua's own
+    def assert_clean_rr_refused_gen3_saved(self, results):
+        """clean_rr_refused_gen3: the clean-RR REFUSAL PROOF. B (raw dump): lua/gen3/run.lua's own
         "needs the SLink companion patch" refusal line, the driver's REFUSED_AT_LAUNCH, WRITES 0,
         and nothing a working client leaves (no MYKEY, no TX, no RX, no admission line, no write, no
         save dump). A (companion): admitted, hello sent, a settled window with no write and no
@@ -9998,21 +10139,9 @@ class DuoRun:
             "a", results["a"],
             required=[r"(?m)^TX hello\b", r"(?m)^PROBE_SETTLED writes=0 rx=0$"],
             forbidden=[rf"(?m)^RX (?:{partner_cmds})\b", r"(?m)^\[client\] \[SLink-gen3\] refused"])
-        problems += gen3_receipt_problems(
-            "b", results["b"],
-            required=[GEN3_CLEAN_REFUSAL_RE, r"(?m)^REFUSED_AT_LAUNCH \[SLink-gen3\] refused: ",
-                      r"(?m)^WRITES 0$"],
-            forbidden=[r"(?m)^MYKEY ", r"(?m)^TX ", r"(?m)^RX ", r"(?m)^\[client\] \[SLink-gen3\] write ",
-                       r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player ",
-                       r"(?m)^SAVE_WITNESS_DUMP"])
-        status = self._status()
-        if status is None:
-            problems.append("server: /api/status unavailable, cannot show B never connected")
-        elif (status.get("players") or {}).get("b", {}).get("connected"):
-            problems.append("server: b connected -- the refused cartridge reached the server")
-        if self._links_json():
-            problems.append(f"server: a persisted link exists: {self._links_json()}")
-        self._gen3_raise(problems, "native_absent REFUSAL PROOF: the clean RR was refused at launch (needs the "
+        problems += gen3_refused_side_problems("b", results["b"])
+        problems += gen3_refused_server_problems(self._status(), "b", self._links_json())
+        self._gen3_raise(problems, "clean_rr_refused REFUSAL PROOF: the clean RR was refused at launch (needs the "
                                    "SLink companion patch), never connected, linked nothing and wrote nothing; "
                                    "the companion side stayed quiet")
 
@@ -10073,6 +10202,8 @@ class DuoRun:
             # Match __init__'s default for bare runners used by lifecycle unit tests.
             validate_pipeline(self, evidence_contract(getattr(self, "game", "legacy")),
                               self.cfg)
+            if getattr(self, "is_gen3_battery", False) and (launch_problems := self._gen3_launch_refusal_problems()):
+                raise RuntimeError("; ".join(launch_problems))
             if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
                 from tools.gen2_source_data import shared_contexts
                 with shared_contexts(), self._timed("preflight"):   # one verified context per title per run

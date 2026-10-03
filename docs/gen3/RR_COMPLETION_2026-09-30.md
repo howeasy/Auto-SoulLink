@@ -1,6 +1,6 @@
 # Radical Red completion — 2026-10-01
 
-> **Update 2026-10-03 (patch-first):** the RR clean rows `linked_faint_active_clean_gen3` and `faint_cmd_clean_gen3` are retired and `native_absent_gen3` is now the clean-RR refusal proof, so the RR plan is 39 rows, not 41. The 41/41 record below stays as history; see [RR_CLEAN_ROWS_CONVERSION_2026-10-03.md](RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
+> **Update 2026-10-03 (patch-first):** the RR clean rows `linked_faint_active_clean_gen3` and `faint_cmd_clean_gen3` are retired and `native_absent_gen3` is replaced by the renamed refusal proof `clean_rr_refused_gen3` (a different claim: the clean RR is refused at launch), so the RR plan is 39 rows, not 41. The old row's receipts are a clean-client PASS and never count for the new row. The 41/41 record below stays as history; see [RR_CLEAN_ROWS_CONVERSION_2026-10-03.md](RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
 
 RR passed the complete **41/41-row plan** at `aab6fb325780e8a4a94b1b33d0f04c74749a51d5`. The qualified source is integrated into local `master`; this delivery adds documentation and retained evidence only. No push or release publication was performed.
 

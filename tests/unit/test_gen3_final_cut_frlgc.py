@@ -120,7 +120,7 @@ def test_zip_boot_companion_entries_demand_the_companion_by_hash_line():
         assert rom == fc.COMPANION_ROMS[t] and launched == os.path.basename(rom) and seed == fixture and battery == saveram
         assert rf"{pack}/{t} \(companion by hash\) player a " in client and hello == f"hello rom={t} "
         assert os.path.isfile(os.path.join(fc.REPO, "tests", "fixtures", "gen3", seed))
-    assert fc.ZIP_BOOT["firered"][4].count("clean by hash")                       # the clean entries are untouched
+    assert "needs the SLink companion patch" in fc.ZIP_BOOT["firered"][4]       # the clean entries prove the refusal
     with pytest.raises(SystemExit):
         fc.main(["zip-boot", "--zip", "z", "--lane", LANE, "--title", "nope"])
 
@@ -240,6 +240,7 @@ def _receipt(row, body, verdict="PASS"):
 
 def test_fc_check_requires_the_admission_evidence_for_a_companion_pass(monkeypatch, tmp_path):
     monkeypatch.setattr(fc, "gen3_companion_pins", lambda tree, strict=False: PINS)
+    monkeypatch.setattr(fc, "gen3_companion_pins_at", lambda cut: PINS)
     row = C("link_gen3_fr_as_a")
     name = f"fc_{row}_{CUT[:8]}.txt"
     assert fc.fc_check(name, _receipt(row, _duo_out()), str(tmp_path))[1]
@@ -337,3 +338,51 @@ def test_zip_boot_refuses_a_companion_title_whose_staged_rom_is_not_the_pin(tmp_
     assert fc.zip_boot(str(zpath), str(lane), 5, "firered_companion") == 1
     out = capsys.readouterr().out
     assert "RESULT: FAIL" in out and "not the firered companion pin" in out and not boom       # nothing was launched
+
+
+def test_every_companion_bootcheck_row_binds_its_rom_to_the_pin():
+    """F2: their own verdict carries no pin binding, so the TOOL must refuse any --rom but the pinned build."""
+    rows = [r for r in fc.build_plan_frlgc(CUT, LANE, MASTER) if "bootcheck_" in r.id]
+    assert len(rows) == 12 and all("--companion" in r.argv for r in rows)
+    assert all("--companion" not in r.argv for r in fc.build_plan("c" * 40, LANE, MASTER) if "bootcheck_" in r.id)
+
+
+def _lane_with_pins(tmp_path, name, pins):
+    import json as _json
+
+    dist = tmp_path / name / "patch" / "dist"
+    dist.mkdir(parents=True)
+    titles = {t: {"rom_sha1": pins[f"{t}_companion"], "rom_md5": "0" * 32, "canonical_sha1": "1" * 40,
+                  "production": True} for t in ("firered", "leafgreen", "emerald")}
+    (dist / "gen3_companions.json").write_text(_json.dumps({"titles": titles}), encoding="utf-8")
+    return str(tmp_path / name)
+
+
+def test_fc_check_judges_companion_evidence_against_the_lanes_pins_not_the_main_checkouts(tmp_path):
+    """F3: the main checkout's gen3_companions.json differs from the cut's -- the cut's pins decide."""
+    row = C("link_gen3_fr_as_a")
+    name = f"fc_{row}_{CUT[:8]}.txt"
+    text = _receipt(row, _duo_out())                               # admissions carry the PINS prefixes
+    lane = _lane_with_pins(tmp_path, "lane_ok", PINS)
+    other = _lane_with_pins(tmp_path, "lane_other", {k: hashlib.sha1(k.encode() + b"x").hexdigest() for k in PINS})
+    assert fc.gen3_companion_pins(fc.REPO) != fc.gen3_companion_pins(lane)           # the lane differs from main
+    assert fc.fc_check(name, text, str(tmp_path), lane=lane)[1]
+    ok, why = fc.fc_check(name, text, str(tmp_path), lane=other)[1:]
+    assert not ok and "companion" in why                                              # the lane's other pins reject it
+    # no lane given: the CUT's own pins (git show), and a cut git cannot show fails closed -- never main's pins
+    assert fc.gen3_companion_pins_at("0" * 40) == {}
+    ok, why = fc.fc_check(name, text, str(tmp_path))[1:]
+    assert not ok and "pin to compare" in why
+    assert fc.gen3_companion_pins_at("HEAD") == fc.gen3_companion_pins(fc.REPO)      # the cut's pins are readable
+
+
+def test_prior_verdict_threads_the_lane(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(fc, "PROBES", str(tmp_path))
+    row = C("link_gen3_fr_as_a")
+    (tmp_path / f"fc_{row}_{CUT[:8]}.txt").write_text(_receipt(row, _duo_out()), encoding="utf-8")
+    real = fc.fc_check
+    monkeypatch.setattr(fc, "fc_check", lambda *a, **k: seen.append(k.get("lane")) or real(*a, **k))
+    lane = _lane_with_pins(tmp_path, "lane_ok", PINS)
+    assert fc.prior_verdict(row, CUT, lane) == "PASS" and seen == [lane]
+    assert fc.prior_verdict(row, CUT) is None            # default: the cut's pins, absent here -> not adopted

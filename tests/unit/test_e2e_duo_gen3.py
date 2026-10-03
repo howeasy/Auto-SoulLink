@@ -140,7 +140,7 @@ from tools import rr_companion  # noqa: E402
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
 # P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
-GEN3_RR_ONLY = ("rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY = ("rival_swap_gen3", "clean_rr_refused_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -736,15 +736,15 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 REFUSAL = "this radical_red cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
 
 
-def _native_absent_receipts():
+def _clean_rr_refused_receipts():
     a = ("MYKEY 1 KA\nTX hello - {}\nPROBE_SETTLED writes=0 rx=0\nWRITES 0\n")
     b = (f"[client] [SLink-gen3] refused: {REFUSAL}\n"
          f"REFUSED_AT_LAUNCH [SLink-gen3] refused: {REFUSAL}\nWRITES 0\n")
     return {"a": a, "b": b}
 
 
-def _native_absent_run(connected=False, links=()):
-    run = _oracle_run("native_absent_gen3", game="gen3_rr")
+def _clean_rr_refused_run(connected=False, links=()):
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
     run.notes = []
     run._pydec_note = run.notes.append
     run._status = lambda: {"players": {"a": {"connected": True}, **({"b": {"connected": True}} if connected else {})}}
@@ -752,16 +752,16 @@ def _native_absent_run(connected=False, links=()):
     return run
 
 
-def test_native_absent_is_the_clean_rr_refusal_proof():
+def test_clean_rr_refused_is_the_clean_rr_refusal_proof():
     """Owner policy 2026-10-02 (companion REQUIRED): the clean RR is refused at launch with the
     companion verdict, links nothing and writes nothing; the companion side A boots alone and stays
     quiet. Neither side saves."""
-    row = duo.SCENARIOS["native_absent_gen3"]
+    row = duo.SCENARIOS["clean_rr_refused_gen3"]
     assert row["no_save"] == ("a", "b") and row["expect_refused"] == ("b",)
     assert row["rom_kind"] == {"a": "companion", "b": "clean"}
-    run = _native_absent_run()
-    receipts = _native_absent_receipts()
-    run.assert_native_absent_gen3_saved(receipts)
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
+    run.assert_clean_rr_refused_gen3_saved(receipts)
     assert run.notes and "refused" in run.notes[-1]
 
 
@@ -785,46 +785,46 @@ def test_native_absent_is_the_clean_rr_refusal_proof():
     ("a", lambda t: t + "RX apply_prepare key=KA\n", "forbidden"),
     ("a", lambda t: t + "RX force_faint key=KA\n", "forbidden"),
 ])
-def test_native_absent_oracle_is_red_on_every_way_the_clean_side_could_work(side, mutate, problem):
-    run = _native_absent_run()
-    receipts = _native_absent_receipts()
+def test_clean_rr_refused_oracle_is_red_on_every_way_the_clean_side_could_work(side, mutate, problem):
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
     receipts[side] = mutate(receipts[side])
     with pytest.raises(RuntimeError, match=problem):
-        run.assert_native_absent_gen3_saved(receipts)
+        run.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_native_absent_oracle_reads_the_server_for_no_partner_and_no_link():
-    receipts = _native_absent_receipts()
+def test_clean_rr_refused_oracle_reads_the_server_for_no_partner_and_no_link():
+    receipts = _clean_rr_refused_receipts()
     with pytest.raises(RuntimeError, match="b connected"):
-        _native_absent_run(connected=True).assert_native_absent_gen3_saved(receipts)
+        _clean_rr_refused_run(connected=True).assert_clean_rr_refused_gen3_saved(receipts)
     with pytest.raises(RuntimeError, match="persisted link"):
-        _native_absent_run(links=[{"a": {"key": "KA"}, "b": {"key": "KB"}, "status": "alive"}]
-                           ).assert_native_absent_gen3_saved(receipts)
-    gone = _native_absent_run()
+        _clean_rr_refused_run(links=[{"a": {"key": "KA"}, "b": {"key": "KB"}, "status": "alive"}]
+                           ).assert_clean_rr_refused_gen3_saved(receipts)
+    gone = _clean_rr_refused_run()
     gone._status = lambda: None
     with pytest.raises(RuntimeError, match="status"):
-        gone.assert_native_absent_gen3_saved(receipts)
+        gone.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_native_absent_orchestration_waits_for_a_alone_then_b_refusal_then_releases_a():
-    run = _native_absent_run()
+def test_clean_rr_refused_orchestration_waits_for_a_alone_then_b_refusal_then_releases_a():
+    run = _clean_rr_refused_run()
     calls, receipts = [], {"a": "", "b": ""}
     run._read_receipt = lambda inst: receipts[inst]
     run.wait_for = lambda desc, pred, timeout: calls.append(desc) or pred() or calls.append("PRED_FALSE")
     run.go = lambda *args: calls.append("go")
-    receipts.update(a="MYKEY 1 KA\n", b=_native_absent_receipts()["b"])
+    receipts.update(a="MYKEY 1 KA\n", b=_clean_rr_refused_receipts()["b"])
     run._status = lambda: {"players": {"a": {"connected": True}}}
-    run.orchestrate_native_absent_gen3()
+    run.orchestrate_clean_rr_refused_gen3()
     assert calls == ["a: MYKEY line", "a: hello accepted", "b: refused at launch", "go"], calls
     # B never produces keys or a hello: the orchestration must not wait on either
     receipts["b"] = ""
     calls.clear()
-    run.orchestrate_native_absent_gen3()
+    run.orchestrate_clean_rr_refused_gen3()
     assert "PRED_FALSE" in calls
 
 
 def test_a_refused_side_is_launched_with_expect_refused():
-    run = _oracle_run("native_absent_gen3", game="gen3_rr")
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
     assert run._gen3_expect_refused("b") is True and run._gen3_expect_refused("a") is False
     assert _oracle_run("faint_cmd_gen3", game="gen3_rr")._gen3_expect_refused("b") is False
 
@@ -1000,10 +1000,10 @@ def test_gen3_rr_rom_companion_missing_build_refuses(monkeypatch, tmp_path):
 
 
 def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
-    """native_absent_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
+    """clean_rr_refused_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
     raw dump (patch/tools/build.py:91 DEFAULT_RR / patch/README.md:18), same rule as firered."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     root = tmp_path / "main" / "wt"
     root.mkdir(parents=True)
     monkeypatch.setattr(duo, "REPO", str(root))
@@ -1025,7 +1025,7 @@ def test_gen3_rr_battery_path_clean_kind_computes_the_saveram_name(monkeypatch, 
     """No hand-transcribed saveram name for the clean side: it is derived from whatever
     `_gen3_rom` actually staged (gen3_fixtures.saveram_name), avoiding a transcription error."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     run._saveram_dir = lambda inst: str(tmp_path)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: "patch/build/gen3_Pokemon_-_Radical_Red.gba")
     path = run._gen3_battery_path("b")
@@ -1432,7 +1432,7 @@ function FAKE(scenario, player, phase, spec)
     local gone, boxed, used, writes = {}, {}, 0, spec.writes or 0
     if spec.gone then gone[spec.gone] = true end     -- a record the server moved out (quarantine)
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
-    -- native_absent's A: spec.drift_writes / spec.drift_rx land inside the 600-frame settle window
+    -- clean_rr_refused's A: spec.drift_writes / spec.drift_rx land inside the 600-frame settle window
     local rx_extra, base_frames = 0, ctx.frames
     ctx.frames = function(n)
         if n == 600 then writes = writes + (spec.drift_writes or 0); rx_extra = rx_extra + (spec.drift_rx or 0) end
@@ -1813,7 +1813,7 @@ def _run_module(lua, scenario, player, phase, spec):
     # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["PROBE_SETTLED writes=0 rx=0"]),
+    ("clean_rr_refused", "a", "initial", {}, ["PROBE_SETTLED writes=0 rx=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
     ok, passed, msg, logs = _run_module(lua, scenario, player, phase, spec)
@@ -1833,9 +1833,9 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
-    ("native_absent", "a", "initial", {"drift_writes": 2}, "wrote 2 time(s)"),
-    ("native_absent", "a", "initial", {"drift_rx": 1}, "received 1 command(s)"),
-    ("native_absent", "b", "initial", {}, "refusal-proof side"),
+    ("clean_rr_refused", "a", "initial", {"drift_writes": 2}, "wrote 2 time(s)"),
+    ("clean_rr_refused", "a", "initial", {"drift_rx": 1}, "received 1 command(s)"),
+    ("clean_rr_refused", "b", "initial", {}, "refusal-proof side"),
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
@@ -5196,7 +5196,7 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     """G5-RR-BATTERY (live 3fa789da: KeyError 1 on slot-1 links over the one-mon rr_town, no
     balls on rr_battle): every RR row that links/trades slot 1 or throws a ball boots rr_battle2."""
     for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
-                 "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
+                 "reconnect_gen3", "clean_rr_refused_gen3", "linked_faint_active_gen3"):
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
     fr = {"faint_cmd_gen3": "town", "link_gen3": "catch_synth", "boxsync_gen3": {"a": "battle", "b": "town"}}
     for name, want in fr.items():

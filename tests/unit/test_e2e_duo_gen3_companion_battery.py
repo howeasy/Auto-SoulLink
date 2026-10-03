@@ -70,3 +70,47 @@ def test_a_clean_cartridge_keeps_the_gamedb_name_and_the_old_flush_rule(tmp_path
     seeded.write_bytes(b"flushed-by-emuhawk")
     os.utime(seeded, (900, 900))
     assert run._gen3_flushed("a") == b"flushed-by-emuhawk"            # unchanged: no freshness requirement on clean rows
+
+
+# ── F5: a NO-WRITE half may leave its battery as the harness seeded it ───────────────────────────────────
+# reconnect_gen3 (A) and active_end_gen3 (B) expect the cartridge NOT to rewrite its battery, so an untouched
+# seed (mtime before the launch) is their legitimate input; every half that must save still needs a fresh file.
+# Found by scenario config (`no_save`), pinned by name below: a new no-write row must be decided here.
+NO_WRITE_COMPANION_ROWS = {
+    ("active_end_gen3", "fr", "b"), ("active_end_gen3", "lg", "b"),
+    ("center_controls_gen3", "fr", "b"), ("center_controls_gen3", "lg", "b"),
+    ("reconnect_gen3", "fr", "a"), ("reconnect_gen3", "em", "a"),
+    ("save_then_write_gen3", "fr", "b"), ("save_then_write_gen3", "lg", "b"),
+}
+
+
+def test_the_frlgc_plans_no_write_halves_are_exactly_the_decided_set():
+    import re
+
+    found = set()
+    for row in gen3_final_cut.build_plan_frlgc("c" * 40, "L:/lane", "L:/master"):
+        m = re.fullmatch(r"frlgc_(.+)_(fr|lg|em)_as_a_companion", row.id)
+        if m and duo.SCENARIOS[m[1]].get("no_save"):
+            found |= {(m[1], m[2], side) for side in duo.SCENARIOS[m[1]]["no_save"]}
+    assert found == NO_WRITE_COMPANION_ROWS, (
+        "a frlgc row gained or lost a no_save half: decide whether _gen3_flushed's no-write exemption applies "
+        f"(new {sorted(found - NO_WRITE_COMPANION_ROWS)}, gone {sorted(NO_WRITE_COMPANION_ROWS - found)})")
+
+
+@pytest.mark.parametrize("scenario, side", [("reconnect_gen3", "a"), ("active_end_gen3", "b")])
+def test_a_no_write_half_accepts_its_untouched_seed_but_a_saving_half_never_does(tmp_path, monkeypatch, scenario, side):
+    run = _run(tmp_path, monkeypatch, "firered", COMPANION, "slink_FireRed.gba")
+    run.cfg = dict(duo.SCENARIOS[scenario])
+    other = "b" if side == "a" else "a"
+    run._launch_times = {"a": 1000.0, "b": 1000.0}
+    run._gen3_battery_path = lambda inst: str(tmp_path / "sav" / f"slink FireRed {inst}.SaveRAM")
+    for inst in ("a", "b"):
+        Path(run._gen3_battery_path(inst)).write_bytes(b"SEEDED-" + inst.encode())
+        os.utime(run._gen3_battery_path(inst), (900, 900))                    # written before the launch, never touched
+    assert side in run.cfg["no_save"] and other not in run.cfg["no_save"]
+    assert run._gen3_flushed(side) == b"SEEDED-" + side.encode()              # the no-write half: the seed IS the answer
+    with pytest.raises(RuntimeError, match="no fresh flushed battery"):
+        run._gen3_flushed(other)                                              # a half that must save: loud
+    os.remove(run._gen3_battery_path(side))
+    with pytest.raises(RuntimeError, match="no fresh flushed battery"):
+        run._gen3_flushed(side)                                               # but a missing file is still no oracle input

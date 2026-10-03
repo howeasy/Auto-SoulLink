@@ -196,7 +196,7 @@ EMERALD_UNIT_FILES = [
     "tests/unit/test_gen3_title_syms.py",
 ]
 UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
-                   # the unpatched RR ROM native_absent_gen3's refusal-proof side and test_mailbox_absent.lua need; a
+                   # the unpatched RR ROM clean_rr_refused_gen3's refusal-proof side and test_mailbox_absent.lua need; a
                    # lane outside the main checkout's folder can't find it by walking up
                    "Pokemon - Radical Red.gba",
                    "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
@@ -400,7 +400,8 @@ def zip_rows(cut, lane, title):
             Row(f"{pre}zip_check", tag,
                 [PY, "tools/check_release_zip.py", zip_path, "--rev", cut], lane, 300,
                 emulator=False),
-            Row(f"zip_boot_{title.replace('_', '')}", tag, boot, REPO, 600)]
+            Row(f"zip_boot_{title.replace('_', '')}" + ("_refused" if title in ZIP_BOOT_REFUSED else ""),
+                tag, boot, REPO, 600)]
 
 
 def build_plan_rr(cut, lane, master):
@@ -634,7 +635,7 @@ def build_plan_frlgc(cut, lane, master):
                 fx = f"{title}_party_{scene}{side}"
                 rows.append(Row(companion_row_id(f"bootcheck_{fx}"), "FRLGC-BOOT",
                                 [PY, "tools/gen3_fixtures.py", "boot-check", "--rom", COMPANION_ROMS[title],
-                                 "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", title], lane, 600))
+                                 "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", title, "--companion"], lane, 600))
     battery = "gen3 " + os.path.basename(COMPANION_ROMS["emerald"])[:-len(".gba")].replace("_", " ") + ".SaveRAM"
     for scene in ("town", "battle"):
         for side in ("", "_b"):
@@ -642,7 +643,7 @@ def build_plan_frlgc(cut, lane, master):
             rows.append(Row(companion_row_id(f"bootcheck_{fx}"), "FRLGC-BOOT",
                             [PY, "tools/gen3_fixtures.py", "boot-check", "--rom", COMPANION_ROMS["emerald"],
                              "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", "emerald",
-                             "--saveram-name", battery], lane, 600))
+                             "--saveram-name", battery, "--companion"], lane, 600))
     rows += [_companion_duo(r) for r in base if r.id.endswith(("_fr_as_a", "_lg_as_a"))]
     rows += [_companion_duo(r) for r in emerald if r.id.endswith("_em_as_a")]
     for scenario in FRLGC_RULE_SCENARIOS:
@@ -739,13 +740,13 @@ def receipt_path(row_id, cut):
     return os.path.join(PROBES, f"fc_{row_id}_{cut[:8]}.txt")
 
 
-def prior_verdict(row_id, cut):
+def prior_verdict(row_id, cut, lane=None):
     """The verdict of this row's runner receipt at this exact cut, or None -- only a receipt that
     fc_check validates counts (a header-only or wrong-row file never resumes as a PASS)."""
     path = receipt_path(row_id, cut)
     if not os.path.isfile(path):
         return None
-    hdr, ok, _why = fc_check(os.path.basename(path), _read(path), PROBES)
+    hdr, ok, _why = fc_check(os.path.basename(path), _read(path), PROBES, lane=lane)
     return hdr["verdict"] if ok and hdr["row"] == row_id and hdr["cut"] == cut else None
 
 
@@ -911,8 +912,24 @@ def gen3_companion_pins(tree, strict=False):
         if strict:
             raise LaneError(f"{path}: gen3_companions.json absent (companion pins required)")
         return {}
+    return _companion_pins_of(_read(path), path, strict)
+
+
+def gen3_companion_pins_at(cut):
+    """The companion pins AS OF `cut` (git show <cut>:patch/dist/gen3_companions.json), lenient: {} when the cut or the file
+    is unreadable, so companion evidence then fails closed ("no pin to compare") instead of borrowing another tree's pins."""
+    shown = _git(REPO, "show", f"{cut}:patch/dist/gen3_companions.json", check=False)
+    if shown.returncode:
+        return {}
     try:
-        titles = json.loads(_read(path)).get("titles") or {}
+        return _companion_pins_of(shown.stdout, f"{cut[:8]}:patch/dist/gen3_companions.json", False)
+    except LaneError:
+        return {}
+
+
+def _companion_pins_of(text, path, strict):
+    try:
+        titles = json.loads(text).get("titles") or {}
     except (ValueError, AttributeError) as exc:
         raise LaneError(f"{path}: not JSON ({exc})") from exc
     out = {}
@@ -1248,6 +1265,12 @@ for f = 1, 1500 do
 end
 dofile(os.getenv("SLINK_ZIPBOOT_ENTRY"))
 """
+# a REFUSAL boot (ZIP_BOOT_REFUSED): the shipped entry raises on the refused cartridge, so catch the error text
+# into the console (slink.lua tees console.log into slink_lua.log) -- that line is the evidence
+_BOOT_LUA_REFUSED = _BOOT_LUA.replace(
+    'dofile(os.getenv("SLINK_ZIPBOOT_ENTRY"))',
+    'local ok, err = pcall(dofile, os.getenv("SLINK_ZIPBOOT_ENTRY"))\n'
+    'console.log("[zip-boot] entry " .. (ok and "returned" or "raised: " .. tostring(err)))')
 
 
 def _free_port():
@@ -1261,10 +1284,21 @@ def _free_port():
 # gamedb entry for it and names the battery from the launched filename ("slink_RR.gba" ->
 # "slink RR.SaveRAM", tools/e2e_duo.py GEN3_TITLES); its hello says rom_type firered_rr
 # (lua/gen3/entry.lua) and its identity line is gen3_rr/radical_red (companion by hash).
+# Patch-first (owner 2026-10-02): the shipped client REFUSES a clean FireRed / Emerald (slink.lua raises the
+# `Unsupported Gen 3 cartridge: ... needs the SLink companion patch` error), so their zip-boot rows prove that
+# refusal -- no identity line, no TCP connect, no server hello -- and carry a `_refused` row id, so a receipt of the
+# old clean-client PASS (same cut, old name) can never resume as this row's verdict.
+ZIP_BOOT_REFUSED = ("firered", "emerald")
+
+
+def _zip_refusal_re(title):
+    return (rf"Unsupported Gen 3 cartridge: this {title} cartridge needs the SLink companion patch; "
+            r"prepare it through the Manager or /patcher")
+
+
 ZIP_BOOT = {
     "firered": (STAGED["firered"], "fr.gba", "firered_party_town.sav",
-                "Pokemon - FireRed Version (USA).SaveRAM",
-                r"\[SLink-gen3\] gen3_frlg/firered \(clean by hash\) player a ", "hello rom=firered "),
+                "Pokemon - FireRed Version (USA).SaveRAM", _zip_refusal_re("firered"), None),
     "radical_red": ("patch/build/slink_RR.gba", "slink_RR.gba", "rr_town.sav", "slink RR.SaveRAM",
                     r"\[SLink-gen3\] gen3_rr/radical_red \(companion by hash\) player a ",
                     "hello rom=firered_rr "),
@@ -1274,8 +1308,7 @@ ZIP_BOOT = {
     # lua/gen3/entry.lua:72 (rom_type), :98 (pack). EG4 (ruling 24) has landed, so this row is
     # reachable for real now -- see zip_boot()'s own precondition check, emerald_admission_blocker.
     "emerald": (STAGED["emerald"], "emerald.gba", "emerald_town.sav", EMERALD_SAVERAM,
-                r"\[SLink-gen3\] gen3_emerald/emerald \(clean by hash\) player a ",
-                "hello rom=emerald "),
+                _zip_refusal_re("emerald"), None),
     # --title frlgc: the PATCHED cartridges. BizHawk has no gamedb entry for them, so the battery follows the launched filename
     # ("slink_FireRed.gba" -> "slink FireRed.SaveRAM", the RR rule above); the client's identity line must say `companion by
     # hash` (zip_boot adds the pinned rom prefix) while the server hello still reports the vanilla rom_type
@@ -1385,8 +1418,9 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             print("RESULT: FAIL the generated config does not have rewind off")
             return 1
     shutil.copyfile(os.path.join(lane, rom_rel), os.path.join(tmp, rom_name))
+    refused = title in ZIP_BOOT_REFUSED
     with open(os.path.join(tmp, "boot.lua"), "w", encoding="utf-8") as f:
-        f.write(_BOOT_LUA)
+        f.write(_BOOT_LUA_REFUSED if refused else _BOOT_LUA)
     tcp, http = _free_port(), _free_port()
     server_log = os.path.join(tmp, "server.log")
     print(f"zip={zip_path}\nextract={tmp}\\extract entry={entry}\nfixture={fixture}\n"
@@ -1412,6 +1446,9 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
         while time.time() < end and not ok:
             time.sleep(2)
             ltxt = _read(lua_log)
+            if refused:
+                ok = zip_boot_refusal_ok(client_re, ltxt, _read(server_log))
+                continue
             ok = bool(client_re.search(ltxt)) and "TCP connected" in ltxt and \
                 hello in _read(server_log)
             if title == "exp":
@@ -1421,9 +1458,22 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
             if p.poll() is None:
                 kill_tree(p.pid)
     print(f"--- {lua_log} ---\n{_read(lua_log)}\n--- server log ---\n{_read(server_log)}")
+    if refused:
+        # one last look at the final logs: a refusal that was followed by a connect is no refusal
+        ok = zip_boot_refusal_ok(client_re, _read(lua_log), _read(server_log))
+        print(f"RESULT: PASS the extracted zip's client REFUSED the clean {title} (needs the SLink companion patch); "
+              f"it never connected" if ok else
+              f"RESULT: FAIL no companion-patch refusal evidence for the clean {title} within {timeout}s")
+        return 0 if ok else 1
     print(f"RESULT: PASS the extracted zip booted {title} on the new client" if ok else
           f"RESULT: FAIL no client/server boot evidence within {timeout}s")
     return 0 if ok else 1
+
+
+def zip_boot_refusal_ok(client_re, lua_text, server_text):
+    """The shipped client refused the cartridge: its own refusal error is in the log, it never reached
+    `TCP connected`, and the server never saw a hello."""
+    return bool(client_re.search(lua_text)) and "TCP connected" not in lua_text and "hello rom=" not in server_text
 
 
 def _read(path):
@@ -1767,6 +1817,16 @@ def hash_inputs(paths):
     return {k: file_sha256(p) or "MISSING" for k, p in paths.items()}
 
 
+def resume_inputs_problem(row, receipt_text, lane):
+    """Why a prior receipt's `# inputs:` are not THIS lane's current non-git input hashes (so --resume must RUN the row),
+    or None -- the same rule carry_decision applies to a carried receipt."""
+    now, then = hash_inputs(row_inputs(row, lane)), parse_inputs(receipt_text)
+    differ = sorted(k for k in set(now) | set(then) if now.get(k) != then.get(k))
+    if not differ:
+        return None
+    return f"non-git inputs differ or unrecorded since the prior receipt ({', '.join(differ[:3])})"
+
+
 def inputs_note(hashes):
     return "inputs: " + (" ".join(f"{k}={v}" for k, v in sorted(hashes.items())) or "(none)")
 
@@ -1849,10 +1909,12 @@ def duo_verdict_ok(text, scenario, orient):
             and a_titles == {_TITLE[orient]} and games <= {_GAME[orient]})
 
 
-def fc_check(name, text, probes, depth=0):
+def fc_check(name, text, probes, depth=0, lane=None):
     """(header, ok, why) for a runner receipt: the file name, header row and cut agree; a PASS,
     SKIP-ALLOWED or FAIL has well-formed attempt blocks whose last one supports the verdict; a
-    CARRIED one cites an origin that is itself a citable PASS for the same row at the cited cut."""
+    CARRIED one cites an origin that is itself a citable PASS for the same row at the cited cut.
+    A companion row's evidence is judged against the CUT's own companion pins (the `lane` checkout when given, else
+    `git show <cut>:...`), never the main checkout's: a differing main gen3_companions.json cannot vouch for it."""
     m = re.fullmatch(r"fc_(.+)_([0-9a-f]{8})\.txt", name)
     hdr = receipts.parse_run_receipt(text)
     if not (m and hdr):
@@ -1887,7 +1949,7 @@ def fc_check(name, text, probes, depth=0):
         return hdr, False, "the last attempt does not support the verdict"
     if is_companion_row(hdr["row"]) and v.startswith("PASS"):
         problem = companion_attempt_problem(hdr["row"], re.split(r"^--- attempt \d+ of \d+ ---$", text, flags=re.M)[-1],
-                                            gen3_companion_pins(REPO))
+                                            gen3_companion_pins(lane) if lane else gen3_companion_pins_at(hdr["cut"]))
         if problem:
             return hdr, False, "companion evidence: " + problem
     if expansion and v.startswith("PASS"):
@@ -2370,7 +2432,27 @@ def merge_summary(cut, rows, suffix=""):
     return 0 if ok else 1
 
 
+# Patch-first (owner 2026-10-02): these plans stage CLEAN FireRed/LeafGreen/Emerald dumps as working clients, which
+# Entry.admit_routed refuses at launch (a refusal that otherwise surfaces as a harness TimeoutError, retried for hours as
+# "contention"). Their receipts are history; the live plan is --title frlgc. rr boots its companion and exp is exempt
+# (gen3_exp has no companion_required), so neither is listed.
+CLEAN_PLAN_TITLES = {"frlg": "FireRed/LeafGreen", "emerald": "Emerald"}
+
+
+def clean_plan_refusal(title):
+    """Why `--title <title>` cannot run live (a message naming the rule and the live plan), or None."""
+    if title not in CLEAN_PLAN_TITLES:
+        return None
+    return (f"--title {title} stages CLEAN {CLEAN_PLAN_TITLES[title]} dumps, but a clean cartridge is refused at launch "
+            f"(this cartridge needs the SLink companion patch; patch-first, owner 2026-10-02); its clean receipts are "
+            f"history. Run the companion re-cut instead: --title frlgc (--dry-run/--list/--merge-summary still work).")
+
+
 def run_pass(args):
+    refusal = clean_plan_refusal(args.title)
+    if refusal and not (args.dry_run or args.list or args.merge_summary):
+        print(f"[final_cut] ABORT: {refusal}", file=sys.stderr)
+        return 2
     root = main_checkout()
     lane = os.path.abspath(args.lane).replace("\\", "/")
     master = os.path.abspath(args.master).replace("\\", "/")
@@ -2463,13 +2545,14 @@ def run_pass(args):
         return 2
     results = []
     for row in rows_here:
-        prior = prior_verdict(row.id, cut)
+        prior = prior_verdict(row.id, cut, lane)
         rec = os.path.basename(receipt_path(row.id, cut))
         if prior and prior.startswith("FAIL"):
             # never re-run an unchanged failed row automatically, and never paper over it
             results.append((row, f"{prior} (prior receipt at this cut; not re-run)", 0, rec))
         elif prior and (args.resume or decisions[row.id].kind in ("CARRY", "CACHED")) and \
-                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED", "CACHED")):
+                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED", "CACHED")) and \
+                not resume_inputs_problem(row, _read(receipt_path(row.id, cut)), lane):
             results.append((row, f"{prior} (resumed)", 0, rec))
         elif decisions[row.id].kind == "CARRY":
             with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:

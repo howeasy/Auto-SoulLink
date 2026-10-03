@@ -1,4 +1,4 @@
--- scenario_gen3_native_absent.lua — native_absent_gen3 (RR only): the clean-RR REFUSAL PROOF.
+-- scenario_gen3_clean_rr_refused.lua — clean_rr_refused_gen3 (RR only): the clean-RR REFUSAL PROOF.
 --
 -- Patch-first (owner 2026-10-02): the SLink companion patch is REQUIRED for Radical Red and a clean
 -- (unpatched) cartridge is refused at launch (lua/gen3/entry.lua Entry.admit_routed). tools/e2e_duo.py
