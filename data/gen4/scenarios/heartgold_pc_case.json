@@ -1,0 +1,11 @@
+{
+  "schema": "gen4-probe-scenario-v3",
+  "title": "heartgold",
+  "purpose": "pc_case",
+  "save": {
+    "path": "g1inputs-c935-1015/hg_p2.SaveRAM",
+    "sha256": "bf5d3b5ff7a194d50b19de917aba8617f61cf667c146b540e6f62508ade65893",
+    "sidecar_sha256": "66f657ce56498f7f2b8e0a260bcdd30296580aa7a00ff9d0f8ffb333990d7df2"
+  },
+  "provenance": "SYNTH party2 fixture; dedicated to native PC deposit phase. No baseline or boxed-descendant fallback."
+}

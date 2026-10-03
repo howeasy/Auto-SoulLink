@@ -3,12 +3,18 @@
 `<title>.json` pins the native OUTDOOR baseline by lane-relative path and SHA256.
 `<title>_row_i.json` pins its separate PC-deposit/native-SAVE boxed descendant,
 including its SYNTH ancestry sidecar hash. Only row i uses that descendant.
-Routes, persistence recipes and all four phase cases remain the pack's defaults;
+Schema `gen4-probe-scenario-v3` also requires `<title>_pc_case.json`: its dedicated
+party2 input and SYNTH sidecar are hash-bound. The PC phase never falls back to
+the native one-mon baseline or boxed row-i descendant. Existing hge/SS party2
+inputs need the PC bridge Pokégear errand before Cherrygrove; no save is staged
+or story flag modified by this schema.
+Routes, persistence recipes and all six phase cases remain the pack's defaults;
 scenario runtime overrides are forbidden. Missing inputs are named OPENs;
 present wrong inputs fail. No scenario contains an absolute lane path.
 
 Every raw and combined a-n receipt carries `scenario_path`, `scenario_sha256`,
-`row_i_scenario_path` and `row_i_scenario_sha256`. Consumption re-reads both files;
+`row_i_scenario_path`, `row_i_scenario_sha256`, `pc_case_scenario_path` and
+`pc_case_scenario_sha256`. Consumption re-reads all three files;
 changes are STALE. Launch requires committed bytes and the original harness
 functions/code. Older receipts without this binding cannot qualify.
 

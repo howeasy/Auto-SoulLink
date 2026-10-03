@@ -345,6 +345,7 @@ SITE_SPECS = [
     ("battle_faint_cmd", "BtlCmd_TryFaintMon", "battle", "faint script command (ov12)", "REPLACED"),
     ("battle_start_ov12", "ov12_02238A68", "battle", "one-per-battle wake-up (r0=BattleSystem*, r1=BattleSetup*)", "ANY"),
     ("battle_controller_try_faint", "TryFaintMon", "battle", "controller turn-end replacement/loss sweep (ov12)", "ANY"),
+    ("battle_exit_arm9", "Battle_Exit", "battle", "native closing-frame exit before manager deletion", "KEPT"),
     ("battle_outcome_copy", "ov12_0223843C", "battle", "stores the battle outcome into BattleSetup.winFlag", "ANY"),
     ("encounter_result", "Encounter_GetResult", "battle", "copies winFlag into VAR_BATTLE_RESULT", "KEPT"),
     ("blackout", "Task_Blackout", "battle", "whiteout task (battle loss path)", "KEPT"),
@@ -376,7 +377,7 @@ SYMBOL_NAMES = [
     "PCStorage_DeleteBoxMonByIndexPair", "PCStorage_SetBoxModified",
     "Save_WriteManFinish", "Save_WriteFileAsync",
     "BtlCmd_TryFaintMon", "BtlCmd_PlayFaintAnimation", "TryFaintMon", "RunBattleScript",
-    "BattleSystem_GetPartyMon", "ov12_02238A68", "ov12_0223843C",
+    "Battle_Exit", "BattleSystem_GetPartyMon", "ov12_02238A68", "ov12_0223843C",
     "MainMenuApp_Main", "MainMenuApp_Init", "OS_DisableInterrupts", "NitroMain",
 ]
 
@@ -490,6 +491,13 @@ def vanilla_sites(xm: XMap, images: Images, only: list | None = None) -> dict[st
             "section": s.section, "symbol_size": s.size,
             "collides_with": images.collisions(s.image, s.address, n),
         }
+    if "battle_exit_arm9" in sites:
+        check = template_check(xm, images, "gOverlayTemplate_Battle", 12)
+        exit_site = sites["battle_exit_arm9"]
+        if exit_site["address"] != check["exit"] & ~1:
+            raise Fail("Battle_Exit xMAP symbol differs from battle template exit")
+        exit_site["source"] = f"SOURCE {PRET_HG} src/launch_application.c:174-176 (returns TRUE); src/overlay_manager.c:65-70; src/field_system.c:171-175"
+        exit_site["template_exit_evidence"] = check
     return sites
 
 
@@ -1083,6 +1091,10 @@ _SCRIPT = "files/battledata/script/subscript"
 _NOROUTE = "no normal-input route in the inventory reaches this"
 _OUTCOME_ASM = "asm/overlay_12_022378C0.s:962-968 (str [setup+0x14] = outcome flags & 0x3F); include/constants/battle.h:112-118"
 BATTLE_SITE_CALLERS = {
+    "battle_exit_arm9": [
+        _entry("exit", "OverlayManager_Run state 3 calls Battle_Exit, then unloads and deletes the manager in the same call chain",
+               f"{_P} src/launch_application.c:174-176; src/overlay_manager.c:65-70; src/field_system.c:171-175", [EXIT_LEG]),
+    ],
     "battle_start_ov12": [
         _entry("direct", "ov12_0223A0D4 = Battle_Run state BSTATE_UNK_A_INIT (allocates the 0x2490 BattleSystem, then calls the site; "
                          "the only caller)", f"{_P} asm/overlay_12_022378C0.s:4282; {_BTL}:75-77", [BS]),
@@ -1224,7 +1236,7 @@ def _case(name: str, phase: str, sites: list[str], producer: str, why: dict, pre
     }
 
 
-def build_phase_cases(xm: XMap, images: Images) -> dict:
+def build_phase_cases(xm: XMap, images: Images, *, hge: bool = False) -> dict:
     """phase_cases (runnable shape), phase_cases_blocked (no fixture) and the excluded candidates with reasons."""
     fsp = xm.lookup("sFieldSysPtr")
     pred_battle = {"symbol": "sFieldSysPtr", "deref": [0x00, 0x04], "offset": 0x0C, "value": 12}
@@ -1249,6 +1261,7 @@ def build_phase_cases(xm: XMap, images: Images) -> dict:
     check_p = template_check(xm, images, "sOverlayTemplate_PCBox", 14)
     sec = fsp.section
     why = {
+        "battle_exit_arm9": "Battle_Exit returns TRUE before manager deletion: queued closing-frame event oracle",
         "battle_start_ov12": "one event per battle and the earliest OVY_12 site after the predicate: the strictest arm-timing witness",
         "battle_faint_cmd": "the single dispatch point of every scripted HP change/faint (the Soul Link signal); hge replaces it (ov130)",
         "battle_outcome_copy": "the only writer of the outcome into BattleSetup.winFlag and the last site before the manager is deleted: "
@@ -1268,6 +1281,10 @@ def build_phase_cases(xm: XMap, images: Images) -> dict:
         battle("battle", three, "battle_faint_cmd", fight),
         battle("battle_arm", ["battle_start_ov12", "battle_outcome_copy"], "battle_start_ov12", [BS, RUN, EXIT_LEG]),
         battle("battle_disarm", ["battle_faint_cmd", "battle_outcome_copy"], "battle_outcome_copy", fight),
+        battle("battle_close", ["battle_exit_arm9"], "battle_exit_arm9", [BS, RUN, EXIT_LEG], {
+            "close_boundary": True,
+            "close_oracle_source": f"{_P} src/launch_application.c:174-176; src/overlay_manager.c:65-70; src/field_system.c:171-175",
+        }),
         battle("reset", two, "battle_start_ov12", [BS, RESET_LEG, BOOT], {
             "reset_note": f"DoSoftReset ({_P} src/main.c:205-214) restarts the program; sFieldSysPtr is {sec} (xMAP) so the "
                           "start-up zero-fill clears it; the stale-RAM window between the reset and that clear (the chain can still "
@@ -1286,7 +1303,28 @@ def build_phase_cases(xm: XMap, images: Images) -> dict:
                        "(ov14), many frames after the launch, so the arm precedes it with a wide margin",
                        "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"]},
                check_p, list(PC_LEGS), PC_SITE_CALLERS, PC_ACTIVATION, PC_EXIT, "BLOCKED_NO_FIXTURE")
-    pc["blocked_reason"] = _PC_WITHDRAW_OPEN
+    # Preserve the full paired-site caller inventory as OPEN; deposit does not exercise deletion/release.
+    pc["name"] = "pc_withdraw_release"
+    pc["blocked_reason"] = "OPEN: delete-by-index, WITHDRAW and RELEASE remain unqualified; " + _PC_WITHDRAW_OPEN
+    for entry in pc["caller_matrix"]["sites"]:
+        if entry["site"] == "pc_delete_by_index_pair":
+            for caller in entry["callers"]:
+                caller["exercised_by_route"] = False
+                caller["exercised_by"] = []
+                caller["why_open"] = caller.get("why_open") or "WITHDRAW/RELEASE route has not been qualified"
+    pc["open"] = _open_from(pc["caller_matrix"])
+    producer = "pc_place_arm9_entry" if hge else "pc_place_first_in_box"
+    ids = [producer, "pc_place_first_in_box"] if hge else [producer]
+    callers = copy.deepcopy(PC_SITE_CALLERS)
+    if hge:
+        callers[producer] = copy.deepcopy(callers["pc_place_first_in_box"])
+    deposit_route = [leg for leg in PC_LEGS if leg != "pc_withdraw_box_mon"]
+    deposit = _case("pc", "pc", ids, producer,
+                    dict.fromkeys(ids, "native deposit; ARM9 entry/trampoline is the static-PC oracle, no withdraw claim"),
+                    pred_pc, {key: pc[key] for key in ("source", "predicate_chain", "precedes_first_event")},
+                    check_p, deposit_route, callers, PC_ACTIVATION, PC_EXIT, "ROUTE_LEGS_PARTLY_NEW")
+    deposit["fixture_role"] = "pc_case"
+    cases.append(deposit)
     return {"phase_cases": cases, "phase_cases_blocked": [pc], "phase_cases_excluded": copy.deepcopy(PHASE_EXCLUDED)}
 
 
@@ -1313,6 +1351,12 @@ def validate_phase_cases(title: dict) -> list[str]:
         if case.get("producer_site") not in ids:
             errs.append(f"{where}: producer_site {case.get('producer_site')!r} must be one of sites "
                         "(the probe compares the always-on observer with the registry events of that site)")
+        if case.get("name") == "pc":
+            producer = title["sites"].get(case.get("producer_site"), {})
+            if producer.get("image") != "arm9" or producer.get("overlay_id") is not None:
+                errs.append(f"{where}: static_pc producer must be an ARM9 site, never an overlay label")
+            if case.get("fixture_role") != "pc_case":
+                errs.append(f"{where}: dedicated pc_case fixture required")
         pred = case.get("predicate") or {}
         if pred.get("symbol") not in known:
             errs.append(f"{where}: predicate.symbol {pred.get('symbol')!r} is not a symbol of this title's xMAP")
@@ -2887,6 +2931,21 @@ def build_hge(inputs: Inputs) -> dict:
             },
             "export_unit": unit,
         }
+    replacement = sites["pc_place_first_in_box"]
+    rep = replacement["replaces"]
+    if rep["vanilla_image"] != "arm9" or not rep["redirect"] or rep["redirect"]["target"] != replacement["address"]:
+        raise Fail("PC placement ARM9 trampoline does not target the pinned hge replacement")
+    pin = rep["vanilla_entry_hex"]
+    sites["pc_place_arm9_entry"] = {
+        "symbol": replacement["symbol"], "address": rep["vanilla_address"],
+        "address_hex": f"{rep['vanilla_address']:#010x}", "image": "arm9", "overlay_id": None,
+        "phase": "pc", "role": "probe static ARM9 placement trampoline; native PC deposit",
+        "extent": len(bytes.fromhex(pin)), "register_hex": pin, "fire_hex": fire_hex(pin),
+        "mode": "thumb", "mode_evidence": "FILE decoded ldr/bx Thumb trampoline at vanilla xMAP entry",
+        "section": ".text", "hge_status": "TRAMPOLINE", "redirect": copy.deepcopy(rep["redirect"]),
+        "source": f"SOURCE {PRET_HG} src/pokemon_storage_system.c:70-88; SOURCE hg-engine hooks:436; FILE hge replacement entry redirect",
+        "collides_with": hge_img.collisions("arm9", rep["vanilla_address"], len(bytes.fromhex(pin))),
+    }
     for site_id, symbol, addr, image, phase, role, mode, prefix, evid in HGE_SOURCE_SITES:
         reg = hge_img.read(image, addr, EXTENT_MAX).hex()
         if not reg.startswith(prefix):
@@ -2988,7 +3047,7 @@ def build_hge(inputs: Inputs) -> dict:
         "overlay_table": {"symbol": "sOverlayRegions", "address": ovr.address, "regions": 3, "per_region": 8,
                           "entry_size": 8, "id_off": 0, "active_off": 4,
                           "evidence": "never patched by hge (rom.ld:552 / platform.md); per_region = MAX_ACTIVE_OVERLAYS 8"},
-        "profile": profile, "phases": phase_table(sites, "hge"), **build_phase_cases(xm, hge_img), "open": open_,
+        "profile": profile, "phases": phase_table(sites, "hge"), **build_phase_cases(xm, hge_img, hge=True), "open": open_,
     }
     ui = ui_geometry(xm, hge_img, hg_img, "heartgold (vanilla)")
     title.update({"ui_geometry": ui, **build_route_legs(ui, "hge"), "collision_pairs": collision_pairs(xm, hge_img, "hge", hg_img)})

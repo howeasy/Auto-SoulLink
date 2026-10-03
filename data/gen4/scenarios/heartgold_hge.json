@@ -1,5 +1,5 @@
 {
-  "schema": "gen4-probe-scenario-v2",
+  "schema": "gen4-probe-scenario-v3",
   "title": "heartgold_hge",
   "purpose": "baseline",
   "save": {
@@ -7,5 +7,6 @@
     "sha256": "a9e4a48b573365bbd6e99436ed9a411523822bed1acda4ecf3868280f98b775f"
   },
   "row_i_scenario": "data/gen4/scenarios/heartgold_hge_row_i.json",
-  "provenance": "Native OUTDOOR played save. Routes and four phase cases come from the title pack; no runtime overrides."
+  "provenance": "Native OUTDOOR played save. Routes and four phase cases come from the title pack; no runtime overrides.",
+  "pc_case_scenario": "data/gen4/scenarios/heartgold_hge_pc_case.json"
 }

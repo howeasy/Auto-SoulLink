@@ -939,11 +939,11 @@ def test_probe_fake_io_terminal_receipt_without_console(api, start_frame, revert
            "rom_md5": "1" * 32, "run_id": "fake", "boot_frames": 1, "requested_rate": 300,
            "code_sha256": MODEL_CUT["script_sha256"], "profile_sha256": MODEL_CUT["profile_sha256"], "source_head": "cut",
            "module_sha256": MODEL_CUT["module_sha256"], "surface_sha256": MODEL_CUT["surface_sha256"], "receipt_kind": MODEL_CUT["receipt_kind"]}
-    for prefix, purpose in (("scenario", "baseline"), ("row_i_scenario", "row_i")):
+    for prefix, purpose in (("scenario", "baseline"), ("row_i_scenario", "row_i"), ("pc_case_scenario", "pc_case")):
         relative = f"data/gen4/scenarios/{purpose}.json"
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"schema": "gen4-probe-scenario-v2", "title": "heartgold", "purpose": purpose}))
+        path.write_text(json.dumps({"schema": "gen4-probe-scenario-v3", "title": "heartgold", "purpose": purpose}))
         cfg[prefix + "_path"], cfg[prefix + "_sha256"] = relative, digest(path)
     pack = {"schema": "gen4-profile-v1", "titles": {"heartgold": {"rom": {"sha1": cfg["rom_sha1"], "md5": cfg["rom_md5"]},
             "symbols": {"sRTCWork": {"address": 100}, "sFieldSysPtr": {"address": 200}, "sSaveDataPtr": {"address": 300}},
@@ -991,7 +991,7 @@ def test_probe_fake_io_terminal_receipt_without_console(api, start_frame, revert
         changed.setattr(sys.modules[__name__], "REPO", tmp_path)
         rows = parse_receipt(r.globals().TERMINAL, title="heartgold", rom_sha1="2" * 40, run_id="fake", expected_cut=MODEL_CUT)
     for _, payload in rows.values():
-        for key in ("scenario_path", "scenario_sha256", "row_i_scenario_path", "row_i_scenario_sha256"):
+        for key in ("scenario_path", "scenario_sha256", "row_i_scenario_path", "row_i_scenario_sha256", "pc_case_scenario_path", "pc_case_scenario_sha256"):
             assert payload[key] == cfg[key]
     assert set(rows) == set(ROWS) and rows["l"][0] == "OPEN"
     if start_frame is not None:
@@ -1262,7 +1262,7 @@ def scenario_path(relative):
 
 def bind_scenarios(payload, title, *, required=True):
     """Re-read scenario bytes at consumption; HEAD movement alone is irrelevant."""
-    for prefix, purpose in (("scenario", "baseline"), ("row_i_scenario", "row_i")):
+    for prefix, purpose in (("scenario", "baseline"), ("row_i_scenario", "row_i"), ("pc_case_scenario", "pc_case")):
         relative, sha = payload.get(prefix + "_path"), payload.get(prefix + "_sha256")
         if relative is None and sha is None and not required:
             continue  # Explicit hypothetical MODEL receipt, not a production consumer.
@@ -1270,10 +1270,12 @@ def bind_scenarios(payload, title, *, required=True):
         if not path.is_file() or digest(path) != sha:
             raise StaleReceiptError(f"STALE scenario hash/absent: {relative}")
         doc = json.loads(path.read_text(encoding="utf-8"))
-        if (doc.get("schema"), doc.get("title"), doc.get("purpose")) != ("gen4-probe-scenario-v2", title, purpose):
+        if (doc.get("schema"), doc.get("title"), doc.get("purpose")) != ("gen4-probe-scenario-v3", title, purpose):
             raise StaleReceiptError(f"STALE scenario title/purpose/schema: {relative}")
-        if required and purpose == "baseline" and doc.get("row_i_scenario") != payload.get("row_i_scenario_path"):
-            raise StaleReceiptError("STALE scenario row-i linkage")
+        if required and purpose == "baseline":
+            for link in ("row_i_scenario", "pc_case_scenario"):
+                if doc.get(link) != payload.get(link + "_path"):
+                    raise StaleReceiptError(f"STALE scenario {link} linkage")
 
 
 def load_scenario(relative, title, purpose, *, committed=True):
@@ -1286,8 +1288,8 @@ def load_scenario(relative, title, purpose, *, committed=True):
         if path.read_bytes().replace(b"\r\n", b"\n") != blob.replace(b"\r\n", b"\n"):
             raise StaleReceiptError(f"STALE uncommitted scenario: {relative}")
     doc = json.loads(path.read_text(encoding="utf-8"))
-    assert (doc.get("schema"), doc.get("title"), doc.get("purpose")) == ("gen4-probe-scenario-v2", title, purpose), "wrong scenario schema/title/purpose"
-    allowed = {"schema", "title", "purpose", "save", "row_i_scenario", "provenance"}
+    assert (doc.get("schema"), doc.get("title"), doc.get("purpose")) == ("gen4-probe-scenario-v3", title, purpose), "wrong scenario schema/title/purpose"
+    allowed = {"schema", "title", "purpose", "save", "row_i_scenario", "pc_case_scenario", "provenance"}
     assert not doc.keys() - allowed, "scenario runtime overrides forbidden (pack routes and phases are authoritative)"
     spec = doc["save"]
     assert isinstance(spec, dict) and not spec.keys() - {"path", "sha256", "sidecar_sha256"}, "wrong scenario save schema"
@@ -1300,8 +1302,8 @@ def load_scenario(relative, title, purpose, *, committed=True):
     assert save.is_relative_to(root), "save escapes lane root"
     input_file(save, f"{title} {purpose} save")
     assert digest(save) == spec["sha256"], f"present scenario save hash mismatch: {save}"
-    if purpose == "row_i":
-        side = input_file(save.with_name(save.name + ".synth.json"), "row-i SYNTH ancestry sidecar")
+    if purpose in {"row_i", "pc_case"}:
+        side = input_file(save.with_name(save.name + ".synth.json"), f"{purpose} SYNTH ancestry sidecar")
         assert digest(side) == spec.get("sidecar_sha256"), "present scenario sidecar hash mismatch"
     elif "sidecar_sha256" in spec:
         raise AssertionError("baseline must be a native outdoor save")
@@ -1313,9 +1315,12 @@ def scenario_input(title):
     doc, save, sha = load_scenario(relative, title, "baseline")
     row_i = doc["row_i_scenario"]
     _, boxed, boxed_sha = load_scenario(row_i, title, "row_i")
+    pc_case = doc["pc_case_scenario"]
+    _, pc_save, pc_sha = load_scenario(pc_case, title, "pc_case")
     return {"scenario_path": relative, "scenario_sha256": sha,
             "row_i_scenario_path": row_i, "row_i_scenario_sha256": boxed_sha,
-            "scenario_save": save.as_posix(), "row_i_save": boxed.as_posix()}
+            "pc_case_scenario_path": pc_case, "pc_case_scenario_sha256": pc_sha,
+            "scenario_save": save.as_posix(), "row_i_save": boxed.as_posix(), "pc_case_save": pc_save.as_posix()}
 
 
 def emulator_pids():
@@ -1761,6 +1766,24 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
             "save_driver_cases": save_driver_cases,
             "save_completed": len(save_driver_cases) == 4 and all(save_driver_complete(trace) for trace in save_driver_cases.values()),
             "oracle": "save-driver active-to-idle state reads + server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
+def phase_case_input(case, cfg, baseline, codec, profile):
+    """A PC deposit never inherits the native one-mon baseline or row-i boxed descendant."""
+    if case.get("name") == "pc" and case.get("fixture_role") != "pc_case":
+        return None, None, "pc: dedicated pc_case fixture_role absent"
+    if case.get("fixture_role") != "pc_case":
+        return baseline, cfg, None
+    value = cfg.get("pc_case_save")
+    if not value or not Path(value).is_file():
+        return None, None, "pc: dedicated hash-bound pc_case party2 fixture absent"
+    save = Path(value)
+    setup = save_setup(save)
+    assert setup["setup"] == "SYNTH", "pc_case must disclose its party2 sidecar"
+    decoded = codec.parse_save(save.read_bytes(), profile)
+    assert len(decoded.party()) >= 2, "pc_case requires at least two party mons for native deposit"
+    assert synth_identity_present(decoded, setup["new_pid"]), "pc_case SYNTH identity absent"
+    return save, {**cfg, **setup, "scenario_role": "pc_case", "save_witness": source_witness(codec, decoded)}, None
+
+
 # MODEL replays may replace collaborators; production launch may not.
 def assert_harness_functions():
     for name, original, code in _HARNESS_FUNCTIONS:
@@ -1839,6 +1862,8 @@ def test_gen4_hook_probe(api, title):
     batch.mkdir(parents=True, exist_ok=False)
     before_save = digest(save)
     before_row_i_save = digest(row_i_save)
+    pc_save = Path(cfg["pc_case_save"]) if cfg.get("pc_case_save") else None
+    before_pc_save = digest(pc_save) if pc_save and pc_save.is_file() else None
     observations, errors, collected = {}, {}, {}
     required_o = ("OPEN", {"reason": "row o consumer not reached"})
     stage, failure_row = "baseline", "a"
@@ -1847,7 +1872,8 @@ def test_gen4_hook_probe(api, title):
                         "script_sha256": cut["script_sha256"], "profile_sha256": cut["profile_sha256"],
                         "requested_rate": 300, "module_sha256": cut["module_sha256"],
                         "surface_sha256": cut["surface_sha256"], "receipt_kind": cut["receipt_kind"],
-                        **save_setup(save), **supplied, "row_i_setup": save_setup(row_i_save)}
+                        **save_setup(save), **supplied, "row_i_setup": save_setup(row_i_save),
+                        "pc_case_setup": save_setup(pc_save) if before_pc_save else {"setup": "OPEN pc_case absent"}}
     try:
         for case in ("baseline", "rtc-repeat", "rtc-unpinned", "no-buttons", "patched-rom"):
             stage, failure_row = case, next(iter(CONTROL_REDS.get(case, {"a": ""})))
@@ -1894,8 +1920,13 @@ def test_gen4_hook_probe(api, title):
                                         "phase_cases_blocked": cfg["phase_cases_blocked"]})
             for index, case in enumerate(runnable):
                 stage = f"phase-{index} ({case['name']})"
-                rows, _ = launch_probe(module, title, source, save, profile, base, f"phase-{index}", batch / f"phase-{index}",
-                                       {**cfg, "phase_case": case, "route": case["route"]})
+                case_save, case_cfg, missing = phase_case_input(case, cfg, save, codec, decoded.profile)
+                if missing:
+                    errors["n"] = ("OPEN", {"reason": missing})
+                    reasons.append(missing)
+                    continue
+                rows, _ = launch_probe(module, title, source, case_save, profile, base, f"phase-{index}", batch / f"phase-{index}",
+                                       {**case_cfg, "phase_case": case, "route": case["route"]})
                 collected[f"phase-{index}"] = rows
                 p = rows["n"][1].get("observation", {}).get("physical")
                 assert p is not None, f"phase case lacks physical measurement: {case['name']}"
@@ -1941,10 +1972,12 @@ def test_gen4_hook_probe(api, title):
                        "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "requested_rate": 300}
             payload.update(module_sha256=cut["module_sha256"], surface_sha256=cut["surface_sha256"], receipt_kind=cut["receipt_kind"])
             payload.update(supplied, scenario_role="row_i" if row == "i" else "baseline")
+            if row == "n":
+                payload["pc_case_setup"] = attempt_metadata["pc_case_setup"]
             payload.update(save_setup(row_i_save if row == "i" else save))
             rows[row] = (status, payload)
         stage, failure_row = "original-save check", "i"
-        assert digest(save) == before_save and digest(row_i_save) == before_row_i_save, "original save was modified"
+        assert digest(save) == before_save and digest(row_i_save) == before_row_i_save and (before_pc_save is None or digest(pc_save) == before_pc_save), "original save was modified"
         result = publish_combined(batch, rows, {})
         assert not missed, f"control(s) did not produce their targeted red in {batch}: {missed}"
         assert result != "FAIL", f"G1 FAIL; preserved receipt {batch / 'combined.txt'}"
@@ -1954,7 +1987,7 @@ def test_gen4_hook_probe(api, title):
     finally:
         failure = sys.exc_info()[1]
         try:
-            unchanged = digest(save) == before_save and digest(row_i_save) == before_row_i_save
+            unchanged = digest(save) == before_save and digest(row_i_save) == before_row_i_save and (before_pc_save is None or digest(pc_save) == before_pc_save)
         except OSError:
             unchanged = False
         if not unchanged:
@@ -2244,14 +2277,14 @@ def test_bridge_replace_bound_fails_loud_and_other_errors_do_not_retry(monkeypat
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize("prefix,purpose", (("scenario", "baseline"), ("row_i_scenario", "row_i")))
+@pytest.mark.parametrize("prefix,purpose", (("scenario", "baseline"), ("row_i_scenario", "row_i"), ("pc_case_scenario", "pc_case")))
 def test_scenario_receipt_hash_red_and_revert(tmp_path, monkeypatch, prefix, purpose):
     """MODEL: same code/ROM receipt must refuse changed scenario bytes."""
     import sys
     monkeypatch.setattr(sys.modules[__name__], "REPO", tmp_path)
     scenario = tmp_path / "data/gen4/scenarios/hg.json"
     scenario.parent.mkdir(parents=True)
-    original = json.dumps({"schema": "gen4-probe-scenario-v2", "title": "heartgold", "purpose": purpose}).encode()
+    original = json.dumps({"schema": "gen4-probe-scenario-v3", "title": "heartgold", "purpose": purpose}).encode()
     scenario.write_bytes(original)
     text = receipt(**{prefix + "_path": "data/gen4/scenarios/hg.json", prefix + "_sha256": digest(scenario)})
     def consume():
@@ -2264,14 +2297,14 @@ def test_scenario_receipt_hash_red_and_revert(tmp_path, monkeypatch, prefix, pur
     assert consume()["a"][0] == "PASS"
 
 
-@pytest.mark.parametrize("prefix", ("scenario", "row_i_scenario"))
+@pytest.mark.parametrize("prefix", ("scenario", "row_i_scenario", "pc_case_scenario"))
 def test_scenario_binding_requires_current_title_and_inventory(tmp_path, monkeypatch, prefix):
     import sys
     monkeypatch.setattr(sys.modules[__name__], "REPO", tmp_path)
     path = tmp_path / "data/gen4/scenarios/input.json"
     path.parent.mkdir(parents=True)
-    path.write_text(json.dumps({"schema": "gen4-probe-scenario-v2", "title": "heartgold",
-                                "purpose": "baseline" if prefix == "scenario" else "row_i"}))
+    path.write_text(json.dumps({"schema": "gen4-probe-scenario-v3", "title": "heartgold",
+                                "purpose": {"scenario": "baseline", "row_i_scenario": "row_i", "pc_case_scenario": "pc_case"}[prefix]}))
     good = {prefix + "_path": "data/gen4/scenarios/input.json", prefix + "_sha256": digest(path)}
     bind_scenarios(good, "heartgold", required=False)
     for patch, why in (({prefix + "_sha256": "0" * 64}, "hash"),
@@ -2309,7 +2342,7 @@ def test_committed_scenario_inputs_preserve_pack_routes_and_boxed_ancestry(title
     doc, save, sha = load_scenario(baseline, title, "baseline", committed=False)
     assert not {"route", "phase_cases", "phase_cases_blocked", "persistence_route"} & doc.keys()
     artifact = json.loads((REPO / "data/games" / TITLE_PACK[title] / "profile.json").read_text())["titles"][title]
-    assert len(artifact["phase_cases"]) == 4
+    assert len(artifact["phase_cases"]) == 6
     route, why = resolve_pack_route(artifact["route"], artifact["route_legs"])
     assert route and not why
     _, boxed, boxed_sha = load_scenario(doc["row_i_scenario"], title, "row_i", committed=False)
@@ -2320,8 +2353,13 @@ def test_committed_scenario_inputs_preserve_pack_routes_and_boxed_ancestry(title
     decoded = codec.parse_save(boxed.read_bytes(), "hge" if title == "heartgold_hge" else "hgss")
     assert synth_identity_present(decoded, setup["new_pid"])
     assert len(decoded.party()) == 1 and any(b["mons"] for b in decoded.boxes())
+    _, pc_save, pc_sha = load_scenario(doc["pc_case_scenario"], title, "pc_case", committed=False)
+    assert pc_save != save and pc_save != boxed
+    pc_decoded = codec.parse_save(pc_save.read_bytes(), decoded.profile)
+    assert len(pc_decoded.party()) == 2 and save_setup(pc_save)["setup"] == "SYNTH"
     bind_scenarios({"scenario_path": baseline, "scenario_sha256": sha,
-                    "row_i_scenario_path": doc["row_i_scenario"], "row_i_scenario_sha256": boxed_sha}, title)
+                    "row_i_scenario_path": doc["row_i_scenario"], "row_i_scenario_sha256": boxed_sha,
+                    "pc_case_scenario_path": doc["pc_case_scenario"], "pc_case_scenario_sha256": pc_sha}, title)
 
 
 def test_scenario_load_rejects_overrides_and_wrong_save_hash_then_reverts(tmp_path, monkeypatch):
@@ -2335,7 +2373,7 @@ def test_scenario_load_rejects_overrides_and_wrong_save_hash_then_reverts(tmp_pa
     relative = "data/gen4/scenarios/heartgold.json"
     path = tmp_path / relative
     path.parent.mkdir(parents=True)
-    doc = {"schema": "gen4-probe-scenario-v2", "title": "heartgold", "purpose": "baseline",
+    doc = {"schema": "gen4-probe-scenario-v3", "title": "heartgold", "purpose": "baseline",
            "save": {"path": "saves/native.SaveRAM", "sha256": digest(save)}}
     def load(value):
         path.write_text(json.dumps(value))
@@ -2355,3 +2393,194 @@ def test_harness_in_place_code_replacement_is_refused_and_reverts(monkeypatch):
         with pytest.raises(AssertionError, match="override forbidden: scenario_input"):
             assert_harness_functions()
     assert_harness_functions()
+
+
+BOUNDARY_REPLAY = r"""
+local callbacks={}; local frame=0; local wanted=true
+local Registry=load(REGISTRY_TEXT)()
+local binding={validate=function(s) return s end,
+ register=function(s,cb) callbacks[s.id]=cb; return "boundary-"..s.id end,
+ unregister=function() return true end,
+ capture=function(s) return {id=s.id,frame=frame} end}
+local composite=M.composite(Registry,binding)
+local monitor,state=M.phase_monitor(composite,"battle_close",{{id="exit"}},"exit",
+ function() return wanted end,function() return true end,function() return frame end)
+monitor.before(); frame=1; callbacks.exit(); wanted=false; monitor.after()
+monitor.before(); monitor.after(); monitor.finish()
+return state,composite:live_handles()
+"""
+
+
+def test_closing_frame_monitor_preserves_pending_once_red_revert(api):
+    r = api._runtime
+    r.globals().M = api._api
+    r.globals().REGISTRY_TEXT = (REPO / "lua/hook_registry.lua").read_text()
+    state, retained = r.execute(BOUNDARY_REPLAY)
+    assert state["pending_at_close"] == 1 and retained == 0 and state["second_drain"] == 0
+    assert list(state["seen"].values()) == [1]
+    boundary = state["close_boundaries"][1]
+    assert boundary["frame"] == 1 and boundary["pending"] == 1 and boundary["seam"] == "pre_close"
+    assert list(boundary["producer_frames"].values()) == [1]
+    text = SCRIPT.read_text()
+    for old, new, field, expected in (
+        ("if active() or not armed then", "if true then", "pending_at_close", 0),
+        (
+            "for _,e in ipairs(reg:drain()) do self.ready_events[#self.ready_events+1]=e end",
+            "",
+            "seen",
+            0,
+        ),
+    ):
+        assert text.count(old) == 1
+        changed = r.execute(text.replace(old, new))
+        r.globals().M = changed
+        bad, _ = r.execute(BOUNDARY_REPLAY)
+        assert (len(bad[field]) if field == "seen" else bad[field]) == expected
+        r.globals().M = r.execute(text)
+        good, retained = r.execute(BOUNDARY_REPLAY)
+        assert good["pending_at_close"] == 1 and len(good["seen"]) == 1 and retained == 0
+
+
+def test_pc_phase_fixture_absent_never_uses_baseline(tmp_path):
+    baseline = tmp_path / "baseline.SaveRAM"
+    baseline.write_bytes(b"not the party2 fixture")
+    save, cfg, reason = phase_case_input(
+        {"name": "pc", "fixture_role": "pc_case"}, {}, baseline, None, "hgss"
+    )
+    assert save is None and cfg is None and "pc_case" in reason
+    import inspect
+
+    text = inspect.getsource(phase_case_input)
+    needle = 'return None, None, "pc: dedicated hash-bound pc_case party2 fixture absent"'
+    namespace = dict(globals())
+    exec(text.replace(needle, "return baseline, cfg, None"), namespace)
+    bad_save, _, _ = namespace["phase_case_input"](
+        {"name": "pc", "fixture_role": "pc_case"}, {}, baseline, None, "hgss"
+    )
+    assert bad_save == baseline  # falsifier detects the forbidden fallback
+    assert (
+        phase_case_input({"name": "pc", "fixture_role": "pc_case"}, {}, baseline, None, "hgss")[0]
+        is None
+    )
+
+
+def test_static_pc_never_labels_an_overlay_as_arm9(api):
+    r = api._runtime
+    case = to_lua(r, {"name": "pc"})
+    assert api.static_pc(case, to_lua(r, {"image": "arm9"})) is True
+    assert api.static_pc(case, to_lua(r, {"image": "ov129", "overlay_id": 129})) is False
+    assert api.static_pc(case, to_lua(r, {"image": "arm9", "overlay_id": 129})) is False
+    assert api.static_pc(case, to_lua(r, {"image": "arm9"})) is True
+
+
+def test_closing_frame_validator_requires_the_oracle_and_one_delivery(api):
+    r = api._runtime
+    good = examples()["n"]
+    case = copy.deepcopy(good["physical"]["cases"][0])
+    case.update(
+        close_boundary_required=True,
+        oracle_frames=[7],
+        seen_frames=[7],
+        close_boundaries=[
+            {
+                "frame": 7,
+                "pending": 1,
+                "predicate_after": False,
+                "producer_frames": [7],
+                "seam": "pre_close",
+            }
+        ],
+    )
+    good["physical"]["cases"] = [case]
+    assert api.evaluate("n", to_lua(r, good)) == "PASS"
+    for patch in (
+        {"close_boundaries": []},
+        {"seen_frames": [7, 7]},
+        {
+            "close_boundaries": [
+                {
+                    "frame": 7,
+                    "pending": 0,
+                    "predicate_after": False,
+                    "producer_frames": [7],
+                    "seam": "pre_close",
+                }
+            ]
+        },
+        {
+            "close_boundaries": [
+                {
+                    "frame": 7,
+                    "pending": 1,
+                    "predicate_after": True,
+                    "producer_frames": [7],
+                    "seam": "pre_close",
+                }
+            ]
+        },
+    ):
+        bad = copy.deepcopy(good)
+        bad["physical"]["cases"][0].update(patch)
+        assert api.evaluate("n", to_lua(r, bad))[0] == "FAIL"
+        assert api.evaluate("n", to_lua(r, good)) == "PASS"
+
+
+@pytest.mark.parametrize("guard", ("deadline", "persistent_pin"))
+def test_settle_guard_mutations_red_revert(api, guard):
+    r = api._runtime
+    source = SCRIPT.read_text()
+    policy = to_lua(r, {"max_frames": 4})
+    pins = to_lua(r, {"pin": {"ov74": "deadbeef"}})
+
+    def replay(module):
+        state = to_lua(r, {"current": {}, "samples": []})
+
+        def ready(frame, raw):
+            return module.phase_sites_ready(
+                to_lua(
+                    r,
+                    [
+                        {
+                            "id": "pin",
+                            "image": "ov12",
+                            "overlay_id": 12,
+                            "address": 100,
+                            "extent": 4,
+                            "register_hex": "01020304",
+                        }
+                    ],
+                ),
+                lambda *args: raw,
+                lambda *args: True,
+                frame,
+                state,
+                policy,
+                pins,
+            )
+
+        assert ready(0, "00000000") is False
+        if guard == "deadline":
+            return lambda: ready(5, "00000000")
+        assert ready(1, "01020304") is True
+        return lambda: ready(2, "00000000")
+
+    needle = (
+        'check(elapsed<policy.max_frames,"settle deadline ("..policy.max_frames.." frames): "..detail)'
+        if guard == "deadline"
+        else 'check(not sample.pin_ready_frame,"confirmed site changed: "..detail)'
+    )
+    assert source.count(needle) == 1
+    with pytest.raises(Exception, match="settle deadline|confirmed site changed"):
+        replay(api)()
+    mutant = r.execute(source.replace(needle, ""))
+    assert replay(mutant)() is False  # fault silently deferred by the broken guard
+    restored = r.execute(source)
+    with pytest.raises(Exception, match="settle deadline|confirmed site changed"):
+        replay(restored)()
+
+
+def test_pc_case_missing_role_never_falls_back(tmp_path):
+    baseline = tmp_path / "baseline.sav"
+    baseline.write_bytes(b"baseline")
+    save, _, reason = phase_case_input({"name": "pc"}, {}, baseline, None, "hgss")
+    assert save is None and "fixture_role" in reason

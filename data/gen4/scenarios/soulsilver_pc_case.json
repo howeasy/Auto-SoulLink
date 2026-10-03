@@ -1,0 +1,11 @@
+{
+  "schema": "gen4-probe-scenario-v3",
+  "title": "soulsilver",
+  "purpose": "pc_case",
+  "save": {
+    "path": "g1inputs-c935-1015/ss_p2.SaveRAM",
+    "sha256": "2eef6df1bd9d29b02b3699a9b99a98924b41d017360bd0104c4f744b44890a3e",
+    "sidecar_sha256": "ab33c5b552662f75ca664b2bdcafa514128e0fc9655710909e3e23ca43dc7ee8"
+  },
+  "provenance": "SYNTH party2 fixture; dedicated to native PC deposit phase. No baseline or boxed-descendant fallback."
+}

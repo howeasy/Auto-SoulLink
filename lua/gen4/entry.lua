@@ -49,9 +49,9 @@ end
 
 -- FLOORS (F11): a vanilla admission with fewer anchors than this is refused, so a pack edit that
 -- drops anchors cannot quietly weaken the hge-vs-vanilla discrimination. Today's HG/SS packs carry
--- 19 arm9 site anchors + 3 admission_anchors (0x02000CD0 hook site and two more); raising the numbers
+-- 20 arm9 site anchors (including the Battle_Exit closing-frame probe) + 3 admission_anchors (0x02000CD0 hook site and two more); raising the numbers
 -- is a conscious edit here, lowering them is a security decision.
-Entry.MIN_SITE_ANCHORS, Entry.MIN_ADMISSION_ANCHORS = 19, 3
+Entry.MIN_SITE_ANCHORS, Entry.MIN_ADMISSION_ANCHORS = 20, 3
 
 -- Pinned byte runs a vanilla ROM must show in ARM9 RAM: {name, address, hex}, in a fixed order.
 local function anchors_of(title)

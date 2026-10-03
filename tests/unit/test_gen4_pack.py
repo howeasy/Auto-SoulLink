@@ -461,8 +461,8 @@ def test_committed_phase_cases_validate_and_cover_the_candidates(mode):
     pack = _pack(mode)
     for name, t in pack["titles"].items():
         assert g.validate_phase_cases(t) == [], name
-        assert [c["name"] for c in t["phase_cases"]] == ["battle", "battle_arm", "battle_disarm", "reset"]
-        assert [c["name"] for c in t["phase_cases_blocked"]] == ["pc"]
+        assert [c["name"] for c in t["phase_cases"]] == ["battle", "battle_arm", "battle_disarm", "battle_close", "reset", "pc"]
+        assert [c["name"] for c in t["phase_cases_blocked"]] == ["pc_withdraw_release"]
         for phase in ("battle", "pc"):
             cases = [c for c in t["phase_cases"] + t["phase_cases_blocked"] if c["phase"] == phase]
             chosen = {s for c in cases for s in c["sites"]}
@@ -470,10 +470,11 @@ def test_committed_phase_cases_validate_and_cover_the_candidates(mode):
             assert chosen | skipped == set(t["phases"][phase]["candidate_sites"]) and not chosen & skipped, (name, phase)
             assert all(isinstance(why, str) and why for why in t["phase_cases_excluded"][phase].values())
         for c in t["phase_cases"]:
-            assert c["predicate"] == {"symbol": "sFieldSysPtr", "deref": [0, 4], "offset": 0x0C, "value": 12}
-            assert c["predicate_file_check"]["ovy_id"] == 12 and c["status"] == "ROUTE_LEGS_PARTLY_NEW"
+            value = 14 if c["phase"] == "pc" else 12
+            assert c["predicate"] == {"symbol": "sFieldSysPtr", "deref": [0, 4], "offset": 0x0C, "value": value}
+            assert c["predicate_file_check"]["ovy_id"] == value and c["status"] == "ROUTE_LEGS_PARTLY_NEW"
             assert c["producer_site"] in c["sites"] and len(c["sites"]) + 1 <= 4 and c["open"]  # honest: nothing is closed
-            assert c["route"][0] in ("gen4_routes:battle_settled",) and all(leg in c["route_status"] for leg in c["route"])
+            assert c["route"][0] in ("gen4_routes:battle_settled", "gen4_pc:reach_pc_terminal") and all(leg in c["route_status"] for leg in c["route"])
         pc = t["phase_cases_blocked"][0]
         assert pc["predicate"]["value"] == pc["predicate_file_check"]["ovy_id"] == 14 and pc["status"] == "BLOCKED_NO_FIXTURE"
         assert "withdraw leg is unrouted" in pc["blocked_reason"] and "6b" in pc["blocked_reason"]
@@ -1743,3 +1744,61 @@ def test_d7_seam_carries_its_file_pin_on_every_build(mode):
         seam = title["profile"]["battle"]["d7"]["seam"]
         assert isinstance(seam.get("addr"), int) and seam["addr"] % 2 == 0, seam
         assert isinstance(seam.get("pin_hex"), str) and len(seam["pin_hex"]) == 8, seam
+
+
+@pytest.mark.parametrize("mode", ("hgss", "hge"))
+def test_generated_battle_close_uses_template_exit_full_pin(mode):
+    for title in _pack(mode)["titles"].values():
+        case = next(c for c in title["phase_cases"] if c["name"] == "battle_close")
+        site = title["sites"][case["producer_site"]]
+        assert site["symbol"] == "Battle_Exit" and site["image"] == "arm9"
+        assert site["address"] == case["predicate_file_check"]["exit"] & ~1
+        assert bytes.fromhex(site["register_hex"])[:4] == bytes.fromhex("01207047")
+        assert site["extent"] == len(bytes.fromhex(site["register_hex"])) >= 4
+        assert "src/launch_application.c:174-176" in site["source"]
+        assert case["predicate"]["value"] == 12
+        assert case["route"] == [g.BS, g.RUN, g.EXIT_LEG]
+        assert case["close_boundary"] is True
+
+
+@pytest.mark.parametrize("mode", ("hgss", "hge"))
+def test_pc_deposit_case_keeps_unexercised_delete_withdraw_release_open(mode):
+    for title in _pack(mode)["titles"].values():
+        pc = next(c for c in title["phase_cases"] if c["name"] == "pc")
+        assert pc["fixture_role"] == "pc_case" and pc["predicate"]["value"] == 14
+        assert pc["route"] == [
+            "gen4_pc:reach_pc_terminal",
+            "pc_open_storage",
+            "pc_deposit_first_party_mon",
+            "pc_exit_app",
+        ]
+        assert title["sites"][pc["producer_site"]]["image"] == "arm9"
+        blocked = title["phase_cases_blocked"][0]
+        assert (
+            blocked["name"] == "pc_withdraw_release"
+            and "pc_delete_by_index_pair" in blocked["sites"]
+        )
+        assert "pc_withdraw_box_mon" in blocked["route"] and "RELEASE" in blocked["blocked_reason"]
+        if mode == "hge":
+            assert pc["producer_site"] == "pc_place_arm9_entry" and len(pc["sites"]) == 2
+            replacement = title["sites"]["pc_place_first_in_box"]
+            static = title["sites"][pc["producer_site"]]
+            assert static["address"] == replacement["replaces"]["vanilla_address"]
+            assert static["register_hex"] == replacement["replaces"]["vanilla_entry_hex"]
+            assert static["register_hex"] != replacement["replaces"]["vanilla_register_hex"]
+            assert replacement["image"] == "ov129"
+            good = copy.deepcopy(title)
+            pc["producer_site"] = "pc_place_first_in_box"
+            assert any("static_pc" in e for e in g.validate_phase_cases(title))
+            assert not g.validate_phase_cases(
+                good
+            )  # revert: the genuine ARM9 trampoline remains required
+
+
+def test_blocked_pc_delete_callers_are_each_explicitly_open():
+    for mode in ("hgss", "hge"):
+        for title in _pack(mode)["titles"].values():
+            blocked = title["phase_cases_blocked"][0]
+            row = next(s for s in blocked["caller_matrix"]["sites"] if s["site"] == "pc_delete_by_index_pair")
+            assert row["callers"] and all(not c["exercised_by_route"] and c["why_open"] for c in row["callers"])
+            assert all(any(c["caller"] in reason for reason in blocked["open"]) for c in row["callers"])
