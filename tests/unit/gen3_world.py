@@ -100,9 +100,16 @@ def compress_box_mon(raw80: bytes) -> bytes:
     return bytes(out)
 
 
+def default_kind(pack: str, title: str) -> str:
+    """The artifact a unit world boots by default: the companion when the title ships one (the
+    companion patch is what SLink admits for production), else the clean cartridge."""
+    return "companion" if "companion" in pack_json(pack, "engine_signals.json")["titles"][title]["artifacts"] else "clean"
+
+
 class World:
-    def __init__(self, pack="gen3_frlg", title="firered", kind="clean", player="a",
+    def __init__(self, pack="gen3_frlg", title="firered", kind=None, player="a",
                  connected=True, native=None, boxes=None, journal=None, model_companion=False):
+        kind = default_kind(pack, title) if kind is None else kind
         self.pack, self.title, self.kind, self.player = pack, title, kind, player
         self.artifact_kind = "clean" if kind == "named" else kind
         titles = pack_json(pack, "engine_signals.json")["titles"]

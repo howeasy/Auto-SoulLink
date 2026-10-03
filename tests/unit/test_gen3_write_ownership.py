@@ -113,7 +113,7 @@ def _party(*pids, hp=20):
     return [mon_record(p, OT, species=4 + i, nickname=f"MON{i}", hp=hp) for i, p in enumerate(pids)]
 
 
-def _live(pack="gen3_frlg", title="firered", kind="clean", pids=(A, B), frames=60):
+def _live(pack="gen3_frlg", title="firered", kind=None, pids=(A, B), frames=60):
     w = World(pack, title, kind)
     w.set_party(_party(*pids))
     w.step_to(frames)
