@@ -2,6 +2,7 @@
 >
 > - **The START row uses `repoints`, not `hooks`: ACCEPTED** (verified `hg-engine/repoints:44-46`, a 3-entry ARM9 function-table repoint). Only the inhibit-bit clear is a `hooks` row. FEATURE_BAR is corrected.
 > - **The 36 B ARM9 expansion stub is full, so the C2 service registration rides a vanilla ARM9 site (an 8 B hook) or load_arm9_expansion's tail. ACCEPTED as a constraint**; the site is chosen at C6 SOURCE against all existing `hooks` rows.
+> - **SUPERSEDED by the registration decision:** the service registers from hge's own `SaveData_New` replacement (`hg-engine/src/save.c:139`, hooked at `hooks:402`), with no new hook row. A `hooks` 4-field row REPLACES a function (`scripts/make.py:151-155`); the non-destructive 3-field form needs at least 0x1C bytes, so it is the fallback only. See C2_BEACON_SPEC's decision block.
 > - **ov129 growth has no bounds check: ACCEPTED as a hard gate.** The first C6 build asserts ov129 memSize <= 0x7FA0 from the overlay table, plus `Slink_*` symbols in offsets.ini.
 > - **Q2 ("the generic ORIGIN parser drops a hex digit") is REJECTED.** `line.split()[4]` is `"0x023C8000,"`, and `[len("0x"):-1]` strips the `0x` prefix AND the trailing comma, giving `023C8000` (correct). This matches the coordinator's ROM-table measurement (ov130 0x023C4000, ov131 0x023C8000).
 > - The nurse line-number corrections in C5 and the ov131 origin (`src/field/linker.ld:5`) are ACCEPTED.

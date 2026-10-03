@@ -12,6 +12,11 @@
 >   - Follow-up (Gen 5): a named `SLINK_TITLE_OFFSET 0xE00 / SLINK_TITLE_SIZE 0x40` in abi.h; until then cite this ruling.
 > - **The link gate (`sub_02036144`):** C2 scope is single-player; the `vwaitTaskQueue` insurance site is not added now. Record it in the C8 checklist.
 > - **The host reads the header itself** in `lua/gen4/companion.lua` (no `lua/nds` edit at C2); a shared reader export waits for the C7 window.
+> - **Service registration site DECIDED (OMP cx-72f089e6, coordinator-verified):**
+>   - **HG/SS:** call `Slink_NDS_Register()` (latched) in `NitroMain` right after `InitSystemForTheGame()` (`src/main.c:51`), before the first `RegisterMainOverlay` at **`:77`** (not `:83`). A soft reset re-runs `NitroMain`.
+>   - **hge:** NO hooks row. hge already replaces `SaveData_New` (its only vanilla caller is `src/main.c:64`, during boot; `hooks:402`) with its own `src/save.c:139`, so append the register call before its `return`. That code calls `CreateSysTask`, which the fork already binds to `0x0200E320|1` = vanilla `SysTask_CreateOnMainQueue` (`rom.ld:477`, `include/task.h:51`).
+>   - A one-line fork source edit, like the accepted C5 commonscript edit.
+>   - **Falsifier:** a published `registrations` counter stays 1 across a full route and becomes 2 after a START+SELECT+L+R soft reset.
 >
 # Gen 4 companion C2: beacon, capabilities and liveness (SPEC draft, 2026-10-02)
 
