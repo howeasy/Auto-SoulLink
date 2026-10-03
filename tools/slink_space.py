@@ -77,16 +77,18 @@ def _require_link_detection() -> None:
         raise RuntimeError("link detection unavailable on this Python; refusing to delete or copy")
 
 
+_LINK_TAGS = {0xA000000C: "symlink", 0xA000001D: "symlink", 0xA0000003: "junction"}
+LINK_KINDS = ("symlink", "junction")
+
+
 def _st_link_kind(st) -> str | None:
-    """'symlink', 'junction' or None.  Any other reparse point counts as a symlink: never
-    entered."""
+    """'symlink' / 'junction' for the reparse tags that are links, 'leaf' for any other
+    reparse point (cloud placeholder, dedup, ...: counted, never entered, never recreated
+    as a link), None for an ordinary file or dir."""
     if stat.S_ISLNK(st.st_mode):
         return "symlink"
-    attrs = getattr(st, "st_file_attributes", 0)
-    if attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
-        tag = getattr(st, "st_reparse_tag", None)
-        return "junction" if tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003) \
-            else "symlink"
+    if getattr(st, "st_file_attributes", 0) & 0x400:  # FILE_ATTRIBUTE_REPARSE_POINT
+        return _LINK_TAGS.get(getattr(st, "st_reparse_tag", None), "leaf")
     return None
 
 
@@ -94,16 +96,16 @@ def _entry_link_kind(entry: os.DirEntry) -> str | None:
     try:
         return _st_link_kind(entry.stat(follow_symlinks=False))
     except OSError:
-        return "symlink"  # unreadable: fail closed, never enter it
+        return "leaf"  # unreadable: fail closed, never enter it
 
 
 def _entry_is_link(entry: os.DirEntry) -> bool:
-    return _entry_link_kind(entry) is not None
+    return _entry_link_kind(entry) in LINK_KINDS
 
 
 def _path_is_link(p) -> bool:
     try:
-        return _st_link_kind(os.lstat(str(p))) is not None
+        return _st_link_kind(os.lstat(str(p))) in LINK_KINDS
     except OSError:
         return False
 
@@ -120,7 +122,7 @@ def tree_stats(path) -> dict:
     """Size, file count, newest mtime and links of a tree.  Never follows a symlink or a
     junction (worktrees here hold junctions into the shared .cache)."""
     p = str(path)
-    out = {"size": 0, "files": 0, "newest": 0.0, "links": []}
+    out = {"size": 0, "files": 0, "newest": 0.0, "links": [], "leaf_dirs": 0}
     try:
         st = os.lstat(p)
     except OSError:
@@ -138,7 +140,7 @@ def tree_stats(path) -> dict:
             continue
         for e in entries:
             kind = _entry_link_kind(e)
-            if kind:
+            if kind in LINK_KINDS:
                 with contextlib.suppress(OSError):
                     out["links"].append([os.path.relpath(e.path, p), _link_target(e.path),
                                          kind, os.path.isdir(e.path)])
@@ -148,7 +150,9 @@ def tree_stats(path) -> dict:
             except OSError:
                 continue
             out["newest"] = max(out["newest"], est.st_mtime)
-            if stat.S_ISDIR(est.st_mode):
+            if kind == "leaf":
+                out["leaf_dirs"] += int(stat.S_ISDIR(est.st_mode))
+            if stat.S_ISDIR(est.st_mode) and kind != "leaf":
                 stack.append(e.path)
             else:
                 out["size"] += est.st_size
@@ -170,6 +174,18 @@ def _rmtree(path) -> None:
     doesn't hang on how a given Python version classifies junctions."""
     _require_link_detection()
     p = str(path)
+    if not _path_is_link(p) and os.path.isdir(p):
+        try:
+            top_leaf = _st_link_kind(os.lstat(p)) == "leaf"
+        except OSError:
+            top_leaf = True
+        if top_leaf or tree_stats(p)["leaf_dirs"]:
+            raise RuntimeError(f"{p}: holds a non-link reparse dir (cloud placeholder?); "
+                               "refusing to delete it")
+    _rmtree_walk(p)
+
+
+def _rmtree_walk(p: str) -> None:
     if _path_is_link(p):
         try:
             os.unlink(p)
@@ -181,8 +197,11 @@ def _rmtree(path) -> None:
             _force(os.remove, p)
         return
     for e in list(os.scandir(p)):
-        if _entry_is_link(e) or e.is_dir(follow_symlinks=False):
-            _rmtree(e.path)
+        kind = _entry_link_kind(e)
+        if kind == "leaf" and e.is_dir(follow_symlinks=False):
+            raise RuntimeError(f"{e.path}: non-link reparse dir; refusing to enter it")
+        if kind in LINK_KINDS or e.is_dir(follow_symlinks=False):
+            _rmtree_walk(e.path)
         else:
             _force(os.remove, e.path)
     _force(os.rmdir, p)
@@ -875,6 +894,10 @@ def _copy_tree(src, dst, move=False):
 
 
 def _relink(dst, links):
+    """Recreate the links tree_stats recorded; only kinds this tool knows are links."""
+    bad = [link for link in links if link[2] not in LINK_KINDS]
+    if bad:
+        raise ValueError(f"refusing to fabricate links for non-link entries: {bad[:3]}")
     for rel, target, kind, is_dir in links:
         p = os.path.join(dst, rel)
         if os.path.lexists(p):

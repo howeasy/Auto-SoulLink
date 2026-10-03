@@ -611,6 +611,51 @@ def test_tree_stats_lists_links_without_their_bytes(W, shared_cache, pre312):
     assert top["size"] == 0 and top["files"] == 0
 
 
+@pytest.mark.parametrize("tag,kind", [(0xA000000C, "symlink"), (0xA000001D, "symlink"),
+                                      (0xA0000003, "junction"), (0x9000001A, "leaf"),
+                                      (0x80000013, "leaf")])
+def test_only_link_reparse_tags_are_links(tag, kind):
+    st = SimpleNamespace(st_mode=0o40777, st_file_attributes=0x410, st_reparse_tag=tag)
+    assert ss._st_link_kind(st) == kind
+
+
+@pytest.fixture
+def cloud_names(monkeypatch):
+    """Pretend entries named cloud* are non-link reparse points (cloud placeholders)."""
+    real = ss._entry_link_kind
+    monkeypatch.setattr(ss, "_entry_link_kind",
+                        lambda e: "leaf" if e.name.startswith("cloud") else real(e))
+
+
+def test_other_reparse_points_are_counted_leaves(W, cloud_names):
+    d = W.tmp / "drive"
+    (d / "clouddir").mkdir(parents=True)
+    (d / "clouddir" / "inside.bin").write_bytes(b"i" * 1000)
+    (d / "cloud.bin").write_bytes(b"c" * 100)
+    st = ss.tree_stats(d)
+    assert st["links"] == []
+    assert st["files"] == 2  # cloud.bin and clouddir counted as leaves; inside.bin not entered
+    assert 100 <= st["size"] < 1000 + 100
+    ss._relink(str(W.tmp / "dst"), st["links"])
+    assert not (W.tmp / "dst").exists()
+
+
+def test_rmtree_refuses_a_tree_holding_an_unknown_reparse_dir(W, cloud_names):
+    d = W.tmp / "drive2"
+    (d / "a").mkdir(parents=True)
+    (d / "a" / "first.txt").write_text("x")
+    (d / "clouddir").mkdir()
+    (d / "clouddir" / "inside.bin").write_text("i")
+    with pytest.raises(RuntimeError, match="reparse"):
+        ss._rmtree(d)
+    assert (d / "a" / "first.txt").exists() and (d / "clouddir" / "inside.bin").exists()
+
+
+def test_relink_only_recreates_links(W):
+    with pytest.raises(ValueError):
+        ss._relink(str(W.tmp / "dst"), [["x", str(W.tmp), "leaf", True]])
+
+
 def test_deleters_refuse_when_link_detection_is_unavailable(W, monkeypatch):
     d = W.tmp / "victim"
     d.mkdir()
