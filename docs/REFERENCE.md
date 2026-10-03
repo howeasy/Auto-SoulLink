@@ -325,6 +325,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 |---|---|---|
 | `/` | GET | The pair board (also `/runs/{id}` on the Manager) |
 | `/memorial` | GET | Memorial wall — dead pairs |
+| `/timeline` | GET | The run's story, oldest first: pairs formed, deaths, dead zones, burials, open areas (`server.board.timeline`); a managed run redirects to `/runs/{id}/timeline` |
 | `/obs` | GET | OBS scene trigger configuration |
 | `/debug` | GET | Debug console |
 | `/twitch` | GET | Twitch bot configuration and activity log |
@@ -464,6 +465,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
 | `/runs/{run_id}/cartridges` (also `/randomizer`) | GET | Gen 1 runs: the cartridges page — what each player plays (the picks, the SLink companion, Randomize and its options), the downloads, the `.rnqs` a randomized pair was built with. Preparing cartridges is normally part of `/new` |
+| `/runs/{run_id}/timeline` | GET | The run's timeline in the Manager's chrome, from its live status or, for a stopped run, what it persisted |
 | `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
 | `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
 | `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
