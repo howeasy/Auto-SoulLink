@@ -63,6 +63,7 @@
     "address": "integers; address_hex is the same value for humans",
     "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
     "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
+    "bag": "profile.bag: the save-array bag's balls pocket, for the Nuzlocke gate. array_id is the same number as profile.save.array_ids.bag; every offset is relative to that ARRAY's base (base: bag_array), never to the general block. balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) addresses slot i; each slot is a u16 id at +0 and a u16 quantity at +2 (slot_fields). ball_ids is every item id whose pocket is POCKET_BALLS, so has_pokeballs = some such slot has an id in ball_ids and a quantity > 0. pocket_layout carries every pocket's offset and slot count. Every value is parsed from the pinned source clone at the pin (source.commit + per-input sha256s); a missing clone emits null with the reason in open.bag, never a guess.",
     "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). battle.d7 = the D7 in-battle linked-faint seam read by lua/gen4/client.lua: seam {cmd, overlay_id, addr + pin_hex (HG/SS) | table (hge: the ROM dispatch word for cmd, client reads the pin live)}, ctx_cmd_off (u32 BattleContext.command), bs_party_off (BattleSystem.trainerParty[]), party_hp_off (PartyPokemon.hp), repl_flag_off (BattleContext replacement flag u32[ctx + off + 4*b] & 1); evidence in battle_evidence.d7.fields (class + cite + PHYSICAL receipt per field) and battle_d7_file_checks (the ROM bytes). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
@@ -3136,7 +3137,7 @@
           ],
           "cap": 2,
           "open": [
-            "hge replaces 25 PC functions in ov129 (resident from boot): no overlay trigger exists, caller predicates are PHYSICAL cells"
+            "hge replaces 29 PCStorage_* functions in ov129 (resident from boot): no overlay trigger exists, caller predicates are PHYSICAL cells. Count = the 29 PCStorage_* rows of the fork's hooks table, hooks:433-461 under `#pc box expansion` (hooks:462 sub_02074128 is the one unnamed row in the block)"
           ],
           "owner_overlay": 129,
           "producers": [
@@ -3192,6 +3193,114 @@
         }
       },
       "profile": {
+        "bag": {
+          "array_id": 3,
+          "array_id_note": "the bag save array; profile.save.array_ids.bag carries the same number",
+          "ball_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            492,
+            493,
+            494,
+            495,
+            496,
+            497,
+            498,
+            499,
+            500,
+            576,
+            851
+          ],
+          "ball_slot_count": 26,
+          "ball_slot_size": 4,
+          "balls_pocket_off": 2216,
+          "balls_pocket_off_hex": "0x08a8",
+          "base": "bag_array",
+          "evidence": {
+            "ball_ids": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b data/itemdata/itemdata.c (every item whose fieldPocket is POCKET_BALLS) + include/constants/item.h (the id constants)",
+            "ball_slot_count": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/constants/item.h (NUM_BAG_BALLS)",
+            "ball_slot_size": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/bag.h (struct ItemSlot: id 2 B + quantity 2 B)",
+            "balls_pocket_off": "SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b include/bag.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/bag.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
+          },
+          "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
+          "note": "27 item ids live in the balls pocket and 26 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "pocket_layout": {
+            "TMsHMs": {
+              "count": 101,
+              "count_const": "NUM_BAG_TMS_HMS",
+              "off": 1348
+            },
+            "balls": {
+              "count": 26,
+              "count_const": "NUM_BAG_BALLS",
+              "off": 2216
+            },
+            "battleItems": {
+              "count": 30,
+              "count_const": "NUM_BAG_BATTLE_ITEMS",
+              "off": 2320
+            },
+            "berries": {
+              "count": 64,
+              "count_const": "NUM_BAG_BERRIES",
+              "off": 1960
+            },
+            "items": {
+              "count": 245,
+              "count_const": "NUM_BAG_ITEMS",
+              "off": 0
+            },
+            "keyItems": {
+              "count": 92,
+              "count_const": "NUM_BAG_KEY_ITEMS",
+              "off": 980
+            },
+            "mail": {
+              "count": 12,
+              "count_const": "NUM_BAG_MAIL",
+              "off": 1752
+            },
+            "medicine": {
+              "count": 40,
+              "count_const": "NUM_BAG_MEDICINE",
+              "off": 1800
+            }
+          },
+          "slot_fields": {
+            "id": {
+              "off": 0,
+              "size": 2
+            },
+            "quantity": {
+              "off": 2,
+              "size": 2
+            }
+          },
+          "source": {
+            "commit": "fc517576498305ecb5f5e1de44681c6e3822361b",
+            "inputs": {
+              "data/itemdata/itemdata.c": "0c3bb8a5d20d47b030c72071f367f404ff7998e6969cb61a4998dc9985502e0c",
+              "include/bag.h": "143213953a08c7e01e4c337595630788c35aefed8a8279230865183c106bf2ed",
+              "include/config.h": "d7742723ef0309834453a3d4fb9fc907950805e1f3e25db206409ca950fb3698",
+              "include/constants/item.h": "25955b175aca5d8817529a99464657cac5ed3374733b4cb8346308bf4f676a81"
+            },
+            "repo": "hg-engine fork"
+          }
+        },
         "battle": {
           "ability_off": 122,
           "ability_width": 2,

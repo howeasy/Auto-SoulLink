@@ -5,6 +5,10 @@ Writes (both from the same parse, one provenance block each):
   data/games/gen4_hgss/area_map.json   area_id -> display/maps, plus map_id -> area_id
   data/games/gen4_hgss/locations.json  map_id -> const/token/mapsec/region/type/area
 
+gen4_hge gets NOTHING from this generator, on purpose: the fork keeps the vanilla MAP_* ids but
+declares no MAPSEC_*, has no map_headers.h and no msg tree, so an area (a map section) and its display
+name are not derivable from the fork's own source. See HGE_NOT_EMITTED below.
+
 Source (pokeheartgold @ the commit pinned in data/gen4_sources.lock.json, never a ROM text dump):
   include/constants/maps.h          MAP_* id and the MAP_<token> comment
   src/data/map_headers.h            .mapsec .regionNo .mapType .wildEncounterBank per map
@@ -45,6 +49,22 @@ import gen4_pins  # noqa: E402
 PIN = gen4_pins.SOURCE_COMMITS["pokeheartgold_citation"]
 OUT_DIR = REPO / "data" / "games" / "gen4_hgss"
 ENV_CLONE = "SLINK_PRET_HGSS"
+
+# gen4_hge ships NO area map, and that is a SOURCE fact, not an omission. The fork keeps the vanilla map
+# ids -- include/constants/maps.h declares exactly 540 maps, MAP_EVERYWHERE 0 (:4) .. MAP_T10R0801 539
+# (:543), the same range and the same endpoints as pret -- but none of the four inputs an area needs:
+#   * no MAPSEC_* constant anywhere in the tree, and an area IS a map section (mapsec);
+#   * no src/data/map_headers.h, so no per-map .mapsec/.regionNo/.mapType/.wildEncounterBank;
+#   * no `// MAP_<token>` comments on the maps.h #defines, so the token column has no source;
+#   * no files/msgdata/msg tree at all, so no msg_0279 area names.
+# Importing pret's table to fill those in would be a cross-repo oracle, which is what this generator
+# exists to avoid. gen4_hge is therefore absent by proof, and lua/gen4/inputs.lua already refuses the
+# area_of producer for that pack instead of borrowing gen4_hgss's.
+HGE_NOT_EMITTED = (
+    "gen4_hge has no area_map.json/locations.json: hg-engine keeps the vanilla MAP_* ids (540 maps, 0..539) but declares no "
+    "MAPSEC_*, has no src/data/map_headers.h, carries no // MAP_<token> comments and has no files/msgdata/msg tree, so the "
+    "area identity (a map section) and its display name are not derivable from the fork's own source"
+)
 
 
 class PretAbsent(Exception):

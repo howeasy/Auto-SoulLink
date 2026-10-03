@@ -89,6 +89,7 @@
     "address": "integers; address_hex is the same value for humans",
     "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
     "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
+    "bag": "profile.bag: the save-array bag's balls pocket, for the Nuzlocke gate. array_id is the same number as profile.save.array_ids.bag; every offset is relative to that ARRAY's base (base: bag_array), never to the general block. balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) addresses slot i; each slot is a u16 id at +0 and a u16 quantity at +2 (slot_fields). ball_ids is every item id whose pocket is POCKET_BALLS, so has_pokeballs = some such slot has an id in ball_ids and a quantity > 0. pocket_layout carries every pocket's offset and slot count. Every value is parsed from the pinned source clone at the pin (source.commit + per-input sha256s); a missing clone emits null with the reason in open.bag, never a guess.",
     "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). battle.d7 = the D7 in-battle linked-faint seam read by lua/gen4/client.lua: seam {cmd, overlay_id, addr + pin_hex (HG/SS) | table (hge: the ROM dispatch word for cmd, client reads the pin live)}, ctx_cmd_off (u32 BattleContext.command), bs_party_off (BattleSystem.trainerParty[]), party_hp_off (PartyPokemon.hp), repl_flag_off (BattleContext replacement flag u32[ctx + off + 4*b] & 1); evidence in battle_evidence.d7.fields (class + cite + PHYSICAL receipt per field) and battle_d7_file_checks (the ROM bytes). Platinum: battle is null, reason in open",
     "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
@@ -2984,6 +2985,112 @@
         }
       },
       "profile": {
+        "bag": {
+          "array_id": 3,
+          "array_id_note": "the bag save array; profile.save.array_ids.bag carries the same number",
+          "ball_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            492,
+            493,
+            494,
+            495,
+            496,
+            497,
+            498,
+            499,
+            500
+          ],
+          "ball_slot_count": 24,
+          "ball_slot_size": 4,
+          "balls_pocket_off": 1728,
+          "balls_pocket_off_hex": "0x06c0",
+          "base": "bag_array",
+          "evidence": {
+            "ball_ids": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 files/itemtool/itemdata/item_data.csv (every item whose fieldPocket is POCKET_BALLS) + include/constants/items.h (the id constants)",
+            "ball_slot_count": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/items.h (NUM_BAG_BALLS)",
+            "ball_slot_size": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/item.h (struct ItemSlot: id 2 B + quantity 2 B)",
+            "balls_pocket_off": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/bag_types_def.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/item.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
+          },
+          "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
+          "note": "25 item ids live in the balls pocket and 24 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "pocket_layout": {
+            "TMsHMs": {
+              "count": 101,
+              "count_const": "NUM_BAG_TMS_HMS",
+              "off": 860
+            },
+            "balls": {
+              "count": 24,
+              "count_const": "NUM_BAG_BALLS",
+              "off": 1728
+            },
+            "battleItems": {
+              "count": 30,
+              "count_const": "NUM_BAG_BATTLE_ITEMS",
+              "off": 1824
+            },
+            "berries": {
+              "count": 64,
+              "count_const": "NUM_BAG_BERRIES",
+              "off": 1472
+            },
+            "items": {
+              "count": 165,
+              "count_const": "NUM_BAG_ITEMS",
+              "off": 0
+            },
+            "keyItems": {
+              "count": 50,
+              "count_const": "NUM_BAG_KEY_ITEMS",
+              "off": 660
+            },
+            "mail": {
+              "count": 12,
+              "count_const": "NUM_BAG_MAIL",
+              "off": 1264
+            },
+            "medicine": {
+              "count": 40,
+              "count_const": "NUM_BAG_MEDICINE",
+              "off": 1312
+            }
+          },
+          "slot_fields": {
+            "id": {
+              "off": 0,
+              "size": 2
+            },
+            "quantity": {
+              "off": 2,
+              "size": 2
+            }
+          },
+          "source": {
+            "commit": "ad7a3afa0cfc144fe6837c410cb95b2727217f54",
+            "inputs": {
+              "files/itemtool/itemdata/item_data.csv": "d4f1f80e8a79504599837912c59f18acd77c3c111d892dfa094f6d0a7c455ac1",
+              "include/bag_types_def.h": "7661ae7e56846b1f9ca355fa5b838a3cec9e6f1a8d251720601c96cce06c5fdc",
+              "include/constants/items.h": "20576a5dc04bd40cb1d212f1dad2de8e0083cf966e9535e3c10baac36cbd7193",
+              "include/item.h": "ba3c9bc510e28baef172eae0f661549ceaa8860adb7c2689c7eff89fe5eaf822"
+            },
+            "repo": "pret/pokeheartgold"
+          }
+        },
         "battle": {
           "ability_off": 39,
           "ability_width": 1,
@@ -8674,6 +8781,112 @@
         }
       },
       "profile": {
+        "bag": {
+          "array_id": 3,
+          "array_id_note": "the bag save array; profile.save.array_ids.bag carries the same number",
+          "ball_ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            492,
+            493,
+            494,
+            495,
+            496,
+            497,
+            498,
+            499,
+            500
+          ],
+          "ball_slot_count": 24,
+          "ball_slot_size": 4,
+          "balls_pocket_off": 1728,
+          "balls_pocket_off_hex": "0x06c0",
+          "base": "bag_array",
+          "evidence": {
+            "ball_ids": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 files/itemtool/itemdata/item_data.csv (every item whose fieldPocket is POCKET_BALLS) + include/constants/items.h (the id constants)",
+            "ball_slot_count": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/items.h (NUM_BAG_BALLS)",
+            "ball_slot_size": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/item.h (struct ItemSlot: id 2 B + quantity 2 B)",
+            "balls_pocket_off": "SOURCE pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/bag_types_def.h (pocket order items, keyItems, TMsHMs, mail, medicine, berries, balls, battleItems); the balls pocket follows items[NUM_BAG_ITEMS], keyItems[NUM_BAG_KEY_ITEMS], TMsHMs[NUM_BAG_TMS_HMS], mail[NUM_BAG_MAIL], medicine[NUM_BAG_MEDICINE], berries[NUM_BAG_BERRIES]; each slot is 4 B (include/item.h, struct ItemSlot), so the offset is the sum of the preceding slot counts x 4"
+          },
+          "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
+          "note": "25 item ids live in the balls pocket and 24 slots hold them; the pocket holds one stack per id, so ids beyond the slot count cannot be carried",
+          "pocket_layout": {
+            "TMsHMs": {
+              "count": 101,
+              "count_const": "NUM_BAG_TMS_HMS",
+              "off": 860
+            },
+            "balls": {
+              "count": 24,
+              "count_const": "NUM_BAG_BALLS",
+              "off": 1728
+            },
+            "battleItems": {
+              "count": 30,
+              "count_const": "NUM_BAG_BATTLE_ITEMS",
+              "off": 1824
+            },
+            "berries": {
+              "count": 64,
+              "count_const": "NUM_BAG_BERRIES",
+              "off": 1472
+            },
+            "items": {
+              "count": 165,
+              "count_const": "NUM_BAG_ITEMS",
+              "off": 0
+            },
+            "keyItems": {
+              "count": 50,
+              "count_const": "NUM_BAG_KEY_ITEMS",
+              "off": 660
+            },
+            "mail": {
+              "count": 12,
+              "count_const": "NUM_BAG_MAIL",
+              "off": 1264
+            },
+            "medicine": {
+              "count": 40,
+              "count_const": "NUM_BAG_MEDICINE",
+              "off": 1312
+            }
+          },
+          "slot_fields": {
+            "id": {
+              "off": 0,
+              "size": 2
+            },
+            "quantity": {
+              "off": 2,
+              "size": 2
+            }
+          },
+          "source": {
+            "commit": "ad7a3afa0cfc144fe6837c410cb95b2727217f54",
+            "inputs": {
+              "files/itemtool/itemdata/item_data.csv": "d4f1f80e8a79504599837912c59f18acd77c3c111d892dfa094f6d0a7c455ac1",
+              "include/bag_types_def.h": "7661ae7e56846b1f9ca355fa5b838a3cec9e6f1a8d251720601c96cce06c5fdc",
+              "include/constants/items.h": "20576a5dc04bd40cb1d212f1dad2de8e0083cf966e9535e3c10baac36cbd7193",
+              "include/item.h": "ba3c9bc510e28baef172eae0f661549ceaa8860adb7c2689c7eff89fe5eaf822"
+            },
+            "repo": "pret/pokeheartgold"
+          }
+        },
         "battle": {
           "ability_off": 39,
           "ability_width": 1,
