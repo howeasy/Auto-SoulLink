@@ -676,6 +676,7 @@ class FakeDS:
         0x02303300,
     )
     MAN, APPD, SAVE = 0x02304000, 0x02305000, 0x02310000
+    PC_WORK, GRID = 0x02308000, 0x02309000
     AV, MO = 0x02304800, 0x02304900
     SCRIPT_ENV, PC_ARGS, SCRIPT_TASK = 0x02306000, 0x02306800, 0x02307000
     PARTY_OFF, PC_OFF = 0x90, 0x10000
@@ -832,9 +833,13 @@ class FakeDS:
             self.w32(self.MAN + 0x0C, 14)
             self.w32(self.MAN + 0x1C, self.APPD)
             self.w32(self.MAN + 0x18, self.PC_ARGS)
+            self.w32(self.APPD+0x34,self.PC_WORK)
+            self.w32(self.PC_WORK+0x2C,self.GRID)
+            self.ram[self.GRID-self.BASE+0xD]=0
+            self.w32(self.GRID+8,0)
             if self.witness_mode_override is not None:
                 self.app_mode=self.witness_mode_override
-            self.ram[self.APPD - self.BASE + 0x21] = 0 if self.withdraw and self.app_mode == 1 else 0xFF
+            self.ram[self.APPD - self.BASE + 0x21] = 0xFF
             self.mode, self.cursor, self.toolbar = "app", 0, False
             self.app_state(0xB)
 
@@ -885,7 +890,10 @@ class FakeDS:
             self.app_state(0x5B)
         elif st == 0x51 and t >= 10:  # the box grid: A grabs (one prompt), B asks to leave
             if "A" in new:
-                self.app_state(5)
+                if self.r(self.GRID+8,4)==0:
+                    self.w32(self.GRID+8,1)  # first A consumed as GRID_MENU_BUTTON_MODE (-4)
+                else:
+                    self.app_state(5)
             elif "B" in new:
                 self.app_state(0x94)
         elif st == 5 and t >= 20:
@@ -1002,11 +1010,12 @@ def _run_lua_leg(
         ds.exited = True
 
     g = lua.globals()
-    g.emu = lua.table(frameadvance=frameadvance, framecount=lambda: ds.frame, limitframerate=noop)
+    ds.rate_calls=[]
+    g.emu = lua.table(frameadvance=frameadvance, framecount=lambda: ds.frame, limitframerate=lambda on:ds.rate_calls.append(('throttle',on)))
     g.joypad = lua.table(set=joypad_set)
     g.memory = lua.table(read_u32_le=read(4), read_u16_le=read(2), read_u8=read(1))
     g.savestate = lua.table(save=noop, load=noop)
-    g.client = lua.table(screenshot=noop, exit=exit_)
+    g.client = lua.table(screenshot=noop, exit=exit_,speedmode=lambda rate:ds.rate_calls.append(('rate',rate)))
     src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
     if library:
         def table(value):
@@ -1040,6 +1049,8 @@ def _run_lua_leg(
 
 def test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch):
     last, ds, log = _run_lua_leg(tmp_path, monkeypatch)
+    assert ds.rate_calls[:2]==[('throttle',True),('rate',300)]
+    assert 'ROUTE_RATE applied=300 throttle=true' in log
     assert (
         "RESULT PC_DEPOSIT party=2->1 box=0/0 pid=0xcafebabe modified=0x1->0 save_driver=idle"
         in last
@@ -1724,10 +1735,81 @@ def test_the_plan_not_the_lua_decides_the_press_counts(tmp_path, monkeypatch):
 def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(tmp_path, monkeypatch):
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
     rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
-    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 6, rows
-    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu"]
+    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 7, rows
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu", "A wake cursor"]
     assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
     assert "RESULT PC_WITHDRAW" in last
+
+
+def test_cursor_cache_guard_and_wake_red_revert(tmp_path, monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
+    original = Path.read_text
+    for old, new in [
+        ("if a.grid_target ~= wd.box_cell then", "if a.sel ~= wd.box_cell then"),
+        ("if not a.button_mode then", "if false then"),
+    ]:
+        assert source.count(old) == 1
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                Path,
+                "read_text",
+                lambda path, *a, old=old, new=new, **k: (
+                    source.replace(old, new)
+                    if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                    else original(path, *a, **k)
+                ),
+            )
+            with pytest.raises(AssertionError):
+                test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(
+                    tmp_path, monkeypatch
+                )
+        test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(
+            tmp_path, monkeypatch
+        )
+
+
+def test_route_rate_and_d2_flush_red_revert(tmp_path, monkeypatch):
+    from tools import gen4_diag as diag
+
+    base = json.loads(
+        (gr.REPO / "tests/fixtures/gen4/diag_config_autosave_before.json").read_text()
+    )
+    paced = gr.route_pacing({**base, "SpeedPercent": 800, "ClockThrottle": False})
+    assert paced["SpeedPercent"] == 300 and paced["ClockThrottle"] is True
+    ini = tmp_path / "rate.ini"
+    ini.write_text(json.dumps(paced))
+    cfg = {
+        "requested_rate": 300,
+        "emulator_config": {
+            "path": str(ini),
+            "before_sha256": "before flush",
+            "expected_settings": diag.emulator_settings(paced, 300),
+        },
+    }
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is True
+    ini.write_text(json.dumps({**paced, "ClockThrottle": False}))
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is False
+    ini.write_text(json.dumps(paced))
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is True
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    original = Path.read_text
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda path, *a, **k: (
+                source.replace(
+                    "emu.limitframerate(true); client.speedmode(rate)",
+                    "emu.limitframerate(false); client.speedmode(rate)",
+                )
+                if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else original(path, *a, **k)
+            ),
+        )
+        with pytest.raises(AssertionError):
+            test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
+    test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
 
 
 def test_the_withdraw_leg_never_presses_into_a_late_launch(tmp_path, monkeypatch):
@@ -1972,6 +2054,24 @@ def test_pc_menu_and_launch_mode_witness_reaches_log_and_receipt(tmp_path, monke
     assert rec["legs"][0]["pc_witnesses"] == witnesses
 
 
+def test_title_settle_policies_match_pinned_epoch_provenance():
+    from tests.live.test_gen4_probe_gates import phase_settle_policy
+
+    for game, title, max_delay in [("hge", "heartgold_hge", 1), ("SS", "soulsilver", 11)]:
+        p = phase_settle_policy(title, gr._pack_title(game))
+        assert (
+            p["measured_max"] == max_delay and p["margin"] == 5 and p["max_frames"] == max_delay + 5
+        )
+        measured = max(row["pin_frame"] - row["active_frame"] for row in p["epochs"])
+        assert p["max_frames"] == measured + 5
+        original = p["max_frames"]
+        p["max_frames"] += 1
+        with pytest.raises(AssertionError):
+            assert p["max_frames"] == measured + 5
+        p["max_frames"] = original
+        assert p["max_frames"] == measured + 5
+
+
 def test_real_menu_exec_grid_schedule_from_pinned_source(tmp_path, monkeypatch):
     # Opcode 752 (NOT opcode 67's legacy Create2dMenu): touchscreen ov27 grid.
     table = (PRET / "src/data/fieldmap/script_cmd_table.h").read_text()
@@ -2095,6 +2195,10 @@ def test_pc_witness_offsets_against_pinned_source_xmap_and_rom(title):
 
     _, _, task = function("TaskManager_GetEnvironment")
     _, _, args = function("OverlayManager_GetArgs")
+    _,_,grid=function('GridInputHandler_GetNextInput')
+    cursor=gr.withdraw_plan()['cursor']
+    assert (grid[0].mnemonic,grid[0].op_str)==('ldrb','r0, [r0, #0xd]')
+    assert cursor['target_off']==0xD and cursor['buttons_off']==8
     _, _, scr = function("ScrCmd_158")
     _, attr_raw, attr = function("FieldSysGetAttrAddr")
     facts = gr.withdraw_plan()["witness"]

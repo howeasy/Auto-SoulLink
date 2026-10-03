@@ -86,6 +86,126 @@ def _owner(variant: str) -> bytes:
     return path.read_bytes()
 
 
+def test_lead_level_rom_stats_roundtrip_and_original(tmp_path):
+    from tools import gen4_pins
+
+    source = _owner("hgss")
+    rom = gen4_pins.default_locations().roms["heartgold"]
+    out, meta = synth.build_lead_level(source, "hgss", rom, 12, title="heartgold")
+    before = codec.parse_save(source, "hgss").party()[0]
+    after = codec.parse_save(out, "hgss").party()[0]
+    assert after["level"] == 12 and after["exp"] == 973
+    assert after["pid"] == before["pid"] and after["moves"] == before["moves"]
+    assert after["ivs"] == before["ivs"] and after["evs"] == before["evs"]
+    assert after["max_hp"] == 34 and after["stats"] == (15, 16, 23, 20, 20)
+    assert after["hp"] == after["max_hp"]
+    assert meta["kind"] == "lead_level" and meta["tail_policy"] == "ROM_RECOMPUTED"
+    src = tmp_path / "original.SaveRAM"
+    src.write_bytes(source)
+    target = tmp_path / "lead12.SaveRAM"
+    assert (
+        synth.main(
+            [
+                "lead_level",
+                "--profile",
+                "hgss",
+                "--title",
+                "heartgold",
+                "--rom",
+                str(rom),
+                "--src",
+                str(src),
+                "--out",
+                str(target),
+                "--level",
+                "12",
+            ]
+        )
+        == 0
+    )
+    assert src.read_bytes() == source and target.read_bytes() == out
+    assert json.loads(Path(str(target) + ".synth.json").read_text()) == meta
+
+
+def test_lead_level_logical_block_and_stats_controls_revert(tmp_path, monkeypatch):
+    source = Path(synth.__file__).read_text()
+    original = synth.build_lead_level
+    test_lead_level_rom_stats_roundtrip_and_original(tmp_path)
+    for old, new in [
+        ("a, b = 8, 8 + 0x20", "a,b,_,_=codec.block_offsets(mon['pid'])"),
+        ("stats[index + 1] * (110", "stats[index + 1] * (100"),
+    ]:
+        assert source.count(old) == 1
+        scope = {"__file__": synth.__file__}
+        exec(compile(source.replace(old, new), synth.__file__, "exec"), scope)
+        monkeypatch.setattr(synth, "build_lead_level", scope["build_lead_level"])
+        with pytest.raises(AssertionError):
+            test_lead_level_rom_stats_roundtrip_and_original(tmp_path)
+        monkeypatch.setattr(synth, "build_lead_level", original)
+        test_lead_level_rom_stats_roundtrip_and_original(tmp_path)
+
+
+@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge", "soulsilver"])
+def test_new_lead_scenarios_bind_synth_and_preserve_linkage(title):
+    from tests.live import test_gen4_probe_gates as gate
+
+    doc, save, _ = gate.load_scenario(
+        f"data/gen4/scenarios/{title}_lead12.json", title, "baseline", committed=False
+    )
+    setup = gate.baseline_setup(doc, save)
+    assert setup["setup"] == "SYNTH" and setup["sidecar_sha256"] == doc["save"]["sidecar_sha256"]
+    original = json.loads((synth.ROOT / f"data/gen4/scenarios/{title}.json").read_text())
+    assert (
+        doc["row_i_scenario"] == original["row_i_scenario"]
+        and doc["pc_case_scenario"] == original["pc_case_scenario"]
+    )
+    native = gen4_fixtures.lane_root() / original["save"]["path"]
+    assert hashlib.sha256(native.read_bytes()).hexdigest() == original["save"]["sha256"]
+    profile = "hge" if title == "heartgold_hge" else "hgss"
+    before = codec.parse_save(native.read_bytes(), profile).party()[0]
+    after = codec.parse_save(save.read_bytes(), profile).party()[0]
+    assert after["level"] == 12 and after["exp"] == 973 and after["moves"] == before["moves"]
+    assert (
+        after["pid"] == before["pid"]
+        and after["ivs"] == before["ivs"]
+        and after["evs"] == before["evs"]
+    )
+
+
+def test_synth_baseline_requires_exact_scenario_disclosure(tmp_path):
+    from tests.live import test_gen4_probe_gates as gate
+
+    save = tmp_path / "source.SaveRAM"
+    save.write_bytes(b"MODEL save")
+    side = Path(str(save) + ".synth.json")
+    side.write_text(
+        json.dumps(
+            {
+                "src_sha1": "0" * 40,
+                "out_sha1": hashlib.sha1(save.read_bytes()).hexdigest(),
+                "new_pid": 1,
+            }
+        )
+    )
+    native = {"save": {"sha256": gate.digest(save)}}
+    with pytest.raises(AssertionError):
+        gate.baseline_setup(native, save)
+    correct = {"save": {**native["save"], "sidecar_sha256": gate.digest(side)}}
+    got = gate.baseline_setup(correct, save)
+    assert got["setup"] == "SYNTH" and got["sidecar_sha256"] == gate.digest(side)
+    wrong = {"save": {**correct["save"], "sidecar_sha256": "0" * 64}}
+    with pytest.raises(AssertionError):
+        gate.baseline_setup(wrong, save)
+    assert gate.baseline_setup(correct, save) == got
+    raw = side.read_bytes()
+    side.unlink()
+    with pytest.raises(AssertionError):
+        gate.baseline_setup(correct, save)
+    assert gate.baseline_setup(native, save) == {"setup": "NATIVE"}
+    side.write_bytes(raw)
+    assert gate.baseline_setup(correct, save) == got
+
+
 def _assert_clone_contract(src: bytes, out: bytes, variant: str) -> None:
     """The card's verification, re-decoded with the codec rather than the tool's own check."""
     a, b = codec.parse_save(src, variant), codec.parse_save(out, variant)

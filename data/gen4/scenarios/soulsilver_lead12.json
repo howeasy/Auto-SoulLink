@@ -1,0 +1,13 @@
+{
+  "schema": "gen4-probe-scenario-v3",
+  "title": "soulsilver",
+  "purpose": "baseline",
+  "save": {
+    "path": "lead12-43b8-100314/ss_lead12.SaveRAM",
+    "sha256": "057ba5a1553b3ca5dd3085c4eda8e074b22ae4eb2685a67717fd1e2123d1c4c6",
+    "sidecar_sha256": "629979c22f1b34d0301344f23432c5e7f7b8233e0bd4c4493f6dae0bca693528"
+  },
+  "row_i_scenario": "data/gen4/scenarios/soulsilver_row_i.json",
+  "provenance": "Disclosed O-33 SYNTH lead-level12 baseline from the untouched native OUTDOOR save; ROM personal/growth recomputation, moves/identity unchanged. Row-i/PC-case retain their separate bound inputs. Live win is unverified.",
+  "pc_case_scenario": "data/gen4/scenarios/soulsilver_pc_case.json"
+}

@@ -535,7 +535,7 @@ local function bridge()
         if reply.open then error({open=reply.open},0) end
         assert(not reply.error,reply.error)
         local context={route=reply.route,title=title,step=step,
-            env={G4_REPO=root,G4_LANE=cfg.lane,G4_TAG="bridge-"..attempt}}
+            env={G4_REPO=root,G4_LANE=cfg.lane,G4_TAG="bridge-"..attempt,G4_RATE=tostring(cfg.requested_rate)}}
         local ok,why=pcall(driver.run,context)
         assert(not ok and type(why)=="table" and why.route_result,"native executor failed: "..tostring(why))
         local value=why.route_result
@@ -663,6 +663,7 @@ def parser():
 def prepare(args):
     """No emulator: validate the committed inventory, then create one fresh private lane."""
     from tests.live.test_gen4_probe_gates import (
+        baseline_setup,
         load_scenario,
         phase_image_pins,
         phase_settle_policy,
@@ -688,6 +689,10 @@ def prepare(args):
            "scenario_path": args.scenario, "scenario_sha256": scenario_sha, "scenario": doc,
            "save_sha256": sha256(save), "state_sha256": None, "artifact": title, "requested_rate": 300,
            "originals": {str(REPO / args.scenario): scenario_sha, str(save): sha256(save), str(rom_src): sha256(rom_src)}}
+    cfg.update(baseline_setup(doc,save))
+    if cfg['setup']=='SYNTH':
+        side=Path(str(save)+'.synth.json')
+        cfg['originals'][str(side)]=sha256(side)
     if args.command != "settle":
         if not args.state.is_file():
             raise g4.RomAbsent(f"OPEN state absent: {args.state}")
@@ -717,7 +722,7 @@ def prepare(args):
     rom = g4.stage_rom(rom_src, lane)
     battery = g4.stage_save(save, lane, cfg["rom_sha1"], rom_basename=rom.name)
     bizhawk = lane / "bizhawk.ini"
-    settings=g4.write_nds_run_config(g4.BIZHAWK_CONFIG, bizhawk, initial_time="2010-01-01T12:00:00",
+    settings=g4.write_nds_run_config(gen4_routes.route_pacing(json.loads(g4.BIZHAWK_CONFIG.read_text(encoding="utf-8-sig")),cfg['requested_rate']), bizhawk, initial_time="2010-01-01T12:00:00",
                             lane_saveram_dir=battery.parent, saveram_name_hint=battery.name)
     lua = lane / "diagnostic.lua"
     lua.write_text(LUA, encoding="utf-8")

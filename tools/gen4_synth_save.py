@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disclosed SYNTH setup (O-33) for the Gen 4 test rows: ``party2``, ``bag``, ``egg1``, ``party6``, ``species``, ``place``.
+"""Disclosed SYNTH setup (O-33) for the Gen 4 test rows: ``party2``, ``bag``, ``egg1``, ``party6``, ``species``, ``place``, ``lead_level``.
 
 Every owner save holds one party mon, and Gen 4 refuses to deposit the last one ("You can't
 leave the party empty"), so the SETUP is synthesized and everything after it runs natively:
@@ -98,6 +98,13 @@ The player entry own mapId is 1 on map 60 in every owner save (the object is KEE
 NOT written.  Map bounds are NOT checked (the pack holds no map dimensions): the sidecar records ``bounds_verified: false``.
 Positive anchors: exactly one active ``movement == 1`` entry whose currentX/currentZ equal the source
 Location.  Only the sector footer CRC is re-sealed (no per-array CRC).  OFFLINE: where the avatar lands is a physical card.
+
+``lead_level`` (O-33) levels only the healthy base-form lead, preserving its
+identity, IV/EV and moves. Base stats and growth EXP are read from the pinned
+ROM a/0/0/2 and a/0/0/3, with the personal/growth member hashes in the sidecar.
+The PID nature stat modifier and party HP/stat tail are recalculated; unknown
+hg-engine nature/IV overrides refuse. The source remains read-only. Level12 is
+an authored fixture, not PHYSICAL proof that a native battle is won.
 
 In every kind the verifier also proves that no byte outside the intended span (plus the two
 CRC bytes of the newest general footer) differs from the source.
@@ -350,6 +357,135 @@ def build_party2(image: bytes, profile) -> tuple[bytes, dict]:
         "note": NOTE,
     }
     return bytes(out), row
+
+
+def build_lead_level(
+    image: bytes, profile, rom_path, level=12, *, title=None
+) -> tuple[bytes, dict]:
+    """O-33 lead-only setup; ROM personal/growth facts, original identity and moves.
+
+    SOURCE: pokemon.c:314-390,1898-1913,1991-2013; personal.h layout (stats
+    0..5, growth 0x13), a/0/0/2 personal and a/0/0/3 growtbl in the pinned ROM.
+    Only the lead record and newest general footer CRC change.
+    """
+    import ndspy.narc
+    import ndspy.rom
+
+    from tools import gen4_pins
+
+    title = title or ("heartgold_hge" if profile == "hge" else "heartgold")
+    if title not in gen4_pins.ROM_SPECS or (title == "heartgold_hge") != (profile == "hge"):
+        raise Refusal("lead_level title/profile mismatch")
+    rom_path = Path(rom_path)
+    if not rom_path.is_file():
+        raise Refusal(f"lead_level ROM absent: {rom_path}")
+    raw_rom = rom_path.read_bytes()
+    if hashlib.sha1(raw_rom).hexdigest() != gen4_pins.ROM_SPECS[title][0]:
+        raise Refusal("lead_level wrong ROM")
+    if not isinstance(level, int) or isinstance(level, bool) or not 1 <= level <= 100:
+        raise Refusal("lead_level level outside 1..100")
+    save, party = _party_mons(image, profile)
+    mon = party[0]
+    if (
+        not mon["tail_plausible"]
+        or mon["is_egg"]
+        or mon["form"]
+        or mon["hp"] == 0
+        or level <= mon["level"]
+    ):
+        raise Refusal("lead_level requires healthy base-form lead and increased level")
+    at = save.profile.party_off + 8
+    plain = bytearray(codec.decrypt_party(_raw_slots(image, save, 1)[0]))
+    a, b = 8, 8 + 0x20  # decrypt_party returns LOGICAL A/B/C/D, not stored PID order
+    # Codec does not decode hg-engine nature/IV overrides. Never carry an
+    # unknown override into a purported recalculation; these inputs have none.
+    if profile == "hge" and struct.unpack_from("<H", plain, b + 0x1A)[0] & 0xFFFE:
+        raise Refusal("lead_level unsupported hge nature/IV override")
+    rom = ndspy.rom.NintendoDSRom(raw_rom)
+    personal = ndspy.narc.NARC(rom.getFileByName("a/0/0/2"))
+    growth = ndspy.narc.NARC(rom.getFileByName("a/0/0/3"))
+    if not 0 < mon["species"] < len(personal.files):
+        raise Refusal("lead_level species absent from personal table")
+    row = personal.files[mon["species"]]
+    if len(row) != 44 or row[0] == 0 or row[0x13] >= len(growth.files):
+        raise Refusal("lead_level invalid personal entry")
+    table = growth.files[row[0x13]]
+    if len(table) != 404:
+        raise Refusal("lead_level invalid growth table")
+    exp = struct.unpack_from("<I", table, level * 4)[0]
+    base = list(row[:6])
+    ivs = mon["ivs"]
+    evs = mon["evs"]
+    nature = mon["nature"]
+    stats = [
+        ((2 * base[i] + ivs[i] + evs[i] // 4) * level) // 100 + (level + 10 if i == 0 else 5)
+        for i in range(6)
+    ]
+    if mon["species"] == 292:
+        stats[0] = 1  # SOURCE pokemon.c:355-360 Shedinja special case
+    up, down = nature // 5, nature % 5
+    for index in range(5):
+        if up != down:
+            stats[index + 1] = (
+                stats[index + 1] * (110 if index == up else 90 if index == down else 100) // 100
+            )
+    hp = min(stats[0], mon["hp"] + stats[0] - mon["max_hp"])
+    plain[codec.TAIL_OFF + 4] = level
+    struct.pack_into("<7H", plain, codec.TAIL_OFF + 6, hp, *stats)
+    old_exp = struct.unpack_from("<I", plain, a + 8)[0]
+    mask = (1 << save.profile.exp_bits) - 1
+    if exp > mask:
+        raise Refusal("lead_level exp exceeds profile field")
+    struct.pack_into("<I", plain, a + 8, (old_exp & ~mask) | exp)
+    record = codec.encrypt_party(bytes(plain))
+
+    def edit(body):
+        body[at : at + codec.PARTY_MON_SIZE] = record
+
+    out = _seal(image, save, edit)
+    _only_changed(image, out, save, [(at, at + codec.PARTY_MON_SIZE)])
+    decoded = codec.parse_save(out, profile)
+    got = decoded.party()[0]
+    assert (
+        got["level"] == level
+        and got["exp"] == exp
+        and got["max_hp"] == stats[0]
+        and tuple(got["stats"]) == tuple(stats[1:])
+    )
+    assert (
+        got["moves"] == mon["moves"]
+        and got["pid"] == mon["pid"]
+        and got["ivs"] == mon["ivs"]
+        and got["evs"] == mon["evs"]
+    )
+    meta = _row(
+        "lead_level",
+        "SYNTH O-33 setup: lead level/stats recomputed; hooks/routes remain native",
+        image,
+        out,
+        save,
+        new_pid=mon["pid"],
+        title=title,
+        level_before=mon["level"],
+        level_after=level,
+        lead_species=mon["species"],
+        tail_policy="ROM_RECOMPUTED",
+        rom_sha1=hashlib.sha1(raw_rom).hexdigest(),
+        personal_sha256=hashlib.sha256(row).hexdigest(),
+        growth_sha256=hashlib.sha256(table).hexdigest(),
+        personal_member=mon["species"],
+        growth_member=row[0x13],
+        base_stats=base,
+        ivs=list(ivs),
+        evs=list(evs),
+        nature=nature,
+        exp_after=exp,
+        hp_after=hp,
+        stats_after=stats,
+        moves=list(mon["moves"]),
+        moves_policy="UNCHANGED",
+    )
+    return out, meta
 
 
 def _verify(src: bytes, out: bytes, profile, bank: int) -> None:
@@ -908,6 +1044,7 @@ def _verify_place(src, out, save, party, fs, loc_off, want, spans) -> None:
 
 
 BUILDERS = {
+    "lead_level": lambda image,a: build_lead_level(image,a.profile,a.rom,a.level,title=a.title),
     "party2": lambda image, a: build_party2(image, a.profile),
     "bag": lambda image, a: build_bag(image, a.profile, a.count),
     "egg1": lambda image, a: build_egg1(image, a.profile, a.species, a.cycles),
@@ -925,11 +1062,16 @@ def main(argv: list[str] | None = None) -> int:
                         ("egg1", "append one egg to the party"),
                         ("party6", "fill the party to 6 with clones of slot 0"),
                         ("species", "make party slot 1 a clone of slot 0 with the given species id"),
-                        ("place", "place the player on a map and set story flags / vars")):
+                        ("place", "place the player on a map and set story flags / vars"),
+                        ("lead_level", "level the lead using ROM stats/growth; preserve moves and identity")):
         cmd = sub.add_parser(kind, help=help_)
         cmd.add_argument("--profile", required=True, choices=PROFILES)
         cmd.add_argument("--src", required=True, type=Path, help="battery save to read (never modified)")
         cmd.add_argument("--out", required=True, type=Path, help="new battery save to write")
+        if kind=="lead_level":
+            cmd.add_argument("--rom",required=True,type=Path)
+            cmd.add_argument("--title",required=True,choices=['heartgold','heartgold_hge','soulsilver'])
+            cmd.add_argument("--level",type=int,default=12)
         if kind == "bag":
             cmd.add_argument("--count", type=int, default=10, help="Poke Balls to add (default 10)")
         if kind == "place":

@@ -85,6 +85,15 @@ from tools.gen4_fixtures import (  # noqa: E402
     write_nds_run_config,
 )
 
+
+def route_pacing(settings, rate=300):
+    """Requested pacing for route/diagnostic producers, independent of owner UI defaults."""
+    if not isinstance(rate, int) or isinstance(rate, bool) or not 0 < rate <= 1000:
+        raise ValueError("invalid requested route rate")
+    return {**settings, "SpeedPercent": rate, "ClockThrottle": True, "Unthrottled": False,
+            "FrameSkip": 0, "AutoMinimizeSkipping": False, "VSyncThrottle": False,
+            "SuperHawkThrottle": False}
+
 DEFAULT_ROM = Path("E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds")
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")
 DEFAULT_PRET = Path("E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold")
@@ -792,6 +801,11 @@ def withdraw_plan() -> dict:
         "menu_key": WITHDRAW_MENU_KEY,
         "menu_hold": WITHDRAW_MENU_HOLD,
         "witness": {**WITHDRAW_WITNESS, "source_symbols": list(WITHDRAW_WITNESS["source_symbols"])},
+        # ov14_021EDA4C / ov14_021F6E8C -> GridInputHandler_GetNextInput.
+        # The cached selection byte data+0x21 is not the button cursor target.
+        "cursor": {"data_work_off": 0x34, "work_grid_off": 0x2C,
+                   "target_off": 0xD, "buttons_off": 8,
+                   "source": "asm/overlay_14.s:16573-16665,35157-35232; src/unk_02019BA4.c:121-128,177-184,226-228"},
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,
@@ -1512,7 +1526,7 @@ def run_lane(
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
-        BIZHAWK_CONFIG,
+        route_pacing(json.loads(BIZHAWK_CONFIG.read_text(encoding="utf-8-sig")),int(os.environ.get("G4_RATE","300"))),
         ld / "bizhawk.ini",
         initial_time=initial_time,
         lane_saveram_dir=ld / "SaveRAM",

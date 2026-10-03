@@ -59,21 +59,29 @@ function Census {
 Assert-Cut
 Census
 
-# D1: current 6000-frame recipe; no budget or button changes.
+# D1: current 6000-frame recipe, now requiring a freshly reviewed L12 state.
+# FIRST obtain the HG state from a fresh diagnostic cold-boot/native wild route
+# on the committed heartgold_lead12 scenario (one owned slot, separate lane):
+# python tools/gen4_diag.py settle --title heartgold --scenario data/gen4/scenarios/heartgold_lead12.json --cold-boot --errand pokegear --target battle_settled --images ov12 --lane <fresh-hg-prep> --timeout 600
+# Coordinator reviews diagnostic outputs/state SHA. The old 108c state is Lv5;
+# do not pair it with a new L12 save or call it the strengthened fixture.
+$hg12state=$env:G4_HG_LEAD12_STATE
+$hg12sha=$env:G4_HG_LEAD12_STATE_SHA256
+if (-not $hg12state -or -not $hg12sha) { throw 'OPEN reviewed HG lead12 battle state absent' }
 $d1="d1-hg-$stamp"
-python tools/gen4_diag.py fight --title heartgold --scenario data/gen4/scenarios/heartgold.json --state "$root/live108-1002220018/probes/heartgold-7a5a0a43970f/baseline/bridge-2_battle_settled.State" --state-sha256 b16302579d3ea1a7c9eef501a9fd972338841e180a46dbc91c49eaf240c165e6 --recipe fight_until_enemy_faints --lane $d1 --timeout 300
+python tools/gen4_diag.py fight --title heartgold --scenario data/gen4/scenarios/heartgold_lead12.json --state $hg12state --state-sha256 $hg12sha --recipe fight_until_enemy_faints --lane $d1 --timeout 300
 Get-Content "$root/$d1/diagnostic.json"
 Census
 
 # D2: cold boot, native Pokegear errand, natural wild launch, uncensored pins.
 Assert-Cut
 $d2h="d2-hge-$stamp"
-python tools/gen4_diag.py settle --title heartgold_hge --scenario data/gen4/scenarios/heartgold_hge.json --cold-boot --errand pokegear --target battle_settled --images ov12 ov130 ov129 --lane $d2h --timeout 600
+python tools/gen4_diag.py settle --title heartgold_hge --scenario data/gen4/scenarios/heartgold_hge_lead12.json --cold-boot --errand pokegear --target battle_settled --images ov12 ov130 ov129 --lane $d2h --timeout 600
 Get-Content "$root/$d2h/diagnostic.json"
 Census
 Assert-Cut
 $d2s="d2-ss-$stamp"
-python tools/gen4_diag.py settle --title soulsilver --scenario data/gen4/scenarios/soulsilver.json --cold-boot --errand pokegear --target battle_settled --images ov12 --lane $d2s --timeout 600
+python tools/gen4_diag.py settle --title soulsilver --scenario data/gen4/scenarios/soulsilver_lead12.json --cold-boot --errand pokegear --target battle_settled --images ov12 --lane $d2s --timeout 600
 Get-Content "$root/$d2s/diagnostic.json"
 Census
 
@@ -292,7 +300,7 @@ $env:SLINK_GEN4_PROBE_RUNS="$root/q-$tag/probes"
 $env:SLINK_GEN4_PROBE_SKIP_PERF_REASON='PERF deferred to quiet-machine final step'
 foreach ($title in @('heartgold','heartgold_hge','soulsilver')) {
     Assert-Cut
-    $env:SLINK_GEN4_PROBE_SCENARIO="data/gen4/scenarios/$title.json"
+    $env:SLINK_GEN4_PROBE_SCENARIO="data/gen4/scenarios/${title}_lead12.json"
     $env:SLINK_GEN4_ROW_O="$root/faint2/row_o_${title}_seam_ufce_bit_p2.txt"
     python -m pytest "tests/live/test_gen4_probe_gates.py::test_gen4_hook_probe[$title]" -m live -q -rs
     $batch=Get-ChildItem $env:SLINK_GEN4_PROBE_RUNS -Directory -Filter "$title-*" | Sort-Object LastWriteTime | Select-Object -Last 1
@@ -306,3 +314,32 @@ caller gaps, named OPENs and f OPEN stay explicit. No threshold, budget or
 recipe change. Never repeat unchanged failure. Own-PID audit and original
 save/state/sidecar hashes precede lane release. PERF is separate and quiet-only:
 foreign EmuHawk means f OPEN, never a noisy receipt.
+
+## Disclosed lead12 baselines and current authoring cut
+
+`<title>_lead12.json` is a NEW baseline, preserving the existing native scenarios
+and their separate row-i / PC-case linkage. Each binds its own SYNTH save and
+sidecar by SHA256. The loader refuses an undeclared sidecar, missing/mismatched
+sidecar, or sidecar naming a different output hash. The probe and diagnostic
+receipts disclose setup=SYNTH and sidecar_sha256. Hooks and route behavior run
+natively; a live win is OPEN. No moves, identity, IV/EV or story flags changed.
+
+Reproduce (new output only; originals never overwritten):
+`python tools/gen4_synth_save.py lead_level --profile hgss|hge --title <title> --rom <pinned ROM> --src <native save> --out <new output> --level 12`.
+The personal stats come from ROM a/0/0/2; growth EXP from a/0/0/3; IV/EV/nature
+come from the decoded lead. The encrypted lead and newest general-footer CRC
+are the only edited spans. Unknown hg-engine nature/IV override fields refuse.
+
+Route producers now explicitly request 300%, clock-throttled, independent of
+the owner's 800% defaults. Nested native diagnostic routes use the same rate.
+PC mode1 target reads GridInputHandler.nextInput (grid+0x0D), not selection
+cache data+0x21. One A activates button mode only when inactive; a separate A
+still grabs and the 0x57/party/box/SAVE/reload criteria remain.
+
+Owner-accepted uncensored settle provenance: hge observation
+`d2-hge-10031339/observation.json` (max1 + margin5 = 6), SS observation
+`d2-ss-10031344/observation.json` (max11 + margin5 = 16). Exact SHA256 and epoch
+frames live in phase_settle_policy. Their historical overall FAIL was the
+ClockThrottle audit; it is never relabelled PASS. These frame differences use
+emulated counters and are independent of host throttling. A policy alone does
+not qualify row n.

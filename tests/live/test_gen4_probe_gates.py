@@ -1322,9 +1322,25 @@ def load_scenario(relative, title, purpose, *, committed=True):
     if purpose in {"row_i", "pc_case"}:
         side = input_file(save.with_name(save.name + ".synth.json"), f"{purpose} SYNTH ancestry sidecar")
         assert digest(side) == spec.get("sidecar_sha256"), "present scenario sidecar hash mismatch"
-    elif "sidecar_sha256" in spec:
-        raise AssertionError("baseline must be a native outdoor save")
+    elif purpose=="baseline":
+        baseline_setup(doc,save)
     return doc, save, digest(path)
+
+
+def baseline_setup(doc,save):
+    """O-33: exact committed scenario declares native or hash-bound SYNTH input."""
+    spec=doc['save']
+    assert digest(save)==spec['sha256'],'baseline save hash mismatch'
+    side=Path(str(save)+'.synth.json')
+    declared=spec.get('sidecar_sha256')
+    if declared is None:
+        assert not side.exists(),'NATIVE baseline scenario points at SYNTH input without sidecar binding'
+        return {'setup':'NATIVE'}
+    assert side.is_file(),'SYNTH baseline sidecar absent'
+    assert digest(side)==declared,'SYNTH baseline scenario sidecar hash mismatch'
+    setup=save_setup(save)
+    assert setup['setup']=='SYNTH' and setup['sidecar_sha256']==declared,'SYNTH baseline disclosure mismatch'
+    return setup
 
 
 def scenario_input(title):
@@ -1614,9 +1630,28 @@ def internal_census_loads(title, artifact):
 
 
 def phase_settle_policy(title, artifact):
-    # This bound is measured for this HG ROM only. Other titles need their own
-    # diagnostic; absent evidence is OPEN, never an inherited timing allowance.
-    if title != "heartgold":
+    # Owner accepted these uncensored PHYSICAL frame deltas. Overall diagnostic
+    # FAIL was ClockThrottle true->false (native executor pacing), not a pin or
+    # publication failure. Frame differences use emulated counters, independent
+    # of host throttling. No historical verdict is relabelled as PASS.
+    measurements={
+        'heartgold_hge':('cb2dc435196d09c8c9209bf037240ed834f4cea1','d2-hge-10031339',
+            '93769b54c053e6d90ddd7750a48e57e68a763b119c7f6741ac332c5e950e7e4d',
+            [('pc_place_first_in_box',9,9),('battle_outcome_copy',10242,10242),
+             ('battle_start_ov12',10242,10243),('battle_faint_cmd',10247,10248)]),
+        'soulsilver':('f8dc38ea20c17541a43b58c5e6d18c1732c7e582','d2-ss-10031344',
+            '89fa7570c4b3d29a7b60f584d2080e9bc238a24455c3365d70f851d23ca645ab',
+            [('battle_faint_cmd',10276,10286),('battle_outcome_copy',10276,10287),
+             ('battle_start_ov12',10276,10287)])}
+    if title in measurements:
+        sha,lane,receipt_sha,rows=measurements[title]
+        assert artifact['rom']['sha1']==sha,'settle measurement ROM changed'
+        epochs=[{'site':s,'active_frame':a,'pin_frame':p,'left_censored':False} for s,a,p in rows]
+        maximum=max(e['pin_frame']-e['active_frame'] for e in epochs)
+        return {'max_frames':maximum+5,'measured_max':maximum,'margin':5,'units':'emulator frames',
+                'receipt':str(lane_root()/lane/'observation.json'),'receipt_sha256':receipt_sha,'epochs':epochs,
+                'diagnostic_verdict':'FAIL ClockThrottle audit','note':'owner accepted uncensored frame deltas; max+5; not row-n closure alone'}
+    if title!='heartgold':
         return None
     assert artifact["rom"]["sha1"] == "4fcded0e2713dc03929845de631d0932ea2b5a37", "settle measurement ROM changed"
     return {"max_frames": 16, "measured_max": 11, "margin": 5, "units": "emulator frames",
@@ -1931,8 +1966,9 @@ def test_gen4_hook_probe(api, title):
         cfg[key], why = resolve_pack_route(cfg.get(key, artifact.get(key, [])), recipes)
         cfg["route_open_reasons"][key] = why
     cfg["route"] += cfg["persistence_route"]  # Native SAVE also supplies row m's save-phase histogram.
-    cfg.update(save_setup(save))
-    assert cfg["setup"] == "NATIVE", "baseline must use the native outdoor save"
+    scenario_doc,scenario_save,_=load_scenario(supplied['scenario_path'],title,'baseline')
+    assert scenario_save.resolve()==save.resolve(),'baseline scenario file differs from supplied save'
+    cfg.update(baseline_setup(scenario_doc,save))
     if os.environ.get("SLINK_GEN4_PROBE_SKIP_PERF_REASON"):
         cfg["skip_perf_reason"] = os.environ["SLINK_GEN4_PROBE_SKIP_PERF_REASON"]
     root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", str(lane_root() / "probe-gates")))
@@ -2062,7 +2098,7 @@ def test_gen4_hook_probe(api, title):
 
 @pytest.mark.parametrize("failure", ("baseline", "persistence", "phase-launch", "phase-observation", "row-o", "surface", "original-save", "row-i-original-save", "graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"))
 @pytest.mark.parametrize("title", TITLE_PACK)
-def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path, failure, title):
+def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path, failure, title, baseline_synth=False):
     """Replay the real orchestration boundary without launching an emulator."""
     import sys
     from types import SimpleNamespace
@@ -2089,7 +2125,8 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     monkeypatch.setenv("SLINK_GEN4_PROBE_RUNS", str(tmp_path / "runs"))
     monkeypatch.delenv("SLINK_GEN4_PERF_RECEIPT", raising=False)
     monkeypatch.setattr(module, "fixture_module", lambda: object())
-    monkeypatch.setattr(module, "scenario_input", lambda title: {"scenario_save": str(save), "row_i_save": str(boxed)})
+    monkeypatch.setattr(module, "scenario_input", lambda title: {"scenario_path":"MODEL-scenario.json","scenario_save": str(save), "row_i_save": str(boxed)})
+    monkeypatch.setattr(module,"load_scenario",lambda *args,**kwargs: ({'save':{'sha256':digest(save)}},save,'MODEL'))
     monkeypatch.setattr(module, "codec_module", lambda: SimpleNamespace(
         parse_save=lambda *args: SimpleNamespace(profile="hgss")))
     monkeypatch.setattr(module, "source_witness", lambda *args: {})
@@ -2100,6 +2137,13 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     monkeypatch.setattr(module, "phase_settle_policy", lambda *args: None if failure == "graded-no-settle" else {})
     monkeypatch.setattr(module, "phase_image_pins", lambda *args: {})
     monkeypatch.setattr(module, "save_setup", lambda path: {"setup": "NATIVE"})
+    if baseline_synth:
+        side=Path(str(save)+'.synth.json')
+        side.write_text(json.dumps({'src_sha1':'0'*40,'out_sha1':digest(save,'sha1'),'new_pid':1}))
+        declared={'save':{'sha256':digest(save),'sidecar_sha256':digest(side)}}
+        real_save_setup=next(r[1] for r in _HARNESS_FUNCTIONS if r[0]=='save_setup')
+        monkeypatch.setattr(module,'load_scenario',lambda *args,**kwargs:(declared,save,'MODEL'))
+        monkeypatch.setattr(module,'save_setup',lambda path:real_save_setup(path) if path==save else {'setup':'NATIVE'})
     monkeypatch.setattr(module, "phase_case_plan", lambda *args: ([{"name": "battle", "route": []}], []))
     cut_calls = 0
     def cut(*args, **kwargs):
@@ -2169,6 +2213,9 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     rows = [ROW_RE.fullmatch(line) for line in combined.splitlines()[:-1]]
     assert all(rows) and {m[1] for m in rows} == set("abcdefghijklmno")
     written = {m[1]: (m[2], json.loads(m[3])) for m in rows}
+    if baseline_synth:
+        assert all(payload.get('setup')=='SYNTH' and payload.get('sidecar_sha256')==digest(side)
+                   for row,(_,payload) in written.items() if row in {'a','b','k','l','m'})
     if failure in {"graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"}:
         assert external_calls and written["o"][0] == "PASS"
         assert written["i"][0] == "PASS" and written["k"][0] == "PASS"
@@ -2201,6 +2248,10 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
         assert written["n"][0] == "FAIL" and external_calls
     else:
         assert any("attempt_failure" in json.loads(m[3]) for m in rows), failure
+
+def test_declared_synth_baseline_orchestration_discloses_receipts(api,monkeypatch,tmp_path):
+    test_every_attempt_failure_publishes_before_raise(api,monkeypatch,tmp_path,'graded-no-settle','heartgold',baseline_synth=True)
+
 
 def test_hge_internal_census_config_covers_pinned_loaders_red_revert():
     artifact = json.loads((REPO / "data/games/gen4_hge/profile.json").read_text())["titles"]["heartgold_hge"]
@@ -2323,14 +2374,13 @@ def test_settle_policy_is_measured_title_only_and_collision_pins_are_rom_bytes()
     for title, pack in TITLE_PACK.items():
         artifact = json.loads((REPO / "data/games" / pack / "profile.json").read_text())["titles"][title]
         policy = phase_settle_policy(title, artifact)
-        if title != "heartgold":
-            assert policy is None
-            continue
-        assert policy["max_frames"] == policy["measured_max"] + policy["margin"] == 16
+        assert policy["max_frames"] == policy["measured_max"] + policy["margin"] == (6 if title=='heartgold_hge' else 16)
         broken = copy.deepcopy(artifact)
         broken["rom"]["sha1"] = "0" * 40
         with pytest.raises(AssertionError, match="measurement ROM changed"):
             phase_settle_policy(title, broken)
+        if title!='heartgold':
+            continue  # preserve this existing HG collision FILE claim; other titles have separate pins
         rom = gen4_pins.default_locations().roms[title]
         if not rom.is_file():
             pytest.skip("OPEN optional HG ROM for collision FILE pins")

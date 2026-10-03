@@ -17,6 +17,11 @@
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
 -- same phase), done=1 = the phase finished (the next phase starts from the state).
 local Driver={}
+function Driver.apply_rate(emu,client,rate)
+  assert(type(rate)=="number" and rate>0 and rate<=1000,"invalid requested route rate")
+  emu.limitframerate(true); client.speedmode(rate)
+  return rate
+end
 Driver.BATTLE_SETTLE_FRAMES=900 -- existing native battle_settled wait, reused by diagnostics
 function Driver.position(title)
   local fs=memory.read_u32_le(title.symbols.sFieldSysPtr.address,"ARM9 System Bus")
@@ -80,7 +85,6 @@ local function r8(a) return memory.read_u8(a, BUS) end
 local function s32(a) local v = r32(a); if v >= 0x80000000 then v = v - 0x100000000 end return v end
 local function hex(v) return v and string.format("0x%08X", v) or "nil" end
 local function inram(p) return p >= 0x02000000 and p < 0x02400000 end
-pcall(function() emu.limitframerate(false) end)
 
 local J = dofile(REPO .. "/lua/json_codec.lua")
 local route,jerr
@@ -89,6 +93,8 @@ if bridge then route=bridge.route else
   route,jerr=J.decode(fh:read("*a"), {bytes = 8 * 1024 * 1024}); fh:close()
 end
 if not route then finish("FAIL", "route_json", jerr) end
+local applied_rate=Driver.apply_rate(emu,client,tonumber(getenv("G4_RATE") or route.requested_rate or 300))
+say("ROUTE_RATE applied="..applied_rate.." throttle=true")
 
 -- ----- RAM probes --------------------------------------------------------------------------
 local function fsys() local f = r32(FS); return inram(f) and f or nil end
@@ -467,6 +473,12 @@ local function app_info()
   local a = {ovy = r32(man + 0x0C)}
   if a.ovy == APP_OVY then a.state = r32(man + 0x14) end -- PCBox_Main dispatches on *state (man->proc_state)
   if a.ovy == APP_OVY and inram(data) then a.sel = r8(data + 0x21) end
+  if a.ovy == APP_OVY and inram(data) and route.phase=="withdraw" then
+    local c=route.pc.withdraw.cursor
+    local work=r32(data+c.data_work_off)
+    local grid=inram(work) and r32(work+c.work_grid_off) or 0
+    if inram(grid) then a.grid_target=r8(grid+c.target_off); a.button_mode=r32(grid+c.buttons_off)~=0 end
+  end
   return a
 end
 local function watch()
@@ -805,7 +817,17 @@ local function pc_withdraw()
     end
   end
   if not a then finish("FAIL", why, "taskman", hex(taskman() or 0), pos_s(loc()), trace()) end
-  if a.sel ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "sel", hx(a.sel), "want", wd.box_cell, trace()) end
+  -- data+0x21 is a selection cache and can still be FF. State51 reads the
+  -- GridInputHandler's nextInput (data+34 -> work+2C -> grid+D). First A is
+  -- consumed by HandleButton as GRID_MENU_BUTTON_MODE (-4), not a grab.
+  if a.grid_target ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "grid",hx(a.grid_target),"cache",hx(a.sel),"want",wd.box_cell,trace()) end
+  if not a.button_mode then
+    tap("A",1,30); pressed("A wake cursor")
+    a=watch()
+    if not a or a.state~=ST_GRID or not a.button_mode or a.grid_target~=wd.box_cell then
+      finish("FAIL","cursor_not_activated",trace())
+    end
+  end
   shot("pc_grid")
 
   -- 4. A = grab + one prompt; state 0x57 commits with no further input: poll the party count
