@@ -345,17 +345,36 @@ def test_drive_conflict_ref_flagged_and_refused_when_it_holds_unique_commits(W):
     assert item(p, heads / "side (1)")["status"] == "refuse"
 
 
-def test_untracked_copy_of_old_revision_flagged(W):
-    _git(W.repo, "rm", "-q", "a.txt")
-    _git(W.repo, "commit", "-qm", "drop a")
-    (W.repo / "a.txt").write_text("v1\n")
+def test_known_drive_restores_and_conflict_copies_are_stale(W):
+    known = W.repo / "lua" / "memory_gba.lua"
+    known.parent.mkdir()
+    known.write_text("old gba\n")
+    (W.repo / "b.txt").write_text("bee\n")
+    _git(W.repo, "add", ".")
+    _git(W.repo, "commit", "-qm", "add")
+    _git(W.repo, "rm", "-q", "lua/memory_gba.lua")
+    _git(W.repo, "commit", "-qm", "drop gba")
+    known.parent.mkdir(exist_ok=True)
+    known.write_text("old gba\n")
+    (W.repo / "b (1).txt").write_text("bee\n")
     (W.repo / "novel.txt").write_text("brand new\n")
     # The real repo carries one of these, and it makes `git log --all` fatal.
     master = _git(W.repo, "rev-parse", "master").strip()
     (W.repo / ".git" / "refs" / "heads" / "master (1)").write_text(master + "\n")
-    paths = {ss._norm(i["path"]) for i in plan(W)["items"] if i["kind"] == "drive-copy"}
-    assert ss._norm(W.repo / "a.txt") in paths
+    p = plan(W)
+    assert item(p, known)["status"] == "stale"
+    assert item(p, W.repo / "b (1).txt")["status"] == "stale"
+    paths = {ss._norm(i["path"]) for i in p["items"] if i["kind"] == "drive-copy"}
     assert ss._norm(W.repo / "novel.txt") not in paths
+
+
+def test_other_untracked_old_revision_is_refused_and_survives(W):
+    _git(W.repo, "rm", "-q", "--cached", "a.txt")  # benign: someone untracking a file
+    p = plan(W)
+    it = item(p, W.repo / "a.txt")
+    assert it["status"] == "refuse"
+    apply(W, p)
+    assert (W.repo / "a.txt").read_text() == "v1\n"
 
 
 def test_orphan_admin_dir_detected_and_pruned(W):

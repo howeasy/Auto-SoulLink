@@ -39,6 +39,8 @@ DEFAULT_TMP_AGE = 2 * 3600
 _EVIDENCE_NAME = re.compile(r"evidence|receipt|proof", re.I)
 _DRIVE_COPY = re.compile(r" \(\d+\)(\.[^./\\ ]+)?$")  # Google Drive conflict copy: "master (1)"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+# Deleted files Google Drive put back into the main checkout (seen 2026-10-02).
+KNOWN_DRIVE_RESTORES = frozenset({"lua/memory_gba.lua", "server/adapters/gen2_crystal.py"})
 _IS_WIN = os.name == "nt"
 
 
@@ -434,17 +436,28 @@ def _drive_hazards(repo) -> list[dict]:
                                encoding="utf-8").stdout.split()
         # Not `log --all`: a Drive conflict ref ("master (1)") makes that fatal.
         revs = git(repo, "for-each-ref", "--format=%(objectname)", "refs/heads", "refs/tags")
-        for rel, blob in zip(untracked, blobs, strict=False):
+        for rel, blob in zip(untracked, blobs, strict=True):
+            conflict = bool(_DRIVE_COPY.search(rel))
+            base = _DRIVE_COPY.sub(lambda m: m.group(1) or "", rel) if conflict else rel
             hit = subprocess.run(["git", "-C", str(repo), "log", "--stdin", "-1", "--format=%h",
-                                  f"--find-object={blob}", "--", rel], input=revs,
+                                  f"--find-object={blob}", "--", base], input=revs,
                                  capture_output=True, text=True, encoding="utf-8").stdout.strip()
-            if hit:
-                p = Path(repo) / rel
-                st = p.stat()
-                items.append({"label": "drive", "kind": "drive-copy", "path": p.as_posix(),
-                              "size": st.st_size, "newest": st.st_mtime, "links": [],
-                              "fp": f"{st.st_size}:{st.st_mtime:.0f}:{blob}", "status": "stale",
-                              "reason": f"untracked copy of {rel} as committed in {hit}"})
+            if not hit:
+                continue
+            p = Path(repo) / rel
+            st = p.stat()
+            item = {"label": "drive", "kind": "drive-copy", "path": p.as_posix(),
+                    "size": st.st_size, "newest": st.st_mtime, "links": [],
+                    "fp": f"{st.st_size}:{st.st_mtime:.0f}:{blob}"}
+            # Only the shapes Drive is known to produce are junk; anything else equal to an old
+            # revision may be someone's deliberate `git rm --cached`.
+            if conflict or rel in KNOWN_DRIVE_RESTORES:
+                items.append({**item, "status": "stale",
+                              "reason": f"Drive-restored copy of {base} as committed in {hit}"})
+            else:
+                items.append({**item, "status": "refuse", "reason":
+                              f"untracked, equals {base} as committed in {hit}; not a known "
+                              "Drive restore, inspect by hand"})
     return items
 
 
