@@ -15,6 +15,7 @@ package.path = ROOT .. "/lua/?.lua;" .. package.path
 
 local Entry = dofile(ROOT .. "/lua/gen4/entry.lua")
 local Client = dofile(ROOT .. "/lua/gen4/client.lua")
+local Inputs = dofile(ROOT .. "/lua/gen4/inputs.lua")
 local C = require("connector")
 local H = require("hud")
 local START_REFUSED = "SLINK COULD NOT START - SEE LOG"
@@ -24,11 +25,11 @@ local host = SLINK_HOST or os.getenv("SLINK_HOST") or "127.0.0.1"
 local port = tonumber(SLINK_PORT or os.getenv("SLINK_PORT") or 54321)
 local player = SLINK_PLAYER or os.getenv("SLINK_PLAYER") or "a"
 
-local BUS = Client.PLATFORM.bus_domain
--- The NDS boot copies the cartridge header to the top of main RAM (GBATEK, "DS Cartridge Header /
--- Main Memory"); the game code is read from that copy at +0x0C by Entry.header_code. Platform fact,
--- not a title fact. UNVERIFIED LIVE on BizHawk's melonDS (no emulator ran for this card).
-local HEADER_COPY = 0x027FFE00
+local PLAT = Client.PLATFORM
+local BUS = PLAT.bus_domain
+-- The NDS boot copies the cartridge header to the top of main RAM; the address is a PLATFORM fact
+-- (Client.PLATFORM.header_copy, cited there), so run.lua names no address at all.
+local HEADER_COPY = PLAT.header_copy
 
 -- BizHawk memory adapters (little-endian), all over the ARM9 system bus the client names.
 local io_ = {
@@ -74,10 +75,19 @@ if not admitted then return refuse("refused", why) end
 H.init(SCREEN)
 C.init(host, port)
 
+-- The optional inputs (area ids, trainer-name charmap, the ball read). lua/gen4/inputs.lua builds
+-- each one from the pack only and omits (never nils) the ones whose pack fact is absent, so the
+-- client's own optional seams stay optional.
+local pack_def = Entry.PACKS[admitted.pack]
+local inputs = Inputs.build({
+    root = ROOT, json = json, pack_profile = pack_def and pack_def.profile,
+    log = function(t) console.log(t) end,
+})
 local client, why_build = Client.new({
     root = ROOT, json = json, io = io_, net = C, hud = H, player = player,
     rom_hash = rom_hash, header_code = header_code,
     log = function(t) console.log(t) end,
+    area_of = inputs.area_of, charmap = inputs.charmap, has_pokeballs = inputs.has_pokeballs,
 })
 if not client then return refuse("refused to start", why_build) end
 local ok, err = pcall(function() client:start() end)

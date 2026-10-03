@@ -15,10 +15,14 @@ from pathlib import Path
 import lupa
 import pytest
 
+from tests.unit.test_gen4_inputs import assert_area_contract, lua_inputs  # the producer harness, shared by the wiring mutants
+
+
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / "lua/gen4/run.lua"
+INPUTS = (ROOT / "lua/gen4/inputs.lua").read_text(encoding="utf-8")
 HGE = json.loads((ROOT / "data/games/gen4_hge/profile.json").read_text(encoding="utf-8"))["titles"]["heartgold_hge"]
-HEADER_COPY = 0x027FFE00  # run.lua's one platform constant (the NDS boot copy of the cartridge header)
+HEADER_COPY = 0x027FFE00  # the NDS boot copy of the cartridge header, now Client.PLATFORM's constant
 
 ENTRY_SHIM = """
 local E = dofile(ROOT_DIR .. "/lua/gen4/entry_real.lua")
@@ -27,7 +31,7 @@ E.admit_routed = function(args) CALLS.admit_routed = (CALLS.admit_routed or 0) +
 return E
 """
 CLIENT_STUB = """
-local C = { PLATFORM = { bus_domain = "ARM9 System Bus" } }
+local C = { PLATFORM = { bus_domain = "ARM9 System Bus", header_copy = HEADER_COPY } }
 function C.new(p)
     CALLS.client_new = (CALLS.client_new or 0) + 1; CALLS.client_args = p
     if CLIENT_FAIL then return nil, CLIENT_FAIL end
@@ -40,22 +44,38 @@ return C
 
 
 def run_root(tmp: Path, text: str | None = None, *, rom_hash: str, header: str = "IPKE",
-             client_fail: str | None = None, start_fail: str | None = None):
-    """Run run.lua (or a mutated `text` of it) in a scratch tree; returns (lua globals, calls, hud log, console log)."""
+             client_fail: str | None = None, start_fail: str | None = None,
+             stub_src: str | None = None, with_areas: bool = False):
+    """Run run.lua (or a mutated `text` of it) in a scratch tree; returns (lua globals, calls, hud log, console log).
+
+    `stub_src` replaces the client stub (mutants); `with_areas` plants the hgss area data files in
+    every scratch pack, which is the only way the optional area input can exist at all (no Gen 4
+    profile carries it).
+    """
     gen4 = tmp / "lua/gen4"
     gen4.mkdir(parents=True)
     (tmp / "lua/json_codec.lua").write_bytes((ROOT / "lua/json_codec.lua").read_bytes())
     shutil.copy(ROOT / "lua/gen4/entry.lua", gen4 / "entry_real.lua")
+    shutil.copy(ROOT / "lua/gen4/inputs.lua", gen4 / "inputs.lua")
     (gen4 / "entry.lua").write_text(ENTRY_SHIM, encoding="utf-8")
-    (gen4 / "client.lua").write_text(CLIENT_STUB, encoding="utf-8")
+    (gen4 / "client.lua").write_text(stub_src if stub_src is not None else CLIENT_STUB, encoding="utf-8")
     for pack in ("hgss", "hge", "pt"):
         d = tmp / f"data/games/gen4_{pack}"
         d.mkdir(parents=True)
         shutil.copy(ROOT / f"data/games/gen4_{pack}/profile.json", d / "profile.json")
+        if with_areas:
+            # the hgss files are the only ones that ship; planting them in every scratch pack is
+            # what makes "the pack CAN supply this fact" testable for whichever pack admits
+            for name in ("area_map.json", "locations.json"):
+                shutil.copy(ROOT / f"data/games/gen4_hgss/{name}", d / name)
     (gen4 / "run.lua").write_text(text if text is not None else RUN.read_text(encoding="utf-8"), encoding="utf-8")
+    return _exec(tmp, gen4, rom_hash, header, client_fail, start_fail)
 
+
+def _exec(tmp: Path, gen4: Path, rom_hash: str, header: str, client_fail, start_fail):
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
+    g.HEADER_COPY = HEADER_COPY
     head = header.encode()
 
     def mem(addr, domain):  # only the header copy is modelled; ARM9 anchors are never needed (hge = hash only)
@@ -124,14 +144,65 @@ def test_a_client_that_fails_to_build_or_start_is_refused_visibly(tmp_path, kw, 
     assert list(hud.shown.values()) == ["SLINK COULD NOT START - SEE LOG"] and g.FRAME_CB is None
 
 
-def test_run_lua_names_no_title_address():
-    """Game facts stay in the pack/adapters: the only hex literal is the platform header-copy base."""
+def test_run_lua_names_no_hex_literal_at_all():
+    """No address lives in run.lua any more: the header copy is Client.PLATFORM's, cited there."""
     code = "\n".join(re.sub(r"--.*", "", ln) for ln in RUN.read_text(encoding="utf-8").splitlines())
-    literals = re.findall(r"\b0[xX][0-9A-Fa-f]{5,}\b", code)
-    assert [x.lower() for x in literals] == ["0x027ffe00"]
-    assert re.search(r"HEADER_COPY\s*=\s*0x027FFE00", code)
+    assert re.findall(r"\b0[xX][0-9A-Fa-f]+\b", code) == []
+    assert re.search(r"Client\.PLATFORM", code)
     for banned in ("heartgold", "soulsilver", "gen4_hg", "ov129", "overlay"):
         assert banned not in code.lower()
+
+
+def test_the_header_copy_is_a_platform_fact_cited_in_the_client():
+    """GBATEK: the header is loaded from ROM 0 to main RAM 0x027FFE00 on power-up."""
+    client = (ROOT / "lua/gen4/client.lua").read_text(encoding="utf-8")
+    # the citation is the comment block that heads the table, so the slice starts at that block
+    plat = client[client.index("-- NDS platform facts") :]
+    plat = plat[: plat.index("local TAG")]
+    assert "header_copy = 0x027FFE00" in plat
+    assert "GBATEK" in plat and "27FFE00h" in plat, "the platform fact must carry its citation"
+    assert "hex literal" not in RUN.read_text(encoding="utf-8")
+
+
+def test_a_platform_without_the_header_copy_is_refused_by_name(tmp_path):
+    """Mutant: the platform table loses header_copy, so run.lua reads a nil address."""
+    mutant = CLIENT_STUB.replace("header_copy = HEADER_COPY", "pc_register = 'ARM9 r15'")
+    assert mutant != CLIENT_STUB
+    _, calls, hud, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], stub_src=mutant)
+    # the header read raises, the header code is empty, and admission refuses by name
+    assert calls.admit_routed == 1 and calls.client_new is None
+    assert any("refused" in line for line in logs)
+    assert list(hud.shown.values()) == ["SLINK COULD NOT START - SEE LOG"]
+
+
+def test_run_lua_hands_the_client_the_producers_the_pack_can_supply(tmp_path):
+    """With the hgss area files present, area_of reaches Client.new and resolves a map id."""
+    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], with_areas=True)
+    p = calls.client_args
+    assert callable(p.area_of), "run.lua must pass the pack-built area producer"
+    assert list(p.area_of(9, {})) == ["route_1", "Route 1"]
+    assert list(p.area_of(0, {})) == [None, "Mystery Zone"]     # unmapped: no area, still a label
+    assert list(p.area_of(9999, {})) == [None, None]
+    # the pack ships no charmap.json and no bag fact: those seams stay ABSENT, never nil-or-guessed
+    assert p.charmap is None and p.has_pokeballs is None
+    for name in ("charmap", "has_pokeballs"):
+        assert any(f"input {name} unavailable" in line for line in logs), f"{name} gap must be visible"
+
+
+def test_run_lua_without_the_area_pack_files_refuses_the_area_input(tmp_path):
+    """The profile alone carries no area map: the seam must be absent, not a guessed area id."""
+    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"])
+    assert calls.client_new == 1 and calls.client_args.area_of is None
+    assert any("input area_of unavailable" in line and "area_map.json" in line for line in logs)
+
+
+def test_a_run_that_invents_an_area_when_the_pack_has_none_goes_red(tmp_path):
+    """Mutant: the area producer fabricates an id instead of refusing."""
+    mutant = INPUTS.replace("local area = maps[key]", "local area = maps[key] or 'route_1'")
+    assert mutant != INPUTS
+    assert_area_contract(lua_inputs(tmp_path / "real", areas=True))
+    with pytest.raises(AssertionError):
+        assert_area_contract(lua_inputs(tmp_path / "mut", src=mutant, areas=True))
 
 
 def test_a_run_that_skips_admit_routed_goes_red(tmp_path):

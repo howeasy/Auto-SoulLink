@@ -14,8 +14,11 @@
 --               { seam = { cmd, overlay_id, addr, pin_hex (FILE-proven on every build;
 --                 an optional dispatch-table address is provenance only) },
 --                 ctx_cmd_off, bs_party_off, party_hp_off, repl_flag_off }
---   p.area_of(map_id, location) -> area_id, loc_name   optional (step 6): area ids come from data
---   p.has_pokeballs() -> bool                          optional (the bag read is a pack gap)
+--   p.area_of(map_id, location) -> area_id, loc_name   optional: lua/gen4/inputs.lua builds it
+--                                                          from the pack's area_map/locations
+--   p.charmap                                       optional: u16 code -> text (the pack's charmap)
+--   p.has_pokeballs() -> bool                       optional (the bag read is a pack gap; see
+--                                                          Inputs.GAPS.has_pokeballs)
 --
 -- Frame order (lua/core/session.lua frame_end, lua/nds/phase_signals.lua):
 --   emu.frameadvance (the D7 hook fires inside it)
@@ -70,7 +73,8 @@
 -- Step 4 (storage): the deferred executors below write box/party records at the checkpoint, see
 -- the "storage" section. Step 5 (D11): a reducer slot_replace note becomes a key_change with the
 -- alias and its exact message on identity.pending. Step 6: hello_fields/tick_fields, see "wire
--- shapes". Still open: the bag read (has_pokeballs) and p.area_of / p.charmap are injections.
+-- shapes". Still open: the bag read (has_pokeballs) has no pack fact yet; p.area_of / p.charmap are
+-- built by lua/gen4/inputs.lua, which refuses (nil, named gap) for any fact the pack does not ship.
 local Client = {}
 
 Client.PHASE = "d7"
@@ -81,8 +85,13 @@ Client.MAX_CHANGES = 32         -- observed key changes waiting behind one unans
 -- include/constants/pokemon.h:132, pinned tree E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold).
 Client.PERFORMANCE_MAX = 5
 -- NDS platform facts for BizHawk's melonDS core (the NDS binding takes them as config, never defaults).
+-- header_copy: the NDS boot loads the cartridge header from ROM offset 0 to main RAM 0x027FFE00
+-- on power-up (GBATEK, "DS Cartridge Header": "Header Overview (loaded from ROM Addr 0 to Main RAM
+-- 27FFE00h on Power-up)"); the game code sits at +0x0C of that copy, which Entry.header_code reads.
+-- A platform fact, not a title fact, so it lives here beside the bus/register facts rather than in
+-- run.lua. UNVERIFIED LIVE on BizHawk's melonDS (no emulator ran for this card).
 Client.PLATFORM = { bus_domain = "ARM9 System Bus", pc_register = "ARM9 r15", pc_offset = { thumb = 4, arm = 8 },
-                    arg_registers = { "ARM9 r0", "ARM9 r1" } }
+                    arg_registers = { "ARM9 r0", "ARM9 r1" }, header_copy = 0x027FFE00 }
 local TAG = "[SLink gen4]"
 
 local function u32(v) return v & 0xFFFFFFFF end
