@@ -41,16 +41,54 @@ SD = 0x022D0000
 P0, P1 = 0x022C8000, 0x022C9000          # battle party copies: player, foe
 TRAINER_OTID = 0x30391A5C
 
+# HG and SS share ONE D7 block, and the pack proves that rather than asserting it: the generator
+# FILE-reads the seam out of each title's OWN decompressed ov12 (tools/gen_gen4_pack.py:2134-2151,
+# d7_file_checks(xm, images, build), fed the per-title images at :2718-2721) and both ROMs answer
+# with the same address and the same four pin bytes -- titles.heartgold.profile.battle_d7_file_checks
+# (data/games/gen4_hgss/profile.json:3027-3068) equals titles.soulsilver.profile.battle_d7_file_checks
+# (:8717-8758) field for field, as do the two battle.d7 blocks they produce (:2991-3002, :8681-8692).
+# The SS per-field receipts say it in words: "HG==SS bytes at the seam, the dispatch table and
+# ov12_0224D540 are FILE-compared in the SS ROM" (:8862, :8871, :8880, :8889, :8898, :8907).
+D7_HGSS = {"seam": {"cmd": 11, "overlay_id": 12, "addr": 0x0224A70C, "pin_hex": "f8b582b0"},
+           "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C}
 D7_MODEL = {  # MODEL: used only when a test strips the pack's battle.d7 (no_pack_d7) or overrides it
-    "heartgold": {"seam": {"cmd": 11, "overlay_id": 12, "addr": 0x0224A70C, "pin_hex": "f8b582b0"},
-                  "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C},
+    "heartgold": D7_HGSS,
+    "soulsilver": D7_HGSS,       # the proven-equal row above, NOT a second copy of HG's numbers
     "heartgold_hge": {"seam": {"cmd": 9, "overlay_id": 12, "table": 0x0226CA90,
                                "addr": 35951836, "pin_hex": "004a1047"},
                       "ctx_cmd_off": 8, "bs_party_off": 0x68, "party_hp_off": 0x8E, "repl_flag_off": 0x13C},
 }
 PACKS = {"heartgold": "gen4_hgss", "soulsilver": "gen4_hgss", "heartgold_hge": "gen4_hge"}
-# where the PC array sits in the general+pc save region, per title (pack evidence: PC block offsets)
-PC_OFF = {"heartgold": (0xF700, 0x300), "heartgold_hge": (0x10000, 0x4FC)}
+# Where the PC array sits in the general+pc save region, per title: (its offset inside the dynamic
+# region, the bytes that follow the box records). The pack's `pc` block is the PC block's own geometry
+# (box_base / box_stride / mon_stride / cur_box_off / wallpapers_off / size); the array's PLACE in the
+# save is the runtime value the game writes into arrayHeaders + saveSlotSpecs, so the pack carries it
+# as evidence prose rather than as a field. Both numbers are derived here, never copied:
+#   offset = (the PC block's address in the save) - save.dynamic_region_off
+#     HG    pc.evidence "PC block at SaveData+0xF710" (profile.json:3556) - 0x10 (save.
+#           dynamic_region_off :3736) = 0xF700 -- and the HG battery save's own saveSlotSpecs[1]
+#           .offset measures the same 0xF700 (open.slot_spec_runtime_values, :348, generated at
+#           tools/gen_gen4_pack.py:923 and re-checked at tests/unit/test_gen4_reads_lua.py:462-463)
+#     SS    the SAME two pack lines for SS: pc.evidence :9234 and dynamic_region_off :9414
+#     hge   pc.evidence states a bank-relative block address ("PC block at bank+0x10000",
+#           data/games/gen4_hge/profile.json:3796), not a SaveData offset; the model takes it as the
+#           array offset verbatim.
+#   extra = (the PC array's size) - boxes * 0x1000
+#     HG    0x12300 -- the live hg_p2/savedata.bin arrayHeaders[41] (test_gen4_reads_lua.py:52-54,
+#           cross-checked against the HG battery save at :462-463) -- minus 18 boxes * 0x1000 = 0x300
+#     SS    identical pc block (:9226-9239 == :3548-3561, one emitted dict for both HGSS titles,
+#           tools/gen_gen4_pack.py:903-907) and identical boxes (18, :9134) => 0x300. SOURCE
+#           projection, NOT an SS measurement: the SS title's own open.soulsilver_save_offsets
+#           (:6039) says "no owner SS save (D4): party_off / trainer FILE evidence is HeartGold
+#           only". The one SS-specific PC fact is PHYSICAL and agrees --
+#           pc.box_modified_flag_evidence (:9229) cites the SS route log at PC+0x12004, i.e.
+#           box_base 0 + 18 * 0x1000.
+#     hge   "size 0x1E4FC FILE" (gen4_hge :3796) - 30 boxes * 0x1000 = 0x4FC
+PC_OFF = {
+    "heartgold": (0xF700, 0x300),
+    "soulsilver": (0xF700, 0x300),
+    "heartgold_hge": (0x10000, 0x4FC),
+}
 
 
 def key_of(pid: int, otid: int = TRAINER_OTID) -> str:
