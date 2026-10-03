@@ -1191,13 +1191,21 @@ def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
             shutil.copyfile(src, dst)
 
 
-def copy_expansion_inputs(tree, root, repo=None):
-    """Reuse pinned copying; keep source read-only and offline compiler proof explicitly bound."""
+def _link_dir(source, destination):
+    """A junction (Windows) or symlink to `source` at `destination`; never a copy of hundreds of MB."""
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(os.path.realpath(source), destination)
+    else:
+        os.symlink(os.path.realpath(source), destination, target_is_directory=True)
+
+
+def link_expansion_source(tree, root, repo=None):
+    """Junction `tree`/.cache/expansion-src to the pinned expansion checkout (SLINK_EXPANSION_SRC, the tree's own, this worktree's or the
+    main checkout's) after proving it is tracked-clean at the locked commit with the locked config headers; the source stays read-only
+    and in place. Any missing or differing source raises LaneError. Returns the lock document."""
     repo = repo or REPO
-    # Copy the whole artifact bundle BEFORE its pinned ROM creates a partial directory.
-    copy_inputs(tree, root, repo, only=EXPANSION_UNPINNED_INPUTS)
-    copy_inputs(tree, root, repo, pins={"exp": expansion_rom_pin(tree)},
-                extra_pinned=EXPANSION_PINNED_INPUTS, base_inputs=False)
     destination = os.path.join(tree, ".cache", "expansion-src")
     supplied = os.environ.get("SLINK_EXPANSION_SRC")
     source = supplied or (destination if os.path.isdir(destination) else next(
@@ -1214,12 +1222,57 @@ def copy_expansion_inputs(tree, root, repo=None):
     if os.path.isdir(destination) and os.path.realpath(destination) != os.path.realpath(source):
         raise LaneError("existing expansion source link differs from SLINK_EXPANSION_SRC")
     if not os.path.isdir(destination):
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        if os.name == "nt":
-            import _winapi
-            _winapi.CreateJunction(os.path.realpath(source), destination)
-        else:
-            os.symlink(os.path.realpath(source), destination, target_is_directory=True)
+        _link_dir(source, destination)
+    return lock
+
+
+# The vendored FireRed decomp (gitignored: patch/.gitignore `vendor/`, ~58 MB) is read by tests/unit/test_gen3_menu_version.py
+# (charmap.txt). It is provisioned as a junction to the main checkout's copy, like the expansion source.
+VENDORED_DECOMP = "patch/vendor/pokefirered"
+VENDORED_DECOMP_MARKER = "charmap.txt"
+
+
+def link_vendored_decomp(tree, root, repo=None):
+    """Junction `tree`/patch/vendor/pokefirered to the first source (the tree's own, this worktree's, the main checkout's) that holds
+    the decomp (its charmap.txt). Missing everywhere raises LaneError; an existing different link is refused."""
+    repo = repo or REPO
+    destination = os.path.join(tree, *VENDORED_DECOMP.split("/"))
+    if os.path.isfile(os.path.join(destination, VENDORED_DECOMP_MARKER)):
+        return destination
+    if os.path.exists(destination):
+        raise LaneError(f"{VENDORED_DECOMP} exists in the lane but holds no {VENDORED_DECOMP_MARKER}")
+    source = next((c for c in (os.path.join(base, *VENDORED_DECOMP.split("/")) for base in (repo, root))
+                   if os.path.isfile(os.path.join(c, VENDORED_DECOMP_MARKER))), None)
+    if source is None:
+        raise LaneError(f"{VENDORED_DECOMP} is missing from {repo} and {root} (the vendored decomp lives in the root checkout)")
+    _link_dir(source, destination)
+    return destination
+
+
+def is_gate_row(row):
+    """A row that runs verify_gen3_release's unit lane (release_gate_quick, frlgc_release_gate_quick)."""
+    return "tools/verify_gen3_release.py" in row.argv
+
+
+def provision_gate_inputs(tree, root, repo=None):
+    """What `release_gate_quick`'s unit lane reads that a plan's own provisioning does not supply (each was a counted skip, and a skip
+    fails the gate): the pinned expansion reference ROM at patch/build/gen3_pokeemerald.gba and its artifact bundle, the locked
+    expansion source junction, and the vendored FireRed decomp. Fail closed: a missing source or pin raises LaneError, never skips."""
+    repo = repo or REPO
+    copy_inputs(tree, root, repo, only=[".cache/expansion-output/"])      # the artifact bundle BEFORE its pinned ROM makes a partial dir
+    copy_inputs(tree, root, repo, pins={"exp": expansion_rom_pin(tree)}, extra_pinned=EXPANSION_PINNED_INPUTS, base_inputs=False)
+    link_expansion_source(tree, root, repo)
+    link_vendored_decomp(tree, root, repo)
+
+
+def copy_expansion_inputs(tree, root, repo=None):
+    """Reuse pinned copying; keep source read-only and offline compiler proof explicitly bound."""
+    repo = repo or REPO
+    # Copy the whole artifact bundle BEFORE its pinned ROM creates a partial directory.
+    copy_inputs(tree, root, repo, only=EXPANSION_UNPINNED_INPUTS)
+    copy_inputs(tree, root, repo, pins={"exp": expansion_rom_pin(tree)},
+                extra_pinned=EXPANSION_PINNED_INPUTS, base_inputs=False)
+    link_expansion_source(tree, root, repo)
     probe = os.environ.get("SLINK_EXPANSION_PROBE_OBJECT") or next(
         (os.path.join(base, ".cache", "x1-probe", "probe.o") for base in (repo, root)
          if os.path.isfile(os.path.join(base, ".cache", "x1-probe", "probe.o"))), None)
@@ -2826,6 +2879,9 @@ def run_pass(args):
             print("# provision: link the locked, clean expansion source; copy the offline probe.o "
                   "(SLINK_EXPANSION_PROBE_OBJECT) plus compile.json when present; verify object hash vs facts")
             print("# Expansion production qualification; unmodified launcher admission required")
+        if any(is_gate_row(r) for r in run_rows) and args.title != "exp":
+            print(f"# provision: gate inputs (release_gate_quick's unit lane): {STAGED['exp']} (pin exp) + .cache/expansion-output/, "
+                  f".cache/expansion-src junction (locked commit, tracked-clean), {VENDORED_DECOMP} junction")
         if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
         for k, r in enumerate(rows, 1):
@@ -2866,6 +2922,8 @@ def run_pass(args):
             else:
                 copy_inputs(lane, root, extra_pinned=emerald_pins, extra_unpinned=emerald_unpinned,
                             pins=rom_pins(lane, require_companions=True) if args.title in ("frlgc", "frlgc-rand") else None)
+                if any(is_gate_row(r) for r in run_rows):
+                    provision_gate_inputs(lane, root)
         if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
             copy_inputs(master, root, only=ITEM6_INPUTS)
