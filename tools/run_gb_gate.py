@@ -38,6 +38,7 @@ from types import MappingProxyType
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
+from repo_paths import inside_repo  # noqa: E402
 import gen1_playthrough as g1  # noqa: E402
 from gen1_playthrough import (  # noqa: E402
     BIZHAWK_CONFIG,
@@ -318,7 +319,7 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     if ctx.artifact != descriptor["artifact"] or hashlib.sha1(ctx.rom).hexdigest() != descriptor["rom_sha1"]:
         raise ValueError("Gen 2 selected artifact/hash binding disagrees")
     rom = (ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]).resolve()
-    if not rom.is_relative_to(Path(REPO).resolve()) or hashlib.sha1(rom.read_bytes()).hexdigest() != descriptor["rom_sha1"]:
+    if not inside_repo(rom, REPO) or hashlib.sha1(rom.read_bytes()).hexdigest() != descriptor["rom_sha1"]:
         raise ValueError("Gen 2 actual ROM differs from the selected descriptor")
     launch_sha1, stage, extra_env = descriptor["rom_sha1"], None, {}
     if descriptor.get("overlay"):

@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.repo_paths import inside_repo  # noqa: E402
+
 SCENARIOS = frozenset({"gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout",
                        "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item",
                        "gen2_trade_evolve"})
@@ -50,7 +52,8 @@ def _json(raw):
 def _repo_path(root, relative):
     _need(isinstance(relative, str), "artifact path missing")
     path = (root / relative).resolve()
-    _need(path.is_relative_to(root), "artifact path escapes repository")
+    # a junctioned .cache (F:/slink-work worktrees) resolves outside root: tools/repo_paths.py allows its target
+    _need(inside_repo(path, root), "artifact path escapes repository")
     return path
 
 
