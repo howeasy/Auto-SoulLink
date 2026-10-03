@@ -106,9 +106,8 @@ features matter, so use the game's setup options when preparing a run.
 | **Emerald** | Emerald on both sides |
 | **Emerald Expansion** | The prebuilt Emerald Expansion reference ROM on both sides. It is built by `tools/build_expansion.py` from the pinned pokeemerald-expansion source (it cannot be built on a Windows host, and no patch exists); no randomizer, no companion patch |
 | **Radical Red 4.1** | Radical Red on both sides |
-| **Archipelago Red/Blue** | Compatible Archipelago builds |
 
-Archipelago FireRed/LeafGreen is disabled in this checkout's new-run form.
+Archipelago builds may run clean, but the Manager doesn't offer them until a client supports them.
 Gen 4 and Gen 5 work is experimental and isn't offered there yet.
 
 Testing is performed with ROMs in **BizHawk emulation**. SLink is in active development;
@@ -148,7 +147,8 @@ and open it in the calculator before the fight.
 
 The memorial keeps both Pokémon together with their encounter area, time of death,
 and the recorded cause. It gives you a history of the run's losses alongside the
-pairs still in play.
+pairs still in play. The run **timeline** tells the whole story in order: every pair
+formed, every death, dead zone and burial, and the areas still open.
 
 ## Streaming
 
