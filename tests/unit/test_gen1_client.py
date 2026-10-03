@@ -2810,8 +2810,8 @@ def test_a_trade_removal_is_suppressed_by_the_apply_state_across_the_whole_movie
     w.assert_all_conform()
 
 
-def _applying(w, token="t30"):
-    """An armed APPLY the cartridge has picked up; returns the armed frame."""
+def _applying(w, token="t30", *, pickup=True):
+    """Arm APPLY and optionally model native pickup; return the armed frame."""
     rng = random.Random(30)
     incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
     blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
@@ -2820,7 +2820,8 @@ def _applying(w, token="t30"):
     w.step()
     armed = _overlay(w)
     assert armed[5] == 5, "apply armed"
-    _fire_trade_service(w)
+    if pickup:
+        _fire_trade_service(w)
     return armed, incoming
 
 
@@ -2882,20 +2883,23 @@ def test_a_reset_after_the_commit_boundary_is_declared_uncertain_after_the_new_h
     w.assert_all_conform()
 
 
-def test_a_reset_before_the_commit_boundary_reports_a_certain_nothing_changed():
-    """Before the RemovePokemon nothing was mutated or saved, so the reset lost nothing: review m2 --
-    say so after the new hello (a certain none) instead of leaving it to the 17-minute watchdog."""
+@pytest.mark.parametrize("picked_up", [False, True])
+def test_a_reset_without_physical_commit_uses_pickup_evidence(picked_up):
+    """No observed pickup permits a certain none; proven consumption requires uncertainty."""
     w = _patched_world()
     old_key = codec.key(w.party()[0])
-    _applying(w)
+    _applying(w, pickup=picked_up)
     _reset_and_reload(w)
     w.step(5)
-    assert [(d["token"], d["new_key"], d.get("uncertain")) for d in w.events("trade_done")] == [
-        ("t30", old_key, None)]
+    if picked_up:
+        assert _uncertain_done(w) == [("t30", True, False)]
+    else:
+        assert [(d["token"], d["new_key"], d.get("uncertain")) for d in w.events("trade_done")] == [
+            ("t30", old_key, None)]
     names = [m["event"] for m in w.sent]
     assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
     assert w.client.trade_state is None
-    assert not any("UNCERTAIN" in str(h) for h in w.hud)
+    assert any("UNCERTAIN" in str(h) for h in w.hud) == picked_up
     w.assert_all_conform()
 
 
