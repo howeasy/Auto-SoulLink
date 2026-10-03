@@ -135,8 +135,11 @@ unload/reload shows the same `resident` answer but a different epoch: a decision
 - Gen 4 lane: build the HGSS strategy from the pack `overlay_table` (address, regions, per_region, entry_size,
   `id_off`, `active_off`), keep its pin check as `site_confirmed`, replace the geometry assert in
   `NDS.resident` with the injected strategy. **The binder calls `assert_strategy(s, read)` once at
-  construction**, then routes `register()` through `may_arm` (with a `snapshot` taken per arming attempt, which
-  re-runs the behavioural check) and the fire path through `may_fire`.
+  construction**, then routes `register()` through `may_arm` (`may_arm(strategy, site, site_confirmed,
+  strategy.epoch())`) and the fire path through `may_fire`. Per-attempt safety comes from `may_arm`'s live pin
+  re-read in `site_confirmed`, which is the load-bearing guard, not the epoch; `snapshot` (which re-runs the
+  behavioural check at a cost of ~16 extra reads) is optional per attempt and the Gen 4 binder does not call it
+  in production (Gen 4 coordinator, review cx-32eee8be).
 - Gen 5 lane: build the heap-block strategy (pointer global, counts, list pointers, `{id, active}` entries), call
   `assert_strategy(s, read)` at construction, same hook.
 
