@@ -29,7 +29,121 @@ python -m ruff check tests/live/test_gen4_probe_gates.py tests/live/test_gen4_ca
 python tools/lua_syntax_check.py
 ```
 
-## Planned live commands (after coordinator FROZEN/lane grant)
+## One-slot diagnostic runbook (after coordinator FROZEN + slot grant)
+
+HOLD means no emulator. Sequential execution only, no xdist; preserve failures.
+The committed tools/gen4_diag.py stays OUTSIDE qualification surface. Every
+JSON says qualified:false and records driver/generated-Lua/config hashes, the
+frozen surface manifest, ROM/scenario/save/state hashes, original-input check
+and owned Popen PID/exit audit. Reuse the frozen recipe, BridgePlanner/native
+executor and composite/phase_monitor; never override harness functions.
+All manual lane names below fit the 24-character cap. Existing automatic
+producer subdirectory naming stays unchanged. Foreign PIDs remain untouched.
+
+```powershell
+$env:SLINK_WORK_ROOT='F:/slink-work'
+$env:PYTEST_DEBUG_TEMPROOT='F:/slink-work/tmp'
+$env:SLINK_LIVE='1'
+$root='F:/slink-work/lanes/g4'
+$stamp=Get-Date -Format 'MMddHHmmss'
+$cut='<coordinator FROZEN full SHA>'
+$env:G4_FROZEN=$cut
+function Assert-Cut {
+    if ((git rev-parse HEAD).Trim() -ne $cut) { throw 'STOP wrong HEAD' }
+    if (@(git status --porcelain).Count) { throw 'STOP dirty source' }
+}
+function Census {
+    Get-CimInstance Win32_Process -Filter "Name='EmuHawk.exe'" |
+        Select-Object ProcessId,CreationDate,CommandLine
+}
+Assert-Cut
+Census
+
+# D1: current 6000-frame recipe; no budget or button changes.
+$d1="d1-hg-$stamp"
+python tools/gen4_diag.py fight --title heartgold --scenario data/gen4/scenarios/heartgold.json --state "$root/live108-1002220018/probes/heartgold-7a5a0a43970f/baseline/bridge-2_battle_settled.State" --state-sha256 b16302579d3ea1a7c9eef501a9fd972338841e180a46dbc91c49eaf240c165e6 --recipe fight_until_enemy_faints --lane $d1 --timeout 300
+Get-Content "$root/$d1/diagnostic.json"
+Census
+
+# D2: cold boot, native Pokegear errand, natural wild launch, uncensored pins.
+Assert-Cut
+$d2h="d2-hge-$stamp"
+python tools/gen4_diag.py settle --title heartgold_hge --scenario data/gen4/scenarios/heartgold_hge.json --cold-boot --errand pokegear --target battle_settled --images ov12 ov130 ov129 --lane $d2h --timeout 600
+Get-Content "$root/$d2h/diagnostic.json"
+Census
+Assert-Cut
+$d2s="d2-ss-$stamp"
+python tools/gen4_diag.py settle --title soulsilver --scenario data/gen4/scenarios/soulsilver.json --cold-boot --errand pokegear --target battle_settled --images ov12 --lane $d2s --timeout 600
+Get-Content "$root/$d2s/diagnostic.json"
+Census
+
+# D3: native RUN + Battle_Exit callback/fall/close counters AND advance tokens.
+Assert-Cut
+$d3="d3-hg-$stamp"
+python tools/gen4_diag.py boundary --title heartgold --scenario data/gen4/scenarios/heartgold.json --state "$root/live108-1002220018/probes/heartgold-7a5a0a43970f/baseline/bridge-2_battle_settled.State" --state-sha256 b16302579d3ea1a7c9eef501a9fd972338841e180a46dbc91c49eaf240c165e6 --phase-case battle_close --lane $d3 --timeout 300
+Get-Content "$root/$d3/diagnostic.json"
+Census
+
+# D4: first withdraw DIAGNOSTIC; per-press trace, unchanged script_a/recover_a.
+Assert-Cut
+$wd='wd-hg-'+(Get-Date -Format 'MMddHHmmss')
+python tools/gen4_routes.py run --game HG --target pc_withdraw --save "$root/g1inputs-c935-1015/hg_boxed.SaveRAM" --lane $wd
+Get-ChildItem "$root/$wd" -Filter '*leg*.log' | Sort-Object Name |
+    ForEach-Object { Get-Content -LiteralPath $_.FullName }
+python -c "from tools.gen4_routes import verify_receipt; print(verify_receipt('$root/$wd/'+'$wd'+'_receipt.json','route',want='PC_WITHDRAW'))"
+Census
+```
+
+Before EVERY cell: assert cut, fresh directory absent, prior own PID exited,
+and verify committed scenario/save hashes (plus SYNTH sidecars where used).
+Diagnostic host cleanup uses its Popen handle and fresh lane command matches,
+never an image-name kill. Timeout/error still publishes identity/cleanup audit.
+
+D1 reports PP-use ordinals (frame/battler/slot/move/before/after), species/level
+and both HP traces. Ordinals are NOT measured turns. No pinned miss/critical/
+damage-cause witness exists in the pack; RNG attribution stays INCONCLUSIVE.
+Wrong slot/nonselection is input drift evidence. Estimate 1-3 minutes; first
+falsifier is wrong input/battle, unexpected PP, loss or recipe bound.
+
+D2 observes before first emulated frame, full registration pin and region-0
+residency every frame, with no 16-frame cutoff. First observed residency is
+LEFT_CENSORED, never a zero latency. Late attachment is OPEN. The 24000-frame
+post-route observation ceiling/host timeout is not a policy/max measurement.
+Keep every sample, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
+(the diagnostic outputs manifest). Estimate 2-6 minutes/title. First falsifier:
+censored load, pin never lands, wrong image, 12-attempt errand bound or no wild
+launch. SS has ov12; hge additionally has ov130/ov129. Startup ov129 must actually
+be witnessed uncensored. These diagnostics do not author settle-policy values.
+
+D3 compares raw callback/fall/close frames and same advance token, pending>=1,
+exactly-once delivery, retained0 and second-drain0. No assumed equal counters.
+Estimate 1-3 minutes; first falsifier is missing boundary/lost event or cleanup.
+D4 uses boxed row-i hash/sidecar inventory and target-specific receipt consumer;
+estimate 2-5 minutes. First falsifier: named press blocks/wrong app, missing mon
+transition, SAVE or independent reload. Remains disclosed DIAGNOSTIC even if its
+consumer reports PASS.
+
+If D1-D3 demand source repair: STOP, report, new freeze; no mid-run fix/retry.
+**D2 policy consumption always requires coordinator review/commit/new FROZEN
+before Q**: the current wrapper has no measured hge/SS policy. No env override.
+Re-pin $cut/G4_FROZEN for Q; all old cuts stay historical. SS is FILE-verified in
+the real faint producer without changing HG/hge or the Lua defaults. Generate
+SS two-mon battle from its dedicated committed party2 fixture after the freeze:
+
+```powershell
+Assert-Cut
+$os2="o2-ss-$stamp"
+python tools/gen4_routes.py run --game SS --target grass --errand pokegear --save "$root/g1inputs-c935-1015/ss_p2.SaveRAM" --lane $os2 --tag p2ss
+```
+
+Select the actual new BATTLE+settled states, not a guessed leg number. Pin their
+hashes from reviewed manifests before row o. Set G4_SS_ONE and G4_SS_TWO to
+lane-relative paths: native SS one-state may be the reviewed D2 output; two-state
+is the new party2 route output. Q's native/PC/boxed saves remain the committed
+scenario inventory, including sidecar hashes. Verify every retained state hash
+before reuse. Q is approximately 50-90 minutes, not a timeout extension.
+
+## Q: qualification ONLY after diagnostic review and the NEW FROZEN
 
 Run sequentially in this worktree; never use pytest-xdist. Retained states below
 are inputs, not reused qualification receipts. Producers stage private copies,
@@ -44,12 +158,12 @@ foreach ($key in @('SLINK_GEN4_PROBE_QUALIFY','SLINK_GEN4_PERF_RECEIPT','SLINK_G
     'SLINK_GEN4_PERF_ONLY','SLINK_GEN4_PERF_COLD_BOOT')) {
     Remove-Item -LiteralPath "Env:$key" -ErrorAction SilentlyContinue
 }
-$tag=(git rev-parse --short HEAD).Trim()+'-'+(Get-Date -Format 'yyyyMMdd-HHmmss')
+$tag=Get-Date -Format 'MMddHHmmss'
 $root='F:/slink-work/lanes/g4'
 
-# 1. Row o: HG one/two, then hge one/two. Real producer; no function overrides.
+# 1. Row o: HG one/two, hge one/two, then SS one/two. Real producer; no function overrides.
 @'
-import json, re, shutil
+import json, os, re, shutil
 from tests.live import test_gen4_battle_faint as f
 from tools.gen4_fixtures import lane_root
 from tools import gen4_pins
@@ -58,8 +172,13 @@ for title, short, native, one, two in [
     ('heartgold','hg','saves/hg_base_26310.SaveRAM',
      'route/route_leg2_battle_settled.State', 'g1hg-p2-route-1016/p2hg_leg2_battle_settled.State'),
     ('heartgold_hge','hge','saves/hge_a_OOO_630.SaveRAM',
-     'route_hge/route_hge_leg5_battle_settled.State', 'g1hge-p2-route-1022/p2hge_leg5_battle_settled.State')]:
+     'route_hge/route_hge_leg5_battle_settled.State', 'g1hge-p2-route-1022/p2hge_leg5_battle_settled.State'),
+    ('soulsilver','ss','saves/ss_DDDD_25944.SaveRAM',
+     os.environ['G4_SS_ONE'], os.environ['G4_SS_TWO'])]:
     for p2, relative in [(False,one),(True,two)]:
+        import subprocess
+        assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['G4_FROZEN']
+        assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
         state=f.need(root/relative, 'retained settled battle input')
         log=state.with_name(state.name.replace('_battle_settled.State','.log'))
         text=f.need(log, 'settled input log').read_text()
@@ -77,48 +196,21 @@ for title, short, native, one, two in [
 '@ | python -
 
 # 2. Full a-n, HG / hge / SS. Read each combined.txt, including named OPENs.
-$env:SLINK_GEN4_PROBE_RUNS="$root/g1-scenarios-$tag"
+$env:SLINK_GEN4_PROBE_RUNS="$root/q-$tag/probes"
 $env:SLINK_GEN4_PROBE_SKIP_PERF_REASON='PERF deferred to quiet-machine final step'
 foreach ($title in @('heartgold','heartgold_hge','soulsilver')) {
+    Assert-Cut
     $env:SLINK_GEN4_PROBE_SCENARIO="data/gen4/scenarios/$title.json"
-    $env:SLINK_GEN4_ROW_O=if ($title -eq 'soulsilver') {$null} else {"$root/faint2/row_o_${title}_seam_ufce_bit_p2.txt"}
+    $env:SLINK_GEN4_ROW_O="$root/faint2/row_o_${title}_seam_ufce_bit_p2.txt"
     python -m pytest "tests/live/test_gen4_probe_gates.py::test_gen4_hook_probe[$title]" -m live -q -rs
     $batch=Get-ChildItem $env:SLINK_GEN4_PROBE_RUNS -Directory -Filter "$title-*" | Sort-Object LastWriteTime | Select-Object -Last 1
     Get-Content -LiteralPath (Join-Path $batch.FullName 'combined.txt')
 }
 
-# 3. First PC withdraw trial, a disclosed DIAGNOSTIC (not qualification); require this target at
-#    consumption. Lane names are capped at 24 chars (tools/gen4_fixtures.lane_dir), so no SHA prefix.
-#    The route receipt binds its input by save_sha1 + sidecar_sha256; compare them with
-#    heartgold_row_i.json by hand. Row o (step 1) binds its inputs inline (digest + check_synth).
-#    The scenario rule covers the a-n probe surface only.
-$wd='wd-hg-'+(Get-Date -Format 'MMddHHmmss')
-python tools/gen4_routes.py run --game HG --target pc_withdraw --save "$root/g1inputs-c935-1015/hg_boxed.SaveRAM" --lane $wd
-python -c "from tools.gen4_routes import verify_receipt; print(verify_receipt('$root/$wd/${wd}_receipt.json','route',want='PC_WITHDRAW'))"
-
-# 4. PERF LAST. Any remaining EmuHawk is foreign: record the PIDs and stop.
-$env:SLINK_GEN4_HEARTGOLD_SAVE="$root/saves/hg_base_26310.SaveRAM"
-$env:SLINK_GEN4_HEARTGOLD_HGE_SAVE="$root/saves/hge_a_OOO_630.SaveRAM"
-$env:SLINK_GEN4_HEARTGOLD_BATTLE_STATE="$root/route/route_leg2_battle_settled.State"
-$env:SLINK_GEN4_HEARTGOLD_OVERWORLD_STATE="$root/perf/heartgold-19ef720fc3e6/overworld_floor_1x/input.State"
-$env:SLINK_GEN4_HEARTGOLD_HGE_BATTLE_STATE="$root/perf/heartgold_hge-69a401df3d4b/battle_floor_1x/input.State"
-$env:SLINK_GEN4_HEARTGOLD_HGE_OVERWORLD_STATE="$root/perf/heartgold_hge-69a401df3d4b/overworld_floor_1x/input.State"
-$env:SLINK_GEN4_PERF_RUNS="$root/g1-perf-$tag"
-foreach ($title in @('heartgold','heartgold_hge')) {
-    $foreign=@(Get-CimInstance Win32_Process -Filter "Name='EmuHawk.exe'" | Select-Object -ExpandProperty ProcessId)
-    if ($foreign.Count) { Write-Output "OPEN f: foreign EmuHawk PIDs $foreign"; break }
-    python -m pytest "tests/live/test_gen4_perf.py::test_live_perf[$title]" -m live -q -rs
-}
 ```
 
-Report PERF independently; earlier combined f OPENs remain unchanged. Missing SS
-row o remains OPEN. hge/SS have no title-specific measured phase settle policy;
-retain the measured verdicts/reasons rather than inheriting HG's allowance.
-Read back every combined receipt before reporting. Preserve failed lanes and
-all historical cuts. Audit owned PID exit and original hashes before release.
-
-Boundary frame parity is OPEN until the first PHYSICAL diagnostic compares the
-callback timestamp with post-advance predicate-fall and close timestamps. The
-probe binds event and predicate fall to the same explicit advance token, accepts
-pre_close or finish only with a false predicate and pending event, and checks
-delivery exactly once. It does not assume equal callback/post-advance counters.
+Read every combined.txt/control-reds.json before reporting. Remaining declared
+caller gaps, named OPENs and f OPEN stay explicit. No threshold, budget or
+recipe change. Never repeat unchanged failure. Own-PID audit and original
+save/state/sidecar hashes precede lane release. PERF is separate and quiet-only:
+foreign EmuHawk means f OPEN, never a noisy receipt.

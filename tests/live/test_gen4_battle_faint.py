@@ -32,14 +32,15 @@ pytestmark = pytest.mark.usefixtures("model_surface")
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_battle_faint.lua"
 LANE_ROOT = g4.lane_root() / "faint2"  # card C1-8D lane (earlier cards used faint / faint_hge)
-LANES = {"heartgold": LANE_ROOT, "heartgold_hge": LANE_ROOT}
+LANES = {"heartgold": LANE_ROOT, "heartgold_hge": LANE_ROOT, "soulsilver": LANE_ROOT}
 # SYNTH 2-mon setup (owner ruling 2026-10-01): python tools/gen4_synth_save.py party2 --profile {hgss|hge} ...
 P2_SAVES = {"heartgold": g4.lane_root() / "saves" / "hg_base_26310_party2.SaveRAM",
-            "heartgold_hge": g4.lane_root() / "saves" / "hge_a_OOO_630_party2.SaveRAM"}
-P2_PROFILE = {"heartgold": "hgss", "heartgold_hge": "hge"}
+            "heartgold_hge": g4.lane_root() / "saves" / "hge_a_OOO_630_party2.SaveRAM",
+            "soulsilver": g4.lane_root() / "g1inputs-c935-1015/ss_p2.SaveRAM"}
+P2_PROFILE = {"heartgold": "hgss", "heartgold_hge": "hge", "soulsilver": "hgss"}
 # the C1-9 route tool (`tools/gen4_routes.py run --save <party2> [--game hge --errand pokegear] --lane faint2 --tag p2hg|p2hge`)
 # leaves <tag>_leg<N>_battle_settled.State + <tag>_leg<N>.log in the lane
-P2_TAG = {"heartgold": "p2hg", "heartgold_hge": "p2hge"}
+P2_TAG = {"heartgold": "p2hg", "heartgold_hge": "p2hge", "soulsilver": "p2ss"}
 P2_SCENARIOS = ("seam_turnend_p2", "seam_ufce_bit_p2")
 HGE_STATE = g4.lane_root() / "route_hge" / "route_hge_leg5_battle_settled.State"
 HGE_SAVE = g4.lane_root() / "saves" / "hge_a_OOO_630.SaveRAM"
@@ -48,12 +49,13 @@ STATE_LOGS = {
     "heartgold": (r"RESULT BATTLE .*species=(?:16|PIDGEY\(16\)) level=2\b", r"settled after \d+ frames; chain .* hp=13/13 player=155"),
     "heartgold_hge": (r"RESULT BATTLE .*species=PIDGEY\(16\) level=3\b",
                       r"settled after \d+ frames; chain .* enemy=16 L3 hp=16/16 player=155"),
+    "soulsilver": (r"RESULT BATTLE\b", r"settled after \d+ frames; chain .*hp=\d+/\d+.*player=\d+"),
 }
 ROUTE_STATE = g4.lane_root() / "route" / "route_leg2_battle_settled.State"
 ROUTE_LOG = ROUTE_STATE.with_name("route_leg2.log")
 EMUHAWK = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")
-PACK = {"heartgold": "gen4_hgss", "heartgold_hge": "gen4_hge"}
+PACK = {"heartgold": "gen4_hgss", "heartgold_hge": "gen4_hge", "soulsilver": "gen4_hgss"}
 RECEIPT_RE = re.compile(r"^PROBE o (PASS|FAIL|OPEN) (\{.*\})$")
 INITIAL_TIME = "2010-01-01T12:00:00"
 # name -> kind; must equal the Lua table (test_scenario_table_matches_lua)
@@ -163,19 +165,61 @@ def receipt_verdict(path: Path, *, title: str, rom_sha1: str, expected_cut: dict
 # command 9 (ServerFieldConditionCheck, `hooks:376`) with C that runs ALL end-of-turn effects, calls
 # CheckIfAnyoneShouldFaint at its loop top (ServerFieldConditionCheck.c:127) and ends in TURN_END (:1944), so hge never
 # dispatches commands 10/11 (live: trace 9 -> 12). The address and pin are read from the ROM's own dispatch table.
-UFCE_CMD = {"heartgold": 11, "heartgold_hge": 9}
+UFCE_CMD = {"heartgold": 11, "heartgold_hge": 9, "soulsilver": 11}
 UFCE_NAME = {11: "BattleControllerPlayer_UpdateFieldConditionExtra", 9: "hge_ServerFieldConditionCheck_entry"}
 CMD_TABLE = 0x0226CA90  # sPlayerBattleCommands (xMAP / hge rom.ld:710)
 
 
 def seam_overrides(title: str, rom: Path) -> dict:
     """{"ufce": {addr, pin, cmd, name}} derived from the ROM table entry, never typed in."""
+    if title == "soulsilver":
+        return {"ufce": ss_file_proof(rom)["seams"]["ufce"]}
     cmd = UFCE_CMD[title]
     ov12, _ = rom_images(rom)
     entry = struct.unpack_from("<I", ov12.data, CMD_TABLE + 4 * cmd - ov12.ramAddress)[0]
     addr = entry & ~1
     pin = struct.unpack_from("<I", ov12.data, addr - ov12.ramAddress)[0]
     return {"ufce": {"addr": addr, "pin": pin, "cmd": cmd, "name": UFCE_NAME[cmd]}}
+
+
+def ss_file_proof(rom: Path) -> dict:
+    """SS-only FILE derivation. Reject any disagreement with the unchanged Lua floor.
+
+    HG/hge take their existing paths. SS's xMAP names the dispatch table and
+    observers; its ROM verifies their bytes. The Lua floor needs no change only
+    because these independent SS facts match it (test_ss_title_support_and_file_floor).
+    """
+    from tools import gen_gen4_pack as generator
+    assert g4.sha1_of(rom) == gen4_pins.ROM_SPECS["soulsilver"][0], "wrong SS ROM"
+    xm_path = gen4_pins.default_locations().assets["soulsilver_xmap"]
+    need(xm_path, "SS xMAP")
+    lock = json.loads(g4.LOCK.read_text())
+    assert digest(xm_path) == lock["assets"]["soulsilver_xmap"]["sha256"], "wrong SS xMAP"
+    xm, images = generator.load_xmap(xm_path), generator.load_images(rom)
+    t = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["soulsilver"]
+    def site(name):
+        sym = xm.lookup(name)
+        return {"addr": sym.address, "pin": int.from_bytes(images.read(sym.image, sym.address, 4), "little"),
+                "name": name, "image": sym.image, "source": "soulsilverus.xMAP:"+name}
+    table = xm.lookup("sPlayerBattleCommands")
+    turnend, ufce = site("BattleControllerPlayer_TurnEnd"), site("BattleControllerPlayer_UpdateFieldConditionExtra")
+    assert table.image == "ov12" and table.address == CMD_TABLE, "SS command table differs from floor"
+    for command, row in ((12, turnend), (UFCE_CMD["soulsilver"], ufce)):
+        entry = int.from_bytes(images.read(table.image, table.address + 4 * command, 4), "little")
+        assert entry == row["addr"] | 1, "SS dispatch target differs"
+        row["cmd"] = command
+    seam = t["profile"]["battle"]["d7"]["seam"]
+    assert (seam["addr"], seam["cmd"], int.from_bytes(bytes.fromhex(seam["pin_hex"]), "little")) == (ufce["addr"], ufce["cmd"], ufce["pin"]), "SS pack seam differs"
+    heal, blackout = site("HealParty"), site("Task_Blackout")
+    floor = ((turnend, TURNEND_ADDR, 0x1C0CB538), (ufce, seam["addr"], 0xB082B5F8),
+             (heal, 0x02090C1C, 0xB083B5F0), (blackout, t["sites"]["blackout"]["address"], 0xB086B5F8))
+    for row, address, pin in floor:
+        assert (row["addr"], row["pin"]) == (address, pin), f"SS Lua floor mismatch: {row['name']}"
+    chain = {"FS": t["symbols"]["sFieldSysPtr"]["address"], "SAVEPTR": t["symbols"]["sSaveDataPtr"]["address"]}
+    assert chain == {"FS": xm.lookup("sFieldSysPtr").address, "SAVEPTR": xm.lookup("sSaveDataPtr").address}
+    assert chain == {"FS": 0x021D4158, "SAVEPTR": 0x021D2228}, "SS chain differs from Lua floor"
+    return {"rom_sha1": g4.sha1_of(rom), "xmap_sha256": digest(xm_path), "chain": chain,
+            "seams": {"turnend": turnend, "ufce": ufce}, "observers": {"heal": heal, "blackout": blackout}}
 
 
 def check_synth(save: Path, title: str) -> dict:
@@ -269,7 +313,9 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     shutil.copyfile(state, lane_state)  # route/ is never written, nor read by the emulator
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     cfg = build_config(title=title, rom_sha1=rom_sha1, scenario=scenario, lane=lane, state=lane_state,
-                       source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom), synth=synth)
+                        source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom), synth=synth)
+    if title == "soulsilver":
+        cfg["ss_file_proof"] = ss_file_proof(rom)
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
     out = lane / "receipt.txt"
     env = dict(os.environ, SLINK_ROOT=REPO.as_posix(), SLINK_GEN4_FAINT_CONFIG=(lane / "probe.json").as_posix(),
@@ -429,7 +475,7 @@ def rom_images(path: Path):
     return ov12, arm9
 
 
-@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge", "soulsilver"])
 def test_seam_pins_and_flow_hold_in_the_pinned_rom_bytes(title):
     """FILE: the pins in the Lua are the ROM's own bytes; the seam sits before the sweeps; the
     controller dispatch table sends commands 11 and 12 to the pinned functions (both builds)."""
@@ -467,6 +513,71 @@ def test_seam_pins_and_flow_hold_in_the_pinned_rom_bytes(title):
     assert word(table + 4 * 10) == 0x02249CC4 | 1
 
 
+def test_ss_title_support_and_file_floor():
+    """FILE: SS is derived from its own locked xMAP/ROM, not a title alias."""
+    assert PACK["soulsilver"] == "gen4_hgss"
+    assert LANES["soulsilver"] == LANE_ROOT and P2_PROFILE["soulsilver"] == "hgss"
+    rom = need(gen4_pins.default_locations().roms["soulsilver"], "SS ROM")
+    proof = ss_file_proof(rom)
+    m = lua_api()
+    for key in ("FS", "SAVEPTR"):
+        assert proof["chain"][key] == m.L[key], key
+    for kind, group in (("seams", m.SEAMS), ("observers", m.OBS)):
+        for key, spec in group.items():
+            row = proof[kind][key]
+            assert row["addr"] == spec.addr and row["pin"] == spec.pin, key
+    prof = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["soulsilver"]["profile"]
+    assert UFCE_CMD["soulsilver"] == prof["battle"]["d7"]["seam"]["cmd"] == proof["seams"]["ufce"]["cmd"]
+    b = prof["battle"]
+    for lua_key, value in {"bs_type": b["type_off"], "bs_outcome": b["outcome_off"],
+                           "bs_party": b["d7"]["bs_party_off"], "ctx_cmd": b["d7"]["ctx_cmd_off"],
+                           "ctx_status": b["fainted_flag_off"], "mon_maxhp": b["max_hp_off"],
+                           "mon_pid": b["personality_off"], "mon_otid": b["otid_off"],
+                           "ctx_repl": b["d7"]["repl_flag_off"], "rec_hp": b["d7"]["party_hp_off"]}.items():
+        assert m.L[lua_key] == value, lua_key
+
+
+def test_ss_model_controls_red_and_revert():
+    import lupa
+
+    from tests.unit.test_gen4_battle_faint_model import World, lt, want
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    rt.globals().SLINK_GEN4_FAINT_TEST = True
+    m = rt.execute(SCRIPT.read_text())
+    assert "soulsilver" in PACK
+    prof = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["soulsilver"]["profile"]
+    def lua(v):
+        return rt.table_from({k: lua(x) if isinstance(x, dict) else x for k, x in v.items()})
+    m.configure(lua(prof))
+    world = World(save_hdr=prof["save"]["array_headers_off"])
+    original = bytes(world.m)
+    assert m.judge_controls(m.controls(world.mem(rt), want(rt)))[0]
+    for fault, reason in FAULTS.items():
+        ok, why = m.judge_controls(m.controls(world.mem(rt), want(rt), lt(rt, fault=fault)))
+        assert not ok and why == reason
+        assert m.judge_controls(m.controls(world.mem(rt), want(rt)))[0]
+    assert bytes(world.m) == original
+
+
+def test_ss_file_pin_corruption_refuses_and_reverts(monkeypatch):
+    from tools import gen_gen4_pack as generator
+    rom = need(gen4_pins.default_locations().roms["soulsilver"], "SS ROM")
+    good = ss_file_proof(rom)
+    original = generator.load_images
+    images = original(rom)
+    class Corrupt:
+        def read(self, image, address, size):
+            raw = images.read(image, address, size)
+            if address == good["observers"]["heal"]["addr"]:
+                return bytes([raw[0] ^ 1]) + raw[1:]
+            return raw
+    monkeypatch.setattr(generator, "load_images", lambda *a, **k: Corrupt())
+    with pytest.raises(AssertionError, match="SS Lua floor mismatch: HealParty"):
+        ss_file_proof(rom)
+    monkeypatch.setattr(generator, "load_images", original)
+    assert ss_file_proof(rom) == good
+
+
 # ---------------------------------------------------------------- live (one owned emulator lane)
 def _live_inputs(title: str, p2: bool = False):
     if p2:
@@ -483,6 +594,11 @@ def _live_inputs(title: str, p2: bool = False):
     if title == "heartgold":
         state = check_state(ROUTE_STATE, ROUTE_LOG)
         save = need(Path(os.environ.get("SLINK_GEN4_HEARTGOLD_SAVE", DEFAULT_SAVE)), "heartgold played save")
+    elif title == "soulsilver":
+        state_path = Path(os.environ.get("SLINK_GEN4_SOULSILVER_FAINT_STATE", g4.lane_root() / "route_ss/ss_battle_settled.State"))
+        log = state_path.with_name(state_path.name.replace("_battle_settled.State", ".log"))
+        state = check_state(state_path, log, title)
+        save = need(Path(os.environ.get("SLINK_GEN4_SOULSILVER_SAVE", g4.lane_root() / "saves/ss_DDDD_25944.SaveRAM")), "SS played save")
     else:
         state_path = Path(os.environ.get("SLINK_GEN4_HGE_FAINT_STATE", HGE_STATE))
         log = state_path.with_name(state_path.name.replace("_battle_settled.State", ".log"))
@@ -526,7 +642,7 @@ def test_live_instrument_controls_go_red_when_a_check_is_disabled(fault, scenari
     assert payload["observation"].get("write") is None, "a write happened despite red instrument controls"
 
 
-@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge", "soulsilver"])
 def test_s2_seam_is_derived_from_the_rom_dispatch_table(title):
     """FILE: HG derives the Lua default (command 11); hge derives its command-9 entry, the vanilla address
     patched by hooks:376 (a trampoline, so its pin differs from the vanilla UFCE bytes)."""
@@ -535,7 +651,7 @@ def test_s2_seam_is_derived_from_the_rom_dispatch_table(title):
         pytest.skip(f"OPEN {title} ROM absent: {rom}")
     seam = seam_overrides(title, rom)["ufce"]
     m = lua_api()
-    if title == "heartgold":
+    if title in ("heartgold", "soulsilver"):
         assert (seam["addr"], seam["pin"], seam["cmd"]) == (m.SEAMS.ufce.addr, m.SEAMS.ufce.pin, m.SEAMS.ufce.cmd)
     else:
         assert (seam["addr"], seam["cmd"]) == (0x022494DC, 9)
