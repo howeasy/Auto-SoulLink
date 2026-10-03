@@ -229,10 +229,6 @@ class World:
             return real_check(this, snap, reason, args)
         policy.check = check
         self.setup_save()
-        # Vanilla (ABI 2) companion worlds carry companion evidence from boot; RR keeps its
-        # historic mailbox-less start (tests attach a carrier, or call write_companion_mailbox()).
-        if self.artifact_kind == "companion" and native is None and not self.rr:
-            self.write_companion_mailbox()
         self.overworld_safe()
         self.client.start(self.client)
 

@@ -222,8 +222,8 @@ def test_rr_anchor_admission_keeps_its_existing_kind(kind):
     assert got["kind"] == kind and got["admitted_by"] == "anchors"
 
 
-def test_rand_companion_routes_through_the_single_gate_and_uses_companion_sites():
-    world = World(pack="gen3_frlg", title="firered", kind="companion", build=False)
+def test_rand_routes_through_the_single_gate_and_uses_clean_sites():
+    world = World(pack="gen3_frlg", title="firered", build=False)
     codec = world.lua.eval(f'dofile("{(REPO / "lua/json_codec.lua").as_posix()}")')
     args = world.lua.table(root=REPO.as_posix(), json=codec,
         rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE")

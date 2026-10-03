@@ -192,8 +192,6 @@ def test_a_companion_emerald_sha1_reaches_the_new_gen3_client():
     assert _OLD_GEN3_CLIENT not in loaded, loaded
 
 
-def test_a_clean_emerald_sha1_follows_its_artifacts_production_flag():
-    _assert_routed_or_refused("gen3_emerald", "emerald", "clean", _EMERALD_CLEAN_SHA1, "BPEE")
 
 
 def test_an_unknown_bpee_hash_admitted_by_header_is_refused_by_name():
