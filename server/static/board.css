@@ -158,6 +158,8 @@ body.mgr .launcher { min-height: 0; max-height: calc(100vh - 57px); }
 .mk-rail-item svg { width: 1.05em; height: 1.05em; flex: none; }
 .mk-rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .mk-rail-pin { font-size: var(--fs-xs); color: var(--c-gold); }
+/* The run's game, as plain text under its name (owner: no new chips or badges). */
+.mk-rail-game { display: block; font-size: var(--fs-xs); color: var(--c-dim); overflow: hidden; text-overflow: ellipsis; }
 .mk-dot { width: .6em; height: .6em; border-radius: 50%; flex: none; background: var(--c-dim); }
 .mk-dot.running  { background: var(--c-alive); box-shadow: 0 0 6px var(--c-alive); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }

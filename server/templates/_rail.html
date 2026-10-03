@@ -24,7 +24,7 @@
     {% macro run_item(r) -%}
         <a class="mk-rail-item{% if run and r.run_id == run.run_id and page == 'run' and not panel %} active{% endif %}" href="{% if standalone %}/{% else %}/runs/{{ r.run_id }}{% endif %}"{% if run and r.run_id == run.run_id and page == 'run' and not panel %} aria-current="page"{% endif %} title="{{ r.game_label or 'game detected on connect' }}{% if r.created_short %} · {{ r.created_short }}{% endif %}">
           <span class="mk-dot {{ r.status }}"></span>
-          <span class="mk-rail-label">{{ r.name }}</span>
+          <span class="mk-rail-label">{{ r.name }}{% if r.game_label %}<span class="mk-rail-game">{{ r.game_label }}</span>{% endif %}</span>
           {% if r.run_id == pinned_run_id %}<span class="mk-rail-pin" title="pinned for stream">◉</span>{% endif %}
         </a>
     {%- endmacro %}

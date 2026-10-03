@@ -131,6 +131,7 @@ global.document = {
   head: { appendChild(s) { if (!installed) { installed = true; install(); } setImmediate(() => s.onload()); } },
 };
 global.window = global;
+global.location = { pathname: process.argv[3] || '/' };
 function install() {  // a recording stand-in for the compiled engine
   const e = window.calc;
   e.useDex = d => { log.order.push('useDex'); log.dex.push(d); };
@@ -231,3 +232,22 @@ def test_an_unbuilt_calc_says_so_in_the_now_card_instead_of_hiding():
     out = json.loads(res.stdout)
     assert out["display"] != "none"
     assert "Damage preview unavailable" in out["html"] and "npm run build" in out["html"]
+
+
+@pytest.mark.parametrize("path, href", [("/runs/r7", "/runs/r7/calc/normal.html"), ("/", "/calc/normal.html")])
+def test_open_in_calc_targets_the_run_being_viewed(path, href):
+    """On the Manager an origin-relative /calc/ opened the PINNED run's calc; the link is
+    run-scoped like dashboard.js's trainer buttons."""
+    harness = _PREVIEW_HARNESS.replace(
+        "setTimeout(() => console.log(JSON.stringify(log)), 200);",
+        "setTimeout(() => console.log(JSON.stringify({ html: div.innerHTML })), 200);")
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    res = subprocess.run([node, "-e", harness, os.path.join(_REPO, "server", "static", "calc-preview.js"),
+                          json.dumps({**_BASE, "gen": 3, "dex": "vanilla"}), path],
+                         capture_output=True, text=True, timeout=30)
+    assert res.returncode == 0, res.stderr
+    assert f'href="{href}"' in json.loads(res.stdout)["html"]

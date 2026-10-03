@@ -204,11 +204,14 @@ window.SLinkCalc = (function () {
           + '<td class="' + cls + '">' + (r.ohko ? 'OHKO' : (r.twoHko ? '2HKO' : '')) + '</td></tr>';
       });
       if (!rows) return;
+      // Run-scoped on the Manager (/runs/<id>/calc/...), as dashboard.js's trainer buttons do:
+      // an origin-relative /calc/ would open the pinned run's calc, not this one's.
+      var run = /^\/runs\/[^\/]+/.exec(location.pathname);
       var badge = difficulty === 'hardcore' ? ' <span style="color:#f80;font-size:0.78em">HC</span>' : '';
       return '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
         + '<table class="calc-preview-table"><thead><tr><th>Move</th><th>Dmg %</th><th></th></tr></thead>'
         + '<tbody>' + rows + '</tbody></table>'
-        + '<a class="calc-open-btn" href="/calc/' + difficulty + '.html" target="_blank">'
+        + '<a class="calc-open-btn" href="' + (run ? run[0] : '') + '/calc/' + difficulty + '.html" target="_blank">'
         + '⚔️ Open in Calc</a>';
     } catch (e) { return ''; /* a matchup the engine cannot model stays hidden */ }
   }

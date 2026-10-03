@@ -546,6 +546,7 @@
           <span class="cfg-lbl" style="padding-top:6px">Set attempts</span>
           <input type="number" min="0" x-model.number="attemptsValue">
           <button class="copy-btn" @click="setAttempts()">Set</button>
+          <span class="copy-msg" role="status" x-text="attemptsMsg"></span>
         </div>
       </template>
     </div>
@@ -580,6 +581,7 @@ function overlayLauncher() {
     activeFilters: new Set(),
     justCopied: false,
     copyMsg: '',
+    attemptsMsg: '',
     attemptsValue: 0,
     // Rail collapse state persists in localStorage so the choice survives
     // page refresh + navigation between the manager + per-run server's
@@ -690,11 +692,18 @@ function overlayLauncher() {
 
     setAttempts() {
       var val = parseInt(this.attemptsValue, 10);
-      if (isNaN(val) || val < 0) return;
+      if (isNaN(val) || val < 0) { this.attemptsMsg = 'Enter a whole number, 0 or more'; return; }
+      this.attemptsMsg = 'Saving…';
       fetch('/api/attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: val }),
+      }).then(r => r.json().catch(() => ({})).then(d => {
+        if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        this.attemptsMsg = 'Saved: attempt #' + d.attempts_count;
+      })).catch(e => {
+        // proxy_failed / No active run come from the Manager when no run answers
+        this.attemptsMsg = 'Not saved: ' + (e.message === 'proxy_failed' ? 'the run did not answer' : e.message);
       });
     },
   };
