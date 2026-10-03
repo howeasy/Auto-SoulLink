@@ -430,7 +430,7 @@ function Session.new(p)
         if sigs and sigs.failure and not self.signal_failure_shown then
             self.signal_failure_shown = true
             log("ENGINE SIGNALS STOPPED: " .. tostring(sigs.failure))
-            hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
+            hud.show("SLINK STOPPED - SEE LOG", 255, 60, 60, 1800)
         end
         for _, fn in ipairs(game.frame_hooks or {}) do fn() end
         if identity:active() then
