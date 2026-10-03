@@ -5865,7 +5865,10 @@ def test_the_probe_byte_of_the_real_builds_is_padding_inside_a_span_off_the_anch
     assert not any(a <= choice["offset"] < a + n for a, n in spans)
     slot = row["payload_version_slot"]
     base = row["protected_spans"][0]["offset"] + slot["offset"]
-    assert patched[base + 12] == 0xFF and choice["offset"] == base + slot["length"] - 1     # behind the string's terminator
+    from patch.tools.gen3_title import menu_field
+    field = menu_field(row["menu_version"])                                                # the stamped string, terminator, zero padding
+    assert bytes(patched[base:base + slot["length"]]) == field and field[-1] == 0
+    assert choice["offset"] == base + slot["length"] - 1                                    # behind the string's terminator
     assert duo.gen3_probe_flip_choice(patched, row, spans) == choice
 
 

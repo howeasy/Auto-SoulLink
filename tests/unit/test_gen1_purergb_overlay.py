@@ -504,7 +504,7 @@ def test_the_built_rom_holds_the_version_in_a_zero_padded_field_at_the_recorded_
     assert row.get("equivalent_sha1s") == (out.get("equivalent_sha1s") or None)   # the row carries what the provenance publishes
     # the control: a different version in the same field is the same canonical build, a byte elsewhere is not
     stamped = bytearray(rom)
-    stamped[slot["offset"]:slot["offset"] + slot["length"]] = title_screen.menu_text("v0.3.0")
+    stamped[slot["offset"]:slot["offset"] + slot["length"]] = title_screen.menu_text("v1.10.3")
     assert hashlib.sha1(stamped).hexdigest() != out["sha1"]
     assert rom_identity.canonical_sha1(bytes(stamped), [slot], gb=True) == out["canonical_sha1"]
     stamped[slot["offset"] - 1] ^= 1

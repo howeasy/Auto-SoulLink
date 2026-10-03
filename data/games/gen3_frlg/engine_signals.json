@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_frlg",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "13b53270278fed0735fbb2cb03c51fbd2c84827ab66ffa928edfeb8eb171603c",
+  "sha256": "f6c7a1e22b0f04574bae7f714a7d92b2a3b322894a7b957474e4efcda728bed3",
   "titles": {
     "firered": {
       "artifacts": {
@@ -642,8 +642,8 @@
         },
         "companion": {
           "production": true,
-          "rom_md5": "680f3b607ca7926ac747b43f6333ed42",
-          "rom_sha1": "96df1dd019b7ec5515b65ab26c82a251f47eb06d",
+          "rom_md5": "bd44b29ac1ace67e0cc6470183f82748",
+          "rom_sha1": "78ead75def87b1284b9c5b89ce1be5c1014d2fe1",
           "sites": {
             "battle_begin": {
               "address": 134282652,
@@ -1913,8 +1913,8 @@
         },
         "companion": {
           "production": true,
-          "rom_md5": "9170ba0b85fe5d054346c0d225e11218",
-          "rom_sha1": "55fb6e9bfa79d562d727b65077fa85064f342b60",
+          "rom_md5": "4c2610c5d13e46daf91f0a7ab2167bd5",
+          "rom_sha1": "e77b1662d655e2e8a1911763e35b79e1b94415e4",
           "sites": {
             "battle_begin": {
               "address": 134282652,

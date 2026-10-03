@@ -89,13 +89,17 @@ def test_the_result_carries_the_module_and_the_hook(inj, clean, manifest):
 
 def test_it_matches_what_the_build_tool_produces(inj, clean):
     """The strongest available check: the structural path and the hash-gated build path
-    must agree byte for byte on the one input where both can run."""
-    built = os.path.join(_REPO, "patch", "gen1", "build", "slink_red.gb")
-    if not os.path.exists(built):
-        pytest.skip("slink_red.gb not built — `python patch/gen1/tools/build.py`")
-    with open(built, "rb") as f:
-        expected = f.read()
-    assert inj.inject(clean) == expected
+    must agree byte for byte on the one input where both can run. The build path's output is
+    the shipped UPS (tools/stamp_release.py builds it), at the version it was stamped with."""
+    import json
+    import sys
+    sys.path.insert(0, os.path.join(_REPO, "patch", "tools"))
+    from make_ups import ups_apply
+    with open(os.path.join(_REPO, "patch", "dist", "companion_pins.json"), encoding="utf-8") as f:
+        version = json.load(f)["pins"]["rb-red"]["version"]
+    with open(os.path.join(_REPO, "patch", "dist", "SLink-RB-Red.ups"), "rb") as f:
+        expected = ups_apply(clean, f.read())
+    assert inj.inject(clean, version=version) == expected
 
 
 # ── the refusals ─────────────────────────────────────────────────────────────────────

@@ -2,18 +2,18 @@
   "schema": "slink-companion-pins-v1",
   "pins": {
     "rr": {
-      "patched_md5": "567eaeeae74f0e8ea412097cf9fda42f",
+      "patched_md5": "b9b8304c0c189bfbe54e9fc8df33c486",
       "canonical_sha1": "6fb65ecb1d1d592891ede494ebc6547c26194eb7",
-      "version": "dev",
+      "version": "v0.3.0",
       "version_slot": {
         "offset": 3653128,
         "length": 20
       },
-      "rom_sha1": "e87a6a7e4fc98a8840ef9ea0511e443ef4659219"
+      "rom_sha1": "b6875d24c34d44347de6e4c211e1c00d64da1cc3"
     },
     "rb-red": {
-      "patched_md5": "a9a70f99008559734ba01a9a80d78d5c",
-      "version": "dev",
+      "patched_md5": "c5c715cda8b0fa178ab30f4fd9e4d821",
+      "version": "v0.3.0",
       "canonical_sha1": "2b8a52771ae6b0c919d0c65ef81d851f448c4729",
       "version_slot": {
         "offset": 16354,
@@ -21,8 +21,8 @@
       }
     },
     "rb-blue": {
-      "patched_md5": "fa47b8ba0c10e82f2545791abd157ad3",
-      "version": "dev",
+      "patched_md5": "cc5d142b0d1c4df8b5e155ded2894e84",
+      "version": "v0.3.0",
       "canonical_sha1": "d0472834f6d2c6118d2e825c0970a7834756f947",
       "version_slot": {
         "offset": 16354,

@@ -1,29 +1,15 @@
 {
-  "49497bdacb2543d9c2689c450ae50b9026e51dba": {
-    "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-    "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
-    "crc32": "F7B5A293",
-    "header_crc": "9E24",
-    "header_title": "POKEMON GREEN",
-    "kind": "overlay",
-    "md5": "e9ffaffba8785143b20829767636168b",
-    "profile_id": "gen1_purergb/puregreen",
-    "size": 1048576,
-    "title": "puregreen",
-    "ups": "patch/dist/SLink-PureGreen.ups",
-    "version_slot": {
-      "length": 20,
-      "offset": 1036545
-    }
-  },
-  "a297c93bb26d54105cfc540cd3554ac232c3d00b": {
+  "557268fd6adb87439cec500f22d8a5f70a202447": {
     "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
     "canonical_sha1": "11138e23a8d3d7339a9200becba920e6b5d143bf",
-    "crc32": "23CECE92",
-    "header_crc": "A780",
+    "crc32": "C7D1C38E",
+    "equivalent_sha1s": [
+      "a297c93bb26d54105cfc540cd3554ac232c3d00b"
+    ],
+    "header_crc": "AAEE",
     "header_title": "POKEMON BLUE",
     "kind": "overlay",
-    "md5": "c07e45c4f4e9598f8c8f2e19fd83bbb6",
+    "md5": "b061c91e628a4885e277414e43c8c3d6",
     "profile_id": "gen1_purergb/pureblue",
     "size": 1048576,
     "title": "pureblue",
@@ -33,14 +19,37 @@
       "offset": 1036545
     }
   },
-  "af199b7cc168853cfed6ab1950525b0a434d569a": {
+  "562d6e79cfa7e0e78a799bfff7e6b55c9acd9a3a": {
+    "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+    "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
+    "crc32": "EDB2D834",
+    "equivalent_sha1s": [
+      "49497bdacb2543d9c2689c450ae50b9026e51dba"
+    ],
+    "header_crc": "A192",
+    "header_title": "POKEMON GREEN",
+    "kind": "overlay",
+    "md5": "5fbc4d5e5e4ccda40b85ecf567ac5504",
+    "profile_id": "gen1_purergb/puregreen",
+    "size": 1048576,
+    "title": "puregreen",
+    "ups": "patch/dist/SLink-PureGreen.ups",
+    "version_slot": {
+      "length": 20,
+      "offset": 1036545
+    }
+  },
+  "d25e88d2d4beb6082e6264857356dce994b323af": {
     "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
     "canonical_sha1": "e913bef00cc5d05dcfda1ca26af32defe42093f7",
-    "crc32": "2354BCD2",
-    "header_crc": "7036",
+    "crc32": "7C85CCB0",
+    "equivalent_sha1s": [
+      "af199b7cc168853cfed6ab1950525b0a434d569a"
+    ],
+    "header_crc": "73A4",
     "header_title": "POKEMON RED",
     "kind": "overlay",
-    "md5": "fdf96ea4c25b9d4f7320394215c538a7",
+    "md5": "39c7478e324bb64f6c2f304d6d2b06d9",
     "profile_id": "gen1_purergb/purered",
     "size": 1048576,
     "title": "purered",
