@@ -19,7 +19,7 @@ has been re-verified against the current tree; see its own header note.**
 
 ```bash
 python tools/verify_gen1_release.py --quick      # the 8 fast lanes; no emulator
-python tools/verify_gen1_release.py              # all 17 lanes, emulator/pureRGB lanes included
+python tools/verify_gen1_release.py              # all 18 lanes, emulator/pureRGB lanes included
 python tools/verify_gen1_release.py --lane live-new-gates    # only the physical lane
 python tools/verify_gen1_release.py --list       # lanes + the requirement ids each serves
 ```
@@ -27,11 +27,11 @@ python tools/verify_gen1_release.py --list       # lanes + the requirement ids e
 A lane that did not run did not pass: a skip is a failure in this runner, which is why a
 missing ROM, jar or emulator fails the gate rather than shrinking it.
 
-Seventeen lanes (`tools/verify_gen1_release.py --list`): `unit`, `rom-layout`, `lua-parse`,
+Eighteen lanes (`tools/verify_gen1_release.py --list`): `unit`, `rom-layout`, `lua-parse`,
 `profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
 `patch-build` (8 fast) and `live-gates`, `live-new-gates`, `inspect-purergb`, `apex-purergb`,
-`live-trade-gates`, `live-trade-gates-purergb`,
-`apex-refusal-purergb`, `duo-pairs`, `duo-pairs-purergb` (9 slow, emulator). The vanilla lane
+`live-trade-gates`, `inspect-purergb-overlay`, `live-trade-gates-purergb`,
+`apex-refusal-purergb`, `duo-pairs`, `duo-pairs-purergb` (10 slow, emulator). The vanilla lane
 list grew from 11/12 to include the seven pureRGB (second-foundation) lanes once that work
 landed; `unit` runs the full `tests/unit` tree (14215 collected at this pass), not a Gen
 1-scoped subset — `ALLOWED_SKIPS` in `tools/verify_gen1_release.py` was widened 2026-09-26 to

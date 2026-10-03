@@ -465,6 +465,9 @@ local function build_production(deps, c)
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = (c.parts.kind == "rand" or c.parts.kind == "rand_companion") and c.parts.kind or c.artifact_kind,
         native = native, log = deps.log, core = core,
+        -- the hello's companion evidence (server companion_refusal): the pack's pinned ABI when this
+        -- cartridge's own mailbox is live, whatever the launcher's artifact kind says
+        companion_abi = function() return L("lua/gen3/native.lua").companion_live(full_profile.native, io_) end,
         trade_policy = Entry.PACKS[pack].trade_policy,
         rom_size = deps.rom_size,
         rom_content_new = deps.rom_content_new or function(tbl, rom_io)

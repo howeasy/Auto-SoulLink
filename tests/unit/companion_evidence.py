@@ -20,7 +20,8 @@ def companion(rom_type: str) -> dict:
     if name in _PURE:
         return {"artifact_kind": "overlay"}
     if name in _GEN3:
-        return {"artifact_kind": "companion"}
+        # the pack-pinned mailbox ABI the cartridge's own mailbox reports (Radical Red ABI1, the rest ABI2)
+        return {"artifact_kind": "companion", "companion_abi": 1 if name == "firered_rr" else 2}
     return {}
 
 

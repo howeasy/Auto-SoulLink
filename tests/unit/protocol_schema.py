@@ -37,7 +37,10 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool",
                "party_hidden": "bool", "trade_outstanding": "list",
                # card C5-10b capability declaration
-               "battle_identity": "bool"}),
+               "battle_identity": "bool",
+               # Gen 3 companion evidence (owner 2026-10-02): the pinned mailbox ABI, present only when the
+               # cartridge's own companion mailbox is live (lua/gen3/native.lua companion_live)
+               "companion_abi": "int"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
                   "party_hidden": "bool",
                   "trade_blocked": "bool", "awaiting_save": "bool",

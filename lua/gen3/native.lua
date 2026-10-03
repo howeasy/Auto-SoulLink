@@ -34,6 +34,21 @@ local function clone(t)
     return out
 end
 
+-- The cartridge's OWN live companion mailbox (signature at BASE, ABI at BASE+4), read from RAM whatever
+-- artifact kind the launcher named. The server's refusal gate (GameRulesAdapter.companion_refusal) needs
+-- evidence from the cartridge, not the launcher's own claim (owner 2026-10-02, review F1/F2): a randomized
+-- cartridge declares "rand" on the wire either way. `nat` is the pack's profile.native; `io` reads RAM.
+-- Returns the ABI the pack pins when the mailbox is live, else nil. Reads nothing when the pack has no native.
+function N.companion_live(nat, io)
+    if type(nat) ~= "table" or type(nat.BASE) ~= "number" or type(nat.SIG) ~= "number" or type(nat.ABI) ~= "number" then
+        return nil
+    end
+    local ok, live = pcall(function()
+        return io.read_u32(nat.BASE) == nat.SIG and io.read_u16(nat.BASE + O.abi) == nat.ABI
+    end)
+    return ok and live == true and nat.ABI or nil
+end
+
 function N.new(profile, deps)
     local p = assert(profile.native, "profile.native required")
     assert(p.ABI == 1 or p.ABI == 2, "unsupported native ABI")

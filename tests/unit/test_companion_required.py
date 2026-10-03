@@ -65,14 +65,44 @@ def test_purergb_refuses_clean_and_admits_the_overlay(rom_type):
         assert _refusal({"rom_type": rom_type, "artifact_kind": kind}) is None, kind
 
 
-@pytest.mark.parametrize("rom_type", ["firered", "leafgreen", "emerald", "firered_rr"])
-def test_gen3_refuses_clean_and_admits_the_companion(rom_type):
-    assert REASON in _refusal({"rom_type": rom_type, "artifact_kind": "clean"})
-    assert REASON in _refusal({"rom_type": rom_type})                               # absent kind == clean
-    assert _refusal({"rom_type": rom_type, "artifact_kind": "companion"}) is None
-    # a randomized cartridge declares "rand" with or without the companion: the wire cannot tell,
-    # the launcher (lua/gen3/entry.lua) refuses a clean rand build before it ever connects.
-    assert _refusal({"rom_type": rom_type, "artifact_kind": "rand"}) is None
+GEN3 = {"firered": 2, "leafgreen": 2, "emerald": 2, "firered_rr": 1}   # title -> the ABI its pack pins
+KINDS = ("clean", "named", "rand", "companion", "rand_companion", "overlay", None)
+
+
+@pytest.mark.parametrize("rom_type", GEN3)
+@pytest.mark.parametrize("kind", KINDS)
+def test_gen3_without_the_cartridges_own_evidence_is_refused_whatever_kind_it_declares(rom_type, kind):
+    """Review F1/F2: the gate asks the CARTRIDGE (the hello's companion_abi, published only when its own
+    companion mailbox is live), never the launcher's artifact_kind. A randomized cartridge declares `rand` on
+    the wire with or without the companion, so `rand` and `companion` carry no weight on their own."""
+    hello = {"rom_type": rom_type} if kind is None else {"rom_type": rom_type, "artifact_kind": kind}
+    assert REASON in _refusal(hello)
+
+
+@pytest.mark.parametrize("rom_type,abi", GEN3.items())
+@pytest.mark.parametrize("kind", KINDS)
+def test_gen3_with_the_pinned_abi_is_admitted_for_every_kind_including_randomized(rom_type, abi, kind):
+    hello = {"rom_type": rom_type, "companion_abi": abi}
+    if kind is not None:
+        hello["artifact_kind"] = kind
+    assert _refusal(hello) is None
+
+
+@pytest.mark.parametrize("rom_type,abi", GEN3.items())
+@pytest.mark.parametrize("bad", [0, 3, True, "2", None, 1.0])
+def test_gen3_evidence_must_be_the_exact_pinned_abi(rom_type, abi, bad):
+    if bad == abi:
+        pytest.skip("that value is the pinned ABI")
+    assert REASON in _refusal({"rom_type": rom_type, "artifact_kind": "companion", "companion_abi": bad})
+
+
+def test_gen3_radical_red_and_the_rest_pin_different_abis():
+    # pack-driven: the number comes from each pack's profile.json native.ABI, not from the title name
+    assert _refusal({"rom_type": "firered_rr", "companion_abi": 2}) is not None
+    assert _refusal({"rom_type": "firered", "companion_abi": 1}) is not None
+    from server.adapters import gen3_frlge
+    assert [gen3_frlge._companion_abi(p) for p in ("gen3_frlg", "gen3_emerald", "gen3_rr")] == [2, 2, 1]
+    assert gen3_frlge._companion_abi("gen3_missing") is None   # a pack with no profile pins nothing: refuse
 
 
 @pytest.mark.parametrize("hello", [
@@ -113,7 +143,7 @@ async def _session(srv):
     async def send(msg):
         w.write((json.dumps(msg) + "\n").encode())
         await w.drain()
-        return json.loads(await asyncio.wait_for(r.readline(), 3))
+        return json.loads(await asyncio.wait_for(r.readline(), 20))   # a loaded CI/dev box
 
     async def close():
         w.close()
@@ -162,6 +192,23 @@ async def test_every_family_is_refused_by_the_server_when_clean(tmp_path, rom_ty
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rom_type", ["firered", "leafgreen", "emerald"])
+async def test_a_randomized_gen3_hello_needs_the_mailbox_evidence_on_the_wire(tmp_path, rom_type):
+    """Review F1: randomized-clean used to be admitted (`rand` passed the adapter). With no companion_abi the
+    hello is rejected for the companion; with the cartridge's mailbox evidence it gets past this gate (the
+    randomized-ROM content binding is a separate, later check; Radical Red cannot be randomized at all)."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello(rom_type, artifact_kind="rand"))
+        assert REASON in srv.state.identity_error["a"] and not srv.state.rom_type
+        await send(_hello(rom_type, artifact_kind="rand", companion_abi=GEN3[rom_type]))
+        assert REASON not in (srv.state.identity_error.get("a") or "")
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("rom_type", ["yellow", "red_ap", "firered_ap"])
 async def test_an_exempt_clean_title_connects(tmp_path, rom_type):
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -183,6 +230,42 @@ def test_a_hello_that_skips_the_socket_is_refused_by_admission_too(tmp_path, rom
     assert commands == [{"cmd": "noop", "refused": "admission"}]
     assert srv.admission["a"]["state"] == "rejected" and REASON in srv.admission["a"]["reason"]
     assert not srv.state.rom_type and not srv.state.artifact_kind
+
+
+# ── 2b. the Gen 3 client's evidence: the cartridge's own mailbox, never the launcher's claim ────────────
+
+def _native(pack):
+    import pathlib
+    profile = json.loads((pathlib.Path(_REPO) / "data" / "games" / pack / "profile.json").read_text(encoding="utf-8"))
+    return profile["native"]
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_rr", "radical_red")])   # the test World has no Emerald pack
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_gen3_hello_publishes_companion_abi_only_from_the_cartridges_own_live_mailbox(pack, title, kind):
+    """Review F1/F2: companion_abi is read from RAM (signature at native.BASE, ABI at BASE+4), so it is absent on a
+    cartridge with no mailbox whatever artifact kind the launcher named, and present on a patched one."""
+    from tests.unit.test_gen3_client import A, B, live
+    nat = _native(pack)
+    w = live(pack, title, kind, pids=(A, B))
+    assert w.client.driver.hello_fields().companion_abi is None, "no mailbox yet: no evidence"
+    w.poke_int(nat["BASE"], nat["SIG"], 4)
+    assert w.client.driver.hello_fields().companion_abi is None, "the signature alone is not the ABI"
+    w.poke_int(nat["BASE"] + 4, nat["ABI"] + 1, 2)
+    assert w.client.driver.hello_fields().companion_abi is None, "another ABI is not this pack's companion"
+    w.poke_int(nat["BASE"] + 4, nat["ABI"], 2)
+    assert w.client.driver.hello_fields().companion_abi == nat["ABI"]
+    w.poke_int(nat["BASE"], nat["SIG"] ^ 1, 4)
+    assert w.client.driver.hello_fields().companion_abi is None, "a wrong signature withdraws the evidence"
+
+
+def test_gen3_companion_live_never_raises_and_reads_nothing_without_a_native_block():
+    lua, native = _lua("lua/gen3/native.lua")
+    io = lua.eval("{read_u32 = function() error('unreadable') end, read_u16 = function() error('unreadable') end}")
+    nat = lua.table(BASE=0x02030000, SIG=0x4B4E4C53, ABI=2)
+    assert native.companion_live(nat, io) is None                 # an unreadable bus is no evidence
+    assert native.companion_live(None, io) is None                # a pack with no native block
+    assert native.companion_live(lua.table(BASE=1, SIG=2), io) is None   # no pinned ABI
 
 
 # ── 3. the Lua launchers ───────────────────────────────────────────────────────────────────
@@ -235,13 +318,21 @@ def test_gen1_a_companion_refusal_is_final_never_retried_as_the_named_family():
 
 
 @pytest.mark.parametrize("family", ["red", "blue"])
-@pytest.mark.parametrize("hook", [STOCK, ("wrong_mailbox", 0x20), ("other_bank", 0x20), None])
+@pytest.mark.parametrize("hook", [STOCK, ("other_bank", 0x20), None])
 def test_gen1_launcher_refuses_a_stock_vanilla_cartridge_that_boots_by_header(family, hook):
     """A patched Red/Blue is in no sha1 table and boots as the named family; a stock or randomized-stock
     one has no admission row either. The beacon writer in ROM bank $3F is what tells them apart (the
     runtime beacon is only in WRAM after frames run; an admission decision at frame 0 cannot see it)."""
     admitted, why = _gen1_routed_stub(None, family=family, hook=hook)
     assert admitted is None and REASON in why and family in why, (hook, why)
+
+
+@pytest.mark.parametrize("family", ["red", "blue"])
+def test_gen1_an_unpinned_pure_overlay_is_not_told_to_patch_its_red_cartridge(family):
+    """Review F6: a pureRGB overlay writes its beacon to ITS mailbox ($DEEA, not the vanilla $DEE2). Reaching the
+    named-family path unpinned, it must be refused for what it is, not told to patch a "red" cartridge."""
+    admitted, why = _gen1_routed_stub(None, family=family, hook=("wrong_mailbox", 0x20))   # writer to $DEEA
+    assert admitted is None and "pureRGB overlay build" in why and REASON not in why, why
 
 
 def test_gen1_launcher_named_fallback_boots_a_patched_vanilla_header_and_still_refuses_unknown():

@@ -1207,6 +1207,7 @@ function Client.new(p)
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
+        f.companion_abi = p.companion_abi and p.companion_abi() or nil  -- the cartridge's own mailbox, never the launcher's claim
         if hidden then
             f.party_hidden = true
             f.pc_boxes, f.pc_boxes_generation = nil, nil

@@ -41,6 +41,24 @@ _DATA_DIR = os.path.join(
     "data", "games", "gen3_frlge"
 )
 
+# rom_type -> the data pack whose profile.json pins the companion mailbox ABI (profile.native.ABI). The ABI
+# is read from the pack, never hard-coded per title, so a later companion (the Emerald Expansion's) only needs
+# its pack listed here and its exemption removed.
+_COMPANION_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald",
+                    "firered_rr": "gen3_rr"}
+
+
+@cache
+def _companion_abi(pack: str) -> int | None:
+    path = os.path.join(os.path.dirname(_DATA_DIR), pack, "profile.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            abi = json.load(fh)["native"]["ABI"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return abi if type(abi) is int and abi > 0 else None
+
+
 # Gift/static encounter area_ids — Pokémon obtained here before Pokéballs.
 _GIFT_AREAS = frozenset({
     "oaks_lab", "intro", "gift", "cinnabar_lab",
@@ -434,17 +452,22 @@ class Gen3Adapter(GameAdapter):
     # Owner 2026-10-02: FireRed, LeafGreen, Emerald and Radical Red require the companion. The AP
     # builds (firered_ap/leafgreen_ap) and the Emerald Expansion (rom_type emerald_expansion_*,
     # which inherits this method) are not listed, so they stay clean-admitted.
-    _COMPANION_ROM_TYPES = frozenset({"firered", "leafgreen", "emerald", "firered_rr"})
+    _COMPANION_ROM_TYPES = frozenset(_COMPANION_PACKS)
 
     @classmethod
     def companion_refusal(cls, hello):
-        # The Gen 3 hello declares "companion" for a patched cartridge. A randomized one declares
-        # "rand" either way (lua/gen3/client.lua folds rand_companion into it), so the wire cannot
-        # refuse that case; the launcher does (lua/gen3/entry.lua admit_routed refuses kind rand).
+        # EVIDENCE from the cartridge, not the launcher's claim (review F1/F2): the hello carries
+        # `companion_abi` only when this cartridge's own companion mailbox (signature + ABI) is live in
+        # RAM (lua/gen3/native.lua companion_live), and it must equal the ABI the title's pack pins. That
+        # also closes randomized-clean: a randomized cartridge declares "rand" on the wire whether or not
+        # it carries the companion, so artifact_kind alone cannot tell them apart.
         rom_type = hello.get("rom_type")
-        if rom_type in cls._COMPANION_ROM_TYPES and hello.get("artifact_kind", "clean") in ("clean", "named"):
-            return companion_required_reason(rom_type)
-        return None
+        if rom_type not in cls._COMPANION_ROM_TYPES:
+            return None
+        pinned = _companion_abi(_COMPANION_PACKS[rom_type])
+        if pinned is not None and hello.get("companion_abi") == pinned and type(hello.get("companion_abi")) is int:
+            return None
+        return companion_required_reason(rom_type)
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

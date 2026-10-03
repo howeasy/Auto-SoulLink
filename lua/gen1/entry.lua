@@ -303,6 +303,8 @@ end
 -- admission decision cannot see it. The writer is `ld a, "S" / ld [mailbox], a` = 3E 53 EA lo hi
 -- (patch/gen1/tools/inject.py _BEACON_WRITER emits it). A stock cartridge, randomized or not, has
 -- no such bytes in bank $3F. `mailbox` defaults to the shipped vanilla patch's (PACKS.gen1_rby.trade).
+-- The pureRGB overlay's own mailbox (patch/gen1/purergb/overlay/slink.asm:20), not the vanilla patch's $DEE2.
+Entry.PURE_MAILBOX = 0xDEEA
 function Entry.has_companion_beacon(read_rom_u8, mailbox)
     if not read_rom_u8 then return false end
     mailbox = mailbox or Entry.PACKS.gen1_rby.trade.mailbox
@@ -352,6 +354,11 @@ function Entry.admit_routed(args)
     -- boots; the server asks the same question again from the hello's `panel`.
     if admitted.kind == "named" and Entry.COMPANION_REQUIRED[admitted.title]
        and not Entry.has_companion_beacon(args.read_rom_u8) then
+        -- a pureRGB overlay shares the vanilla header but writes its beacon to ITS mailbox ($DEEA, review F6):
+        -- an unpinned pure overlay must not be told to "patch your red cartridge"
+        if Entry.has_companion_beacon(args.read_rom_u8, Entry.PURE_MAILBOX) then
+            return nil, "this is a pureRGB overlay build that is not a pinned release, so it is not admitted"
+        end
         return nil, companion_reason(admitted.title)
     end
     return admitted
