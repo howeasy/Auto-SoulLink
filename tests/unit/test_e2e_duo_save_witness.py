@@ -504,3 +504,25 @@ def test_pure_companion_kinds_bind_successfully(tmp_path, monkeypatch, game, kin
         results[inst] = results[inst].replace("pack=gen1_rby kind=named",
                                             f"pack=gen1_purergb kind={kind}")
     run.check_save_witness(results)
+
+@pytest.mark.parametrize("fault", [None, "bytes", "logged_path"])
+def test_archived_witness_keeps_original_name_and_byte_checks(tmp_path, monkeypatch, fault):
+    run, results, _notes, build = _stub(tmp_path, monkeypatch)
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    paths = {}
+    for inst in ("a", "b"):
+        original = Path(run._witness_path(inst))
+        paths[inst] = archive / original.name
+        original.rename(paths[inst])
+    if fault == "bytes":
+        raw = bytearray(paths["a"].read_bytes())
+        raw[0] ^= 1
+        paths["a"].write_bytes(raw)
+    elif fault == "logged_path":
+        results["a"] = results["a"].replace("e2e_link_new_a_1_witness", "foreign")
+    if fault:
+        with pytest.raises(RuntimeError, match="does not match|disagree about the name"):
+            run.check_save_witness(results, archived_paths=paths)
+    else:
+        run.check_save_witness(results, archived_paths=paths)

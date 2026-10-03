@@ -6590,21 +6590,48 @@ class DuoRun:
                                if line.startswith("[hunt] threw ball")]
                 throws = []
                 for line in throw_lines:
-                    throw = re.fullmatch(r"\[hunt\] threw ball index \d+ -> (missed|caught) "
+                    throw = re.fullmatch(r"\[hunt\] threw ball index \d+ -> (missed|caught|timeout) "
                                          r"balls_before=(\d+) balls_after=(\d+)", line)
                     if not throw:
                         raise RuntimeError(f"{inst}: SYNTH catch has malformed throw receipt: {line}")
                     throws.append((throw[1], int(throw[2]), int(throw[3])))
                 saved_balls = sum(qty for item, qty in layout.decode_bag(sram) if item in layout.ball_items)
                 remaining = stock
-                for _outcome, before, after in throws:
-                    if before != remaining or after != before - 1:
+                for outcome, before, after in throws:
+                    # A timeout is an unfinished observation, not a failed throw. The
+                    # input-free wait can expire before the capture animation consumes
+                    # the ball. Only settled observations carry reliable live counts;
+                    # the final save must independently account for EVERY attempt.
+                    if outcome != "timeout" and (before != remaining or after != remaining - 1):
                         raise RuntimeError(f"{inst}: SYNTH catch throw counts are not continuous: {throws}")
-                    remaining = after
-                decrement = stock - remaining
+                    remaining -= 1
+                caught = sum(outcome == "caught" for outcome, _, _ in throws)
+                final_caught = bool(throws) and throws[-1][0] == "caught" and caught == 1
+                if throws and throws[-1][0] == "timeout" and caught == 0:
+                    tail = results[inst].rsplit(throw_lines[-1], 1)[1]
+                    captures = []
+                    capture_prefix = ""
+                    for line in tail.splitlines():
+                        if line.startswith("TX "):
+                            try:
+                                event = json.loads(line[3:])
+                            except ValueError:
+                                continue
+                            if isinstance(event, dict) and event.get("event") == "capture":
+                                captures.append(event)
+                                capture_prefix = tail.split(line, 1)[0]
+                    # Later party routing can remove/reinsert a captured mon; count
+                    # growth only up to the capture TX, not across the whole scenario.
+                    growth = re.findall(r"(?m)^PARTY_COUNT (\d+) -> (\d+) @\d+$", capture_prefix)
+                    final_caught = (len(captures) == 1
+                                    and captures[0].get("key") == key
+                                    and captures[0].get("player") == inst
+                                    and captures[0].get("area_id") == "route_1"
+                                    and captures[0].get("gift") is False
+                                    and sum(int(b) - int(a) for a, b in growth if int(b) > int(a)) == 1)
+                decrement = stock - saved_balls
                 if (not throws or decrement != len(throws) or decrement < 1
-                        or sum(outcome == "caught" for outcome, _, _ in throws) != 1
-                        or throws[-1][0] != "caught" or saved_balls != remaining):
+                        or not final_caught or saved_balls != remaining):
                     raise RuntimeError(f"{inst}: SYNTH catch spent balls must match recorded throws: "
                                        f"stock={stock} throws={throws} saved={saved_balls}")
                 self._pydec_note(f"GEN1_SYNTH_CATCH inst={inst} balls_before={stock} "
@@ -8355,7 +8382,7 @@ class DuoRun:
         """
         return self._saved_gen1_party(inst)[0]
 
-    def check_save_witness(self, results):
+    def check_save_witness(self, results, *, archived_paths=None):
         """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.
 
         Each instance first requires a client-built ROM hash prefix matching its resolved
@@ -8446,6 +8473,11 @@ class DuoRun:
                         f"{inst}: the save witness landed at {dumps[-1][0]!r} (the receipt's "
                         f"last dump), not {rel_to_repo(path)!r} — the body and this "
                         f"check disagree about the name")
+            # Offline rejudgment preserves the receipt's original logical path above,
+            # then reads an explicitly retained copy. Size/hash/flush checks still apply.
+            if archived_paths is not None:
+                path = str(archived_paths[inst])
+                self._pydec_note(f"SAVE_WITNESS_ARCHIVE inst={inst} path={path}")
             if not os.path.exists(path):
                 failed = re.findall(r"SAVE_WITNESS_DUMP_FAIL (.*)", receipt)
                 detail = (f" (the body logged SAVE_WITNESS_DUMP_FAIL: {failed[-1]})"
