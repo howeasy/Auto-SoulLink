@@ -405,6 +405,21 @@ def test_apply_rechecks_use_right_before_each_action(W, real_processes):
     assert any((x / "s").exists() for x in (l1, l2))
 
 
+def test_own_lock_and_plan_files_are_not_temp(W):
+    tmp = W.root / "tmp"
+    tmp.mkdir(parents=True)
+    own = [tmp / "slink-space-apply.lock", tmp / "slink-space-prune-plan.json",
+           tmp / "slink-space-move-plan.json"]
+    other = tmp / "old-scratch.log"
+    for f in [*own, other]:
+        f.write_text("x")
+        t = time.time() - 3 * DAY
+        os.utime(f, (t, t))
+    p = plan(W)
+    assert {item(p, f)["status"] for f in own} == {"keep"}
+    assert item(p, other)["status"] == "stale"
+
+
 def test_work_root_lanes_are_never_pruned(W):
     lane = W.root / "lanes" / "g4"  # Gen 4's real 46 GB lane lives here
     lane.mkdir(parents=True)

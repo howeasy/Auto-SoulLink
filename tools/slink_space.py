@@ -39,6 +39,7 @@ DEFAULT_TMP_AGE = 2 * 3600
 _EVIDENCE_NAME = re.compile(r"evidence|receipt|proof", re.I)
 _DRIVE_COPY = re.compile(r" \(\d+\)(\.[^./\\ ]+)?$")  # Google Drive conflict copy: "master (1)"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_OWN_FILES = re.compile(r"slink-space-(apply\.lock|(prune|move)-plan\.json)")
 # Deleted files Google Drive put back into the main checkout (seen 2026-10-02).
 KNOWN_DRIVE_RESTORES = frozenset({"lua/memory_gba.lua", "server/adapters/gen2_crystal.py"})
 _IS_WIN = os.name == "nt"
@@ -542,6 +543,8 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
         item["rule"] = rule
     if rule in ("cache", "evidence"):
         return {**item, "status": "keep", "reason": rule}
+    if rule == "tmp" and _OWN_FILES.fullmatch(name):
+        return {**item, "status": "keep", "reason": "slink_space's own lock/plan file"}
     if rule == "owned-lane":
         return {**item, "status": "keep", "reason": "work-root lane: owned by its thread, "
                                                     "never pruned"}
