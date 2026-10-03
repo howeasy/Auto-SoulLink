@@ -16,13 +16,17 @@ import lupa
 import pytest
 
 import tests.unit.test_gen3_entry as te
-from tests.unit.test_gen3_entry import PACKS, REPO, World, _admit, lua_to_py
+from tests.unit.test_gen3_entry import PACKS, REPO, World, _admit, _split, is_production, lua_to_py
 from tests.unit.test_slink_route import _NEW_GEN3_CLIENT, _rom_gba, _run_launcher
 
 _EMERALD_DIR = REPO / "data" / "games" / "gen3_emerald"
 _EMERALD_SHA1 = json.loads(
     (_EMERALD_DIR / "engine_signals.json").read_text(encoding="utf-8")
 )["titles"]["emerald"]["artifacts"]["clean"]["rom_sha1"]
+
+_EMERALD_COMPANION_SHA1 = json.loads(
+    (_EMERALD_DIR / "engine_signals.json").read_text(encoding="utf-8")
+)["titles"]["emerald"]["artifacts"]["companion"]["rom_sha1"]
 
 # The owner-lane pin (docs/gen3_emerald/PLAN.md §0 "ROM" row) -- must equal the shipped
 # engine_signals.json pin, or the pack data has drifted from the card's own brief.
@@ -58,10 +62,15 @@ def test_gen3_emerald_is_in_entry_routed():
 # ── (b) Entry.admit on the Emerald hash ──────────────────────────────────────────────────
 def test_entry_admit_on_the_emerald_hash_returns_the_emerald_pack():
     world = World(pack="gen3_frlg", title="firered", build=False)
-    got = lua_to_py(_admit(world, rom_hash=_EMERALD_SHA1))
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "clean")
+    got = lua_to_py(_split(_admit(world, rom_hash=_EMERALD_COMPANION_SHA1))[0])
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "companion")
     assert got["rom_type"] == "emerald"
     assert got["admitted_by"] == "hash"
+    clean, why = _split(_admit(world, rom_hash=_EMERALD_SHA1))
+    if is_production("gen3_emerald", "emerald", "clean"):
+        assert lua_to_py(clean)["kind"] == "clean"
+    else:
+        assert clean is None and "non-production cartridge is not admitted" in why
 
 
 # ── (c) FR/LG/RR admission is unchanged; admission_table still builds (no collisions) ──────
@@ -70,12 +79,18 @@ def test_entry_admit_on_the_emerald_hash_returns_the_emerald_pack():
     ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"),
     ("gen3_rr", "radical_red", "companion"),
+    ("gen3_frlg", "firered", "companion"),
+    ("gen3_frlg", "leafgreen", "companion"),
 ])
 def test_frlg_and_rr_admission_is_unchanged_by_the_emerald_pack(pack, title, kind):
     world = World(pack="gen3_frlg", title="firered", build=False)
     sha1 = json.loads((REPO / "data" / "games" / pack / "engine_signals.json")
                       .read_text(encoding="utf-8"))["titles"][title]["artifacts"][kind]["rom_sha1"]
-    got = lua_to_py(_admit(world, rom_hash=sha1))
+    got, why = _split(_admit(world, rom_hash=sha1))
+    if not is_production(pack, title, kind):
+        assert got is None and "non-production cartridge is not admitted" in why
+        return
+    got = lua_to_py(got)
     assert (got["pack"], got["title"], got["kind"]) == (pack, title, kind)
     assert got["admitted_by"] == "hash"
 
@@ -197,7 +212,8 @@ def test_only_the_observer_reads_the_unadmitted_env_and_slink_never_loads_it():
 @pytest.mark.parametrize("pack,title,kind", [
     ("gen3_frlg", "firered", "clean"), ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"), ("gen3_rr", "radical_red", "companion"),
-    ("gen3_emerald", "emerald", "clean"),
+    ("gen3_emerald", "emerald", "clean"), ("gen3_emerald", "emerald", "companion"),
+    ("gen3_frlg", "firered", "companion"), ("gen3_frlg", "leafgreen", "companion"),
 ])
 def test_the_flag_changes_nothing_for_admitted_titles(pack, title, kind):
     """Guard 3: an admitted title builds identically with or without the flag, and logs no

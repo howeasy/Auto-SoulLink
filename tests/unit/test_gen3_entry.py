@@ -48,6 +48,14 @@ def artifact_of(pack: str, title: str, kind: str) -> dict:
     return pack_json(pack, "engine_signals.json")["titles"][title]["artifacts"][kind]
 
 
+def is_production(pack: str, title: str, kind: str) -> bool:
+    """The artifact's own admission flag (an absent key means production). The clean cartridges
+    of gen3_frlg/gen3_emerald/gen3_rr carry production:false once the companion patch is
+    required, so the admission tests below derive their expectation from this flag and hold on
+    both sides of that switch; tests/unit/test_gen3_clean_refusal.py pins the literal values."""
+    return artifact_of(pack, title, kind).get("production") is not False
+
+
 def profile_of(pack: str, title: str) -> dict:
     return pack_json(pack, "profile.json")["titles"][title]
 
@@ -155,19 +163,28 @@ class World:
 
 def test_admission_by_hash_covers_every_shipped_artifact():
     world = World(build=False)
-    for pack, title, kinds in (("gen3_frlg", "firered", ["clean"]),
-                               ("gen3_frlg", "leafgreen", ["clean"]),
+    for pack, title, kinds in (("gen3_frlg", "firered", ["clean", "companion"]),
+                               ("gen3_frlg", "leafgreen", ["clean", "companion"]),
                                ("gen3_rr", "radical_red", ["clean", "companion"]),
-                               ("gen3_emerald", "emerald", ["clean"])):
+                               ("gen3_emerald", "emerald", ["clean", "companion"])):
         for kind in kinds:
             artifact = artifact_of(pack, title, kind)
             for digest in ("rom_sha1", "rom_md5"):
-                got = lua_to_py(world.Entry.admit(world.lua.table(
+                got, why = _split(world.Entry.admit(world.lua.table(
                     root=REPO.as_posix(), json=world.lua.eval(
                         f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")'),
                     rom_hash=artifact[digest].upper())))
+                if not is_production(pack, title, kind):
+                    assert got is None and "non-production cartridge is not admitted" in why
+                    continue
+                got = lua_to_py(got)
                 assert got["admitted_by"] == "hash"
                 assert (got["pack"], got["title"], got["kind"]) == (pack, title, kind)
+
+
+def _split(returned):
+    """Entry.admit returns the admission alone, or (nil, reason) (lupa unpacks the tuple)."""
+    return returned if isinstance(returned, tuple) else (returned, None)
 
 
 def _admit(world, **args):
@@ -178,25 +195,35 @@ def _admit(world, **args):
     return world.Entry.admit(world.lua.table(**table))
 
 
+@pytest.mark.parametrize("seed_kind", ["clean", "companion"])
 @pytest.mark.parametrize("title,code", [("firered", "BPRE"), ("leafgreen", "BPGE")])
-def test_admission_by_anchors_when_the_hash_is_unknown(title, code):
-    world = World(pack="gen3_frlg", title=title, build=False)
-    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
-                           header_code=code))
+def test_admission_by_anchors_when_the_hash_is_unknown(title, code, seed_kind):
+    world = World(pack="gen3_frlg", title=title, kind=seed_kind, build=False)
+    got, why = _split(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read, header_code=code))
+    if not is_production("gen3_frlg", title, seed_kind):
+        assert got is None and "non-production cartridge is not admitted" in why
+        return
+    got = lua_to_py(got)
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", title, "rand")
+    # a randomized cartridge: the clean one is `rand`, the companion one `rand_companion`
+    assert (got["pack"], got["title"], got["kind"]) == (
+        "gen3_frlg", title, "rand" if seed_kind == "clean" else "rand_companion")
     assert got["rom_type"] == title
 
 
 @pytest.mark.parametrize("kind", ["clean", "companion"])
 def test_rr_anchor_admission_keeps_its_existing_kind(kind):
     world = World(pack="gen3_rr", title="radical_red", kind=kind, build=False)
-    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read))
+    got, why = _split(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read))
+    if not is_production("gen3_rr", "radical_red", kind):
+        assert got is None and "non-production cartridge is not admitted" in why
+        return
+    got = lua_to_py(got)
     assert got["kind"] == kind and got["admitted_by"] == "anchors"
 
 
-def test_rand_routes_through_the_single_gate_and_uses_clean_sites():
-    world = World(pack="gen3_frlg", title="firered", build=False)
+def test_rand_companion_routes_through_the_single_gate_and_uses_companion_sites():
+    world = World(pack="gen3_frlg", title="firered", kind="companion", build=False)
     codec = world.lua.eval(f'dofile("{(REPO / "lua/json_codec.lua").as_posix()}")')
     args = world.lua.table(root=REPO.as_posix(), json=codec,
         rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE")
@@ -215,12 +242,18 @@ def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
     ROM with an unrecognized hash still admits by anchors alone (E2-ENTRY:
     Entry.artifacts()/anchor_matches() open gen3_emerald unconditionally; since EG4 it is also
     in Entry.ROUTED, same as gen3_frlg/gen3_rr)."""
-    world = World(pack="gen3_emerald", title="emerald", build=False)
-    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
-                           header_code="BPEE"))
+    world = World(pack="gen3_emerald", title="emerald", kind="companion", build=False)
+    got = lua_to_py(_split(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
+                                  header_code="BPEE"))[0])
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand")
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand_companion")
     assert got["rom_type"] == "emerald"
+    clean = World(pack="gen3_emerald", title="emerald", kind="clean", build=False)
+    got, why = _split(_admit(clean, rom_hash="00" * 20, rom_read=clean._rom_read, header_code="BPEE"))
+    if is_production("gen3_emerald", "emerald", "clean"):
+        assert lua_to_py(got)["kind"] == "rand"
+    else:
+        assert got is None and "non-production cartridge is not admitted" in why
 
 
 def test_anchors_alone_separate_every_shipped_artifact():
@@ -395,11 +428,19 @@ def _production(world, **over):
     ("gen3_frlg", "firered", "clean"),
     ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"),
+    ("gen3_frlg", "firered", "companion"),
+    ("gen3_frlg", "leafgreen", "companion"),
     ("gen3_rr", "radical_red", "companion"),
     ("gen3_emerald", "emerald", "clean"),
+    ("gen3_emerald", "emerald", "companion"),
 ])
 def test_production_build_returns_a_client_and_arms_no_hook_until_start(pack, title, kind):
     world = World(pack=pack, title=title, kind=kind, build=False)
+    if not is_production(pack, title, kind):
+        with pytest.raises(lupa.LuaError, match="non-production cartridge cannot build a production client"):
+            _production(world)
+        assert world.registered == []
+        return
     client, parts = _production(world)
     assert client is not None and parts.mode == "production"
     assert parts.writes is not None and parts.policy is not None and parts.safety is not None
@@ -409,10 +450,10 @@ def test_production_build_returns_a_client_and_arms_no_hook_until_start(pack, ti
 
 
 def test_production_start_refuses_by_name_when_a_site_is_not_in_the_rom():
-    sites = sites_of("gen3_frlg", "firered", "clean")
+    sites = sites_of("gen3_frlg", "firered", "companion")
     rom = seed_rom(sites)
     rom[sites["faint"]["rom_offset"]] ^= 0xFF
-    world = World(pack="gen3_frlg", title="firered", rom=rom, build=False)
+    world = World(pack="gen3_frlg", title="firered", kind="companion", rom=rom, build=False)
     client, _ = _production(world)
     with pytest.raises(lupa.LuaError, match="engine sites differ from the ROM: faint"):
         client.start(client)
@@ -420,7 +461,7 @@ def test_production_start_refuses_by_name_when_a_site_is_not_in_the_rom():
 
 
 def test_production_refuses_a_read_only_io():
-    world = World(pack="gen3_frlg", title="firered", build=False)
+    world = World(pack="gen3_frlg", title="firered", kind="companion", build=False)
     with pytest.raises(lupa.LuaError, match="production io needs write_u8"):
         world.Entry.build(world.deps(mode="production"))
 
@@ -428,7 +469,7 @@ def test_production_refuses_a_read_only_io():
 def test_each_reason_reaches_safety_check_with_the_real_pack_clauses():
     """C4-7: the policy is a pass-through. Every reason evaluates the PACK's own clause set (the
     refusal names a clause that only exists in the pack), and the args reach the guard."""
-    world = World(pack="gen3_frlg", title="firered", build=False)
+    world = World(pack="gen3_frlg", title="firered", kind="companion", build=False)
     _, parts = _production(world)
     policy = parts.policy
     ok, why = policy.check(policy, world.lua.table(), "overworld")
@@ -446,14 +487,14 @@ def test_each_reason_reaches_safety_check_with_the_real_pack_clauses():
 def test_an_overworld_and_a_battle_refusal_hold():
     """The client treats a refusal as a HOLD: the pack clauses decide, and the guard is
     fail-closed on a missing battler (so an explode cannot write until the client passes one)."""
-    world = World(pack="gen3_frlg", title="firered")
+    world = World(pack="gen3_frlg", title="firered", kind="companion")
     _, parts = _production(world)
     policy = parts.policy
     # seed the checkpoint's own ROM anchors, or safety refuses in its preamble and the clauses
     # under test are never evaluated
     anchors = pack_json("gen3_frlg", "write_checkpoint.json")["firered"]["anchors"]
     for a in anchors.values():
-        hexs = a["expected_hex"]["clean"]
+        hexs = a["expected_hex"]["companion"]
         for i in range(a["length"]):
             world.rom[a["rom_offset"] + i] = int(hexs[i * 2:i * 2 + 2], 16)
     # seed the battle clause set in the fake bus so only the guard decides

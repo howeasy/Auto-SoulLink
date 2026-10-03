@@ -31,12 +31,24 @@ _NEW_GEN1_CLIENT = "lua/gen1/run.lua"
 _OLD_GEN3_CLIENT = "lua/clients/gen3_frlge_client.lua"  # deleted; see archive/gen3-old-client:lua/clients/
 
 
-def _sha1(pack: str, title: str, kind: str) -> str:
-    """A real pinned hash from the pack's own admission table (never invented)."""
+def _artifact(pack: str, title: str, kind: str) -> dict:
     path = os.path.join(_REPO, "data", "games", pack, "engine_signals.json")
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    return data["titles"][title]["artifacts"][kind]["rom_sha1"]
+    return data["titles"][title]["artifacts"][kind]
+
+
+def _sha1(pack: str, title: str, kind: str) -> str:
+    """A real pinned hash from the pack's own admission table (never invented)."""
+    return _artifact(pack, title, kind)["rom_sha1"]
+
+
+def _is_production(pack: str, title: str, kind: str) -> bool:
+    """The artifact's own admission flag (absent = production). The clean cartridges are
+    production:false once the companion patch is required; the clean-hash route tests below
+    follow that flag (routed while admitted, refused by name once not), so they hold on both
+    sides of the switch. tests/unit/test_gen3_clean_refusal.py pins the literal values."""
+    return _artifact(pack, title, kind).get("production") is not False
 
 
 _FR_CLEAN_SHA1 = _sha1("gen3_frlg", "firered", "clean")
@@ -45,6 +57,9 @@ _LG_CLEAN_SHA1 = _sha1("gen3_frlg", "leafgreen", "clean")
 _LG_COMPANION_SHA1 = _sha1("gen3_frlg", "leafgreen", "companion")
 _RR_CLEAN_SHA1 = _sha1("gen3_rr", "radical_red", "clean")
 _RR_COMPANION_SHA1 = _sha1("gen3_rr", "radical_red", "companion")
+_FR_COMPANION_SHA1 = _sha1("gen3_frlg", "firered", "companion")
+_LG_COMPANION_SHA1 = _sha1("gen3_frlg", "leafgreen", "companion")
+_EMERALD_COMPANION_SHA1 = _sha1("gen3_emerald", "emerald", "companion")
 _EMERALD_CLEAN_SHA1 = _sha1("gen3_emerald", "emerald", "clean")
 _EMERALD_COMPANION_SHA1 = _sha1("gen3_emerald", "emerald", "companion")
 
@@ -175,6 +190,10 @@ def test_a_companion_emerald_sha1_reaches_the_new_gen3_client():
     loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_COMPANION_SHA1)
     assert _NEW_GEN3_CLIENT in loaded, loaded
     assert _OLD_GEN3_CLIENT not in loaded, loaded
+
+
+def test_a_clean_emerald_sha1_follows_its_artifacts_production_flag():
+    _assert_routed_or_refused("gen3_emerald", "emerald", "clean", _EMERALD_CLEAN_SHA1, "BPEE")
 
 
 def test_an_unknown_bpee_hash_admitted_by_header_is_refused_by_name():

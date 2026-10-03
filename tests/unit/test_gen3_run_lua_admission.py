@@ -53,7 +53,7 @@ def _run(
     logs: list[str] = []
     real_dofile = g.dofile
     g.BOOT_FAILURE_REASON = "engine sites differ from the ROM: " + ", ".join(
-        sorted(sites_of("gen3_frlg", "firered", "clean"))
+        sorted(sites_of("gen3_frlg", "firered", "companion"))
     )
     fail = lua.eval("function() error(BOOT_FAILURE_REASON,0) end")
 
@@ -113,11 +113,11 @@ def test_a_header_only_admission_is_refused_naming_the_pinned_cartridge_rule():
 
 
 def test_a_pack_dropped_from_routed_is_refused_even_when_anchors_admit_it():
-    """Case 2: a synthetic ROM whose anchors admit it as gen3_frlg/firered/clean (unknown hash,
+    """Case 2: a synthetic ROM whose anchors admit it as gen3_frlg/firered/companion (rand_companion) (unknown hash,
     same synthesis as test_gen3_entry.py's test_admission_by_anchors_when_the_hash_is_unknown),
     but with gen3_frlg cleared from Entry.ROUTED. Entry.admit alone would happily return this
     admission; only admit_routed's own ROUTED check refuses it."""
-    rom = seed_rom(sites_of("gen3_frlg", "firered", "clean"), header_code="BPRE")
+    rom = seed_rom(sites_of("gen3_frlg", "firered", "companion"), header_code="BPRE")
     client, logs = _run(rom, rom_hash="0" * 40, drop_pack="gen3_frlg")
     assert client == "stale"
     assert any("gen3_frlg" in line and "not yet routed" in line for line in logs), logs
