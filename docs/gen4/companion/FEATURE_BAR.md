@@ -76,9 +76,9 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
 ## Items 3-4 mechanics (OMP cx-543d1b7b, coordinator-reconciled; pinned pret + hge fork)
 
 **START panel (item 3). Corrections:** the entry is a `StartMenuAction` row in `src/start_menu.c` (static ARM9 `start_menu.o`, 0x0203BC10.., not overlay 1; see below), not a script. The Gen 4 UI APIs are `bg_window.h` (`AddWindow`), `render_window.h` (`DrawFrameAndWindow1/2`), `font_types_def.h` (`TextPrinter`), `render_text.h` (`RenderText`) and `list_menu.h` (`ListMenuInit`), not Gen 3 names.
-- **Smallest patch:** rows `START_MENU_ACTION_7` and `RETIRE` are permanently inhibited (`:305-306`). Clear one bit and repoint that row's `.func`/`.ident` in `sStartMenuActions` (`:174-188`). There is no table growth and no icon.
-- **Hazard:** `ACTION_9`/`_10` sit at fixed display slots 7/8 (`:517-518`). Never append rows above them.
-- **The panel is its own overlay,** cloned from the trainer card's OverlayManager shape (`src/overlay_trainer_card.c:29-36`), launched through the start menu's fade → app → return chain (`:1120-1127`).
+- **Smallest patch:** rows `START_MENU_ACTION_7` and `RETIRE` are permanently inhibited (`:303`). Clear one bit and repoint that row's `.func`/`.ident` in `sStartMenuActions` (`:174-188`). There is no table growth and no icon.
+- **Hazard:** `ACTION_9`/`_10` sit at fixed display slots 7/8 (`:518-519`). Never append rows above them.
+- **The panel is its own overlay,** cloned from the trainer card's OverlayManager shape (`src/overlay_trainer_card.c:29-36`), launched through the start menu's fade → app → return chain (`:1114-1122`).
 - **hge does not source or hook the start menu.** It is vanilla binary, so one site serves both. Re-prove it against the hge sha1.
 
 **Receptionist trade (item 4). Corrections:**
