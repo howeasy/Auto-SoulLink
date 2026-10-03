@@ -583,7 +583,15 @@ function Client.new(p)
         return f
     end
     function drv.on_reset()
-        st.has_pokeballs = nil
+        -- Core calls on_reset even for unreadable SaveData. Rearm the run only on the
+        -- same positively read pre-game marker as game_is_live: OT=0 AND an empty party.
+        -- A transient refusal neither forgets a known ball edge nor starts a new run.
+        local sd = R.save_data(mem, prof)
+        local trainer = sd and R.trainer(mem, prof, sd)
+        local cleared_party = sd and R.party(mem, prof, sd)
+        if trainer and trainer.otid == 0 and cleared_party and #cleared_party == 0 then
+            st.has_pokeballs = nil
+        end
         pe:reset()
         if signals then signals:disarm(Client.PHASE,true) end   -- save/reset ends the old battle context
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
@@ -603,6 +611,17 @@ function Client.new(p)
         st.signals = signals
         return signals
     end
+    -- Core drains signals BEFORE flush_battle_writes (session.lua:421-475). Retire the
+    -- exact completed entry here: an unreadable/missing party on the ending flush otherwise
+    -- bypasses battle_write and defers it (:189-200). Other entries still owe their writes.
+    local function retire_d7_entry(entry)
+        for i = #session.battle_pending, 1, -1 do
+            if session.battle_pending[i] == entry then
+                table.remove(session.battle_pending, i)
+            end
+        end
+    end
+
     function drv.on_signal(sig)
         if sig.kind ~= "d7" then return end
         local lease = st.d7
@@ -610,6 +629,7 @@ function Client.new(p)
         if sig.result == "written" then
             if lease then
                 st.d7_done[lease.entry] = { frame = sig.frame }
+                retire_d7_entry(lease.entry)
                 -- Accepted linked-faint notice, after verified writes only. The one-shot lease
                 -- prevents refires; noop/refusal/hold and the commanded reducer echo show nothing.
                 local name = lease.entry.nickname
@@ -623,7 +643,10 @@ function Client.new(p)
             end
             log("D7 faint written " .. tostring(sig.key) .. " at frame " .. sig.frame)
         elseif sig.result == "noop" then
-            if lease then st.d7_done[lease.entry] = { frame = sig.frame, noop = true } end
+            if lease then
+                st.d7_done[lease.entry] = { frame = sig.frame, noop = true }
+                retire_d7_entry(lease.entry)  -- already-zero is completed too, without a KO notice
+            end
             log("D7 faint: " .. tostring(sig.why) .. " " .. tostring(sig.key))
         elseif sig.result == "fatal" then
             st.revoked = tostring(sig.why)

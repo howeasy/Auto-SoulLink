@@ -164,6 +164,8 @@ class World:
         self.order = order          # "hook_new": the hook sees the NEW framecount; "hook_old": the OLD one
         self.reads = 0              # io read calls (the per-frame read budget)
         self.read_log = None        # when a list: every read address (which reads a code path makes)
+        self.read_faults = []       # (first frame, last frame, first address, exclusive last address)
+        self.read_fault_hits = []   # actual I/O refusals, so a scheduled fault is not mistaken for evidence
         self.pack_name = PACKS[title]
         doc = json.loads((ROOT / f"data/games/{self.pack_name}/profile.json").read_text(encoding="utf-8"))
         self.title = doc["titles"][title]
@@ -491,19 +493,36 @@ class World:
         return (self.r(CTX + self.prof["battle"]["fainted_flag_off"], 4) >> (24 + bt)) & 1
 
     # ── the fake BizHawk ────────────────────────────────────────────────────────────
+    def fail_reads(self, address, size, *, frames=1):
+        """Refuse this RAM span during the next N frames, leaving all actual bytes unchanged."""
+        self.read_faults.append((self.frame + 1, self.frame + frames, address, address + size))
+
+    def fail_party_reads(self, *, frames=1):
+        """Refuse the SAVE party-count read (the D7 callback's battle-party copy stays readable)."""
+        self.fail_reads(self.party_base + self.prof["party_off"]["count_off"], 4, frames=frames)
+
+    def _read_refused(self, address, size):
+        for first, last, lo, hi in self.read_faults:
+            if first <= self.frame <= last and address < hi and address + size > lo:
+                self.read_fault_hits.append((self.frame, address, size))
+                return True
+        return False
+
     def _make_io(self):
         def rd(n):
             def f(a, domain=None):
                 self.reads += 1
                 if self.read_log is not None:
                     self.read_log.append(a)
-                if a < BASE or a + n > BASE + SIZE:
+                if self._read_refused(a, n) or a < BASE or a + n > BASE + SIZE:
                     return None
                 return int.from_bytes(self.m[a - BASE:a - BASE + n], "little")
             return f
 
         def read_range(a, n, domain=None):
             self.reads += 1
+            if self._read_refused(a, n):
+                return None
             return self.lua.table_from(list(self.m[a - BASE:a - BASE + n]))
 
         def wr(n):

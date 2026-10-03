@@ -167,10 +167,11 @@ ITEMS: list[Item] = [
          "test_world_no_catch_ball_gate_once_per_area_and_never_after_capture"),
     Item("24", "unresolve_area{area_id} re-arms no_catch / encounter HUD", "world",
          "test_world_unresolve_area_rearms_no_catch_only_for_the_named_area",
-         open="PARTIAL: no_catch rearming and named-area isolation are wire-proven on HG/SS/hge. "
-              "The encounter-HUD half is not claimed: Gen 4 has no NEW ENCOUNTER banner producer "
-              "(client.lua:732-736 sends reducer events; poll_events.lua emits no banner). "
-              "These world tests assert sent events / writes only, not HUD setup or presentation."),
+         open="MODEL: no_catch rearming/named-area isolation are wire-proven by the registered test; "
+              "test_gen4_hud_parity.py::test_new_encounter_on_later_debounced_area_entry_and_unresolved_reentry "
+              "proves the shared HUD's exact banner tuple, resolved-area suppression and unresolve rearming "
+              "on HG/SS/hge. Gen4 client.lua's area_enter delivery applies the accepted eligibility/gift "
+              "guards. PHYSICAL rendering/expiry is still unverified; there is no missing producer GAP."),
     Item("25", "faint fires once per real HP>0->0 transition and NOT for client-zeroed HP", "world",
          "test_world_faint_fires_once_for_a_real_transition_and_never_for_a_commanded_zero"),
     Item("26", "whiteout fires exactly once when every previously-alive party mon is at 0 HP after a real faint",

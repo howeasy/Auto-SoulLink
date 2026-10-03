@@ -93,7 +93,9 @@ def test_hud_double_records_shared_show_prompt_and_nuzlocke_start(title):
     assert callable(w.hud_t.nuzlocke_start), "World HUD double lacks nuzlocke_start (harness prerequisite)"
     # Exercise the recorder itself; no production function is replaced or manufactured.
     w.hud_t.nuzlocke_start("Nuzlocke Start!", 180)
-    assert ("nuzlocke_start", "Nuzlocke Start!", 180) in w.hud
+    assert w.hud == [("show", "HUD self-check", 1, 2, 3, 41),
+                     ("prompt", "Prompt self-check", 4, 5, 6, 42),
+                     ("nuzlocke_start", "Nuzlocke Start!", 180)]
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -105,6 +107,7 @@ def test_nuzlocke_start_once_on_first_ball_edge_after_silent_seed(title, pre=Non
     w.advance(35)
     assert w.events("tick")[-1]["has_pokeballs"] is True
     assert nuzlocke_calls(w) == [NUZLOCKE], "missing first-ball Nuzlocke Start! HUD trigger"
+    assert [row[0] for row in w.hud] == ["nuzlocke_start"]
     w.advance(80)
     set_balls(w, 0)
     w.advance(35)
@@ -144,6 +147,7 @@ def test_new_encounter_on_later_debounced_area_entry_and_unresolved_reentry(titl
     w.advance(1)
     assert [e["area_id"] for e in w.events("area_enter")] == ["route_61"]
     assert encounter_calls(w) == [ENCOUNTER], "missing debounced NEW ENCOUNTER HUD trigger"
+    assert w.hud == [ENCOUNTER]
     # SOURCE G3 client.lua:598-608 has no independent shown-once latch while unresolved.
     set_map(w, 60)
     w.advance(2)
@@ -166,6 +170,8 @@ def test_new_encounter_on_later_debounced_area_entry_and_unresolved_reentry(titl
     set_map(w, 61)
     w.advance(2)
     assert [row for row in encounter_calls(w) if row[1] == ENCOUNTER[1]] == [ENCOUNTER] * 3
+    route_60 = ("show", "** NEW ENCOUNTER **  Route 60", 255, 220, 60, 240)
+    assert w.hud == [ENCOUNTER, route_60, ENCOUNTER, route_60, route_60, ENCOUNTER]
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -216,6 +222,7 @@ def test_whiteout_popup_once_per_event_not_per_idle_poll(title, pre=None):
     lose_battle(w)
     assert len(w.events("whiteout")) == 2
     assert whiteout_calls(w) == [WHITEOUT, WHITEOUT]
+    assert w.hud == [WHITEOUT, WHITEOUT]
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -324,11 +331,11 @@ REVERTS = (
 )
 
 
-def without_hud_call(call):
+def client_revert(call, replacement=""):
     def load_mutant(w):
         source = (ROOT / "lua/gen4/client.lua").read_text(encoding="utf-8")
-        assert source.count(call) == 1, "revert control no longer names exactly one production HUD call"
-        mutant = source.replace(call, "")
+        assert source.count(call) == 1, "revert control no longer names exactly one production line"
+        mutant = source.replace(call, replacement)
         real_dofile, load = w.lua.globals().dofile, w.lua.eval("load")
 
         def dofile(path):
@@ -345,4 +352,174 @@ def without_hud_call(call):
 def test_each_hud_trigger_has_a_red_revert_control(title, scenario, call, reason):
     # Removing only presentation must fail the corresponding wire-proven qualification scenario.
     with pytest.raises(AssertionError, match=reason):
-        scenario(title, pre=without_hud_call(call))
+        scenario(title, pre=client_revert(call))
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_landed_d7_cannot_defer_again_when_ending_party_is_unreadable(title, pre=None):
+    # SOURCE core/session.lua:189-200 can defer an ending entry WITHOUT battle_write.
+    # The callback uses the prior battle snapshot (gen4/client.lua d7_plan), so a final
+    # frame may land the write before the field/party copy-back becomes readable.
+    w = armed_faint(title, pre=pre)
+    w.party[0].hp = 0
+    w.write_party()
+    w.field(launched=0, driver_state=0)  # battle has ended, native save checkpoint not ready yet
+    w.fail_party_reads()
+    w.dispatch_seam(cmd=w.d7["seam"]["cmd"])
+    w.advance(1)
+    assert w.read_fault_hits  # the real read layer refused the ending party, no function override
+    assert len(w.writes) == 3
+    assert w.hud == [LINK_FAINT]
+    deferred_at_close = len(w.session.deferred["items"])
+    w.field()
+    w.advance(20)
+    assert w.hud == [LINK_FAINT], "landed D7 produced a second checkpoint KO popup"
+    assert deferred_at_close == 0, "landed D7 was deferred on the unreadable ending frame"
+    assert len(w.writes) == 3  # no deferred faint-slot write
+    assert w.events("faint") == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_transient_save_read_failure_cannot_rearm_nuzlocke_start(title, pre=None):
+    w = boot(title, pre=pre)
+    set_balls(w, 1)
+    w.advance(35)
+    assert nuzlocke_calls(w) == [NUZLOCKE]
+    set_balls(w, 0)
+    w.run_to((w.frame // 60 + 1) * 60 - 1)
+    w.fail_reads(w.prof["save_ptr"]["address"], 4)
+    w.advance(4)  # core validation sees unreadable save, calls on_reset, then read recovers
+    assert w.read_fault_hits
+    assert len(w.events("hello")) == 2
+    set_balls(w, 1)
+    w.advance(35)
+    assert nuzlocke_calls(w) == [NUZLOCKE], "transient save failure rearmed Nuzlocke Start"
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_transient_save_read_failure_cannot_lose_the_first_ball_edge(title):
+    w = boot(title)
+    assert nuzlocke_calls(w) == []
+    w.run_to((w.frame // 60 + 1) * 60 - 1)
+    w.fail_reads(w.prof["save_ptr"]["address"], 4)
+    set_balls(w, 1)
+    w.advance(35)
+    assert w.read_fault_hits
+    assert w.events("tick")[-1]["has_pokeballs"] is True
+    assert nuzlocke_calls(w) == [NUZLOCKE], "transient save failure lost the first-ball edge"
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_readable_empty_new_game_rearms_nuzlocke_start(title, pre=None):
+    w = boot(title, pre=pre)
+    set_balls(w, 1)
+    w.advance(35)
+    assert nuzlocke_calls(w) == [NUZLOCKE]
+    old_party = w.party
+    w.party = []
+    w.write_party()
+    trainer = w.prof["trainer"]
+    trainer_id = w.dyn + w.arrays[trainer["array_id"]][1] + trainer["profile_off_in_array"] + trainer["id_off"]
+    w.w(trainer_id, 0)  # SOURCE drv.game_is_live: readable OT=0 AND party count=0 is pre-game
+    set_balls(w, 0)
+    w.advance(65)
+    w.w(trainer_id, 0x12345678)
+    w.party = old_party
+    w.write_party()
+    w.advance(4)
+    assert len(w.events("hello")) == 2
+    assert w.events("hello")[-1]["has_pokeballs"] is False, "new game kept the old ball latch"
+    set_balls(w, 1)
+    w.advance(35)
+    assert nuzlocke_calls(w) == [NUZLOCKE, NUZLOCKE]
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_latched_balls_still_resolve_no_catch_after_the_bag_is_empty(title, pre=None):
+    # SOURCE G3 client.lua:405-410,656-659: acquiring balls starts the run permanently.
+    w = boot(title, pre=pre)
+    set_balls(w, 1)
+    w.advance(35)
+    set_balls(w, 0)
+    w.advance(35)
+    assert w.events("tick")[-1]["has_pokeballs"] is True
+    # A transient validation reset clears PE's independent upward latch. This prevents
+    # that older latch from masking a regression to raw empty-bag snapshots in the driver.
+    w.run_to((w.frame // 60 + 1) * 60 - 1)
+    w.fail_reads(w.prof["save_ptr"]["address"], 4)
+    w.advance(4)
+    assert w.read_fault_hits
+    w.enter_battle()
+    w.advance(5)
+    w.leave_battle()
+    w.advance(12)
+    assert [{k: e[k] for k in ("area_id", "species_id", "level")} for e in w.events("no_catch")] == [
+        {"area_id": "route_60", "species_id": 16, "level": 3}], "lost latched no_catch after reducer reset"
+    assert nuzlocke_calls(w) == [NUZLOCKE]
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_completed_noop_cannot_become_a_checkpoint_ko_on_unreadable_close(title):
+    w = armed_faint(title)
+    w.set_battle_hp(0, 0)
+    w.party[0].hp = 0
+    w.put(w.battle_party_rec(0), w.party[0].party_raw())  # coherent native zero in BOTH battle copies
+    w.write_party()
+    w.field(launched=0, driver_state=0)
+    w.fail_party_reads()
+    w.dispatch_seam(cmd=w.d7["seam"]["cmd"])
+    w.advance(1)
+    assert w.read_fault_hits
+    assert w.writes == []
+    assert any("target already at zero" in row for row in w.logs)
+    assert len(w.session.deferred["items"]) == 0
+    w.field()
+    w.advance(20)
+    assert w.writes == []
+    assert w.hud == []  # the native game's own faint was never our commanded KO
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_retiring_one_d7_preserves_the_other_owed_faint(title):
+    w = boot(title)
+    w.enter_battle(btype=2, local=((0, 0), (2, 1)))
+    w.advance(3)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key, "nickname": "Ember"},
+            {"cmd": "force_faint", "key": w.party[1].key, "nickname": "Other"})
+    w.advance(1)
+    w.party[0].hp = 0
+    w.write_party()
+    w.field(launched=0, driver_state=0)
+    w.fail_party_reads()
+    w.dispatch_seam(cmd=w.d7["seam"]["cmd"])
+    w.advance(1)
+    assert w.read_fault_hits
+    assert len(w.writes) == 3
+    assert [e["key"] for e in w.session.deferred["items"].values()] == [w.party[1].key]
+    w.field()
+    w.advance(20)
+    assert len(w.writes) == 4  # other entry still lands its checkpoint party-HP write
+    assert w.hud == [LINK_FAINT, ("show", "!! Other KO'd", 255, 80, 80, 360)]
+
+
+REVIEW_REVERTS = (
+    (test_latched_balls_still_resolve_no_catch_after_the_bag_is_empty,
+     "has_pokeballs = has_pokeballs(true) }",
+     "has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false }",
+     "lost latched no_catch after reducer reset"),
+    (test_landed_d7_cannot_defer_again_when_ending_party_is_unreadable,
+     "table.remove(session.battle_pending, i)", "", "second checkpoint KO"),
+    (test_transient_save_read_failure_cannot_rearm_nuzlocke_start,
+     "if trainer and trainer.otid == 0 and cleared_party and #cleared_party == 0 then",
+     "if true then", "transient save failure rearmed"),
+    (test_readable_empty_new_game_rearms_nuzlocke_start,
+     "st.has_pokeballs = nil", "", "new game kept the old ball latch"),
+)
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize("scenario,line,replacement,reason", REVIEW_REVERTS,
+                         ids=[row[0].__name__ for row in REVIEW_REVERTS])
+def test_completion_and_save_reset_fixes_have_red_revert_controls(title, scenario, line, replacement, reason):
+    with pytest.raises(AssertionError, match=reason):
+        scenario(title, pre=client_revert(line, replacement))

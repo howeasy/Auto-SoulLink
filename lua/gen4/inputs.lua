@@ -159,8 +159,9 @@ end
 -- true iff some balls-pocket slot holds an id the pack calls a ball with a quantity above zero.
 -- The pack decides WHICH ids are balls; this file adds only the pack's own offsets. A read that
 -- refuses at call time answers nil (unknown), never false: the client's own seam treats a nil
--- answer as "not yet" (client.lua sends `p.has_pokeballs() or false`, and the reducer latches the
--- gate only upward), so a false would be a claim the save never made.
+-- answer as "not yet": client.lua's has_pokeballs latch seeds from the first valid boolean,
+-- then stays true for the run (including an empty/unreadable bag). The reducer also latches
+-- upward. Returning false for a refusal would claim a measured empty bag the save never supplied.
 function Inputs.has_pokeballs(deps)
     local dir, why = pack_dir(deps)
     if not dir then return nil, why end
