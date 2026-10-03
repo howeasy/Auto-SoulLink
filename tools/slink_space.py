@@ -930,21 +930,31 @@ def _remove_path(_repo, a):
 
 
 def _copy_tree(src, dst, move=False):
-    """Copy (or move) a tree without following or copying links; links are recreated after."""
+    """Copy (or move) a tree without following or copying links; links are recreated after.
+    A move copies, checks the destination holds the same files and bytes (links excluded)
+    as the source did, and only then deletes the source."""
     _require_link_detection()
+    before = tree_stats(src)
+    _raw_copy(src, dst)
+    after = tree_stats(dst)
+    if (after["files"], after["size"]) != (before["files"], before["size"]):
+        raise RuntimeError(f"{dst} does not match {src} after the copy ({after['files']} files/"
+                           f"{after['size']} B vs {before['files']}/{before['size']}); "
+                           "source kept")
+    if move:
+        _rmtree(src)
+
+
+def _raw_copy(src, dst) -> None:
     if _IS_WIN:
         flags = ["/E", "/XJ", "/COPY:DAT", "/DCOPY:T", "/R:1", "/W:1", "/NFL", "/NDL", "/NP",
-                 "/NJH", "/NJS"] + (["/MOVE"] if move else [])
+                 "/NJH", "/NJS"]
         r = subprocess.run(["robocopy", src, dst, *flags], capture_output=True, text=True)
         if r.returncode >= 8:
             raise RuntimeError(f"robocopy {src} -> {dst} failed ({r.returncode}): {r.stdout}")
     else:
         shutil.copytree(src, dst, symlinks=True, ignore=lambda d, names: [
             n for n in names if _path_is_link(os.path.join(d, n))])
-    if move:
-        if tree_stats(src)["files"]:
-            raise RuntimeError(f"{src}: files left behind after the move; not deleting it")
-        _rmtree(src)
 
 
 def _relink(dst, links):

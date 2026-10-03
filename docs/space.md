@@ -92,7 +92,8 @@ move-to-work-root moves each kind of item a different way:
   volumes with "Improper link".
 - **Dirty worktree:** `robocopy /E /XJ`, then `git worktree repair`. The old dir is removed only
   if `git status` matches.
-- **Plain dirs:** `robocopy /MOVE /XJ`.
+- **Plain dirs:** `robocopy /E /XJ`, then the source is deleted only if the copy holds the
+  same file count and bytes.
 
 Junctions are never followed. They are recreated at the new path. Link detection reads reparse
 attributes off `lstat`; where those are unavailable, nothing is deleted or copied. The move

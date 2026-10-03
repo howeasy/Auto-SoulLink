@@ -753,6 +753,17 @@ def test_c_drive_content_is_moved_not_deleted(W, monkeypatch):
     assert (lane / "s").exists() and wt.exists() and not pyt.exists()
 
 
+def test_copy_tree_move_verifies_before_deleting_the_source(W, monkeypatch):
+    src = W.tmp / "src-lane"
+    (src / "sub").mkdir(parents=True)
+    (src / "sub" / "state.bin").write_bytes(b"s" * 300)
+    (src / "log.txt").write_text("log")
+    monkeypatch.setattr(ss, "_raw_copy", lambda s, d: os.makedirs(d, exist_ok=True))
+    with pytest.raises(RuntimeError, match="does not match"):
+        ss._copy_tree(str(src), str(W.tmp / "dst-lane"), move=True)
+    assert (src / "sub" / "state.bin").stat().st_size == 300 and (src / "log.txt").exists()
+
+
 def _readd_setup(W, name):
     p = add_wt(W, name, commits=1, old=False)
     head = _git(p, "rev-parse", "HEAD").strip()
