@@ -259,7 +259,11 @@ def process_scan_problem() -> str | None:
 
 _CWDS: dict | None = None
 _CWD_MISSING: list = []
-# PEB.ProcessParameters and RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath offsets
+# (PEB.ProcessParameters, RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath) offsets.
+# x64: PEB+0x20, params+0x38 (ntdll PEB / RTL_USER_PROCESS_PARAMETERS layouts, e.g. the
+# Process Hacker phnt headers). WOW64: the 32-bit PEB from NtQueryInformationProcess class
+# 26 (ProcessWow64Information; NULL for a native process), PEB32+0x10, params32+0x24.
+# Cross-checked 2026-10-02 against three live WOW64 processes and a SysWOW64\cmd.exe test.
 _PEB64 = (0x20, 0x38)
 _PEB32 = (0x10, 0x24)
 
@@ -310,7 +314,7 @@ def _win_cwd(pid: int) -> str | None:
         ustr = read(params + d_off, 2 * ptr)  # UNICODE_STRING: Length, Max, [pad], Buffer
         length, buf = u(ustr[:2]), u(ustr[ptr:2 * ptr])
         return read(buf, length).decode("utf-16-le") if length and buf else None
-    except OSError:
+    except Exception:  # torn read, odd-length buffer, ...: unreadable, never a crash
         return None
     finally:
         k.CloseHandle(h)
@@ -332,7 +336,10 @@ def _cwds() -> dict[int, str]:
     if _CWDS is None:
         out, missing = {}, []
         for pid, _ in processes():
-            cwd = _proc_cwd(pid)
+            try:
+                cwd = _proc_cwd(pid)
+            except Exception:
+                cwd = None  # counted as unreadable below: the scan is incomplete, not crashed
             if cwd:
                 out[pid] = cwd
             elif pid != os.getpid() and pid_alive(pid):

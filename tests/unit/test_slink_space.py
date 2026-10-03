@@ -527,6 +527,37 @@ def test_unreadable_cwd_of_a_live_process_refuses_everything(W, monkeypatch):
         proc.wait()
 
 
+def test_a_cwd_read_that_raises_makes_the_scan_incomplete(W, monkeypatch):
+    proc = _sleeper(W.tmp)
+    try:
+        def garbled(pid):
+            raise UnicodeDecodeError("utf-16-le", b"\xff", 0, 1, "odd length")
+        _scan_breaks(monkeypatch, lambda: [(proc.pid, "app.exe")], cwd=garbled)
+        assert "incomplete" in ss.process_scan_problem()
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+@pytest.mark.skipif(os.name != "nt" or not os.path.exists(
+    os.path.expandvars(r"%SystemRoot%\SysWOW64\cmd.exe")), reason="needs Windows SysWOW64")
+def test_win_cwd_reads_a_32bit_process(W):
+    where = W.tmp / "wow64 cwd"
+    where.mkdir()
+    cmd32 = os.path.expandvars(r"%SystemRoot%\SysWOW64\cmd.exe")
+    proc = subprocess.Popen([cmd32, "/c", "ping -n 30 127.0.0.1 >nul"], cwd=str(where))
+    try:
+        for _ in range(50):
+            got = ss._win_cwd(proc.pid)
+            if got:
+                break
+            time.sleep(0.1)
+        assert ss._norm(got) == ss._norm(where)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
 def test_users_of_matches_whole_path_components(W, monkeypatch):
     base = W.c.as_posix()
     monkeypatch.setattr(ss, "processes", lambda: [(4242, f"tool {base}/slink-cache/f.bin"),
