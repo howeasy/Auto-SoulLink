@@ -526,11 +526,11 @@ PC_FACE = "Up"
 PC_BEHAVIOR = 0x83
 
 # The PC WITHDRAW leg (box -> party). Every input names its SOURCE (pokeheartgold @ad7a3afa, see
-# docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"); `inferred` marks a step with no source line, which the
+# docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 3"); `inferred` marks a step with no source line, which the
 # Lua polls by a RAM signal instead of trusting. A full party is refused by the source itself
 # (ov14_021F13B0, :23513-23514 takes a branch that never schedules the commit), and the leg
 # refuses it by name before any input, because the run's SYNTH fixture must have room.
-WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
+WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; data+0x21 is the cached selection byte, see below)
 # Opcode 752 MenuExec uses ov27's touchscreen grid (NOT opcode 67's 2D menu).
 # scrcmd_c.c:5025-5032 -> ov01_021F6ABC(fs,3,7,p_ret); overlay_27.s
 # ov27_0225CA68 indexes the neighbor tables by count-2. For 5/6 items, index0
