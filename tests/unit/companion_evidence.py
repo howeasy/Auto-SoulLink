@@ -26,5 +26,13 @@ def companion(rom_type: str) -> dict:
 
 
 def patched(hello: dict) -> dict:
-    """`hello` with the companion evidence for its rom_type merged under any field it already sets."""
-    return {**companion(hello.get("rom_type", "")), **hello}
+    """`hello` with the companion evidence for its rom_type merged under any field it already sets.
+
+    The caller's artifact_kind wins (a "clean" Gen 1/Gen 3 half keeps committing "clean"): the evidence for
+    those families is the panel / `companion_abi` field, not the kind. pureRGB's evidence IS the kind, so
+    a non-overlay kind is lifted to "overlay" there.
+    """
+    merged = {**companion(hello.get("rom_type", "")), **hello}
+    if str(hello.get("rom_type", "")).lower() in _PURE and merged.get("artifact_kind") not in ("overlay", "rand_overlay"):
+        merged["artifact_kind"] = "overlay"
+    return merged

@@ -26,7 +26,7 @@ from server.adapters import (
 from server.adapters.gen2_gsc import _TITLE_FOR_ROM_TYPE, Gen2GSCAdapter
 from server.server import SLinkServer
 from tests.unit.test_mixed_foundations import _hello, _refused, _session
-from tests.unit.companion_evidence import companion
+from tests.unit.companion_evidence import patched
 
 TITLE = {"Crystal": "crystal", "crystal": "crystal", "Gold": "gold", "gold": "gold",
          "Silver": "silver", "silver": "silver"}
@@ -37,8 +37,8 @@ AP = ("Crystal (AP)", "crystal_ap")
 def _cart(rom_type):
     cart = {"rom_type": rom_type, "artifact_kind": "clean"}
     if rom_type.lower() not in ("crystal", "gold", "silver"):
-        # a Gen 1 / Gen 3 half connects PATCHED (companion required, owner 2026-10-02)
-        cart.update(companion(rom_type))
+        # a Gen 1 / Gen 3 half connects PATCHED (companion required, owner 2026-10-02); its kind is not the evidence
+        cart = patched(cart)
     return cart
 
 

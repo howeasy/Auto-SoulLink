@@ -30,7 +30,7 @@ from server.adapters import (
 )
 from server.server import SLinkServer
 from server.state import LinkEntry, LinkStatus, MonInfo
-from tests.unit.companion_evidence import companion
+from tests.unit.companion_evidence import patched
 from tests.unit.test_mixed_foundations import _hello, _refused, _session, _snapshot
 
 REPO = Path(__file__).resolve().parents[2]
@@ -44,8 +44,8 @@ def _cart(rom_type: str, declare: bool = False) -> dict:
     cart = {"rom_type": rom_type, "artifact_kind": "clean"}
     if rom_type.lower() not in ("crystal", "gold", "silver"):
         # a Gen 1 / Gen 3 half connects PATCHED: the server refuses a clean companion-title hello before the
-        # mixed-games gate this matrix is about (companion required, owner 2026-10-02)
-        cart.update(companion(rom_type))
+        # mixed-games gate this matrix is about (companion required, owner 2026-10-02); its kind is not the evidence
+        cart = patched(cart)
     if declare:  # the new client (lua/gen2/client.lua) declares it; the legacy one omits it
         cart["foundation"] = "gen2_gsc"
     return cart

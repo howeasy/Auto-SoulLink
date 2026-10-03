@@ -36,10 +36,10 @@ from .base import GameAdapter, companion_required_reason, humanize_area_id
 
 log = logging.getLogger(__name__)
 
-_DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen3_frlge"
+_GAMES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "games"
 )
+_DATA_DIR = os.path.join(_GAMES_DIR, "gen3_frlge")
 
 # rom_type -> the data pack whose profile.json pins the companion mailbox ABI (profile.native.ABI). The ABI
 # is read from the pack, never hard-coded per title, so a later companion (the Emerald Expansion's) only needs
@@ -50,7 +50,7 @@ _COMPANION_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald":
 
 @cache
 def _companion_abi(pack: str) -> int | None:
-    path = os.path.join(os.path.dirname(_DATA_DIR), pack, "profile.json")
+    path = os.path.join(_GAMES_DIR, pack, "profile.json")
     try:
         with open(path, encoding="utf-8") as fh:
             abi = json.load(fh)["native"]["ABI"]
@@ -92,7 +92,7 @@ _DAYCARE_AREAS = frozenset({
 # id: the egg is handed over on wild Route 117 (pret data/maps/Route117/map.json:65), and a
 # daycare id there would let an egg consume that route. A missing pack file leaves the sets empty rather than breaking the
 # import for every game.
-_EMERALD_DIR = os.path.join(os.path.dirname(_DATA_DIR), "gen3_emerald")
+_EMERALD_DIR = os.path.join(_GAMES_DIR, "gen3_emerald")
 
 
 def _emerald_json(name: str) -> dict:

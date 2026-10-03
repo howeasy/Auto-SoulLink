@@ -49,6 +49,14 @@ def test_gen1_rby_admits_a_cartridge_that_reports_the_mailbox(rom_type, kind):
     assert _refusal({"rom_type": rom_type, "artifact_kind": kind, "panel": True}) is None
 
 
+def test_patched_keeps_the_callers_artifact_kind_except_where_the_kind_is_the_evidence():
+    from tests.unit.companion_evidence import patched
+    for rom_type in ("red", "firered", "emerald", "firered_rr"):
+        assert patched({"rom_type": rom_type, "artifact_kind": "clean"})["artifact_kind"] == "clean", rom_type
+    assert patched({"rom_type": "purered", "artifact_kind": "clean"})["artifact_kind"] == "overlay"
+    assert patched({"rom_type": "purered", "artifact_kind": "rand_overlay"})["artifact_kind"] == "rand_overlay"
+
+
 def test_a_patched_red_still_pairs_with_a_clean_yellow():
     """pairing_kind keeps mapping named -> clean on purpose: Yellow stays admitted clean and a patched
     Red/Blue (kind named) must keep linking with it, the family rule (Red, Blue and Yellow share one run)."""
@@ -192,6 +200,20 @@ async def test_every_family_is_refused_by_the_server_when_clean(tmp_path, rom_ty
 
 
 @pytest.mark.asyncio
+async def test_a_companion_hello_carrying_another_packs_abi_is_refused_on_the_wire(tmp_path):
+    """Firered pins ABI 2; a hello that says "companion" with Radical Red's ABI 1 is cross-pack evidence."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        reply = await send(_hello("firered", artifact_kind="companion", companion_abi=1))
+        assert any(c.get("cmd") == "hud_show" and "COMPANION" in c.get("text", "") for c in reply["commands"])
+        assert REASON in srv.state.identity_error["a"]
+        assert not srv.state.rom_type
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("rom_type", ["firered", "leafgreen", "emerald"])
 async def test_a_randomized_gen3_hello_needs_the_mailbox_evidence_on_the_wire(tmp_path, rom_type):
     """Review F1: randomized-clean used to be admitted (`rand` passed the adapter). With no companion_abi the
@@ -255,6 +277,7 @@ def test_gen3_hello_publishes_companion_abi_only_from_the_cartridges_own_live_ma
     assert w.client.driver.hello_fields().companion_abi is None, "another ABI is not this pack's companion"
     w.poke_int(nat["BASE"] + 4, nat["ABI"], 2)
     assert w.client.driver.hello_fields().companion_abi == nat["ABI"]
+    assert "companion_abi" not in w.client.driver.tick_fields(), "the evidence is hello-time only"
     w.poke_int(nat["BASE"], nat["SIG"] ^ 1, 4)
     assert w.client.driver.hello_fields().companion_abi is None, "a wrong signature withdraws the evidence"
 
