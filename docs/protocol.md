@@ -258,8 +258,8 @@ Built by `party_wire`/`party_entry` (`lua/gen3/client.lua:297-316`, fields at `:
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:2202`, `server.py:2772-2775` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:2196-2213` |
 | `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3401-3402`, `server.py:3279`, `server.py:2425-2427` |
-| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_pill` macro (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3400`, `server.py:1819`, `server/templates/_macros.html:43-53` |
-| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_row(stages, labels)` macro — `(raw\|int)-6` | `server/templates/_macros.html:64-83`, `server.py:3401`, `lua/gen3/reads.lua:675-687` |
+| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_pill` macro (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3401`, `server.py:1819`, `server/templates/_macros.html:43-53` |
+| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_row(stages, labels)` macro — `(raw\|int)-6` | `server/templates/_macros.html:64-83`, `server.py:3402`, `lua/gen3/reads.lua:675-687` |
 | `moves` | list[4] int move ids | optional | `move_details` via `adapter.move_data` | `server.py:2757-2789` |
 | `pp` | list[4] int | optional | `current_pp` | `server.py:2768-2775` |
 | `pp_bonuses` | int (2 bits/move, Gen 3) **or** `pp_ups: list[4]` (Gen 4) | optional | max PP scaling `base + base*ups//5` | `server.py:2760-2776` |
@@ -282,7 +282,7 @@ Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry;
 | `trainer_id` | int | `adapter.trainer_info(tid)` → opponent name/class; if the adapter returns no class, `opponent_name`/`opponent_class` from the tick are accepted instead | `server.py:2438-2452` |
 | `opponent_name`, `opponent_class` | str | non-RR fallback for trainer display and killfeed | `server.py:3420-3428` |
 | `enemy_party` | list[FoeEntry] (§4.3); `[]` when not in battle | sanitised on EVERY inbound message before dispatch (non-list ⇒ `[]`, non-dict entries dropped); then battle panel, killer enrichment, dupes check (`[0].species_id`) | `server.py:2065-2080`, `server.py:2434-2435`, `2516-2527`, `2164-2165` |
-| `is_doubles` | bool | doubles chip; if absent, inferred from >1 `active` foe | `server.py:2436-2442`, `2967` |
+| `is_doubles` | bool | doubles chip; if absent, inferred from >1 `active` foe | `server.py:2437-2443`, `2967` |
 | `pc_boxes` | list[BoxEntry] (§4.4), full cache every tick | box table, memorial contamination scan, `_mon_cache` | `server.py:2425-2431` |
 | `badges` | int bitmask | 8 gym circles, badges overlay, compact panel popcount | `server.py:2419-2420`, `3277-3296` |
 | `kanto_badges` | int bitmask | second-region badges (Gen 4) | `server.py:2421-2422`, `3277-3296` |
@@ -298,8 +298,8 @@ Gen 3 builds it from `r.read_enemy_party()` (`lua/gen3/reads.lua:657-674`) overl
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `species_id` | int | name, sprite, killer species, `/api/calc/mons` entry | `server.py:2838-2845`, `2357-2364`, `2651`, `2655` |
-| `level` | int | display, killer level, calc entry | `server.py:2363`, `2656` |
+| `species_id` | int | name, sprite, killer species, `/api/calc/mons` entry | `server.py:2839-2846`, `2357-2364`, `2651`, `2655` |
+| `level` | int | display, killer level, calc entry | `server.py:2364`, `2656` |
 | `hp`, `maxHP` | int | HP bar; "active foe" for killer/calc preview = first with `hp > 0` | `server.py:1186-1187`, `2658`, `2662` |
 | `active` | bool | active marker, doubles inference, calc preview | `server.py:3324`, `1993-1995`, `2680` |
 | `ability_id`, `held_item_id`, `status_cond`, `stat_stages`, `moves`, `pp`, `form`, `key` | as §4.1 | battle panel enrichment, calc entry | `server.py:2560-2577`, `2663-2668` |
@@ -313,7 +313,7 @@ Built by `rescan_boxes` (`lua/gen3/client.lua:335-351`, entry at `:338-343`): th
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
 | `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5178`, `4652`, `4701` |
-| `slot` | int, 0-based | display `slot+1`, logs | `server.py:4542`, `4702` |
+| `slot` | int, 0-based | display `slot+1`, logs | `server.py:4543`, `4702` |
 | `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1937-1983`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:2784-2793` (`_enrich_box`, wire-through to the template) |
 | `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5250-5269` |
@@ -325,13 +325,13 @@ There is **no** "active box index" on the wire.
 
 | Builder | Reads | Adapter calls |
 |---|---|---|
-| `_build_status_dict` `server.py:2747-3033` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
-| `_handle_dashboard_template` `server.py:3053-3070` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities`, `stat_stage_labels` (`server/ui_capabilities.py:26-30`), `gender_from_key`, `item_name`, `ability_description`, `species_types`/`type_name`, `memorial_box_index`, `trainer_info` |
+| `_build_status_dict` `server.py:2751-3037` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
+| `_handle_dashboard_template` `server.py:3057-3074` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities`, `stat_stage_labels` (`server/ui_capabilities.py:26-30`), `gender_from_key`, `item_name`, `ability_description`, `species_types`/`type_name`, `memorial_box_index`, `trainer_info` |
 | `_build_link_panel` `server.py:1816-1924` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
-| `_build_party_overlay_context` `server.py:3233-3281` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
-| `_build_badges_overlay_context` `server.py:3664-3684` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
+| `_build_party_overlay_context` `server.py:3237-3285` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
+| `_build_badges_overlay_context` `server.py:3668-3688` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
 | `_check_memorial_box_contamination` `server.py:5139-5238` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
-| `_memorial_box_indices` `server.py:5023-5042` | dead count | `memorial_box_index`, `mons_per_box` |
+| `_memorial_box_indices` `server.py:5027-5046` | dead count | `memorial_box_index`, `mons_per_box` |
 
 `status_pill` (`server/templates/_macros.html:43-53`) decodes `status_cond` with the Gen 3 bit layout directly (SLP bits 0-2, TOX 0x80, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40). A client for a generation with a different layout MUST translate to this layout on the wire (see §8).
 
