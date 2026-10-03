@@ -116,8 +116,8 @@ the bridge (never from an interrupt), and the fade case is held rather than drop
 
 | | Base ROM md5 | Patched md5 (current build) |
 |---|---|---|
-| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a9a70f99008559734ba01a9a80d78d5c` |
-| Blue | `50927e843568814f7ed45ec4f944bd8b` | `fa47b8ba0c10e82f2545791abd157ad3` |
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `c5c715cda8b0fa178ab30f4fd9e4d821` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `cc5d142b0d1c4df8b5e155ded2894e84` |
 
 `patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
 
