@@ -681,6 +681,14 @@ local function validate_n_case(case)
             check(witnessed>0,"closing-frame event absent at close")
         end
 end
+-- The pack's battle_close case must carry close_boundary=true: a missing or non-boolean flag is a
+-- named OPEN, never a silently skipped closing-frame oracle (OMP cx-3d38711e).
+function M.close_boundary_required(case)
+    if case.name=="battle_close" and case.close_boundary~=true then
+        error({open="n:battle_close case without pack close_boundary"},0)
+    end
+    return case.close_boundary==true
+end
 function M.evaluate_n_case(physical)
     local ok,why=pcall(function() validate_n_case(need(physical,"n:physical phase case")) end)
     if ok then return "PASS" end
@@ -698,6 +706,9 @@ validators.n=function(x)
     local cases=need(p.cases,"n:per-phase case measurements")
     check(#cases>0,"no measured phase cases")
     for _,case in ipairs(cases) do validate_n_case(case) end
+    local closing=false
+    for _,case in ipairs(cases) do if case.close_boundary_required==true then closing=true end end
+    check(closing,"no closing-frame boundary case")
     check(p.first_expected>0 and p.first_seen==p.first_expected and p.last_seen==p.last_expected and p.last_expected>0,
         "first/last producer lost")
     check(p.static_pc and p.reset and p.peak<=4 and p.live_after_close==0,"phase coverage/accounting")
@@ -1249,7 +1260,7 @@ local function run()
                     static_pc=M.static_pc(case,producer),reset=case.name=="reset",peak=composite.peak+1,
                     live_after_close=composite:live_handles(),max_cost=maxcost,restored_fps=restored,baseline_fps=baseline,
                     pending_at_close=state.pending_at_close,second_drain=state.second_drain,
-                    close_boundaries=state.close_boundaries,close_boundary_required=case.close_boundary==true,
+                    close_boundaries=state.close_boundaries,close_boundary_required=M.close_boundary_required(case),
                     fixture_role=cfg.scenario_role or "baseline",setup=cfg.setup or "NATIVE",sidecar_sha256=cfg.sidecar_sha256,
                     oracle_frames=oracle,seen_frames=seen,oracle_steps=oracle_steps,seen_steps=state.seen_steps,
                     frame_parity={status="OPEN",note="callback/fall/close framecount mapping requires first PHYSICAL boundary diagnostic"},phase=case.name,predicate_source=case.source}

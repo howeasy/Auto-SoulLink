@@ -256,10 +256,25 @@ def examples():
               "physical": {"first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
                            "static_pc": True, "reset": True, "peak": 3, "live_after_close": 0,
                            "pending_at_close": 1, "second_drain": 0,
+                           # orchestration MODELs reuse this block as each phase case's measurement: it is a
+                           # valid closing-frame case so the aggregate's battle_close requirement is met
+                           "close_boundary_required": True, "oracle_frames": [7], "seen_frames": [7],
+                           "oracle_steps": [1], "seen_steps": [1],
+                           "close_boundaries": [{"frame": 7, "pending": 1, "predicate_before": True, "predicate_after": False,
+                                                 "producer_frames": [7], "producer_steps": [1], "fall_step_id": 1,
+                                                 "seam": "pre_close"}],
                            "cases": [{"phase": name, "first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
                                       "peak": 3, "live_after_close": 0, "second_drain": 0,
                                       "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}
-                                     for name in ("battle", "pc", "reset")],
+                                     for name in ("battle", "pc", "reset")] + [
+                               {"phase": "battle_close", "first_expected": 1, "first_seen": 1, "last_expected": 1, "last_seen": 1,
+                                "peak": 3, "live_after_close": 0, "second_drain": 0,
+                                "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200,
+                                "close_boundary_required": True, "oracle_frames": [7], "seen_frames": [7],
+                                "oracle_steps": [1], "seen_steps": [1],
+                                "close_boundaries": [{"frame": 7, "pending": 1, "predicate_before": True, "predicate_after": False,
+                                                      "producer_frames": [7], "producer_steps": [1], "fall_step_id": 1,
+                                                      "seam": "pre_close"}]}],
                            "max_cost": 0.001, "restored_fps": 200, "baseline_fps": 200}},
     }
 
@@ -2566,6 +2581,32 @@ def test_static_pc_never_labels_an_overlay_as_arm9(api):
     assert api.static_pc(case, to_lua(r, {"image": "ov129", "overlay_id": 129})) is False
     assert api.static_pc(case, to_lua(r, {"image": "arm9", "overlay_id": 129})) is False
     assert api.static_pc(case, to_lua(r, {"image": "arm9"})) is True
+
+
+def test_aggregate_n_requires_a_witnessed_closing_frame_case(api):
+    # OMP cx-3d38711e F5/F6: a summed pending_at_close from an unrelated case must not stand in for the oracle.
+    r = api._runtime
+    good = examples()["n"]
+    assert api.evaluate("n", to_lua(r, good)) == "PASS"
+    bad = copy.deepcopy(good)
+    bad["physical"]["cases"] = [c for c in bad["physical"]["cases"] if not c.get("close_boundary_required")]
+    status, why = api.evaluate("n", to_lua(r, bad))
+    assert status == "FAIL" and "no closing-frame boundary case" in why
+
+
+def test_battle_close_flag_fails_closed_on_the_lua_copy(api):
+    # OMP cx-3d38711e F2/F3: the pack-to-Lua copy of close_boundary must never silently skip the oracle.
+    r = api._runtime
+    assert api.close_boundary_required(to_lua(r, {"name": "battle_close", "close_boundary": True})) is True
+    assert api.close_boundary_required(to_lua(r, {"name": "battle", "phase": "battle"})) is False
+    for case in ({"name": "battle_close"}, {"name": "battle_close", "close_boundary": "true"},
+                 {"name": "battle_close", "close_boundary": 1}):
+        ok, why = r.globals().pcall(api.close_boundary_required, to_lua(r, case))
+        assert not ok and dict(why.items()).get("open") == "n:battle_close case without pack close_boundary"
+    # the measurement copies the flag only through this function (no second derivation to drift)
+    source = (REPO / "lua/tests/probe_gen4_hooks.lua").read_text(encoding="utf-8")
+    assert source.count("close_boundary_required=M.close_boundary_required(case)") == 1
+    assert len(re.findall(r"close_boundary_required=(?!=)", source)) == 1
 
 
 def test_closing_frame_validator_requires_the_oracle_and_one_delivery(api):
