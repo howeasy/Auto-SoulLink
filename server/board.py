@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import re
 
+from server.adapters.base import companion_required_reason
+
+_COMPANION_REFUSAL = re.compile(re.escape(companion_required_reason("{title}")).replace(re.escape("{title}"), ".+"))
+
 SECTION_LABELS = {
     "party": "In party",
     "pending": "Pending link",
@@ -220,6 +224,9 @@ def connection_state(p: dict, live: bool) -> dict:
     if not live:
         return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
     err = p.get("identity_error") or ""
+    if _COMPANION_REFUSAL.fullmatch(err):
+        return state("companion", "Companion patch required",
+                     "Patch this cartridge using the run's cartridge download or /patcher.")
     if err.startswith("Trade recovery extension unavailable"):
         return state("wrong_game", "Unsupported recovery",
                      f"{err}. Use a client/cartridge build with supported trade recovery.")

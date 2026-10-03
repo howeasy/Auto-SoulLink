@@ -588,3 +588,22 @@ def _battle_sides(board):
     foe = next((n for n in by_class(battle, "mk-cbt") if "foe" in (n.get("class") or "").split()), None)
     assert mine is not None and foe is not None, "the battle drew no own mon / no foe"
     return mine, foe
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connected", [False, True])
+@pytest.mark.parametrize("admission", ["admitted", "rejected"])
+async def test_companion_refusal_renders_patch_advice_not_wrong_save(tmp_path, connected, admission):
+    from server.adapters.base import companion_required_reason
+    from server.board import connection_state
+    reason = companion_required_reason("arbitrary title")
+    player = {"identity_error": reason, "connected": connected, "admission": admission}
+    state = connection_state(player, live=True)
+    assert state["slug"] == "companion" and "patch" in state["label"].lower()
+    assert "cartridge download" in state["line"] and "/patcher" in state["line"]
+    assert connection_state({"identity_error": "Trainer identity mismatch"}, live=True)["slug"] == "identity"
+    server = SLinkServer(data_dir=str(tmp_path))
+    server.state.identity_error["a"] = reason
+    async with TestClient(TestServer(build_app(server))) as client:
+        html = await (await client.get("/")).text()
+    assert "Companion patch required" in html and "Patch this cartridge" in html
