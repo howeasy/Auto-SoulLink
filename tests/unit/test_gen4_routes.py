@@ -2011,7 +2011,10 @@ def test_run_lane_withdraw_refuses_a_full_party_before_touching_the_lane(tmp_pat
 
 
 def test_live_d4_printing_replay_selects_storage_pc_before_down(tmp_path, monkeypatch):
-    # 180-frame print wait: old 60-frame interact wait + 120-frame A spacing
+    # print_frames=180 is a chosen MODEL constant, not measured PHYSICAL timing.
+    # The fake is harsher than the engine: its swallowed press completes printing
+    # immediately, without another continuation acceptance on a held key.
+    # Old 60-frame interact wait + 120-frame A spacing
     # consume A1/A3 in printing; Down reaches Which PC instead of WITHDRAW.
     last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"print_frames":180})
     assert "RESULT PC_WITHDRAW" in last, log
@@ -2028,6 +2031,21 @@ def test_short_printer_wait_control_replays_live_fail_then_reverts(tmp_path,monk
     assert "RESULT PC_WITHDRAW" in last
 
 
+def assert_pc_item_order_and_cursor(scr, command_source):
+    def body(label):
+        text=scr[scr.index(label+':')+len(label)+1:]
+        return re.split(r'\n\w+:',text,maxsplit=1)[0]
+    access=body('_0A2E')
+    for label,msg in [('_0A78','msg_0191_00061'),('_0A82','msg_0191_00062')]:
+        assert re.findall(r'MenuItemAdd\s+(\w+),\s*(\d+),\s*(\d+)',body(label))==[(msg,'255','0')]
+        assert access.index(label)<access.index('MenuItemAdd msg_0191_00063, 255, 1')
+    assert re.findall(r'MenuInitStdGmm\s+(\d+),\s*(\d+),\s*(\d+),\s*(\d+)',access)==[('1','1','0','1')]
+    assert 'MenuItemAdd msg_0191_00063, 255, 1' in access
+    block=command_source[command_source.index('static void sub_02041770('):][:650]
+    assert re.findall(r'u8\s+(\w+)\s*=\s*ScriptReadByte\(ctx\)',block)==['x','y','initCursorPos','cancellable']
+    assert ', initCursorPos, cancellable,' in block
+
+
 def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     import xml.etree.ElementTree as ET
     scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
@@ -2038,7 +2056,7 @@ def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     assert r"\r" not in message(34) and '{YESNO 0}' in message(34)
     assert gr.WITHDRAW_SCRIPT_A==2+1  # two carriage waits plus storage-PC choice
     assert gr.WITHDRAW_RECOVER_A==0  # _0C01 NonNPCMsg, no carriage wait
-    assert 'MenuInitStdGmm 1, 1, 0, 1' in scr
+    assert_pc_item_order_and_cursor(scr,(PRET/'src/scrcmd_c.c').read_text())
     render=(PRET/'src/render_text.c').read_text()
     focus=render[render.index('case 0x200:'):render.index('case 0x207:')]
     assert 'RenderScreenFocusIndicatorTile' in focus and 'printer->state =' not in focus
@@ -2047,3 +2065,24 @@ def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     assert 'return IsPrintFinished(*textPrinterNumPtr);' in code
     nonnpc=code[code.index('BOOL ScrCmd_NonNPCMsg('):code.index('BOOL ScrCmd_NonNPCMsgExtern(')]
     assert 'SetupNativeScript' not in nonnpc and 'return FALSE;' in nonnpc
+
+
+@pytest.mark.parametrize("old,new",[
+    ('MenuItemAdd msg_0191_00061, 255, 0','MenuItemAdd msg_0191_00061, 255, 1'),
+    ('MenuItemAdd msg_0191_00062, 255, 0','MenuItemAdd msg_0191_00062, 255, 1'),
+    ('MenuInitStdGmm 1, 1, 0, 1','MenuInitStdGmm 1, 1, 1, 1'),
+])
+def test_pc_order_cursor_controls_red_revert(old,new):
+    scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
+    code=(PRET/'src/scrcmd_c.c').read_text()
+    assert_pc_item_order_and_cursor(scr,code)
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr.replace(old,new),code)
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr,code.replace('u8 initCursorPos = ScriptReadByte(ctx);','u8 initCursorPos = ScriptReadHalfword(ctx);'))
+    a=scr.index('\tCallIfUnset FLAG_SYS_MET_BILL, _0A78',scr.index('_0A2E:'))
+    b=scr.index('\tGoToIfSet FLAG_GAME_CLEAR',a)
+    region=scr[a:b].splitlines()
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr[:a]+'\n'.join([region[-1],*region[:-1]])+'\n'+scr[b:],code)
+    assert_pc_item_order_and_cursor(scr,code)

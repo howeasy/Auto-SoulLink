@@ -530,8 +530,8 @@ WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
 # {YESNO 0} in msg34 draws a focus indicator, NOT a blocking YesNo question:
 # charmap.txt:2889 and render_text.c:158-168. MenuInit cursor0: scrcmd_c.c:988-997.
 # A during printing only speeds printing (render_text.c:95-105), and cannot also
-# satisfy the later \r/menu. Replay wd-hg-1003033806 showed this failure. Wait
-# before each semantic A using the EXISTING 900-frame launch bound, not extra
+# satisfy the later \r/menu. Replay wd-hg-1003033806 showed this failure. Waits the
+# existing 900-frame bound before each semantic A, not extra
 # A-mash (which would choose DEPOSIT once the storage menu is reached).
 # _0C01 returns via NonNPCMsg (instant print, no \r in msg34) straight to _0B53:
 # scr_seq_0003.s:879-885; scrcmd_message.c:45-50,226-232. Thus recover_a=0.

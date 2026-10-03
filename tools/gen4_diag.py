@@ -32,13 +32,13 @@ def sha256(path):
 
 
 def emulator_settings(settings, applied_rate):
-    """Ignore UI/history autosaves; freeze NDS execution, pacing and private paths."""
-    keys = ('FrameSkip','AutoMinimizeSkipping','ClockThrottle','VSyncThrottle','SuperHawkThrottle',
+    """Freeze listed pacing/audio/rewind keys, NDS sync/core, firmware and all NDS paths; ignore UI/history."""
+    keys = ('Unthrottled','FrameSkip','AutoMinimizeSkipping','ClockThrottle','VSyncThrottle','SuperHawkThrottle',
             'SoundEnabled','SoundEnabledNormal','SoundEnabledRWFF','SoundVolume','Rewind')
     return {**{k:settings.get(k) for k in keys}, 'SpeedPercent':applied_rate,
             'NDS_sync':settings['CoreSyncSettings'][g4.NDS_CORE],
-            'NDS_paths':[p for p in settings['PathEntries']['Paths'] if p.get('System')=='NDS'
-                         and p.get('Type') in {'Save RAM','Savestates','Screenshots'}]}
+            'NDS_core':settings['CoreSettings'][g4.NDS_CORE],
+            'NDS_paths':[p for p in settings['PathEntries']['Paths'] if p.get('System')=='NDS' or p.get('Type')=='Firmware']}
 
 
 def emulator_config_audit(config):
@@ -46,7 +46,7 @@ def emulator_config_audit(config):
     if not item:
         return None  # MODEL collector seams without an emulator configuration.
     path=Path(item['path'])
-    settings=json.loads(path.read_text())
+    settings=json.loads(path.read_text(encoding='utf-8-sig'))
     valid=emulator_settings(settings, config['requested_rate'])==item['expected_settings']
     # Compare the actual applied rate, not a projection that would replace it.
     valid=valid and settings.get('SpeedPercent')==config['requested_rate']
@@ -228,13 +228,28 @@ function D.settle_trace(sites)
     for _,s in ipairs(sites) do trace.sites[#trace.sites+1]=s.id end
     return trace
 end
-function D.begin_settle(sites,resident,bytes,frame)
+function D.any_region_resident(t,read,id)
+    assert(t.regions==3 and t.per_region==8 and t.entry_size==8,"overlay table geometry")
+    for region=0,t.regions-1 do
+        for slot=0,t.per_region-1 do
+            local p=t.address+(region*t.per_region+slot)*t.entry_size
+            if read(p+t.active_off)~=0 and read(p+t.id_off)==id then return true end
+        end
+    end
+    return false
+end
+function D.begin_settle(sites,resident,bytes,frame,any_resident)
     local trace=D.settle_trace(sites)
-    trace.attach_frame=frame; trace.can_proceed=true
+    trace.attach_frame=frame
     -- PHYSICAL: b809 D2 hge/SS first Lua observation is frame 1, with all sites
     -- inactive (d2-{hge,ss}-1003033806/observation.json). The counter's origin
     -- is not a censoring oracle; only each site's initial flag/bytes are.
     D.settle_sample(trace,sites,resident,bytes,frame)
+    if any_resident then
+        for _,site in ipairs(sites) do
+            if any_resident(site.overlay_id) then trace.current[site.id].attach_censored=true end
+        end
+    end
     return trace
 end
 function D.settle_sample(trace,sites,resident,bytes,frame)
@@ -442,7 +457,8 @@ local function run()
         result.initial=ready.initial; result.readiness=ready; result.ready_sample=ready.last
     elseif cfg.command=="settle" then
         result.attach_frame=emu.framecount()
-        result.settle=D.begin_settle(cfg.sites,resident,bytes,result.attach_frame)
+        result.settle=D.begin_settle(cfg.sites,resident,bytes,result.attach_frame,
+            function(id) return D.any_region_resident(title.overlay_table,read,id) end)
         result.boot=M.boot("bridge",3000,idle_field,function()
             local fs=read(title.symbols.sFieldSysPtr.address)
             return fs~=0 and read(fs+title.profile.probe_field.live)~=0
@@ -601,7 +617,7 @@ def prepare(args):
         state = lane / "start.State"
         shutil.copyfile(args.state, state)
         cfg["state_path"] = state.as_posix()
-    cfg["hashes"] = {"driver": sha256(Path(__file__)), "generated_lua": sha256(lua), "bizhawk_config": sha256(bizhawk),
+    cfg["hashes"] = {"driver": sha256(Path(__file__)), "generated_lua": sha256(lua),
                      "rom_sha256": sha256(rom), "profile": sha256(profile)}
     cfg['emulator_config']={'path':str(bizhawk),'before_sha256':sha256(bizhawk),
                             'expected_settings':emulator_settings(settings,cfg['requested_rate'])}

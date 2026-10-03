@@ -457,15 +457,16 @@ def test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path, monkey
     assert d.verify_after(cfg)['settings_valid']
 
 
-def test_observed_frame_one_attach_all_inactive_can_proceed():
+def test_observed_frame_one_attach_records_uncensored_delay():
     r=api()
     r.execute('''
       local sites={{id="cold",overlay_id=12,address=20,extent=2,register_hex="aabb"}}
       local trace=DIAG.begin_settle(sites,function() return false end,function() return "0000" end,1)
-      assert(trace.attach_frame==1 and trace.can_proceed==true)
+      assert(trace.attach_frame==1)
       DIAG.settle_sample(trace,sites,function() return true end,function() return "0000" end,10)
       DIAG.settle_sample(trace,sites,function() return true end,function() return "aabb" end,12)
       assert(trace.epochs[1].delta==2 and not trace.epochs[1].left_censored)
+      assert(DIAG.settle_verdict(trace)=="OBSERVED")
       local loaded=DIAG.begin_settle(sites,function() return true end,function() return "aabb" end,1)
       assert(loaded.epochs[1].left_censored and loaded.epochs[1].delta==nil)
       local bytes_first=DIAG.begin_settle(sites,function() return false end,function() return "aabb" end,1)
@@ -513,7 +514,6 @@ def test_old_byte_config_check_is_red_then_semantic_check_reverts(tmp_path, monk
 
 
 @pytest.mark.parametrize("old,new,test",[
-    ("trace.can_proceed=true","trace.can_proceed=frame==0",test_observed_frame_one_attach_all_inactive_can_proceed),
     ("for i=0,limit do","for i=0,0 do",test_initial_hp_zero_waits_bounded_and_refusal_keeps_values),
 ])
 def test_live_instrument_controls_red_revert(monkeypatch,old,new,test):
@@ -575,3 +575,84 @@ def test_first_failure_overwrite_control_red_revert(monkeypatch):
         test_raw_failure_stays_first_when_audit_fails()
     monkeypatch.setattr(d,"record_failure",original)
     test_raw_failure_stays_first_when_audit_fails()
+
+
+@pytest.mark.parametrize("kind",['Unthrottled','TraceArm9Thumb','TraceArm9Arm','NDS_core','Firmware','NDS_Base','NDS_ROM','NDS_Cheats'])
+def test_expanded_config_keys_mutations_refuse_and_revert(tmp_path,kind):
+    import copy
+    import json
+    before=json.loads((d.REPO/'tests/fixtures/gen4/diag_config_autosave_before.json').read_text())
+    after=json.loads((d.REPO/'tests/fixtures/gen4/diag_config_autosave_after.json').read_text())
+    # These are the new key categories; the old projection ignores every one.
+    assert 'Unthrottled' in before and 'CoreSettings' in before
+    path=tmp_path/'bizhawk.ini'
+    path.write_text(json.dumps(after))
+    cfg={'requested_rate':300,'emulator_config':{'path':str(path),'before_sha256':'before',
+         'expected_settings':d.emulator_settings(before,300)}}
+    assert d.emulator_config_audit(cfg)['settings_valid']
+    bad=copy.deepcopy(after)
+    if kind=='Unthrottled':
+        bad[kind]=not bad[kind]
+    elif kind.startswith('TraceArm9'):
+        bad['CoreSettings'][d.g4.NDS_CORE][kind]=not bad['CoreSettings'][d.g4.NDS_CORE].get(kind,False)
+    elif kind=='NDS_core':
+        bad['CoreSettings'][d.g4.NDS_CORE]['unrecognised_new_core_setting']=True
+    else:
+        system='Global_NULL' if kind=='Firmware' else 'NDS'
+        type_={'Firmware':'Firmware','NDS_Base':'Base','NDS_ROM':'ROM','NDS_Cheats':'Cheats'}[kind]
+        item=next(x for x in bad['PathEntries']['Paths'] if x['System']==system and x['Type']==type_)
+        item['Path']='changed'
+    path.write_text(json.dumps(bad))
+    assert not d.emulator_config_audit(cfg)['settings_valid'],kind
+    path.write_text(json.dumps(after))
+    assert d.emulator_config_audit(cfg)['settings_valid']
+
+
+@pytest.mark.parametrize("region_id",[1,2])
+def test_region_one_at_attach_then_main_region_stays_censored(region_id):
+    r=api()
+    r.globals().START_REGION=region_id
+    r.execute('''
+      local t={address=100,regions=3,per_region=8,entry_size=8,id_off=0,active_off=4}
+      local region=START_REGION
+      local function read(a)
+        local start=t.address+region*t.per_region*t.entry_size
+        return a==start and 12 or a==start+4 and 1 or 0
+      end
+      local function any(id) return DIAG.any_region_resident(t,read,id) end
+      local sites={{id="loaded",overlay_id=12,address=20,extent=2,register_hex="aabb"}}
+      local trace=DIAG.begin_settle(sites,function() return region==0 end,function() return "0000" end,1,any)
+      region=0
+      DIAG.settle_sample(trace,sites,function() return true end,function() return "aabb" end,9)
+      assert(trace.epochs[1].left_censored and trace.epochs[1].delta==nil)
+      assert(DIAG.settle_verdict(trace)=="OBSERVED_CENSORED")
+    ''')
+
+
+@pytest.mark.parametrize("region_id",[1,2])
+def test_any_region_censoring_control_red_revert(monkeypatch,region_id):
+    source=d.LUA
+    old='for region=0,t.regions-1 do'
+    assert source.count(old)==1
+    test_region_one_at_attach_then_main_region_stays_censored(region_id)
+    monkeypatch.setattr(d,'LUA',source.replace(old,'for region=0,0 do'))
+    with pytest.raises((AssertionError,lupa.LuaError)):
+        test_region_one_at_attach_then_main_region_stays_censored(region_id)
+    monkeypatch.setattr(d,'LUA',source)
+    test_region_one_at_attach_then_main_region_stays_censored(region_id)
+
+
+def test_bom_config_audit_reader_red_revert(tmp_path,monkeypatch):
+    import json
+    settings=json.loads((d.REPO/'tests/fixtures/gen4/diag_config_autosave_after.json').read_text())
+    path=tmp_path/'bizhawk.ini'
+    path.write_text(json.dumps(settings),encoding='utf-8-sig')
+    cfg={'requested_rate':300,'emulator_config':{'path':str(path),'before_sha256':'before',
+        'expected_settings':d.emulator_settings(settings,300)}}
+    assert d.emulator_config_audit(cfg)['settings_valid']
+    original=Path.read_text
+    with monkeypatch.context() as patch:
+        patch.setattr(Path,'read_text',lambda p,*a,**k:original(p) if p==path else original(p,*a,**k))
+        with pytest.raises(json.JSONDecodeError):
+            d.emulator_config_audit(cfg)
+    assert d.emulator_config_audit(cfg)['settings_valid']

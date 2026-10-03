@@ -694,8 +694,8 @@ local function pc_withdraw()
   end
   if not started then finish("FAIL", "pc_script_not_started", pos_s(loc())) end
   -- Three semantic A: msg33 \r -> storage-PC row0 -> msg35 \r. A during
-  -- printing is NOT also a menu press (render_text.c:95-105). First wait for
-  -- printing, using the existing launch bound; do not add A-mash that could
+  -- printing is NOT also a menu press (render_text.c:95-105). Waits the existing
+  -- 900-frame bound before each semantic A; do not add A-mash that could
   -- launch DEPOSIT before the Down. Count/recovery remain plan parameters.
   for i = 1, wd.script_a do
     frames(wd.script_wait)
