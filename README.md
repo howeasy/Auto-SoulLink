@@ -109,15 +109,11 @@ Each player gets a card showing their area, their lead or current battle, and HP
 
 If the server stops answering, the board says "Connection lost" instead of showing old numbers. If an in-game trade ends in a state SLink can't settle on its own, a banner on the board lets you settle it.
 
-## Timeline and memorial
+## Timeline
 
 <img src="docs/images/timeline.png" width="900" alt="The run timeline: pairs formed route by route, a dead zone, and a fallen pair">
 
-The timeline lists every pair, death, dead zone and burial in order, plus the areas that are still open.
-
-<img src="docs/images/memorial.png" width="320" alt="A memorial card for a fallen pair from Route 3">
-
-The memorial (`/memorial` on the run's board) keeps each fallen pair together with where they were caught, when they died and what killed them.
+The timeline tells the run in order: every pair formed, every death, dead zone and burial, plus the areas that are still open.
 
 ## Damage calculator
 
