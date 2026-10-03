@@ -70,6 +70,10 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z"/></svg>
         <span class="mk-rail-label">Debug</span>
       </a>
+      <a class="mk-rail-item{% if panel == 'timeline' %} active{% endif %}" href="{{ base }}/timeline"{% if panel == 'timeline' %} aria-current="page"{% endif %}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3 1h2v14H3zM7 2h7v3H7zm0 4.5h5v3H7zM7 11h7v3H7z"/></svg>
+        <span class="mk-rail-label">Timeline</span>
+      </a>
     {% endif %}
     {% if standalone %}
     <a class="mk-rail-item{% if page == 'broadcast' and not tab %} active{% endif %}" href="/stream"{% if page == 'broadcast' and not tab %} aria-current="page"{% endif %}>

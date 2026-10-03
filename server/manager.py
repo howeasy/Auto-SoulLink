@@ -1959,6 +1959,7 @@ class RunManager:
         if show_calc:
             tabs.append(("Calc", f"{base}/calc/normal.html", panel == "calc"))
         tabs.append(("Debug", f"{base}/debug", panel == "debug"))
+        tabs.append(("Timeline", f"{base}/timeline", panel == "timeline"))
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
@@ -1981,6 +1982,16 @@ class RunManager:
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
         ctx = await self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
+
+    async def handle_run_timeline(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/timeline — the run's story, from its status payload: live when
+        it is running, what it persisted when it is not (so a stopped run still has one)."""
+        from server.board import timeline
+        runs, run = self._run_or_404(request)
+        ctx = await self._run_panel_ctx(request, runs, run, panel="timeline", label="Timeline")
+        status = await self._run_status(request, run)
+        ctx.update({"available": True, "story": timeline(status), "players": status.get("players") or {}})
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
@@ -2269,6 +2280,7 @@ async def main(host: str, port: int, public_host: str = ""):
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
     # A run's secondary pages in the Manager's chrome, and the per-run relay their JS uses.
     app.router.add_get("/runs/{run_id}/debug",            manager.handle_run_debug)
+    app.router.add_get("/runs/{run_id}/timeline",         manager.handle_run_timeline)
     app.router.add_get("/runs/{run_id}/calc",             manager.handle_run_calc)
     app.router.add_get("/runs/{run_id}/calc/{path:.*}",   manager.handle_run_calc)
     app.router.add_get("/calc/{path:.*}",                 manager.handle_calc_asset)

@@ -1476,8 +1476,10 @@ class SLinkServer:
             if self._calc_profile():
                 tabs.append(("Calc", "/calc/normal.html", panel == "calc"))
             tabs.append(("Debug", "/debug", panel == "debug"))
-        ctx = self._rail_ctx(page="run" if panel in ("calc", "debug") else "broadcast",
-                             panel=panel if panel in ("calc", "debug") else "",
+            tabs.append(("Timeline", "/timeline", panel == "timeline"))
+        run_panel = panel in ("calc", "debug", "timeline")
+        ctx = self._rail_ctx(page="run" if run_panel else "broadcast",
+                             panel=panel if run_panel else "",
                              tab=panel if panel in ("twitch", "obs") else "")
         ctx.update({
             "page_title": self._page_title(), "theme": resolve_theme(request),
@@ -3247,6 +3249,17 @@ class SLinkServer:
         if request.query.get("_smoke") != "1":      # the macro harness stays reachable
             self._to_manager(request, "/runs/{id}")
         return await self._handle_memorial_template(request)
+
+    async def handle_timeline_html(self, request):
+        """GET /timeline — the run's story in order (route name: docs/public_ui/DECISIONS.md
+        #1). Built from the status payload by server.board.timeline; a Manager run's lives at
+        /runs/{id}/timeline."""
+        from server.board import timeline
+        self._to_manager(request, "/runs/{id}/timeline")
+        d = self._build_status_dict()
+        ctx = self._panel_ctx(request, panel="timeline", label="Timeline")
+        ctx.update({"story": timeline(d), "players": d.get("players") or {}})
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def _handle_memorial_template(self, request):
         """Jinja-rendered memorial wall."""
@@ -5578,6 +5591,7 @@ def build_app(srv):
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)
+    app.router.add_get("/timeline",    srv.handle_timeline_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
     app.router.add_get("/api/events",  srv.handle_sse)
     app.router.add_post("/api/reset",              srv.handle_reset_api)
