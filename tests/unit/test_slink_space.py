@@ -807,6 +807,23 @@ def test_readd_rolls_back_when_branch_checkout_fails(W, monkeypatch):
     _assert_rolled_back(W, p, head, new, "rb2")
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows process API")
+def test_pid_alive_assumes_alive_when_the_exit_code_is_unreadable(monkeypatch):
+    import ctypes
+
+    def opener(*_a):
+        return 1
+
+    def no_exit_code(*_a):
+        return 0  # GetExitCodeProcess failed
+
+    def close(*_a):
+        return 1
+    fake = SimpleNamespace(OpenProcess=opener, GetExitCodeProcess=no_exit_code, CloseHandle=close)
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **k: fake)
+    assert ss.pid_alive(12345) is True
+
+
 def test_apply_takes_a_mutex(W):
     lane = W.c / "slink" / "old"
     lane.mkdir()

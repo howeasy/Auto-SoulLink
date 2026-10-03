@@ -369,9 +369,9 @@ def pid_alive(pid: int) -> bool:
         if not h:
             return ctypes.get_last_error() == 5  # access denied => it exists
         code = ctypes.c_ulong()
-        k.GetExitCodeProcess(h, ctypes.byref(code))
+        ok = k.GetExitCodeProcess(h, ctypes.byref(code))
         k.CloseHandle(h)
-        return code.value == 259  # STILL_ACTIVE
+        return not ok or code.value == 259  # unreadable => assume alive; 259 = STILL_ACTIVE
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
