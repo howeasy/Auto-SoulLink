@@ -2974,7 +2974,7 @@ ctx = { hunt = function() return true end, choose_action = function() return tru
         wait_until = function(pred) return true end, bag_input_ready = function() return true end,
         await_turn = function() return "action" end,                  -- every ball misses
         run_away = function() return RAN[1], RAN[2] end,
-        last_sent = function() end, party = function() return {} end }
+        last_sent = function() end, sent = function() return 0 end, party = function() return {} end }
 function CATCH() local key, why = ctx.catch("t"); return key, tostring(why) end
 """
 
@@ -6093,15 +6093,99 @@ ATTEMPT_LIMITS_AT_D5A26DA9 = {
 RAND_WHITEOUT = "RESULT: FAIL (hunt ended whiteout)"
 
 
+# Gen 2's commit 96b65c48 ("a Gen 2 trade scenario retries once ... when its route battle is lost") deliberately raised EXACTLY the
+# `GEN2_TRADE_SCENARIOS` x `scenario_family(game) == "gen2_new"` rows to 2 (one retry on the next pinned clock minute). A tree with it
+# and a tree without it are both correct; those rows (and only those) may therefore be the snapshot value OR exactly 2.
+_GEN2_ROUTE_RETRY = "        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)\n"
+_GEN2_ROUTE_RETRY_HUNK = (_GEN2_ROUTE_RETRY + '    if scenario_family(game) == "gen2_new" and name in GEN2_TRADE_SCENARIOS:\n'
+                          "        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)\n")
+
+
+def _allowed_attempt_limits(snapshot, name, family, trade_scenarios):
+    """The limits one scenario/game pair may have: the d5a26da9 snapshot, plus exactly 2 for a Gen 2 trade scenario on a `gen2_new`-family
+    pairing (96b65c48). `trade_scenarios` is the module's GEN2_TRADE_SCENARIOS (empty when the symbol is absent), so the set cannot drift
+    from the source of truth. (cut2 already has the symbol but not yet the limit change, hence {snapshot, 2} rather than 2 alone.)"""
+    allowed = {snapshot}
+    if name in trade_scenarios and family == "gen2_new":
+        allowed.add(2)
+    return allowed
+
+
+def _attempt_budget_problems(module):
+    """Every scenario/game pair whose scenario_attempt_limit left its allowed set, except link_gen3_rand (6) and the probe row (new, 1).
+    [(name, game, snapshot, now)]"""
+    trade = getattr(module, "GEN2_TRADE_SCENARIOS", ())
+    problems = []
+    for game in module.GAMES:
+        for name in module.SCENARIOS:
+            if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):      # (the probe row did not exist at d5a26da9)
+                continue
+            was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+            now = module.scenario_attempt_limit(name, game)
+            if now not in _allowed_attempt_limits(was, name, module.scenario_family(game), trade):
+                problems.append((name, game, was, now))
+    return problems
+
+
+def test_the_attempt_limit_expectation_builder_in_both_modes():
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ()) == {1}                       # symbol absent: snapshot unchanged
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ("gen2_trade_x",)) == {1, 2}      # present: the trade rows may be 2
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen3_frlg", ("gen2_trade_x",)) == {1}        # ... only on the gen2_new pairings
+    assert _allowed_attempt_limits(3, "link_gen3", "gen2_new", ("gen2_trade_x",)) == {3}            # ... and only for those scenarios
+    assert sorted(g for g in duo.GAMES if duo.scenario_family(g) == "gen2_new") == ["gen2_crystal_gold", "gen2_gold_silver", "gen2_new"]
+
+
+def test_the_snapshot_check_works_on_a_module_without_the_symbol():
+    import types
+
+    bare = types.SimpleNamespace(GAMES=duo.GAMES, SCENARIOS=duo.SCENARIOS, scenario_family=duo.scenario_family,
+                                 scenario_attempt_limit=lambda name, game: 1 if name == "x" else duo.scenario_attempt_limit(name, game))
+    assert not hasattr(bare, "GEN2_TRADE_SCENARIOS")
+    assert _attempt_budget_problems(bare) == [] or all(n in duo.GEN2_TRADE_SCENARIOS for n, *_ in _attempt_budget_problems(bare))
+
+
 def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
-    for game in duo.GAMES:
-        for name in duo.SCENARIOS:
-            if name not in ("link_gen3_rand", "probe_protected_span_flip_gen3"):      # (the probe row did not exist at d5a26da9)
-                assert duo.scenario_attempt_limit(name, game) == ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1), (name, game)
+    assert _attempt_budget_problems(duo) == []
     assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [6, 6]    # the Emerald twin too
     assert [duo.scenario_attempt_limit("probe_protected_span_flip_gen3", g) for g in ("gen3_frlg", "gen3_emerald")] == [1, 1]
     assert [n for n, row in duo.SCENARIOS.items() if row.get("rng_attempts") == 6] == ["link_gen3_rand"]
     assert not any("rehunt" in k for row in duo.SCENARIOS.values() for k in row)
+
+
+def _module_from_source(source, tmp_path):
+    import importlib.util
+
+    path = tmp_path / "e2e_duo_variant.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("e2e_duo_variant", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["e2e_duo_variant"] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop("e2e_duo_variant", None)
+    return module
+
+
+def test_the_snapshot_holds_with_gen2s_trade_retry_applied_and_still_catches_other_drift(tmp_path):
+    source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert source.count(_GEN2_ROUTE_RETRY) == 1
+    with_gen2 = source.replace(_GEN2_ROUTE_RETRY, _GEN2_ROUTE_RETRY_HUNK)       # exactly 96b65c48's scenario_attempt_limit hunk
+    module = _module_from_source(with_gen2, tmp_path)
+    changed = [(n, g) for g in module.GAMES for n in module.SCENARIOS
+               if module.scenario_attempt_limit(n, g) != duo.scenario_attempt_limit(n, g)]
+    assert changed and all(n in module.GEN2_TRADE_SCENARIOS and module.scenario_family(g) == "gen2_new"
+                           and module.scenario_attempt_limit(n, g) == 2 for n, g in changed)
+    assert _attempt_budget_problems(module) == []
+    # any other drift is still caught: a third attempt on a Gen 2 trade row, a non-trade Gen 2 row moved, a Gen 3 row moved
+    three = with_gen2.replace("        return 2   # one retry, only when the route's own", "        return 3   # one retry, only when the route's own")
+    assert three != with_gen2 and _attempt_budget_problems(_module_from_source(three, tmp_path))
+    ball_gate = with_gen2.replace(_GEN2_ROUTE_RETRY, _GEN2_ROUTE_RETRY.replace("return 2", "return 3"))
+    assert ball_gate != with_gen2 and _attempt_budget_problems(_module_from_source(ball_gate, tmp_path))
+    other = with_gen2.replace(_GEN2_ROUTE_RETRY_HUNK, _GEN2_ROUTE_RETRY_HUNK
+                              + '    if name == "link_gen3" and scenario_family(game) == "gen3_frlg":\n        return 2\n')
+    drift = _attempt_budget_problems(_module_from_source(other, tmp_path))
+    assert sorted((n, g, now) for n, g, _was, now in drift) == [("link_gen3", "gen3_frlg", 2), ("link_gen3", "gen3_lgfr", 2)]   # (lgfr is the family)
 
 
 @pytest.mark.parametrize("game", ["gen3_frlg", "gen3_emerald"])
@@ -6150,3 +6234,109 @@ def test_the_observed_line_names_which_title_was_flipped_and_where():
     notes.clear()
     run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
     assert "flipped_title=firered" in notes[0] and "inside_protected_span=0xeb2000+0x4000" in notes[0]
+
+
+# ── ctx.catch is strict about the client's capture event (the party scan only for named exemptions, of which there are none) ──────────
+NO_CAPTURE_MESSAGE = "caught, but the client never sent a capture event"
+CATCH_CALLER_MODULES = {"clause", "deadzone", "link", "shiny_bonus", "static_wild"}     # (+ rand_link and ball_gate, which dofile() link)
+
+
+def _caught_key_world(scenario="link_gen3", exempt=(), party="{}", sent="", on_frame="nil"):
+    from lupa import LuaRuntime
+
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format(re.escape("ctx.caught_key")), source, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no ctx.caught_key"
+    window = int(re.search(r"CAPTURE_TX_WINDOW_FRAMES = (\d+)", source)[1])
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(f"""
+        D = {{ scenario = {scenario!r} }}
+        boot_keys = {{ BOOT = true }}
+        CAPTURE_TX_WINDOW_FRAMES = {window}
+        tx = {{ {sent} }}
+        frames_run = 0
+        on_frame = {on_frame}
+        ctx = {{ catch_without_capture_event = {{ {"".join(f"[{name!r}] = true," for name in exempt)} }} }}
+        function ctx.last_sent(ev) for i = #tx, 1, -1 do if tx[i].event == ev then return tx[i].msg end end end
+        function ctx.sent(ev) local n = 0 for _, e in ipairs(tx) do if e.event == ev then n = n + 1 end end return n end
+        function ctx.frames(n) frames_run = frames_run + n; if on_frame then on_frame(frames_run) end end
+        function ctx.party() return {party} end
+        {found.group(0)}
+    """)
+    return runtime, window
+
+
+def _call(runtime, captures_before):
+    """ctx.caught_key's (key, why) with a Lua nil as None (a Lua table would drop it)."""
+    returned = runtime.eval("ctx.caught_key")(captures_before)
+    returned = list(returned) if isinstance(returned, tuple) else [returned]
+    return tuple(returned + [None] * (2 - len(returned)))
+
+
+def _capture(key):
+    return "{ event = 'capture', msg = { key = '%s' } }" % key
+
+
+def test_a_capture_tx_already_sent_names_the_key_without_waiting():
+    runtime, _ = _caught_key_world(sent=_capture("K1"))
+    assert _call(runtime, 0) == ("K1", None) and runtime.eval("frames_run") == 0
+
+
+def test_a_capture_tx_that_arrives_late_within_the_frame_window_is_used():
+    runtime, window = _caught_key_world(on_frame="function(n) if n == %d then tx[#tx + 1] = %s end end" % (window_minus_one(), _capture("K2")))
+    assert _call(runtime, 0) == ("K2", None)
+    assert runtime.eval("frames_run") == window_minus_one() and window_minus_one() < window
+
+
+def window_minus_one():
+    return int(re.search(r"CAPTURE_TX_WINDOW_FRAMES = (\d+)", DRIVER.read_text(encoding="utf-8"))[1]) - 1
+
+
+def test_no_capture_tx_inside_the_window_fails_by_name_even_with_a_new_mon_in_the_party():
+    runtime, window = _caught_key_world(party="{ { key = 'NEW' } }")
+    got = _call(runtime, 0)
+    assert got[0] is None and got[1] == NO_CAPTURE_MESSAGE                         # strict: the party scan does NOT rescue it
+    assert runtime.eval("frames_run") == window == 600                             # a FRAME window, not wall clock
+    assert "wait_until" not in re.search(_LUA_DEF.format(re.escape("ctx.caught_key")),
+                                          DRIVER.read_text(encoding="utf-8"), re.M | re.S)[0]
+
+
+def test_an_earlier_mons_capture_or_a_boot_key_is_not_this_catchs_event():
+    stale, _ = _caught_key_world(sent=_capture("OLD"))
+    assert _call(stale, 1)[1] == NO_CAPTURE_MESSAGE      # one capture was already sent on entry
+    boot, _ = _caught_key_world(sent=_capture("BOOT"))
+    assert _call(boot, 0)[1] == NO_CAPTURE_MESSAGE
+
+
+def test_a_named_exemption_still_scans_the_party_and_nothing_else_does():
+    runtime, _ = _caught_key_world(scenario="exempt_row", exempt=("exempt_row",), party="{ { key = 'BOOT' }, { key = 'NEW' } }")
+    got = _call(runtime, 0)
+    assert got[0] == "NEW" and runtime.eval("frames_run") == 0                      # no wait for an event nobody sends
+    empty, _ = _caught_key_world(scenario="exempt_row", exempt=("exempt_row",), party="{ { key = 'BOOT' } }")
+    assert _call(empty, 0)[1] == "caught, but no new key in the party"
+    other, _ = _caught_key_world(scenario="not_exempt", exempt=("exempt_row",), party="{ { key = 'NEW' } }")
+    assert _call(other, 0)[1] == NO_CAPTURE_MESSAGE
+
+
+def test_every_ctx_catch_caller_gets_the_strict_behaviour_because_the_exemption_list_is_empty():
+    source = DRIVER.read_text(encoding="utf-8")
+    assert "ctx.catch_without_capture_event = {}" in source                       # EMPTY, in the driver
+    callers = {path.stem.removeprefix("scenario_gen3_") for path in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")
+               if "ctx.catch(" in path.read_text(encoding="utf-8")}
+    assert callers == CATCH_CALLER_MODULES, callers        # a NEW caller must be looked at: does it expect a capture event?
+    for name in duo.SCENARIOS:                              # no scenario of any row is exempt
+        runtime, _ = _caught_key_world(scenario=name, party="{ { key = 'NEW' } }")
+        assert _call(runtime, 0)[1] == NO_CAPTURE_MESSAGE, name
+    assert "return ctx.caught_key(captures_before)" in source and "local captures_before = ctx.sent(\"capture\")" in source
+
+
+def test_the_missing_capture_event_failure_is_never_retried_for_any_scenario():
+    for reason in (NO_CAPTURE_MESSAGE, "link_new prerequisite failed: hunt ended " + NO_CAPTURE_MESSAGE):
+        for prefix in ("hunt ended ", "native catch failed: ", ""):
+            text = f"RESULT: FAIL ({prefix}{reason})"
+            assert duo.classify_gen1_result(text) == "FINAL", text                          # classification=real, not CAUSE_RNG
+            for name in duo.SCENARIOS:
+                for game in duo.GAMES:
+                    limit = duo.scenario_attempt_limit(name, game)
+                    for attempt in range(1, limit + 1):
+                        assert not duo.retryable_gen1_rng(game, {"a": text, "b": None}, attempt, limit, scenario=name), (name, game, attempt)

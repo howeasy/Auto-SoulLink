@@ -728,3 +728,13 @@ def test_cold_trade_recovery_does_not_replay_trade_owned_acquisition(tmp_path, m
     pump(65)
     assert model.journal.hidden(model.journal) is False
     assert world.events("capture") == []
+
+
+def test_acq_a_signal_held_by_recovery_is_logged_once_not_per_frame(monkeypatch):
+    world, _carrier = uncertain_client(monkeypatch)
+    world.logs.clear()
+    world.fire("capture_wild")
+    world.step(30)                                           # the hold may keep the flag for many frames
+    held = [line for line in world.logs if "[SLink-gen3] ACQ held" in line]
+    assert len(held) == 1 and "reason=recovery_hidden" in held[0] and "caught=true" in held[0]
+    assert world.events("capture") == []
