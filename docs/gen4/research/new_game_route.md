@@ -21,7 +21,7 @@
    - **Never leave the gender non-binary:** the default name is then uninitialised (`naming_screen.c:664-665`).
    - **Name entry:** a child OverlayManager (`oaks_speech.c:2012`). Press OK with an EMPTY buffer and `NamingScreenApp_Exit` supplies a random default (`naming_screen.c:700-712`, `:707`). No typing is needed.
    - **No rival-name prompt** (fixed default, `oaks_speech.c:645`). **No clock/RTC prompt**; time of day is narration only (`:1795-1799`).
-5. **After Oak.** One more app with no input (`overlay_36.c:117-139`). The trainer ID is set here (`:145`), so trainer ID ≠ 0 means "past Oak".
+5. **After Oak.** One more app with no input (`overlay_36.c:117-139`). The trainer ID is set here (the `set_trainer_id` parameter, `src/overlay_36.c:129,180`), so trainer ID ≠ 0 means "past Oak".
 6. **Field start.** `MAP_NEW_BARK_PLAYER_HOUSE_2F`, x6 y6 dir1 warpId -1 (`location_backup.c:10-16`).
    - Bedroom script: ~~`scr_seq_0844_T20R0102.s`~~ **`scr_seq_0846_T20R0202.s`**; 0844/T20R0102 is Elm's lab 2F (map 62). See the corrections below. Lab: `scr_seq_0843_T20R0101.s`.
 7. **Starter.** `ChooseStarter` at `scr_seq_0843_T20R0101.s:169`, guarded by `FLAG_GOT_STARTER` (`:167` check, `:170` set).

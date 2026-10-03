@@ -205,7 +205,7 @@ The four shared semantic codes (`patch/gb/slink_abi.inc:33-36`; Gen 2 table `pat
 - **Site: one SysTask on `gSystem.mainTaskQueue`** (`SysTask_CreateOnMainQueue`, `src/sys_task_api.c:8-10`).
   - It drains every frame in `NitroMain` right after the active app (`src/main.c:109-111`). It is app-independent, so the field, START-menu apps and battle are all covered by one site. This is not Gen 1's two-site problem.
   - The queues are arena-allocated (`src/system.c:123-126`), so the task survives app and overlay switches.
-  - It does NOT survive a soft reset (`DoSoftReset` -> `OS_ResetSystem`, `src/main.c:203-210`). Register it on every boot.
+  - It does NOT survive a soft reset (`DoSoftReset`, called at `src/main.c:103` -> `OS_ResetSystem` at `:182`). Register it on every boot.
 - **The `if (sub_02036144())` guard** (`main.c:106`) is the wireless/link frame-sync gate (`asm/unk_02035900.s`).
   - With no comm session (`[_021D4140+8] == 0`) it branches straight out, so single-player always drains.
   - Insurance, if a link state matters: `gSystem.vwaitTaskQueue`, which drains outside the guard at `main.c:131`.
