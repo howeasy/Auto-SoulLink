@@ -41,9 +41,10 @@ function randomizerFields(form) {
     rdraft: {
       jar: form.jar || '', rom_a: '', rom_b: '',
       // Start from what the run last made, so "prepare again" means the same unless
-      // changed: the companion as before (on by default where one exists — the panel and
-      // the native trade are what the companion is for), randomized as before.
-      companion: form.cartridges ? !!form.cartridges.companion : true,
+      // changed: randomized as before. The companion is always on: it is required wherever
+      // one exists (companionRequired), so a run that once made clean cartridges does not
+      // carry that forward.
+      companion: true,
       randomize: !!(form.current),
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
@@ -337,6 +338,10 @@ function randomizerFields(form) {
       finally { this.uploading = ''; }
     },
     pick(pid) { var p = this.rdraft['rom_' + pid]; return this.roms.find(function (r) { return r.path === p; }) || null; },
+    // The companion is required for every cartridge it exists for (policy 2026-10-02): the
+    // checkbox is then locked on. Exempt picks (Yellow, Archipelago, the Expansion) keep
+    // companionOk()'s greyed reason instead.
+    companionRequired() { return this.companionOk().ok; },
     // The SLink companion exists for some titles only (rform.companion_titles): a pick
     // outside them greys the checkbox with the reason, as the run options do.
     companionOk() {
@@ -360,6 +365,7 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
+      if (this.companionRequired() && !this.rdraft.companion) return 'The SLink companion is required for these cartridges; a clean one is refused at launch. Turn it on.';
       if (this.rdraft.randomize && [ra, rb].some(function (r) { return r && r.family === 'gen3_exp'; })) return 'The Emerald Expansion has no randomizer; turn Randomize off.';
       if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
