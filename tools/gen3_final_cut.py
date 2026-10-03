@@ -38,7 +38,9 @@ Per title a companion-check row proves the staged patch/build/slink_*.gba is the
 shipped UPS; the duo rows are the frlg and emerald plans' duo rows run with e2e_duo.py --gen3-companion plus the species / gender /
 type clause, ball-gate, shiny-bonus and species-family rows on FR, LG and Emerald; a green duo or zip-boot receipt must carry the
 CLIENT's own `<title> (companion by hash)` admission line with the pinned rom prefix (companion_attempt_problem, in run_row and
-fc_check). Not in it: states_/tutorials_/checkpoint_ (the probe wrapper is wired to the clean dump), probe_gates, item6.
+fc_check; it owes nothing extra to frlgc_source_* (their own companion-check verdict is the proof), frlgc_bootcheck_* (bound by
+the F2 sha1 pin in gen3_fixtures boot-check --companion) and frlgc_release_gate_quick (emulator-free source lanes)). Not in it:
+states_/tutorials_/checkpoint_ (the probe wrapper is wired to the clean dump), probe_gates, item6.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass

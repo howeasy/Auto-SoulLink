@@ -55,7 +55,7 @@ a clean or randomized-clean leg dies at LAUNCH instead of producing the server-s
 | same, new `clean_refused` | b | CLEAN | (none: the clean cartridge never reached a verdict) | NEW launch-refusal proof, reusing `expect_refused`: the clean B must show the companion-patch refusal, no hello/MYKEY/write/save, and the server never sees it (`_observe_gen3_rand_refused`; the admission oracle needs this leg) |
 | same, `equivalent_pair` | a, b | clean-equivalent unknown-hash randomized clean + CLEAN partner | declared `rand`, effective `clean`, both admitted | RE-POINTED: the companion build with one unused 0xFF padding byte outside every protected span changed (`gen3_rand_equivalent_rom`), plus the plain companion partner |
 | `link_gen3_rand`, `trainer_panel_gen3_rand` | a, b | randomized clean pair | link / nearby-trainer panel on each side's OWN randomized tables | RE-POINTED (companion overlay pair) |
-| every row of the clean `--title frlg` / `--title emerald` plans (FR/LG/E duos, bootchecks, `zip_boot_firered`, `zip_boot_emerald`) | both | CLEAN FR/LG/E | clean-client behaviour | NOT CONVERTIBLE (their meaning is a clean client). The live successor is `--title frlgc` (companion twins). `main()` now refuses these titles by name unless `--dry-run/--list/--merge-summary` (F1); the duo harness refuses a clean launch up front (`_gen3_launch_refusal_problems`); their clean receipts are history |
+| every row of the clean `--title frlg` / `--title emerald` plans (FR/LG/E duos, bootchecks, `zip_boot_firered`, `zip_boot_emerald`) | both | CLEAN FR/LG/E | clean-client behaviour | NOT CONVERTIBLE (their meaning is a clean client). The live successor is `--title frlgc` (companion twins). `run_pass` (reached through `main`) now refuses these titles by name unless `--dry-run/--list/--merge-summary` (F1); the duo harness refuses a clean launch up front (`_gen3_launch_refusal_problems`); their clean receipts are history |
 | `zip_boot_firered`, `zip_boot_emerald` | a | CLEAN, shipped client | identity line + TCP connect + hello | CONVERTED for direct `zip-boot --title firered|emerald` use into a refusal proof and RENAMED `zip_boot_firered_refused` / `zip_boot_emerald_refused`: PASS only on the shipped client's own `Unsupported Gen 3 cartridge ... needs the SLink companion patch` error, no `TCP connected`, no server hello |
 | RR rows, `--title rr` | both | companion (except the refusal proof) | unchanged | NO CHANGE |
 | `gen3_exp` rows, `--title exp` | both | clean expansion | unchanged | NO CHANGE: the pack has no `companion_required` (exempt until its companion lands) |
@@ -68,13 +68,16 @@ but unrunnable).
 
 ## Review follow-ups F1-F5 (2026-10-03)
 
-- F1: `--title frlg` and `--title emerald` refused up front by `clean_plan_refusal` (message points at `--title frlgc`); `rr`, `exp`, `frlgc` unaffected.
+- F1: `--title frlg` and `--title emerald` refused up front by `clean_plan_refusal`, called from `run_pass` (not `main`) (message points at `--title frlgc`); `rr`, `exp`, `frlgc` unaffected.
   `classify_failure` is left alone: an unexpected launch refusal already ends with `RESULT: FAIL`, a real failure, and the refusal-proof rows
   print the refusal text on PASS, so keying "contention" on that text would misclassify them.
-- F2: `gen3_fixtures.py boot-check --companion` refuses a `--rom` whose sha1 is not the lane's `patch/dist/gen3_companions.json` `rom_sha1` for the title;
+- F2: `gen3_fixtures.py boot-check --companion` refuses a `--rom` whose sha1 is not the `patch/dist/gen3_companions.json` `rom_sha1` of the checkout the tool runs from (the lane's copy, since the rows run `tools/gen3_fixtures.py` from the lane) for the title;
   the 12 `frlgc_bootcheck_*` rows pass it.
 - F3: `fc_check(..., lane=None)` judges companion evidence against the CUT's pins (`lane` when given, else `git show <cut>:patch/dist/gen3_companions.json`),
   never `REPO`'s; an unreadable cut fails closed.
 - F4: `--resume` adopts a prior receipt only if its `# inputs:` equal the lane's current `hash_inputs(row_inputs(row, lane))` (`resume_inputs_problem`).
-- F5: `_gen3_flushed` exempts a NO-WRITE half (`no_save` side) from the mtime-after-launch rule (its caller compares the bytes to the seed); the 8
-  frlgc no-write halves are pinned by name in `tests/unit/test_e2e_duo_gen3_companion_battery.py`.
+- F5: `_gen3_flushed` exempts a NO-WRITE half (`no_save` side) from the mtime-after-launch rule. What proves "nothing wrote" differs by row: for
+  `active_end_gen3` B and `reconnect_gen3` A the oracle reads the battery and compares the bytes; for the `center_controls_gen3` and
+  `save_then_write_gen3` B halves no oracle reads the battery, and the proof is the declared-no_save gate in `check_save_witness_gen3` (a
+  no_save half whose receipt dumped a save FAILS). The 8 frlgc no-write halves are pinned by name, each with its proof kind as data, in
+  `tests/unit/test_e2e_duo_gen3_companion_battery.py`.

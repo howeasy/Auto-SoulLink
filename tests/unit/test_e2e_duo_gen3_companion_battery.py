@@ -75,12 +75,15 @@ def test_a_clean_cartridge_keeps_the_gamedb_name_and_the_old_flush_rule(tmp_path
 # ── F5: a NO-WRITE half may leave its battery as the harness seeded it ───────────────────────────────────
 # reconnect_gen3 (A) and active_end_gen3 (B) expect the cartridge NOT to rewrite its battery, so an untouched
 # seed (mtime before the launch) is their legitimate input; every half that must save still needs a fresh file.
-# Found by scenario config (`no_save`), pinned by name below: a new no-write row must be decided here.
+# Found by scenario config (`no_save`), pinned by name below: a new no-write row must be decided here. Each half also records WHAT
+# proves "nothing wrote": its oracle reads the battery and compares bytes (SEED_BYTES), or no oracle reads it and the declared-no_save
+# gate in check_save_witness_gen3 (a no_save half that dumped a save FAILS) is the whole proof (NO_SAVE_GATE).
+SEED_BYTES, NO_SAVE_GATE = "seed-bytes compared by the oracle", "declared-no_save gate in check_save_witness_gen3"
 NO_WRITE_COMPANION_ROWS = {
-    ("active_end_gen3", "fr", "b"), ("active_end_gen3", "lg", "b"),
-    ("center_controls_gen3", "fr", "b"), ("center_controls_gen3", "lg", "b"),
-    ("reconnect_gen3", "fr", "a"), ("reconnect_gen3", "em", "a"),
-    ("save_then_write_gen3", "fr", "b"), ("save_then_write_gen3", "lg", "b"),
+    ("active_end_gen3", "fr", "b"): SEED_BYTES, ("active_end_gen3", "lg", "b"): SEED_BYTES,
+    ("center_controls_gen3", "fr", "b"): NO_SAVE_GATE, ("center_controls_gen3", "lg", "b"): NO_SAVE_GATE,
+    ("reconnect_gen3", "fr", "a"): SEED_BYTES, ("reconnect_gen3", "em", "a"): SEED_BYTES,
+    ("save_then_write_gen3", "fr", "b"): NO_SAVE_GATE, ("save_then_write_gen3", "lg", "b"): NO_SAVE_GATE,
 }
 
 
@@ -92,9 +95,25 @@ def test_the_frlgc_plans_no_write_halves_are_exactly_the_decided_set():
         m = re.fullmatch(r"frlgc_(.+)_(fr|lg|em)_as_a_companion", row.id)
         if m and duo.SCENARIOS[m[1]].get("no_save"):
             found |= {(m[1], m[2], side) for side in duo.SCENARIOS[m[1]]["no_save"]}
-    assert found == NO_WRITE_COMPANION_ROWS, (
+    assert found == set(NO_WRITE_COMPANION_ROWS), (
         "a frlgc row gained or lost a no_save half: decide whether _gen3_flushed's no-write exemption applies "
-        f"(new {sorted(found - NO_WRITE_COMPANION_ROWS)}, gone {sorted(NO_WRITE_COMPANION_ROWS - found)})")
+        f"(new {sorted(found - set(NO_WRITE_COMPANION_ROWS))}, gone {sorted(set(NO_WRITE_COMPANION_ROWS) - found)})")
+
+
+def test_each_no_write_half_records_the_proof_that_really_backs_it():
+    """The recorded proof kind is checked against the code: a SEED_BYTES half's oracle reads that side's battery; a NO_SAVE_GATE half
+    is read by NO oracle, so the declared-no_save gate is all there is (and it must still refuse a no_save half that dumped)."""
+    import inspect
+
+    for (scenario, _orient, side), proof in NO_WRITE_COMPANION_ROWS.items():
+        oracle = inspect.getsource(getattr(duo.DuoRun, duo.SCENARIOS[scenario]["oracle"]))
+        reads = f'_gen3_flushed("{side}")' in oracle or f'_gen3_saved("{side}")' in oracle
+        if proof == SEED_BYTES:
+            assert reads, (scenario, side, "recorded as byte-compared but its oracle never reads that battery")
+        else:
+            assert proof == NO_SAVE_GATE and not reads, (scenario, side, "recorded as gate-only but its oracle reads it")
+    gate = inspect.getsource(duo.DuoRun.check_save_witness_gen3)
+    assert "declared no_save, but its final receipt dumped" in gate
 
 
 @pytest.mark.parametrize("scenario, side", [("reconnect_gen3", "a"), ("active_end_gen3", "b")])

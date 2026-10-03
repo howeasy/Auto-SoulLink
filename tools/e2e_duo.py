@@ -3942,10 +3942,12 @@ class DuoRun:
             # The seed is written before the launch: only a file the emulator wrote after it is an oracle input, under the
             # derived name alone (no 'any other *.SaveRAM' fallback: a stale file of another name must not be adopted).
             launched = self._launch_times.get(inst)
-            # A NO-WRITE half (`no_save`: the cartridge is expected to leave its battery as the harness seeded it, e.g.
-            # reconnect_gen3's A, active_end_gen3's idle B) may be an untouched seed: BizHawk need not flush an SRAM
-            # nothing wrote. Its caller compares the bytes against the seeded/expected ones, which is the real proof;
-            # every other half still needs a battery the emulator wrote after the launch.
+            # A NO-WRITE half (`no_save`: the cartridge is expected to leave its battery as the harness seeded it) may be
+            # an untouched seed: BizHawk need not flush an SRAM nothing wrote. What proves "nothing wrote" differs by row:
+            # active_end_gen3's B and reconnect_gen3's A are READ by their oracles and compared byte-for-byte; the
+            # center_controls_gen3 / save_then_write_gen3 B halves are never read at all, and their proof is the
+            # declared-no_save gate in check_save_witness_gen3 (a no_save half whose receipt dumped a save FAILS).
+            # Every other half still needs a battery the emulator wrote after the launch.
             no_write = inst in self.cfg.get("no_save", ())
             if not seeded.is_file() or (not no_write and (not launched or seeded.stat().st_mtime < launched)):
                 raise RuntimeError(f"{inst}: companion cartridge has no fresh flushed battery at {rel_to_repo(seeded)} "

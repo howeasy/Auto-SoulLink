@@ -671,7 +671,7 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
 
 def companion_pin_problem(rom_path, title, root=REPO):
     """Why `rom_path` is not THE published companion cartridge of `title` (patch/dist/gen3_companions.json
-    `rom_sha1`, read from `root` -- the lane being verified), or None. A companion boot-check row is only
+    `rom_sha1`, read from `root` -- by default the checkout this tool runs from), or None. A companion boot-check row is only
     evidence for the pinned build: without this the tool boots whatever --rom names."""
     if title not in ("firered", "leafgreen", "emerald"):
         return f"--companion needs --title firered|leafgreen|emerald (got {title!r})"
