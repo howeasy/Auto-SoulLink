@@ -6093,28 +6093,42 @@ ATTEMPT_LIMITS_AT_D5A26DA9 = {
 RAND_WHITEOUT = "RESULT: FAIL (hunt ended whiteout)"
 
 
-# Gen 2's commit 96b65c48 ("a Gen 2 trade scenario retries once ... when its route battle is lost") deliberately raised EXACTLY the
-# `GEN2_TRADE_SCENARIOS` x `scenario_family(game) == "gen2_new"` rows to 2 (one retry on the next pinned clock minute). A tree with it
-# and a tree without it are both correct; those rows (and only those) may therefore be the snapshot value OR exactly 2.
-_GEN2_ROUTE_RETRY = "        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)\n"
-_GEN2_ROUTE_RETRY_HUNK = (_GEN2_ROUTE_RETRY + '    if scenario_family(game) == "gen2_new" and name in GEN2_TRADE_SCENARIOS:\n'
-                          "        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)\n")
+# The snapshot above is d5a26da9's. Three SETS of rows have changed since, each for a named, intended reason; nothing else may drift:
+#   1. link_gen3_rand: "rng_attempts": 6 (this task's own change; asserted separately as exactly 6 on FR/LG and Emerald).
+#   2. Gen 2 96b65c48 ("a Gen 2 trade scenario retries once ... when its route battle is lost"): every `GEN2_TRADE_SCENARIOS` scenario on a
+#      `scenario_family(game) == "gen2_new"` pairing (gen2_new, gen2_gold_silver, gen2_crystal_gold) may be 2. The set comes from the module's own
+#      GEN2_TRADE_SCENARIOS (absent on a tree without the change: then those rows must still equal the snapshot).
+#   3. Gen 1 O-8 (codex/o8-gen1; 2aa11f88 "bind synth catches ...", 2dec7f9e): the gen1_synth rows carry `"rng_attempts"` in their SCENARIOS
+#      entry instead of being keyed by name AND game inside scenario_attempt_limit (the old `if name == "explode_new": return 4` is gone). The
+#      entry value applies on every rng-retry family, so the same rows drift on the Gen 3 pairings (e.g. linked_faint_active_new on gen3_frlg,
+#      1 -> 3): those pairs never run (the rows are `games: gen1_new`) and the drift is accepted EXPLICITLY, with the exact values pinned below.
+O8_GEN1_SYNTH_LIMITS = {"linked_faint_active_new": 3, "explode_bench_battle_new": 3, "explode_new": 4}
+_GEN2_BALL_GATE_RETRY = "        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)\n"
+_GEN2_TRADE_RETRY = "        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)\n"
 
 
-def _allowed_attempt_limits(snapshot, name, family, trade_scenarios):
-    """The limits one scenario/game pair may have: the d5a26da9 snapshot, plus exactly 2 for a Gen 2 trade scenario on a `gen2_new`-family
-    pairing (96b65c48). `trade_scenarios` is the module's GEN2_TRADE_SCENARIOS (empty when the symbol is absent), so the set cannot drift
-    from the source of truth. (cut2 already has the symbol but not yet the limit change, hence {snapshot, 2} rather than 2 alone.)"""
+def _allowed_attempt_limits(snapshot, name, family, trade_scenarios, rng_family=False, o8_rows=()):
+    """The limits one scenario/game pair may have: the d5a26da9 `snapshot` value, plus (see the three sets above) exactly 2 for a Gen 2 trade
+    scenario of `trade_scenarios` on a `gen2_new` pairing, plus the pinned O-8 value for a gen1_synth row of `o8_rows` on an rng-retry family
+    (`rng_family`)."""
     allowed = {snapshot}
     if name in trade_scenarios and family == "gen2_new":
         allowed.add(2)
+    if name in o8_rows and rng_family:
+        allowed.add(O8_GEN1_SYNTH_LIMITS[name])
     return allowed
+
+
+def _o8_rows(module):
+    """The module's gen1_synth rows that carry `rng_attempts` (derived, not listed); only the pinned names are allowed a new value."""
+    return {n for n, row in module.SCENARIOS.items() if row.get("gen1_synth") and row.get("rng_attempts") and n in O8_GEN1_SYNTH_LIMITS}
 
 
 def _attempt_budget_problems(module):
     """Every scenario/game pair whose scenario_attempt_limit left its allowed set, except link_gen3_rand (6) and the probe row (new, 1).
     [(name, game, snapshot, now)]"""
     trade = getattr(module, "GEN2_TRADE_SCENARIOS", ())
+    o8 = _o8_rows(module)
     problems = []
     for game in module.GAMES:
         for name in module.SCENARIOS:
@@ -6122,26 +6136,64 @@ def _attempt_budget_problems(module):
                 continue
             was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
             now = module.scenario_attempt_limit(name, game)
-            if now not in _allowed_attempt_limits(was, name, module.scenario_family(game), trade):
+            if now not in _allowed_attempt_limits(was, name, module.scenario_family(game), trade, module.rng_retry_family(game), o8):
                 problems.append((name, game, was, now))
     return problems
 
 
 def test_the_attempt_limit_expectation_builder_in_both_modes():
+    # Gen 2 trade rows
     assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ()) == {1}                       # symbol absent: snapshot unchanged
     assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ("gen2_trade_x",)) == {1, 2}      # present: the trade rows may be 2
     assert _allowed_attempt_limits(1, "gen2_trade_x", "gen3_frlg", ("gen2_trade_x",)) == {1}        # ... only on the gen2_new pairings
     assert _allowed_attempt_limits(3, "link_gen3", "gen2_new", ("gen2_trade_x",)) == {3}            # ... and only for those scenarios
+    # Gen 1 O-8 rows: the pinned value, only for a named row that carries rng_attempts, only on an rng-retry family
+    assert _allowed_attempt_limits(1, "explode_new", "gen3_frlg", (), True, {"explode_new"}) == {1, 4}
+    assert _allowed_attempt_limits(1, "explode_new", "gen2_new", (), False, {"explode_new"}) == {1}
+    assert _allowed_attempt_limits(1, "explode_new", "gen3_frlg", (), True, set()) == {1}
+    assert _allowed_attempt_limits(1, "link_gen3", "gen3_frlg", (), True, {"explode_new"}) == {1}
     assert sorted(g for g in duo.GAMES if duo.scenario_family(g) == "gen2_new") == ["gen2_crystal_gold", "gen2_gold_silver", "gen2_new"]
 
 
-def test_the_snapshot_check_works_on_a_module_without_the_symbol():
+def _fake_module(trade_rows_at=None, with_symbol=False, o8=True):
+    """A module-shaped object around the real tables, whose scenario_attempt_limit is the SNAPSHOT value everywhere except what the caller
+    says (the Gen 2 trade rows at `trade_rows_at`, the O-8 rows at their pinned values)."""
     import types
 
-    bare = types.SimpleNamespace(GAMES=duo.GAMES, SCENARIOS=duo.SCENARIOS, scenario_family=duo.scenario_family,
-                                 scenario_attempt_limit=lambda name, game: 1 if name == "x" else duo.scenario_attempt_limit(name, game))
+    def limit(name, game):
+        was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+        if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):
+            return duo.scenario_attempt_limit(name, game)
+        if trade_rows_at is not None and name in duo.GEN2_TRADE_SCENARIOS and duo.scenario_family(game) == "gen2_new":
+            return trade_rows_at
+        if o8 and name in O8_GEN1_SYNTH_LIMITS and duo.rng_retry_family(game):
+            return O8_GEN1_SYNTH_LIMITS[name]
+        return was
+
+    module = types.SimpleNamespace(GAMES=duo.GAMES, SCENARIOS=duo.SCENARIOS, scenario_family=duo.scenario_family,
+                                   rng_retry_family=duo.rng_retry_family, scenario_attempt_limit=limit)
+    if with_symbol:
+        module.GEN2_TRADE_SCENARIOS = duo.GEN2_TRADE_SCENARIOS
+    return module
+
+
+def test_the_snapshot_check_works_on_a_module_without_the_symbol():
+    """STRICT no-symbol mode: a module with no GEN2_TRADE_SCENARIOS is held to the plain snapshot (+ link6 + O-8), so a Gen 2 trade row at 2
+    is a problem there -- and is the ONLY problem. With the symbol the same limits are fine."""
+    trade_pairs = sorted((n, g) for g in duo.GAMES for n in duo.GEN2_TRADE_SCENARIOS if duo.scenario_family(g) == "gen2_new")
+    assert len(trade_pairs) == 21
+    bare = _fake_module(trade_rows_at=2)
     assert not hasattr(bare, "GEN2_TRADE_SCENARIOS")
-    assert _attempt_budget_problems(bare) == [] or all(n in duo.GEN2_TRADE_SCENARIOS for n, *_ in _attempt_budget_problems(bare))
+    assert sorted((n, g) for n, g, _was, _now in _attempt_budget_problems(bare)) == trade_pairs
+    assert _attempt_budget_problems(_fake_module(trade_rows_at=2, with_symbol=True)) == []
+    assert _attempt_budget_problems(_fake_module()) == []                          # no symbol, snapshot values: clean
+    assert sorted((n, g) for n, g, _was, _now in _attempt_budget_problems(_fake_module(trade_rows_at=3, with_symbol=True))) == trade_pairs
+    # O-8: without its rows' `rng_attempts` the drifted pairs are NOT excused
+    stripped = _fake_module()
+    stripped.SCENARIOS = {n: {k: v for k, v in row.items() if k != "rng_attempts"} if n in O8_GEN1_SYNTH_LIMITS else row
+                          for n, row in duo.SCENARIOS.items()}
+    drifted = {n for n, _g, _was, _now in _attempt_budget_problems(stripped)}
+    assert drifted == set(O8_GEN1_SYNTH_LIMITS)
 
 
 def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
@@ -6150,6 +6202,30 @@ def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
     assert [duo.scenario_attempt_limit("probe_protected_span_flip_gen3", g) for g in ("gen3_frlg", "gen3_emerald")] == [1, 1]
     assert [n for n, row in duo.SCENARIOS.items() if row.get("rng_attempts") == 6] == ["link_gen3_rand"]
     assert not any("rehunt" in k for row in duo.SCENARIOS.values() for k in row)
+
+
+def test_the_gen2_and_gen1_changed_sets_are_exactly_the_named_ones():
+    """Name every drift the snapshot excuses, so a new one cannot hide inside the allowed sets."""
+    drifted = {}
+    for game in duo.GAMES:
+        for name in duo.SCENARIOS:
+            if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):
+                continue
+            was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+            now = duo.scenario_attempt_limit(name, game)
+            if now != was:
+                drifted.setdefault(name, set()).add((game, was, now))
+    gen2 = {n: v for n, v in drifted.items() if n in duo.GEN2_TRADE_SCENARIOS}
+    assert set(gen2) <= set(duo.GEN2_TRADE_SCENARIOS)
+    for name, rows in gen2.items():
+        assert {game for game, _w, now in rows} <= {"gen2_new", "gen2_gold_silver", "gen2_crystal_gold"} and {now for _g, _w, now in rows} == {2}, name
+    o8 = {n: v for n, v in drifted.items() if n in O8_GEN1_SYNTH_LIMITS}
+    for name, rows in o8.items():
+        assert {now for _g, _w, now in rows} == {O8_GEN1_SYNTH_LIMITS[name]}, name
+        assert all(duo.rng_retry_family(game) and not duo.scenario_applies(name, game) for game, _w, _n in rows), name    # pairs that never run
+    assert set(drifted) == set(gen2) | set(o8), sorted(set(drifted) - set(gen2) - set(o8))
+    assert {n for n, row in duo.SCENARIOS.items() if row.get("gen1_synth") and row.get("rng_attempts")} >= set(O8_GEN1_SYNTH_LIMITS)
+    assert all(duo.SCENARIOS[n]["rng_attempts"] == v for n, v in O8_GEN1_SYNTH_LIMITS.items())
 
 
 def _module_from_source(source, tmp_path):
@@ -6167,25 +6243,26 @@ def _module_from_source(source, tmp_path):
     return module
 
 
-def test_the_snapshot_holds_with_gen2s_trade_retry_applied_and_still_catches_other_drift(tmp_path):
+def test_the_snapshot_catches_any_other_drift_in_the_real_source(tmp_path):
+    """Mutate THIS tree's e2e_duo.py source and run the same check on the variant: every kind of other drift is a problem."""
     source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8").replace("\r\n", "\n")
-    assert source.count(_GEN2_ROUTE_RETRY) == 1
-    with_gen2 = source.replace(_GEN2_ROUTE_RETRY, _GEN2_ROUTE_RETRY_HUNK)       # exactly 96b65c48's scenario_attempt_limit hunk
-    module = _module_from_source(with_gen2, tmp_path)
-    changed = [(n, g) for g in module.GAMES for n in module.SCENARIOS
-               if module.scenario_attempt_limit(n, g) != duo.scenario_attempt_limit(n, g)]
-    assert changed and all(n in module.GEN2_TRADE_SCENARIOS and module.scenario_family(g) == "gen2_new"
-                           and module.scenario_attempt_limit(n, g) == 2 for n, g in changed)
-    assert _attempt_budget_problems(module) == []
-    # any other drift is still caught: a third attempt on a Gen 2 trade row, a non-trade Gen 2 row moved, a Gen 3 row moved
-    three = with_gen2.replace("        return 2   # one retry, only when the route's own", "        return 3   # one retry, only when the route's own")
-    assert three != with_gen2 and _attempt_budget_problems(_module_from_source(three, tmp_path))
-    ball_gate = with_gen2.replace(_GEN2_ROUTE_RETRY, _GEN2_ROUTE_RETRY.replace("return 2", "return 3"))
-    assert ball_gate != with_gen2 and _attempt_budget_problems(_module_from_source(ball_gate, tmp_path))
-    other = with_gen2.replace(_GEN2_ROUTE_RETRY_HUNK, _GEN2_ROUTE_RETRY_HUNK
-                              + '    if name == "link_gen3" and scenario_family(game) == "gen3_frlg":\n        return 2\n')
-    drift = _attempt_budget_problems(_module_from_source(other, tmp_path))
-    assert sorted((n, g, now) for n, g, _was, now in drift) == [("link_gen3", "gen3_frlg", 2), ("link_gen3", "gen3_lgfr", 2)]   # (lgfr is the family)
+    assert _attempt_budget_problems(_module_from_source(source, tmp_path)) == []                    # the unmutated source is clean
+
+    def variant(old, new):
+        assert source.count(old) == 1, old
+        return _attempt_budget_problems(_module_from_source(source.replace(old, new), tmp_path))
+    assert source.count(_GEN2_TRADE_RETRY) == 1 and source.count(_GEN2_BALL_GATE_RETRY) == 1
+    third = variant(_GEN2_TRADE_RETRY, _GEN2_TRADE_RETRY.replace("return 2", "return 3"))             # a third attempt on a trade row
+    assert {n for n, *_ in third} == set(duo.GEN2_TRADE_SCENARIOS)
+    moved_gate = variant(_GEN2_BALL_GATE_RETRY, _GEN2_BALL_GATE_RETRY.replace("return 2", "return 3"))    # ball_gate moved
+    assert {n for n, *_ in moved_gate} == {"gen2_ball_gate"}
+    anchor = '    entry = SCENARIOS.get(name, {})\n    if entry.get("rule_kind") == "family"'
+    gen3 = variant(anchor, '    if name == "link_gen3" and scenario_family(game) == "gen3_frlg":\n        return 2\n' + anchor)
+    assert sorted((n, g, now) for n, g, _w, now in gen3) == [("link_gen3", "gen3_frlg", 2), ("link_gen3", "gen3_lgfr", 2)]   # (lgfr = the family)
+    gen1 = variant('"gen1_synth": "explode", "rng_attempts": 4, "no_setup"', '"gen1_synth": "explode", "rng_attempts": 5, "no_setup"')
+    assert {n for n, *_ in gen1} == {"explode_new"} and {now for *_x, now in gen1} == {5}            # a gen1 row beyond its new value
+    no_entry = variant('"gen1_synth": "explode", "rng_attempts": 4, "no_setup"', '"gen1_synth": "explode", "no_setup"')
+    assert {n for n, *_ in no_entry} <= {"explode_new"}                                              # (explode_new is back to the default)
 
 
 @pytest.mark.parametrize("game", ["gen3_frlg", "gen3_emerald"])
