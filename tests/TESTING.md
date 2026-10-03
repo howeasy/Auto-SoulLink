@@ -510,7 +510,12 @@ writes no game memory: the only side effects are `joypad.set`, `savestate.save`/
 | pret | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` | supplies the event/terrain behaviour sources and the Johto encounter table |
 | Emulator | `E:/Howard/Bizhawk/EmuHawk.exe` | absent is a named **SKIP** (exit 2), not a FAIL |
 | hge ROM (`--game hge`) | `.cache/gen4/hge/build-fc5175764983/test.nds` | the matrix, land-data and zone-event NARCs (`a/0/4/1`, `a/0/6/5`, `a/0/3/2`) are byte-identical to HG's, so the pret events are reused (a unit test pins the hashes) |
-| hge save | `C:/slink/g4/saves/hge_a_OOO_630.SaveRAM` | Cyndaquil L5 outside the player's house, **no Pokégear yet**; Location at `general + 0x1424` |
+| hge save | `$SLINK_WORK_ROOT/lanes/g4/saves/hge_a_OOO_630.SaveRAM` | Cyndaquil L5 outside the player's house, **no Pokégear yet**; Location at `general + 0x1424` |
+| lane root | `$SLINK_WORK_ROOT/lanes/g4` — `F:/slink-work/lanes/g4` by default | `tools.gen4_fixtures.lane_root()`; every lane, save and receipt below is `<lane root>/<lane>`. `C:/slink/g4` remains only as a temporary junction |
+
+`setx` reaches only shells started after it — export `SLINK_WORK_ROOT` and `PYTEST_DEBUG_TEMPROOT`
+in any shell opened earlier, because an unset `SLINK_WORK_ROOT` falls back to `F:/slink-work`
+silently: a stale shell then works in a different lane tree instead of failing.
 
 ### Plan only (no emulator)
 
@@ -529,9 +534,9 @@ attributes from `a/0/6/5` at `0x14 + the u16 at +0x12`, and the event tiles from
 ### Plan and drive it (one EmuHawk per leg, own lane)
 
 ```bash
-python tools/gen4_routes.py run                    # lane C:/slink/g4/route by default
+python tools/gen4_routes.py run                    # lane $SLINK_WORK_ROOT/lanes/g4/route by default
 python tools/gen4_routes.py run --lane route2 --timeout 900 --pace-max 4000
-python tools/gen4_routes.py run --game hge --errand pokegear   # lane C:/slink/g4/route_hge, tag route_hge
+python tools/gen4_routes.py run --game hge --errand pokegear   # lane $SLINK_WORK_ROOT/lanes/g4/route_hge, tag route_hge
 ```
 
 `--game hge` swaps in the hge ROM, save, lane and state prefix. `--errand pokegear` prepends three
@@ -581,9 +586,9 @@ refuses to deposit the last one, so a **disclosed SYNTH setup** supplies the sec
 (`docs/gen4/reviews/DECISIONS_2026-10-01.md`, "box-mon setup"); everything after it runs natively.
 
 ```bash
-python tools/gen4_synth_save.py party2 --profile hgss --src <battery> --out C:/slink/g4/saves/hg_party2.SaveRAM
+python tools/gen4_synth_save.py party2 --profile hgss --src <battery> --out $SLINK_WORK_ROOT/lanes/g4/saves/hg_party2.SaveRAM
 python tools/gen4_routes.py plan --target pc --out pc_plan.json        # offline: both walks, no emulator
-python tools/gen4_routes.py run --target pc --save C:/slink/g4/saves/hg_party2.SaveRAM --lane route_pc
+python tools/gen4_routes.py run --target pc --save $SLINK_WORK_ROOT/lanes/g4/saves/hg_party2.SaveRAM --lane route_pc
 python tools/gen4_routes.py run --game hge --errand pokegear --target pc --save <hge party2 copy> --lane route_pc_hge
 ```
 
