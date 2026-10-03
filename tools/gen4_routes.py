@@ -3,7 +3,7 @@
 encounter grass tile, derived ONLY from ROM / pret data (no screenshots).
 
     python tools/gen4_routes.py plan [--game HG|hge] --save S.SaveRAM --rom X.nds --pret <pokeheartgold> [--out route.json]
-    python tools/gen4_routes.py run  [--game HG|hge]       # live, lane C:/slink/g4/route[_hge]
+    python tools/gen4_routes.py run  [--game HG|hge]       # live, lane <LANE_ROOT>/route[_hge]
 
 Sources (pokeheartgold @ad7a3afa; ROM files read through ndspy):
   * Save position (HG; hge reads its own offset from the hge pack, see GAMES): general block +
@@ -78,6 +78,7 @@ from tools.gen4_fixtures import (  # noqa: E402
     RomAbsent,
     kill_our_emuhawk,
     lane_dir,
+    lane_root,
     sha1_of,
     stage_rom,
     stage_save,
@@ -87,7 +88,7 @@ from tools.gen4_fixtures import (  # noqa: E402
 DEFAULT_ROM = Path("E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds")
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")
 DEFAULT_PRET = Path("E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold")
-HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")  # owner hge save: Cyndaquil L5, OOO
+HGE_SAVE = lane_root() / "saves" / "hge_a_OOO_630.SaveRAM"  # owner hge save: Cyndaquil L5, OOO
 
 # Per-title save Location: the pack's profile.location names array 5's general-block offset
 # (HG 0x1234, hge 0x1424: hge's earlier arrays are larger) and the Location field offsets. The
@@ -104,7 +105,7 @@ GAMES = {
     "SS": (REPO / "data/games/gen4_hgss/profile.json", "soulsilver", "hgss"),
 }
 SS_ROM = Path("E:/Howard/hgss_archipelago-master/Pokemon - SoulSilver Version (USA).nds")
-SS_SAVE = Path("C:/slink/g4/saves/ss_DDDD_25944.SaveRAM")  # owner SS save: Totodile L5, DDDD
+SS_SAVE = lane_root() / "saves" / "ss_DDDD_25944.SaveRAM"  # owner SS save: Totodile L5, DDDD
 MATRIX_NARC, LAND_NARC = "a/0/4/1", "a/0/6/5"
 TERRAIN_OFF, CELL = 0x14, 32
 DOOR_BAND = range(0x68, 0x70)  # TILE_BEHAVIOR_104..111: what a warp tile must decode to
@@ -1405,7 +1406,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
-    r = sub.add_parser("run", help="plan and drive the route live in lane C:/slink/g4/route[_hge]")
+    r = sub.add_parser("run", help="plan and drive the route live in lane <LANE_ROOT>/route[_hge]")
     for q in (p, r):
         q.add_argument("--game", choices=sorted(GAMES), default="HG")
         q.add_argument("--save")

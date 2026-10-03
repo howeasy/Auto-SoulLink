@@ -1,9 +1,9 @@
 """G2 live wild CAPTURE on HG (lua/tests/probe_gen4_catch.lua), SYNTH bag setup.
 
 Offline: python -m pytest tests/live/test_gen4_catch.py -m 'not live' -q
-Live (own lane C:/slink/g4/catch, one EmuHawk at a time, own PIDs only):
+Live (own lane <LANE_ROOT>/catch, one EmuHawk at a time, own PIDs only):
   SLINK_LIVE=1 python -m pytest tests/live/test_gen4_catch.py -m live -q -rs
-Inputs: C:/slink/g4/saves/hg_base_26310_bag.SaveRAM (+ .synth.json, `tools/gen4_synth_save.py bag`) and the settled wild
+Inputs: <LANE_ROOT>/saves/hg_base_26310_bag.SaveRAM (+ .synth.json, `tools/gen4_synth_save.py bag`) and the settled wild
 battle state the C1-9 route tool leaves for it (`gen4_routes.py run --save <bag> --lane catch --tag catchhg`).
 Oracle (independent of the probe's writes: it writes NOTHING): the game's result byte bs+0x2420 == 4, the live party
 growing 1 -> 2 with the new key's PID equal to the foe's battleMons[1] PID, then a codec decode of the lane battery after
@@ -35,7 +35,7 @@ SCRIPT = REPO / "lua/tests/probe_gen4_catch.lua"
 GAME = os.environ.get("SLINK_GEN4_CATCH_GAME", "HG")
 TITLES = {
     "HG": {
-        "lane": "C:/slink/g4/catch",
+        "lane": g4.lane_root() / "catch",
         "bag": "hg_base_26310_bag",
         "title": "heartgold",
         "pack": "gen4_hgss",
@@ -44,7 +44,7 @@ TITLES = {
         "tag": "catchhg",
     },
     "SS": {
-        "lane": "C:/slink/g4/catch_ss",
+        "lane": g4.lane_root() / "catch_ss",
         "bag": "ss_bag",
         "title": "soulsilver",
         "pack": "gen4_hgss",
@@ -53,7 +53,7 @@ TITLES = {
         "tag": "catchhg",
     },
     "hge": {
-        "lane": "C:/slink/g4/catch_hge",
+        "lane": g4.lane_root() / "catch_hge",
         "bag": "hge_bag",
         "title": "heartgold_hge",
         "pack": "gen4_hge",
@@ -62,8 +62,8 @@ TITLES = {
         "tag": "catchhg",
     },
 }[GAME]
-LANE_ROOT = Path(TITLES["lane"])
-BAG_SAVE = Path(f"C:/slink/g4/saves/{TITLES['bag']}.SaveRAM")
+LANE_ROOT = TITLES["lane"]
+BAG_SAVE = g4.lane_root() / "saves" / f"{TITLES['bag']}.SaveRAM"
 EMUHAWK = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
 INITIAL_TIME = "2010-01-01T12:00:00"
 # Menu path from the settled FIGHT menu to a thrown ball. The first three keys are the pack's recipe

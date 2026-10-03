@@ -616,7 +616,7 @@ def test_live_perf(title):
     packed_title["perf_title"] = title
     sites, seam = site_inventory(packed_title, source)
     inventory = packed_title, sites, seam
-    root = Path(os.environ.get("SLINK_GEN4_PERF_RUNS", "C:/slink/g4/perf")) / (
+    root = Path(os.environ.get("SLINK_GEN4_PERF_RUNS") or gen4_fixtures.lane_root() / "perf") / (
         title + "-" + uuid.uuid4().hex[:12]
     )
     records = []

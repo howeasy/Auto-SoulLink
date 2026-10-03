@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import gen_gen4_pack as g
+from tools import gen4_fixtures, gen_gen4_pack as g
 
 PACKS = {m: g.OUT[m] for m in ("hgss", "hge", "pt")}
 
@@ -388,7 +388,7 @@ def test_hge_hidden_ability_is_bit_6_of_the_two_bit_field_not_bit_0():
 
 
 # ---- Part A data gaps: location / Pt party+trainer+footer / hge party+trainer ---------------------------
-SAVES = Path("C:/slink/g4/saves")
+SAVES = gen4_fixtures.lane_root() / "saves"
 SAVE_OF = {"hgss": ("hg_base_26310.SaveRAM", "hgss"), "hge": ("hge_a_OOO_630.SaveRAM", "hge"), "pt": ("pt_TTT_44361.SaveRAM", "pt")}
 
 

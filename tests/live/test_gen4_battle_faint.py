@@ -5,7 +5,7 @@ Offline (always): python -m pytest tests/live/test_gen4_battle_faint.py -m 'not 
   proof of every seam pin against the pinned ROM bytes (absent ROM skips by name, wrong bytes fail).
 Live (the coordinator's ONE emulator lane, granted separately):
   SLINK_LIVE=1 python -m pytest tests/live/test_gen4_battle_faint.py -m live -q -rs
-  Input: the C1-9 state C:/slink/g4/route/route_leg2_battle_settled.State (copied into the lane,
+  Input: the C1-9 state <LANE_ROOT>/route/route_leg2_battle_settled.State (copied into the lane,
   never written in route/). hge: route_hge leg5 state + hge_a_OOO_630 save, lane faint_hge (env overrides).
 No offline test launches an emulator. A scenario that cannot reach its oracle is a NAMED SKIP (OPEN),
 never a pass. Never kill by image name: only this Popen's PID and this lane's own EmuHawk."""
@@ -31,25 +31,25 @@ pytestmark = pytest.mark.usefixtures("model_surface")
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_battle_faint.lua"
-LANE_ROOT = Path("C:/slink/g4/faint2")  # card C1-8D lane (earlier cards used faint / faint_hge)
+LANE_ROOT = g4.lane_root() / "faint2"  # card C1-8D lane (earlier cards used faint / faint_hge)
 LANES = {"heartgold": LANE_ROOT, "heartgold_hge": LANE_ROOT}
 # SYNTH 2-mon setup (owner ruling 2026-10-01): python tools/gen4_synth_save.py party2 --profile {hgss|hge} ...
-P2_SAVES = {"heartgold": Path("C:/slink/g4/saves/hg_base_26310_party2.SaveRAM"),
-            "heartgold_hge": Path("C:/slink/g4/saves/hge_a_OOO_630_party2.SaveRAM")}
+P2_SAVES = {"heartgold": g4.lane_root() / "saves" / "hg_base_26310_party2.SaveRAM",
+            "heartgold_hge": g4.lane_root() / "saves" / "hge_a_OOO_630_party2.SaveRAM"}
 P2_PROFILE = {"heartgold": "hgss", "heartgold_hge": "hge"}
 # the C1-9 route tool (`tools/gen4_routes.py run --save <party2> [--game hge --errand pokegear] --lane faint2 --tag p2hg|p2hge`)
 # leaves <tag>_leg<N>_battle_settled.State + <tag>_leg<N>.log in the lane
 P2_TAG = {"heartgold": "p2hg", "heartgold_hge": "p2hge"}
 P2_SCENARIOS = ("seam_turnend_p2", "seam_ufce_bit_p2")
-HGE_STATE = Path("C:/slink/g4/route_hge/route_hge_leg5_battle_settled.State")
-HGE_SAVE = Path("C:/slink/g4/saves/hge_a_OOO_630.SaveRAM")
+HGE_STATE = g4.lane_root() / "route_hge" / "route_hge_leg5_battle_settled.State"
+HGE_SAVE = g4.lane_root() / "saves" / "hge_a_OOO_630.SaveRAM"
 # the route log of each state must name the settled FIGHT-menu battle (title -> (RESULT regex, settled regex))
 STATE_LOGS = {
     "heartgold": (r"RESULT BATTLE .*species=(?:16|PIDGEY\(16\)) level=2\b", r"settled after \d+ frames; chain .* hp=13/13 player=155"),
     "heartgold_hge": (r"RESULT BATTLE .*species=PIDGEY\(16\) level=3\b",
                       r"settled after \d+ frames; chain .* enemy=16 L3 hp=16/16 player=155"),
 }
-ROUTE_STATE = Path("C:/slink/g4/route/route_leg2_battle_settled.State")
+ROUTE_STATE = g4.lane_root() / "route" / "route_leg2_battle_settled.State"
 ROUTE_LOG = ROUTE_STATE.with_name("route_leg2.log")
 EMUHAWK = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
 DEFAULT_SAVE = Path("E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM")

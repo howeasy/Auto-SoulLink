@@ -10,7 +10,7 @@ tests/TESTING.md) are laid into a fake 4 MiB main RAM the way the game lays Save
   SaveData + 0x232B4         slot specs {u8 id, u8 first_page, u16 num_pages, u32 offset, u32 size}
 
 The header/spec geometry is the REAL one from the probe dump
-``C:/slink/g4/probe/runs/hg_p2/savedata.bin`` (a 0x30000-byte RAM dump of the live SaveData struct,
+``<LANE_ROOT>/probe/runs/hg_p2/savedata.bin`` (a 0x30000-byte RAM dump of the live SaveData struct,
 HG, idle overworld; run row h item4): ``ARRAY_TABLE`` below is that dump's (size, offset) for the arrays
 the client reads, embedded so the suite runs without the dump; ``test_probe_dump_*`` cross-checks them
 when the dump is present. The only bytes where the live dump differs from the battery file's
@@ -35,12 +35,13 @@ import lupa
 import pytest
 
 from server.adapters import gen4_codec as codec
+from tools import gen4_fixtures
 
 ROOT = Path(__file__).resolve().parents[2]
 READS = ROOT / "lua/gen4/reads.lua"
 PK4 = ROOT / "lua/gen4/pk4.lua"
 SAVE_DIR = Path("E:/Howard/Bizhawk/NDS/SaveRAM")
-PROBE_DUMP = Path("C:/slink/g4/probe/runs/hg_p2/savedata.bin")
+PROBE_DUMP = gen4_fixtures.lane_root() / "probe" / "runs" / "hg_p2" / "savedata.bin"
 SAVES = {
     "hg": ("SLINK_GEN4_HG_SAVE", "Pokemon - HeartGold Version (USA).SaveRAM", "hgss", "gen4_hgss", "heartgold"),
     "ss": ("SLINK_GEN4_SS_SAVE", "Pokemon - SoulSilver Version (USA).SaveRAM", "hgss", "gen4_hgss", "soulsilver"),

@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 
 from server.adapters import gen4_codec as codec
-from tools import gen4_synth_save as synth
+from tools import gen4_fixtures, gen4_synth_save as synth
 
-SAVES = Path("C:/slink/g4/saves")
+SAVES = gen4_fixtures.lane_root() / "saves"
 OWNER = {"hgss": "hg_base_26310.SaveRAM", "hge": "hge_a_OOO_630.SaveRAM"}
 HGSS = codec.PROFILES["hgss"]
 

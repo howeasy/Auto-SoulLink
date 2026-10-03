@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import gen4_evidence, gen4_mailbox_census
+from tools import gen4_evidence, gen4_fixtures, gen4_mailbox_census
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "lua/tests/probe_gen4_mailbox.lua"
@@ -465,7 +465,7 @@ def test_gen4_mailbox_canary_watch(title):
     register_mailbox_kind()
     cut = gen4_evidence.snapshot("mailbox", title, repo=REPO)
     cut["rom_sha1"] = rom_sha1
-    root = Path(os.environ.get("SLINK_GEN4_MAILBOX_RUNS", "C:/slink/g4/mailbox"))
+    root = Path(os.environ.get("SLINK_GEN4_MAILBOX_RUNS") or gen4_fixtures.lane_root() / "mailbox")
     assert " " not in str(root.resolve()) and "google drive" not in str(root.resolve()).lower(), "short non-Drive lane root required"
     batch = root / (title + "-" + uuid.uuid4().hex[:12])
     batch.mkdir(parents=True, exist_ok=False)

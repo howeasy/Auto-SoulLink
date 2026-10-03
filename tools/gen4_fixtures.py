@@ -19,6 +19,7 @@ import copy
 import datetime
 import hashlib
 import json
+import os
 import re
 import shutil
 import struct
@@ -34,7 +35,14 @@ from tools.gen1_playthrough import disable_rewind  # noqa: E402
 
 LOCK = REPO / "data" / "gen4_sources.lock.json"
 BIZHAWK_CONFIG = Path("E:/Howard/Bizhawk/config.ini")
-LANE_ROOT = Path("C:/slink/g4")
+
+
+def lane_root() -> Path:
+    # ponytail: local until the shared tools/slink_space.py work_root('lanes') lands; then delegate to it.
+    return Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work")) / "lanes" / "g4"
+
+
+LANE_ROOT = lane_root()
 NDS_CORE = "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS"
 MAX_PATH_GUARD = 240  # BizHawk save writes fail silently near MAX_PATH 260
 
