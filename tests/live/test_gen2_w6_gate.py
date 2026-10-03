@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -86,8 +87,10 @@ SYNTH_PSN_U1 = {"gold": "gold_synth_psn"}   # titles whose U1 leg boots the disc
 # O-33 clock setup for the U1 leg (tools/gen2_synth_fixtures.day_clock, disclosed in the leg as clock_setup): the
 # fixture RTC runs on with the host clock (game = the save's wStart time + RTC), and Silver Route 30 holds Weedle only by morning/day
 # (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite: Hoothoot/Rattata), so a night launch never meets a
-# POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) and Gold (trainer Wade) hunt
-# at any hour. Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
+# POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) hunts at any hour. Gold boots
+# the SYNTH poisoned lead (SYNTH_PSN_U1), so it needs no hunter, but it is still pinned to 11:00: the RTC otherwise runs
+# on from the host clock (EVO-U1), so the pin keeps the route a pure function of the committed fixture + the disclosed
+# clock_setup, which the verifier re-derives. Only the emulator RTC trailer changes; the CartRAM is the fixture's.
 U1_CLOCK = {"silver": 11, "gold": 11}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
@@ -146,10 +149,12 @@ def frozen_u1(chain: str):
     place of the worktree files), {path: {ref, sha256}}, and the frozen test module (u1_facts, verify, U1_FIXTURE)."""
     base = REPO / ".cache/gen2-w6-frozen" / chain
     files = {}
+    # the receipt names the exact commit, never the moving ref: resolved ONCE, before the file loop
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True,
+                          text=True).stdout.strip()
     for rel, ref in U1_CHAINS[chain].items():
-        if ref == "HEAD":   # the receipt names the exact commit, never the moving ref
-            ref = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True,
-                                 text=True).stdout.strip()
+        if ref == "HEAD":
+            ref = head
         data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_bytes(data)
@@ -161,6 +166,15 @@ def frozen_u1(chain: str):
     sys.path[:] = path          # its REPO-relative sys.path inserts point into the cache
     module.REPO = REPO
     return base, files, module
+
+
+def verify_u1(u1, text: str, pack: dict, title: str):
+    """The frozen 09-24 chains verify against the clean pack (no `identity`); the current-drivers chain verifies the
+    overlay run against its own overlay identity, exactly as test_gen2_frame_align does (sweep wave3: the head module's
+    verify() without an identity took the clean-ROM branch and failed a PASSING overlay run on rom_sha1)."""
+    if "identity" in inspect.signature(u1.verify).parameters:
+        return u1.verify(text, pack, title, live.identity(title, "overlay"))
+    return u1.verify(text, pack, title)
 
 
 def _legs(title: str, u1) -> dict:
@@ -186,7 +200,7 @@ def _legs(title: str, u1) -> dict:
         "sfx": (sfx.GATE, "patch/build/gen2_sfx_gate_result.txt", f"{title}_battle", sfx_env,
                 lambda text, staged: sfx.verify(text, sfx.sfx_facts(title), title, staged), 1800),
         "u1": (u1.GATE, "patch/build/gen2_frame_align_result.txt", u1.U1_FIXTURE[title], u1_env,
-               lambda text, staged: u1.verify(text, pack, title), 3600),   # the U1f gate's own bound
+               lambda text, staged: verify_u1(u1, text, pack, title), 3600),   # the U1f gate's own bound
     }
 
 
@@ -256,7 +270,9 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
                      "qualification_attempt_id": qual["attempt_id"], "clock_setup": clock,
-                     **({"poison_setup": poison} if poison is not None else {}),
+                     **({"poison_setup": poison, "synth_psn": True,
+                         "poison_start_phase": json.loads(env["SLINK_GEN2_U1_FACTS"])["poison"]["start_phase"]}
+                        if poison is not None else {}),
                      "driver": {"ref": chain, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
