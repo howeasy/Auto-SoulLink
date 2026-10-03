@@ -1076,13 +1076,17 @@ function Client.new(p)
                 send("sync_retrieve_failed", { key = cmd.key, reason = tostring(why) })
             end
         else
+            -- BOX-MEMORIAL-2: a burial already waiting for its save owns this key. A repeated command (the server
+            -- re-sends memorialize until it is acked) must NOT reach the box executor: with the memorial copy made
+            -- and the volatile active-box source already removed it reports a plain done, and the client would ack
+            -- memorialize_done before the native save made the removal durable (sweep ffd54b44, gen2_pc_ops).
+            for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
             local done, why = boxes.memorialize(phys)
             if done and why then
-                -- BOX-MEMORIAL-2: a boxed memorial that touched the volatile active sBox is not durable until
+                -- a boxed memorial that touched the volatile active sBox is not durable until
                 -- a native save; memorialize_done waits for the settle after the save witness
                 self.pending_rescan = true
                 log("[SLink-gen2] memorialize " .. cmd.key .. ": " .. why)
-                for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
                 self.settle[#self.settle + 1] = { key = phys, armed = false,
                                                   memorial = { key = cmd.key, nickname = cmd.nickname } }
                 show_burial()

@@ -1634,6 +1634,29 @@ def test_memorialize_moves_the_mon_into_box_14_and_acks_with_the_box():
     assert storage(world, 13)[0:3] == [1, 19, 255] and party_count(world) == 1
 
 
+def test_a_repeated_memorialize_while_the_burial_waits_for_the_save_never_acks_early():
+    """Final sweep ffd54b44 (gen2_pc_ops, both pairs): the dead partner sat in the ACTIVE box, so its removal is
+    volatile until a native save (BOX-MEMORIAL-2) and the first memorialize parks a settle. The server RE-SENT the
+    command while the player had not saved yet; the duplicate found the memorial copy and no source, which the box
+    executor reports as a plain done, so the client acked memorialize_done three times BEFORE the save. The ack must
+    wait for the save and be sent exactly once."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [dead])                          # the dead mon is in the active (current) box
+    world.checkpoint_ok = True
+    for _ in range(4):                                         # the server's retries before the player saves
+        world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+        world.frames(3)
+    assert world.sent("memorialize_done") == [], "acked before the native save made the removal durable"
+    assert world.sent("memorialize_failed") == []
+    world.fire("save_completed")
+    world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and done["box"] == 13
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})  # a retry AFTER the settle is harmless and idempotent
+    world.frames(3)
+    assert len(world.sent("memorialize_done")) == 2   # re-acked on request (the lone durable copy is done)
+
+
 def test_memorialize_follows_the_dead_mon_through_its_evolution():
     """O-30: the linked mon evolved after its death (no Gen 2 key_change): the memorial still buries it
     and acks under the key the server tracks."""
