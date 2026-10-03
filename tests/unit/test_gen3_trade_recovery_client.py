@@ -664,8 +664,13 @@ def test_empty_journal_one_frame_busy_replays_capture_once_after_visibility_retu
     flushed = world.saveram_calls
     world.fire("save")
     world.step(2)
-    assert world.events("capture") == []
-    assert pending_settle_flags(world).acquire is True
+    if signal == "capture_wild":
+        # a wild catch is reported NOW (it needs only a party read, and no trade can produce it); nothing is held
+        assert len(world.events("capture")) == 1 and world.client.state.held_acq is None
+    else:
+        # a gift / PC move is held as an acquisition-only record (never the whole flag table) until the journal answers
+        assert world.events("capture") == [] and world.client.state.held_acq is not None
+        assert pending_settle_flags(world).acquire is None
     assert world.saveram_calls == flushed + 1
     journal.busy = None
     world.step(3)
@@ -740,121 +745,221 @@ def test_acq_a_signal_held_by_recovery_is_logged_once_not_per_frame(monkeypatch)
     assert world.events("capture") == []
 
 
-# ── a wild catch seen while the trade journal is only BUSY is never dropped (lost-capture, link_gen3_rand Emerald) ───────────────
-# Measured: both duo clients share one journal file, whose OS guard makes the OTHER client's read momentarily "busy"; journal:hidden() then
-# answers true although the journal holds NO record (revision 0). With the run unbound (awaiting_trade_run: "trade journal binding
-# refused", the rand rows) settle() used to CLEAR the flags, and observe_known absorbed the new key as known: a real catch, never reported.
-def busy_world(awaiting=True):
+# ── lost-capture: an acquisition is never lost while the trade journal is merely UNREADABLE (busy) ───────────────────────────────
+# Production trigger: any other process holding ROOT/slink_gen3_trade.guard (a sync client, an indexer, a backup, a second BizHawk) makes the
+# journal's own read() raise LOCK_BUSY; journal:hidden() is then true although the journal holds no record. These tests drive exactly that through
+# the REAL guarded file_store (tests/unit/gen3_trade_journal_model.py `files=`): files.held = True is the other process; nothing sets journal.busy.
+ROUTE_102, ROUTE_103 = (0, 17), (0, 18)          # Emerald map group/num -> area_map.json route_102 / route_103
+
+
+def lock_world(awaiting=True, held=False):
     from tests.unit.gen3_trade_journal_model import JournalModel
     from tests.unit.gen3_world import World
     from tests.unit.test_gen3_client import A, B, party
+    from tests.unit.test_gen3_trade_journal import Files
 
-    model = JournalModel(run=None if awaiting else "model-run")
+    files = Files()
+    files.held = held                                       # busy from the very first read when True
+    model = JournalModel(run=None if awaiting else "model-run", files=files)
     world = World("gen3_emerald", "emerald", "companion", journal=model)
+    model.frame_source = lambda: world.frame
+    world.set_location(*ROUTE_102)
     world.set_party(party(A, B))
     world.step_to(60)
     world.set_balls(5)
     world.step(30)
-    journal = model.journal
-    assert (journal.ready(journal) is False) == awaiting
-    original_hidden, original_entries = journal.hidden, journal.has_entries
-    original_ready, original_outstanding = journal.ready, journal.outstanding
-    # the real journal's answers while its lock is busy: read() is nil, so hidden() and has_entries() are true, ready() is false and
-    # outstanding() is nil (the fake keeps `busy` set; the real one re-reads, and clears it, only when the lock is free)
-    journal.hidden = lambda self: True if self.busy else original_hidden(self)
-    journal.has_entries = lambda self: True if self.busy else original_entries(self)
-    journal.ready = lambda self: False if self.busy else original_ready(self)
-    journal.outstanding = lambda self: (None, None) if self.busy else original_outstanding(self)
-    return world, journal
+    return world, files, model.journal
 
 
-def catch_in_battle(world):
+def catch_in_battle(world, foe=None, *signals):
     from tests.unit.test_gen3_client import A, B, C, FOE, party
 
     world.logs.clear()
-    world.enter_battle([FOE])
+    world.enter_battle([foe or FOE])
     world.set_party(party(A, B, C))
-    world.fire("capture_wild")
-    world.fire("mon_given")
+    for signal in signals or ("capture_wild", "mon_given"):
+        world.fire(signal)
 
 
 def acq_lines(world, *needles):
     return [line for line in world.logs if "[SLink-gen3] ACQ " in line and all(n in line for n in needles)]
 
 
+def capture_events(world):
+    return [e for e in world.events("capture")]
+
+
 @pytest.mark.parametrize("awaiting", [True, False])
-def test_lost_capture_a_catch_during_a_busy_journal_is_reported_once_when_the_lock_frees(awaiting):
+def test_lost_capture_a_wild_catch_is_reported_now_even_while_the_journal_is_unreadable(awaiting):
+    """Design: capture_wild is the battle engine's Cmd_givecaughtmon, which no trade can produce, and its key (personality:ot_id) comes from
+    party_read, which reads RAM and never the journal -- so it is reported at once and nothing is held."""
     from tests.unit.test_gen3_client import KC
 
-    world, journal = busy_world(awaiting)
-    journal.busy = True
+    world, files, journal = lock_world(awaiting)
+    files.held = True
     catch_in_battle(world)
-    world.step(200)                                             # far longer than observe_known's quiet window: it must NOT absorb the key
-    assert world.events("capture") == [] and acq_lines(world, "known via=seed:observe") == []
-    (held,) = acq_lines(world, "held reason=recovery_hidden")
-    assert "retained=true" in held and "caught=true" in held     # one evidence line, not one per frame
-    journal.busy = None
-    world.step(60)
-    (cap,) = world.events("capture")                             # exactly one, no double report once the hold releases
-    assert cap["key"] == KC and "gift" not in cap
-    (sent,) = acq_lines(world, "capture via=settle:party")
-    assert f"key={KC} " in sent and "gift=false" in sent
-    assert acq_lines(world, "known via=seed:observe") == []
-    (resumed,) = acq_lines(world, "resumed")                    # the hold's end is evidenced once too
-    assert "journal visible again" in resumed
+    world.step(3)
+    assert journal.busy is True                                          # the REAL lock answer, not a hand-set flag
+    (cap,) = capture_events(world)
+    assert cap["key"] == KC and cap["area_id"] == "route_102" and "gift" not in cap
+    assert len(acq_lines(world, "journal_busy reported_now=true")) == 1 and acq_lines(world, "retained=true") == []
     world.step(200)
-    assert len(world.events("capture")) == 1 and len(acq_lines(world, "capture via=")) == 1
+    assert acq_lines(world, "known via=seed:observe") == []
+    files.held = False
+    world.step(60)
+    assert len(capture_events(world)) == 1 and len(acq_lines(world, "capture via=")) == 1       # exactly once, never twice
 
 
-def test_lost_capture_a_hold_that_never_ends_expires_loudly_and_is_bounded():
-    world, journal = busy_world(True)
-    journal.busy = True
-    catch_in_battle(world)
+def test_lost_capture_f1_a_held_gift_is_attributed_to_the_area_of_its_signal():
+    from tests.unit.test_gen3_client import A, B, C, KC, party
+
+    world, files, journal = lock_world()
+    files.held = True
+    world.logs.clear()
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
+    world.step(3)
+    assert capture_events(world) == [] and len(acq_lines(world, "held reason=recovery_hidden retained=true")) == 1
+    world.set_location(*ROUTE_103)                                        # the player walks on while the lock stays busy
+    world.step(120)
+    assert capture_events(world) == [] and acq_lines(world, "known via=seed:observe") == []     # observe_known cannot absorb it
+    files.held = False
+    world.step(10)
+    (cap,) = capture_events(world)
+    assert cap["key"] == KC and cap["gift"] is True and cap["area_id"] == "route_102"             # NOT route_103
+    assert len(acq_lines(world, "resumed")) == 1
+
+
+def test_lost_capture_f2_a_trade_owned_signal_is_never_replayed_as_a_catch():
+    from tests.unit.test_gen3_client import A, B, C, party
+
+    # (a) the settle window of a native trade covers the signal: evaluated AT SIGNAL TIME, it stays trade-owned however long the hold lasts
+    world, files, journal = lock_world()
+    files.held = True
+    world.logs.clear()
+    world.client.state.trade_settle_until = world.frame + 30
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
+    world.step(205)                                                                   # far past the 30-frame witness window
+    files.held = False
+    world.step(20)
+    assert capture_events(world) == []                                                # the behaviour: no fake catch at release
+    assert acq_lines(world, "retained=false", "why=trade_owned") and acq_lines(world, "retained=true") == []
+    # (b) a trade starts while an ordinary gift is held: the held signal is tainted and dropped by name on release
+    world, files, journal = lock_world()
+    files.held = True
+    world.logs.clear()
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
+    world.step(3)
+    assert len(acq_lines(world, "retained=true")) == 1
+    world.client.state.trade_settle_until = world.frame + 30
+    world.step(40)
+    files.held = False
+    world.step(20)
+    assert capture_events(world) == [] and len(acq_lines(world, "dropped reason=trade_during_hold")) == 1
+
+
+def test_lost_capture_f3_an_expired_hold_is_loud_and_player_visible_once():
+    from tests.unit.test_gen3_client import A, B, C, party
+
+    world, files, journal = lock_world()
+    files.held = True
+    world.logs.clear()
+    world.hud.clear()
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
     world.step(1700)
-    assert acq_lines(world, "expired") == [] and world.events("capture") == []     # still inside the bound
+    assert acq_lines(world, "expired") == [] and world.hud == []                          # still inside the bound
     world.step(300)
     (loud,) = acq_lines(world, "expired")
-    assert "retained=false" in loud and "DROPPED" in loud and "frames" in loud
-    assert world.events("capture") == []
+    assert "DROPPED" in loud and "after=" in loud
+    shown = [h for h in world.hud if h[0] == "show"]
+    assert len(shown) == 1 and shown[0][1] == "Capture not recorded - check your party / tell the host"
+    assert shown[0][1].isascii()
+    world.step(400)
+    assert len([h for h in world.hud if h[0] == "show"]) == 1 and capture_events(world) == []
 
 
-@pytest.mark.parametrize("how", ["entries", "failure"])
-def test_lost_capture_a_journal_that_really_owns_the_party_still_drops_the_signal(how):
-    """The original protection: an unsettled (entries) or failed journal owns the party change; the signal is NOT replayed as a catch."""
-    world, journal = busy_world(True)
-    journal.busy = True
-    catch_in_battle(world)
+def test_lost_capture_f4_a_wild_catch_with_the_journal_busy_since_startup_is_still_reported():
+    """No baseline exists (the hello was hidden), so settle used to drop the signal and learn the caught mon as the baseline."""
+    from tests.unit.test_gen3_client import A, B, C, KA, KB, KC, OT, party
+    from tests.unit.gen3_world import mon_record
+
+    world, files, journal = lock_world(held=True)
+    assert world.client.state.baselined is False and journal.busy is True
+    foe = mon_record(C, OT, species=19)
+    catch_in_battle(world, foe)
     world.step(5)
-    assert acq_lines(world, "retained=true")                     # held while it is only busy
-    journal.busy = None
-    if how == "entries":
-        journal.hidden = lambda self: True                       # an unsettled record is now visible
-        journal.has_entries = lambda self: True
-    else:
-        journal.failure = "trade journal: model failure"
-        journal.hidden = lambda self: True
-    world.step(60)
-    assert world.events("capture") == []
-    assert acq_lines(world, "retained=false")                    # the (named) drop, not a silent one
+    (cap,) = capture_events(world)
+    assert cap["key"] == KC and acq_lines(world, "baseline taken with the caught foe excluded (1 key(s))")
+    assert cap["key"] not in (KA, KB) and world.client.state.baselined is True
+    files.held = False
+    world.step(120)
+    assert len(capture_events(world)) == 1
 
 
-def test_lost_capture_without_an_acquisition_signal_nothing_is_held_or_logged():
-    world, journal = busy_world(True)
-    journal.busy = True
+def test_lost_capture_f5_only_the_acquisition_is_held_every_other_flag_keeps_the_old_rule():
+    from tests.unit.test_gen3_client import A, B, C, FOE, party
+
+    world, files, journal = lock_world()
+    files.held = True
+    world.logs.clear()
+    world.enter_battle([FOE])                                              # battle N
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")                                                # held
+    world.leave_battle(outcome=4)                                          # battle N's battle_end fires inside the busy window
+    world.step(3)
+    world.enter_battle([FOE])                                              # battle N+1 begins
+    world.step(3)
+    battle_n1 = world.client.state.battle
+    assert battle_n1 is not None
+    files.held = False
+    world.step(10)
+    assert world.events("no_catch") == []                                  # N's battle_end was cleared, not replayed
+    assert world.client.state.battle is not None and world.client.state.battle["battle_id"] == battle_n1["battle_id"]
+    assert len(capture_events(world)) == 1
+
+
+def test_lost_capture_unreadable_journal_with_no_signal_holds_and_logs_nothing():
+    world, files, journal = lock_world()
+    files.held = True
     world.logs.clear()
     world.step(100)
     assert acq_lines(world) == []
 
 
+@pytest.mark.parametrize("how", ["entries", "failure"])
+def test_lost_capture_a_journal_that_owns_the_party_still_drops_the_signal(how):
+    from tests.unit.test_gen3_client import A, B, C, party
+
+    world, files, journal = lock_world(awaiting=False)
+    if how == "entries":
+        epoch = journal.allocate(journal)
+        assert journal.arm(journal, "pending", epoch) is True              # a REAL unsettled lease: hidden() is true with the lock free
+    else:
+        files.held = True
+        world.step(1)
+        journal.hidden(journal)                                            # a real read (a new frame, so not the cached one): busy
+        assert journal.busy is True
+        journal.failure = "trade journal: model failure"
+    world.logs.clear()
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
+    world.step(5)
+    assert acq_lines(world, "retained=false", "why=journal_owns") and acq_lines(world, "retained=true") == []
+    files.held = False
+    world.step(60)
+    assert capture_events(world) == []
+
+
 def test_lost_capture_a_posted_trade_is_never_held_as_a_catch(monkeypatch):
-    """A posted (or possibly posted) native trade owns the party change even while the journal is merely busy: nothing is retained."""
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)                       # a real trade in flight, journal-armed and posted
     world.step()
     journal = carrier.journal_model.journal
     state = world.client.state.trade_apply
     assert state is not None and (state.posted or state.possibly_posted)
-    original_hidden, original_ready = journal.hidden, journal.ready
     journal.busy = True
     journal.hidden = lambda self: True
     journal.ready = lambda self: False
@@ -863,46 +968,52 @@ def test_lost_capture_a_posted_trade_is_never_held_as_a_catch(monkeypatch):
     world.fire("mon_given")
     world.step(5)
     assert acq_lines(world, "retained=true") == [] and world.events("capture") == []
-    assert acq_lines(world, "retained=false") or acq_lines(world, "skipped")      # named, not held
-
-
-def test_lost_capture_a_journal_failure_that_coincides_with_busy_still_drops_the_signal():
-    world, journal = busy_world(True)
-    journal.busy = True
-    journal.failure = "trade journal: model failure"             # failed() leaves `busy` as it was
-    catch_in_battle(world)
-    world.step(5)
-    assert acq_lines(world, "retained=true") == [] and acq_lines(world, "retained=false")
-    journal.busy = None
-    world.step(60)
-    assert world.events("capture") == []
+    (named,) = acq_lines(world, "retained=false")                  # exactly the named drop, not a skip or a hold
+    assert "why=journal_owns" in named
 
 
 def test_lost_capture_each_hold_is_measured_from_its_own_start():
-    """A finished hold must not leave its start frame behind: a second catch long after must be held (not 'expired'), then reported."""
+    """A finished hold must not leave its start frame behind: a second gift long after must be held (not 'expired'), then reported."""
     from tests.unit.gen3_world import key_of
-    from tests.unit.test_gen3_client import A, B, C, FOE, OT, party
+    from tests.unit.test_gen3_client import A, B, C, KC, OT, party
 
     D = 0x44444444
     KD = key_of(D, OT)
-
-    world, journal = busy_world(True)
-    journal.busy = True
-    catch_in_battle(world)
+    world, files, journal = lock_world()
+    files.held = True
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
     world.step(30)
-    journal.busy = None
+    files.held = False
     world.step(60)
-    assert len(world.events("capture")) == 1
+    assert [c["key"] for c in capture_events(world)] == [KC]
     world.step(2500)                                              # far beyond the 1800-frame bound
-    journal.busy = True
+    files.held = True
     world.logs.clear()
-    world.leave_battle(outcome=7)
-    world.enter_battle([FOE])
     world.set_party(party(A, B, C, D))
-    world.fire("capture_wild")
     world.fire("mon_given")
     world.step(30)
     assert acq_lines(world, "expired") == [] and acq_lines(world, "retained=true")
-    journal.busy = None
+    files.held = False
     world.step(60)
-    assert [e["key"] for e in world.events("capture")][-1] == KD and len(world.events("capture")) == 2
+    assert [c["key"] for c in capture_events(world)] == [KC, KD]
+
+
+def test_lost_capture_entries_that_appear_during_a_hold_drop_the_signal_at_release():
+    """The journal becomes readable again but now shows an unsettled lease: it owns the party change, the held gift is NOT replayed."""
+    from tests.unit.test_gen3_client import A, B, C, party
+
+    world, files, journal = lock_world(awaiting=False)
+    files.held = True
+    world.logs.clear()
+    world.set_party(party(A, B, C))
+    world.fire("mon_given")
+    world.step(3)
+    assert len(acq_lines(world, "retained=true")) == 1
+    files.held = False
+    world.frame += 1                                                      # a new frame for the journal's per-frame busy cache, no client step
+    epoch = journal.allocate(journal)
+    assert journal.arm(journal, "pending", epoch) is True                 # an unsettled lease is written the moment the guard frees
+    world.step(10)
+    assert capture_events(world) == [] and len(acq_lines(world, "dropped reason=journal_owns")) == 1
+    assert acq_lines(world, "resumed") == []

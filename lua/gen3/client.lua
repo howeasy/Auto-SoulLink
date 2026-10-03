@@ -232,7 +232,14 @@ function Client.new(p)
         trade_apply = nil, trade_settle_until = 0,
         trade_limits = { settle = 30 },
         bframe = nil, bcache = nil,
+        held_acq = nil,        -- LOST-CAPTURE: a gift / PC-move acquisition held while the journal is unreadable (acquisition only)
+        acq_hold_limit = 1800, -- frames (30 s) a held acquisition may wait before its loud, player-visible expiry
     }
+    -- the first actual native-trade POST and its settle window own the party change (settle's `trading`)
+    function st.trading_now()
+        return (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
+               or io.framecount() < st.trade_settle_until
+    end
 
     -- ── reads (tolerant: a read the pack cannot make yet degrades the field, not the client)
     local function call(name, ...)
@@ -390,6 +397,10 @@ function Client.new(p)
     end
     -- ACQ diagnostics (log only; no decision reads them): one line per call that marked keys known, naming the path (`via`; no argument = the quiet-count observe path)
     local function seed_known(party, via)
+        if st.held_acq then       -- a held acquisition is pending: seeding now would absorb its key as known
+            log("ACQ seed skipped via=" .. (via or "observe") .. " (a held acquisition is pending)")
+            return
+        end
         local fresh = {}
         for _, m in ipairs(party) do
             local k = key(m)
@@ -690,46 +701,71 @@ function Client.new(p)
 
     local function settle()
         local f = st.flags
+        local h = st.held_acq
+        if h then
+            local hidden = recovery_hidden()                     -- re-reads the journal: refreshes journal.busy
+            local now = io.framecount()
+            if st.trading_now() or st.trade ~= nil then h.tainted = true end
+            if journal.failure or (hidden and not journal.busy) then
+                st.held_acq = nil
+                log(string.format("ACQ dropped reason=journal_owns held=%d frames caught=false", now - h.since))
+            elseif hidden then
+                if now - h.since > st.acq_hold_limit then       -- bounded: then drop, LOUDLY and player-visibly, never silently
+                    st.held_acq = nil
+                    log(string.format("ACQ expired after=%d frames reason=recovery_hidden retained=false DROPPED area=%s", now - h.since, tostring(h.area)))
+                    hud.show("Capture not recorded - check your party / tell the host", 255, 60, 60, 300)
+                end
+            else
+                st.held_acq = nil
+                if h.tainted then
+                    log(string.format("ACQ dropped reason=trade_during_hold held=%d frames", now - h.since))
+                else
+                    f.acquire, f.acq_area = true, h.area
+                    log(string.format("ACQ resumed after=%d frames (journal visible again) area=%s", now - h.since, tostring(h.area)))
+                end
+            end
+        end
         if not next(f) and not nature_completed then return end
         if f.save and io.saveram then pcall(io.saveram) end
         f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
         if recovery_hidden() then
-            -- Retain observer evidence only for a temporary guard collision outside a posted
-            -- native trade. A genuinely unsettled/failed journal or a posted trade owns the
-            -- party change; replaying its signal after the settle window could report the
-            -- received mon as a catch. A transient empty-journal read instead needs this flag
-            -- until visibility returns, so observe_known cannot silently seed its new key.
+            -- LOST-CAPTURE (docs/protocol.md 6.2 item 5). recovery_hidden() is true whenever the journal cannot be READ, and a busy lock is
+            -- unreadable: any other process holding ROOT/slink_gen3_trade.guard makes read() answer LOCK_BUSY (a sync client, an indexer,
+            -- a backup, a second BizHawk; run.lua counts a CreateNew that sees an existing guard as busy too), so journal:hidden() is true
+            -- although the journal holds no record. An unreadable journal is not a trade-owned party change. Only the ACQUISITION is
+            -- treated specially; every other flag keeps the rule it always had here (cleared):
+            --   * a wild catch (capture_wild: the battle engine's Cmd_givecaughtmon, which no trade can produce) is reported NOW. Its
+            --     key needs no journal (party_read reads RAM, the key is personality:ot_id), so nothing is held;
+            --   * a gift / PC move (mon_given / pc_move, whose trade ambiguity is real) is held as a bounded, acquisition-only
+            --     record (st.held_acq) that carries the area and the trade-ownership verdict of the SIGNAL frame.
+            -- A journal that shows entries or a failure, or a posted trade, still owns the change: the signal is dropped, by name.
             local posted = st.trade_apply and (st.trade_apply.posted or st.trade_apply.possibly_posted)
-            -- LOST-CAPTURE: an acquisition signal is never dropped just because the journal answered "busy". Two clients may share one
-            -- journal file whose OS guard makes the other's read momentarily busy (journal:hidden() is then true although it holds NO
-            -- record); with the trade run unbound (awaiting_trade_run, the rand rows) the old test cleared the flags and observe_known
-            -- absorbed the caught mon as known. A busy journal with no failure and no posted trade cannot own a party change (a
-            -- trade needs a bound run), so the signal is held, bounded, until the journal answers; the other flags keep the old rule.
-            local keep = journal and journal.busy and not journal.failure and not posted
-                         and (not awaiting_trade_run or f.acquire)
-            if keep and f.acquire then
-                local now = io.framecount()
-                if not st.acq_held or now < st.acq_held then st.acq_held = now end
-                if now - st.acq_held > 1800 then          -- bounded (30 s of frames): then drop, LOUDLY, never silently
-                    keep = false
-                    log(string.format("ACQ expired after=%d frames reason=recovery_hidden retained=false DROPPED caught=%s",
-                                      now - st.acq_held, tostring(f.caught)))
-                    st.acq_held = nil
-                elseif now == st.acq_held then            -- first frame of this hold: the evidence line, once
-                    log(string.format("ACQ held reason=recovery_hidden retained=true caught=%s awaiting_run=%s", tostring(f.caught),
-                                      tostring(awaiting_trade_run)))
+            local busy_only = journal and journal.busy and not journal.failure and not posted
+            local owned = f.acq_trade or f.trade or st.trade ~= nil or st.trading_now()
+            if f.acquire and busy_only and not owned and f.caught then
+                st.flags = {acquire = true, caught = true, acq_area = f.acq_area, acq_busy = true}
+                f = st.flags
+                log(string.format("ACQ journal_busy reported_now=true caught=true area=%s (unreadable journal; a wild catch is not a trade)",
+                                  tostring(f.acq_area)))
+            else
+                if f.acquire then
+                    local h = st.held_acq
+                    if busy_only and not owned and h then
+                        if h.area ~= f.acq_area then
+                            log(string.format("ACQ held area_conflict first=%s second=%s (the first is kept)", tostring(h.area), tostring(f.acq_area)))
+                        end
+                    elseif busy_only and not owned and st.baselined then
+                        st.held_acq = {since = io.framecount(), caught = false, area = f.acq_area}
+                        log(string.format("ACQ held reason=recovery_hidden retained=true caught=false area=%s", tostring(f.acq_area)))
+                    else
+                        log(string.format("ACQ held reason=recovery_hidden retained=false caught=%s why=%s", tostring(f.caught),
+                                          not busy_only and "journal_owns" or owned and "trade_owned" or "no_baseline"))
+                    end
                 end
-            elseif not keep and f.acquire then
-                st.acq_held = nil
-                log(string.format("ACQ held reason=recovery_hidden retained=false caught=%s", tostring(f.caught)))
+                st.flags = {}
+                st.trade, f.trade = nil, nil
+                return
             end
-            if not keep then st.flags = {} end
-            st.trade, f.trade = nil, nil
-            return
-        end
-        if st.acq_held then
-            log(string.format("ACQ resumed after=%d frames (journal visible again)", io.framecount() - st.acq_held))
-            st.acq_held = nil
         end
         st.flags = {}
         local party = party_read(f.pc)                          -- a PC settle reads occupancy
@@ -741,7 +777,24 @@ function Client.new(p)
         update_frozen(party)
         local area_id = area_now()
         if st.battle and in_battle() then note_battle(battle_now()) end
-        if f.acquire and not st.baselined then
+        if f.acquire and not st.baselined and f.acq_busy then
+            -- LOST-CAPTURE F4: a wild catch while the journal has been unreadable since startup. The foe being caught is the new mon:
+            -- learn every OTHER key as the baseline (its personality is the foe's) and let settle report the foe.
+            if not st.frozen then
+                local b, foe = battle_now(), {}
+                for _, m in ipairs(b and b.enemy_party or {}) do if m.personality then foe[m.personality] = true end end
+                rescan_boxes(); seed_known(party, "baseline")
+                local excluded = 0
+                local function unknow(k)
+                    local pid = tonumber(tostring(k):match("^(%x+):"), 16)
+                    if pid and foe[pid] and st.known[k] then st.known[k] = nil; excluded = excluded + 1 end
+                end
+                for _, m in ipairs(party) do unknow(key(m)) end
+                for _, e in ipairs(st.box_cache) do unknow(e.key) end
+                st.baselined = true
+                log(string.format("ACQ baseline taken with the caught foe excluded (%d key(s)) before reporting it", excluded))
+            end
+        elseif f.acquire and not st.baselined then
             -- nothing tells a pre-existing key from a new one yet: report none, learn them all
             log("acquisition signal before a party baseline exists: not reported")
             f.acquire = nil
@@ -754,8 +807,7 @@ function Client.new(p)
         -- not from the queued phase: a post that is refused or held writes nothing, and until
         -- something is written the party can only change the ordinary way, so ordinary reduction
         -- keeps going
-        local trading = (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
-                        or io.framecount() < st.trade_settle_until
+        local trading = st.trading_now()
         if trading then st.trade = nil end
         if f.acquire and (st.frozen or trading) then
             -- the flags were already cleared above: this acquisition signal is dropped, not retried
@@ -764,7 +816,7 @@ function Client.new(p)
         if not st.frozen and not trading then
             if f.faint or f.battle_end or f.whiteout then settle_faints(party, area_id) end
             settle_hatches(f.hatches)
-            if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
+            if f.acquire then settle_acquisitions(party, f.acq_area or area_id, f.caught or (st.battle and st.battle.caught)) end
             if f.pc then settle_pc(party, area_id, f.release) end
             if f.trade then settle_trade(party) end
             if nature_completed then settle_nature(party) end
@@ -1173,7 +1225,7 @@ function Client.new(p)
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
-        st.opp_seen, st.pre_announced_id, st.acq_held = nil, nil, nil
+        st.opp_seen, st.pre_announced_id, st.held_acq = nil, nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until = nil, 0
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
@@ -1495,10 +1547,14 @@ function Client.new(p)
         elseif k == "whiteout" and not sig.borrowed_party then f.whiteout = true
         elseif k == "capture_wild" then
             f.acquire, f.caught = true, true
+            f.acq_area = f.acq_area or (area_now())             -- the area of the SIGNAL, whatever settle reads later
+            if st.trading_now() or st.trade ~= nil then f.acq_trade = true end
             if st.battle then st.battle.caught = true end
             log(string.format("ACQ signal kind=capture_wild frame=%d in_battle=%s", io.framecount(), tostring(st.battle ~= nil)))
         elseif k == "mon_given" or k == "pc_move" then
             f.acquire = true
+            f.acq_area = f.acq_area or (area_now())
+            if st.trading_now() or st.trade ~= nil then f.acq_trade = true end
             log(string.format("ACQ signal kind=%s frame=%d in_battle=%s", k, io.framecount(), tostring(st.battle ~= nil)))
         elseif k == "hatch" and sig.hatch_mon and sig.hatch_epoch == trade_reset_epoch then
             f.hatches = f.hatches or {}
@@ -1542,7 +1598,7 @@ function Client.new(p)
     -- hook next frame) is still settled as an acquisition, not absorbed. A signalled frame
     -- belongs to settle, which runs after this hook.
     local function observe_known()
-        if next(st.flags) then st.observe_at = nil; return end
+        if next(st.flags) or st.held_acq then st.observe_at = nil; return end   -- a held acquisition's key is never absorbed as known
         local f = io.framecount()
         local count = num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) or -1
         -- the quiet interval belongs to one candidate count: a change inside it restarts it
