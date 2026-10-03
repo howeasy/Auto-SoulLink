@@ -12,11 +12,9 @@
 -- quarantined capture was correctly boxed, and B misreported A's FAIL as "not in the party").
 -- This side's own box_mon/sync_retrieve failures are FINAL. The second capturer is never
 -- quarantined; it waits for the partner.
-return function(ctx, opts)
+return function(ctx)
     if not ctx.wait_go() then return false, "no go-file" end
-    -- opts.catch (link_gen3_rand only: the disclosed REHUNT_FILTER) replaces the hunt+catch; nil keeps this exact ctx.catch call
-    local key, why
-    if opts and opts.catch then key, why = opts.catch(ctx, "link") else key, why = ctx.catch("link") end
+    local key, why = ctx.catch("link")
     if not key then return false, "hunt ended " .. tostring(why) end
     ctx.log("CAUGHT " .. key)
     local quarantined = function() return ctx.received("box_mon", key) > 0 end

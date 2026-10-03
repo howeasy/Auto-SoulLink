@@ -113,10 +113,11 @@ SCENARIOS = {
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
         "frames": 2000000, "gen3_rand": True, "explicit_only": True, "ball_hunt": True,
-        # the disclosed natural REHUNT_FILTER (lua/tests/duo/gen3_rehunt_filter.lua): a foe whose catch rate, read from the side's OWN ROM,
-        # is below max_rate is run from (no ball spent) and the hunt repeats, at most max_rehunts times. Only this row carries the key;
-        # Emerald shares the scenario function, so it is covered. Its attempt budget (scenario_attempt_limit) is unchanged.
-        "rehunt_filter": {"max_rate": 150, "max_rehunts": 12},
+        # rng_attempts 6 (this scenario id only, so the Emerald twin has the same budget): the randomized FR/LG Route 1 tables make the catch a
+        # coin flip -- measured ~40-44% failure per attempt (per-throw catch odds 6-33%; fc_frlgcr_link_gen3_rand_frlg_d5a26da9 failed 3/3 attempts,
+        # the Emerald twin whited out once and passed on attempt 2); the predicted failure over 6 attempts is ~0.5%. The failure is "hunt ended
+        # whiteout" before the catch, so more balls would not help; retryable_gen1_rng admits the attempts past 2 for that reason only.
+        "rng_attempts": 6,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
@@ -927,6 +928,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     # no runtime bag write, changed activation, or retry for a harness failure.
     if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
         return True
+    # link_gen3_rand (randomized Route 1 catch odds, see its registry row): attempts past 2 retry a "hunt ended whiteout" CAUSE_RNG, only that.
+    if scenario == "link_gen3_rand" and attempt > 2 and SCENARIOS[scenario].get("rng_attempts") == limit:
+        causes = [text for text in results.values() if classify_gen1_result(text) == "CAUSE_RNG"]
+        if causes and all("hunt ended whiteout" in (text or "") for text in causes):
+            return True
     if (scenario == "type_clause_gen3" and scenario_family(game) == "gen3_rr" and limit == 8
             and "RESULT: FAIL (RNG: type first encounter has no overlap)" in
             (results.get("b") or "").splitlines()):
@@ -3471,25 +3477,6 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
                               for i in range(0, size, 11)}}
 
 
-GEN3_SPECIES_INFO_STRIDE = 28       # pret SpeciesInfo: 28-byte records; catchRate is the byte at +8 (include/gba/../pokemon.h)
-GEN3_SPECIES_INFO_CATCH_OFFSET = 8
-
-
-def gen3_rehunt_filter_config(cfg, title):
-    """The `SLINK_DUO.rehunt_filter` table: the row's floor/limit plus where THIS title's own gSpeciesInfo catch-rate bytes live (pret
-    .sym address of the title's ROM, never another game's data)."""
-    return {"max_rate": cfg["max_rate"], "max_rehunts": cfg["max_rehunts"], "species_info": gen3_sym(title, "gSpeciesInfo"),
-            "stride": GEN3_SPECIES_INFO_STRIDE, "catch_offset": GEN3_SPECIES_INFO_CATCH_OFFSET}
-
-
-_REHUNT_FILTER_LINE = re.compile(r"(?m)^REHUNT_FILTER .*$")
-
-
-def rehunt_filter_lines(result_text):
-    """Every REHUNT_FILTER decision line a side logged (lua/tests/duo/gen3_rehunt_filter.lua), in order."""
-    return _REHUNT_FILTER_LINE.findall(result_text or "")
-
-
 def gen3_probe_flip_choice(patched, row, anchors):
     """The ONE byte the protected-span probe flips, chosen by a fixed rule so the same build always gives the same byte.
 
@@ -4753,9 +4740,7 @@ class DuoRun:
                       f"scope={scope} install_root={REPO}")
             duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
             duo["expect_refused"] = self._gen3_expect_refused(inst)
-            duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip"))
-            if self.cfg.get("rehunt_filter"):
-                duo["rehunt_filter"] = gen3_rehunt_filter_config(self.cfg["rehunt_filter"], self._gen3_title(inst))
+            duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"      # B holds the flipped cartridge; A is ordinary
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
@@ -9221,7 +9206,8 @@ class DuoRun:
             problems.append("b: the admitted observation is not in its own receipt")
         if observed and observed["client"] == "admitted" and not hello_facts_from(results["b"]):
             problems.append("b: no hello was logged although the probe records it as admitted")
-        self._gen3_raise(problems, f"probe_protected_span_flip OBSERVED (not a verdict): {observed}")
+        outcome = (observed or {}).get("client", "nothing")
+        self._gen3_raise(problems, f"OBSERVED {outcome} (an observation, not a verdict): probe_protected_span_flip {observed}")
 
     def _prepare_gen3_rand(self):
         problems = gen3_rand_dependencies()
@@ -9543,12 +9529,6 @@ class DuoRun:
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
-        # DISCLOSURE: every REHUNT_FILTER decision (species, catch rate, rehunt count, skip/keep) goes into the receipt's PYDEC notes
-        for side in ("a", "b"):
-            lines = rehunt_filter_lines(results.get(side, ""))
-            skips = sum(1 for line in lines if "verdict=skip" in line)
-            self._pydec_note(f"REHUNT_FILTER side={side} decisions={len(lines)} skipped_low_catch_rate={skips}"
-                             + "".join(f"\n  {line}" for line in lines))
         self.assert_link_gen3_saved(results)  # independent flash, key, bag and server-link facts
         problems = [f"{side}: {p}" for side in ("a", "b") for p in gen3_rand_capture_problems(
             self._gen3_saved(side), self._link_keys[side], self._rand_facts[side])]

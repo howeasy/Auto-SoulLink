@@ -11,5 +11,5 @@ return function(ctx)
     if not ctx.wait_go("GO", 300) then return false, "the runner never released the probe" end
     ctx.frames(30)
     ctx.log("PROBE_PASSIVE writes=" .. ctx.writes())
-    return true, "probe: the client admitted the flipped cartridge; the server's verdict is the runner's observation"
+    return true, "OBSERVED admitted: the client admitted the flipped cartridge; the server's verdict is the runner's observation"
 end

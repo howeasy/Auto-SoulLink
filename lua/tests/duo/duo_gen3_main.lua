@@ -773,7 +773,7 @@ local function launch_verdict(client_built, refusal, expect_refused, probe)
     end
     if not client_built then
         -- an OBSERVATION probe (SLINK_DUO.probe_admission) records a refusal as its result; it is not a failure of the harness
-        if probe then return true, true, "probe observed: refused at launch: " .. tostring(refusal or "no reason logged") end
+        if probe then return true, true, "OBSERVED refused: probe observed: refused at launch: " .. tostring(refusal or "no reason logged") end
         return true, false, "run.lua built no client: " .. tostring(refusal or "no reason logged")
     end
     return false

@@ -1501,18 +1501,15 @@ def run_row(row, cut, lane, deadline):
 
 
 def new_run_stamp(cut, suffix=""):
-    """A UTC stamp unique among this cut's existing per-invocation summaries (reserved by creating the file), so two invocations -- even in
-    the same second -- never share, and never overwrite, a `fc_SUMMARY_<cut8><suffix>_run<stamp>.txt`."""
+    """A UTC stamp no existing per-invocation summary uses. Nothing is created here: the file appears at the first write_summary, so an
+    aborted invocation leaves no empty file behind. (ponytail: two invocations started in the same second before either has written
+    could share a stamp; a lock/reservation is not worth an empty file on abort.)"""
     base = utcnow().strftime("%Y%m%dT%H%M%SZ")
     stamp, n = base, 0
-    while True:
-        path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}_run{stamp}.txt")
-        try:
-            with open(path, "x", encoding="utf-8"):
-                return stamp
-        except FileExistsError:
-            n += 1
-            stamp = f"{base}-{n}"
+    while os.path.exists(os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}_run{stamp}.txt")):
+        n += 1
+        stamp = f"{base}-{n}"
+    return stamp
 
 
 def write_summary(cut, results, suffix="", run_stamp=None):

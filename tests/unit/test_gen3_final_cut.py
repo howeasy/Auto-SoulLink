@@ -2066,3 +2066,11 @@ def test_merge_summary_also_keeps_its_own_copy_and_the_readers_ignore_run_files(
         assert fc.receipt_evidence(name, (probes / name).read_text(encoding="utf-8"), str(probes)) is None
     assert set(fc.collect_evidence(str(probes))) == {"states_firered_town", "states_firered_battle"}
     assert fc.prior_verdict("states_firered_town", cut) == "PASS"
+
+
+def test_an_aborted_invocation_leaves_no_empty_summary_file(pass_env):
+    cut, _ran, probes = pass_env
+    stamp = fc.new_run_stamp(cut, "")
+    assert not list(probes.glob(f"fc_SUMMARY_{cut[:8]}_run*.txt"))          # reserving a stamp creates nothing
+    fc.write_summary(cut, [], "", stamp)
+    assert fc.new_run_stamp(cut, "") != stamp                               # but a written one is never reused

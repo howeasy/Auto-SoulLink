@@ -5917,6 +5917,20 @@ def test_the_probe_records_an_admitted_client_and_the_servers_verdict_either_way
         {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
 
 
+def test_the_probe_oracle_names_what_was_observed_never_a_bare_pass():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED refused_at_launch (an observation, not a verdict)")
+    run, notes, _ = _probe_run("HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", {"admission": "admitted"})
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED admitted (an observation, not a verdict)")
+
+
 def test_the_probe_fails_only_when_the_harness_itself_broke():
     run, _notes, went = _probe_run("")                                       # B did nothing at all: no observation possible
     with pytest.raises(TimeoutError, match="launch outcome"):
@@ -5937,7 +5951,7 @@ def test_the_driver_lets_a_probe_record_a_refusal_but_nothing_else_changes():
     verdict = LuaRuntime(unpack_returned_tuples=True).execute(found.group(0) + "\nreturn launch_verdict")
     refused = "[SLink-gen3] refused: this firered cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
     done, ok, msg = verdict(None, refused, False, True)
-    assert (done, ok) == (True, True) and "probe observed: refused at launch" in msg
+    assert (done, ok) == (True, True) and msg.startswith("OBSERVED refused: ") and "probe observed: refused at launch" in msg
     assert verdict(None, "x", False, False)[:2] == (True, False)                    # an ordinary row: still a failure
     assert verdict(None, "x", False)[:2] == (True, False)                           # the old three-argument call
     assert verdict({}, None, False, True) is False                                  # a built client carries on, probe or not
@@ -5957,183 +5971,158 @@ def test_the_probe_scenario_module_records_what_the_client_announced_and_writes_
         module = dofile(WT .. "/lua/tests/duo/scenario_gen3_probe_flip.lua")
     """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
     ok, msg = runtime.eval("module(ctx)")
-    assert ok is True and "probe" in msg
+    assert ok is True and msg.startswith("OBSERVED admitted: ")
     logs = list(runtime.eval("logs").values())
     assert logs[0] == "PROBE_CLIENT admitted artifact_kind=companion companion_abi=2 rom_sha1=ab" and logs[-1] == "PROBE_PASSIVE writes=0"
 
 
-# ── link_gen3_rand's disclosed natural REHUNT_FILTER (lua/tests/duo/gen3_rehunt_filter.lua) ───────────────────────────
-FILTER = REPO / "lua" / "tests" / "duo" / "gen3_rehunt_filter.lua"
-_CFG = "{max_rate = 150, max_rehunts = %d, species_info = 0x1000, stride = 28, catch_offset = 8}"
+# ── link_gen3_rand: attempt budget 6, and nothing else's budget moved ───────────────────────────────────────────────────
+# Every scenario/game pair whose scenario_attempt_limit was not 1 at d5a26da9 (snapshot of 1417 pairs; link_gen3_rand excluded -- it is
+# the one row that changed). Pairs not listed were 1.
+ATTEMPT_LIMITS_AT_D5A26DA9 = {
+    "active_end_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_emerald": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_frlg": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "ball_gate_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "borrowed_party_battle_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_menu_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_opponent_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "center_controls_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "changebox_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "choice_gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "clean_rr_refused_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "deadzone_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "deadzone_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_hatch_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_receive_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "evolve_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering0_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering1_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_fish_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_grass_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_rock_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_run_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_surf_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "faint_cmd_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_admit_wrong_rom": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_ball_gate": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2},
+    "gen2_boxed_capture": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_changebox": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_egg_hatch": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_evolution": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active_trainer": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_gender_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_gift": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_npc_trade": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_pc_ops": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_poison": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_reconnect": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_soft_reset": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_species_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_evolve": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_refuse_item": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_commit": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_wait": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_timeout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_type_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_whiteout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_whiteout_rebuild": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gender_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "gift_box_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_dex_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "link_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_lhammer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_mega_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_trainer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_decline_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "nature_change_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "npc_trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "pc_ops_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_faint_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "reconnect_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "reconnect_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "release_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_real_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "save_then_write_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "shiny_bonus_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "soft_reset_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "species_clause_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "species_clause_new": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8},
+    "species_family_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 16},
+    "trade_decline_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_lock_probe_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_commit_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_success_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trainer_bench_gen3": {"gen1_new": 2, "gen1_pure": 2, "gen1_pure_green": 2, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2, "gen3_emerald": 2, "gen3_exp": 2, "gen3_fr_trade": 2, "gen3_frlg": 2, "gen3_lg_trade": 2, "gen3_lgfr": 2, "gen3_rr": 2},
+    "trainer_panel_gen3_rand": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "type_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "type_clause_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3}
+}
+RAND_WHITEOUT = "RESULT: FAIL (hunt ended whiteout)"
 
 
-def _filter_world(rates, rehunts=12, cfg=True, peek_fails=False, foes=None, escape_ok=True, hunt_ok_after=None):
-    """A Lua fake ctx. `foes` is the species of each successive encounter; `rates[species]` is the catch-rate byte in the fake ROM."""
-    from lupa import LuaRuntime
-
-    runtime = LuaRuntime(unpack_returned_tuples=True)
-    foes = foes if foes is not None else list(rates)
-    rom = "".join(f"[{0x1000 + s * 28 + 8}] = {r}," for s, r in rates.items())
-    runtime.execute(f"""
-        foes = {{{",".join(str(f) for f in foes)}}}
-        rom = {{{rom}}}
-        calls = {{hunt = 0, run_away = 0, catch = 0, catch_args = nil}}
-        logs = {{}}
-        local seen = 0
-        ctx = {{
-            D = {{ rehunt_filter = {_CFG % rehunts if cfg else "nil"} }},
-            fmt = string.format,
-            log = function(s) logs[#logs + 1] = s end,
-            hunt = function(label) calls.hunt = calls.hunt + 1; return {("true" if hunt_ok_after is None else f"calls.hunt <= {hunt_ok_after}")} end,
-            enemy_species = function() return foes[calls.hunt] end,
-            peek_u8 = function(a) {"error('bus') end" if peek_fails else "return rom[a] end"},
-            run_away = function(label) calls.run_away = calls.run_away + 1; return {str(escape_ok).lower()}, "stuck" end,
-            catch = function(label, already) calls.catch = calls.catch + 1; calls.catch_args = tostring(label) .. "/" .. tostring(already); return "KEY", nil end,
-        }}
-        filter = dofile({str(FILTER).replace(chr(92), "/")!r})
-    """)
-    return runtime
+def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
+    for game in duo.GAMES:
+        for name in duo.SCENARIOS:
+            if name not in ("link_gen3_rand", "probe_protected_span_flip_gen3"):      # (the probe row did not exist at d5a26da9)
+                assert duo.scenario_attempt_limit(name, game) == ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1), (name, game)
+    assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [6, 6]    # the Emerald twin too
+    assert [duo.scenario_attempt_limit("probe_protected_span_flip_gen3", g) for g in ("gen3_frlg", "gen3_emerald")] == [1, 1]
+    assert [n for n, row in duo.SCENARIOS.items() if row.get("rng_attempts") == 6] == ["link_gen3_rand"]
+    assert not any("rehunt" in k for row in duo.SCENARIOS.values() for k in row)
 
 
-def _run_filter(runtime):
-    returned = runtime.eval('filter.catch(ctx, "link")')              # (key, why); a Lua nil comes back as None
-    result = list(returned) if isinstance(returned, tuple) else [returned]
-    result += [None] * (2 - len(result))
-    calls = runtime.eval("calls")
-    return result, {k: calls[k] for k in ("hunt", "run_away", "catch", "catch_args")}, list(runtime.eval("logs").values())
+@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_emerald"])
+def test_attempts_past_two_retry_a_link_gen3_rand_whiteout_and_nothing_else(game):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    for attempt in (1, 2, 3, 4, 5):
+        assert duo.retryable_gen1_rng(game, receipts, attempt, 6, scenario="link_gen3_rand"), attempt
+    assert not duo.retryable_gen1_rng(game, receipts, 6, 6, scenario="link_gen3_rand")        # the budget ends at 6
+    partner = "RESULT: FAIL (runner never released B (A_PENDING))"
+    assert duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": partner}, 4, 6, scenario="link_gen3_rand")
+    # an out-of-balls miss keeps the ordinary two retries; past them it is final (the late clause is for a whiteout only)
+    assert duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 2, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 3, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": duo.RNG_OUT_OF_BALLS}, 3, 6, scenario="link_gen3_rand")
 
 
-def test_a_low_catch_rate_foe_is_run_from_and_hunted_again_without_a_ball():
-    runtime = _filter_world({100: 3, 101: 45, 102: 149, 103: 150})
-    result, calls, logs = _run_filter(runtime)
-    assert result == ["KEY", None]                                                         # then the ordinary catch, on the kept foe
-    assert (calls["hunt"], calls["run_away"], calls["catch"], calls["catch_args"]) == (4, 3, 1, "link/true")
-    assert logs == ["REHUNT_FILTER species=100 catch_rate=3 rehunts=1 verdict=skip floor=150",
-                    "REHUNT_FILTER species=101 catch_rate=45 rehunts=2 verdict=skip floor=150",
-                    "REHUNT_FILTER species=102 catch_rate=149 rehunts=3 verdict=skip floor=150",    # 149 is skipped ...
-                    "REHUNT_FILTER species=103 catch_rate=150 rehunts=3 verdict=keep floor=150"]     # ... 150 is kept
+@pytest.mark.parametrize("scenario", ["link_gen3", "trainer_panel_gen3_rand", "admit_randomized_frlg", "ball_gate_gen3", None])
+def test_the_late_whiteout_retry_does_not_fire_for_other_rows(scenario):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 6, scenario=scenario)
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 2, scenario="link_gen3_rand")      # only at its own declared budget
 
 
-def test_a_high_catch_rate_foe_is_caught_as_usual_with_no_run_and_no_rehunt():
-    runtime = _filter_world({16: 255})
-    result, calls, logs = _run_filter(runtime)
-    assert result == ["KEY", None] and (calls["hunt"], calls["run_away"], calls["catch_args"]) == (1, 0, "link/true")
-    assert logs == ["REHUNT_FILTER species=16 catch_rate=255 rehunts=0 verdict=keep floor=150"]
-
-
-def test_exhausting_the_rehunts_fails_by_name_and_throws_nothing():
-    runtime = _filter_world({100: 3, 101: 3, 102: 3, 103: 3, 104: 3}, rehunts=3)
-    result, calls, logs = _run_filter(runtime)
-    assert result[0] is None and result[1].startswith("REHUNT_FILTER exhausted:") and "species=103 rate=3" in result[1]
-    assert (calls["run_away"], calls["catch"]) == (3, 0)                              # no ball path at all
-    assert logs[-1] == "REHUNT_FILTER species=103 catch_rate=3 rehunts=3 verdict=exhausted floor=150"
-
-
-@pytest.mark.parametrize("kwargs, expect", [
-    ({"peek_fails": True}, "reason=the catch-rate byte is unreadable"),
-    ({"rates": {}, "foes": [0]}, "reason=no foe species"),
-    ({"rates": {}, "foes": [77]}, "reason=the catch-rate byte is unreadable"),
-])
-def test_an_unreadable_species_or_rate_means_no_filtering_and_says_so(kwargs, expect):
-    kwargs = {"rates": {100: 3}, **kwargs}
-    runtime = _filter_world(kwargs.pop("rates"), **kwargs)
-    result, calls, logs = _run_filter(runtime)
-    assert result == ["KEY", None] and (calls["run_away"], calls["catch"]) == (0, 1)        # the foe is caught as without the filter
-    assert len(logs) == 1 and logs[0].startswith("REHUNT_FILTER unavailable") and expect in logs[0] and "NO filtering" in logs[0]
-
-
-def test_an_unreadable_foe_is_disclosed_too():
-    runtime = _filter_world({100: 3}, foes=[])
-    runtime.execute("ctx.enemy_species = function() return nil, 'no wild enemy' end")
-    result, _calls, logs = _run_filter(runtime)
-    assert result == ["KEY", None] and "NO filtering" in logs[0] and "reason=no wild enemy" in logs[0]
-
-
-def test_the_filter_fails_by_name_when_the_escape_or_the_rehunt_fails():
-    result, calls, _ = _run_filter(_filter_world({100: 3, 101: 255}, escape_ok=False))
-    assert result == [None, "REHUNT_FILTER: the escape failed: stuck"] and calls["catch"] == 0
-    result, calls, _ = _run_filter(_filter_world({100: 3, 101: 255}, hunt_ok_after=1))
-    assert result == [None, "REHUNT_FILTER: re-hunt found no encounter"] and calls["catch"] == 0
-    result, calls, _ = _run_filter(_filter_world({100: 3}, hunt_ok_after=0))
-    assert result == [None, "no wild encounter"] and calls["catch"] == 0
-
-
-def test_without_the_parameter_the_filter_is_the_plain_catch():
-    result, calls, logs = _run_filter(_filter_world({100: 3}, cfg=False))
-    assert result == ["KEY", None] and logs == [] and (calls["hunt"], calls["run_away"], calls["catch_args"]) == (0, 0, "link/nil")
-
-
-def test_the_default_link_scenario_path_is_the_unchanged_ctx_catch_call():
-    """scenario_gen3_link.lua with no opts (every row but link_gen3_rand) still makes exactly `ctx.catch("link")`."""
-    from lupa import LuaRuntime
-
-    runtime = LuaRuntime(unpack_returned_tuples=True)
-    runtime.execute("""
-        calls = {}
-        ctx = { wait_go = function() return true end,
-                catch = function(...) calls[#calls + 1] = table.pack(...); return nil, "boom" end }
-        link = dofile(WT .. "/lua/tests/duo/scenario_gen3_link.lua")
-    """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
-    assert list(runtime.eval("{link(ctx)}").values()) == [False, "hunt ended boom"]
-    assert runtime.eval("#calls") == 1 and runtime.eval("calls[1].n") == 1 and runtime.eval("calls[1][1]") == "link"
-    runtime.execute("calls = {}; own = {}")
-    runtime.execute("""
-        local r = {link(ctx, { catch = function(c, label) own[#own + 1] = label; return nil, "filtered" end })}
-        outcome = r[2]
-    """)
-    assert runtime.eval("#calls") == 0 and runtime.eval("own[1]") == "link" and runtime.eval("outcome") == "hunt ended filtered"
-
-
-def test_only_link_gen3_rand_carries_the_filter_and_no_attempt_budget_changed():
-    owners = sorted(p.name for p in (REPO / "lua" / "tests" / "duo").glob("*.lua")
-                    if "gen3_rehunt_filter" in p.read_text(encoding="utf-8") and p.name != "gen3_rehunt_filter.lua")
-    assert owners == ["scenario_gen3_rand_link.lua"]                                  # nothing else loads it
-    assert [n for n, row in duo.SCENARIOS.items() if "rehunt_filter" in row] == ["link_gen3_rand"]
-    assert duo.SCENARIOS["link_gen3_rand"]["rehunt_filter"] == {"max_rate": 150, "max_rehunts": 12}
-    assert "rng_attempts" not in duo.SCENARIOS["link_gen3_rand"]
-    assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [3, 3]   # the ball_hunt default
-    assert set(duo.SCENARIOS["link_gen3_rand"]["games"]) == {"gen3_frlg", "gen3_emerald"}      # Emerald runs the same scenario function
-
-
-def test_the_scenario_module_hands_the_filter_to_the_link_scenario():
-    text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_rand_link.lua").read_text(encoding="utf-8")
-    assert "gen3_rehunt_filter.lua" in text and "{ catch = filter.catch }" in text
-
-
-@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
-def test_the_rehunt_filter_config_points_at_the_titles_own_catch_rate_bytes(title):
-    cfg = duo.gen3_rehunt_filter_config({"max_rate": 150, "max_rehunts": 12}, title)
-    assert cfg["species_info"] == duo.gen3_sym(title, "gSpeciesInfo") and (cfg["stride"], cfg["catch_offset"]) == (28, 8)
-    assert (cfg["max_rate"], cfg["max_rehunts"]) == (150, 12)
-    rate_of = {"firered": (1, 45), "leafgreen": (150, 3), "emerald": (16, 255)}[title]       # Bulbasaur 45, Mewtwo 3, Pidgey 255
-    from tools.gen3_final_cut import ROOT_DUMPS, main_checkout
-
-    dump = os.path.join(os.environ.get("SLINK_GEN3_ROMS") or main_checkout(), ROOT_DUMPS[title])
-    if not os.path.isfile(dump):
-        pytest.skip(f"clean {title} dump absent: {dump}")
-    rom = open(dump, "rb").read()
-    species, rate = rate_of
-    assert rom[cfg["species_info"] - 0x08000000 + species * cfg["stride"] + cfg["catch_offset"]] == rate
-
-
-def test_rehunt_filter_lines_are_collected_from_a_receipt_for_the_pydec_notes():
-    text = "x\nREHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150\nCAUGHT k\nREHUNT_FILTER unavailable species=2 rehunts=0\n y REHUNT_FILTER\n"
-    assert duo.rehunt_filter_lines(text) == ["REHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150",
-                                             "REHUNT_FILTER unavailable species=2 rehunts=0"]
-    assert duo.rehunt_filter_lines("") == [] and duo.rehunt_filter_lines(None) == []
-
-
-def test_the_rand_link_oracle_notes_every_rehunt_decision():
-    run = object.__new__(duo.DuoRun)
-    notes = []
-    run._pydec_note = notes.append
-    run._check_gen3_rand_pair = lambda: None
-
-    def stop(results):
-        raise RuntimeError("stop after the note")
-    run.assert_link_gen3_saved = stop
-    line = "REHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150"
-    with pytest.raises(RuntimeError, match="stop after the note"):
-        run.assert_link_gen3_rand_saved({"a": line + "\n", "b": ""})
-    assert notes == [f"REHUNT_FILTER side=a decisions=1 skipped_low_catch_rate=1\n  {line}",
-                     "REHUNT_FILTER side=b decisions=0 skipped_low_catch_rate=0"]
+def test_only_the_flipped_instance_is_launched_as_a_probe():
+    source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    assert 'duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"' in source

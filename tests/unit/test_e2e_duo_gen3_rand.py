@@ -291,7 +291,7 @@ def test_link_gen3_rand_extends_to_emerald_with_its_own_catch_fixture():
     # new SYNTH file, following the Emerald `catch` fixture precedent the README documents.
     assert duo.scenario_target(entry, "gen3_frlg") == "catch_synth"
     assert duo.scenario_target(entry, "gen3_emerald") == "catch"
-    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_emerald") == 3
+    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_emerald") == 6
     for stem in ("emerald_catch.sav", "emerald_catch_b.sav"):
         assert (ROOT / "tests/fixtures/gen3" / stem).is_file()
 

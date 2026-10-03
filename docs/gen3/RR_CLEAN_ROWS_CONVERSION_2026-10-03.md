@@ -141,23 +141,31 @@ zip rows) the release-zip hash as inputs. `--resume` re-runs on any difference; 
 the randomized ROMs present now and does not report PASS if they are gone or repointed (overlay and zip hashes are lane-local and are not
 compared across lanes).
 
-### link_gen3_rand: the disclosed natural REHUNT_FILTER (2026-10-03)
+### link_gen3_rand: attempt budget 6 (not a rehunt filter)
 
-A randomized ROM can place a very low catch-rate foe (rate 3..45) in the Route 1 / Route 102 grass, and the pair has only 2-4 Poke Balls,
-so the hunt can end `out-of-balls` for reasons that say nothing about the product. `link_gen3_rand` (and only it) therefore carries
-`"rehunt_filter": {"max_rate": 150, "max_rehunts": 12}` and `lua/tests/duo/gen3_rehunt_filter.lua`:
+`link_gen3_rand` (and only it; the Emerald twin is the same scenario id, so it gets the same budget) carries `"rng_attempts": 6`, with
+`retryable_gen1_rng` admitting the attempts past 2 for a `hunt ended whiteout` CAUSE_RNG and nothing else. Basis: measured ~40-44% failure
+per attempt on the randomized FR/LG Route 1 tables (per-throw catch odds 6-33%; `fc_frlgcr_link_gen3_rand_frlg_d5a26da9` failed 3/3 attempts, the
+Emerald twin whited out once and passed on attempt 2); predicted ~0.5% failure over 6 attempts. No other scenario's attempt budget changed.
 
-- after each hunt it decodes the foe species' base catch rate from the **side's own ROM** (pret `gSpeciesInfo` address for that title,
-  28-byte records, `catchRate` at +8; never Radical Red data) and, when the rate is below 150, runs (`ctx.run_away`) and hunts again
-  (`ctx.hunt`) with no ball spent. Nothing is injected and no species is chosen: the foe is whatever the encounter produced.
-- every decision is logged as `REHUNT_FILTER species=.. catch_rate=.. rehunts=.. verdict=skip|keep|exhausted` in the side's receipt, and
-  the oracle copies the lines into the PYDEC notes (`REHUNT_FILTER side=a decisions=N skipped_low_catch_rate=K`).
-- after 12 skips the row fails by name (`REHUNT_FILTER exhausted`). An unreadable species or catch-rate byte means NO filtering, logged as
-  `REHUNT_FILTER unavailable ... -- NO filtering`, and the normal catch proceeds.
-- Emerald is covered: `link_gen3_rand` is one scenario function for FR/LG and Emerald (`scenario_gen3_rand_link.lua`), and the config
-  resolves the Emerald `gSpeciesInfo` address for the Emerald side. No other row's hunt path and no attempt budget
-  (`scenario_attempt_limit`) changed.
+REHUNT_FILTER was tried and rejected: run_away on an uncaught wild battle with balls held sends no_catch and dead-zones the area
+(`lua/gen3/client.lua:659-663`, `server/state.py:3088`); the failure is whiteout before the catch, so more balls would not help either.
 
 Better long-term setup (not done): a disclosed SYNTH bag fixture holding Master Balls for these two rows, so the catch itself cannot fail on
-the ball RNG at all. It would be a tool-built setup fixture in the O-33 sense (the catch/link behaviour under test still runs natively),
-but it changes the fixture bytes and the save attestation for the rows, so it is left for the owner to rule on.
+the ball RNG at all. It would be a tool-built setup fixture in the O-33 sense (the catch/link behaviour under test still runs natively), but it
+changes the fixture bytes and the save attestation for the rows, so it is left for the owner to rule on.
+
+
+## Known property: how an unknown-hash companion is admitted (owner ruling 2026-10-03)
+
+An unknown-hash companion (a randomized cart, or the `equivalent_pair` cart with one unused byte changed) is admitted by the ROM anchors
+(`Entry.admit`, `lua/gen3/entry.lua`: the engine-site bytes in `data/games/gen3_*/write_checkpoint.json`) plus a live `companion_abi` read from the
+cartridge's RAM mailbox signature (`server/adapters/gen3_frlge.py` `companion_refusal`). This is the same admission design Gen 1 (beacon +
+capabilities) and Gen 2 (`companion_abi`) use, and it is what makes randomized companions admissible at all, since a randomized cart cannot be
+hash-pinned. There is no runtime hashing of the companion's protected spans and no runtime masked-version equivalence
+(`canonical_sha1`, `equivalent_sha1s`, `payload_version_slot`, `protected_spans` in `patch/dist/gen3_companions.json` are build-time and harness
+facts only). A cart that differs inside a protected span but not on an anchor is therefore not distinguished at admission.
+
+Owner ruling (2026-10-03, relayed by the Gen 1-3 readiness overlord): KEEP the current admission; no runtime protected-span hashing before release.
+`probe_protected_span_flip_gen3` (explicit-only, in no plan) is the factual record of what the live system does with a one-byte flip inside a
+protected span off the anchors; it is an observation, not a gate.
