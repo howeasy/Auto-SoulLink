@@ -78,12 +78,22 @@ C.init(host, port)
 -- The optional inputs (area ids, trainer-name charmap, the ball read). lua/gen4/inputs.lua builds
 -- each one from the pack only and omits (never nils) the ones whose pack fact is absent, so the
 -- client's own optional seams stay optional.
+--
+-- `save_array` binds LATE on purpose: Inputs.build runs before Client.new, and the reader over a save
+-- array is the CLIENT's read layer (client:save_array, over its own R.save_data -> R.array), not a
+-- second copy of it in this file. Until the client exists the seam refuses by name; a producer body
+-- only calls it later, after Client.new has bound the local.
 local pack_def = Entry.PACKS[admitted.pack]
+local client
 local inputs = Inputs.build({
-    root = ROOT, json = json, pack_profile = pack_def and pack_def.profile,
+    root = ROOT, json = json, pack_profile = pack_def and pack_def.profile, title = admitted.title,
+    save_array = function(array_id)
+        if not client then return nil, "client not built" end
+        return client:save_array(array_id)
+    end,
     log = function(t) console.log(t) end,
 })
-local client, why_build = Client.new({
+client, why_build = Client.new({
     root = ROOT, json = json, io = io_, net = C, hud = H, player = player,
     rom_hash = rom_hash, header_code = header_code,
     log = function(t) console.log(t) end,

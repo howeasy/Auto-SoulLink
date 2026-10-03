@@ -17,8 +17,10 @@
 --   p.area_of(map_id, location) -> area_id, loc_name   optional: lua/gen4/inputs.lua builds it
 --                                                          from the pack's area_map/locations
 --   p.charmap                                       optional: u16 code -> text (the pack's charmap)
---   p.has_pokeballs() -> bool                       optional (the bag read is a pack gap; see
---                                                          Inputs.GAPS.has_pokeballs)
+--   p.has_pokeballs() -> bool                       optional: lua/gen4/inputs.lua builds it from
+--                                                          the pack's profile.bag (the bag array's
+--                                                          balls pocket), read through
+--                                                          client:save_array(array_id) below
 --
 -- Frame order (lua/core/session.lua frame_end, lua/nds/phase_signals.lua):
 --   emu.frameadvance (the D7 hook fires inside it)
@@ -78,8 +80,9 @@
 -- Step 4 (storage): the deferred executors below write box/party records at the checkpoint, see
 -- the "storage" section. Step 5 (D11): a reducer slot_replace note becomes a key_change with the
 -- alias and its exact message on identity.pending. Step 6: hello_fields/tick_fields, see "wire
--- shapes". Still open: the bag read (has_pokeballs) has no pack fact yet; p.area_of / p.charmap are
--- built by lua/gen4/inputs.lua, which refuses (nil, named gap) for any fact the pack does not ship.
+-- shapes". p.area_of / p.charmap / p.has_pokeballs are built by lua/gen4/inputs.lua, which refuses
+-- (nil, named gap) for any fact the pack does not ship; the ball read reaches the save through
+-- client:save_array(array_id) below, the ONE reader this client hands out over a save array.
 local Client = {}
 
 Client.PHASE = "d7"
@@ -1108,6 +1111,26 @@ function Client.new(p)
                                         __newindex = function(_, k, v) session.resolved_areas[k] = v end })
     pe = PE.new({ battle_enums = prof.battle_enums, resolved = resolved })
     session.driver, session.state, session.parts, session.admitted = drv, st, parts, admitted
+
+    -- The read seam lua/gen4/inputs.lua gets (its deps.save_array): a bounds-checked reader over ONE
+    -- save array, `off` ARRAY-relative, so the producers name no address and no struct offset. The
+    -- array is resolved PER CALL and the SaveData base is NEVER cached: the game can rewrite the save
+    -- (and a re-created block is a different address), and a cached base would outlive it. `size` is
+    -- the bound R.array reported, so a read past the end refuses by name instead of walking into the
+    -- neighbouring array. A refusal is (nil, why) -- never a value the save never made.
+    session.save_array = function(_, array_id)
+        local sd, why = R.save_data(mem, prof)
+        if not sd then return nil, why end
+        local base, size = R.array(mem, prof, sd, array_id)
+        if not base then return nil, tostring(size) end
+        return function(off, len)
+            if math.type(off) ~= "integer" or math.type(len) ~= "integer"
+               or off < 0 or len < 1 or off + len > size then
+                return nil, "out_of_array"
+            end
+            return R.read(mem, base + off, len)
+        end
+    end
     return session
 end
 
