@@ -1,0 +1,1524 @@
+{
+ "AutoMinimizeSkipping": true,
+ "ClockThrottle": true,
+ "CoreSyncSettings": {
+  "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS": {
+   "$type": "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS+NDSSyncSettings, BizHawk.Emulation.Cores",
+   "ClearNAND": true,
+   "DSiDSPHLE": true,
+   "EnableDLDI": false,
+   "EnableDSiSDCard": false,
+   "EnableJIT": false,
+   "FirmwareBirthdayDay": 3,
+   "FirmwareBirthdayMonth": 11,
+   "FirmwareFavouriteColour": 2,
+   "FirmwareLanguage": 1,
+   "FirmwareMessage": "Melons Taste Great!",
+   "FirmwareOverride": true,
+   "FirmwareStartUp": 0,
+   "FirmwareUsername": "melonDS",
+   "FullDSiBIOSBoot": false,
+   "GLBetterPolygons": false,
+   "GLHiResCoordinates": false,
+   "GLScaleFactor": 1,
+   "InitialTime": "2010-01-01T12:00:00",
+   "JITBranchOptimizations": true,
+   "JITLiteralOptimizations": true,
+   "JITMaxBranchSize": 32,
+   "SkipFirmware": true,
+   "ThreadedRendering": true,
+   "ThreeDeeRenderer": 0,
+   "UseDSi": false,
+   "UseRealBIOS": false,
+   "UseRealTime": false,
+   "UseTouchInterpolation": true
+  }
+ },
+ "FrameSkip": 4,
+ "MainWindowSize": "530, 529",
+ "PathEntries": {
+  "LastRomPath": "C:\\slink-wt\\title-publish\\patch\\build",
+  "Paths": [
+   {
+    "Path": ".",
+    "System": "Global_NULL",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Global_NULL",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./Firmware",
+    "System": "Global_NULL",
+    "Type": "Firmware"
+   },
+   {
+    "Path": "./Movies",
+    "System": "Global_NULL",
+    "Type": "Movies"
+   },
+   {
+    "Path": "./Movies/backup",
+    "System": "Global_NULL",
+    "Type": "Movie backups"
+   },
+   {
+    "Path": ".",
+    "System": "Global_NULL",
+    "Type": "A/V Dumps"
+   },
+   {
+    "Path": "./Tools",
+    "System": "Global_NULL",
+    "Type": "Tools"
+   },
+   {
+    "Path": "./Lua",
+    "System": "Global_NULL",
+    "Type": "Lua"
+   },
+   {
+    "Path": "./.",
+    "System": "Global_NULL",
+    "Type": "Watch (.wch)"
+   },
+   {
+    "Path": ".",
+    "System": "Global_NULL",
+    "Type": "Debug Logs"
+   },
+   {
+    "Path": "./Movies/Macros",
+    "System": "Global_NULL",
+    "Type": "Macros"
+   },
+   {
+    "Path": ".",
+    "System": "Global_NULL",
+    "Type": "Multi-Disk Bundles"
+   },
+   {
+    "Path": "./ExternalTools",
+    "System": "Global_NULL",
+    "Type": "External Tools"
+   },
+   {
+    "Path": "",
+    "System": "Global_NULL",
+    "Type": "Temp Files"
+   },
+   {
+    "Path": "./3DS",
+    "System": "3DS",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "3DS",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "3DS",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "3DS",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "3DS",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./User",
+    "System": "3DS",
+    "Type": "User"
+   },
+   {
+    "Path": "./32X",
+    "System": "32X",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "32X",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "32X",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "32X",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "32X",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "32X",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Amiga",
+    "System": "Amiga",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Amiga",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Amiga",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "Amiga",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Amiga",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Amiga",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Atari 2600",
+    "System": "A26",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "A26",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "A26",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "A26",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "A26",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Atari 7800",
+    "System": "A78",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "A78",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "A78",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "A78",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "A78",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "A78",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./AmstradCPC",
+    "System": "AmstradCPC",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "AmstradCPC",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "AmstradCPC",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "AmstradCPC",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "AmstradCPC",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Apple II",
+    "System": "AppleII",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "AppleII",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "AppleII",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "AppleII",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "AppleII",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "AppleII",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Arcade",
+    "System": "Arcade",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Arcade",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Arcade",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "Arcade",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Arcade",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Arcade",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./C64",
+    "System": "C64",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "C64",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "C64",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "C64",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "C64",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "C64",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Channel F",
+    "System": "ChannelF",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "ChannelF",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "ChannelF",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "ChannelF",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "ChannelF",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Coleco",
+    "System": "Coleco",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Coleco",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Coleco",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Coleco",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Coleco",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Doom",
+    "System": "Doom",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Doom",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Doom",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Doom",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Doom",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./DOS",
+    "System": "DOS",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "DOS",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "DOS",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "DOS",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "DOS",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "DOS",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Gameboy Link",
+    "System": "GBL",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GBL",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GBL",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GBL",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GBL",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GBL",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Palettes",
+    "System": "GBL",
+    "Type": "Palettes"
+   },
+   {
+    "Path": "./Gameboy",
+    "System": "GB_GBC_SGB",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GB_GBC_SGB",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GB_GBC_SGB",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GB_GBC_SGB",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GB_GBC_SGB",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GB_GBC_SGB",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Palettes",
+    "System": "GB_GBC_SGB",
+    "Type": "Palettes"
+   },
+   {
+    "Path": "./GBA",
+    "System": "GBA",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GBA",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GBA",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GBA",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GBA",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GBA",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Genesis",
+    "System": "GEN",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GEN",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GEN",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GEN",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GEN",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GEN",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Game Gear",
+    "System": "GG",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GG",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GG",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GG",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GG",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GG",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Dual Game Gear",
+    "System": "GGL",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "GGL",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "GGL",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "GGL",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "GGL",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "GGL",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Intellivision",
+    "System": "INTV",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "INTV",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "INTV",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "INTV",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "INTV",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "INTV",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Palettes",
+    "System": "INTV",
+    "Type": "Palettes"
+   },
+   {
+    "Path": "./Jaguar",
+    "System": "Jaguar",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Jaguar",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Jaguar",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "Jaguar",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Jaguar",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Jaguar",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Libretro",
+    "System": "Libretro",
+    "Type": "Base"
+   },
+   {
+    "Path": "%recent%",
+    "System": "Libretro",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./Cores",
+    "System": "Libretro",
+    "Type": "Cores"
+   },
+   {
+    "Path": "./System",
+    "System": "Libretro",
+    "Type": "System"
+   },
+   {
+    "Path": "./State",
+    "System": "Libretro",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "Libretro",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Libretro",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Libretro",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Lynx",
+    "System": "Lynx",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "Lynx",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "Lynx",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "Lynx",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "Lynx",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "Lynx",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./MSX",
+    "System": "MSX",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "MSX",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "MSX",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "MSX",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "MSX",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "MSX",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./N64",
+    "System": "N64",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "N64",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "N64",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "N64",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "N64",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "N64",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./NDS",
+    "System": "NDS",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "NDS",
+    "Type": "ROM"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/State",
+    "System": "NDS",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/SaveRAM",
+    "System": "NDS",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/Screenshots",
+    "System": "NDS",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "NDS",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./NES",
+    "System": "NES",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "NES",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "NES",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "NES",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "NES",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "NES",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Palettes",
+    "System": "NES",
+    "Type": "Palettes"
+   },
+   {
+    "Path": "./NGP",
+    "System": "NGP",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "NGP",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "NGP",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "NGP",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "NGP",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "NGP",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./O2",
+    "System": "O2",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "O2",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "O2",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "O2",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "O2",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "O2",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./3DO",
+    "System": "3DO",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "3DO",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "3DO",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "3DO",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "3DO",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "3DO",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./PC Engine",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "PCE_PCECD_SGX_SGXCD",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./PCFX",
+    "System": "PCFX",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "PCFX",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "PCFX",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "PCFX",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "PCFX",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "PCFX",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./PSX",
+    "System": "PSX",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "PSX",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "PSX",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "PSX",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "PSX",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "PSX",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Saturn",
+    "System": "SAT",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "SAT",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "SAT",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "SAT",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "SAT",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "SAT",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Satellaview",
+    "System": "BSX",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "BSX",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "BSX",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "BSX",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "BSX",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "BSX",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./SG-1000",
+    "System": "SG",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "SG",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "SG",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "SG",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "SG",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "SG",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./SMS",
+    "System": "SMS",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "SMS",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "SMS",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "SMS",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "SMS",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "SMS",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./SNES",
+    "System": "SNES",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "SNES",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "SNES",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "SNES",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "SNES",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "SNES",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./TI83",
+    "System": "TI83",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "TI83",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "TI83",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "TI83",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "TI83",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "TI83",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./TIC80",
+    "System": "TIC80",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "TIC80",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "TIC80",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "TIC80",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "TIC80",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "TIC80",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./Uzebox",
+    "System": "UZE",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "UZE",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "UZE",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "UZE",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "UZE",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "UZE",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./VB",
+    "System": "VB",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "VB",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "VB",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "VB",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "VB",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "VB",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./VEC",
+    "System": "VEC",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "VEC",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "VEC",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "VEC",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "VEC",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "VEC",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./WonderSwan",
+    "System": "WSWAN",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "WSWAN",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "WSWAN",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./SaveRAM",
+    "System": "WSWAN",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "WSWAN",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "WSWAN",
+    "Type": "Cheats"
+   },
+   {
+    "Path": "./ZXSpectrum",
+    "System": "ZXSpectrum",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "ZXSpectrum",
+    "Type": "ROM"
+   },
+   {
+    "Path": "./State",
+    "System": "ZXSpectrum",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "./Screenshots",
+    "System": "ZXSpectrum",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "ZXSpectrum",
+    "Type": "Cheats"
+   }
+  ],
+  "UseRecentForRoms": false
+ },
+ "RecentCores": [
+  "Gambatte",
+  "Gambatte",
+  "Gambatte",
+  "Gambatte",
+  "Gambatte"
+ ],
+ "RecentLua": {
+  "AutoLoad": false,
+  "Frozen": false,
+  "MAX_RECENT_FILES": 8,
+  "recentlist": [
+   "C:\\slink-wt\\title-publish\\patch\\build\\g2menu.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\menu_cont.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\menu_cap.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\anim_cap.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\anim_cap_dbg.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\gsc_dense.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\pure_dense.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\gba_shot.lua"
+  ]
+ },
+ "RecentRoms": {
+  "AutoLoad": false,
+  "Frozen": false,
+  "MAX_RECENT_FILES": 10,
+  "recentlist": [
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_silver.gbc",
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_gold.gbc",
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_crystal.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\smoke\\smoke_pure.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\smoke\\smoke_red.gb",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\emerald.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\radical_red.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\leafgreen.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen1_purered_overlay.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen1_puregreen_overlay.gbc"
+  ]
+ },
+ "Rewind": {
+  "AllowOutOfOrderStates": true,
+  "AllowSlowStates": false,
+  "BackingStore": 0,
+  "BufferSize": 512,
+  "Enabled": false,
+  "TargetFrameLength": 600,
+  "TargetRewindInterval": 5,
+  "UseCompression": false,
+  "UseDelta": false,
+  "UseFixedRewindInterval": false
+ },
+ "SoundEnabled": false,
+ "SoundEnabledNormal": false,
+ "SoundEnabledRWFF": false,
+ "SoundVolume": 0,
+ "SpeedPercent": 800,
+ "SuperHawkThrottle": false,
+ "UpdateLastCheckTimeUtc": "2026-10-02T19:16:54.3474188Z",
+ "VSyncThrottle": false
+}

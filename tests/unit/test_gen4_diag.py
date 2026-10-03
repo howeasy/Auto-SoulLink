@@ -416,9 +416,11 @@ def test_runbook_censoring_control_red_revert(monkeypatch, replacement):
 
 def test_observed_config_autosave_keeps_immutable_inputs_strict(tmp_path, monkeypatch):
     import json
-    physical = Path('F:/slink-work/lanes/g4/d3-hg-1003033806')
-    before = json.loads((physical / 'bizhawk.initial-rebuilt.ini').read_text())
-    after = json.loads((physical / 'bizhawk.ini').read_text())
+    # Minimal committed copies of the PHYSICAL b809 D3 config (lane d3-hg-1003033806): the audited keys plus
+    # every key EmuHawk rewrote, so the replay is hermetic.
+    fixtures = Path(__file__).resolve().parents[1] / 'fixtures' / 'gen4'
+    before = json.loads((fixtures / 'diag_config_autosave_before.json').read_text(encoding='utf-8'))
+    after = json.loads((fixtures / 'diag_config_autosave_after.json').read_text(encoding='utf-8'))
     config = tmp_path / 'bizhawk.ini'
     config.write_text(json.dumps(before))
     source = tmp_path / 'diagnostic.lua'
