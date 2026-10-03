@@ -181,8 +181,10 @@
     </div>
     {% if cause %}
       <div class="tomb-cause">
-        {%- if cause == 'battle' -%}
-          {%- set ksp = killer.species_name or ('Species #' ~ (killer.species or '?')) -%}
+        {%- if cause == 'battle' and not (killer.species_name or killer.species) -%}
+          <span class="cause-battle"><svg class="cause-icon inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>Fainted in battle</span>
+        {%- elif cause == 'battle' -%}
+          {%- set ksp = killer.species_name or ('Species #' ~ killer.species) -%}
           {%- set klv = (' Lv' ~ killer.level) if killer.level else '' -%}
           {%- if killer.is_trainer and killer.trainer_name -%}
             {%- set owner = ((killer.trainer_class ~ ' ') if killer.trainer_class else '') ~ killer.trainer_name ~ "'s " -%}

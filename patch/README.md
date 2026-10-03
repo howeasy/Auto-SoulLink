@@ -46,10 +46,9 @@ Set these in the Manager's **New run** form.
 
 | Option | Default | What it does |
 |---|---|---|
-| In-game messages | Off | Also shows big run events (a new link, a shiny, a dead zone) in the game's own text box |
-| In-game sounds | Off | Plays run event sounds through the game |
+| Native Sounds | Off | Plays run event sounds through the game |
 | Battle Calc | On | Radical Red: shows the damage of the highlighted move in battle |
-| Pokémon Center trade NPC | On | Gen 3: a trainer in each Pokémon Center to trade linked Pokémon with your partner |
-| Phone calls | On | Gold/Silver/Crystal: your Pokégear rings for a new link, a dead zone or a fallen Pokémon |
+| PC Trade NPC | On | Gen 3: a trader in each Pokémon Center for swapping linked Pokémon with your partner |
+| Phone Calls | On | Gold/Silver/Crystal: your Pokégear rings for a new link, a dead zone or a fallen Pokémon |
 
 Building or changing the patches: see [DEVELOPER.md](DEVELOPER.md).

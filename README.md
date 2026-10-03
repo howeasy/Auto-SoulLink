@@ -11,161 +11,143 @@
 
 <br><br>
 
-<img src="docs/images/board.png" width="900" alt="The Soul Link board showing both players, linked Pokémon pairs, and recent run events">
-
-<sub>Both players' teams, every linked pair, and the run's recent events in one place.</sub>
+<img src="docs/images/board.png" width="900" alt="The run board: both players' current area and battle, a damage preview, linked pairs and the event log">
 
 </div>
 
-## Two games, one rule
+## What it does
 
-A Soul Link Nuzlocke is two friends, two copies of the same game, and one rule that makes every decision cost something: **the first Pokémon you each catch in an area become a pair.** Lose one and you lose the other. Choosing a team means choosing pairs that work for both of you.
+A Soul Link Nuzlocke is two players, two copies of the same game, and one rule: the first Pokémon you each catch in an area become a pair. If one of them dies, so does the other.
 
-That's the fun, and the nuisance. SLink takes the nuisance away — it reads both games, does the pairing, and makes the rules happen inside the emulators:
+SLink reads both games while you play and applies that rule for you. Your first catches in an area are paired as soon as both land. When one Pokémon faints, its partner faints in the other game, mid-battle if need be. A shared board and stream overlays keep track of everything, so nobody has to.
 
-- your first catches in an area are paired the moment both land;
-- when one Pokémon drops, **its partner faints in the other game**, live, mid-battle;
-- a board and a set of stream overlays tell the story, so you watch instead of score-keeping.
-
-Both games run in **BizHawk**. A Python server holds the Soul Link rules and the browser UI; each emulator runs a generation-specific Lua client that reads its game and reports back.
-
-[Get started](#get-started) · [The rules](#the-rules) · [Games](#games) ·
-[Streaming](#streaming) · [Documentation](#documentation)
-
-## One board for the whole run
-
-<img src="docs/images/linked-pairs.png" width="900" alt="Linked Pokémon pairs grouped by in-party, waiting to link, boxed, and fallen">
-
-A **Now** card per player — where they are, what they're fighting, HP and moves — then the pairs sorted into **In party**, **Pending link**, **Split**, **Boxed**, **Linked** and **Fallen**, with the run's event log beside them.
-
-A pending catch is waiting for the other player's catch in that area. If the page ever stops answering, the board says **"Connection lost — retrying…"** instead of quietly showing stale numbers.
+Both games run in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a small Lua client that reports to a Python server, which enforces the rules and serves the web pages.
 
 ## The rules
 
-| Rule | What happens in your run |
+| Rule | What happens |
 |---|---|
-| **One encounter per area** | Each player's first eligible catch in the same area becomes a linked pair. |
-| **Missed encounter** | Failing to catch your encounter closes that area for both players. |
-| **Shared faints** | When one Pokémon faints, SLink faints its linked partner in the other game. |
-| **Linked teams** | Both Pokémon in a pair must be in the party together or in the PC together. |
-| **Memorial** | Fallen pairs are recorded on the board and moved to the memorial box when the games can safely do so. |
-| **Starting the challenge** | Enforcement begins once you have Poké Balls. |
+| One encounter per area | Each player's first catch in an area is linked to the other player's first catch there. |
+| Missed encounter | If either player fails to catch in an area, it's closed for both. |
+| Shared faints | When one Pokémon faints, SLink faints its partner in the other game. |
+| Linked teams | Both halves of a pair go in the party together, or in the PC together. |
+| Memorial | Fallen pairs are moved to a memorial box once both games are somewhere safe. |
+| When it starts | The rules switch on once you have Poké Balls. |
 
-The new-run form also offers **species, gender, and type clauses** where the selected
-game supports them. Each option explains what it changes before you start.
+### Run options
+
+Pick these when you create a run. The form greys out anything the chosen game can't do and says why.
+
+| Option | What it does | Games |
+|---|---|---|
+| Species, Gender, Type Clause | Refuse a link when both Pokémon share an evolution family, a gender, or a type. | All (no Gender Clause on Gen 1) |
+| Explode Mode | When your partner's Pokémon dies, yours is forced to use Explosion. | All except Emerald Expansion |
+| Rival Swap | Rival battles use your partner's real team instead of the usual one. | All except Emerald Expansion |
+| Native Sounds | Run events play sounds through the game itself. | Patched games |
+| Phone Calls | Your partner rings your Pokégear when a pair links, an area closes or a Pokémon falls. | Gold, Silver, Crystal |
+| Battle Calc | Shows the damage of the highlighted move in battle. | Radical Red |
 
 ## Get started
 
-You need **Python 3.11+**, **BizHawk 2.11+** (Gen 2 runs on 2.9+ too), and a compatible game ROM for each player. **No ROMs are included** — bring your own dumps.
-Both players choose games from the same family: Red can link with Blue, for example; a Radical Red run uses Radical Red on both sides.
+You need Python 3.11+, BizHawk 2.11+ (Gen 2 also runs on 2.9+), and your own copy of each game. No ROMs are included.
 
-Install SLink's requirements and start the Manager from the project folder:
+Install the requirements and start the Run Manager:
 
 ```bash
 pip install -r requirements.txt
 python -m server.manager --host 0.0.0.0
 ```
 
-Open **http://localhost:8090/** on the machine running the Manager.
+Then open http://localhost:8090/.
 
-Which port is which: **8090** is the Manager (the page above). Each run the Manager starts gets its own dashboard, starting at **8081** and counting up. **8080** is the dashboard of a single run started by hand with `python -m server.server` (its `--http-port` default); the Manager never uses it.
+<img src="docs/images/manager-new.png" width="900" alt="The New run form with FireRed and LeafGreen picked, Species Clause and Explode Mode ticked">
 
-<img src="docs/images/manager-new.png" width="900" alt="Creating a run: choose a name, game family, and optional rules">
+1. Create a run. Name it, pick the game family and the options you want. Where the game supports it, you can also have the Manager randomize the cartridges.
+2. Download each player's setup. On the run page, open **Launchers** and download the Player A and Player B setup ZIPs, plus each player's prepared cartridge.
+3. Connect. Each player unzips their setup, opens the cartridge in BizHawk and loads their save, then opens the launcher in the Lua Console.
+4. Play. Your first catches in the same area form a pair.
 
-1. **Create a run.** Give it a name, choose your game family, and select the rules you want to use. Game preparation and randomizer settings appear where the selected game family supports them.
-2. **Download each player's setup.** Open **Launchers** on the run page and download the Player A and Player B setup ZIPs — SLink's Lua runtime with that player's launcher inside. Download the prepared cartridge too if your run made one.
-3. **Connect both games.** Each player extracts their setup, opens their game and loads their save in BizHawk, then loads the included launcher in the Lua console.
-4. **Play.** Your first catches in the same area form a pair. Keep the board open to follow your teams, encounters, and losses.
+For a player on another machine, set **Players connect to** under Launchers to an address they can reach, then download their setup again.
 
-For a player on another machine, set **Players connect to** under **Launchers** to an address they can reach, then download the setup again. That player opens their own game in BizHawk; the Manager stays on the host's machine.
-
-> Load your game and save **before** the launcher. If you download only the `.lua`
-> launcher instead of the setup ZIP, that player also needs SLink's Lua runtime.
+Each run gets its own board, on port 8081 and up. Port 8080 is only used when you start a single run by hand with `python -m server.server`.
 
 ## Games
 
-These game families are offered by the current Manager. Game versions and optional features matter, so use the game's setup options when preparing a run.
+Both players pick from the same family. Red links with Blue, for example, and a Radical Red run is Radical Red on both sides.
 
-| Game family | Pairing |
+| Family | Randomizer |
 |---|---|
-| **Red, Blue, Yellow** | Two games from this family |
-| **PureRed, PureBlue, PureGreen** ([pureRGB](https://github.com/Vortyne/pureRGB)) | Two compatible pureRGB games; separate from vanilla Red/Blue/Yellow |
-| **Gold, Silver, Crystal** | Two games from this family |
-| **FireRed, LeafGreen** | Two games from this family |
-| **Emerald** | Emerald on both sides |
-| **Emerald Expansion** | Emerald Expansion on both sides; played clean, no randomizer |
-| **Radical Red 4.1** | Radical Red on both sides |
+| Red, Blue, Yellow | Yes |
+| PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB)) | Yes |
+| Gold, Silver, Crystal | No |
+| FireRed, LeafGreen | Yes |
+| Emerald | Yes |
+| Radical Red 4.1 | No |
+| Emerald Expansion | No |
 
-Gen 4 and Gen 5 support is experimental and isn't offered in the Manager yet.
+The randomizer is your own copy of Universal Pokémon Randomizer ZX. Both cartridges get the same settings and different seeds.
 
-SLink is in active development and is tested in **BizHawk**; not every game has been played start to finish.
+SLink is tested in BizHawk, but not every game has been played start to finish. Gen 4 and Gen 5 support is experimental and isn't offered in the Manager yet.
 
-## Prepare your games
+## The companion patch
 
-For game families that support randomization, the Manager can build the pair for you: **the same settings and two different seeds**, one cartridge per player, made from your own copy of Universal Pokémon Randomizer ZX. Your ROMs stay on the machine that prepared them.
+Every game in the list except Yellow and the Emerald Expansion needs the SLink companion patch, and a clean cartridge of those games won't connect. The Manager patches each cartridge it prepares, so you only need to think about it if you bring your own. In that case, use `/patcher` on the Manager.
 
-The **companion patch is required** for every game that has one (Red/Blue, pureRGB, Gold/Silver/Crystal, FireRed/LeafGreen/Emerald, Radical Red). The Manager patches each cartridge for you; a clean cartridge of these games won't connect.
+The patch puts SLink inside the game:
 
-What it adds, inside the game:
+- a SoulLink title screen, with the patch version on the main menu;
+- the SLINK panel in the START menu, so you can check the run without leaving the game;
+- in-game trades between linked Pokémon, at the Cable Club receptionist on Gen 1 and Gen 2, or a trader in the Pokémon Center on Gen 3. You can only trade a Pokémon for its own partner.
 
-| | |
-|---|---|
-| **SoulLink title** | The SLink wordmark on the game's title screen, with the patch version on the main menu. |
-| **The SLINK panel** | An in-game Soul Link panel you can read without leaving the game. |
-| **Native trades** | A trade counterparty in the game itself — a receptionist on patched Gen 1 and Gen 2, a Pokémon Center NPC on Gen 3 by default. On Gen 3 the real in-game trade animation plays on both sides, and only a linked mon is ever accepted: your partner's matching half. |
+More in the [companion patch guide](patch/README.md).
 
-Yellow and the Emerald Expansion have no companion yet and still run clean — the same Soul Link rules, without the panel or the native trades. The new-run form shows which options you can use; they are separate from the core linking rules.
+## The board
 
-More detail: [Companion patches](patch/README.md).
+<img src="docs/images/linked-pairs.png" width="900" alt="Five linked pairs in the party, each showing both Pokémon, their encounter route, HP, ability and held item">
 
-## Plan your next battle
+Each player gets a card showing their area, their lead or current battle, and HP and moves. In battle, it also previews how much damage each move will do. Below that, pairs are sorted into in party, waiting for a partner, boxed and fallen. The event log runs down the side.
 
-<img src="docs/images/calc.png" width="900" alt="The damage calculator alongside both players' live parties">
+If the server stops answering, the board says "Connection lost" instead of showing old numbers. If an in-game trade ends in a state SLink can't settle on its own, a banner on the board lets you settle it.
 
-The bundled damage calculator carries a SLink panel with **both players' live parties**, so you can compare a matchup without retyping the whole team. It uses the selected game's own data where supported.
+## Timeline and memorial
 
-Gen 3 runs also get an **Upcoming Key Trainers** panel: read a trainer's roster, then open it straight in the calculator before the fight.
+<img src="docs/images/timeline.png" width="900" alt="The run timeline: pairs formed route by route, a dead zone, and a fallen pair">
 
-## 🪦 What you lost, in order
+The timeline lists every pair, death, dead zone and burial in order, plus the areas that are still open.
 
-<img src="docs/images/memorial.png" width="900" alt="A memorial card showing a fallen pair, their encounter area, and the recorded cause of death">
+<img src="docs/images/memorial.png" width="320" alt="A memorial card for a fallen pair from Route 3">
 
-The memorial keeps both Pokémon of every fallen pair together with their encounter area, time of death, and the recorded cause. It lives at `/memorial` on that run's own port, beside the pairs still in play.
+The memorial (`/memorial` on the run's board) keeps each fallen pair together with where they were caught, when they died and what killed them.
 
-The **Timeline** tells the whole run in order — every pair formed, every death, dead zone and burial — and lists the areas still open, so you always know what is still on the table.
+## Damage calculator
 
-If a native trade ends in a state the server can't settle on its own, the board raises a **Trade conflict** banner with a form to settle it by hand: adopt what each side reported, commit the undecided sides, or roll them back.
+<img src="docs/images/calc.png" width="900" alt="The damage calculator with the SLink party panel showing both players' live teams">
+
+The calculator has a SLink panel with both players' live parties, so you can check a matchup without typing your team in. On Gen 3 runs, the Prep tab lists upcoming key trainers, and you can open any of their Pokémon straight in the calculator.
 
 ## Streaming
 
-<img src="docs/images/overlays.png" width="900" alt="A gallery of stream overlays for parties, linked pairs, battles, and the memorial">
+<img src="docs/images/overlays.png" width="900" alt="The overlay gallery: parties, linked pairs, battle cards, counters, badges and trackers">
 
-Open **Broadcast** to preview overlays and add them to OBS as browser sources. Either player's party, linked pairs, battle cards, gym badges, the event feed, area and encounter trackers, death and attempt counters, and a memorial scroll — all updating from the run as you play.
+**Broadcast** lists every overlay with its URL and recommended size, ready to add to OBS as a browser source. There are overlays for each party, linked pairs, battles, badges, the event feed, area and encounter trackers, death and attempt counters, and the memorial.
 
-Optional stream tools include OBS scene changes on run events and a Twitch bot that answers questions such as `!partner`, `!rip`, and `!runstats`. Their setup pages are under Broadcast. These integrations need extra packages:
+The same page sets up OBS scene switching on run events and a Twitch bot that answers `!partner`, `!rip` and `!runstats`. Those need a few extra packages:
 
 ```bash
 pip install "twitchio>=3.0" "simpleobsws>=1.4" psutil
 ```
 
-## Documentation
+## More documentation
 
-| Guide | What you'll find |
-|---|---|
-| [Technical reference](docs/REFERENCE.md) | Server options and how SLink works, for hosts and tinkerers |
-| [Companion patches](patch/README.md) | In-game features and patch setup |
+- [Companion patch guide](patch/README.md): which games need it and how to patch your own cartridge.
+- [Technical reference](docs/REFERENCE.md): server options, the protocol and how SLink works inside.
 
 ## Licence and credits
 
-SLink is [MIT licensed](LICENSE). The bundled calculator retains its upstream MIT
-licence; the Universal Pokémon Randomizer ZX patches are GPL-3.0. See
-[NOTICE.md](NOTICE.md) for component licences and attribution.
+SLink is [MIT licensed](LICENSE). The bundled calculator keeps its upstream MIT licence, and the Universal Pokémon Randomizer ZX patches are GPL-3.0. See [NOTICE.md](NOTICE.md) for details.
 
-No ROMs or savestates are distributed here. Bring your own game dumps.
+No ROMs or savestates are distributed here.
 
-Built with [BizHawk](https://github.com/TASEmulators/BizHawk), the
-[Smogon damage calculator](https://github.com/smogon/damage-calc), and research from
-the [pret Pokémon disassemblies](https://github.com/pret).
+Built with [BizHawk](https://github.com/TASEmulators/BizHawk), the [Smogon damage calculator](https://github.com/smogon/damage-calc), and research from the [pret disassemblies](https://github.com/pret).
 
-<sub>Pokémon is a trademark of Nintendo, Creatures Inc. and GAME FREAK Inc.
-This is an unaffiliated fan tool.</sub>
+<sub>Pokémon is a trademark of Nintendo, Creatures Inc. and GAME FREAK Inc. This is an unaffiliated fan tool.</sub>

@@ -39,7 +39,7 @@ def test_published_companion_is_crc_bound_and_admitted(title,file,cap):
     assert patched[slot["offset"]:field_end] == gen3_title.menu_field(row["menu_version"])
     assert canonical_problems(row, rom=patched) == []
     stamped = bytearray(patched)
-    stamped[slot["offset"]:field_end] = gen3_title.menu_field("v0.3.0")
+    stamped[slot["offset"]:field_end] = gen3_title.menu_field("v10.20.30")   # any version other than the published one
     assert hashlib.sha1(stamped).hexdigest() != row["rom_sha1"]                            # a stamp moves the exact hash ...
     assert rom_identity.canonical_sha1(bytes(stamped), [slot]) == row["canonical_sha1"]    # ... and nothing the canonical one sees
     elsewhere = bytearray(patched)

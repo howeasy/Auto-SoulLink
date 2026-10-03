@@ -193,8 +193,8 @@ OPTION_SUPPORT = {
                         "gen2_gsc": {"ok": True},
                         "gen3_frlge_rr": {"ok": True},
                         "gen3_exp": {"ok": False, "why": "Needs the companion patch (gEnemyParty is encrypted), and the Emerald Expansion has none."}},
-    "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
-    "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
+    "overworld_presence": {"all": False, "why": "Not available yet."},   # deferred post-RC, docs/gen3/TODO.md
+    "native_messages": {"all": False, "why": "Not available yet."},   # deferred post-RC, docs/gen3/TODO.md
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal, FireRed/LeafGreen/Emerald).",
                       "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                       "gen1_rby": {"ok": True},

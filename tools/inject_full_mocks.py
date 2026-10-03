@@ -55,8 +55,17 @@ async def send_tcp(events: list[dict]) -> None:
         # keep the connection clean.
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(r.readline(), timeout=2.0)
-    if HOLD:
-        await asyncio.sleep(HOLD)
+    # Replay each player's last tick while holding: the server calls a player silent for
+    # STALE_AFTER_SECS (10 s) and the board would show "No data" in the capture.
+    last_tick = {m["player"]: m for m in events if m.get("event") == "tick"}
+    deadline = asyncio.get_running_loop().time() + HOLD
+    while HOLD and asyncio.get_running_loop().time() < deadline:
+        for m in last_tick.values():
+            w.write((json.dumps(m) + "\n").encode())
+            await w.drain()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(r.readline(), timeout=2.0)
+        await asyncio.sleep(3)
     w.close()
     await w.wait_closed()
 
@@ -456,14 +465,20 @@ def _memorial():
 def _companion_fields(rom_type: str) -> dict:
     """The mock cartridges are PATCHED ones: a hello for a title that requires the SLink companion is
     refused by the server without this evidence (patch-first, owner 2026-10-02; the same fields
-    GameRulesAdapter.companion_refusal asks for). Yellow, Archipelago and Gen 4/5 need none."""
+    GameRulesAdapter.companion_refusal asks for). Yellow and Gen 4/5 need none."""
     name = rom_type.lower()
     if name in ("red", "blue"):
         return {"artifact_kind": "named", "panel": True}
     if name in ("purered", "pureblue", "puregreen"):
         return {"artifact_kind": "overlay"}
     if name in ("firered", "leafgreen", "emerald", "firered_rr"):
-        return {"artifact_kind": "companion"}
+        # Gen 3 asks for the live mailbox's ABI, equal to the one the title's pack pins
+        # (server/adapters/gen3_frlge.py _COMPANION_PACKS / _companion_abi)
+        pack = {"emerald": "gen3_emerald", "firered_rr": "gen3_rr"}.get(name, "gen3_frlg")
+        path = os.path.join(os.path.dirname(__file__), "..", "data", "games", pack, "profile.json")
+        with open(path, encoding="utf-8") as fh:
+            abi = json.load(fh)["native"]["ABI"]
+        return {"artifact_kind": "companion", "companion_abi": abi}
     return {}
 
 

@@ -117,7 +117,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -126,7 +126,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "always": true,
@@ -169,7 +169,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -178,7 +178,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "always": true,
@@ -220,7 +220,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -229,7 +229,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "always": true,
@@ -270,7 +270,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -279,7 +279,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "ok": true,
@@ -320,7 +320,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -329,7 +329,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "ok": true,
@@ -369,7 +369,7 @@
    "native_messages": {
     "always": false,
     "ok": false,
-    "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "native_sounds": {
     "ok": true,
@@ -378,7 +378,7 @@
    "overworld_presence": {
     "always": false,
     "ok": false,
-    "why": "Deferred until after this release (docs/gen3/TODO.md)."
+    "why": "Not available yet."
    },
    "pc_trade_npc": {
     "ok": true,
