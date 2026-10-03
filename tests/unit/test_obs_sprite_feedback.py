@@ -61,7 +61,7 @@ def rendered_sizes(tmp_path_factory):
     board_css = (REPO / "server" / "static" / "board.css").read_text(encoding="utf-8")
     # Load its real macros without evaluating the unrelated run page's context.
     board_source = (REPO / "server" / "templates" / "_board.html").read_text(encoding="utf-8")
-    board_macros = env.from_string(board_source.split('<div class="mk-a11y-bar">')[0]).module
+    board_macros = env.from_string(board_source.split('<div id="mk-announcer"')[0]).module
     frames = []
     for width, height in ((320, 240), (1920, 1080)):
         scenes = {
