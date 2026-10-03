@@ -495,11 +495,12 @@ def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
 # -- the server's evidence: hello.companion_abi is read from the cartridge's own LIVE mailbox -----------
 
 @NEEDS_OVERLAY
-@pytest.mark.parametrize("fault", ["live", "no_service", "wrong_abi", "wrong_beacon", "wrong_cookie", "stalled"])
-def test_hello_publishes_companion_abi_only_while_the_cartridges_own_service_is_live(fault):
-    """A clean cartridge has no live SLNK service, so the mailbox reads ABSENT and `companion_abi` is not sent;
-    a dead, stale, foreign-ABI or half-written mailbox is not evidence either (and `panel_abi` alone is raw RAM).
-    `live` is the known-positive control for the same harness: the same sequence without a fault publishes 3."""
+@pytest.mark.parametrize("fault", ["live", "stalled", "no_service", "wrong_abi", "wrong_beacon", "wrong_cookie"])
+def test_hello_publishes_companion_abi_only_from_the_cartridges_own_mailbox_signature(fault):
+    """A clean cartridge has no SLNK service, so the beacon/ABI/cookie do not read right and `companion_abi` is not
+    sent; a foreign-ABI or half-written mailbox is not evidence either (and `panel_abi` alone is raw RAM). `live` is
+    the known-positive control. `stalled` (the counter stopped, as in a battle text prompt that never reaches
+    DelayFrame) is STILL evidence: the signature says what the cartridge is, the counter only gates painting."""
     w = World("crystal", production=True)
     mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
     state = {"counter": 0}
@@ -512,29 +513,21 @@ def test_hello_publishes_companion_abi_only_while_the_cartridges_own_service_is_
         elif fault == "wrong_cookie":
             w.emu.poke("System Bus", mb + 31, w.lua.table_from([0x00]))
         elif fault == "stalled":
-            w.frames(120)                                     # the counter stops moving: last session's bytes
-        if fault != "live":
-            w.frames(1)
-    if fault == "live":
-        hello = w.hello()
-        assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
-        return
-    w.checkpoint_ok = True                       # no live service: the hello waits a bounded time, then goes out bare
-    for _ in range(400):
-        if w.sent("hello"):
-            break
-        w.hold()
+            w.frames(120)                                     # the counter stops moving
         w.frames(1)
-    (hello,) = w.sent("hello")
-    assert hello.get("companion_abi") is None, hello
+    hello = w.hello()
+    if fault in ("live", "stalled"):
+        assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
+    else:
+        assert hello.get("companion_abi") is None, hello
 
 
 @NEEDS_OVERLAY
 @pytest.mark.parametrize("warmup", [0, 1, 3])
-def test_the_first_hello_of_a_ticking_overlay_carries_the_evidence_even_when_the_script_starts_on_a_checkpoint(warmup):
-    """The hello is final (the server refuses it and nothing re-sends), so it must wait until the cartridge's own
-    service has been SEEN moving: the script can start while the game already stands in the overworld, and `fresh`
-    needs two observations of a moving counter."""
+def test_the_first_hello_of_an_overlay_carries_the_evidence_even_when_the_script_starts_on_a_checkpoint(warmup):
+    """The hello is final (the server refuses it and nothing re-sends), and a script can load while the game already
+    stands in the overworld: the evidence must already be there on the very first checkpoint frame, without waiting
+    for the service counter to be seen moving."""
     w = World("crystal", production=True)
     mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
     counter = {"c": 100}
@@ -556,28 +549,16 @@ def test_the_first_hello_of_a_ticking_overlay_carries_the_evidence_even_when_the
     w.hold()
     frames(1)
     w.checkpoint_ok = True
-    for _ in range(8):                       # the hello may take a few frames to be ready, never many
-        if w.sent("hello"):
-            break
-        w.hold()
-        frames(1)
+    w.hold()
+    frames(1)
     (hello,) = w.sent("hello")
     assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int, hello
 
 
 @NEEDS_OVERLAY
-def test_a_cartridge_with_no_service_still_says_hello_after_a_bounded_wait_and_carries_no_evidence():
-    """Waiting for the service must not hang a clean cartridge forever: the hello goes out WITHOUT evidence so the
-    server's refusal reaches the player (HUD text) instead of silence."""
+def test_a_cartridge_with_no_service_says_hello_at_once_and_carries_no_evidence():
+    """Nothing waits for the service: a clean cartridge's hello goes out on the first checkpoint frame WITHOUT
+    evidence, so the server's refusal reaches the player (HUD text) immediately."""
     w = World("crystal", production=True)
-    w.checkpoint_ok = True
-    first = None
-    for frame in range(1, 600):
-        w.hold()
-        w.frames(1)
-        if w.sent("hello"):
-            first = frame
-            break
-    assert first is not None, "no hello was ever sent"
-    assert 2 <= first <= 400, first          # it did wait for the service (not instant), but only a bounded time
-    assert w.sent("hello")[0].get("companion_abi") is None
+    hello = w.hello()
+    assert hello.get("companion_abi") is None

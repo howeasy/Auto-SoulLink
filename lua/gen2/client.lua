@@ -1306,24 +1306,12 @@ function Client.new(p)
         return send("hello", payload)
     end
 
-    -- The hello is FINAL (the server's companion refusal is never retried), and its companion evidence exists
-    -- only once panel.lua has SEEN the cartridge's service counter move (two observations). A script that loads
-    -- while the game already stands in the overworld would otherwise hello before that and be refused as a clean
-    -- cartridge, so the first hello waits for the service, for a bounded time: a cartridge with no service says
-    -- hello WITHOUT evidence after PANEL_WAIT frames and the server's refusal reaches the player.
-    local PANEL_WAIT, panel_waited = 180, 0
     self.hello_session = HelloSession.new({
         connected = function() return net.connected() end,
         identity = hello_identity,
         ready = function(identity)
             local live, why = game_is_live()
             if not live then return false, why end
-            if panel and panel:fresh() then
-                panel_waited = 0
-            elseif panel and panel_waited < PANEL_WAIT then
-                panel_waited = panel_waited + 1
-                return false, "waiting for the companion service to be seen live"
-            end
             local battle = reads.read_battle()
             if not battle then return false, "battle state unavailable" end
             -- PLAN §5.4: the first hello waits for the OWPlayerInput checkpoint or a running battle
