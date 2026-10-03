@@ -2,6 +2,7 @@
 real ROM/pret/save cases skip by name when an input is absent and fail when present but wrong
 (tests/TESTING.md)."""
 
+import hashlib
 import json
 import re
 import struct
@@ -1341,6 +1342,150 @@ def test_run_lane_reports_a_saved_file_that_lacks_the_clone(real, tmp_path, monk
     assert (
         res["status"] == "SAVE_MISMATCH" and "saved_mismatch" in res["detail"] and len(calls) == 1
     )
+
+
+# --- the grass leg's producer receipt (no SAVE, no reload: the battle chain IS the evidence) ----------
+_BATTLE_DETAIL = (
+    "phase=pace species=PIDGEY(16) level=2 player=155 map=33 x=665 y=404 paceSteps=12 framesInGrass=900"
+)
+
+
+def _grass_log(state: Path | None, detail: str, frames: int = 900):
+    """One fake EmuHawk log: the savestate line the real Lua writes, then the settled-chain line, then
+    RESULT. `frames` only varies the frame count the receipt must NOT read as its outcome."""
+    lines = []
+    if state is not None:
+        lines.append(f"[f1800] savestate battle_settled ok {state.as_posix()}")
+    lines.append(f"[f2700] settled after {frames} frames; chain fs=0x02300000 sub0=0x02300100 man=0x02300200 "
+                 "ovy=12 bs=0x02300300 ctx=0x02300400 battleType=0x0 enemy=16 L2 hp=13/13 player=155")
+    lines.append(f"[f2700] RESULT {detail}")
+    return "\n".join(lines) + "\n"
+
+
+def _battle_doc(**over):
+    """A consumable BATTLE route receipt: bound to this tree, with the three bindings it must carry."""
+    from tools import gen4_pins
+
+    doc = {
+        **gr.receipt_binding(),
+        "source_head": HEAD,
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
+        "final_status": "BATTLE",
+        "staged_save": {"path": "C:/lane/SaveRAM/hg_a.SaveRAM", "sha256": "1" * 64},
+        "plan": {"path": "C:/lane/route_leg1.json", "sha256": "2" * 64},
+        "battle": {
+            "witness": {
+                "entered": True, "reason": "", "phase": "pace", "species": 16, "level": 2,
+                "player": 155, "map": 33, "x": 665, "y": 404,
+            },
+            "settled_state": {"path": "C:/lane/route_leg1_battle_settled.State", "sha256": "3" * 64},
+        },
+    }
+    return {**doc, **over}
+
+
+def _grass_lane(monkeypatch, tmp_path, log):
+    """A grass run on the synthetic grid: the real ROM/pret are never read (load_world and the wild
+    table are stubbed), so this leg's receipt is proven without an emulator or an E: drive."""
+    pos = _start(1, 1)
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, lambda leg, route: log(leg))
+    monkeypatch.setattr(gr, "load_world", lambda *a, **k: _world(ROWS))
+    monkeypatch.setattr(gr, "wild_land_day", lambda pret: None)
+    return calls
+
+
+def test_the_grass_leg_writes_a_receipt_whose_save_hash_is_the_staged_battery(tmp_path, monkeypatch):
+    staged = tmp_path / "L" / "x.SaveRAM"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(b"staged battery bytes")
+    state = tmp_path / "L" / "t_leg1_battle_settled.State"
+    state.write_bytes(b"settled battle state")
+    calls = _grass_lane(
+        monkeypatch, tmp_path, lambda leg: _grass_log(state, f"BATTLE {_BATTLE_DETAIL}")
+    )
+
+    res = gr.run_lane("rom.nds", tmp_path / "hg_a.SaveRAM", PRET, target="grass", lane="L", tag="t")
+    assert res["status"] == "BATTLE" and len(calls) == 1, res.get("detail")
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "BATTLE" and rec["receipt_kind"] == "route"
+    # the save sha256 names the BYTES the lane booted from, not the source it was copied from
+    assert rec["staged_save"]["path"] == str(staged)
+    assert rec["staged_save"]["sha256"] == hashlib.sha256(b"staged battery bytes").hexdigest()
+    assert rec["plan"]["path"].endswith("t_leg1.json")
+    assert rec["plan"]["sha256"] == gr._sha256(tmp_path / "L" / "t_leg1.json")
+    assert rec["battle"]["settled_state"]["sha256"] == hashlib.sha256(b"settled battle state").hexdigest()
+    assert rec["battle"]["witness"]["entered"] and rec["battle"]["witness"]["species"] == 16
+    # no SYNTH fixture stands behind a grass run, and the receipt says so rather than inventing one
+    assert rec["setup"] == "NATIVE" and rec["sidecar"] is None and rec["sidecar_sha256"] is None
+
+
+def test_a_grass_run_that_never_reached_a_battle_receipts_fail_naming_why(tmp_path, monkeypatch):
+    _grass_lane(
+        monkeypatch, tmp_path,
+        lambda leg: "[f1] RESULT FAIL no_encounter 12 pace steps, frames 900\n",
+    )
+    res = gr.run_lane("rom.nds", tmp_path / "hg_a.SaveRAM", PRET, target="grass", lane="L", tag="t")
+    assert res["status"] == "FAIL"
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "FAIL"  # never a PASS: the leg never entered a battle
+    assert rec["battle"]["witness"]["entered"] is False
+    assert "no_encounter" in rec["battle"]["witness"]["reason"]
+    assert rec["battle"]["settled_state"] is None  # the Lua never wrote one
+    assert gr.verify_receipt(_write(tmp_path, rec), "route", head=HEAD)[0] != "PASS"
+
+
+def test_the_battle_outcome_is_the_chain_not_the_frames_the_leg_waited():
+    """The red control on the outcome rule: 900 frames in grass with no live chain is a FAIL, and
+    padding the frame count cannot turn it into a PASS."""
+    waited = "phase=pace paceSteps=4000 framesInGrass=900000"
+    assert gr.battle_witness({"status": "BATTLE", "detail": waited})["entered"] is False
+    # a chain that vanished (species 0 / player 0) is not an entered battle either
+    for detail in ("phase=pace species=GONE(0) level=0 player=0 map=33 x=1 y=2",
+                   "phase=pace species=PIDGEY(16) level=2 player=0 map=33 x=1 y=2"):
+        w = gr.battle_witness({"status": "BATTLE", "detail": detail})
+        assert w["entered"] is False and w["reason"]
+    live = gr.battle_witness({"status": "BATTLE", "detail": _BATTLE_DETAIL})
+    assert live["entered"] and (live["species"], live["level"], live["player"]) == (16, 2, 155)
+
+
+def test_a_settled_state_that_the_leg_never_wrote_is_absent_not_invented(tmp_path):
+    assert gr.settled_state([]) is None
+    assert gr.settled_state(["[f1] savestate battle_settled ERR no such path C:/x.State"]) is None
+    gone = gr.settled_state([f"[f1] savestate battle_settled ok {(tmp_path / 'gone.State').as_posix()}"])
+    assert gone["path"].endswith("gone.State") and gone["sha256"] is None  # hashed None, never faked
+    state = tmp_path / "s.State"
+    state.write_bytes(b"bytes")
+    assert gr.settled_state([f"[f1] savestate battle_settled ok {state.as_posix()}"])["sha256"] == (
+        hashlib.sha256(b"bytes").hexdigest()
+    )
+
+
+def test_a_battle_receipt_passes_only_with_every_binding_and_a_live_chain(tmp_path, monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _battle_doc())[0] == "PASS"  # baseline green before any fault
+    trimmed = {k: v for k, v in _battle_doc().items() if k != "staged_save"}
+    verdict, why = _consume(tmp_path, trimmed)
+    assert verdict == "STALE" and "staged battery" in why, (verdict, why)
+    for over, gap in (
+        ({"plan": {"path": "x"}}, "plan"),
+        ({"battle": {"witness": {"entered": True}, "settled_state": {"path": "x"}}}, "settled battle state"),
+        ({"battle": {"settled_state": {"sha256": "3" * 64}}}, "battle witness"),
+        ({"battle": None}, "battle block"),
+    ):
+        verdict, why = _consume(tmp_path, _battle_doc(**over))
+        assert verdict == "STALE" and gap in why, (over, verdict, why)
+    # a receipt that binds everything but records no entered battle is a FAIL, naming why
+    dead = _battle_doc()
+    dead["battle"] = {**dead["battle"], "witness": {"entered": False, "reason": "no chain"}}
+    verdict, why = _consume(tmp_path, dead)
+    assert verdict == "FAIL" and "no chain" in why, (verdict, why)
+    # a PC save receipt is not battle proof and vice versa
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    assert gr.verify_receipt(_write(tmp_path, _battle_doc()), "route", head=HEAD, want="BATTLE")[0] == "PASS"
+    assert gr.verify_receipt(_write(tmp_path, _battle_doc()), "route", head=HEAD, want="PC_WITHDRAW")[0] == "FAIL"
+    assert "BATTLE" in gr.RECEIPT_KINDS["route"]["pass"]
+    assert "BATTLE" not in gr.RECEIPT_KINDS["route"]["save_pass"]  # it claims no native SAVE
 
 
 # --- SoulSilver (same HGSS pack, title "soulsilver") ---------------------------------------------
