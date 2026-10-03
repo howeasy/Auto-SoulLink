@@ -43,6 +43,13 @@ enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/ge
   proved by `offsetof` asserts instead of `_Alignas`. `static inline` stays (the real
   mwccarm accepted it in the Gen 4 build); `tests/unit/test_nds_c89_scan.py` enforces
   the rest on host gcc with `-std=gnu89 -Wdeclaration-after-statement`.
+* **Host seq discipline is part of the contract.** `tp_ack` (shared with the panel and sound
+  producers) compares only `seq`, never the opcode, so a host must not reuse the seq of an
+  outstanding trade command for another opcode (the inherited Gen 3 assumption); a foreign
+  command that does collide can be consumed by a poll-side ack. Gating `tp_ack` on trade
+  opcodes was tried and rejected: it breaks the panel/sound acks that reuse it.
+* **No u32 divide in the producers.** The text helpers use shifts (width is 1 or 2), so the
+  mwccarm link needs no `_u32_div_f` runtime helper (found by the Gen 4 real-compiler run).
 * **Title dispatchers MUST route by opcode.** `slink_trade_service` ignores any opcode
   that is not a trade opcode (so sound/panel commands are never FAIL-acked), but it
   must still be called on every visit: the save and scene polls live inside it.

@@ -240,3 +240,35 @@ def test_the_scan_catches_a_for_loop_head_declaration_and_a_mixed_declaration(tm
     done = subprocess.run([_gcc(), *CC_FLAGS, str(src)], capture_output=True, text=True, timeout=60)
     assert done.returncode != 0
     assert "initial declarations" in done.stderr and "mixed declarations" in done.stderr, done.stderr
+
+
+def _assert_line_ranges(path):
+    """Line numbers spanned by each SLINK_STATIC_ASSERT( invocation (not the #define lines)."""
+    text = path.read_text(encoding="utf-8")
+    ranges = []
+    for match in re.finditer(r"SLINK_STATIC_ASSERT\(", text):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        if text[line_start:match.start()].lstrip().startswith("#"):
+            continue
+        depth, i = 1, match.end()
+        while depth and i < len(text):
+            depth += (text[i] == "(") - (text[i] == ")")
+            i += 1
+        first = text.count("\n", 0, match.start()) + 1
+        last = text.count("\n", 0, i) + 1
+        ranges.append((first, last))
+    return ranges
+
+
+def test_no_two_static_asserts_in_different_headers_can_share_a_line_number():
+    """compat.h names each fallback typedef after __LINE__ (implementation-defined for a multi-line
+    invocation: first or last line). C89 forbids the redefinition a collision causes, a C11 host build
+    would not notice, so keep the line sets of every header disjoint."""
+    seen = {}
+    for header in _headers():
+        for first, last in _assert_line_ranges(header):
+            for line in range(first, last + 1):
+                other = seen.setdefault(line, header.name)
+                assert other == header.name, (
+                    f"{header.name} and {other} both have a SLINK_STATIC_ASSERT spanning line {line}: "
+                    "the mwcc typedef names would collide")

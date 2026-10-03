@@ -317,6 +317,11 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         if (!e->start_scene(e->context,(unsigned)slot,handed,s->incoming_len))
             tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
     } else {
+        /* Unreachable: the gate above admits exactly the four opcodes handled in this chain.
+         * Kept as the fail-closed tail; widening the gate must add a branch above. NOTE tp_ack is
+         * shared with the panel and sound producers and compares only seq, so a foreign command
+         * whose seq collides with an outstanding trade seq could still be consumed by a poll-side
+         * ack: that is the inherited Gen 3 host-side seq-discipline assumption (see README). */
         tp_ack(m,seq,0,2);
     }
 }

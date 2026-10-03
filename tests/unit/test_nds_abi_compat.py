@@ -234,3 +234,22 @@ def test_the_fallback_assert_rejects_a_false_condition_under_mwcc(tmp_path):
     assert mutated.returncode != 0, "a false SLINK_STATIC_ASSERT compiled clean under -D__MWERKS__"
     assert STDINT_MARKER not in mutated.stderr
     assert NEGATIVE_ARRAY.search(mutated.stderr), mutated.stderr  # the FAILURE came from the assert
+
+
+@pytest.mark.parametrize("needle,mutated", [
+    ("offsetof(SlinkMailboxV2, capabilities) == 0x40", "offsetof(SlinkMailboxV2, capabilities) == 0x41"),
+    ("offsetof(SlinkRecordStageV1, record) == 0x10", "offsetof(SlinkRecordStageV1, record) == 0x11"),
+    ("sizeof(SlinkControlV2) == 16", "sizeof(SlinkControlV2) == 17"),
+    ("SLINK_TITLE_SIZE == 0x40u", "SLINK_TITLE_SIZE == 0x41u"),
+    ("SLINK_ABI_VERSION == 3u", "SLINK_ABI_VERSION == 4u"),
+])
+def test_other_asserts_are_also_load_bearing_under_mwcc(tmp_path, needle, mutated):
+    """Not just one assert: a second family (offsetof, region, version) is falsified too, so the
+    27-assert count pin is not cosmetic. Control first, so a red mutant is never an unrelated break."""
+    abi = (COMMON / "abi.h").read_text()
+    assert abi.count(needle) == 1, "the mutated condition must be unique or the test is vacuous"
+    control = _compile_pair(tmp_path, "control", abi)
+    assert control.returncode == 0, control.stderr
+    mutated_run = _compile_pair(tmp_path, "mutant", abi.replace(needle, mutated))
+    assert mutated_run.returncode != 0, f"a false assert ({mutated}) compiled clean under -D__MWERKS__"
+    assert NEGATIVE_ARRAY.search(mutated_run.stderr), mutated_run.stderr

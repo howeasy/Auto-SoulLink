@@ -298,7 +298,8 @@ SLINK_STATIC_ASSERT(sizeof(SlinkControlV2) == 16, "control prefix ABI size");
 SLINK_STATIC_ASSERT(offsetof(SlinkControlV2, pi_count) == SLINK_PI_COUNT_FIELD, "NPC counter ABI offset");
 SLINK_STATIC_ASSERT(SLINK_CONTROL_OFFSET + SLINK_CONTROL_SIZE == SLINK_RESERVED_OFFSET, "control/reserved overlap");
 SLINK_STATIC_ASSERT(SLINK_RESERVED_OFFSET < SLINK_ARENA_SIZE, "arena ABI extent");
-SLINK_STATIC_ASSERT(SLINK_TITLE_OFFSET == SLINK_RESERVED_OFFSET
+SLINK_STATIC_ASSERT(SLINK_TITLE_OFFSET == SLINK_RESERVED_OFFSET && SLINK_TITLE_SIZE == 0x40u
+                    && SLINK_TITLE_OFFSET + SLINK_TITLE_SIZE == 0xE40u
                     && SLINK_TITLE_OFFSET + SLINK_TITLE_SIZE <= SLINK_ARENA_SIZE,
                     "title-private region starts at the reserved base and fits the arena");
 SLINK_STATIC_ASSERT(SLINK_ABI_VERSION == 3u, "NDS witness semantics are ABI 3 (Gen 3 is 2)");

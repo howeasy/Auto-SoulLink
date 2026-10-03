@@ -190,7 +190,7 @@ static inline int slink_text_terminator_index(const volatile uint8_t *row, uint3
     for (i = 0; i + t->width <= bytes; i += t->width) {
         unit = row[i];
         if (t->width == 2) unit |= (uint32_t)row[i + 1] << 8;
-        if (unit == t->terminator) return (int)(i / t->width);
+        if (unit == t->terminator) return (int)(i >> (t->width - 1u)); /* width is 1 or 2 (checked above): shift, no divide helper */
     }
     return -1;
 }
@@ -205,8 +205,8 @@ static inline void slink_copy_text_bounded(volatile uint8_t *dst, uint32_t capac
     uint32_t w, cap, n, i;
     if (!t || (t->width != 1 && t->width != 2)) return;
     w = t->width;
-    cap = capacity_bytes / w;
-    n = source_bytes / w;
+    cap = capacity_bytes >> (w - 1u); /* w is 1 or 2 (checked above): shift, no u32 divide helper on mwcc */
+    n = source_bytes >> (w - 1u);
     i = 0;
     if (!cap) return;
     while (i < n && i + 1 < cap) {
