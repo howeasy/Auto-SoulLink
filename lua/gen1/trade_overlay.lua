@@ -126,12 +126,14 @@ function T.new(profile, io, writes)
     --- its preimage back (arm backed it up); a clobbered frame is already the game's again.
     function self:withdraw()
         if self.phase ~= "armed" then return false end
-        if not self:clobbered() then
+        local clobbered = self:clobbered()
+        if self.phase ~= "armed" then return false end -- an observed-entry ambiguity became a hold
+        if not clobbered then
             local preimage = io.read_range(backup, 16)
             if not valid_bytes(preimage, 16) then return false end
             writes:write_bytes(overlay, preimage)
         end
-        self.expected, self.phase = nil, nil
+        self.expected, self.phase, self.entry_observed = nil, nil, false
         return true
     end
     return self

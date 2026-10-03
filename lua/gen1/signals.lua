@@ -363,11 +363,28 @@ function S.bind(dependencies)
             end
             specs[kind]={spec=spec,accept=accept}
         end
-        local service,why,failed = registry.new({
+        local service,why,failed
+        service,why,failed = registry.new({
             owner=owner,max_pending=factory.MAX_PENDING,sites=descriptors,
             validate=function(site) return binding:validate(site) end,
             name_for_site=function(site) return "SLink-gen1-"..site.id end,
-            register=function(site,callback,name) return binding:register(site,callback,name) end,
+            register=function(site,callback,name)
+                local wrapped = callback
+                if site.entry_observer then
+                    wrapped = function(...)
+                        -- A stopped queue must not hide native work from the lease.
+                        -- Retain bank/PC/byte validation and shutdown ownership.
+                        if service then
+                            local ok,context = pcall(binding.context,binding,site)
+                            if ok and context and not service:status().closed then
+                                site.entry_observer(context)
+                            end
+                        end
+                        return callback(...)
+                    end
+                end
+                return binding:register(site,wrapped,name)
+            end,
             unregister=function(handle) return binding:unregister(handle) end,
             valid_handle=function(handle) return binding:valid_handle(handle) end,
             capture=function(site)

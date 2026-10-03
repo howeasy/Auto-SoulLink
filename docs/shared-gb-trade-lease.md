@@ -26,9 +26,9 @@ over EWRAM (`lua/mailbox.lua`).
 
 `Lease.new(spec, io, writes)` returns the lease object (`poll_query`,
 `answer_query`, `poll_offer`, `answer_offer`, `arm`, `poll_done`, `release`,
-`clobbered`, `picked_up`).
+`clobbered`, `observe_entry`, `picked_up`, `hold_consumed`).
 
-Every `spec` field is required. If one is missing, `new` asserts.
+The four framing/staging fields below are required. The consumption verifier is optional.
 
 - `lease`: base address of the frame.
 - `party_capacity`: bounds the offer slot, the own slot and the mask (`< 2^capacity`).
@@ -37,6 +37,28 @@ Every `spec` field is required. If one is missing, `new` asserts.
 - `stage(payload, preimage16)`: writes the per-game incoming mon. It runs after
   validation and before the frame is published, and receives the frame's
   pre-image (Gen 1 backs it up).
+
+The optional `pickup(evidence, expected16)` verifies a binder's native consumption
+boundary. It returns true for a bound consumption, false for a poll/no evidence,
+or nil plus an error when the native boundary was reached but the request could
+not be verified. A thrown verifier error also holds the lease. The latter cases
+set `phase="picked_up"` plus `pickup_error`: this is a conservative hold, not a
+claim that a physical commit succeeded.
+
+`observe_entry()` records a qualified service-entry observation while armed.
+Each successful `arm` resets it. For a binder with a consumption verifier, an
+armed frame that becomes clobbered after that observation is held as
+consumed-but-unwitnessed. It must not be re-staged or withdrawn: the precise
+post-restore hook may have been dropped. A matching DONE remains stronger
+evidence. Binders without the optional verifier retain their existing
+owned-mailbox clobber behavior.
+
+Gen 1 acknowledges withdrawal after pickup with the existing
+`trade_done{uncertain=true}` carrier, preserving the native lease and making no
+new-key claim while awaiting native completion. Its armed-too-long tripwire is
+a console diagnostic, not an automatic cancellation. Frame holds report the
+step and count periodically on the console; hold reasons/counters never go to
+the HUD.
 
 `arm(command, own_slot, token4, payload)` checks the command and slot, then
 calls `check`. It refuses a zero token, stages, writes the frame, and then
@@ -54,7 +76,12 @@ they disagree.
   byte mon plus the partner name. `stage` writes enemy slot 0 and
   `wLinkEnemyTrainerName`, and backs the union up after the enemy battle
   struct. It keeps its `arm(command, slot, blob66, name11, token4)` surface and
-  `service_address`.
+  `service_address`. `pickup_site` binds the instruction after the ROM's first
+  guarded restoration of the borrowed union. The retained stack request and
+  restored backup are checked synchronously there. Missing or ambiguous anchors
+  disable trading with a console diagnostic while ordinary client signals keep
+  running. Service-entry observation supplies the independent fail-closed
+  fallback when that precise consumption hit is lost.
 - **Gen 2** (`lua/gen2/trade_overlay.lua`, P4.3b): the lease is `mailbox + L.OFF_LEASE`,
   owned, so there is no preimage backup. The payload is the 70-byte mon. `check` refuses a
   mail holder or an item this cartridge cannot hold (D3). `stage` writes only incoming OT
@@ -62,3 +89,5 @@ they disagree.
   cartridge's outgoing preimage, and the binder's own permit cannot reach it. The client
   keeps one visit token from the query answer or PROMPT through APPLY. It binds
   `picked_up` at `SlinkTradePromptEntry` and `SlinkTradeApplyPickup`.
+
+The Gen 1 entry observer runs outside the queued signal failure latch, while retaining bank, PC, ROM-byte and closed-service checks. A previously failed queue therefore cannot hide a subsequent service entry from the conservative lease hold.

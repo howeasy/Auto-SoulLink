@@ -149,3 +149,130 @@ def test_native_restore_anchor_is_required_and_unique(monkeypatch, fault):
         image[first + 0x100:first + 0x100 + 61] = image[first + 0x28:first + 0x28 + 61]
     with pytest.raises(Exception, match="restore anchor"):
         world.client.trade.pickup_site(lambda addr: image[int(addr)])
+
+
+def _applying_state(world):
+    _base, _backup, published, _preimage = _armed(world)
+    blob = world.lua.table(0x99, *([0] * 65))
+    name = world.lua.table(*([0x50] * 11))
+    world.client.trade_state = world.lua.table(kind="apply", token="late", slot=0, old_key="old",
+                                               gen=published[6], frame=0,
+                                               arm=world.lua.table(5, 0, blob, name))
+    return world.client.trade_state
+
+
+@pytest.mark.parametrize("title", ["red", "purered"])
+@pytest.mark.parametrize("drop", ["missing", "bank", "accept", "pc"])
+@pytest.mark.parametrize("action", ["tick", "withdraw"])
+def test_observed_entry_then_lost_consumption_witness_never_restages(monkeypatch, title, drop, action):
+    world, _ = _world(monkeypatch, title)
+    _applying_state(world)
+    base, backup, published, preimage = _armed(world)
+    _fire(world)  # independent observation before the native restore
+    world.client.signals.drain(world.client.signals)
+    site = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)])
+    sp = 0xDE80
+    world.bus[base:base + 16] = preimage
+    world.bus[sp:sp + 16] = published[::-1]
+    world.bus[world.ram["hLoadedROMBank"]] = site.bank + (drop == "bank")
+    world.regs["PC"], world.regs["SP"] = site.address + (drop == "pc"), sp
+    if drop == "accept":
+        world.lua.globals().held_trade = world.client.trade
+        world.client.trade.phase = None
+        world.lua.execute('setmetatable(held_trade, {__index=function(_, k) if k=="phase" then error("accept failed") end end})')
+    if drop != "missing":
+        world.hooks["SLink-gen1-trade_consumed"][0]()
+    if drop == "accept":
+        world.lua.execute("setmetatable(held_trade, nil)")
+        world.client.trade.phase = "armed"
+    writes = []
+
+    def forbidden(*_args):
+        writes.append(True)
+        raise RuntimeError("must not re-stage into native work")
+
+    world.parts.writes.write_enemy_party = forbidden
+    if action == "tick":
+        world.client.trade_tick(world.client)
+    else:
+        world.client.trade_withdraw(world.client, world.lua.table(token="late"))
+    assert world.client.trade.phase == "picked_up" and world.client.trade.pickup_error
+    assert writes == []
+    assert bytes(world.bus[base:base + 16]) == preimage
+
+
+@pytest.mark.parametrize("fault", ["missing", "ambiguous"])
+def test_bad_trade_anchor_disables_only_trading(monkeypatch, fault):
+    world, _ = _world(monkeypatch, "red")
+    image = bytearray(world.rom)
+    service = world.client.trade.service_address()
+    first = service.bank * 0x4000 + service.addr - 0x4000
+    if fault == "missing":
+        image[first:first + 0x200] = bytes(0x200)
+    else:
+        image[first + 0x100:first + 0x100 + 61] = image[first + 0x28:first + 0x28 + 61]
+    world.rom = bytes(image)
+    ok, error = world.lua.eval("function(c) local ok,e=pcall(c.start,c); return ok,tostring(e) end")(world.client)
+    assert ok, error
+    assert world.client.trade_enabled is False
+    assert world.client.signals.status(world.client.signals).failed is None
+    assert any("trading disabled" in line for line in world.logs)
+    world.fire("save_witness")
+    assert len(world.client.signals.drain(world.client.signals)) == 1
+
+
+def test_late_precommit_withdraw_is_acknowledged_without_releasing_native_work(monkeypatch):
+    world, _ = _world(monkeypatch, "red")
+    _applying_state(world)
+    world.client.trade.phase = "picked_up"
+    for _ in range(2):
+        world.client.trade_withdraw(world.client, world.lua.table(token="late"))
+    owed = list(world.client.trade_owed.values())
+    assert len(owed) == 1 and owed[0].event == "trade_done"
+    assert owed[0].fields.token == "late" and owed[0].fields.uncertain is True
+    assert world.client.trade_state is not None and world.client.trade.phase == "picked_up"
+    assert world.hud == []
+
+
+def test_frame_hold_has_periodic_console_reminders_and_no_hud(monkeypatch):
+    world, _ = _world(monkeypatch, "red")
+    clock = {"now": 0}
+    world.lua.globals().os.time = lambda: clock["now"]
+    world.net.pump = world.lua.eval('function() error("persistent pump hold") end')
+    world.client.on_signal = lambda *_args: None
+    for now in (0, 1, 59, 60, 120):
+        clock["now"] = now
+        world.client.frame_end(world.client)
+    assert len([s for s in world.logs if "frame hold:" in s]) == 1
+    reminders = [s for s in world.logs if "frame hold reminder:" in s]
+    assert len(reminders) == 2 and "count=5" in reminders[-1] and "net.pump" in reminders[-1]
+    assert world.hud == []
+
+
+def test_armed_pickup_tripwire_reports_without_mutating_the_request(monkeypatch):
+    world, _ = _world(monkeypatch, "red")
+    _applying_state(world)
+    before = bytes(world.bus)
+    world.client.frame = 1801
+    world.client.trade_tick(world.client)
+    assert any("armed too long" in line for line in world.logs)
+    assert world.client.trade.phase == "armed" and bytes(world.bus) == before
+    assert world.hud == []
+
+
+def test_entry_observation_survives_a_preexisting_registry_failure(monkeypatch):
+    world, _ = _world(monkeypatch, "red")
+    _applying_state(world)
+    base, _backup, _published, preimage = _armed(world)
+    site = world.parts.sites.save_witness
+    world.bus[world.ram["hLoadedROMBank"]] = site.bank
+    world.regs["PC"] = site.address + (site.capture_offset or 0) + 1
+    world.hooks["SLink-gen1-save_witness"][0]()
+    assert world.client.signals.status(world.client.signals).failed is not None
+    _fire(world)  # must still observe entry even though the queued stream has stopped
+    world.bus[base:base + 16] = preimage
+    writes = []
+    world.parts.writes.write_enemy_party = lambda *_args: writes.append(True)
+    world.client.trade_tick(world.client)
+    assert world.client.trade.phase == "picked_up" and world.client.trade.pickup_error
+    assert writes == []

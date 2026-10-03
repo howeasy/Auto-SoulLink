@@ -17,6 +17,7 @@
 -- InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
+                 TRADE_PICKUP_FRAMES = 1800, HOLD_REMINDER_SECONDS = 60,
                  -- A13: the two halves of the `replace_rival_team` window. ONE window measured
                  -- from `battle_begin` cannot work, because the transition alone outlasts any
                  -- figure small enough to be a write window (this was RIVAL_SWAP_FRAMES = 120,
@@ -2066,7 +2067,7 @@ function Client.new(p)
             send("menu_result", { token = cmd.token, choice = 0 })
             return
         end
-        self.trade_state = { kind = "prompt", gen = gen, token = cmd.token, arm = { PROMPT, cmd.slot, blob, name } }
+        self.trade_state = { kind = "prompt", gen = gen, token = cmd.token, frame = self.frame, arm = { PROMPT, cmd.slot, blob, name } }
     end
 
     -- Both sides: apply_trade stages the OTHER mon; the game swaps, animates, evolves, saves.
@@ -2088,6 +2089,7 @@ function Client.new(p)
             return
         end
         self.trade_state = { kind = "apply", gen = gen, token = cmd.token, old_key = cmd.old_key, slot = slot,
+                             frame = self.frame,
                              arm = { APPLY, slot, blob, name } }
     end
 
@@ -2135,6 +2137,14 @@ function Client.new(p)
             owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
         elseif st.committing then
             trade_uncertain(st, "the server asked for a withdrawal")
+        elseif self.trade.phase == "picked_up" or self.trade.phase == "done" then
+            -- Native owns the request. Acknowledge conservatively with the existing wire
+            -- contract; never claim nothing changed or silently drop the withdrawal.
+            if not st.declared then
+                st.declared = true
+                log("[SLink-gen1] withdrawal acknowledged after pickup; awaiting native result")
+                owe("trade_done", { token = st.token, uncertain = true })
+            end
         end
     end
 
@@ -2143,8 +2153,26 @@ function Client.new(p)
         if not self.trade_enabled or not self.trade then return end
         local st = self.trade_state
         if st and (st.kind == "prompt" or st.kind == "apply") then
-            if self.trade:clobbered() then
-                -- the borrowed tile bytes were overwritten before pickup: stage again
+            local clobbered = self.trade:clobbered()
+            if self.trade.pickup_error then
+                st.pickup_hold_count = (st.pickup_hold_count or 0) + 1
+                local now = os.time()
+                if not st.pickup_notice or now - st.pickup_notice >= Client.HOLD_REMINDER_SECONDS then
+                    log("[SLink-gen1] trade hold: step=pickup count=" .. st.pickup_hold_count
+                        .. " reason=" .. tostring(self.trade.pickup_error))
+                    st.pickup_notice = now
+                end
+            end
+            if self.trade.phase == "armed" and self.frame - (st.frame or self.frame) > Client.TRADE_PICKUP_FRAMES then
+                local now = os.time()
+                if not st.pickup_wait_notice or now - st.pickup_wait_notice >= Client.HOLD_REMINDER_SECONDS then
+                    log("[SLink-gen1] trade armed too long: step=pickup frames=" .. (self.frame - st.frame)
+                        .. " entry_observed=" .. tostring(self.trade.entry_observed))
+                    st.pickup_wait_notice = now
+                end
+            end
+            if clobbered then
+                -- Only a request never observed at entry may be safely re-staged.
                 local gen = trade_arm(function() return self.trade:arm(st.arm[1], st.arm[2], st.arm[3], st.arm[4], new_token()) end)
                 if gen then st.gen = gen end
                 return
@@ -2226,33 +2254,45 @@ function Client.new(p)
             transform_hp_lo = logged("transform_hp_lo", function(sig) self:on_transform_hp_lo(sig) end),
         }
         local all_sites = sites
+        self.trade_enabled = false
         if self.trade and self:trade_patch_present() then
-            -- Vanilla's anchor is SlinkForeground; pure overlays name SlinkTradeService.
-            -- signals.lua filters poll hits against the ROM's published trade-work gate.
-            -- This companion-only site is pinned against the running ROM here.
-            local svc = self.trade.service_address()
-            local flat = svc.bank * 0x4000 + (svc.addr - 0x4000)
-            local bytes = io.read_range(flat, 6, "ROM")
-            all_sites = {}
-            for k, v in pairs(sites) do all_sites[k] = v end
-            local function waiting_for_pickup()
-                return self.trade.phase ~= "picked_up" and self.trade.phase ~= "done"
+            local pickup_ok, pickup = pcall(self.trade.pickup_site, function(a) return io.read_u8(a, "ROM") end)
+            if not pickup_ok or type(pickup) ~= "table" then
+                log("[SLink-gen1] trading disabled: " .. tostring(pickup))
+            else
+                -- Vanilla's anchor is SlinkForeground; pure overlays name SlinkTradeService.
+                -- signals.lua filters poll hits against the ROM's published trade-work gate.
+                -- This companion-only site is pinned against the running ROM here.
+                local svc = self.trade.service_address()
+                local flat = svc.bank * 0x4000 + (svc.addr - 0x4000)
+                local bytes = io.read_range(flat, 6, "ROM")
+                all_sites = {}
+                for k, v in pairs(sites) do all_sites[k] = v end
+                local function waiting_for_pickup()
+                    return self.trade.phase ~= "picked_up" and self.trade.phase ~= "done"
+                end
+                all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
+                                            capture_offset = 0, expected_hex = hex_of(bytes),
+                                            lease_address = assert(profile.ram.wSerialPartyMonsPatchList, "trade lease_address required"),
+                                            entry_observer = function() self.trade:observe_entry() end,
+                                            client_accept = waiting_for_pickup,
+                                            symbol = self.foundation == "gen1_purergb"
+                                                and "SlinkTradeService" or "SlinkForeground" }
+                -- Polls never prove pickup. The binder requires its post-restore stack witness.
+                handlers.trade_service = logged("trade_service", function()
+                    self.trade:picked_up()
+                end)
+                all_sites.trade_consumed = pickup
+                all_sites.trade_consumed.client_accept = waiting_for_pickup
+                handlers.trade_consumed = logged("trade_consumed", function(sig)
+                    local _, why = self.trade:picked_up(sig.sp)
+                    if why then
+                        log("[SLink-gen1] trade consumption unverified; holding: " .. tostring(why))
+                        if self.trade_state then self.trade_state.pickup_notice = os.time() end
+                    end
+                end)
+                self.trade_enabled = true
             end
-            all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
-                                        capture_offset = 0, expected_hex = hex_of(bytes),
-                                        lease_address = assert(profile.ram.wSerialPartyMonsPatchList, "trade lease_address required"),
-                                        client_accept = waiting_for_pickup,
-                                        symbol = self.foundation == "gen1_purergb"
-                                            and "SlinkTradeService" or "SlinkForeground" }
-            -- Polls never prove pickup. The binder requires its post-restore stack witness.
-            handlers.trade_service = logged("trade_service", function() self.trade:picked_up() end)
-            all_sites.trade_consumed = self.trade.pickup_site(function(a) return io.read_u8(a, "ROM") end)
-            all_sites.trade_consumed.client_accept = waiting_for_pickup
-            handlers.trade_consumed = logged("trade_consumed", function(sig)
-                local _, why = self.trade:picked_up(sig.sp)
-                if why then log("[SLink-gen1] trade consumption unverified; holding: " .. tostring(why)) end
-            end)
-            self.trade_enabled = true
         end
         -- Re-arming (e.g. against a newly patched ROM) releases the previous hook set first:
         -- the shared registry owns one "SLink-gen1" namespace at a time.
@@ -2285,14 +2325,6 @@ function Client.new(p)
             self.owed:step(net.connected(), online == true, send)
             return online
         end)
-        if not ready then
-            if not self.frame_hold_error then
-                self.frame_hold_error = stage .. ": " .. tostring(connected)
-                log("[SLink-gen1] frame hold: " .. self.frame_hold_error)
-            end
-        else
-            self.frame_hold_error = nil
-        end
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
@@ -2318,9 +2350,25 @@ function Client.new(p)
         if st and st.failed and not self.signal_failure_shown then
             self.signal_failure_shown = true
             log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(st.failed))
-            hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
         end
-        if not ready then return end -- drained and diagnosed; no deferred work during the hold
+        if not ready then
+            local now = os.time()
+            if not self.frame_hold_state then
+                self.frame_hold_error = stage .. ": " .. tostring(connected)
+                self.frame_hold_state = {started=now, last_report=now, count=0}
+                log("[SLink-gen1] frame hold: " .. self.frame_hold_error)
+            end
+            local hold = self.frame_hold_state
+            hold.count, hold.step = hold.count + 1, stage
+            if now < hold.last_report then hold.last_report = now end
+            if now - hold.last_report >= Client.HOLD_REMINDER_SECONDS then
+                log("[SLink-gen1] frame hold reminder: step=" .. stage .. " count=" .. hold.count
+                    .. " held_s=" .. math.max(0, now-hold.started) .. " reason=" .. tostring(connected))
+                hold.last_report = now
+            end
+            return -- drained and diagnosed; no deferred work during the hold
+        end
+        self.frame_hold_error, self.frame_hold_state = nil, nil
         self:rival_window_tick()
         self:settle_pending_change()
         -- Every readable frame OBSERVES each alias (pure pass, no similarity, nothing refreshed):

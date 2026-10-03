@@ -232,3 +232,21 @@ def test_a_throwing_consumption_verifier_holds_native_work_instead_of_rearming()
     assert result is None and "unreadable retained frame" in why
     assert driver.phase == "picked_up" and driver.pickup_error == why
     assert driver.clobbered(driver) is False
+
+
+def test_entry_observation_is_reset_by_each_successful_arm():
+    b = Gen1Binder()
+    gen = b.arm(5, 0, (1, 2, 3, 4))
+    assert gen == 1 and b.call("observe_entry") is True
+    b.arm(5, 0, (4, 3, 2, 1))
+    assert b.f.driver.entry_observed is False
+    b.mem[b.base + 2] ^= 1
+    assert b.call("clobbered") is True and b.f.driver.phase == "armed"
+
+
+def test_owned_mailbox_does_not_acquire_the_borrowed_union_fallback():
+    b = Gen2Stub()
+    _stub_arm(b, 5, 0, (1, 2, 3, 4))
+    assert b.call("observe_entry") is True
+    b.mem[b.base + 2] ^= 1
+    assert b.call("clobbered") is True and b.driver.phase == "armed"
