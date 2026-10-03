@@ -572,6 +572,13 @@ body.stream {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* conn-watch.js: the poll stopped getting answers. On stream, so quiet: the stale data
+ * dims and a small corner tag says why; both clear on the next good poll. */
+body.stream.conn-lost #root { opacity: .45; filter: grayscale(.7); transition: opacity .4s, filter .4s; }
+body.stream.conn-lost::after {
+  content: "signal lost"; position: fixed; right: 6px; bottom: 4px;
+  font-size: .7em; letter-spacing: .06em; color: var(--c-dim); pointer-events: none;
+}
 body.stream, body.stream *, body.stream *::before, body.stream *::after {
   box-sizing: border-box;
 }
@@ -1070,6 +1077,7 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 }
 .calc-preview-table .ohko   { color: var(--c-dead); font-weight: bold; }
 .calc-preview-table .twohko { color: var(--c-pend); }
+.calc-preview-note { margin: 0; font-size: 0.82em; color: var(--c-dim); }
 
 .calc-open-btn {
   display: inline-block;

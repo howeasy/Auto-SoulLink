@@ -3,7 +3,8 @@
 // and lazy-loads the damage engine exactly as the full calc page does: the same CommonJS shim
 // and the same compiled files in the same order (calc/src/normal.template.html). Those files
 // come from calc/dist, a local build (`cd calc && npm run build`, docs/REFERENCE.md); without it
-// the preview stays hidden and tries again later. Loaded on every board: a no-op out of battle.
+// the preview says so once in the Now card (FAILED_NOTE) and tries again later. Loaded on every
+// board: a no-op out of battle.
 window.SLinkCalc = (function () {
   // The full page's engine scripts, in its order. tests/unit/test_calc_preview.py holds this
   // list to the template, so the two cannot drift apart.
@@ -21,6 +22,11 @@ window.SLinkCalc = (function () {
   var HARDCORE_SETS = ['js/data/sets/hardcore.js', 'js/data/sets/slink_priority.js'];
   var RETRY_MS = 30000;  // an unbuilt calc 404s; don't re-ask on every 2 s board refresh
   var _state = 'idle', _failedAt = 0;  // idle | loading | ready
+  var _failed = false;  // the last engine load failed; cleared when one succeeds
+  // Same advice as the calc page's own not-built message (server/manager.py handle_run_calc).
+  var FAILED_NOTE = '<p class="calc-preview-note">Damage preview unavailable: the calculator did not load. '
+    + 'If it is not built on this machine, run <code>cd calc &amp;&amp; npm install &amp;&amp; npm run build</code> '
+    + '(docs/REFERENCE.md, Damage calculator) and reload.</p>';
 
   function _load(srcs, ok, fail) {
     var i = 0;
@@ -42,7 +48,7 @@ window.SLinkCalc = (function () {
     window.__createBinding = function (o, m, k) { o[k] = m[k]; };
     window.calc = window.exports = {};
     window.require = function () { return window.exports; };
-    function fail() { _state = 'idle'; _failedAt = Date.now(); }
+    function fail() { _state = 'idle'; _failedAt = Date.now(); _failed = true; _renderAll(); }
     _load(ENGINE.concat(NORMAL_SETS), function () {
       window.SETDEX_NORMAL = window.SETDEX_SV || {};
       _load(HARDCORE_SETS, function () {
@@ -50,6 +56,7 @@ window.SLinkCalc = (function () {
         window.SETDEX_SV = window.SETDEX_NORMAL;
         if (!window.calc.Pokemon || !window.calc.Generations) { fail(); return; }
         _state = 'ready';
+        _failed = false;
         _renderAll();
       }, fail);
     }, fail);
@@ -132,7 +139,8 @@ window.SLinkCalc = (function () {
   function _renderPreview(pid) {
     var div = document.getElementById('calc-preview-' + pid);
     if (!div) return;
-    var html = (div.getAttribute('data-in-battle') && _state === 'ready') ? _previewHtml(div) : '';
+    var inBattle = div.getAttribute('data-in-battle');
+    var html = !inBattle ? '' : _state === 'ready' ? _previewHtml(div) : _failed ? FAILED_NOTE : '';
     if (!html) { div.style.display = 'none'; return; }
     if (div._calcHtml !== html) { div.innerHTML = html; div._calcHtml = html; }
     div.style.display = '';
