@@ -22,11 +22,13 @@ local S = { MAX_PENDING = 64 }
 -- †UNVERIFIED exact casing/braces across BizHawk versions: compared after stripping braces,
 -- case-insensitively, so any spelling of the all-zero GUID is refused.
 S.NULL_GUID = "00000000-0000-0000-0000-000000000000"
--- kind -> { filter = function(io, ram, d) -> bool, point = function(io, ram, d) -> table }
+-- kind -> { filter = function(io, ram, d, site) -> bool, point = function(io, ram, d) -> table }
 -- `filter` drops hits that are not the event (e.g. AddItemToInventory_.done fires for every
 -- item; only a Poke Ball class item with the carry flag set is `bag_received`).
 -- `point` snapshots the WRAM the server needs at the instant the engine is there.
 -- `d` is profile.derived: capacities, the ball set, struct sizes.
+-- Runtime sites may also provide client_accept() for phase gating; trade_service carries
+-- its validated lease_address in the site descriptor rather than resolving it per hit.
 S.KINDS = {}
 
 local function ball_set(d)
@@ -100,8 +102,8 @@ S.KINDS.trade_service = {
     -- Both ROM services require the complete SLT1 publication and version +4 == 1
     -- before using this tile-aliased union (trade_service.asm .magic / entry).
     -- Do not add state/token/availability conditions: the hook must not drop ROM work.
-    filter = function(io, ram)
-        local lease = assert(ram.wSerialPartyMonsPatchList, "trade lease address required")
+    filter = function(io, _ram, _d, site)
+        local lease = site.lease_address
         return io.read_u8(lease, "System Bus") == 0x53
            and io.read_u8(lease + 1, "System Bus") == 0x4C
            and io.read_u8(lease + 2, "System Bus") == 0x54
@@ -347,13 +349,43 @@ function S.bind(dependencies)
             descriptors[#descriptors+1] = descriptor
             -- spec + accept built once here: a wrong-bank hit (the common one) allocates nothing
             local spec=S.KINDS[kind] or {point=generic_point(descriptor)}
-            specs[kind]={spec=spec,accept=spec.filter and function() return spec.filter(io,ram,d) end}
+            if kind == "trade_service" then
+                local lease = descriptor.lease_address
+                assert(type(lease) == "number" and lease % 1 == 0 and lease >= 0xC000 and lease <= 0xDFF0,
+                       "trade_service lease_address required")
+            end
+            local accept
+            if spec.filter or descriptor.client_accept then
+                accept = function()
+                    if descriptor.client_accept and not descriptor.client_accept() then return false end
+                    return not spec.filter or spec.filter(io,ram,d,descriptor)
+                end
+            end
+            specs[kind]={spec=spec,accept=accept}
         end
-        local service,why,failed = registry.new({
+        local service,why,failed
+        local closed = false
+        service,why,failed = registry.new({
             owner=owner,max_pending=factory.MAX_PENDING,sites=descriptors,
             validate=function(site) return binding:validate(site) end,
             name_for_site=function(site) return "SLink-gen1-"..site.id end,
-            register=function(site,callback,name) return binding:register(site,callback,name) end,
+            register=function(site,callback,name)
+                local wrapped = callback
+                if site.entry_observer then
+                    wrapped = function(...)
+                        -- A stopped queue must not hide native work from the lease.
+                        -- Retain bank/PC/byte validation and shutdown ownership.
+                        if service and not closed and (not site.entry_accept or site.entry_accept()) then
+                            local ok,context = pcall(binding.context,binding,site)
+                            if ok and context then
+                                site.entry_observer(context)
+                            end
+                        end
+                        return callback(...)
+                    end
+                end
+                return binding:register(site,wrapped,name)
+            end,
             unregister=function(handle) return binding:unregister(handle) end,
             valid_handle=function(handle) return binding:valid_handle(handle) end,
             capture=function(site)
@@ -377,6 +409,11 @@ function S.bind(dependencies)
             error(why,0)
         end
         factory.failed_service=nil
+        local close = service.close
+        function service:close()
+            closed = true -- cache shutdown before unregister; leaked callbacks remain inert
+            return close(self)
+        end
         -- Read-only: a fresh copy of the binding's dropped-filter record ({accept_errors, accept_error}).
         function service:filter_status() return binding:status() end
         return service

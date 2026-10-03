@@ -215,7 +215,8 @@ function M.new(expected, opts)
             self.stage = "throw"
             local t = D.use_item(idx, 600)
             self.receipts[#self.receipts + 1] = "throw:" .. tostring(t.why)
-            log("[hunt] threw ball index " .. idx .. " -> " .. tostring(t.why))
+            log("[hunt] threw ball index " .. idx .. " -> " .. tostring(t.why)
+                .. " balls_before=" .. tostring(t.balls_before) .. " balls_after=" .. tostring(t.balls_after))
             -- caught: dex/nickname prompts (B = NO) then the battle ends; failed: the menu returns
             m = wait_menu(3600)
             if m ~= "menu" then return m end

@@ -725,3 +725,24 @@ def test_gen1_row_without_companion_key_cannot_fall_back_to_clean(game, method, 
     monkeypatch.setattr(g1, "staged_rom", lambda key: f"clean-{key}.gb")
     with pytest.raises(RuntimeError, match="Gen 1 row has no companion key"):
         getattr(run, method)("a")
+
+
+@pytest.mark.parametrize("game", GEN1_ROWS)
+def test_gen1_evidence_uses_real_companion_resolver_for_every_pairing(monkeypatch, game):
+    from run_gb_gate import PATCHED
+
+    staged = []
+
+    def overlay_path(key):
+        staged.append(key)
+        assert key.endswith("_overlay")
+        return f"patch/build/gen1_{key}.gbc"
+
+    monkeypatch.setattr(g1, "staged_rom", overlay_path)
+    run = duo.DuoRun("link_new", _args(game=game))
+    for inst, key in duo.GAMES[game]["patched_saves"].items():
+        expected = PATCHED[key][1] or f"patch/build/gen1_{key}.gbc"
+        resolved = run._rom_for(inst)
+        assert resolved == expected and resolved not in run.gcfg["rom"].values()
+    assert staged == ([] if game == "gen1_new" else list(run.gcfg["patched_saves"].values()))
+    assert duo.evidence_contract(game).witness_validator == "check_save_witness"

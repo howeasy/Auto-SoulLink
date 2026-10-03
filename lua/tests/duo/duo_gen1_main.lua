@@ -413,6 +413,7 @@ local function hunt(mode, options)
                       wActionResultOrTookBattleTurn = symbols.wActionResultOrTookBattleTurn,
                       hLoadedROMBank = symbols.hLoadedROMBank, wListScrollOffset = symbols.wListScrollOffset,
                       wPlayerMonNumber = symbols.wPlayerMonNumber, wPartyCount = symbols.wPartyCount,
+                      wNumBagItems = symbols.wNumBagItems, wBagItems = symbols.wBagItems,
                       wBattleMonMoves = symbols.wBattleMonMoves, wBattleMonPP = symbols.wBattleMonPP,
                       wBattleMonHP = symbols.wBattleMonHP, wEnemyMonHP = symbols.wEnemyMonHP,
                       wEnemySelectedMove = symbols.wEnemySelectedMove, wCurItem = symbols.wCurItem,

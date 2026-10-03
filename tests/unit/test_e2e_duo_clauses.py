@@ -732,7 +732,7 @@ def test_an_oracle_failure_becomes_a_fail_summary_not_a_traceback(capsys, tmp_pa
 
 def test_the_explode_ko_phrase_is_retryable_within_its_own_budget():
     """B's explode half can lose the linked mon to the foe before the coerced turn; A reports
-    the 180 s READY_ACTIVE wait as a consequence, so the pair retries inside explode_new's two
+    the 180 s READY_ACTIVE wait as a consequence, so the pair retries inside explode_new's declared
     attempts."""
     miss = f"RESULT: FAIL ({duo.EXPLODE_KO_MISS})"
     assert duo.classify_gen1_result(miss) == "CAUSE_RNG"
@@ -747,10 +747,10 @@ def test_the_explode_ko_phrase_is_retryable_within_its_own_budget():
     assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 1, limit=2)
     # (s): explode_new's own budget is 4, so the phrase stays retryable on attempts 2 and 3.
     limit = duo.scenario_attempt_limit("explode_new", "gen1_new")
-    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 2, limit=limit)
-    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 3, limit=limit)
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 2, limit=limit, scenario="explode_new")
+    assert duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 3, limit=limit, scenario="explode_new")
     assert not duo.retryable_gen1_rng("gen1_new", {"a": "RESULT: PASS (x)", "b": miss}, 4,
-                                      limit=limit)
+                                      limit=limit, scenario="explode_new")
 
 
 def test_the_explode_ko_phrase_is_cross_checked_against_the_body():

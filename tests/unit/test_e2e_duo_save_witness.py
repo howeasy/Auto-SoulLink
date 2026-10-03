@@ -32,10 +32,10 @@ def _client_line(inst):
             f"rom={digest[:8]} -> 127.0.0.1:54321")
 
 
-def _rom_note(inst):
+def _rom_note(inst, prefix=None):
     digest = hashlib.sha1(_ROM_BYTES[inst]).hexdigest()
     return (f"GEN1_ROM_SHA1 inst={inst} rom=roms/{inst}.gb sha1={digest} "
-            f"receipt={digest[:8]} match=true")
+            f"receipt={prefix or digest[:8]} computed={digest[:8]} match=true")
 
 
 def _image(seed=0x11):
@@ -474,5 +474,33 @@ def test_gen1_rom_receipt_accepts_repeated_matching_builds_and_uppercase_hashes(
         results[inst] = results[inst].replace(prefix, prefix.upper()) + "\n" + _client_line(inst)
     run.check_save_witness(results)
     assert [note for note in notes if note.startswith("GEN1_ROM_SHA1 ")] == [
-        _rom_note("a"), _rom_note("b"),
+        _rom_note(inst, hashlib.sha1(_ROM_BYTES[inst]).hexdigest()[:8].upper())
+        for inst in ("a", "b")
     ]
+
+
+@pytest.mark.parametrize("game", ["gen1_new", "gen1_pure", "gen1_pure_green"])
+@pytest.mark.parametrize("inst", ["a", "b"])
+@pytest.mark.parametrize("bad_kind", ["clean", "rand", "unknown"])
+def test_matching_hash_cannot_admit_an_unpatched_receipt_kind(tmp_path, monkeypatch, game, inst, bad_kind):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    run.game, run.gcfg = game, dict(duo.GAMES[game])
+    if game != "gen1_new":
+        for side in ("a", "b"):
+            results[side] = results[side].replace("pack=gen1_rby kind=named",
+                                                "pack=gen1_purergb kind=overlay")
+    allowed = "named" if game == "gen1_new" else "overlay"
+    results[inst] = results[inst].replace(f"kind={allowed}", f"kind={bad_kind}")
+    with pytest.raises(RuntimeError, match="companion|kind"):
+        run.check_save_witness(results)
+
+
+@pytest.mark.parametrize("game", ["gen1_pure", "gen1_pure_green"])
+@pytest.mark.parametrize("kind", ["overlay", "rand_overlay"])
+def test_pure_companion_kinds_bind_successfully(tmp_path, monkeypatch, game, kind):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    run.game, run.gcfg = game, dict(duo.GAMES[game])
+    for inst in ("a", "b"):
+        results[inst] = results[inst].replace("pack=gen1_rby kind=named",
+                                            f"pack=gen1_purergb kind={kind}")
+    run.check_save_witness(results)

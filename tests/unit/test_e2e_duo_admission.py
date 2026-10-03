@@ -924,7 +924,9 @@ def _put_fainted_in_box12(sram, rom):
 
 def _oracle_runner(tmp_path, scenario):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.scenario = scenario
+    run.scenario, run.game, run.attempt = scenario, "gen1_new", 1
+    run.data_dir = str(tmp_path)
+    run._pydec_path = str(tmp_path / "pydec.txt")
     run.cfg = duo.SCENARIOS[scenario]
     run.gcfg = duo.GAMES["gen1_new"]
     run._saveram_dir = lambda inst: str(tmp_path / f"save_{inst}")
@@ -935,8 +937,15 @@ def _oracle_runner(tmp_path, scenario):
 
     run.emus = [Finished(), Finished()]
     paths = {}
+    for inst in ("a", "b"):
+        companion = Path(duo.REPO) / run._rom_for(inst)
+        if not companion.is_file():
+            pytest.skip(f"companion input absent: {companion}")
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
+        if run.cfg.get("gen1_synth"):
+            # The model starts from the same qualified/disclosed input as the live row.
+            sram = bytearray(Path(run._prepare_gen1_explode_fixture(inst)).read_bytes())
         path = Path(run._saveram_dir(inst)) / run._gen1_save_name(inst)   # the companion's save, as the oracle reads it
         path.parent.mkdir(parents=True)
         paths[inst] = (path, sram, rom)
@@ -984,7 +993,14 @@ def _linked_faint_fixture(tmp_path, scenario):
     run, paths = _oracle_runner(tmp_path, scenario)
     run.data_dir = str(tmp_path)
     run._link_keys = {}
+    hunts = {}
     for inst, (path, sram, rom) in paths.items():
+        if run.cfg.get("gen1_synth"):
+            balls = codec.bag_quantity(sram, codec.POKE_BALL)
+            hunts[inst] = (f"[hunt] encounter 1 at (10,35) mode=catch balls={balls}\n"
+                           f"[hunt] threw ball index 0 -> caught balls_before={balls} balls_after={balls-1}\n")
+            sram[codec._BAG_COUNT + 2] = balls - 1  # model one native prerequisite throw
+            _seal_main(sram)
         run._link_keys[inst] = _put_fainted_in_box12(sram, rom)
         path.write_bytes(sram)
     (tmp_path / "links.json").write_text(json.dumps({"links": [{
@@ -1002,7 +1018,7 @@ def _linked_faint_fixture(tmp_path, scenario):
               f'RX memorialize key={run._link_keys["b"]}\n'
               'GAME_OVER RX game_over\n'
               'TX {"event":"memorialize_done"}\n')
-    return run, paths, a_text, b_text
+    return run, paths, hunts.get("a", "") + a_text, hunts.get("b", "") + b_text
 
 
 def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_path, capsys):
@@ -2053,3 +2069,129 @@ def test_saved_gen1_party_reports_rom_scan_failure_as_named_qualification(runner
     with pytest.raises(RuntimeError, match="qualification: neither the clean nor the overlay anchor set holds"):
         runner._saved_gen1_party("a")
     assert seen == [(b"saved party", rom.read_bytes())]
+
+
+def test_prepared_admission_cartridge_remains_selected_at_oracle_time(runner, monkeypatch):
+    _fake_pipeline(monkeypatch)
+    runner.prepare_admit_randomized_new()
+    expected = runner._admit_roms["a"]
+    runner.game = "gen1_new"
+    runner.emus = []
+    observed = []
+    runner.assert_stub_oracle = lambda _results: observed.append(runner._rom_for("a"))
+    results = {}
+    for inst in ("a", "b"):
+        rom = Path(duo.REPO) / runner._rom_for(inst)
+        prefix = hashlib.sha1(rom.read_bytes()).hexdigest()[:8]
+        kind = "named"  # Entry's vanilla companion fallback, including randomized companions
+        results[inst] = (f"client built: title=red pack=gen1_rby kind={kind} player={inst} "
+                         f"rom={prefix} -> 127.0.0.1:54321")
+    runner._run_oracle(results)
+    assert observed == [expected] and runner._admit_roms == {"a": expected}
+    assert (Path(duo.REPO) / expected).read_bytes() == b"random-red"
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("fault", ["untouched_save", "untouched_receipt", "missing_receipt"])
+def test_synth_catch_oracle_requires_spent_balls(tmp_path, scenario, fault):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    def receipt(text):
+        return text if "balls_before=" in text else text + "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19\n"
+    results = {"a": receipt(a_text), "b": receipt(proper)}
+    run.assert_linked_faint_saved(results, active=True)
+    if fault == "untouched_save":
+        path, sram, _rom = paths["a"]
+        sram[codec._BAG_COUNT + 2] = 20
+        _seal_main(sram)
+        path.write_bytes(sram)
+    elif fault == "untouched_receipt":
+        results["a"] = results["a"].replace("balls_after=19", "balls_after=20")
+    else:
+        results["a"] = "\n".join(line for line in results["a"].splitlines() if "threw ball" not in line)
+    with pytest.raises(RuntimeError, match="SYNTH catch"):
+        run.assert_linked_faint_saved(results, active=True)
+
+
+
+def test_oracle_fixture_skips_when_private_companion_input_is_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    with pytest.raises(pytest.skip.Exception, match="companion input absent"):
+        _oracle_runner(tmp_path, "link_new")
+
+
+def test_hunt_logs_driver_ball_counts_for_the_oracle():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    logs, menus = [], []
+    def menu(_budget):
+        menus.append(True)
+        return lua.table(ok=len(menus) == 1, frames=1, why="battle_over")
+    driver = lua.table(wait_menu=menu,
+                       use_item=lambda *_: lua.table(why="caught", balls_before=20, balls_after=19))
+    route = module.new(lua.table(player="a"), lua.table(driver=driver, step=lambda _: None,
+        rd=lambda a: {1: 1, 2: 4, 3: 20, 4: 0, 5: 1, 6: 0, 7: 14}.get(a, 0),
+        symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", log=lambda line: logs.append(str(line))))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    route.step(None, None, battle, 1)
+    assert "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19" in logs
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("case", ["one", "three", "wrong_delta", "untouched", "saved_disagrees",
+                                  "no_caught", "two_caught", "noncontiguous", "extra_miss",
+                                  "later_miss", "later_hunt_no_throw"])
+def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    throws = [("caught", 20, 19)] if case == "one" else [
+        ("missed", 20, 19), ("missed", 19, 18), ("caught", 18, 17)]
+    saved = 19 if case == "one" else 17
+    if case == "wrong_delta":
+        throws[-1] = ("caught", 18, 16)
+        saved = 16  # receipt agrees with save, but four balls for three throws is false
+    elif case == "untouched":
+        saved = 20
+    elif case == "saved_disagrees":
+        saved = 18
+    elif case == "no_caught":
+        throws[-1] = ("missed", 18, 17)
+    elif case == "two_caught":
+        throws[0] = ("caught", 20, 19)
+    elif case == "extra_miss":
+        throws = [("missed", 20, 20), ("caught", 20, 19)]
+        saved = 19
+    elif case == "later_miss":
+        saved = 16
+    elif case == "noncontiguous":
+        throws[1] = ("missed", 18, 17)  # total decrement still equals count; chain is impossible
+    path, sram, _rom = paths["a"]
+    sram[codec._BAG_COUNT + 2] = saved
+    _seal_main(sram)
+    path.write_bytes(sram)
+    lines = []
+    for line in a_text.splitlines():
+        if line.startswith("[hunt] threw ball"):
+            lines.extend(f"[hunt] threw ball index 0 -> {why} balls_before={before} balls_after={after}"
+                         for why, before, after in throws)
+            if case in ("later_miss", "later_hunt_no_throw"):
+                # These rows' later A hunt is sacrifice; it cannot reach use_item.
+                lines.append("[hunt] encounter 1 at (10,35) mode=sacrifice balls=17")
+                if case == "later_miss":
+                    lines.append("[hunt] threw ball index 0 -> missed balls_before=17 balls_after=16")
+        else:
+            lines.append(line)
+    results = {"a": "\n".join(lines) + "\n", "b": proper}
+    if case in ("one", "three", "later_hunt_no_throw"):
+        run.assert_linked_faint_saved(results, active=True)
+    else:
+        with pytest.raises(RuntimeError, match="SYNTH catch"):
+            run.assert_linked_faint_saved(results, active=True)

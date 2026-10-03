@@ -148,7 +148,9 @@ def test_apply_publishes_generation_last_and_releases_only_its_own_completion(wh
     gen = arm(b, 5, 2, token)
     assert gen == 1
     assert b.frame() == MAGIC + bytes((1, 5, 1, 0, 255, 2, 1, 0)) + bytes(token)
-    assert b.call("picked_up") is True
+    published = b.frame()
+    assert (b.f.consume() if which == "gen1" else b.call("picked_up")) is True
+    b.seed(published)  # the native publisher restores its retained stack frame before DONE
     # A completion under a different token (a stale lease) is not ours.
     b.mem[b.base + 5], b.mem[b.base + 8], b.mem[b.base + 7] = 7, 0, gen
     b.mem[b.base + 15] ^= 1
@@ -212,3 +214,39 @@ def test_lease_abi_probe_catches_a_drift():
     L = lupa.LuaRuntime().eval(f'dofile("{LEASE}")')
     abi = dict(_abi_resolved(), SLINK_OFS_TRADE_LEASE=15)
     assert _mismatches(L, abi) == ["OFF_LEASE != SLINK_OFS_TRADE_LEASE"]
+
+
+def test_a_throwing_consumption_verifier_holds_native_work_instead_of_rearming():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    lease = lua.eval("dofile")(LEASE)
+    driver = lua.eval("""function(L)
+        local t=L.new({lease=0xC000, party_capacity=6,
+            check=function() end, stage=function() end,
+            pickup=function() error("unreadable retained frame") end},
+            {read_u8=function() return 0 end, read_range=function() return {} end},
+            {write_bytes=function() error("must not write") end})
+        t.phase="armed"; t.expected={}
+        return t
+    end""")(lease)
+    result, why = driver.picked_up(driver, 0xDE80)
+    assert result is None and "unreadable retained frame" in why
+    assert driver.phase == "picked_up" and driver.pickup_error == why
+    assert driver.clobbered(driver) is False
+
+
+def test_entry_observation_is_reset_by_each_successful_arm():
+    b = Gen1Binder()
+    gen = b.arm(5, 0, (1, 2, 3, 4))
+    assert gen == 1 and b.call("observe_entry") is True
+    b.arm(5, 0, (4, 3, 2, 1))
+    assert b.f.driver.entry_observed is False
+    b.mem[b.base + 2] ^= 1
+    assert b.call("clobbered") is True and b.f.driver.phase == "armed"
+
+
+def test_owned_mailbox_does_not_acquire_the_borrowed_union_fallback():
+    b = Gen2Stub()
+    _stub_arm(b, 5, 0, (1, 2, 3, 4))
+    assert b.call("observe_entry") is True
+    b.mem[b.base + 2] ^= 1
+    assert b.call("clobbered") is True and b.driver.phase == "armed"
