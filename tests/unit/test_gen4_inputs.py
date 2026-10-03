@@ -70,7 +70,7 @@ def bag_memory(slots: list[tuple[int, int]]) -> dict[int, int]:
 
 def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locations: bool = True,
                charmap: dict | None = None, titles: dict | None = None, bag_mem: dict | None = None,
-               array_refuses: bool = False, save_array: bool = True,
+               array_refuses: bool = False, save_array: bool = True, gift_areas: dict | None = None,
                profile: str = "data/games/gen4_x/profile.json") -> dict:
     """Load inputs.lua in lupa over a scratch pack; returns the flat namespace it produced.
 
@@ -84,7 +84,13 @@ def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locati
     (tmp / "lua/json_codec.lua").write_bytes((ROOT / "lua/json_codec.lua").read_bytes())
     (pack / "profile.json").write_text(json.dumps({"titles": titles} if titles else {}), encoding="utf-8")
     if areas:
-        (pack / "area_map.json").write_text(json.dumps(HGSS_MAP), encoding="utf-8")
+        # a deep copy; the gift_areas key is REMOVED unless a test asks for one, so "the pack ships no
+        # gift list" stays that case whatever the committed area_map.json happens to carry
+        doc = json.loads(json.dumps(HGSS_MAP))
+        doc.pop("gift_areas", None)
+        if gift_areas is not None:
+            doc["gift_areas"] = gift_areas
+        (pack / "area_map.json").write_text(json.dumps(doc), encoding="utf-8")
     if locations:
         (pack / "locations.json").write_text(json.dumps(HGSS_LOCS), encoding="utf-8")
     if charmap is not None:
@@ -112,6 +118,7 @@ def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locati
         area_of, AREA_WHY = INPUTS.area_of(deps)
         charmap, charmap_why = INPUTS.charmap(deps)
         bags, bags_why = INPUTS.has_pokeballs(deps)
+        gift, GIFT_WHY = INPUTS.gift_area(deps)
         -- called directly, once: a refusal is (nil, reason), an answer is true/false, and the
         -- globals are always strings/booleans so a Lua nil reads as Python None, never as AttributeError
         ball_v, ball_w = nil, tostring(bags_why)
@@ -130,7 +137,7 @@ def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locati
     return {"lua": lua, "g": g, "raw": g.area_of, "area": call_area,
             "why": g.AREA_WHY, "charmap": g.charmap, "charmap_why": g.charmap_why,
             "bags": g.bags, "bags_why": g.bags_why,
-            "ball": g.ball_v, "ball_why": g.ball_w,
+            "ball": g.ball_v, "ball_why": g.ball_w, "gift": g.gift, "gift_why": g.GIFT_WHY,
             "built": g.built, "gaps": g.gaps}
 
 
@@ -240,6 +247,63 @@ def test_a_charmap_producer_that_borrows_a_hardcoded_table_goes_red(tmp_path):
     assert lua_inputs(tmp_path, src=mutant)["charmap"] is not None, "the mutant guessed: this must go red"
 
 
+# -- gift_area: the pack's own no_catch exemption list --------------------------------------------
+GIFT = {"ids": ["new_bark_town", "pallet_town", "violet_city"], "on_wild_area": {"9": "route_1"}}
+
+
+def test_gift_area_is_true_only_for_the_area_ids_the_pack_lists(tmp_path):
+    w = lua_inputs(tmp_path, areas=True, gift_areas=GIFT)
+    assert w["gift"]("pallet_town") is True and w["gift"]("new_bark_town") is True
+    # An area the pack does not name -- including one it named as on_wild_area -- is NOT a gift area.
+    # false, never nil: the client drops no_catch for a gift area (poll_events.lua:415-418), so false
+    # is the direction that only lets the ordinary rule run.
+    assert w["gift"]("route_1") is False and w["gift"]("not_an_area") is False
+    assert w["gift"]("") is False and w["gift"](None) is False
+
+
+def test_a_pack_with_no_gift_areas_block_refuses_and_exempts_nothing(tmp_path):
+    """The Gen 4 answer to a missing list is "no area is exempt", NOT Gen 3's "every area is a gift"
+    (D10/E3-GIFTLINK): Gen 4 has no NEW ENCOUNTER banner, so an every-area fallback would switch
+    no_catch off for a whole run. The refusal is the safe direction and must name where it looked."""
+    w = lua_inputs(tmp_path, areas=True)
+    assert w["gift"] is None and ".gift_areas" in str(w["gift_why"])
+
+
+def test_a_pack_with_no_area_map_refuses_the_gift_list_by_name(tmp_path):
+    w = lua_inputs(tmp_path, areas=False)
+    assert w["gift"] is None and "area_map.json" in str(w["gift_why"])
+
+
+@pytest.mark.parametrize("block,needle", [
+    ({"ids": []}, ".gift_areas.ids is empty"),
+    ({"ids": {}}, ".gift_areas.ids is empty"),        # a JSON object decodes to the same empty table
+    ({"on_wild_area": {"9": "route_1"}}, ".gift_areas.ids"),
+    ({"ids": ["pallet_town", None]}, "non-empty string"),   # JSON null decodes to a table
+    ({"ids": [""]}, "non-empty string"),
+])
+def test_a_gift_areas_block_the_pack_cannot_mean_refuses(tmp_path, block, needle):
+    w = lua_inputs(tmp_path, areas=True, gift_areas=block)
+    assert w["gift"] is None and needle in str(w["gift_why"]), w["gift_why"]
+
+
+def test_a_gift_producer_that_exempts_every_area_goes_red(tmp_path):
+    """Mutant: a producer that answers true for anything, the Gen 3 missing-list semantics. The
+    route_1 assertion above must catch it: a wrong true swallows a real failed encounter."""
+    mutant = INPUTS.replace("return type(area_id) == \"string\" and ids[area_id] == true",
+                            "return type(area_id) == \"string\"")
+    assert mutant != INPUTS
+    good = lua_inputs(tmp_path / "real", areas=True, gift_areas=GIFT)
+    assert good["gift"]("route_1") is False
+    with pytest.raises(AssertionError):
+        assert lua_inputs(tmp_path / "mut", src=mutant, areas=True, gift_areas=GIFT)["gift"]("route_1") is False
+
+
+def test_build_wires_the_gift_seam_when_the_pack_ships_the_list(tmp_path):
+    w = lua_inputs(tmp_path, areas=True, gift_areas=GIFT, charmap={"glyphs": {"299": "A"}})
+    assert callable(w["built"]["gift_area"]) and w["built"]["gift_area"]("violet_city") is True
+    assert [g["name"] for g in w["gaps"].values()] == ["has_pokeballs"]
+
+
 # -- has_pokeballs: the pack's bag pocket, read through run.lua's save seam ----------------------
 def assert_bag_contract(w, expected):
     """The guard every bag mutant must trip: a held ball, an empty pocket and an unreadable save are
@@ -320,7 +384,7 @@ def test_build_omits_an_absent_producer_and_reports_every_gap(tmp_path):
     w = lua_inputs(tmp_path, areas=True, charmap={"glyphs": {"299": "A"}})
     built, gaps = w["built"], w["gaps"]
     assert built["area_of"] is not None and built["charmap"] is not None
-    assert built["has_pokeballs"] is None and [g["name"] for g in gaps.values()] == ["has_pokeballs"]
+    assert built["has_pokeballs"] is None and [g["name"] for g in gaps.values()] == ["has_pokeballs", "gift_area"]
 
 
 def test_build_produces_no_key_at_all_when_every_producer_refuses(tmp_path):
@@ -328,7 +392,7 @@ def test_build_produces_no_key_at_all_when_every_producer_refuses(tmp_path):
     reads as nil at the call site and the client's own optional guard holds."""
     w = lua_inputs(tmp_path, areas=False, charmap=None)
     assert list(w["built"].keys()) == []
-    assert sorted(g["name"] for g in w["gaps"].values()) == ["area_of", "charmap", "has_pokeballs"]
+    assert sorted(g["name"] for g in w["gaps"].values()) == ["area_of", "charmap", "gift_area", "has_pokeballs"]
 
 
 def test_a_build_that_invents_every_seam_goes_red(tmp_path):
@@ -354,7 +418,7 @@ def test_inputs_names_no_game_address_and_no_hex_literal():
 
 
 
-@pytest.mark.parametrize("name", ["area_of", "charmap", "has_pokeballs"])
+@pytest.mark.parametrize("name", ["area_of", "charmap", "has_pokeballs", "gift_area"])
 def test_every_producer_is_reachable_by_name_and_returns_a_value_or_a_reason(tmp_path, name):
     w = lua_inputs(tmp_path, areas=True, charmap={"glyphs": {"299": "A"}})
     produced = w["built"][name]

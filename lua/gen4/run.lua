@@ -75,9 +75,10 @@ if not admitted then return refuse("refused", why) end
 H.init(SCREEN)
 C.init(host, port)
 
--- The optional inputs (area ids, trainer-name charmap, the ball read). lua/gen4/inputs.lua builds
--- each one from the pack only and omits (never nils) the ones whose pack fact is absent, so the
--- client's own optional seams stay optional.
+-- The optional inputs (area ids, trainer-name charmap, the ball read, the gift-area list).
+-- lua/gen4/inputs.lua builds each one from the pack only and omits (never nils) the ones whose pack
+-- fact is absent, so the client's own optional seams stay optional. An absent gift_area means NO area
+-- is exempt from no_catch, never every area.
 --
 -- `save_array` binds LATE on purpose: Inputs.build runs before Client.new, and the reader over a save
 -- array is the CLIENT's read layer (client:save_array, over its own R.save_data -> R.array), not a
@@ -98,6 +99,7 @@ client, why_build = Client.new({
     rom_hash = rom_hash, header_code = header_code,
     log = function(t) console.log(t) end,
     area_of = inputs.area_of, charmap = inputs.charmap, has_pokeballs = inputs.has_pokeballs,
+    gift_area = inputs.gift_area,
 })
 if not client then return refuse("refused to start", why_build) end
 local ok, err = pcall(function() client:start() end)

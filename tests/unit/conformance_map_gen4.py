@@ -164,12 +164,7 @@ ITEMS: list[Item] = [
                    "behaviour is historical). No current client, Gen 4 included, has this obligation."),
     Item("23", "no_catch fires once per unresolved wild battle, never for gifts, never twice, never after a "
                "capture in that battle", "world",
-         "test_world_no_catch_ball_gate_once_per_area_and_never_after_capture",
-         open="GAP (gift-area exclusion): MODEL test_open_gen4_no_catch_resolves_a_gift_area_without_the_missing_predicate "
-              "records no_catch for gift_daycare on HG/SS/hge. The desired empty wire assertion goes red. "
-              "lua/gen4/client.lua:1112 omits PE's gift_area predicate, so poll_events.lua:415-418 cannot "
-              "exclude an adapter's gift_ area. Real inputs.lua -> client:save_array ball gating, empty/"
-              "unwired gates, once-per-area and post-capture suppression are covered; gifts stay OPEN."),
+         "test_world_no_catch_ball_gate_once_per_area_and_never_after_capture"),
     Item("24", "unresolve_area{area_id} re-arms no_catch / encounter HUD", "world",
          "test_world_unresolve_area_rearms_no_catch_only_for_the_named_area",
          open="PARTIAL: no_catch rearming and named-area isolation are wire-proven on HG/SS/hge. "

@@ -222,11 +222,38 @@ def test_run_lua_hands_the_client_the_producers_the_pack_can_supply(tmp_path):
     assert not any("input has_pokeballs unavailable" in line for line in logs)
 
 
+def test_run_lua_hands_the_client_the_pack_gift_area_list(tmp_path):
+    """The gift seam rides in the SAME area_map.json the area producer already needs, so a pack that
+    can answer "which map am I on" can answer "is this area exempt from no_catch" -- and the list must
+    be the pack's own: the ids this run asserts are the ones the committed file carries."""
+    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], with_areas=True)
+    p = calls.client_args
+    ids = json.loads((ROOT / "data/games/gen4_hgss/area_map.json").read_text(encoding="utf-8"))["gift_areas"]["ids"]
+    assert callable(p.gift_area), "run.lua must pass the pack-built gift-area producer"
+    assert [a for a in ids if p.gift_area(a) is not True] == [], ids
+    assert p.gift_area("route_1") is False and p.gift_area("") is False, "an unnamed area is not a gift area"
+    assert not any("input gift_area unavailable" in line for line in logs)
+
+
+def test_a_run_that_drops_the_gift_seam_goes_red(tmp_path):
+    """Mutant: run.lua builds the gift producer and then never hands it to the client -- the exact
+    defect that made the `gift_daycare` falsifier go red. The `callable` assertion above must catch it."""
+    src = RUN.read_text(encoding="utf-8")
+    mutant = src.replace("    gift_area = inputs.gift_area,\n", "")
+    assert mutant != src
+    _, calls, _, _ = run_root(tmp_path, mutant, rom_hash=HGE["rom"]["sha1"], with_areas=True)
+    with pytest.raises(AssertionError):
+        assert callable(calls.client_args.gift_area)
+
+
 def test_run_lua_without_the_area_pack_files_refuses_the_area_input(tmp_path):
-    """The profile alone carries no area map: the seam must be absent, not a guessed area id."""
+    """The profile alone carries no area map: the seams must be absent, not guessed. An absent
+    gift_area means NO area is exempt from no_catch -- never every area, which would switch the
+    dead-zone rule off for the whole run."""
     _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"])
-    assert calls.client_new == 1 and calls.client_args.area_of is None
+    assert calls.client_new == 1 and calls.client_args.area_of is None and calls.client_args.gift_area is None
     assert any("input area_of unavailable" in line and "area_map.json" in line for line in logs)
+    assert any("input gift_area unavailable" in line and "area_map.json" in line for line in logs)
 
 
 def test_a_run_that_invents_an_area_when_the_pack_has_none_goes_red(tmp_path):

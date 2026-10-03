@@ -80,6 +80,7 @@ A = Mon(0x5A3C91E7, 155, 5, 20, 20)
 B = Mon(0x0BADF00D, 155, 5, 11, 11)
 CHARMAP = {0x12: "A", 0x13: "B", 0x14: "C"}
 AREA = "function(map_id, loc) return 'route_' .. map_id, 'Route ' .. map_id end"
+GIFT_AREA = "function() return 'gift_daycare', 'Daycare gift' end"   # an area the pack's list can name
 STATS = {"level": 7, "maxHP": 30, "attack": 11, "defense": 12, "speed": 13, "spAtk": 14, "spDef": 15}
 TITLES = ("heartgold", "soulsilver", "heartgold_hge")
 TRAINER_OTID = 0x30391A5C
@@ -579,14 +580,24 @@ def test_world_no_catch_requires_a_ball_id_and_positive_quantity(title, item, qu
 
 
 @pytest.mark.parametrize("title", TITLES)
-def test_open_gen4_no_catch_resolves_a_gift_area_without_the_missing_predicate(title):
-    # GAP item 23: docs/protocol.md §6 requires gift_ recognition. The desired [] assertion
-    # went red on all three titles: client.lua constructs PE without its optional gift_area.
-    # Pin the observed defect explicitly; invert this test when the production seam is wired.
-    w = ready(title, area_of="function() return 'gift_daycare', 'Daycare gift' end", balls=True)
+def test_world_no_catch_never_fires_in_an_area_the_pack_calls_a_gift_area(title):
+    """docs/protocol.md §9 item 23, gift half: a scripted catch is not a wild encounter, so the area
+    it lands in must not be dead-zoned. The exemption is the PACK's own list -- data/games/gen4_hgss/
+    area_map.json `gift_areas.ids` through lua/gen4/inputs.lua Inputs.gift_area -- so this asserts the
+    seam end to end, not a hardcoded id."""
+    w = ready(title, area_of=GIFT_AREA, gift_area={"gift_daycare"}, balls=True)
     _wild_end(w)
-    assert [{k: e[k] for k in ("area_id", "species_id", "level")} for e in w.events("no_catch")] == [
-        {"area_id": "gift_daycare", "species_id": 16, "level": 3}]
+    assert w.events("no_catch") == [], w.events("no_catch")
+    assert w.writes == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_gift_area_exemption_is_load_bearing_and_not_a_default(title):
+    """Red control: the SAME world with the seam unwired emits the no_catch. If the test above ever
+    passed for an unwired client, it would be proving the harness, not the wiring."""
+    w = ready(title, area_of=GIFT_AREA, balls=True)
+    _wild_end(w)
+    assert [e["area_id"] for e in w.events("no_catch")] == ["gift_daycare"]
     assert w.writes == []
 
 

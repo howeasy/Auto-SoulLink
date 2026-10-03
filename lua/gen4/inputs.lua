@@ -1,15 +1,17 @@
--- lua/gen4/inputs.lua -- producers for the rewritten Gen 4 client's three OPTIONAL inputs
--- (lua/gen4/client.lua p.area_of / p.charmap / p.has_pokeballs).
+-- lua/gen4/inputs.lua -- producers for the rewritten Gen 4 client's four OPTIONAL inputs
+-- (lua/gen4/client.lua p.area_of / p.charmap / p.has_pokeballs / p.gift_area).
 --
 -- Rule: a producer exists only where the PACK carries the fact. This file names no game address,
 -- no struct offset, no item id and no char code. A fact the pack does not ship yields
 -- (nil, named reason) so the client's seam stays UNWIRED rather than guessing -- the client
--- already treats every one of the three as optional (client.lua area_now/trainer_fields/hello_fields).
---
+-- already treats every one of the four as optional (client.lua area_now/trainer_fields/hello_fields,
+-- and the reducer's gift_area seam).
 --   Inputs.area_of(deps)       -> function(map_id, loc) -> area_id, loc_name | nil, reason
 --   Inputs.charmap(deps)       -> { [code] = text }              | nil, reason
 --   Inputs.has_pokeballs(deps) -> function() -> bool | nil       | nil, reason
---   Inputs.build(deps)         -> { area_of = ..., charmap = ..., has_pokeballs = ... }, gaps[]
+--   Inputs.gift_area(deps)     -> function(area_id) -> bool      | nil, reason
+--   Inputs.build(deps)         -> { area_of = ..., charmap = ..., has_pokeballs = ...,
+--                                   gift_area = ... }, gaps[]
 --
 -- deps = { root, json, pack_profile (repo-relative profile.json path, from Entry.PACKS), log,
 --          title      the admitted title name (Entry.admit's `title`), which picks the row out of
@@ -23,6 +25,11 @@
 --             place, the file's `unmapped_maps` explains each), and
 --             data/games/<pack>/locations.json `.locations[map_id].name` -> loc_name.
 --             SHIPPED for gen4_hgss. gen4_hge ships no area map, so its producer refuses.
+--   gift_area   data/games/<pack>/area_map.json `.gift_areas.ids` -> the areas a scripted
+--             starter/gift/egg/loan reaches and no wild-encounter map backs (tools/
+--             gen_gen4_area_map.py over acquisition.json; the rule is that file's rules.gift_areas).
+--             SHIPPED for gen4_hgss, inside the SAME area_map.json area_of already needs. A pack with
+--             no gift_areas block refuses, so no area is exempt -- never the reverse.
 --   charmap   data/games/<pack>/charmap.json `.glyphs[dec_code]` -> text (tools/gen_gen4_names.py;
 --             the pack-directory convention data/games/gen1_purergb/charmap.json already uses).
 --             The table is keyed by NUMBER here, because R.decode_name (reads.lua) looks a u16 up
@@ -88,6 +95,46 @@ function Inputs.area_of(deps)
         local name = type(row) == "table" and row.name or nil
         if type(name) ~= "string" then name = nil end
         return area, name
+    end
+end
+
+-- area_id -> true iff the pack lists it a gift area: an area no map of which owns a wild-encounter
+-- bank, so the only way a mon enters it is the starter / a gift / an egg / a loan. Read from
+-- data/games/<pack>/area_map.json `gift_areas.ids`, derived by tools/gen_gen4_area_map.py over the
+-- pack's acquisition.json (that file's rules.gift_areas states the rule; the split fails closed if
+-- an area in `ids` ever owns a wild-encounter map).
+--
+-- The answer is ALWAYS a boolean, never nil: an area the pack does not name is not a gift area, and
+-- false is the safe direction. The client drops no_catch for a gift area
+-- (lua/gen4/poll_events.lua:415-418), so a wrong true swallows a real failed encounter while a wrong
+-- false only lets the ordinary rule run -- the opposite of has_pokeballs below, where false was the
+-- dangerous answer.
+--
+-- A pack with no valid gift_areas REFUSES (nil, named gap), and Inputs.build then leaves the seam
+-- ABSENT, so the client treats NO area as a gift area. That deliberately differs from Gen 3, where a
+-- missing list means "every area is a gift" (D10/E3-GIFTLINK): Gen 4 has no NEW ENCOUNTER banner,
+-- so an every-area-gift fallback would silently switch no_catch off for a whole run.
+function Inputs.gift_area(deps)
+    local dir, why = pack_dir(deps)
+    if not dir then return nil, why end
+    local doc
+    doc, why = load_optional(deps.json, deps.root .. "/" .. dir .. "area_map.json")
+    if not doc then return nil, why end
+    local block = doc.gift_areas
+    if type(block) ~= "table" then return nil, "pack_gap:" .. dir .. "area_map.json .gift_areas" end
+    local list = block.ids
+    if type(list) ~= "table" then return nil, "pack_gap:" .. dir .. "area_map.json .gift_areas.ids" end
+    local ids = {}
+    for _, area_id in ipairs(list) do
+        -- A JSON null decodes to a table, so shape is what tells a real area id from an absent one.
+        if type(area_id) ~= "string" or area_id == "" then
+            return nil, "pack_gap:" .. dir .. "area_map.json .gift_areas.ids -- not a non-empty string"
+        end
+        ids[area_id] = true
+    end
+    if next(ids) == nil then return nil, "pack_gap:" .. dir .. "area_map.json .gift_areas.ids is empty" end
+    return function(area_id)
+        return type(area_id) == "string" and ids[area_id] == true
     end
 end
 
@@ -180,7 +227,7 @@ end
 -- client input rather than present-and-nil.
 function Inputs.build(deps)
     local out, gaps = {}, {}
-    for _, name in ipairs({ "area_of", "charmap", "has_pokeballs" }) do
+    for _, name in ipairs({ "area_of", "charmap", "has_pokeballs", "gift_area" }) do
         local value, why = Inputs[name](deps)
         if value ~= nil then
             out[name] = value

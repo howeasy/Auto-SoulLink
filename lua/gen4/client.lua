@@ -21,6 +21,12 @@
 --                                                          the pack's profile.bag (the bag array's
 --                                                          balls pocket), read through
 --                                                          client:save_array(array_id) below
+--   p.gift_area(area_id) -> bool                    optional: lua/gen4/inputs.lua builds it from
+--                                                          the pack's area_map `gift_areas.ids`, the
+--                                                          areas a scripted catch reaches and no wild
+--                                                          encounter backs. ABSENT means NO area is
+--                                                          exempt from no_catch (poll_events.lua), so
+--                                                          nil is the safe answer and is passed on as-is
 --
 -- Frame order (lua/core/session.lua frame_end, lua/nds/phase_signals.lua):
 --   emu.frameadvance (the D7 hook fires inside it)
@@ -80,8 +86,8 @@
 -- Step 4 (storage): the deferred executors below write box/party records at the checkpoint, see
 -- the "storage" section. Step 5 (D11): a reducer slot_replace note becomes a key_change with the
 -- alias and its exact message on identity.pending. Step 6: hello_fields/tick_fields, see "wire
--- shapes". p.area_of / p.charmap / p.has_pokeballs are built by lua/gen4/inputs.lua, which refuses
--- (nil, named gap) for any fact the pack does not ship; the ball read reaches the save through
+-- shapes". p.area_of / p.charmap / p.has_pokeballs / p.gift_area are built by lua/gen4/inputs.lua, which
+-- refuses (nil, named gap) for any fact the pack does not ship; the ball read reaches the save through
 -- client:save_array(array_id) below, the ONE reader this client hands out over a save array.
 local Client = {}
 
@@ -1109,7 +1115,10 @@ function Client.new(p)
     -- the reducer shares the session's resolved_areas (the core REPLACES that table on a command)
     local resolved = setmetatable({}, { __index = function(_, k) return session.resolved_areas[k] end,
                                         __newindex = function(_, k, v) session.resolved_areas[k] = v end })
-    pe = PE.new({ battle_enums = prof.battle_enums, resolved = resolved })
+    -- p.gift_area is optional and may be absent: the reducer's own cfg loop skips a nil seam
+    -- (poll_events.lua:89-91) and every call site is `g and g(area_id)`, so nil means "NO area is
+    -- exempt from no_catch" and is passed through unchanged rather than replaced by a guess.
+    pe = PE.new({ battle_enums = prof.battle_enums, resolved = resolved, gift_area = p.gift_area })
     session.driver, session.state, session.parts, session.admitted = drv, st, parts, admitted
 
     -- The read seam lua/gen4/inputs.lua gets (its deps.save_array): a bounds-checked reader over ONE

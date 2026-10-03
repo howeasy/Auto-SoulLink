@@ -154,10 +154,13 @@ def py(v):
 class World:
     def __init__(self, title="heartgold", *, party=None, boxes=None, d7="model", connected=True, rom_hash=None,
                  start=True, pre=None, area_of=None, no_pack_d7=False, charmap=None, order="hook_new",
-                 party_extra=None, party_array_size=0x5B4, patch_title=None, balls=None):
+                 party_extra=None, party_array_size=0x5B4, patch_title=None, balls=None, gift_area=None):
         self.title_name = title
         self.party_array_size = party_array_size
         self.balls = balls  # None keeps the historical unwired world; bool opts into the real producer.
+        # gift_area: None keeps the seam UNWIRED (the reducer then exempts no area, which is the safe
+        # direction); a str is Lua source, a set/list of area ids becomes a membership closure.
+        self.gift_area = gift_area
         self.order = order          # "hook_new": the hook sees the NEW framecount; "hook_old": the OLD one
         self.reads = 0              # io read calls (the per-frame read budget)
         self.read_log = None        # when a list: every read address (which reads a code path makes)
@@ -226,6 +229,15 @@ class World:
             cfg["area_of"] = self.lua.eval(area_of)
         if charmap is not None:
             cfg["charmap"] = to_lua(self.lua, charmap)
+        if self.gift_area is not None:
+            # Lua source, a Python callable (area_id -> bool), or a plain set of area ids.
+            if isinstance(self.gift_area, str):
+                cfg["gift_area"] = self.lua.eval(self.gift_area)
+            elif callable(self.gift_area):
+                cfg["gift_area"] = self.gift_area
+            else:
+                cfg["gift_area"] = self.lua.eval("function(ids) return function(a) return ids[a] == true end end")(
+                    self.lua.table_from(dict.fromkeys(self.gift_area, True)))
         if party_extra is not None:                      # an OVERRIDE of the default geometry (stride 5, after mons[6])
             cfg["party_extra"] = to_lua(self.lua, party_extra)
         if patch_title is not None:
@@ -538,7 +550,7 @@ class World:
 
     def _make_hud(self):
         t = self.lua.table()
-        for name in ("show", "prompt", "set_game_over", "set_rebuilding", "clear_rebuilding"):
+        for name in ("show", "prompt", "nuzlocke_start", "set_game_over", "set_rebuilding", "clear_rebuilding"):
             t[name] = (lambda n: lambda *a: self.hud.append((n, *a)))(name)
         return t
 
