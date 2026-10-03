@@ -44,6 +44,12 @@ def lines(log):
 def two_mon():
     return [Mon(A.pid, 155, 5, 20, 20), Mon(B.pid, 155, 5, 11, 11)]
 
+# Every title the pack admits, so a cartridge cannot go missing from a parametrization by omission.
+# soulsilver is an admitted gen4_hgss title (profile.json titles.soulsilver, admission
+# G0_IDENTITY_ONLY: a pinned md5/sha1 AND the static-ARM9 anchors) and the server routes its
+# rom_type (server/adapters/__init__.py _ROM_TYPE_TO_GAME_ID), so it needs no world-model exception.
+TITLES = ["heartgold", "soulsilver", "heartgold_hge"]
+
 
 def armed_world(title="heartgold", party=None, **kw):
     """A 2-mon party in a singles battle at the command-select screen, with a force_faint for the active
@@ -83,7 +89,7 @@ def test_hge_is_admitted_by_hash_only():
     assert w.session is not None and w.session.admitted.pack == "gen4_hge"
 
 
-@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+@pytest.mark.parametrize("title", TITLES)
 def test_step0_exactly_one_hello_then_a_tick_every_30_frames_and_no_hook_or_write(title):
     w = World(title, party=two_mon())
     bw = spy(w, w.session.driver, "battle_write")
@@ -561,7 +567,7 @@ def test_the_overworld_faint_zeroes_the_party_hp_and_is_never_echoed_as_a_faint(
     assert w.events("faint") == [] and w.state.fatal is None
 
 
-@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+@pytest.mark.parametrize("title", TITLES)
 def test_battery_modified_word_at_1_with_an_idle_driver_still_arms(title):
     w = ready(title, boxes={(0, 5): Mon(0x44444444, 16, 3, 13, 13)})
     w.w(w.modified_word_addr(), 1)                                      # the battery keeps this at 1 permanently
@@ -1016,7 +1022,7 @@ def test_r3_f1_with_no_pack_block_the_named_default_applies_and_party_shape_chan
     assert w.saved_extra(0) == e1 and w.saved_extra(2) == bytes(5)       # shifted, and the withdrawn slot cleared
 
 
-@pytest.mark.parametrize("title", ["heartgold", "heartgold_hge"])
+@pytest.mark.parametrize("title", TITLES)
 def test_r3_f2_a_party_array_one_notch_too_small_refuses_and_names_it(title):
     need = 8 + 6 * 236 + 6 * 5                                          # PartyCore + 6 * PERFORMANCE_MAX
     ok = ready(title, party=[Mon(0x10000001), Mon(0x10000002)], party_array_size=need)
