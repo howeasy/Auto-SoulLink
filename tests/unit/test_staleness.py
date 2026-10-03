@@ -128,3 +128,35 @@ async def test_load_failure_cannot_be_overwritten_by_a_socket_hello(tmp_path):
         reply = await _send(socket, _hello("a", {"rom_type": "red"}))
         assert any(c.get("refused") == "load_failed" for c in reply["commands"])
         assert path.read_text() == original
+
+
+@pytest.mark.asyncio
+async def test_dispatch_errors_are_counted_visible_and_leave_socket_usable(tmp_path, caplog):
+    import logging
+
+    from tests.unit.test_mixed_foundations import _hello
+    from tests.unit.test_server_run_reconnect import _send, _tcp
+    server = SLinkServer(data_dir=str(tmp_path))
+    async with _tcp(server) as (connect, _):
+        socket = await connect()
+        await _send(socket, _hello("a", {"rom_type": "red"}))
+        def broken(_area):
+            raise RuntimeError("persistent adapter failure")
+        server.state._adapter_for("a").is_gift_area = broken
+        for _ in range(3):
+            reply = await _send(socket, {"event": "no_catch", "player": "a", "area_id": "route_1"})
+            assert any(c.get("refused") == "error" for c in reply["commands"])
+        assert server._build_status_dict()["dispatch_errors"] == {"a": 3, "b": 0}
+        errors = [r for r in caplog.records if r.levelno == logging.ERROR and "no_catch" in r.message]
+        assert len(errors) == 1
+        tick = await _send(socket, {"event": "tick", "player": "a", "party": []})
+        assert not any(c.get("refused") for c in tick["commands"])
+        async with TestClient(TestServer(build_app(server))) as http:
+            rendered = await (await http.get("/")).text()
+        assert "Event errors:" in rendered and "A 3" in rendered and "B 0" in rendered
+
+
+
+def test_status_defaults_absent_dispatch_counter_to_zero(srv):
+    del srv.dispatch_errors
+    assert srv._build_status_dict()["dispatch_errors"] == {"a": 0, "b": 0}

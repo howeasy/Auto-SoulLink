@@ -482,6 +482,32 @@ class SoulLinkState:
             return [{"cmd": "noop", "refused": "party_hidden"}]
         return None
 
+    def normalize_party_snapshot(self, player_id: str, msg: dict):
+        """Keep keyed records; refuse unknowable nonempty snapshots before adoption."""
+        event = msg.get("event")
+        if event not in ("hello", "tick", "safe") or "party" not in msg:
+            return None
+        if self.party_snapshot_withheld(player_id, msg):
+            return None
+        raw = msg["party"]
+        if raw is None:
+            if event == "hello":
+                msg["party"] = []
+            else:
+                msg.pop("party")  # no snapshot, not an empty party
+            return None
+        party = [m for m in raw if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]] if isinstance(raw, list) else []
+        dropped = len(raw) - len(party) if isinstance(raw, list) else 1
+        if dropped:
+            log.warning("[%s] dropped %s malformed or unkeyed party entries", player_id, dropped)
+        if not isinstance(raw, list) or (raw and not party):
+            if event == "hello":
+                self.identity_error[player_id] = "Party snapshot contains no keyed entries"
+                msg["_rejected"] = True
+            return [{"cmd": "noop", "refused": "party_snapshot"}]
+        msg["party"] = party
+        return None
+
     def handle_event(self, player_id: str, msg: dict) -> list[dict]:
         """
         Process one event from player_id.
@@ -490,6 +516,9 @@ class SoulLinkState:
         """
         if self.load_failed:
             return [{"cmd": "noop", "refused": "load_failed"}]
+        malformed = self.normalize_party_snapshot(player_id, msg)
+        if malformed is not None:
+            return malformed
         event = msg.get("event", "unknown")
         refused = self.refuse_hidden_event(player_id, msg)
         if refused is not None:
@@ -1976,8 +2005,7 @@ class SoulLinkState:
             return
         error = self._trade_recovery_error(msg)
         hidden = self.party_snapshot_withheld(player_id, msg)
-        raw_party = [] if hidden else msg.get("party", [])
-        party = [m for m in raw_party if isinstance(m, dict)] if isinstance(raw_party, list) else []
+        party = [] if hidden else msg.get("party", [])
 
         # ── Identity lock ── (before anything about this hello is adopted: a wrong save must
         # leave party_size / the blob cache exactly as they were)
@@ -2326,10 +2354,17 @@ class SoulLinkState:
         area_id = msg.get("area_id", "")
         if not area_id:
             return
-        self.retry_areas[player_id] = {a for a in self.retry_areas[player_id] if a == area_id}
+        old_retry = self.retry_areas[player_id]
+        self.retry_areas[player_id] = {a for a in old_retry if a == area_id}
+        retry_changed = old_retry != self.retry_areas[player_id]
+        if retry_changed:
+            log.info("[%s] cleared retry areas %s on entering %s", player_id,
+                     sorted(old_retry - self.retry_areas[player_id], key=str), area_id)
         # Gift areas (oaks_lab, intro, etc.) are not encounter areas — their captures
         # are handled directly via _handle_capture.  Don't create pending area state.
         if self._adapter_for(player_id).is_gift_area(area_id):
+            if retry_changed:
+                self._save()
             return
         # Always track area state — Lua only sends area_enter events once it has confirmed
         # Pokéballs are available (M.hasPokeballs() gate on the client side).

@@ -5311,7 +5311,7 @@ def test_save_writes_valid_json_and_leaves_no_tmp(tmp_path):
         payload = _json.load(f)
     assert any(e.get("area_id") == "route_1" for e in payload["links"])
 
-    assert not (tmp_path / "links.json.tmp").exists(), ".tmp scratch must not leak"
+    assert not list(tmp_path.glob("*.tmp")), ".tmp scratch must not leak"
 
 
 def test_save_crash_mid_write_preserves_previous_links_json(tmp_path, monkeypatch):
@@ -5843,7 +5843,70 @@ def test_prompt_terminal_records_uncertainty_without_claiming_a_decline(tmp_path
         assert server._build_status_dict()["trade_last"] == state.trade_last
         rows = json.loads(Path(server._events_path).read_text())
         assert len([r for r in rows if r["type"] == "trade_uncertain" and r["key"] == token]) == 1
+        assert all("{}" not in r["text"] for r in rows if r["type"] == "trade_uncertain")
     else:
         assert any(c.get("text") == "Your partner declined the trade." for c in a)
         assert any(c.get("text") == "Trade declined." for c in b)
         assert state.trade_last is None
+
+
+
+def test_a_valid_old_format_links_json_still_loads(tmp_path):
+    import json
+    payload = {"links": [{"area_id": "route_1", "status": "alive", "a": {"key": "A:1", "level": 5},
+                          "b": {"key": "B:2", "level": 7}}],
+               "area_states": {"route_1": "linked"}, "pokeballs_obtained": {"a": True, "b": False}}
+    (tmp_path / "links.json").write_text(json.dumps(payload))
+    loaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert loaded.load_failed == "" and loaded.links[0].a.key == "A:1"
+    assert loaded.links[0].b.key == "B:2" and loaded.links[0].status == LinkStatus.ALIVE
+    assert loaded.area_states == {"route_1": AreaStatus.LINKED}
+    assert loaded.pokeballs_obtained == {"a": True, "b": False}
+
+
+def test_unknown_saved_area_state_is_a_strict_load_failure(tmp_path):
+    (tmp_path / "links.json").write_text('{"area_states":{"route_1":"unknown"}}')
+    loaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert loaded.load_failed.startswith("ValueError:")
+    assert loaded.handle_event("a", {"event": "tick"})[0]["refused"] == "load_failed"
+
+
+@pytest.mark.parametrize("event", ["tick", "safe"])
+def test_partial_party_snapshot_drops_bad_entries_with_warning(event, caplog):
+    import logging
+    state = make_state_with_link()
+    state.handle_event("a", {"event": event, "party": [1, {"maxHP": 10}, {"key": "A:1", "hp": 5, "maxHP": 10}]})
+    assert state.party_size["a"] == 1 and state.party_keys["a"] == {"A:1"}
+    assert any(r.levelno == logging.WARNING and "party" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("event", ["hello", "tick", "safe"])
+@pytest.mark.parametrize("party", [[{"maxHP": 50}], [1], 5])
+def test_nonempty_unkeyed_party_is_refused_without_zeroing(event, party):
+    state = make_state_with_link()
+    before = set(state.party_keys["a"]), state.party_size["a"]
+    reply = state.handle_event("a", {"event": event, "party": party})
+    assert any(c.get("refused") == "party_snapshot" for c in reply)
+    assert (state.party_keys["a"], state.party_size["a"]) == before
+
+
+def test_unkeyed_lead_cannot_bypass_the_identity_lock(caplog):
+    state = SoulLinkState()
+    state.handle_event("a", {"event": "hello", "trainer_name": "A", "party": [{"key": "AAAA:1111", "hp": 10, "maxHP": 10}]})
+    message = {"event": "hello", "trainer_name": "Other", "party": [{"maxHP": 10}, {"key": "BBBB:2222", "hp": 10, "maxHP": 10}]}
+    state.handle_event("a", message)
+    assert message.get("_rejected") and "2222" in state.identity_error["a"]
+    assert state.party_keys["a"] == {"AAAA:1111"}
+
+
+
+def test_gift_area_retry_clear_is_logged_and_saved(tmp_path, caplog):
+    import logging
+    caplog.set_level(logging.INFO)
+    state = SoulLinkState(data_dir=str(tmp_path))
+    state.retry_areas["a"].add("route_2")
+    state._save()
+    state.handle_event("a", {"event": "area_enter", "area_id": "oaks_lab"})
+    restored = SoulLinkState.load(data_dir=str(tmp_path), adapter=state.adapter)
+    assert restored.retry_areas["a"] == set()
+    assert "cleared retry areas" in caplog.text

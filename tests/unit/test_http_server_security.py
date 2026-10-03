@@ -293,3 +293,37 @@ async def test_debug_revive_clears_game_over_and_allows_it_to_be_requeued(srv, c
     first.status = LinkStatus.DEAD
     state._check_game_over()
     assert state.run_over and all(any(c["cmd"] == "game_over" for c in state.queued_commands[p]) for p in ("a", "b"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/attempts", "/api/debug/inject_event", "/api/debug/queue_command",
+    "/api/debug/set_pokeballs", "/api/debug/set_area_state", "/api/debug/clear_pending", "/api/debug/unlink",
+    "/api/debug/resolve_trade", "/api/debug/resolve_ambiguous_key", "/api/debug/revive", "/api/inject_link", "/api/inject_link_by_slot"])
+async def test_load_failure_refuses_http_state_writers_without_touching_disk(srv, client, path):
+    from pathlib import Path
+
+    from server.state import LinkEntry, LinkStatus, MonInfo
+    saved = Path(srv.state._links_path)
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    saved.write_bytes(b'{"bad":"preserve me"}')
+    srv.state.load_failed = "ValueError: broken saved state"
+    srv.state.links = [LinkEntry(area_id="route_1", a=MonInfo(key="A:1"), b=MonInfo(key="B:1"), status=LinkStatus.DEAD)]
+    response = await client.post(path, json={"player": "a", "area_id": "route_1", "index": 0, "key": "A:1",
+        "a_key": "A:1", "b_key": "B:1", "count": 7, "event": "tick", "cmd": "hud_show", "token": "t1", "action": "rollback"})
+    assert response.status == 409
+    assert await response.json() == {"ok": False, "error": "run could not be loaded; restore a backup or reset first"}
+    assert saved.read_bytes() == b'{"bad":"preserve me"}'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["reset", "rollback"])
+async def test_load_failure_still_allows_reset_and_rollback(srv, client, action):
+    from pathlib import Path
+    srv.state.load_failed = "ValueError: broken saved state"
+    if action == "rollback":
+        backup = Path(srv.state._links_path).parent / "backups" / "links.backup.1.json"
+        backup.parent.mkdir(parents=True)
+        backup.write_text('{"links":[]}')
+    response = await client.post("/api/reset" if action == "reset" else "/api/debug/rollback", json={"slot": 1})
+    assert response.status == 200 and (await response.json())["ok"]
+    assert srv.state.load_failed == ""
