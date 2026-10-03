@@ -4,7 +4,8 @@
   "purpose": "baseline",
   "save": {
     "path": "saves/hg_base_26310.SaveRAM",
-    "sha256": "e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6"
+    "sha256": "e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6",
+    "setup": "NATIVE"
   },
   "row_i_scenario": "data/gen4/scenarios/heartgold_row_i.json",
   "provenance": "Native OUTDOOR played save. Routes and four phase cases come from the title pack; no runtime overrides.",

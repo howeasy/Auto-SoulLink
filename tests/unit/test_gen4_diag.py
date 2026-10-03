@@ -1316,3 +1316,94 @@ def test_bom_config_audit_reader_red_revert(tmp_path,monkeypatch):
         with pytest.raises(json.JSONDecodeError):
             d.emulator_config_audit(cfg)
     assert d.emulator_config_audit(cfg)['settings_valid']
+
+
+@pytest.mark.parametrize("command", ["fight", "boundary"])
+def test_state_save_binding_required_and_revert(command):
+    good = "e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6"
+    lead12 = "ab2775c7aa89cc6075d14949211a9829a71b14658944b92c3b418696c0c92d69"
+    assert d.state_save_binding(good, good) == good
+    with pytest.raises(AssertionError, match="state/save"):
+        d.state_save_binding(good, lead12)
+    with pytest.raises(AssertionError, match="state/save"):
+        d.state_save_binding(None, lead12)
+    assert d.state_save_binding(good, good) == good
+    with pytest.raises(SystemExit):
+        d.parser().parse_args(
+            [
+                command,
+                "--title",
+                "heartgold",
+                "--scenario",
+                "data/gen4/scenarios/heartgold.json",
+                "--lane",
+                "model",
+                "--state",
+                "a.State",
+                "--state-sha256",
+                "1" * 64,
+            ]
+        )
+
+
+def test_state_binding_guard_red_revert(monkeypatch):
+    import inspect
+
+    source = inspect.getsource(d.state_save_binding)
+    old = "recorded == scenario_save_sha256"
+    assert source.count(old) == 1
+    namespace = {}
+    exec(source.replace(old, "True"), namespace)
+    test_state_save_binding_required_and_revert("fight")
+    with monkeypatch.context() as patch:
+        patch.setattr(d, "state_save_binding", namespace["state_save_binding"])
+        with pytest.raises(pytest.fail.Exception):
+            test_state_save_binding_required_and_revert("fight")
+    test_state_save_binding_required_and_revert("fight")
+
+
+def test_prepare_rejects_l5_state_provenance_with_lead12_save_before_lane(tmp_path, monkeypatch):
+    from tests.live import test_gen4_probe_gates as gate
+
+    scenario = "data/gen4/scenarios/heartgold_lead12.json"
+    doc, save, scenario_hash = gate.load_scenario(
+        scenario, "heartgold", "baseline", committed=False
+    )
+    state = tmp_path / "retained-L5.State"
+    state.write_bytes(b"PK\x03\x04MODEL retained L5")
+    args = d.parser().parse_args(
+        [
+            "fight",
+            "--title",
+            "heartgold",
+            "--scenario",
+            scenario,
+            "--lane",
+            "must-not-create",
+            "--source-cut",
+            "MODEL",
+            "--state",
+            str(state),
+            "--state-sha256",
+            d.sha256(state),
+            "--state-save-sha256",
+            "e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6",
+        ]
+    )
+
+    def git(cmd, **kwargs):
+        if cmd[1:] == ["rev-parse", "HEAD"]:
+            return "MODEL"
+        if cmd[1:] == ["status", "--porcelain"]:
+            return ""
+        if cmd[1:] == ["show", "MODEL:tools/gen4_diag.py"]:
+            return Path(d.__file__).read_bytes()
+        raise AssertionError(cmd)
+
+    monkeypatch.setattr(d.subprocess, "check_output", git)
+    monkeypatch.setattr(gate, "load_scenario", lambda *a, **k: (doc, save, scenario_hash))
+    monkeypatch.setattr(d.evidence, "snapshot", lambda *a, **k: {"surface_sha256": "MODEL"})
+    # A guard at prepare(), not just a helper test. No emulator or lane mutation.
+    with pytest.raises(AssertionError, match="state/save"):
+        d.prepare(args)
+    assert not (d.g4.lane_root() / "must-not-create").exists()

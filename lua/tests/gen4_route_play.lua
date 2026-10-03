@@ -817,17 +817,10 @@ local function pc_withdraw()
     end
   end
   if not a then finish("FAIL", why, "taskman", hex(taskman() or 0), pos_s(loc()), trace()) end
-  -- data+0x21 is a selection cache and can still be FF. State51 reads the
-  -- GridInputHandler's nextInput (data+34 -> work+2C -> grid+D). First A is
-  -- consumed by HandleButton as GRID_MENU_BUTTON_MODE (-4), not a grab.
+  -- data+0x21 is a selection cache and can still be FF. State51 reads
+  -- GridInputHandler.nextInput (data+34 -> work+2C -> grid+D).
+  -- All entry paths already enable button mode; the first A below is the grab.
   if a.grid_target ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "grid",hx(a.grid_target),"cache",hx(a.sel),"want",wd.box_cell,trace()) end
-  if not a.button_mode then
-    tap("A",1,30); pressed("A wake cursor")
-    a=watch()
-    if not a or a.state~=ST_GRID or not a.button_mode or a.grid_target~=wd.box_cell then
-      finish("FAIL","cursor_not_activated",trace())
-    end
-  end
   shot("pc_grid")
 
   -- 4. A = grab + one prompt; state 0x57 commits with no further input: poll the party count

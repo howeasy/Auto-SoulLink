@@ -69,7 +69,7 @@ $hg12state=$env:G4_HG_LEAD12_STATE
 $hg12sha=$env:G4_HG_LEAD12_STATE_SHA256
 if (-not $hg12state -or -not $hg12sha) { throw 'OPEN reviewed HG lead12 battle state absent' }
 $d1="d1-hg-$stamp"
-python tools/gen4_diag.py fight --title heartgold --scenario data/gen4/scenarios/heartgold_lead12.json --state $hg12state --state-sha256 $hg12sha --recipe fight_until_enemy_faints --lane $d1 --timeout 300
+python tools/gen4_diag.py fight --title heartgold --scenario data/gen4/scenarios/heartgold_lead12.json --state $hg12state --state-sha256 $hg12sha --state-save-sha256 ab2775c7aa89cc6075d14949211a9829a71b14658944b92c3b418696c0c92d69 --recipe fight_until_enemy_faints --lane $d1 --timeout 300
 Get-Content "$root/$d1/diagnostic.json"
 Census
 
@@ -88,7 +88,7 @@ Census
 # D3: native RUN + Battle_Exit callback/fall/close counters AND advance tokens.
 Assert-Cut
 $d3="d3-hg-$stamp"
-python tools/gen4_diag.py boundary --title heartgold --scenario data/gen4/scenarios/heartgold.json --state "$root/live108-1002220018/probes/heartgold-7a5a0a43970f/baseline/bridge-2_battle_settled.State" --state-sha256 b16302579d3ea1a7c9eef501a9fd972338841e180a46dbc91c49eaf240c165e6 --phase-case battle_close --lane $d3 --timeout 300
+python tools/gen4_diag.py boundary --title heartgold --scenario data/gen4/scenarios/heartgold.json --state "$root/live108-1002220018/probes/heartgold-7a5a0a43970f/baseline/bridge-2_battle_settled.State" --state-sha256 b16302579d3ea1a7c9eef501a9fd972338841e180a46dbc91c49eaf240c165e6 --state-save-sha256 e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6 --phase-case battle_close --lane $d3 --timeout 300
 Get-Content "$root/$d3/diagnostic.json"
 Census
 
@@ -319,7 +319,9 @@ foreign EmuHawk means f OPEN, never a noisy receipt.
 
 `<title>_lead12.json` is a NEW baseline, preserving the existing native scenarios
 and their separate row-i / PC-case linkage. Each binds its own SYNTH save and
-sidecar by SHA256. The loader refuses an undeclared sidecar, missing/mismatched
+sidecar by SHA256 and explicitly declares save.setup=SYNTH. Original scenarios
+explicitly declare NATIVE and bind the reviewed native inventory hash. Absence
+of a sidecar never establishes native ancestry. The loader refuses an undeclared sidecar, missing/mismatched
 sidecar, or sidecar naming a different output hash. The probe and diagnostic
 receipts disclose setup=SYNTH and sidecar_sha256. Hooks and route behavior run
 natively; a live win is OPEN. No moves, identity, IV/EV or story flags changed.
@@ -333,13 +335,28 @@ are the only edited spans. Unknown hg-engine nature/IV override fields refuse.
 Route producers now explicitly request 300%, clock-throttled, independent of
 the owner's 800% defaults. Nested native diagnostic routes use the same rate.
 PC mode1 target reads GridInputHandler.nextInput (grid+0x0D), not selection
-cache data+0x21. One A activates button mode only when inactive; a separate A
-still grabs and the 0x57/party/box/SAVE/reload criteria remain.
+cache data+0x21. All 0x51 entry paths enable button mode (overlay_14.s:13581-13584,
+16668-16675,17179-17184,25214-25217); modeSwitchLagFrame is only assigned FALSE
+(unk_02019BA4.c:20). The first A grabs and the 0x57/party/box/SAVE/reload criteria remain.
 
 Owner-accepted uncensored settle provenance: hge observation
 `d2-hge-10031339/observation.json` (max1 + margin5 = 6), SS observation
-`d2-ss-10031344/observation.json` (max11 + margin5 = 16). Exact SHA256 and epoch
-frames live in phase_settle_policy. Their historical overall FAIL was the
+`d2-ss-10031344/observation.json` (max11 + margin5 = 16). Exact observation bytes are committed under tests/fixtures/gen4; phase_settle_policy
+verifies their SHA256 and recomputes epochs/max+5 from those files at admission. Their historical overall FAIL was the
 ClockThrottle audit; it is never relabelled PASS. These frame differences use
 emulated counters and are independent of host throttling. A policy alone does
 not qualify row n.
+
+The level/stat edit is a fixed point of the native arithmetic in pokemon.c:362-386.
+CalcMonStats runs on the party mon at battle EXP gain (battle/battle_command.c:6161);
+this is not a claim that battle entry itself recalculates stats. Moves stay unchanged.
+
+Fight/boundary prepare requires --state-save-sha256, recorded from the state's
+producer diagnostic save_sha256, equal to the scenario save hash. This is recorded
+producer provenance, not a decoder of the state. A retained L5 state cannot be paired
+with a lead12 scenario by supplying its original producer hash. Review the producer
+manifest before supplying the value; the state SHA256 still binds the exact bytes.
+
+Route pacing at 300%, with clock throttling, intentionally applies to EVERY route
+lane, including plain route CLI lanes and diagnostic native routes. It is the
+orchestration contract, not a per-diagnostic audit exception.

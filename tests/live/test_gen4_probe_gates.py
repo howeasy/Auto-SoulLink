@@ -1309,7 +1309,7 @@ def load_scenario(relative, title, purpose, *, committed=True):
     allowed = {"schema", "title", "purpose", "save", "row_i_scenario", "pc_case_scenario", "provenance"}
     assert not doc.keys() - allowed, "scenario runtime overrides forbidden (pack routes and phases are authoritative)"
     spec = doc["save"]
-    assert isinstance(spec, dict) and not spec.keys() - {"path", "sha256", "sidecar_sha256"}, "wrong scenario save schema"
+    assert isinstance(spec, dict) and not spec.keys() - {"path", "sha256", "sidecar_sha256", "setup"}, "wrong scenario save schema"
     relative_save = spec["path"]
     assert isinstance(relative_save, str) and "\\" not in relative_save and ":" not in relative_save, "save must be lane-relative"
     part = PurePosixPath(relative_save)
@@ -1319,7 +1319,9 @@ def load_scenario(relative, title, purpose, *, committed=True):
     assert save.is_relative_to(root), "save escapes lane root"
     input_file(save, f"{title} {purpose} save")
     assert digest(save) == spec["sha256"], f"present scenario save hash mismatch: {save}"
+    assert spec.get("setup") in {"NATIVE", "SYNTH"}, "explicit save.setup required"
     if purpose in {"row_i", "pc_case"}:
+        assert spec["setup"] == "SYNTH", "per-case fixture must explicitly disclose SYNTH"
         side = input_file(save.with_name(save.name + ".synth.json"), f"{purpose} SYNTH ancestry sidecar")
         assert digest(side) == spec.get("sidecar_sha256"), "present scenario sidecar hash mismatch"
     elif purpose=="baseline":
@@ -1327,21 +1329,36 @@ def load_scenario(relative, title, purpose, *, committed=True):
     return doc, save, digest(path)
 
 
-def baseline_setup(doc,save):
-    """O-33: exact committed scenario declares native or hash-bound SYNTH input."""
-    spec=doc['save']
-    assert digest(save)==spec['sha256'],'baseline save hash mismatch'
-    side=Path(str(save)+'.synth.json')
-    declared=spec.get('sidecar_sha256')
-    if declared is None:
-        assert not side.exists(),'NATIVE baseline scenario points at SYNTH input without sidecar binding'
-        return {'setup':'NATIVE'}
-    assert side.is_file(),'SYNTH baseline sidecar absent'
-    assert digest(side)==declared,'SYNTH baseline scenario sidecar hash mismatch'
-    setup=save_setup(save)
-    assert setup['setup']=='SYNTH' and setup['sidecar_sha256']==declared,'SYNTH baseline disclosure mismatch'
-    return setup
+def baseline_setup(doc, save):
+    """Explicit O-33 declaration; NATIVE binds the reviewed native inventory.
 
+    Bytes alone cannot identify a synthesis after its sidecar is deleted. Native
+    admission therefore requires the original title scenario's approved hash,
+    rather than treating absence of a sidecar as evidence of native ancestry.
+    """
+    spec = doc["save"]
+    assert digest(save) == spec["sha256"], "baseline save hash mismatch"
+    assert spec.get("setup") in {"NATIVE", "SYNTH"}, "explicit save.setup required"
+    side = Path(str(save) + ".synth.json")
+    declared = spec.get("sidecar_sha256")
+    if spec["setup"] == "NATIVE":
+        assert declared is None and not side.exists(), "NATIVE scenario carries SYNTH ancestry"
+        title = doc.get("title")
+        assert title in TITLE_PACK, "NATIVE title required"
+        native = json.loads(
+            (REPO / f"data/gen4/scenarios/{title}.json").read_text(encoding="utf-8")
+        )
+        assert native["save"]["setup"] == "NATIVE" and spec["sha256"] == native["save"]["sha256"], (
+            "NATIVE save differs from reviewed native inventory"
+        )
+        return {"setup": "NATIVE"}
+    assert isinstance(declared, str) and side.is_file(), "SYNTH baseline sidecar absent"
+    assert digest(side) == declared, "SYNTH baseline scenario sidecar hash mismatch"
+    setup = save_setup(save)
+    assert setup["setup"] == "SYNTH" and setup["sidecar_sha256"] == declared, (
+        "SYNTH baseline disclosure mismatch"
+    )
+    return setup
 
 def scenario_input(title):
     relative = os.environ.get("SLINK_GEN4_PROBE_SCENARIO", f"data/gen4/scenarios/{title}.json")
@@ -1634,32 +1651,69 @@ def phase_settle_policy(title, artifact):
     # FAIL was ClockThrottle true->false (native executor pacing), not a pin or
     # publication failure. Frame differences use emulated counters, independent
     # of host throttling. No historical verdict is relabelled as PASS.
-    measurements={
-        'heartgold_hge':('cb2dc435196d09c8c9209bf037240ed834f4cea1','d2-hge-10031339',
-            '93769b54c053e6d90ddd7750a48e57e68a763b119c7f6741ac332c5e950e7e4d',
-            [('pc_place_first_in_box',9,9),('battle_outcome_copy',10242,10242),
-             ('battle_start_ov12',10242,10243),('battle_faint_cmd',10247,10248)]),
-        'soulsilver':('f8dc38ea20c17541a43b58c5e6d18c1732c7e582','d2-ss-10031344',
-            '89fa7570c4b3d29a7b60f584d2080e9bc238a24455c3365d70f851d23ca645ab',
-            [('battle_faint_cmd',10276,10286),('battle_outcome_copy',10276,10287),
-             ('battle_start_ov12',10276,10287)])}
+    measurements = {
+        "heartgold_hge": (
+            "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+            "d2-hge-10031339",
+            "93769b54c053e6d90ddd7750a48e57e68a763b119c7f6741ac332c5e950e7e4d",
+            1,
+        ),
+        "soulsilver": (
+            "f8dc38ea20c17541a43b58c5e6d18c1732c7e582",
+            "d2-ss-10031344",
+            "89fa7570c4b3d29a7b60f584d2080e9bc238a24455c3365d70f851d23ca645ab",
+            11,
+        ),
+    }
     if title in measurements:
-        sha,lane,receipt_sha,rows=measurements[title]
-        assert artifact['rom']['sha1']==sha,'settle measurement ROM changed'
-        epochs=[{'site':s,'active_frame':a,'pin_frame':p,'left_censored':False} for s,a,p in rows]
-        maximum=max(e['pin_frame']-e['active_frame'] for e in epochs)
-        return {'max_frames':maximum+5,'measured_max':maximum,'margin':5,'units':'emulator frames',
-                'receipt':str(lane_root()/lane/'observation.json'),'receipt_sha256':receipt_sha,'epochs':epochs,
-                'diagnostic_verdict':'FAIL ClockThrottle audit','note':'owner accepted uncensored frame deltas; max+5; not row-n closure alone'}
-    if title!='heartgold':
+        sha, lane, receipt_sha, expected_max = measurements[title]
+        assert artifact["rom"]["sha1"] == sha, "settle measurement ROM changed"
+        receipt = REPO / f"tests/fixtures/gen4/{lane}_observation.json"
+        assert digest(receipt) == receipt_sha, "settle observation hash mismatch"
+        observation = json.loads(receipt.read_bytes())
+        assert observation["qualified"] is False and observation["status"] == "OBSERVED", (
+            "wrong settle observation"
+        )
+        epochs = observation["settle"]["epochs"]
+        assert {e["site"] for e in epochs} == set(observation["settle"]["sites"]), (
+            "incomplete settle epochs"
+        )
+        for e in epochs:
+            assert e["left_censored"] is False and e["status"] == "SETTLED", (
+                "censored or unfinished settle epoch"
+            )
+            assert e["delta"] == e["pin_frame"] - e["active_frame"] >= 0, (
+                "settle delta disagrees with frames"
+            )
+        maximum = max(e["delta"] for e in epochs)
+        assert maximum == expected_max, "settle measured maximum changed"
+        return {
+            "max_frames": maximum + 5,
+            "measured_max": maximum,
+            "margin": 5,
+            "units": "emulator frames",
+            "receipt": str(receipt),
+            "receipt_sha256": receipt_sha,
+            "epochs": epochs,
+            "physical_lane": str(lane_root() / lane),
+            "diagnostic_verdict": "FAIL ClockThrottle audit",
+            "note": "owner accepted uncensored frame deltas; max+5; not row-n closure alone",
+        }
+    if title != "heartgold":
         return None
-    assert artifact["rom"]["sha1"] == "4fcded0e2713dc03929845de631d0932ea2b5a37", "settle measurement ROM changed"
-    return {"max_frames": 16, "measured_max": 11, "margin": 5, "units": "emulator frames",
-            "receipt": str(lane_root() / "g1-settle-HG-1144-serial/settle.json"),
-            "receipt_sha256": "ddf1dc69d852f30988aba4c0b8af61697ec6307e0b6d4371fe29188e9f1e5d38",
-            "state_sha256": "86efe700aed2d8e2737330c98bb2881891daeb1004382be43a1577e349ffb627",
-            "note": "serial PHYSICAL diagnostic: faint 10, start 11; add 5 frames scheduling margin; never qualifies row n alone"}
-
+    assert artifact["rom"]["sha1"] == "4fcded0e2713dc03929845de631d0932ea2b5a37", (
+        "settle measurement ROM changed"
+    )
+    return {
+        "max_frames": 16,
+        "measured_max": 11,
+        "margin": 5,
+        "units": "emulator frames",
+        "receipt": str(lane_root() / "g1-settle-HG-1144-serial/settle.json"),
+        "receipt_sha256": "ddf1dc69d852f30988aba4c0b8af61697ec6307e0b6d4371fe29188e9f1e5d38",
+        "state_sha256": "86efe700aed2d8e2737330c98bb2881891daeb1004382be43a1577e349ffb627",
+        "note": "serial PHYSICAL diagnostic: faint 10, start 11; add 5 frames scheduling margin; never qualifies row n alone",
+    }
 
 def phase_image_pins(source, artifact, title):
     generator = importlib.import_module("tools.gen_gen4_pack")
@@ -2118,6 +2172,9 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
                 "sites": {"hge_load_arm9_expansion": {"symbol": "load_arm9_expansion"},
                           "load_overlay_noinit_async": {"symbol": "LoadOverlayNoInitAsync"}}}
     profile.write_text(json.dumps({"schema": "gen4-profile-v1", "titles": {title: artifact}}))
+    native_inventory = tmp_path / f'data/gen4/scenarios/{title}.json'
+    native_inventory.parent.mkdir(parents=True)
+    native_inventory.write_text(json.dumps({'save':{'setup':'NATIVE','sha256':digest(save)}}))
     monkeypatch.setattr(module, "REPO", tmp_path)
     monkeypatch.setenv("SLINK_GEN4_" + title.upper(), str(source))
     monkeypatch.setenv("SLINK_GEN4_" + title.upper() + "_SAVE", str(save))
@@ -2126,9 +2183,9 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     monkeypatch.delenv("SLINK_GEN4_PERF_RECEIPT", raising=False)
     monkeypatch.setattr(module, "fixture_module", lambda: object())
     monkeypatch.setattr(module, "scenario_input", lambda title: {"scenario_path":"MODEL-scenario.json","scenario_save": str(save), "row_i_save": str(boxed)})
-    monkeypatch.setattr(module,"load_scenario",lambda *args,**kwargs: ({'save':{'sha256':digest(save)}},save,'MODEL'))
+    monkeypatch.setattr(module,"load_scenario",lambda *args,**kwargs: ({'title':title,'save':{'setup':'NATIVE','sha256':digest(save)}},save,'MODEL'))
     monkeypatch.setattr(module, "codec_module", lambda: SimpleNamespace(
-        parse_save=lambda *args: SimpleNamespace(profile="hgss")))
+        parse_save=lambda *args: SimpleNamespace(profile="hgss",party=lambda: [{"pid":2}], boxes=lambda: [])))
     monkeypatch.setattr(module, "source_witness", lambda *args: {})
     def census_pins(source, artifact, title, internal_loads):
         assert internal_loads == internal_census_loads(title, artifact)
@@ -2140,10 +2197,12 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     if baseline_synth:
         side=Path(str(save)+'.synth.json')
         side.write_text(json.dumps({'src_sha1':'0'*40,'out_sha1':digest(save,'sha1'),'new_pid':1}))
-        declared={'save':{'sha256':digest(save),'sidecar_sha256':digest(side)}}
+        declared={'title':title,'save':{'setup':'SYNTH','sha256':digest(save),'sidecar_sha256':digest(side)}}
+        boxed_side=Path(str(boxed)+'.synth.json')
+        boxed_side.write_text(json.dumps({'src_sha1':'0'*40,'out_sha1':digest(boxed,'sha1'),'new_pid':2}))
         real_save_setup=next(r[1] for r in _HARNESS_FUNCTIONS if r[0]=='save_setup')
         monkeypatch.setattr(module,'load_scenario',lambda *args,**kwargs:(declared,save,'MODEL'))
-        monkeypatch.setattr(module,'save_setup',lambda path:real_save_setup(path) if path==save else {'setup':'NATIVE'})
+        monkeypatch.setattr(module,'save_setup',lambda path:real_save_setup(path))
     monkeypatch.setattr(module, "phase_case_plan", lambda *args: ([{"name": "battle", "route": []}], []))
     cut_calls = 0
     def cut(*args, **kwargs):
@@ -2214,8 +2273,8 @@ def test_every_attempt_failure_publishes_before_raise(api, monkeypatch, tmp_path
     assert all(rows) and {m[1] for m in rows} == set("abcdefghijklmno")
     written = {m[1]: (m[2], json.loads(m[3])) for m in rows}
     if baseline_synth:
-        assert all(payload.get('setup')=='SYNTH' and payload.get('sidecar_sha256')==digest(side)
-                   for row,(_,payload) in written.items() if row in {'a','b','k','l','m'})
+        assert all(payload.get('setup')=='SYNTH' and payload.get('sidecar_sha256')==digest(boxed_side if row=='i' else side)
+                   for row,(_,payload) in written.items() if row in set(ROWS))
     if failure in {"graded-no-settle", "phase-row-n-fail", "aggregate-baseline-open"}:
         assert external_calls and written["o"][0] == "PASS"
         assert written["i"][0] == "PASS" and written["k"][0] == "PASS"
@@ -2534,7 +2593,7 @@ def test_scenario_load_rejects_overrides_and_wrong_save_hash_then_reverts(tmp_pa
     path = tmp_path / relative
     path.parent.mkdir(parents=True)
     doc = {"schema": "gen4-probe-scenario-v3", "title": "heartgold", "purpose": "baseline",
-           "save": {"path": "saves/native.SaveRAM", "sha256": digest(save)}}
+           "save": {"setup":"NATIVE", "path": "saves/native.SaveRAM", "sha256": digest(save)}}
     def load(value):
         path.write_text(json.dumps(value))
         return load_scenario(relative, "heartgold", "baseline", committed=False)
@@ -2936,3 +2995,35 @@ def test_n_case_invariant_failure_reaches_combined(api, patch):
         api=api,
     )
     assert "n" not in errors
+
+
+def test_all_a_n_setup_disclosure_control_red_revert(api, monkeypatch, tmp_path):
+    import inspect
+    import sys
+
+    module = sys.modules[__name__]
+    source = inspect.getsource(test_gen4_hook_probe)
+    source = source[source.index("def test_gen4_hook_probe") :]
+    needle = 'payload.update(save_setup(row_i_save if row == "i" else save))'
+    assert source.count(needle) == 1
+    mutant = source.replace(needle, 'if row != "n": ' + needle)
+    namespace = dict(globals())
+    exec(mutant, namespace)
+    for name in ("good", "mutant", "revert"):
+        run = tmp_path / name
+        run.mkdir()
+        with monkeypatch.context() as patch:
+            if name == "mutant":
+                patch.setattr(
+                    module.test_gen4_hook_probe,
+                    "__code__",
+                    namespace["test_gen4_hook_probe"].__code__,
+                )
+                with pytest.raises(AssertionError):
+                    test_every_attempt_failure_publishes_before_raise(
+                        api, patch, run, "graded-no-settle", "heartgold", baseline_synth=True
+                    )
+            else:
+                test_every_attempt_failure_publishes_before_raise(
+                    api, patch, run, "graded-no-settle", "heartgold", baseline_synth=True
+                )

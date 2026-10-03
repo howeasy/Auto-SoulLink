@@ -187,10 +187,10 @@ def test_synth_baseline_requires_exact_scenario_disclosure(tmp_path):
             }
         )
     )
-    native = {"save": {"sha256": gate.digest(save)}}
+    native = {"title":"heartgold", "save": {"setup":"NATIVE", "sha256": gate.digest(save)}}
     with pytest.raises(AssertionError):
         gate.baseline_setup(native, save)
-    correct = {"save": {**native["save"], "sidecar_sha256": gate.digest(side)}}
+    correct = {"save": {**native["save"], "setup":"SYNTH", "sidecar_sha256": gate.digest(side)}}
     got = gate.baseline_setup(correct, save)
     assert got["setup"] == "SYNTH" and got["sidecar_sha256"] == gate.digest(side)
     wrong = {"save": {**correct["save"], "sidecar_sha256": "0" * 64}}
@@ -201,7 +201,8 @@ def test_synth_baseline_requires_exact_scenario_disclosure(tmp_path):
     side.unlink()
     with pytest.raises(AssertionError):
         gate.baseline_setup(correct, save)
-    assert gate.baseline_setup(native, save) == {"setup": "NATIVE"}
+    with pytest.raises(AssertionError):
+        gate.baseline_setup(native, save)
     side.write_bytes(raw)
     assert gate.baseline_setup(correct, save) == got
 
@@ -1197,3 +1198,137 @@ def test_the_place_docstring_explains_the_five_locations_and_warp_id():
     doc = synth.__doc__
     assert "all five Locations" in doc and "warpId -1" in doc and "field_warp_tasks.c:150" in doc
     assert "src/location_backup.c" in doc and "vecY" in doc and "map_object.c:494-496" in doc
+
+
+@pytest.mark.parametrize(
+    "title,profile,filename,species,hp,stats",
+    [
+        ("heartgold_hge", "hge", "hge_a_OOO_630.SaveRAM", 155, 34, (17, 18, 21, 22, 19)),
+        ("soulsilver", "hgss", "ss_DDDD_25944.SaveRAM", 158, 36, (23, 21, 15, 16, 19)),
+    ],
+)
+def test_lead12_independent_title_literals(title, profile, filename, species, hp, stats):
+    from tools import gen4_pins
+
+    source = (SAVES / filename).read_bytes()
+    out, _ = synth.build_lead_level(
+        source, profile, gen4_pins.default_locations().roms[title], 12, title=title
+    )
+    mon = codec.parse_save(out, profile).party()[0]
+    assert (mon["species"], mon["level"], mon["exp"], mon["hp"], mon["max_hp"], mon["stats"]) == (
+        species,
+        12,
+        973,
+        hp,
+        hp,
+        stats,
+    )
+    assert (SAVES / filename).read_bytes() == source
+
+
+def test_hge_override_low_bit_refused():
+    from tools import gen4_pins
+
+    source = _owner("hge")
+    p = codec.PROFILES["hge"]
+
+    def mutate(body):
+        at = p.party_off + 8
+        plain = bytearray(codec.decrypt_party(body[at : at + codec.PARTY_MON_SIZE]))
+        struct.pack_into("<H", plain, 8 + 0x20 + 0x1A, 1)
+        body[at : at + codec.PARTY_MON_SIZE] = codec.encrypt_party(bytes(plain))
+        return body
+
+    bad = _reseal(source, "hge", mutate)
+    with pytest.raises(synth.Refusal, match="override"):
+        synth.build_lead_level(
+            bad,
+            "hge",
+            gen4_pins.default_locations().roms["heartgold_hge"],
+            12,
+            title="heartgold_hge",
+        )
+
+
+@pytest.mark.parametrize("setup", ["NATIVE", "SYNTH", None])
+def test_lead12_deleted_sidecar_cannot_be_native(tmp_path, setup):
+    from tests.live import test_gen4_probe_gates as gate
+
+    doc, source, _ = gate.load_scenario(
+        "data/gen4/scenarios/heartgold_lead12.json", "heartgold", "baseline", committed=False
+    )
+    save = tmp_path / "lead12.SaveRAM"
+    save.write_bytes(source.read_bytes())
+    doc["save"]["setup"] = setup
+    # Even deleting the declaration cannot launder this known SYNTH output.
+    if setup == "NATIVE":
+        doc["save"].pop("sidecar_sha256")
+    with pytest.raises(AssertionError):
+        gate.baseline_setup(doc, save)
+
+
+@pytest.mark.parametrize("mutation", ["mask", "stats", "exp"])
+def test_lead12_current_fixes_red_revert(monkeypatch, mutation):
+    import inspect
+
+    source = inspect.getsource(synth.build_lead_level)
+    old, new = {
+        "mask": ("0xFFFF", "0xFFFE"),
+        "stats": ("level + 10 if", "level + 11 if"),
+        "exp": ("    exp = struct.unpack_from", "    exp = 1 + struct.unpack_from"),
+    }[mutation]
+    assert source.count(old) == 1
+    namespace = dict(vars(synth))
+    exec(source.replace(old, new), namespace)
+    original = synth.build_lead_level
+    checks = (
+        [test_hge_override_low_bit_refused]
+        if mutation == "mask"
+        else [
+            lambda: test_lead12_independent_title_literals(
+                "heartgold_hge", "hge", "hge_a_OOO_630.SaveRAM", 155, 34, (17, 18, 21, 22, 19)
+            ),
+            lambda: test_lead12_independent_title_literals(
+                "soulsilver", "hgss", "ss_DDDD_25944.SaveRAM", 158, 36, (23, 21, 15, 16, 19)
+            ),
+        ]
+    )
+    for check in checks:
+        check()
+        with monkeypatch.context() as patch:
+            patch.setattr(synth, "build_lead_level", namespace["build_lead_level"])
+            with pytest.raises((AssertionError, pytest.fail.Exception)):
+                check()
+        assert synth.build_lead_level is original
+        check()
+
+
+def test_setup_inference_red_revert(tmp_path, monkeypatch):
+    from copy import deepcopy
+
+    from tests.live import test_gen4_probe_gates as gate
+
+    doc, source, _ = gate.load_scenario(
+        "data/gen4/scenarios/heartgold_lead12.json", "heartgold", "baseline", committed=False
+    )
+    save = tmp_path / "lead12.SaveRAM"
+    save.write_bytes(source.read_bytes())
+    native = deepcopy(doc)
+    native["save"]["setup"] = "NATIVE"
+    native["save"].pop("sidecar_sha256")
+
+    def old_inference(doc, save):
+        if not Path(str(save) + ".synth.json").exists():
+            return {"setup": "NATIVE"}
+        return gate.save_setup(save)
+
+    def check():
+        with pytest.raises(AssertionError):
+            gate.baseline_setup(native, save)
+
+    check()
+    with monkeypatch.context() as patch:
+        patch.setattr(gate, "baseline_setup", old_inference)
+        with pytest.raises(pytest.fail.Exception):
+            check()
+    check()

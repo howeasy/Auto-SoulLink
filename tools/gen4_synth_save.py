@@ -399,7 +399,7 @@ def build_lead_level(
     a, b = 8, 8 + 0x20  # decrypt_party returns LOGICAL A/B/C/D, not stored PID order
     # Codec does not decode hg-engine nature/IV overrides. Never carry an
     # unknown override into a purported recalculation; these inputs have none.
-    if profile == "hge" and struct.unpack_from("<H", plain, b + 0x1A)[0] & 0xFFFE:
+    if profile == "hge" and struct.unpack_from("<H", plain, b + 0x1A)[0] & 0xFFFF:
         raise Refusal("lead_level unsupported hge nature/IV override")
     rom = ndspy.rom.NintendoDSRom(raw_rom)
     personal = ndspy.narc.NARC(rom.getFileByName("a/0/0/2"))

@@ -836,7 +836,7 @@ class FakeDS:
             self.w32(self.APPD+0x34,self.PC_WORK)
             self.w32(self.PC_WORK+0x2C,self.GRID)
             self.ram[self.GRID-self.BASE+0xD]=0
-            self.w32(self.GRID+8,0)
+            self.w32(self.GRID+8,1)
             if self.witness_mode_override is not None:
                 self.app_mode=self.witness_mode_override
             self.ram[self.APPD - self.BASE + 0x21] = 0xFF
@@ -890,10 +890,7 @@ class FakeDS:
             self.app_state(0x5B)
         elif st == 0x51 and t >= 10:  # the box grid: A grabs (one prompt), B asks to leave
             if "A" in new:
-                if self.r(self.GRID+8,4)==0:
-                    self.w32(self.GRID+8,1)  # first A consumed as GRID_MENU_BUTTON_MODE (-4)
-                else:
-                    self.app_state(5)
+                self.app_state(5)
             elif "B" in new:
                 self.app_state(0x94)
         elif st == 5 and t >= 20:
@@ -1735,19 +1732,18 @@ def test_the_plan_not_the_lua_decides_the_press_counts(tmp_path, monkeypatch):
 def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(tmp_path, monkeypatch):
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
     rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
-    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 7, rows
-    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu", "A wake cursor"]
+    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 6, rows
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu"]
     assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
     assert "RESULT PC_WITHDRAW" in last
 
 
-def test_cursor_cache_guard_and_wake_red_revert(tmp_path, monkeypatch):
+def test_cursor_cache_guard_red_revert(tmp_path, monkeypatch):
     source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
     test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
     original = Path.read_text
     for old, new in [
         ("if a.grid_target ~= wd.box_cell then", "if a.sel ~= wd.box_cell then"),
-        ("if not a.button_mode then", "if false then"),
     ]:
         assert source.count(old) == 1
         with monkeypatch.context() as patch:
@@ -2432,3 +2428,90 @@ def test_pc_order_cursor_controls_red_revert(old,new):
     with pytest.raises(AssertionError):
         assert_pc_item_order_and_cursor(scr[:a]+'\n'.join([region[-1],*region[:-1]])+'\n'+scr[b:],code)
     assert_pc_item_order_and_cursor(scr,code)
+
+
+def test_no_unreachable_wake_a_branch():
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    assert "A wake cursor" not in source and "cursor_not_activated" not in source
+
+
+def _grid_source_contract(c_source, asm):
+    writes = re.findall(r"modeSwitchLagFrame\s*=\s*(?![=])([^;]+);", c_source)
+    assert writes == ["FALSE"]
+    functions = ("ov14_021EC150", "ov14_021EDA4C", "ov14_021EDF28", "ov14_021F21D0")
+    for name in functions:
+        body = asm.split("thumb_func_start " + name, 1)[1].split("thumb_func_end " + name, 1)[0]
+        calls = list(re.finditer(r"bl GridInputHandler_SetButtonInputMode", body))
+        assert calls, name
+        for call in calls:
+            before = body[: call.start()]
+            writes_r1 = re.findall(r"\b(?:mov|add|ldr|ldrb|lsr|lsl) r1, ([^\n]+)", before)
+            assert writes_r1[-1] == "#1", name
+
+
+def test_051_entry_button_mode_source_red_revert():
+    # Census every C translation unit, not just the known constructor file.
+    c = "\n".join(
+        path.read_text() for path in PRET.rglob("*.c")
+        if b"modeSwitchLagFrame" in path.read_bytes()
+    )
+    asm = (PRET / "asm/overlay_14.s").read_text()
+    _grid_source_contract(c, asm)
+    for bad_c, bad_asm in [
+        (c.replace("modeSwitchLagFrame = FALSE", "modeSwitchLagFrame = TRUE"), asm),
+        (
+            c,
+            asm.replace(
+                "mov r1, #1\n\tldr r0, [r0, #0x2c]\n\tbl GridInputHandler_SetButtonInputMode",
+                "mov r1, #0\n\tldr r0, [r0, #0x2c]\n\tbl GridInputHandler_SetButtonInputMode",
+            ),
+        ),
+    ]:
+        with pytest.raises(AssertionError):
+            _grid_source_contract(bad_c, bad_asm)
+        _grid_source_contract(c, asm)
+
+
+def test_settle_policy_reads_committed_observations_and_checks_hash(monkeypatch, tmp_path):
+    from tests.live import test_gen4_probe_gates as gate
+
+    for title, game, lane, maximum in [
+        ("heartgold_hge", "hge", "d2-hge-10031339", 1),
+        ("soulsilver", "SS", "d2-ss-10031344", 11),
+    ]:
+        p = gate.phase_settle_policy(title, gr._pack_title(game))
+        fixture = gr.REPO / "tests/fixtures/gen4" / f"{lane}_observation.json"
+        assert p["receipt"] == str(fixture)
+        assert gate.digest(fixture) == p["receipt_sha256"]
+        raw = json.loads(fixture.read_text())
+        epochs = raw["settle"]["epochs"]
+        assert p["epochs"] == epochs and p["max_frames"] == maximum + 5
+        # The current fixture bytes are mandatory, even when the mutation still
+        # describes a plausible larger margin. Reverting restores admission.
+        copied = tmp_path / "tests/fixtures/gen4" / fixture.name
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes(fixture.read_bytes() + b" ")
+        with monkeypatch.context() as patch:
+            patch.setattr(gate, "REPO", tmp_path)
+            with pytest.raises(AssertionError, match="hash"):
+                gate.phase_settle_policy(title, gr._pack_title(game))
+        assert gate.phase_settle_policy(title, gr._pack_title(game)) == p
+
+
+def test_removed_wake_branch_control_red_revert(monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    old = Path.read_text
+    test_no_unreachable_wake_a_branch()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda p, *a, **k: (
+                source + '\nif not a.button_mode then tap("A",1,30); pressed("A wake cursor") end\n'
+                if p == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else old(p, *a, **k)
+            ),
+        )
+        with pytest.raises(AssertionError):
+            test_no_unreachable_wake_a_branch()
+    test_no_unreachable_wake_a_branch()

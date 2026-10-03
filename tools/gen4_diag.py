@@ -653,12 +653,20 @@ def parser():
         else:
             cmd.add_argument("--state", type=Path, required=True)
             cmd.add_argument("--state-sha256", required=True)
+            cmd.add_argument("--state-save-sha256", required=True, help="recorded producer save SHA256; must match scenario save")
             if name == "fight":
                 cmd.add_argument("--recipe", choices=["fight_until_enemy_faints"], default="fight_until_enemy_faints")
             else:
                 cmd.add_argument("--phase-case", choices=["battle_close"], default="battle_close")
     return ap
 
+
+def state_save_binding(recorded, scenario_save_sha256):
+    """Require recorded producer-save provenance; this does not decode the state."""
+    assert isinstance(recorded, str) and len(recorded) == 64 and recorded == scenario_save_sha256, (
+        "state/save provenance mismatch"
+    )
+    return recorded
 
 def prepare(args):
     """No emulator: validate the committed inventory, then create one fresh private lane."""
@@ -698,6 +706,8 @@ def prepare(args):
             raise g4.RomAbsent(f"OPEN state absent: {args.state}")
         assert sha256(args.state) == args.state_sha256, "wrong state hash"
         assert args.state.read_bytes()[:4] == b"PK\x03\x04", "not a BizHawk state"
+        cfg["state_save_sha256"] = state_save_binding(args.state_save_sha256, cfg["save_sha256"])
+        cfg["state_binding"] = "recorded producer-save SHA256 (not state decode)"
         cfg["state_sha256"] = args.state_sha256
         cfg["originals"][str(args.state)] = args.state_sha256
         if args.command == "fight":

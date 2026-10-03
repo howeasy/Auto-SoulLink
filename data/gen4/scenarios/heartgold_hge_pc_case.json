@@ -5,7 +5,8 @@
   "save": {
     "path": "g1inputs-c935-1015/hge_p2.SaveRAM",
     "sha256": "0c9017af93cda226e81bb33ddbec563fe521340a635815cc7a082168705f2b5c",
-    "sidecar_sha256": "ad57f5b79be6c80db42ba57c116a902a5a97f7cd781a8f8556cb30429de68bb7"
+    "sidecar_sha256": "ad57f5b79be6c80db42ba57c116a902a5a97f7cd781a8f8556cb30429de68bb7",
+    "setup": "SYNTH"
   },
   "provenance": "SYNTH party2 fixture; dedicated to native PC deposit phase. No baseline or boxed-descendant fallback."
 }

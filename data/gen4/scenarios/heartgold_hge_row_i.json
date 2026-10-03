@@ -5,7 +5,8 @@
   "save": {
     "path": "g1inputs-c935-1015/hge_boxed.SaveRAM",
     "sha256": "82a0fe0d2949eeb34e0e97b34cf06f4aa08cda43018539f5e3a040946b8372ba",
-    "sidecar_sha256": "1908058e3b0e7dd246c02806021538f913cd0de22ee0dd9638cc8e862d953918"
+    "sidecar_sha256": "1908058e3b0e7dd246c02806021538f913cd0de22ee0dd9638cc8e862d953918",
+    "setup": "SYNTH"
   },
   "provenance": "SYNTH party2 ancestry; native PC deposit/SAVE descendant. Used only by row i. See hash-pinned sidecar for parent and native receipt hashes."
 }
