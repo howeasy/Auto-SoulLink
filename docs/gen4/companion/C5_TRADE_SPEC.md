@@ -3,7 +3,7 @@
 > - **Q1 (MUTATES_INPUT on the PK4 binding): no owner call needed.** My ruling summary was imprecise. The flag stays set (a harmless scratch copy for the party raw copy); DECISIONS is corrected. No shared edit.
 > - **D1:** PLAN.md's stale box-delivery lines are fixed (C5 row + open question 3 closed by the party-only ruling).
 > - **F5:** the hge fork is at `E:/Howard/HGEngine_ROMHack/hg-engine` (not under hgss_archipelago-master). The hge citations go through FEATURE_BAR until C6 re-reads them there.
-> - The shared trade producer leaves foreign opcodes alone (Gen 4 commit `6c76265c`,
+> - The shared trade producer leaves foreign opcodes alone (Gen 4 commit `efc76dd9`,
 >   `claude/gen4-tp-gate`): its state machine still runs every visit for the save watchdog, and
 >   only `{29, 21, 30, 31}` reach dispatch. The C2 dispatcher calls every producer every visit and
 >   each producer ignores foreign opcodes. (corrected 2026-10-03: "The C2 dispatcher routes by
@@ -19,7 +19,7 @@
 >   writable 0x88 scratch. This closes `FEATURE_BAR.md:201`.
 > - The shared ABI is used **UNMODIFIED** (`C2_BEACON_SPEC.md:47-49`). Every static assert at
 >   `patch/src/nds/common/abi.h:261-286` still holds.
-> - **Producer isolation is per producer, not in the dispatcher** (Gen 4 `6c76265c`,
+> - **Producer isolation is per producer, not in the dispatcher** (Gen 4 `efc76dd9`,
 >   `claude/gen4-tp-gate`): the C2 service SysTask calls **every** producer on **every** visit, and
 >   each producer ignores opcodes it does not own. The trade producer's old catch-all
 >   `} else { tp_ack(m,seq,0,2); }` (`trade_producer.h:300-302`) is gated on the trade-owned set;
@@ -414,7 +414,7 @@ cancel, which is only true because nothing is published before consent.
 | **F4** | An out-of-range or stale slot is refused, **never asserted** | S+M+P | Force `slot >= Party_GetCount` (a party of 3, slot chosen as 5 by a synthetic script path) and a `locate()` that disagrees with the chosen slot | No `GF_AssertFail`; `SLINK_TRADE_UNCHANGED`; party byte-identical. Pins `src/party.c:9-12` + `config.mk:36-37` |
 | **F5** | SAVE + cold reload keep it | P | Commit, let the save poll reach OK, power-cycle (no soft reset), reload | The slot still holds the record; `POST_SAVE_OK` was set only after the polled OK, never at begin (`trade_producer.h:233-243`) |
 | **F6** | **Opcode 1 is executed by no vanilla script** | S | Re-run `FEATURE_BAR.md:158-165`: zero `Dummy` uses in `files/fielddata/script`; zero `dummy` uses in hge `armips/scr_seq`; C0 sha1 + `a/0/1/2` member diff (965 members, `filesystem.mk:406`) | Zero uses on HG, SS and hge; re-run on every pin (`FEATURE_BAR.md:165`) |
-| **F7** | Two producers do not steal each other's acks | S+M | C3's **F6** (`C3_SOUND_SPEC.md:487`) with C5 present: hold a `SLINK_OP_PLAY_SE` across ≥1 visit; post a `TRADE_PREPARE`; assert each producer acks only its own opcodes (`trade_producer.h:300-302`, gated). Then, with no trade request outstanding, assert the trade producer's save watchdog still advances — its state machine runs **every** visit and only `{29,21,30,31}` reach dispatch. | Exactly one producer acks each request, and the watchdog does not stall. **This is what the shared else-arm fix buys** (`6c76265c`); it failed against the unrouted dispatcher the draft proposed. |
+| **F7** | Two producers do not steal each other's acks | S+M | C3's **F6** (`C3_SOUND_SPEC.md:487`) with C5 present: hold a `SLINK_OP_PLAY_SE` across ≥1 visit; post a `TRADE_PREPARE`; assert each producer acks only its own opcodes (`trade_producer.h:300-302`, gated). Then, with no trade request outstanding, assert the trade producer's save watchdog still advances — its state machine runs **every** visit and only `{29,21,30,31}` reach dispatch. | Exactly one producer acks each request, and the watchdog does not stall. **This is what the shared else-arm fix buys** (`efc76dd9`); it failed against the unrouted dispatcher the draft proposed. |
 | **F8** | The committed identity is observed, not assumed | S+M | Mutant: `received_key` decodes the staging buffer instead of the party slot. It must stay **RED** | `README.md:138-141` |
 
 **What no falsifier here can prove:** flash durability (the ABI says so itself,

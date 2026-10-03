@@ -582,7 +582,7 @@ validators.l=function(x)
 end
 validators.m=function(x)
     for _,p in ipairs({"overworld","menu","battle","save"}) do
-        local hist=need(x.histograms[p],"m:verified phase "..p)
+        local hist=need(need(x.histograms,"m:CPU histograms")[p],"m:verified phase "..p)
         check(count(hist)>0,"empty CPU histogram")
     end
     check(need(x.halt,"m:OS_Halt symbol")>0 and x.idle_hits>0,"idle-thread PC not observed")

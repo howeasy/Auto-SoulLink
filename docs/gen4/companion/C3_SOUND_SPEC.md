@@ -5,7 +5,7 @@
 > - **C2 review checklist gains:**
 >   1. The dispatcher calls **every** producer on **every** visit, and each producer ignores
 >      foreign opcodes. The shared trade producer now does exactly that (Gen 4 commit
->      `6c76265c`, branch `claude/gen4-tp-gate`): its state machine still runs each visit for the
+>      `efc76dd9`, branch `claude/gen4-tp-gate`): its state machine still runs each visit for the
 >      save watchdog, and only the trade opcodes `{29 PREPARE, 21 SCENE, 30 WITHDRAW, 31 STATUS}`
 >      reach dispatch. **Neither producer gates the other.**
 >   2. Leave `status = BUSY` while a request is held.
@@ -18,7 +18,7 @@
 >   - Title-private capability bits are **16..31** (bits 7..15 are reserved for future shared caps), so Gen 4 gates NOTIFY on its own title bit **1<<16** in its host adapter, and NATIVE_SOUND (1<<2) keeps its shared meaning.
 >   - Title-private reason codes are **32..63** (16..31 are reserved for future shared reasons), so Gen 4 refuses sound code 2 with reason **32 = SOUND_CODE_REFUSED**, decoded only by the Gen 4 adapter.
 >   - The trade_producer else-ack issue is confirmed and is now **fixed** in the shared header on the Gen 4 branch, for Gen 5 to import (commit
->     `6c76265c`, branch `claude/gen4-tp-gate`): the `else` arm is gated on the trade-owned opcode
+>     `efc76dd9`, branch `claude/gen4-tp-gate`): the `else` arm is gated on the trade-owned opcode
 >     set, so a foreign opcode is left alone instead of acked. The C2 dispatcher does **not** route.
 >     (corrected 2026-10-03: "Until then the C2 dispatcher routes by opcode" is obsolete.)
 >   - Cite this ruling until the abi.h comments land.
@@ -152,7 +152,7 @@ The hazard was real: `tp_service`'s `} else { tp_ack(m,seq,0,2); }` (`trade_prod
 acked **every** opcode it did not own, so a held `SLINK_OP_PLAY_SE` would be acked
 `SLINK_ST_FAIL/BAD_ARGS` while C3 was still holding it, and `tp_ack` would zero the opcode out
 from under the hold. That arm is now gated on the trade-owned opcode set (Gen 4 commit
-`6c76265c`, `claude/gen4-tp-gate`): the shared producer **leaves foreign opcodes alone**. Its
+`efc76dd9`, `claude/gen4-tp-gate`): the shared producer **leaves foreign opcodes alone**. Its
 state machine still runs on **every** visit — it must, for the save watchdog
 (`trade_producer.h:160-171`) — but only `{29, 21, 30, 31}` reach dispatch. **The dispatcher calls
 every producer every visit and each producer ignores foreign opcodes.** C3 is already symmetric:
@@ -489,7 +489,7 @@ Class per `PLAN.md:64`: **S** = SOURCE, **M** = MODEL (a lupa/host world), **P**
 | **F3** | **No `PlaySE` off the main thread.** | S | Static: assert the companion adds no task on `gSystem.vwaitTaskQueue` (`src/main.c:131`) or `gSystem.vBlankIntr` (`src/main.c:127-128`), no `hooks` row on either, and that the only `PlaySE` call site is inside the `mainTaskQueue` SysTask. Runtime: a breakpoint/log gate on `PlaySE` recording the caller — only `Slink_NDS_Service`. | The only caller of `0x0200604C` is the C2 service. |
 | **F4** | **An unknown code is refused.** | S + M | Post `args[0] = 0`, `5`, `255`, and `0xFFFF`; assert each is consumed unplayed with `status = SLINK_ST_FAIL`, `reason = SLINK_REASON_BAD_ARGS` (2, `abi.h:101`), and `opcode` cleared (`trade_producer.h:103`) — never held, never played. Model: a fake `SlinkSoundEngine` + a fake handle word. | Same as Gen 2's `cp SLINK_SFX_NOTIFY + 1 ; jr nc` (`sfx.asm:40-41`), with an ack. |
 | **F5** | **Code 2 is refused with a named reason.** | S + M + P | Post `args[0] = 2` on each artifact. Assert: `SLINK_ST_FAIL`; `reason = 32` (`SOUND_CODE_REFUSED`, title-private per the ABI owner: 32..63 are title reasons, 16..31 are reserved for shared reasons); `opcode` cleared; no `PlaySE`; handle word unchanged; **no audible sound**. Additionally assert the *host* never emits code 2, and that the code table in `patch/src/nds/gen4/sound.h` has a hole at index 2 rather than a placeholder id. | Refused, named, silent, and `mailbox.reason == 32`. **This is the falsifier that proves the owner ruling (`DECISIONS_2026-10-02_companion.md:16`) is honoured rather than quietly filled.** (corrected 2026-10-03: "a **distinct** reason (not the generic 2)" → pinned at 32.) |
-| **F6** | **Two producers do not steal each other's acks.** | S + M | With the C5 trade producer present in the same SysTask: hold a sound request across ≥ 1 visit, and assert the trade producer has not acked it. Then post a `TRADE_PREPARE` and assert the sound producer ignores it (returns without acking — `sound_producer.h:17`). Then assert the trade producer's save watchdog still advances with no trade request outstanding (its state machine runs every visit; only `{29,21,30,31}` reach dispatch). | Exactly one producer acks each request; no producer's watchdog stalls. **Passes only with the foreign-opcode gate in place** (`6c76265c`); it failed against the C2-routed dispatcher the draft proposed. |
+| **F6** | **Two producers do not steal each other's acks.** | S + M | With the C5 trade producer present in the same SysTask: hold a sound request across ≥ 1 visit, and assert the trade producer has not acked it. Then post a `TRADE_PREPARE` and assert the sound producer ignores it (returns without acking — `sound_producer.h:17`). Then assert the trade producer's save watchdog still advances with no trade request outstanding (its state machine runs every visit; only `{29,21,30,31}` reach dispatch). | Exactly one producer acks each request; no producer's watchdog stalls. **Passes only with the foreign-opcode gate in place** (`efc76dd9`); it failed against the C2-routed dispatcher the draft proposed. |
 
 **What F1 cannot prove:** *which* SE handle an id maps to, statically. It resolves it at runtime on
 the artifact under test, and that per-artifact result is what C3 records — it is the "the SE id
@@ -555,7 +555,7 @@ a measurement.
 | **Q5** | **Is `GF_SndGetAfterFadeDelayTimer()` a required second fade guard?** | **INFERRED.** It is the after-fade delay attribute (`src/sound.c:231-232`) and the name says what it says, but no call site was read. Cheap; keep it, revisit if it costs plays. |
 | **Q6** | **Hold bound in visits or vblanks?** | **Visits**, by the Gen 2 rule (`sfx.asm:1-5`). A vblank-based bound is forbidden while `gSystem.frameCounter` is zeroed per loop (`src/main.c:124`; `C2_BEACON_SPEC.md:4`). |
 | **Q7** | **hge `InitSoundData` hook address.** | **RESOLVED.** Not a hook. The call site is `0x02000D12` in HG, SS and hge (pinned-ROM read, `ndspy`), the pret Thumb `bl` targeting `0x02004174`; hge keeps vanilla static-ARM9 addresses. On hge the vehicle is a SLink-owned armips `.org 0x02000D12` patch replacing that 4 B `bl` with a `bl` to a pinned stub that calls `InitSoundData` then latches, following `hg-engine/armips/asm/syntheticoverlay.s:8-10`. Not a `hooks` row: `hooks` replaces the function and cannot call through. Collision census must cover all five writer classes (§2.4). (corrected 2026-10-03: was "UNVERIFIED — must be read off the hge nm/xMAP at C6".) |
-| **Q8** | **F6's fix lands in C2 or C5?** | **Answered: neither.** It landed in the shared producer (Gen 4 `6c76265c`, `claude/gen4-tp-gate`), which now ignores foreign opcodes, so the dispatcher does not route and no C2/C5 file carries the gate. (corrected 2026-10-03: the draft recommended "C2, as a routing-by-opcode rule".) |
+| **Q8** | **F6's fix lands in C2 or C5?** | **Answered: neither.** It landed in the shared producer (Gen 4 `efc76dd9`, `claude/gen4-tp-gate`), which now ignores foreign opcodes, so the dispatcher does not route and no C2/C5 file carries the gate. (corrected 2026-10-03: the draft recommended "C2, as a routing-by-opcode rule".) |
 | **Q9** | **Should the host replace or drop a superseded sound request?** | **Recommend replace-in-place, same `seq`** (§3.2), so the host never has two live sound `seq`s. Not yet exercised by any Gen 1/2 precedent — the GB byte mailbox has no seq. |
 | **Q10** | **Latch vs a read-only sound-work check on hge.** | **OPEN — design alternative, undecided.** Instead of writing a latch through an armips `.org`, the service could read a `sSoundWork` field that only `InitSoundData` sets, and refuse until it is set. Zero writes, no collision with any writer class, but it needs a field proven set-and-only-set by `InitSoundData` on all three artifacts. §2.4. |
 

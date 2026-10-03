@@ -552,6 +552,14 @@ def test_phase_zero_expected_cannot_hide_in_sum_red_revert(api, phase):
     assert api.evaluate("n", to_lua(api._runtime, original)) == "PASS"
 
 
+def test_missing_cpu_histograms_are_a_named_open_not_a_lua_error(api):
+    # PHYSICAL hge/SS at 108c025d: the route never reached a battle, and row m crashed indexing nil histograms.
+    bad = copy.deepcopy(examples()["m"])
+    del bad["histograms"]
+    assert api.evaluate("m", to_lua(api._runtime, bad)) == ("OPEN", "m:CPU histograms")
+    assert api.evaluate("m", to_lua(api._runtime, examples()["m"])) == "PASS"
+
+
 @pytest.mark.parametrize("fault", ["no_active", "still_active", "pointer_changed", "backwards", "invalid_state"])
 def test_save_completion_needs_driver_state_reads_red_revert(api, fault):
     original = examples()["i"]
