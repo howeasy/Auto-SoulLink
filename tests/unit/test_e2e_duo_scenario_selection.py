@@ -958,7 +958,7 @@ def test_randomized_frlg_registration(name, module, target):
     assert callable(getattr(DuoRun, row["oracle"]))
     assert callable(getattr(DuoRun, f"orchestrate_{name}"))
     # link_gen3_rand throws Poke Balls: the Gen 1 ball_hunt retry (out-of-balls / lost catch battle)
-    assert scenario_attempt_limit(name, "gen3_frlg") == (3 if name == "link_gen3_rand" else 1)
+    assert scenario_attempt_limit(name, "gen3_frlg") == (6 if name == "link_gen3_rand" else 1)
     assert not scenario_applies(name, "gen3_rr")
 
 
@@ -996,7 +996,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
-                        + tuple(duo_module.GEN3_RAND_SCENARIOS)):
+                        + tuple(duo_module.GEN3_RAND_SCENARIOS) + ("probe_protected_span_flip_gen3",)):   # the opt-in LIVE PROBE row
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS + GEN3_RR_EXPLICIT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name

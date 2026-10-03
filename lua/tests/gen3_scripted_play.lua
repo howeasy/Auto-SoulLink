@@ -5136,6 +5136,7 @@ return {
     -- var address arithmetic, both independently checkable without an emulator.
     follow = play.follow,
     traced_follow = traced_follow,
+    OBJ_EVENTS_ADDR = OBJ_EVENTS_ADDR,   -- em_carrier_walk's carrier lookup (gObjectEvents base; nil where unknown)
     in_battle = play.in_battle,
     LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
     -- Whiteout signal and checkpoint-battle-state guard (C3-18, C3-29).

@@ -113,10 +113,21 @@ SCENARIOS = {
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
         "frames": 2000000, "gen3_rand": True, "explicit_only": True, "ball_hunt": True,
+        # rng_attempts 6 (this scenario id only, so the Emerald twin has the same budget): the randomized FR/LG Route 1 tables make the catch a
+        # coin flip -- measured ~40-44% failure per attempt (per-throw catch odds 6-33%; fc_frlgcr_link_gen3_rand_frlg_d5a26da9 failed 3/3 attempts,
+        # the Emerald twin whited out once and passed on attempt 2); the predicted failure over 6 attempts is ~0.5%. The failure is "hunt ended
+        # whiteout" before the catch, so more balls would not help; retryable_gen1_rng admits the attempts past 2 for that reason only.
+        "rng_attempts": 6,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_trainer_panel", "oracle": "assert_trainer_panel_gen3_rand_saved"},
+    # LIVE PROBE (not a gate, in no plan): a companion pair where B's cartridge has ONE byte flipped inside a protected span, off every
+    # anchor (gen3_probe_flip_choice). It records what the client and the server actually do with it -- admitted or refused, and why --
+    # and passes on any recorded observation; it fails only when the harness itself breaks. Opt-in: --scenario probe_protected_span_flip_gen3.
+    "probe_protected_span_flip_gen3": {"flags": [], "timeout": 300, "games": ("gen3_frlg", "gen3_lgfr", "gen3_emerald"),
+        "target": "town", "frames": 600000, "no_save": ("a", "b"), "gen3_probe_flip": True, "explicit_only": True,
+        "scenario_module": "probe_flip", "oracle": "assert_probe_protected_span_flip_gen3_saved"},
     # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
     # 1.0, one step west of Rick 102's sight line, Lv13 lead -- gen3_routes skips the T2 walk.
     "trainer_bench_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
@@ -927,6 +938,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     # no runtime bag write, changed activation, or retry for a harness failure.
     if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
         return True
+    # link_gen3_rand (randomized Route 1 catch odds, see its registry row): attempts past 2 retry a "hunt ended whiteout" CAUSE_RNG, only that.
+    if scenario == "link_gen3_rand" and attempt > 2 and SCENARIOS[scenario].get("rng_attempts") == limit:
+        causes = [text for text in results.values() if classify_gen1_result(text) == "CAUSE_RNG"]
+        if causes and all("hunt ended whiteout" in (text or "") for text in causes):
+            return True
     if (scenario == "type_clause_gen3" and scenario_family(game) == "gen3_rr" and limit == 8
             and "RESULT: FAIL (RNG: type first encounter has no overlap)" in
             (results.get("b") or "").splitlines()):
@@ -1082,6 +1098,108 @@ def _new_events(problems, events_before, events_after):
     return events_after[:len(events_after) - kept]
 
 
+# Identity-bearing fields of the (200-char truncated) `TX hello - {...}` receipt lines: a refresh hello may change the AREA (the
+# client re-announces it when the map settles after CONTINUE) but nothing here. ot_id and the party keys are past the truncation, so
+# the server's own view (events.json "Connected (" rows of one text, the locked OT, identity_error) carries that half of the check.
+SAME_SAVE_HELLO_IDENTITY_FIELDS = ("artifact_kind", "foundation", "companion_abi", "badges", "ball_count", "has_pokeballs")
+_RECONNECT_HELLO_LINE_RE = re.compile(r"(?m)^RECONNECT_HELLO\b.*$")
+_TX_HELLO_LINE_RE = re.compile(r"(?m)^TX hello - (\{.*)$")
+
+
+def same_save_hello_problems(result_text):
+    """Violations in a same-save phase receipt (empty = none). The Gen 3 reconnect driver logs ONE `RECONNECT_HELLO <phase> count=N`
+    line (N = hellos sent when the phase starts; a companion cartridge sends capability-refresh hellos too, so N = 1..3 is normal),
+    and every `TX hello` of the phase must carry the same identity-bearing fields as the first. Any hello line for another phase
+    (a different save), any line this check cannot parse, or identity drift between the hellos is a violation."""
+    problems, parsed = [], []
+    for line in _RECONNECT_HELLO_LINE_RE.findall(result_text or ""):
+        m = re.fullmatch(r"RECONNECT_HELLO (\S+) count=(\d+)\s*", line)
+        if m:
+            parsed.append((m[1], int(m[2])))
+        else:
+            problems.append(f"unknown reconnect hello line {line.strip()!r}")
+    other = sorted({phase for phase, _count in parsed if phase != "same_save"})
+    if other:
+        problems.append(f"hello for another save in the same-save window: {', '.join(other)}")
+    hellos = [{k: v for k, v in re.findall(r'"(' + "|".join(SAME_SAVE_HELLO_IDENTITY_FIELDS) + r')":("[^"]*"|-?\d+|true|false)', body)}
+              for body in _TX_HELLO_LINE_RE.findall(result_text or "")]
+    for k, hello in enumerate(hellos[1:], 2):
+        drift = sorted(f for f in SAME_SAVE_HELLO_IDENTITY_FIELDS if f in hello and f in hellos[0] and hello[f] != hellos[0][f])
+        if drift:
+            problems.append(f"hello #{k} differs from hello #1 in {', '.join(drift)} (not a capability refresh of one save)")
+    return problems
+
+
+def same_save_hello_seen(result_text):
+    """The wait predicate: True once a `RECONNECT_HELLO same_save count=N` line with N >= 1 is there. It RAISES on a violation
+    (same_save_hello_problems) instead of waiting out the timeout, so a mixed same/different-save window fails at once."""
+    problems = same_save_hello_problems(result_text)
+    if problems:
+        raise RuntimeError("same-save reconnect window is not one save: " + "; ".join(problems))
+    return re.search(r"(?m)^RECONNECT_HELLO same_save count=[1-9]\d*\s*$", result_text or "") is not None
+
+
+_CONNECTED_ROW_RE = re.compile(r"Connected \((.+), (\d+) mons\)")
+_HELLO_FACTS_RE = re.compile(r"(?m)^HELLO_FACTS party=(absent|\d+) party_hidden=(true|false)\s*$")
+
+
+def hello_facts_from(result_text):
+    """The client-side facts of each hello a phase sent, in order (lua/tests/duo/duo_gen3_main.lua `HELLO_FACTS`): the party it carried
+    (`None` when the field is absent, else its length) and whether it declared the party WITHHELD."""
+    return [{"party": None if p == "absent" else int(p), "hidden": h == "true"} for p, h in _HELLO_FACTS_RE.findall(result_text or "")]
+
+
+def reconnect_hello_party_problems(new_hellos, events_before, hello_facts=None):
+    """Identity and party-size problems among A's NEW accepted hello rows (newest first, as events.json stores them).
+
+    `hello_facts=None` is the strict rule: every row is the same text (one rom, one party size). With `hello_facts` (hello_facts_from) one
+    relaxation exists: a row that reports 0 mons while the baseline reported more is accepted ONLY when the client-side fact for that very
+    hello says its party was WITHHELD (party_hidden=true). The server keeps the stored party intact for a withheld hello (server/state.py:
+    1958-1959, 2065 `if not hidden`), but REPLACES it for an empty party that is not withheld (:2067, :2087-2089 party_keys emptied), so a
+    present-and-empty party stays a failure, as does any other count; the rom must be one throughout and at least one hello must carry the
+    baseline party."""
+    rows = [_CONNECTED_ROW_RE.fullmatch(row.get("text", "")) for row in new_hellos]
+    if hello_facts is None:
+        return [] if len({row.get("text") for row in new_hellos}) == 1 else [
+            "A's accepted reconnect hellos name more than one cartridge/party (another identity)"]
+    if any(m is None for m in rows):
+        return ["A's accepted reconnect hello text is not `Connected (<rom>, <n> mons)`"]
+    problems = []
+    if len({m[1] for m in rows}) != 1:
+        problems.append("A's accepted reconnect hellos name more than one cartridge (another identity)")
+    baseline = next((int(m[2]) for m in (_CONNECTED_ROW_RE.fullmatch(r.get("text", "")) for r in events_before
+                                         if r.get("type") == "hello" and r.get("player") == "a") if m), None)
+    counts = [int(m[2]) for m in reversed(rows)]                     # chronological, to line up with the client's own hello log
+    if baseline is None:
+        return problems + (["A's accepted reconnect hellos differ in party size and the baseline has no A hello to judge them by"]
+                           if len(set(counts)) != 1 else [])
+    odd = [i for i, n in enumerate(counts) if n != baseline]
+    if odd and len(hello_facts) != len(counts):
+        problems.append(f"{len(counts)} new A hello rows but {len(hello_facts)} client HELLO_FACTS lines: a hello whose party differs "
+                        f"from the baseline ({baseline}) cannot be matched to its client-side facts")
+    else:
+        for i in odd:
+            if counts[i] != 0:
+                problems.append(f"hello #{i + 1} reports {counts[i]} mons, the baseline party is {baseline}")
+            elif hello_facts[i] != {"party": 0, "hidden": True}:
+                problems.append(f"hello #{i + 1} reports 0 mons but its party was not withheld "
+                                f"(client: party={hello_facts[i]['party']}, party_hidden={hello_facts[i]['hidden']}): the server "
+                                f"treats that as an EMPTY party")
+    if len(odd) == len(counts):
+        problems.append(f"no A hello carried the baseline party ({baseline} mons)")
+    return problems
+
+
+def accepted_reconnect_hellos(events_before, events_after, hello_facts=None):
+    """True when A added at least one hello row since the baseline, every one ACCEPTED ("Connected (") and one identity
+    (reconnect_hello_party_problems), with no event-log rewrite."""
+    problems = []
+    new_hellos = _new_a_hellos(problems, events_before, events_after)
+    return (not problems and bool(new_hellos)
+            and all(row.get("text", "").startswith("Connected (") for row in new_hellos)
+            and not reconnect_hello_party_problems(new_hellos, events_before, hello_facts))
+
+
 def _new_a_hellos(problems, events_before, events_after):
     """A's hellos among the rows this reconnect actually added, not among all of history."""
     return [row for row in _new_events(problems, events_before, events_after)
@@ -1089,7 +1207,7 @@ def _new_a_hellos(problems, events_before, events_after):
 
 
 def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id,
-                            allow_accepted_refreshes=False):
+                            allow_accepted_refreshes=False, hello_facts=None):
     """Public/persisted C-2 facts; empty means a safe same-save reconnect."""
     problems = []
     a = (after.get("status", {}).get("players") or {}).get("a") or {}
@@ -1111,6 +1229,8 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
         if not new_hellos or any(not row.get("text", "").startswith("Connected (")
                                  for row in new_hellos):
             problems.append("A did not add only accepted reconnect hellos")
+        else:
+            problems += reconnect_hello_party_problems(new_hellos, events_before, hello_facts)
     elif len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
@@ -3388,6 +3508,39 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
                               for i in range(0, size, 11)}}
 
 
+def gen3_probe_flip_choice(patched, row, anchors):
+    """The ONE byte the protected-span probe flips, chosen by a fixed rule so the same build always gives the same byte.
+
+    Rule: the LAST byte of the payload's version slot (`row["payload_version_slot"]`, inside the first protected span). The slot is a
+    GBA text string, 0xFF-terminated and zero padded; its last byte is padding after the terminator, so the game cannot read it, the
+    flip does not break boot, and it still changes the ROM hash. If that byte is not a 0x00 behind a 0xFF terminator, the fallback is the
+    first byte of the first protected span outside the version slot. The byte must lie in a protected span and outside every anchor
+    (`anchors`: [(rom_offset, length)]), else ValueError. Returns {offset, before, after, span, rule}."""
+    spans = row["protected_spans"]
+    slot = row["payload_version_slot"]
+    base = spans[0]["offset"] + slot["offset"]
+    slot_bytes = patched[base:base + slot["length"]]
+    if slot_bytes[-1:] == b"\x00" and b"\xff" in slot_bytes[:-1]:
+        offset, rule = base + slot["length"] - 1, "version-slot padding byte"
+    else:
+        offset, rule = next((spans[0]["offset"] + i for i in range(spans[0]["size"])
+                             if not base <= spans[0]["offset"] + i < base + slot["length"]), None), "first non-slot payload byte"
+    span = next((k for k, s in enumerate(spans) if offset is not None and s["offset"] <= offset < s["offset"] + s["size"]), None)
+    if span is None:
+        raise ValueError("probe byte is not inside a protected span")
+    if any(start <= offset < start + length for start, length in anchors):
+        raise ValueError(f"probe byte {offset:#x} is on an anchor")
+    return {"offset": offset, "before": patched[offset], "after": patched[offset] ^ 0x01, "span": span, "rule": rule,
+            "span_offset": spans[span]["offset"], "span_size": spans[span]["size"]}
+
+
+def probe_flip_facts(flip):
+    """The flipped cartridge, named: which title (B's cart: gen3_frlg flips LeafGreen, gen3_lgfr FireRed, gen3_emerald Emerald), its byte,
+    the protected span that byte is inside, and that it is off every anchor."""
+    return (f"flipped_title={flip['title']} cart=b offset={flip['offset']:#x} inside_protected_span={flip['span_offset']:#x}+{flip['span_size']:#x} "
+            f"(span {flip['span']}) on_anchor=false (checked {flip['anchors_checked']} anchors)")
+
+
 def gen3_rand_equivalent_rom(patched, protected_spans):
     """SYNTH 32(b) on the COMPANION cartridge: an unknown hash whose tables and engine/companion sites are
     byte-identical to the published companion -- the last 0xFF padding byte outside every protected span is
@@ -3425,6 +3578,12 @@ def gen3_rand_hello_problems(hello, facts, kind="rand"):
     return problems
 
 
+# The clean-pairing class: the server commits the artifact_kind of the FIRST hello of a run (server/server.py:2271-2284). In the
+# equivalent_pair leg the companion partner may land first (committing "companion") or the clean-equivalent randomized cart may
+# (committing "clean"); both are the same pairing class (gen3_frlge.pairing_kind maps companion -> clean), so either is correct.
+GEN3_EQUIVALENT_PAIRING_KINDS = ("clean", "companion")
+
+
 def gen3_rand_admission_problems(phase, status, hellos, facts):
     """No connected/default-admitted shortcut: require actual contract verdicts."""
     problems = []
@@ -3454,9 +3613,10 @@ def gen3_rand_admission_problems(phase, status, hellos, facts):
             if status.get("links"):
                 problems.append(f"{side}: admission-only negative leg created links")
     if phase in ("pair", "equivalent_pair"):
-        effective = "clean" if phase == "equivalent_pair" else "rand"
-        if status.get("gen3_rand_effective_kind") != effective:
-            problems.append(f"{phase}: effective kind is not {effective}")
+        effective = GEN3_EQUIVALENT_PAIRING_KINDS if phase == "equivalent_pair" else ("rand",)
+        if status.get("gen3_rand_effective_kind") not in effective:
+            problems.append(f"{phase}: effective kind {status.get('gen3_rand_effective_kind')!r} is not "
+                            f"{' or '.join(effective)}")
         if status.get("gen3_rand_identity_errors") != {}:
             problems.append(f"{phase}: identity/pairing error proof missing or nonempty")
     if phase == "equivalent_pair" and (
@@ -3835,7 +3995,8 @@ class DuoRun:
         """Patch-first preflight: a side that would boot a CLEAN companion-required cartridge as a working
         client dies at launch (Entry.admit_routed), so refuse the run up front and name why. The clean
         FR/LG/Emerald plans land here; --gen3-companion, a companion rom_kind and `expect_refused` clear it."""
-        if not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
+        if (not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade")
+                or self.cfg.get("gen3_probe_flip")):      # (the probe stages its own companion carts; --gen3-companion is optional there)
             return []
         problems = []
         for inst in ("a", "b"):
@@ -3864,7 +4025,7 @@ class DuoRun:
             from tools.gen3_trade_duo import player_manifest
             return player_manifest(self._native_candidate, inst)["rom"]
         import gen3_fixtures
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_probe_flip"):
             if not getattr(self, "_rand_current", None):
                 raise RuntimeError("randomized ROM preflight has not run")
             return self._rand_current[inst]["rom"]
@@ -3915,7 +4076,8 @@ class DuoRun:
             return
         from tools.gen3_final_cut import rom_pins
 
-        sides = {inst: self._gen3_title(inst) for inst in ("a", "b")}
+        # the protected-span probe's B is an UNKNOWN-hash cart on purpose (one byte flipped): only A is proven by hash
+        sides = {inst: self._gen3_title(inst) for inst in (("a",) if self.cfg.get("gen3_probe_flip") else ("a", "b"))}
         problems, proofs = gen3_companion_admission_problems(results, sides, rom_pins(REPO, require_companions=True))
         if problems:
             raise RuntimeError("companion provenance: " + "; ".join(problems))
@@ -3928,7 +4090,7 @@ class DuoRun:
         if self.cfg.get("gen3_native_trade"):
             from tools import gen3_fixtures
             return os.path.join(self._saveram_dir(inst), gen3_fixtures.saveram_name(self._gen3_rom(inst)))
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_probe_flip"):
             import gen3_fixtures
 
             current = self._rand_current[inst]
@@ -4619,6 +4781,7 @@ class DuoRun:
                       f"scope={scope} install_root={REPO}")
             duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
             duo["expect_refused"] = self._gen3_expect_refused(inst)
+            duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"      # B holds the flipped cartridge; A is ordinary
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
@@ -9162,6 +9325,88 @@ class DuoRun:
         self.go()
         self.assert_link_new()
 
+    def _prepare_gen3_probe_flip(self):
+        """A boots the byte-pinned companion; B boots the published companion with ONE byte flipped (gen3_probe_flip_choice). The edit
+        is staged under patch/build/probe_flip_<lane>/ and recorded in the receipt before anything launches."""
+        gen3_codec()
+        from tools.gen3_companions import published
+        from tools.gen3_final_cut import STAGED, rom_pins
+
+        pins = rom_pins(REPO, require_companions=True)
+        title_a, title_b = (self.gcfg["sides"][side][0] for side in ("a", "b"))
+        clean = next((base / STAGED[title_b] for base in (Path(REPO), *Path(REPO).parents) if (base / STAGED[title_b]).is_file()), None)
+        if clean is None:
+            raise RuntimeError(f"BLOCKED: pinned clean {title_b} ROM absent for the probe build")
+        clean_raw = clean.read_bytes()
+        if hashlib.sha1(clean_raw).hexdigest() != pins[title_b]:
+            raise RuntimeError(f"present-but-wrong clean {title_b} SHA-1")
+        published_row = published(title_b, clean_raw)
+        if published_row is None:
+            raise RuntimeError(f"BLOCKED: no published companion for {title_b} (patch/dist/gen3_companions.json)")
+        patched, row = published_row
+        pack = Path(REPO) / "data" / "games" / GEN3_PACKS[title_b].split("/")[0]
+        checkpoint = json.loads((pack / "write_checkpoint.json").read_text(encoding="utf-8"))[title_b]
+        anchors = [(a["rom_offset"], len(a["expected_hex"]["companion"]) // 2) for a in checkpoint["anchors"].values()]
+        choice = gen3_probe_flip_choice(patched, row, anchors)
+        flipped = patched[:choice["offset"]] + bytes([choice["after"]]) + patched[choice["offset"] + 1:]
+        stage = Path(BUILD) / f"probe_flip_{self.lane}"
+        stage.mkdir(parents=True, exist_ok=True)
+        dest = stage / f"b_{title_b}.gba"
+        dest.write_bytes(flipped)
+        self._probe_flip = {**choice, "title": title_b, "anchors_checked": len(anchors), "sha1": hashlib.sha1(flipped).hexdigest(),
+                            "published_sha1": hashlib.sha1(patched).hexdigest()}
+        self._rand_current = {"a": {"title": title_a, "rom": self._gen3_companion_rom(title_a)},
+                              "b": {"title": title_b, "rom": dest.relative_to(REPO).as_posix()}}
+        self._rand_inputs = dict(self._rand_current)
+        self._pydec_note(
+            f"PROBE_FLIP_INPUT {probe_flip_facts(self._probe_flip)} before={choice['before']:#04x} after={choice['after']:#04x} "
+            f"span={choice['span']} rule='{choice['rule']}' sha1={self._probe_flip['sha1']} published_sha1={self._probe_flip['published_sha1']}")
+
+    def orchestrate_probe_protected_span_flip_gen3(self):
+        """Record what the flipped cartridge (B) gets: refused at launch by the client's own admission, or a hello the server then
+        admits or rejects. Never asserts either outcome; an observation of either kind is the result."""
+        def b_outcome():
+            text = self._read_receipt("b")
+            refused = re.search(r"(?m)^PROBE_ADMISSION client=refused_at_launch reason=(.*)$", text)
+            if refused:
+                return {"client": "refused_at_launch", "reason": refused[1].strip()}
+            if hello_facts_from(text):
+                return {"client": "admitted", "reason": ""}
+            return None
+        seen = self.wait_for("b: the flipped cartridge's launch outcome", b_outcome, 180)
+        server = {"server": "n/a (the client never sent a hello)", "server_reason": ""}
+        if seen["client"] == "admitted":
+            def verdict():
+                player = ((self._status() or {}).get("players") or {}).get("b") or {}
+                if player.get("admission") in ("admitted", "rejected") or player.get("identity_error"):
+                    return player
+                return None
+            player = self.wait_for("b: the server's verdict on the flipped cartridge", verdict, 90)
+            server = {"server": player.get("admission") or "identity_error", "server_reason": player.get("admission_reason") or
+                      player.get("identity_error") or ""}
+        self._probe_observed = {**seen, **server}
+        flip = self._probe_flip
+        self._pydec_note(
+            f"PROBE_FLIP_OBSERVED {probe_flip_facts(flip)} client={seen['client']} server={server['server']} "
+            f"reason='{(seen['reason'] or server['server_reason']).replace(chr(10), ' ')[:200]}'")
+        self.go()
+
+    def assert_probe_protected_span_flip_gen3_saved(self, results):
+        """A probe, not a gate: it passes when an observation was recorded (either outcome); it fails only when the harness broke."""
+        observed = getattr(self, "_probe_observed", None)
+        problems = []
+        if not observed:
+            problems.append("no admission observation was recorded for the flipped cartridge")
+        elif observed["client"] == "refused_at_launch" and not re.search(r"(?m)^PROBE_ADMISSION client=refused_at_launch ", results["b"]):
+            problems.append("b: the refusal observation is not in its own receipt")
+        elif observed["client"] == "admitted" and not re.search(r"(?m)^PROBE_CLIENT admitted ", results["b"]):
+            problems.append("b: the admitted observation is not in its own receipt")
+        if observed and observed["client"] == "admitted" and not hello_facts_from(results["b"]):
+            problems.append("b: no hello was logged although the probe records it as admitted")
+        outcome = (observed or {}).get("client", "nothing")
+        self._gen3_raise(problems, f"OBSERVED {outcome} (an observation, not a verdict): probe_protected_span_flip "
+                          f"{probe_flip_facts(self._probe_flip) if getattr(self, '_probe_flip', None) else 'no flip recorded'} {observed}")
+
     def _prepare_gen3_rand(self):
         problems = gen3_rand_dependencies()
         if problems:
@@ -9223,6 +9468,7 @@ class DuoRun:
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
             self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} companion=overlay "
+                             f"companion_pin={pins.get(title + '_companion', '')[:12]} "
                              f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
                              f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:
@@ -9404,6 +9650,7 @@ class DuoRun:
     def orchestrate_admit_randomized_frlg(self):
         self._gen3_prelude()
         self._observe_gen3_rand_admission("pair")
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
 
@@ -9415,6 +9662,7 @@ class DuoRun:
         self._observe_gen3_rand_admission("pair")
         self.go()
         self.assert_link_new()
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
 
     def orchestrate_trainer_panel_gen3_rand(self):
@@ -9426,15 +9674,21 @@ class DuoRun:
         problems = gen3_rand_panel_problems(probes, self._rand_facts, retail, expected_area=area)
         if problems:
             raise RuntimeError("; ".join(problems))
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
+
+    def _assert_gen3_rand_roms_unchanged(self):
+        """Every ROM file the attempt prepared (all six randomized rows share one stage dir) still has the sha1 its facts were
+        taken from. Called by all three randomized orchestrations and by the shared verdict check."""
+        for side, row in self._rand_inputs.items():
+            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
+                raise RuntimeError(f"{side}: ROM file changed during the attempt")
 
     def _check_gen3_rand_pair(self):
         if not self._live_complete.get(self.scenario):
             raise RuntimeError("randomized live legs incomplete")
-        for side, row in self._rand_inputs.items():
-            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
-                raise RuntimeError(f"{side}: ROM file changed during the attempt")
+        self._assert_gen3_rand_roms_unchanged()
         evidence = self._rand_evidence["pair"]
         problems = gen3_rand_admission_problems("pair", **evidence, facts=self._rand_facts)
         if problems:
@@ -9467,8 +9721,9 @@ class DuoRun:
             problems += gen3_rand_saved_problems(self._gen3_rand_fresh_flushed(side), self._gen3_fixture_bytes(side),
                                                  unchanged_bytes=True)
         self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind(companion)/rule-changed ROMs refused; "
-                                  "a clean cartridge refused at launch; 32(b) declared-rand companion-equivalent pair "
-                                  "effective=clean; flash unchanged")
+                                  "a clean cartridge refused at launch; 32(b) declared-rand unknown-hash companion admitted by anchors + "
+                                  "mailbox, effective pairing class clean (committed kind clean or companion, by hello "
+                                  "order); flash unchanged")
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
@@ -9609,25 +9864,21 @@ class DuoRun:
             raise RuntimeError("the live link changed when A's EmuHawk was killed")
         self.launch_instance("a", phase="same_save", seed=False)
         same_path = self._phase_result_path("a", "same_save")
-        self.wait_for("same-save A hello",
-                      lambda: "RECONNECT_HELLO same_save count=1" in text(same_path), 300)
+        self.wait_for("same-save A hello", lambda: same_save_hello_seen(text(same_path)), 300)
         self.wait_for("server accepts A's same-save party", lambda: (
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
             60)
-        def accepted_reconnect_hello():
-            problems = []
-            new_hellos = _new_a_hellos(problems, baseline["events"], self._reconnect_events())
-            return (not problems and bool(new_hellos)
-                    and all(row.get("text", "").startswith("Connected (") for row in new_hellos))
-
-        self.wait_for("durable accepted reconnect hello", accepted_reconnect_hello, 30)
+        self.wait_for("durable accepted reconnect hello",
+                      lambda: accepted_reconnect_hellos(baseline["events"], self._reconnect_events(),
+                                                        hello_facts_from(text(same_path))), 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
                                            baseline["links"]["player_identity"]["a"]["ot_id"],
-                                           allow_accepted_refreshes=True)
+                                           allow_accepted_refreshes=True, hello_facts=hello_facts_from(text(same_path)))
+        problems += same_save_hello_problems(text(same_path))
         problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
             r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
         if problems:
@@ -10400,6 +10651,8 @@ class DuoRun:
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.cfg.get("gen3_rand"):
                 self._prepare_gen3_rand()
+            if self.cfg.get("gen3_probe_flip"):
+                self._prepare_gen3_probe_flip()
             if self.cfg.get("gen3_native_trade"):
                 self._prepare_native_trade()
             if self.scenario == "admit_randomized_new":

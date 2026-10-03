@@ -44,7 +44,12 @@ end
 return function(ctx)
     if not ctx.wait_go() then return false, "no go-file" end
     if ctx.D.ball_stock_phase and ctx.D.phase == "post_flip" then
-        if ctx.balls() ~= 20 or ctx.session.state.has_pokeballs ~= true then
+        -- the bag is readable at once, but the client latches has_pokeballs only on its next 30-frame
+        -- tick (lua/gen3/client.lua latch_balls via tick_fields): wait for that tick instead of racing it
+        -- (frlgc ball_gate fr/lg 2026-10-03: the check ran on the first field frame, before any tick)
+        if ctx.balls() ~= 20 then return false, "post-flip SYNTH stock was not read back" end
+        if not ctx.wait_until(function() return ctx.session.state.has_pokeballs == true end, 10,
+                              "post-flip stock latch") then
             return false, "post-flip SYNTH stock was not read back"
         end
         ctx.jlog("BALL_STOCK_READY", {balls=ctx.balls(), active=ctx.session.state.has_pokeballs})

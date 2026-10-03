@@ -505,6 +505,15 @@ end
 
 local C = require("connector")
 local raw_send = C.send
+-- What the server needs to read a hello's party, which the 200-char `TX hello` line above cannot show: the party the hello carried
+-- (`absent` when the field is missing, else its length) and whether it declared the party WITHHELD (party_hidden). The Gen 3 client
+-- always sends `party` -- empty when withheld; server/state.py:1958-1959 keeps the stored party intact for a withheld hello and
+-- replaces it (party_keys emptied, :2065-2089) for an empty one that is not withheld, so a "0 mons" hello means two things.
+local function hello_facts(msg)
+    local party = type(msg) == "table" and msg.party
+    return string.format("HELLO_FACTS party=%s party_hidden=%s", type(party) == "table" and tostring(#party) or "absent",
+                         type(msg) == "table" and msg.party_hidden == true and "true" or "false")
+end
 C.send = function(line)
     local ok, msg = pcall(JSON.decode, line)
     local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
@@ -517,6 +526,7 @@ C.send = function(line)
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
         tx[#tx + 1] = { event = name, key = key, msg = ok and msg or nil }
         log(fmt("TX %s %s %s", name, key, name == "hello" and line:sub(1, 200) or line))
+        if name == "hello" then log(hello_facts(msg)) end
     end
     return raw_send(line)
 end
@@ -753,7 +763,7 @@ if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun))
 -- (SLINK_DUO.expect_refused: a clean companion-required cartridge, patch-first 2026-10-02) passes
 -- ONLY when run.lua refused it with the companion verdict and built nothing; an admitted client, a
 -- different refusal (bad hash, header-only) or no refusal at all fails it. -> done, pass, msg
-local function launch_verdict(client_built, refusal, expect_refused)
+local function launch_verdict(client_built, refusal, expect_refused, probe)
     if expect_refused then
         if client_built then return true, false, "expected a refusal but the cartridge was admitted and a client built" end
         if refusal and refusal:find("needs the SLink companion patch", 1, true) then
@@ -762,12 +772,17 @@ local function launch_verdict(client_built, refusal, expect_refused)
         return true, false, "expected the companion-patch refusal, got: " .. tostring(refusal or "no refusal logged")
     end
     if not client_built then
+        -- an OBSERVATION probe (SLINK_DUO.probe_admission) records a refusal as its result; it is not a failure of the harness
+        if probe then return true, true, "OBSERVED refused: probe observed: refused at launch: " .. tostring(refusal or "no reason logged") end
         return true, false, "run.lua built no client: " .. tostring(refusal or "no reason logged")
     end
     return false
 end
-local launch_done, launch_pass, launch_msg = launch_verdict(SLINK_GEN3_CLIENT, refused, D.expect_refused)
+local launch_done, launch_pass, launch_msg = launch_verdict(SLINK_GEN3_CLIENT, refused, D.expect_refused, D.probe_admission)
 if launch_done then
+    if D.probe_admission and not SLINK_GEN3_CLIENT then
+        log("PROBE_ADMISSION client=refused_at_launch reason=" .. tostring(refused or "none logged"))
+    end
     if launch_pass then
         log("REFUSED_AT_LAUNCH " .. tostring(refused))
         log(fmt("WRITES %d", writes))
@@ -2039,6 +2054,40 @@ end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
 if EMERALD_ENGINE then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
+-- The Emerald companion's wandering trade NPC can stand on the Center route; a blocked step waits
+-- it out and never taps A (lua/tests/em_carrier_walk.lua has the why). ONE helper for the walk
+-- in (walk_to_pc) and the walk back out (walk_pc_to_grass).
+local EMW = load_or_die("/lua/tests/em_carrier_walk.lua", "em_carrier_walk.lua")
+local function em_carrier_tile()
+    local base = SP.OBJ_EVENTS_ADDR
+    if not base then return nil end
+    local g, n = G.map(cp)
+    for i = 1, 15 do
+        local o = base + i * 0x24
+        if (memory.read_u8(o) & 1) ~= 0 and memory.read_u8(o + 8) == EMW.CARRIER_LOCAL_ID
+           and memory.read_u8(o + 9) == n and memory.read_u8(o + 10) == g then
+            return memory.read_s16_le(o + 0x10) - 7, memory.read_s16_le(o + 0x12) - 7
+        end
+    end
+end
+local function em_center_walk(path_name, label)
+    local p = assert(SP.PATHS[path_name], "no PATHS entry " .. path_name)
+    EMW.new({
+        pos = function() return G.pos(cp) end,
+        map = function() return play.map(cp) end,
+        hold = function(dir, n) for _ = 1, n do joypad.set({ [dir] = true }); G.advance() end end,
+        idle = G.idle,
+        tap_b = function() G.tap("B", 3, 13) end,
+        quiet = function()
+            return play.on_field(cp) and G.pred_ok(cp, "script_context_status")
+                and G.pred_ok(cp, "field_controls_locked")
+        end,
+        carrier = em_carrier_tile,
+        wait_at = function(x, y) return play.wait_at(cp, x, y, 120) end,
+        finish = G.finish,
+    }).walk(p, label, path_name)
+end
+
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
     if EMERALD_ENGINE then
@@ -2047,7 +2096,7 @@ function ctx.walk_to_pc(label)
         local ok, why = play.enter_warp(cp, "Up", 20)
         if not ok then error(label .. ": the Oldale Center door never fired a warp: " .. tostring(why)) end
         SP.verify_destination(cp, label, { group = 2, num = 2, x = 7, y = 8 })
-        play.follow(cp, "em_oldale_center_to_pc", label)
+        em_center_walk("em_oldale_center_to_pc", label)
         G.tap("Up", 2, 13)
         return
     end
@@ -2065,7 +2114,7 @@ function ctx.walk_pc_to_grass(label)
     if EMERALD_ENGINE then
         -- E4c: the PC -> the Center door landing (7,8) -> out through Oldale's door; the exit
         -- lands on (6,17), the pinned `from` of the Route 103 walk ctx.hunt takes next
-        play.follow(cp, "em_pc_to_center_door", label)
+        em_center_walk("em_pc_to_center_door", label)
         local ok, why = play.enter_warp(cp, "Down", 20)
         if not ok then error(label .. ": the Oldale Center exit never fired a warp: " .. tostring(why)) end
         return

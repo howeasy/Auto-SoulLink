@@ -1,0 +1,72 @@
+# G4 final cut b6cd75c670eef0911e56c8f056649dcbd192d31a -- tools/gen3_final_cut.py summary (written 2026-10-03T08:55:49Z)
+# RUN 58 / CARRIED 0 / CACHED 0 / FAIL 7
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | frlgc_source_firered | FRLGC-SOURCE | PASS | 1 | fc_frlgc_source_firered_b6cd75c6.txt |
+| 2 | frlgc_source_leafgreen | FRLGC-SOURCE | PASS | 1 | fc_frlgc_source_leafgreen_b6cd75c6.txt |
+| 3 | frlgc_source_emerald | FRLGC-SOURCE | PASS | 1 | fc_frlgc_source_emerald_b6cd75c6.txt |
+| 4 | frlgc_bootcheck_firered_party_town | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_firered_party_town_b6cd75c6.txt |
+| 5 | frlgc_bootcheck_firered_party_town_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_firered_party_town_b_b6cd75c6.txt |
+| 6 | frlgc_bootcheck_firered_party_battle | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_firered_party_battle_b6cd75c6.txt |
+| 7 | frlgc_bootcheck_firered_party_battle_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_firered_party_battle_b_b6cd75c6.txt |
+| 8 | frlgc_bootcheck_leafgreen_party_town | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_leafgreen_party_town_b6cd75c6.txt |
+| 9 | frlgc_bootcheck_leafgreen_party_town_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_leafgreen_party_town_b_b6cd75c6.txt |
+| 10 | frlgc_bootcheck_leafgreen_party_battle | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_leafgreen_party_battle_b6cd75c6.txt |
+| 11 | frlgc_bootcheck_leafgreen_party_battle_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_leafgreen_party_battle_b_b6cd75c6.txt |
+| 12 | frlgc_bootcheck_emerald_town | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_emerald_town_b6cd75c6.txt |
+| 13 | frlgc_bootcheck_emerald_town_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_emerald_town_b_b6cd75c6.txt |
+| 14 | frlgc_bootcheck_emerald_battle | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_emerald_battle_b6cd75c6.txt |
+| 15 | frlgc_bootcheck_emerald_battle_b | FRLGC-BOOT | PASS | 1 | fc_frlgc_bootcheck_emerald_battle_b_b6cd75c6.txt |
+| 16 | frlgc_faint_cmd_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_faint_cmd_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 17 | frlgc_link_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_link_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 18 | frlgc_boxsync_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_boxsync_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 19 | frlgc_reconnect_gen3_fr_as_a_companion | FRLGC-DUO | FAIL exit=1 | 2 | fc_frlgc_reconnect_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 20 | frlgc_deadzone_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_deadzone_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 21 | frlgc_whiteout_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_whiteout_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 22 | frlgc_whiteout_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_whiteout_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 23 | frlgc_center_controls_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_center_controls_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 24 | frlgc_center_controls_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_center_controls_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 25 | frlgc_linked_faint_active_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 26 | frlgc_linked_faint_active_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 27 | frlgc_active_end_gen3_fr_as_a_companion | FRLGC-DUO | FAIL exit=1 | 1 | fc_frlgc_active_end_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 28 | frlgc_active_end_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_active_end_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 29 | frlgc_linked_faint_active_whiteout_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_whiteout_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 30 | frlgc_linked_faint_active_whiteout_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_whiteout_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 31 | frlgc_linked_faint_active_trainer_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_trainer_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 32 | frlgc_linked_faint_active_trainer_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_trainer_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 33 | frlgc_save_then_write_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_save_then_write_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 34 | frlgc_save_then_write_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_save_then_write_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 35 | frlgc_faint_cmd_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_faint_cmd_gen3_em_as_a_companion_b6cd75c6.txt |
+| 36 | frlgc_reconnect_gen3_em_as_a_companion | FRLGC-DUO | FAIL exit=1 | 2 | fc_frlgc_reconnect_gen3_em_as_a_companion_b6cd75c6.txt |
+| 37 | frlgc_deadzone_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_deadzone_gen3_em_as_a_companion_b6cd75c6.txt |
+| 38 | frlgc_link_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_link_gen3_em_as_a_companion_b6cd75c6.txt |
+| 39 | frlgc_boxsync_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_boxsync_gen3_em_as_a_companion_b6cd75c6.txt |
+| 40 | frlgc_linked_faint_active_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_linked_faint_active_gen3_em_as_a_companion_b6cd75c6.txt |
+| 41 | frlgc_whiteout_gen3_em_as_a_companion | FRLGC-DUO | FAIL exit=1 | 1 | fc_frlgc_whiteout_gen3_em_as_a_companion_b6cd75c6.txt |
+| 42 | frlgc_species_clause_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_clause_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 43 | frlgc_species_clause_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_clause_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 44 | frlgc_species_clause_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_clause_gen3_em_as_a_companion_b6cd75c6.txt |
+| 45 | frlgc_gender_clause_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_gender_clause_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 46 | frlgc_gender_clause_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_gender_clause_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 47 | frlgc_gender_clause_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_gender_clause_gen3_em_as_a_companion_b6cd75c6.txt |
+| 48 | frlgc_type_clause_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_type_clause_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 49 | frlgc_type_clause_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_type_clause_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 50 | frlgc_type_clause_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_type_clause_gen3_em_as_a_companion_b6cd75c6.txt |
+| 51 | frlgc_ball_gate_gen3_fr_as_a_companion | FRLGC-DUO | FAIL exit=1 | 1 | fc_frlgc_ball_gate_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 52 | frlgc_ball_gate_gen3_lg_as_a_companion | FRLGC-DUO | FAIL exit=1 | 1 | fc_frlgc_ball_gate_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 53 | frlgc_ball_gate_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_ball_gate_gen3_em_as_a_companion_b6cd75c6.txt |
+| 54 | frlgc_shiny_bonus_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_shiny_bonus_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 55 | frlgc_shiny_bonus_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_shiny_bonus_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 56 | frlgc_shiny_bonus_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_shiny_bonus_gen3_em_as_a_companion_b6cd75c6.txt |
+| 57 | frlgc_species_family_gen3_fr_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_family_gen3_fr_as_a_companion_b6cd75c6.txt |
+| 58 | frlgc_species_family_gen3_lg_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_family_gen3_lg_as_a_companion_b6cd75c6.txt |
+| 59 | frlgc_species_family_gen3_em_as_a_companion | FRLGC-DUO | PASS | 1 | fc_frlgc_species_family_gen3_em_as_a_companion_b6cd75c6.txt |
+| 60 | frlgc_zip_build | FRLGC-ZIP | PASS | 1 | fc_frlgc_zip_build_b6cd75c6.txt |
+| 61 | frlgc_zip_check | FRLGC-ZIP | PASS | 1 | fc_frlgc_zip_check_b6cd75c6.txt |
+| 62 | frlgc_zip_boot_firered | FRLGC-ZIP | PASS | 1 | fc_frlgc_zip_boot_firered_b6cd75c6.txt |
+| 63 | frlgc_zip_boot_leafgreen | FRLGC-ZIP | PASS | 1 | fc_frlgc_zip_boot_leafgreen_b6cd75c6.txt |
+| 64 | frlgc_zip_boot_emerald | FRLGC-ZIP | PASS | 1 | fc_frlgc_zip_boot_emerald_b6cd75c6.txt |
+| 65 | frlgc_release_gate_quick | FRLGC-GATE | FAIL exit=1 | 1 | fc_frlgc_release_gate_quick_b6cd75c6.txt |
+
+OVERALL: FAIL (58/65 rows)

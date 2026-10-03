@@ -1,0 +1,111 @@
+# gen3_final_cut row=frlgc_species_family_gen3_em_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario species_family_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:42:24 cpu=68% emuhawk=1 python=11
+start_utc=2026-10-03T08:42:23Z tracked_clean_before=True
+
+========== scenario: species_family_gen3 ==========
+[duo] species_family_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=d63ad883705068bda07baed14895b70ea6cf1636078e1ca458cf137ded9a5d38 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49210 http=49211 data=F:\slink-work\tmp\duo_7sebwc07
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_1_witness.bin, e2e_species_family_gen3_a_attempt1_result.txt, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_1_witness.bin, e2e_species_family_gen3_b_attempt1_result.txt, e2e_species_family_gen3_b_result.txt, e2e_species_family_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_7sebwc07 path=F:\slink-work\tmp\duo_7sebwc07\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_7sebwc07 path=F:\slink-work\tmp\duo_7sebwc07\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 13.0s
+[duo] timing results 3.3s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:49210 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:49210 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=6dd699fac5ce8cf70742128082e2438503e3bfb120c93eab864e534ce5dfbb3f file=6dd699fac5ce8cf70742128082e2438503e3bfb120c93eab864e534ce5dfbb3f match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=718ebb89c8d016ad2a46b7e74d6f149062f9e07868b5f05657e1850bd03d1555 file=718ebb89c8d016ad2a46b7e74d6f149062f9e07868b5f05657e1850bd03d1555 match=true saves=1 counter=2->3 rtc=normalized
+[duo] FAMILY_ENCOUNTER {"key": "4D55444B:20250925", "map": 17, "owned": 287, "player": "a", "related": false, "species": 290, "x": 21, "y": 16}
+[duo] timing oracle 0.6s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: F:\slink-work\tmp\duo_7sebwc07
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=d63ad883705068bda07baed14895b70ea6cf1636078e1ca458cf137ded9a5d38 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49392 http=49393 data=F:\slink-work\tmp\duo_8_n4vrx1
+[duo] timing server 1.0s
+[duo] cleared 4 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_1_witness.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_1_witness.bin, e2e_species_family_gen3_b_result.txt
+[duo] JOURNAL attempt=2 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_8_n4vrx1 path=F:\slink-work\tmp\duo_8_n4vrx1\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=2 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_8_n4vrx1 path=F:\slink-work\tmp\duo_8_n4vrx1\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 9.9s
+[duo] timing results 3.1s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:49392 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:49392 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f531c30f44fa11fd40eada58a8ee566e2ef5b2992196846e4b2e191efce3dce0 file=f531c30f44fa11fd40eada58a8ee566e2ef5b2992196846e4b2e191efce3dce0 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=13f6339914f75deee07392cebe3ad152c0c47fe833299ddd648ae36158814ddf file=13f6339914f75deee07392cebe3ad152c0c47fe833299ddd648ae36158814ddf match=true saves=1 counter=2->3 rtc=normalized
+[duo] FAMILY_ENCOUNTER {"key": "4D55444B:20250925", "map": 17, "owned": 287, "player": "a", "related": false, "species": 290, "x": 21, "y": 17}
+[duo] timing oracle 0.7s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: F:\slink-work\tmp\duo_8_n4vrx1
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 3 of 8
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=d63ad883705068bda07baed14895b70ea6cf1636078e1ca458cf137ded9a5d38 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49783 http=49784 data=F:\slink-work\tmp\duo_3_h1h1_f
+[duo] timing server 1.0s
+[duo] cleared 4 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_2_witness.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_2_witness.bin, e2e_species_family_gen3_b_result.txt
+[duo] JOURNAL attempt=3 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_3_h1h1_f path=F:\slink-work\tmp\duo_3_h1h1_f\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=3 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_3_h1h1_f path=F:\slink-work\tmp\duo_3_h1h1_f\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 11.3s
+[duo] timing results 3.3s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:49783 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:49783 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=21f9c50e483dce04a56a62daed001caf049bd32c0e6e2d83e23b81c2429a144a file=21f9c50e483dce04a56a62daed001caf049bd32c0e6e2d83e23b81c2429a144a match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=cfe3bee558023bac6589aac008b05664a8b10016bff43b207ff16b5d8b652e43 file=cfe3bee558023bac6589aac008b05664a8b10016bff43b207ff16b5d8b652e43 match=true saves=1 counter=2->3 rtc=normalized
+[duo] FAMILY_ENCOUNTER {"key": "4D55444B:20250925", "map": 17, "owned": 287, "player": "a", "related": true, "species": 286, "x": 22, "y": 16}
+[duo] family: native 286 rerolled against distinct owned 287 on a; staged link remains alive
+[duo] timing oracle 0.6s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] species_family_gen3: a=PASS b=PASS
+
+========== summary ==========
+  species_family_gen3: PASS (attempt 3 of 8)
+exit=0 end_utc=2026-10-03T08:43:15Z tracked_clean_after=True classification=pass

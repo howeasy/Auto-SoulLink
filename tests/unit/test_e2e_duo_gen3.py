@@ -5720,3 +5720,433 @@ def test_non_expansion_bm_still_refuses_an_unreadable_fallback(battle_model):
     lua.globals().start(40)
     ok, why = lua.globals().LOSE()
     assert ok is True and list(lua.globals().M.used.values())[:2] == [39, 33], why
+
+
+# ── frlgc 2026-10-03: reconnect_gen3's same-save window with a companion cartridge ─────────────────────
+# Evidence (F:/slink-work/tmp/duo_2jsg2y18, the Emerald same_save result file): one client session sends THREE `TX hello` lines in the
+# first ~550 frames -- the connect hello, then capability refreshes after `resolved_areas/config/dead_keys` and the native link-panel
+# write -- all with the same artifact_kind/foundation/companion_abi/badges/ball_count and the same party; only area_id may differ (the
+# map settles after CONTINUE). The phase driver logs ONE `RECONNECT_HELLO same_save count=N` line (N = hellos sent so far).
+def _tx_hello(area="oldale_town", kind="companion", abi=2, badges=0, balls=5, foundation="gen3_emerald"):
+    return ('TX hello - {"area_id":"%s","artifact_kind":"%s","badges":%d,"ball_count":%d,"battle_identity":true,'
+            '"companion_abi":%d,"event":"hello","foundation":"%s","has_pokeballs":true,"in_battle":fal\n'
+            % (area, kind, badges, balls, abi, foundation))
+
+
+def _same_save_window(count=3, hellos=3, **kw):
+    return ("booted\n" + "".join(_tx_hello(**kw) for _ in range(hellos))
+            + f"RECONNECT_HELLO same_save count={count}\n")
+
+
+@pytest.mark.parametrize("count, hellos", [(1, 1), (2, 2), (3, 3), (3, 1)])
+def test_same_save_hello_wait_accepts_the_companions_extra_hellos(count, hellos):
+    window = _same_save_window(count, hellos)
+    assert duo.same_save_hello_seen(window) is True and duo.same_save_hello_problems(window) == []
+
+
+def test_same_save_hello_wait_is_not_satisfied_by_nothing_or_count_zero():
+    for text in ("", "booted\n", "RECONNECT_HELLO same_save count=0\n"):
+        assert duo.same_save_hello_seen(text) is False and duo.same_save_hello_problems(text) == []
+
+
+def test_a_refresh_may_change_the_area_but_not_the_identity_fields():
+    areas = ("booted\n" + _tx_hello(area="viridian_city") + _tx_hello(area="viridian_city_mart")
+             + "RECONNECT_HELLO same_save count=2\n")
+    assert duo.same_save_hello_problems(areas) == []
+    for field, bad in (("kind", "clean"), ("abi", 1), ("badges", 3), ("balls", 4), ("foundation", "gen3_frlg")):
+        window = "booted\n" + _tx_hello() + _tx_hello(**{field: bad}) + "RECONNECT_HELLO same_save count=2\n"
+        problems = duo.same_save_hello_problems(window)
+        assert problems and "hello #2 differs from hello #1" in problems[0], (field, problems)
+        with pytest.raises(RuntimeError, match="not one save"):
+            duo.same_save_hello_seen(window)
+
+
+def test_a_mixed_same_and_different_save_window_fails_and_never_waits_out_the_timeout():
+    """RED case: the window holds a same_save hello AND a hello for another save (or a line nobody can parse)."""
+    mixed = _same_save_window(2, 2) + "RECONNECT_HELLO wrong_save count=1\n"
+    assert any("another save" in p and "wrong_save" in p for p in duo.same_save_hello_problems(mixed))
+    with pytest.raises(RuntimeError, match="wrong_save"):
+        duo.same_save_hello_seen(mixed)
+    only_other = "RECONNECT_HELLO wrong_save count=1\n"                   # a wrong_save-only window is no same-save hello
+    with pytest.raises(RuntimeError, match="another save"):
+        duo.same_save_hello_seen(only_other)
+    for odd in ("RECONNECT_HELLO other_save count=1\n", "RECONNECT_HELLO same_save\n", "RECONNECT_HELLO same_save count=x\n"):
+        problems = duo.same_save_hello_problems(_same_save_window(1, 1) + odd)
+        assert problems, odd
+        with pytest.raises(RuntimeError):
+            duo.same_save_hello_seen(_same_save_window(1, 1) + odd)
+
+
+def test_the_orchestration_waits_with_the_checked_predicate_and_re_checks_at_the_oracle():
+    import inspect
+
+    src = inspect.getsource(duo.DuoRun.orchestrate_reconnect_gen3)
+    assert "same_save_hello_seen(text(same_path))" in src            # the wait predicate (raises on a violation)
+    assert "same_save_hello_problems(text(same_path))" in src        # and the final problems list
+    assert "accepted_reconnect_hellos(baseline" in src and "RECONNECT_HELLO same_save count=1" not in src
+
+
+def test_the_driver_logs_per_hello_what_the_tx_line_truncates():
+    """HELLO_FACTS (duo_gen3_main.lua hello_facts): the party a hello carried and whether it was withheld -- the two facts that decide
+    whether a '0 mons' hello is safe (server/state.py:1958-1959 vs :2087)."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("hello_facts"), source, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no hello_facts"
+    facts = runtime.execute(found.group(0) + "\nreturn hello_facts")
+    assert facts(runtime.eval("{party = {}, party_hidden = true}")) == "HELLO_FACTS party=0 party_hidden=true"
+    assert facts(runtime.eval("{party = {1, 2}}")) == "HELLO_FACTS party=2 party_hidden=false"
+    assert facts(runtime.eval("{party = {}}")) == "HELLO_FACTS party=0 party_hidden=false"
+    assert facts(runtime.eval("{}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts(runtime.eval("{party_hidden = false}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts("not a table") == "HELLO_FACTS party=absent party_hidden=false"
+    assert 'if name == "hello" then log(hello_facts(msg)) end' in source          # and every sent hello is logged with it
+
+
+# ── probe_protected_span_flip_gen3: a live OBSERVATION row, in no plan ───────────────────────────────────────────────
+PROBE = "probe_protected_span_flip_gen3"
+_PROBE_SLOT = b"\xcd\xe3\xe9\xe0\xc6\xdd\xe2\xdf\x00\xd8\xd9\xea\xff" + b"\x00" * 7        # "dev" text, 0xFF terminator, zero padding
+
+
+def _probe_rom_and_row(slot=_PROBE_SLOT):
+    rom = bytearray(b"\x55" * 0x400)
+    rom[0x100 + 0x20:0x100 + 0x20 + len(slot)] = slot
+    row = {"protected_spans": [{"offset": 0x100, "size": 0x100}, {"offset": 0x300, "size": 8}],
+           "payload_version_slot": {"offset": 0x20, "length": len(slot)}}
+    return bytes(rom), row
+
+
+def test_the_probe_flips_the_last_padding_byte_of_the_version_slot_by_a_fixed_rule():
+    rom, row = _probe_rom_and_row()
+    choice = duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)])
+    assert choice == {"offset": 0x100 + 0x20 + 19, "before": 0, "after": 1, "span": 0, "rule": "version-slot padding byte",
+                      "span_offset": 0x100, "span_size": 0x100}
+    assert duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)]) == choice                  # deterministic
+    flipped = rom[:choice["offset"]] + bytes([choice["after"]]) + rom[choice["offset"] + 1:]
+    assert [i for i in range(len(rom)) if rom[i] != flipped[i]] == [choice["offset"]]   # exactly one byte differs
+
+
+def test_the_probe_falls_back_when_the_slot_is_not_a_terminated_padded_string():
+    rom, row = _probe_rom_and_row(slot=b"\xcd" * 20)                                    # no 0xFF terminator, no padding
+    choice = duo.gen3_probe_flip_choice(rom, row, [])
+    assert choice["rule"] == "first non-slot payload byte" and choice["offset"] == 0x100
+    assert choice["offset"] not in range(0x100 + 0x20, 0x100 + 0x20 + 20)
+
+
+def test_the_probe_byte_must_be_in_a_protected_span_and_off_every_anchor():
+    rom, row = _probe_rom_and_row()
+    with pytest.raises(ValueError, match="on an anchor"):
+        duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 18, 4)])                  # an anchor covering the chosen byte
+    duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 19, 0)])                      # a zero-length anchor covers nothing
+    outside = {**row, "protected_spans": [{"offset": 0x100, "size": 0x10}]}                # the slot sits past the span
+    with pytest.raises(ValueError, match="not inside a protected span"):
+        duo.gen3_probe_flip_choice(rom, outside, [])
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
+def test_the_probe_byte_of_the_real_builds_is_padding_inside_a_span_off_the_anchors(title):
+    """Needs the real, uncommitted clean dump: a named skip when it is absent (tests/TESTING.md)."""
+    from tools.gen3_companions import published
+    from tools.gen3_final_cut import ROOT_DUMPS, main_checkout
+
+    root = os.environ.get("SLINK_GEN3_ROMS") or main_checkout()
+    dump = os.path.join(root, ROOT_DUMPS[title])
+    if not os.path.isfile(dump):
+        pytest.skip(f"clean {title} dump absent: {dump}")
+    patched, row = published(title, open(dump, "rb").read())
+    pack = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald"}[title]
+    anchors = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json").read_text(encoding="utf-8"))[title]["anchors"]
+    spans = [(a["rom_offset"], len(a["expected_hex"]["companion"]) // 2) for a in anchors.values()]
+    choice = duo.gen3_probe_flip_choice(patched, row, spans)
+    assert choice["rule"] == "version-slot padding byte" and (choice["before"], choice["after"]) == (0, 1)
+    assert any(s["offset"] <= choice["offset"] < s["offset"] + s["size"] for s in row["protected_spans"])
+    assert not any(a <= choice["offset"] < a + n for a, n in spans)
+    slot = row["payload_version_slot"]
+    base = row["protected_spans"][0]["offset"] + slot["offset"]
+    assert patched[base + 12] == 0xFF and choice["offset"] == base + slot["length"] - 1     # behind the string's terminator
+    assert duo.gen3_probe_flip_choice(patched, row, spans) == choice
+
+
+def test_the_probe_is_opt_in_and_in_no_plan():
+    from tools import gen3_final_cut as fc
+
+    row = duo.SCENARIOS[PROBE]
+    assert row["explicit_only"] is True and row["gen3_probe_flip"] is True and row["no_save"] == ("a", "b")
+    assert set(row["games"]) == {"gen3_frlg", "gen3_lgfr", "gen3_emerald"}
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_emerald"):
+        assert PROBE not in duo.scenarios_for(game) and duo.scenario_applies(PROBE, game)
+    # applicable to exactly the three per-title games and to NO other pairing row
+    assert sorted(g for g in duo.GAMES if duo.scenario_applies(PROBE, g)) == ["gen3_emerald", "gen3_frlg", "gen3_lgfr"]
+    cut = "c" * 40
+    os.environ.setdefault("SLINK_GEN3_RAND_ROMS", "R:/rand")
+    for plan in (fc.build_plan, fc.build_plan_rr, fc.build_plan_emerald, fc.build_plan_exp, fc.build_plan_frlgc, fc.build_plan_frlgc_rand):
+        assert not any("probe_protected_span_flip" in " ".join(r.argv) or "probe_flip" in r.id for r in plan(cut, "L:/lane", "L:/m")), plan
+    assert len(fc.build_plan_frlgc(cut, "L:/lane", "L:/m")) == 65 and len(fc.build_plan_frlgc_rand(cut, "L:/lane", "L:/m")) == 13
+    assert callable(duo.DuoRun.orchestrate_probe_protected_span_flip_gen3) and callable(duo.DuoRun.assert_probe_protected_span_flip_gen3_saved)
+
+
+def _probe_run(receipt_b, status_b=None):
+    run = object.__new__(duo.DuoRun)
+    run._probe_flip = {"title": "firered", "offset": 0xEB2E27, "before": 0, "after": 1, "span": 0, "span_offset": 0xEB2000,
+                       "span_size": 0x4000, "anchors_checked": 11}
+    notes, went = [], []
+    run._pydec_note = notes.append
+    run._read_receipt = lambda side: receipt_b
+    run._status = lambda: {"players": {"b": status_b or {}}}
+    run.wait_for = lambda desc, pred, timeout: pred() or (_ for _ in ()).throw(TimeoutError(desc))
+    run.go = lambda *a, **k: went.append(True)
+    return run, notes, went
+
+
+def test_the_probe_records_a_launch_refusal_without_judging_it():
+    run, notes, went = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=[SLink-gen3] refused: this firered cartridge ...\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert run._probe_observed["client"] == "refused_at_launch" and went == [True]
+    assert any("PROBE_FLIP_OBSERVED" in n and "client=refused_at_launch" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+
+
+@pytest.mark.parametrize("player, expect", [({"admission": "admitted", "admission_reason": "ok"}, "server=admitted"),
+                                            ({"admission": "rejected", "admission_reason": "companion_abi differs"}, "server=rejected"),
+                                            ({"identity_error": "Identity mismatch"}, "server=identity_error")])
+def test_the_probe_records_an_admitted_client_and_the_servers_verdict_either_way(player, expect):
+    run, notes, went = _probe_run("TX hello - {}\nHELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", player)
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == [True] and any(expect in n and "client=admitted" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+
+
+def test_the_probe_oracle_names_what_was_observed_never_a_bare_pass():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED refused_at_launch (an observation, not a verdict)")
+    run, notes, _ = _probe_run("HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", {"admission": "admitted"})
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED admitted (an observation, not a verdict)")
+
+
+def test_the_probe_fails_only_when_the_harness_itself_broke():
+    run, _notes, went = _probe_run("")                                       # B did nothing at all: no observation possible
+    with pytest.raises(TimeoutError, match="launch outcome"):
+        run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == []
+    with pytest.raises(RuntimeError, match="no admission observation"):
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": ""})
+    run._probe_observed = {"client": "admitted", "reason": "", "server": "admitted", "server_reason": ""}
+    with pytest.raises(RuntimeError, match="not in its own receipt"):          # the claim must be in the side's own receipt
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\n"})
+
+
+def test_the_driver_lets_a_probe_record_a_refusal_but_nothing_else_changes():
+    from lupa import LuaRuntime
+
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("launch_verdict"), source, re.M | re.S)
+    verdict = LuaRuntime(unpack_returned_tuples=True).execute(found.group(0) + "\nreturn launch_verdict")
+    refused = "[SLink-gen3] refused: this firered cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
+    done, ok, msg = verdict(None, refused, False, True)
+    assert (done, ok) == (True, True) and msg.startswith("OBSERVED refused: ") and "probe observed: refused at launch" in msg
+    assert verdict(None, "x", False, False)[:2] == (True, False)                    # an ordinary row: still a failure
+    assert verdict(None, "x", False)[:2] == (True, False)                           # the old three-argument call
+    assert verdict({}, None, False, True) is False                                  # a built client carries on, probe or not
+    assert verdict({}, None, True, True)[:2] == (True, False)                       # expect_refused still wins over a probe
+    assert 'PROBE_ADMISSION client=refused_at_launch reason=' in source and "D.probe_admission" in source
+
+
+def test_the_probe_scenario_module_records_what_the_client_announced_and_writes_nothing():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute("""
+        logs = {}
+        ctx = { last_sent = function() return { artifact_kind = "companion", companion_abi = 2, rom_sha1 = "ab" } end,
+                log = function(s) logs[#logs + 1] = s end, wait_go = function() return true end, frames = function() end,
+                writes = function() return 0 end }
+        module = dofile(WT .. "/lua/tests/duo/scenario_gen3_probe_flip.lua")
+    """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
+    ok, msg = runtime.eval("module(ctx)")
+    assert ok is True and msg.startswith("OBSERVED admitted: ")
+    logs = list(runtime.eval("logs").values())
+    assert logs[0] == "PROBE_CLIENT admitted artifact_kind=companion companion_abi=2 rom_sha1=ab" and logs[-1] == "PROBE_PASSIVE writes=0"
+
+
+# ── link_gen3_rand: attempt budget 6, and nothing else's budget moved ───────────────────────────────────────────────────
+# Every scenario/game pair whose scenario_attempt_limit was not 1 at d5a26da9 (snapshot of 1417 pairs; link_gen3_rand excluded -- it is
+# the one row that changed). Pairs not listed were 1.
+ATTEMPT_LIMITS_AT_D5A26DA9 = {
+    "active_end_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_emerald": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_frlg": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "ball_gate_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "borrowed_party_battle_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_menu_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_opponent_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "center_controls_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "changebox_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "choice_gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "clean_rr_refused_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "deadzone_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "deadzone_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_hatch_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_receive_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "evolve_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering0_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering1_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_fish_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_grass_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_rock_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_run_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_surf_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "faint_cmd_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_admit_wrong_rom": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_ball_gate": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2},
+    "gen2_boxed_capture": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_changebox": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_egg_hatch": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_evolution": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active_trainer": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_gender_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_gift": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_npc_trade": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_pc_ops": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_poison": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_reconnect": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_soft_reset": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_species_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_evolve": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_refuse_item": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_commit": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_wait": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_timeout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_type_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_whiteout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_whiteout_rebuild": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gender_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "gift_box_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_dex_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "link_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_lhammer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_mega_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_trainer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_decline_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "nature_change_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "npc_trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "pc_ops_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_faint_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "reconnect_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "reconnect_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "release_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_real_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "save_then_write_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "shiny_bonus_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "soft_reset_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "species_clause_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "species_clause_new": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8},
+    "species_family_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 16},
+    "trade_decline_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_lock_probe_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_commit_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_success_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trainer_bench_gen3": {"gen1_new": 2, "gen1_pure": 2, "gen1_pure_green": 2, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2, "gen3_emerald": 2, "gen3_exp": 2, "gen3_fr_trade": 2, "gen3_frlg": 2, "gen3_lg_trade": 2, "gen3_lgfr": 2, "gen3_rr": 2},
+    "trainer_panel_gen3_rand": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "type_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "type_clause_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3}
+}
+RAND_WHITEOUT = "RESULT: FAIL (hunt ended whiteout)"
+
+
+def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
+    for game in duo.GAMES:
+        for name in duo.SCENARIOS:
+            if name not in ("link_gen3_rand", "probe_protected_span_flip_gen3"):      # (the probe row did not exist at d5a26da9)
+                assert duo.scenario_attempt_limit(name, game) == ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1), (name, game)
+    assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [6, 6]    # the Emerald twin too
+    assert [duo.scenario_attempt_limit("probe_protected_span_flip_gen3", g) for g in ("gen3_frlg", "gen3_emerald")] == [1, 1]
+    assert [n for n, row in duo.SCENARIOS.items() if row.get("rng_attempts") == 6] == ["link_gen3_rand"]
+    assert not any("rehunt" in k for row in duo.SCENARIOS.values() for k in row)
+
+
+@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_emerald"])
+def test_attempts_past_two_retry_a_link_gen3_rand_whiteout_and_nothing_else(game):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    for attempt in (1, 2, 3, 4, 5):
+        assert duo.retryable_gen1_rng(game, receipts, attempt, 6, scenario="link_gen3_rand"), attempt
+    assert not duo.retryable_gen1_rng(game, receipts, 6, 6, scenario="link_gen3_rand")        # the budget ends at 6
+    partner = "RESULT: FAIL (runner never released B (A_PENDING))"
+    assert duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": partner}, 4, 6, scenario="link_gen3_rand")
+    # an out-of-balls miss keeps the ordinary two retries; past them it is final (the late clause is for a whiteout only)
+    assert duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 2, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 3, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": duo.RNG_OUT_OF_BALLS}, 3, 6, scenario="link_gen3_rand")
+
+
+@pytest.mark.parametrize("scenario", ["link_gen3", "trainer_panel_gen3_rand", "admit_randomized_frlg", "ball_gate_gen3", None])
+def test_the_late_whiteout_retry_does_not_fire_for_other_rows(scenario):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 6, scenario=scenario)
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 2, scenario="link_gen3_rand")      # only at its own declared budget
+
+
+def test_only_the_flipped_instance_is_launched_as_a_probe():
+    source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    assert 'duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"' in source
+
+
+@pytest.mark.parametrize("game, flipped", [("gen3_frlg", "leafgreen"), ("gen3_lgfr", "firered"), ("gen3_emerald", "emerald")])
+def test_each_probe_game_flips_one_named_title_on_the_b_cart(game, flipped):
+    """gen3_frlg is FireRed(A)/LeafGreen(B), gen3_lgfr is LeafGreen(A)/FireRed(B), gen3_emerald is Emerald/Emerald: B is the flipped cart,
+    so the three games observe LeafGreen, FireRed and Emerald. Their fixtures are the ordinary party_town battery pair."""
+    sides = duo.GAMES[game]["sides"]
+    assert sides["b"][0] == flipped and duo.GAMES[game]["scenario_prefix"] == "gen3_"
+    assert duo.scenario_target(duo.SCENARIOS[PROBE], game) == "town"
+    assert duo.scenario_applies(PROBE, game)
+
+
+def test_the_observed_line_names_which_title_was_flipped_and_where():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    observed = next(n for n in notes if n.startswith("PROBE_FLIP_OBSERVED"))
+    for fact in ("flipped_title=firered", "cart=b", "offset=0xeb2e27", "inside_protected_span=0xeb2000+0x4000", "on_anchor=false",
+                 "checked 11 anchors", "client=refused_at_launch"):
+        assert fact in observed, fact
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert "flipped_title=firered" in notes[0] and "inside_protected_span=0xeb2000+0x4000" in notes[0]

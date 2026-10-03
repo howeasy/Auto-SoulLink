@@ -1,0 +1,50 @@
+# gen3_final_cut row=frlgc_deadzone_gen3_em_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario deadzone_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:24:02 cpu=83% emuhawk=1 python=9
+start_utc=2026-10-03T08:24:01Z tracked_clean_before=True
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=52094 http=52095 data=F:\slink-work\tmp\duo_jzuzg8ux
+[duo] timing server 1.2s
+[duo] cleared 13 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_3_witness.bin, e2e_deadzone_gen3_a_attempt1_result.txt, e2e_deadzone_gen3_a_attempt2_result.txt, e2e_deadzone_gen3_a_attempt3_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_3_witness.bin, e2e_deadzone_gen3_b_attempt1_result.txt, e2e_deadzone_gen3_b_attempt2_result.txt, e2e_deadzone_gen3_b_attempt3_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt1_result.txt, e2e_deadzone_gen3_pydec_attempt2_result.txt, e2e_deadzone_gen3_pydec_attempt3_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_jzuzg8ux path=F:\slink-work\tmp\duo_jzuzg8ux\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_jzuzg8ux path=F:\slink-work\tmp\duo_jzuzg8ux\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_102
+[duo] go-file written for b
+[duo] B caught EF239FCE:DFDAF6DA in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_102; B's EF239FCE:DFDAF6DA retired
+[duo] timing orchestrate 23.5s
+[duo] timing results 2.4s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture EF239FCE:DFDAF6DA retired)
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:52094 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:52094 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=fdd418cf7736ec675c49dbf26ea396fd2092f9e9a8ea3abc488b5469e1f4b4af file=fdd418cf7736ec675c49dbf26ea396fd2092f9e9a8ea3abc488b5469e1f4b4af match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=d6d93b2df2eac25bf167880cb9d65dec88266ae7d6503fea0ce1e23108a6cca2 file=d6d93b2df2eac25bf167880cb9d65dec88266ae7d6503fea0ce1e23108a6cca2 match=true saves=1 counter=2->3 rtc=normalized
+[duo] deadzone: route_102 locked by A's no_catch (species 286); B's EF239FCE:DFDAF6DA saved only in the memorial box
+[duo] MARKER b: FAINTED EF239FCE:DFDAF6DA frame=6161 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=EF239FCE:DFDAF6DA
+[duo] MARKER b: TX memorialize_done EF239FCE:DFDAF6DA {"box":13,"event":"memorialize_done","key":"EF239FCE:DFDAF6DA","player":"b","seq":194}
+[duo] timing oracle 0.6s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-10-03T08:24:31Z tracked_clean_after=True classification=pass

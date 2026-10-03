@@ -291,7 +291,7 @@ def test_link_gen3_rand_extends_to_emerald_with_its_own_catch_fixture():
     # new SYNTH file, following the Emerald `catch` fixture precedent the README documents.
     assert duo.scenario_target(entry, "gen3_frlg") == "catch_synth"
     assert duo.scenario_target(entry, "gen3_emerald") == "catch"
-    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_emerald") == 3
+    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_emerald") == 6
     for stem in ("emerald_catch.sav", "emerald_catch_b.sav"):
         assert (ROOT / "tests/fixtures/gen3" / stem).is_file()
 
@@ -756,3 +756,34 @@ def test_the_partner_legs_expect_a_companion_hello_and_never_a_clean_one():
     rand = {"artifact_kind": "rand", "rom_sha1": sha, "rom_content": {"tables": {}}}
     assert _observe("pair", rand)[0] is True
     assert not _observe("pair", comp)[0]
+
+
+# ── equivalent_pair: the server commits the FIRST hello's kind, so the effective kind is the clean-pairing CLASS ─────────
+def _equivalent_case(facts, kind):
+    facts = copy.deepcopy(facts)
+    facts["clean_a"] = facts["a"]
+    facts["equivalent_a"] = {**facts["a"], "sha1": "f" * 40}
+    case = {"status": {"gen3_rand_effective_kind": kind, "gen3_rand_identity_errors": {},
+                       "players": {side: {"connected": True, "admission": "admitted",
+                                          "admission_reason": "no randomized-ROM contract for this run"} for side in ("a", "b")}},
+            "hellos": {"a": _hello(facts["equivalent_a"]), "b": _hello(facts["companion_b"], "companion")}}
+    return facts, case
+
+
+@pytest.mark.parametrize("kind, ok", [("clean", True), ("companion", True), ("rand", False), ("rand_companion", False),
+                                      ("overlay", False), ("", False), (None, False)])
+def test_equivalent_pair_accepts_exactly_the_clean_pairing_class(facts, kind, ok):
+    facts, case = _equivalent_case(facts, kind)
+    problems = duo.gen3_rand_admission_problems("equivalent_pair", facts=facts, **case)
+    assert (problems == []) is ok, problems
+    if not ok:
+        assert any("effective kind" in p and "clean or companion" in p for p in problems)
+
+
+def test_the_pair_leg_still_demands_rand_and_the_negative_twins_are_untouched(facts):
+    case = _admission_case("pair", facts)
+    case["status"]["gen3_rand_effective_kind"] = "companion"
+    assert any("effective kind" in p for p in duo.gen3_rand_admission_problems("pair", **case, facts=facts))
+    case["status"]["gen3_rand_effective_kind"] = "rand"
+    assert duo.gen3_rand_admission_problems("pair", **case, facts=facts) == []
+    assert duo.GEN3_EQUIVALENT_PAIRING_KINDS == ("clean", "companion")
