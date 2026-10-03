@@ -30,3 +30,9 @@ Now `DuoRun._gen3_duo_journal_path(inst)` is `<data_dir>/slink_gen3_trade_<a|b>`
 No scenario reads the other instance's journal: the Lua wrapper receives `journal_path` per launch (each instance's own stub), and the trade
 scenarios only reach the journal through their own client. The native candidate (`tools/gen3_trade_duo.py prepare_pair`) still gives both sides one
 manifest-pinned path by design of that carrier; it is out of this change.
+
+
+**Known shared-file exception (2026-10-03).** The native T5 trade candidate (`tools/gen3_trade_duo.py`, `prepare_pair`) still gives BOTH sides one
+manifest-pinned guarded file, `slink_gen3_trade_<nonce>`. That is a deliberate carrier and is left unchanged. Unlike the ordinary duo it can therefore see
+the other side's OS guard as a busy read. Since 1996ba17 a busy read HOLDS an acquisition signal (bounded, loud on expiry) instead of dropping it, so the
+lost-capture failure cannot occur there either; the contention itself is covered by the client fix, not by the harness.
