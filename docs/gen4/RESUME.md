@@ -2,6 +2,44 @@
 
 > **Player launcher caveat (2026-10-03):** `lua/slink_gen4.lua` still runs the LEGACY Gen 4 client. Every G1/G2 cut so far proves the rewritten `lua/gen4/*` modules through test drivers, not the player launch path. G3a switches the launcher (first batched Gen 2 digest window after the current release); G4 sign-off requires a cut launched through `slink.lua`. Gen 4 is pre-release on this branch.
 
+## Checkpoint 12 (2026-10-04) - NEW FREEZE: all offline Gen 4 work + landed master; live checks next (owner: "new freeze, then run")
+
+**State.** The Gen 1-3 release landed on local master (`30834347`, then the board-only `4c2eb702`; not pushed). This branch was fast-forwarded to `claude/gen4-integration`, which merges:
+- master;
+- every Gen 4 side branch: withdraw-docs, generators, c2-beacon, faint-provenance, withdraw, run-root, g3-model with ss-world;
+- the later integration fixes.
+The de5ab39f re-run was SKIPPED by owner ruling: its receipts are stale against this tree. Every earlier PHYSICAL receipt is historical; re-run at the freeze below. **FROZEN = the commit that adds this checkpoint** (docs only, off the evidence surface).
+
+**Offline at the freeze.** Run at merged head `3a0375b0`: (gen4 or nds or hgss or server or adapter or state or protocol) and not gen3, 4672 passed / 294 named skips / 0 failed; Lua syntax OK. After the board-only tip merge: board/dashboard 105 pass; gen4 client/hud/requirements 232 pass. PLAN.md and tests/gen4_requirements.json are unchanged since G0.
+
+**New since checkpoint 11 (all SOURCE/MODEL):**
+- **Withdraw.** Keyboard withdraw is two A presses (route leg + falsifier). See G2_PRODUCER_PLAN.md 6b CORRECTION 3 and research/hge_pc_redirects.md (29 PCStorage ov129 targets, observer pins).
+- **Grass route receipt.** The grass route writes the shared receipt: staged battery, plan, settled state sha256 and a battle witness.
+- **Faint provenance.** The faint receipt echoes its state/save binding. All 5 route-state batteries are PROVEN by staged-copy hashes (data/gen4/scenarios/README.md).
+- **Run root.** `lua/gen4/run.lua` composition root plus `inputs.lua` producers: area_of, charmap, has_pokeballs (bag via client:save_array), gift_area.
+- **Packs.** charmap.json + profile.bag. gift_areas holds goldenrod/pewter/saffron/sinjoh_ruins only; gift sites on wild areas sit in on_wild_area, fail-closed. hge PC redirect count is 29.
+- **Client fixes.** `safe` armed once per debounced battle end (protocol item 19). HUD parity with the accepted gens: Nuzlocke Start, NEW ENCOUNTER, WHITED OUT, D7 KO'd. A landed D7 entry is retired before the ending flush, so there is no double KO'd.
+- **Conformance.** Map of 50 items, OWED empty. Checkpoint forbidden-state matrix. Real probe dumps through reads.lua.
+- **Evidence.** It binds the pack inputs the producers open: charmap/area_map/locations, with hge area files recorded `absent`.
+- **C2 beacon.** Source compiles clean under the real pret mwccarm. The shared NDS headers at nds-shared `78c2a0a0` are mwcc-clean. ROM integration (main.lsf + link) belongs to the shared-stack writer.
+
+**Owner rulings 2026-10-04:**
+- Row n G1 scope = deposit only (`reviews/DECISIONS_2026-10-04_rown.md`).
+- The 3 cherry-picked side branches are approved for delete. They are tagged `archive/gen4/*`; the owner runs the force delete.
+- The HUD fatal text becomes "SLINK STOPPED - SEE LOG" (claude/hud-fatal-text `370e5f75`; batched window).
+
+**Queued for the first batched Gen 2 digest window (overlord-confirmed):**
+- G3a launcher/server;
+- the hud-fatal-text fix;
+- the server `_GIFT_AREAS` fix: server/adapters/gen4_hgsspt.py is hand-typed and wrong (wild areas listed, route_30 wrong, six sites missing). Load data/games/gen4_hgss/area_map.json gift_areas.ids instead.
+
+**NEXT (one emulator slot, overlord-granted; confirm with the overlord before the first EmuHawk; own PIDs only; F: lanes):**
+- row o HG/hge one+two;
+- SS row o one+two (first ever; states ss1/ss2-de5-10031709, bindings PROVEN);
+- then rows a-n HG/hge/SS at the freeze;
+- D1-D4 diagnostics as needed.
+No unchanged failed run is repeated.
+
 ## Checkpoint 11 (2026-10-03) - committed-scenario run at FROZEN `108c025d`; row-n mechanisms landed; G1 still NOT qualified
 
 **Cut `108c025d`** = committed outdoor scenarios, no in-process harness overrides: the first run under the receipt rule from the evidence caveat below.
