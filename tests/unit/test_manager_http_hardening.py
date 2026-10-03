@@ -377,3 +377,59 @@ async def test_manager_creates_an_emerald_run_now_that_eg4_admits_it(manager_cli
 def test_a_saved_run_with_an_unknown_game_key_still_labels():
     """A registry run saved under a game key no longer in GAMES must not raise KeyError."""
     assert manager.GAME_LABELS.get("gen3_gone", "gen3_gone") == "gen3_gone"
+
+
+@pytest.mark.parametrize("locks", [1, 4, 5])
+def test_atomic_json_retries_only_target_permission_locks(tmp_path, monkeypatch, locks):
+    import time
+    path = tmp_path / "locked.json"
+    path.write_text('{"old":true}')
+    replace = json_files.os.replace
+    calls, delays = [], []
+    def locked(source, target):
+        calls.append((source, target))
+        if len(calls) <= locks:
+            raise PermissionError("Drive lock")
+        return replace(source, target)
+    monkeypatch.setattr(json_files.os, "replace", locked)
+    monkeypatch.setattr(time, "sleep", delays.append)
+    if locks == 5:
+        with pytest.raises(PermissionError, match="Drive lock"):
+            json_files.atomic_write_json(path, {"new": True})
+        assert json.loads(path.read_text()) == {"old": True}
+    else:
+        json_files.atomic_write_json(path, {"new": True})
+        assert json.loads(path.read_text()) == {"new": True}
+    assert len(calls) == min(locks + 1, 5)
+    assert delays == pytest.approx([0.2 * (n + 1) for n in range(min(locks, 4))])
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_atomic_json_does_not_retry_non_permission_error(tmp_path, monkeypatch):
+    calls = []
+    def broken(*args):
+        calls.append(args)
+        raise OSError("disk full")
+    monkeypatch.setattr(json_files.os, "replace", broken)
+    with pytest.raises(OSError, match="disk full"):
+        json_files.atomic_write_json(tmp_path / "out.json", {})
+    assert len(calls) == 1 and not (tmp_path / "out.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_obs_config_is_published_atomically(tmp_path, monkeypatch):
+    from server.obs_controller import OBSController
+    obs = OBSController.__new__(OBSController)
+    path = tmp_path / "obs.json"
+    path.write_text('{"old":true}')
+    obs._config_path, obs._config = str(path), {"players": {}}
+    replace = json_files.os.replace
+    seen = []
+    def publish(source, target):
+        assert json.loads(path.read_text()) == {"old": True}
+        seen.append(json.loads(Path(source).read_text()))
+        return replace(source, target)
+    monkeypatch.setattr(json_files.os, "replace", publish)
+    obs.save_config()
+    assert seen == [{"players": {}}] and json.loads(path.read_text()) == obs._config
+    assert not list(tmp_path.glob("*.tmp"))

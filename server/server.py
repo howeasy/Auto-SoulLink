@@ -530,6 +530,16 @@ def prompt_event_type(text: str) -> str | None:
     return None
 
 
+def _requires_loaded_state(handler):
+    @functools.wraps(handler)
+    async def guarded(self, request, *args, **kwargs):
+        if self.state.load_failed:
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "run could not be loaded; restore a backup or reset first"}, status=409)
+        return await handler(self, request, *args, **kwargs)
+    return guarded
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -544,6 +554,7 @@ class SLinkServer:
         # None (the default) means no _WireTap is ever built and nothing changes.
         self._wire_log = wire_log
         self._wire_files: dict = {}
+        self.dispatch_errors = {"a": 0, "b": 0}
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1594,7 +1605,7 @@ class SLinkServer:
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
-        hello_seen = False
+        hello_players = set()
         conn_gen: dict[str, int] = {}   # player -> the generation this connection's hello was given
         no_hello_warned = False
         try:
@@ -1636,14 +1647,27 @@ class SLinkServer:
                     continue
                 if self._wire_log:
                     writer.c2s(line, msg)
-                    if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
-                        await self._respond(writer, [{"cmd": "noop"}])
-                        continue
+                if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+                    await self._respond(writer, [{"cmd": "noop", "refused": "malformed"}])
+                    continue
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
                     log.warning(f"Rejected unknown player_id: {repr(player_id)} from {peer}")
                     await self._respond(writer, [{"cmd": "noop"}])
+                    continue
+
+                # Hello-first. A connection has proved nothing until it has said hello, so
+                # nothing else on it is listened to. Without this a cartridge whose hello was
+                # lost still had its ticks reconciled into whichever slot it named, and a
+                # wrong save's party discarded the run's linked keys (reconnect_new,
+                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
+                if msg.get("event") != "hello" and player_id not in hello_players:
+                    if not no_hello_warned:
+                        no_hello_warned = True
+                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
+                                    f"{peer} — dropping this connection's events until it says hello")
+                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
                     continue
 
                 # Retain overlapping connections until each closes, including a socket
@@ -1757,19 +1781,6 @@ class SLinkServer:
                         # is ours to clear, and only a routable hello gets this far.
                         self._rom_type_rejected.discard(player_id)
                         self.state.identity_error.pop(player_id, None)
-                # Hello-first. A connection has proved nothing until it has said hello, so
-                # nothing else on it is listened to. Without this a cartridge whose hello was
-                # lost still had its ticks reconciled into whichever slot it named, and a
-                # wrong save's party discarded the run's linked keys (reconnect_new,
-                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
-                if msg.get("event") != "hello" and not hello_seen:
-                    if not no_hello_warned:
-                        no_hello_warned = True
-                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
-                                    f"{peer} — dropping this connection's events until it says hello")
-                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
-                    continue
-
                 # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
                 # and every client sends hello on (re)connect and counts up from there. So a
                 # seq is only ever a duplicate of one seen on THIS connection — comparing
@@ -1783,7 +1794,7 @@ class SLinkServer:
                     log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
                     last_seq = seq
                 if msg.get("event") == "hello":
-                    hello_seen = True
+                    hello_players.add(player_id)
                     self._conn_gen[player_id] = conn_gen[player_id] = self._conn_gen.get(player_id, 0) + 1
                 elif conn_gen.get(player_id, self._conn_gen.get(player_id)) != self._conn_gen.get(player_id):
                     # KEY-SCOPE-5: a newer connection helloed as this player; a delayed line from
@@ -2109,6 +2120,22 @@ class SLinkServer:
         return commands
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
+        try:
+            return self._dispatch_event(player_id, msg)
+        except Exception:
+            if msg.get("event") == "hello":
+                raise  # the hello transaction owns rollback and retains its fatal boundary
+            self.dispatch_errors[player_id] = self.dispatch_errors.get(player_id, 0) + 1
+            if self.dispatch_errors[player_id] == 1:
+                log.error("[%s] failed to dispatch %s", player_id, msg.get("event", "unknown"), exc_info=True)
+            return [{"cmd": "noop", "refused": "error"}]
+
+    def _dispatch_event(self, player_id: str, msg: dict) -> list:
+        if self.state.load_failed:
+            return [{"cmd": "noop", "refused": "load_failed"}]
+        malformed = self.state.normalize_party_snapshot(player_id, msg)
+        if malformed is not None:
+            return malformed
         event = msg.get("event", "unknown")
         # enemy_party is client JSON read by every battle view: keep only a list of objects.
         if "enemy_party" in msg:
@@ -2893,6 +2920,8 @@ class SLinkServer:
         return {
             # "" when the last save succeeded; the error text when it did not.
             "save_failed": s.save_failed,
+            "load_failed": s.load_failed,
+            "dispatch_errors": dict(getattr(self, "dispatch_errors", {"a": 0, "b": 0})),
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
@@ -3670,6 +3699,7 @@ class SLinkServer:
     def _build_attempts_overlay_context(self) -> dict:
         return {"attempts_count": self.state.attempts_count}
 
+    @_requires_loaded_state
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
         try:
@@ -4600,6 +4630,7 @@ class SLinkServer:
         }
         return aiohttp_web.json_response(raw)
 
+    @_requires_loaded_state
     async def handle_debug_inject_event(self, request):
         """POST /api/debug/inject_event — send a synthetic event through the state machine."""
         try:
@@ -4625,6 +4656,7 @@ class SLinkServer:
             log.exception(f"Debug inject_event error: {e}")
             return aiohttp_web.json_response({"ok": False, "error": str(e)}, status=500)
 
+    @_requires_loaded_state
     async def handle_debug_queue_command(self, request):
         """POST /api/debug/queue_command — manually queue a command for a player."""
         try:
@@ -4648,6 +4680,7 @@ class SLinkServer:
             "queue_length": len(self.state.queued_commands[player]),
         })
 
+    @_requires_loaded_state
     async def handle_debug_set_pokeballs(self, request):
         """POST /api/debug/set_pokeballs — toggle pokeballs_obtained."""
         try:
@@ -4666,6 +4699,7 @@ class SLinkServer:
             "pokeballs_obtained": value,
         })
 
+    @_requires_loaded_state
     async def handle_debug_set_area_state(self, request):
         """POST /api/debug/set_area_state — manually set an area's state."""
         try:
@@ -4690,6 +4724,7 @@ class SLinkServer:
             "ok": True, "area_id": area_id, "state": new_state,
         })
 
+    @_requires_loaded_state
     async def handle_debug_clear_pending(self, request):
         """POST /api/debug/clear_pending — clear pending captures (all or by area)."""
         try:
@@ -4709,6 +4744,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True, "message": msg})
 
+    @_requires_loaded_state
     async def handle_debug_unlink(self, request):
         """POST /api/debug/unlink — remove a link entry.
 
@@ -4772,6 +4808,7 @@ class SLinkServer:
             "message": f"Unlinked {a_name} <-> {b_name} on {self.adapter.area_display_name(area_id)}. Area reset.",
         })
 
+    @_requires_loaded_state
     async def handle_debug_resolve_trade(self, request):
         """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt",
         "sides"?: {"a"|"b": "traded"|"none"}} —
@@ -4792,6 +4829,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True})
 
+    @_requires_loaded_state
     async def handle_debug_resolve_ambiguous_key(self, request):
         """POST /api/debug/resolve_ambiguous_key {"player": "a"|"b", "key": str} — after checking
         the cartridge, clear a KEY-SCOPE-3 latch (the key names one mon again)."""
@@ -4809,6 +4847,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True})
 
+    @_requires_loaded_state
     async def handle_debug_revive(self, request):
         """POST /api/debug/revive — revive a dead/memorial link back to alive.
 
@@ -4864,6 +4903,8 @@ class SLinkServer:
         a_name = entry.a.nickname if entry.a else "?"
         b_name = entry.b.nickname if entry.b else "?"
 
+        s.run_over = False
+        s._check_game_over()
         s._save()
         log.info(f"[revive] Revived link: {a_name} <-> {b_name} on {area_id}")
         self._notify_sse()
@@ -5131,8 +5172,10 @@ class SLinkServer:
             name = ((mon.nickname or self.adapter_for(pid).species_name(mon.species))
                     if mon and mon.key == key else "")
             names.append(name or self._mon_display_name(pid, key))
+        details = " ".join(part for part in (
+            str(rec["verdict"]) if rec.get("verdict") else "", rec.get("problem") or "") if part)
         self._log_event("", f"trade_{rec['outcome']}",
-                        f"{names[0]} <-> {names[1]}: {rec['verdict']} {rec['problem']}".strip(),
+                        f"{names[0]} <-> {names[1]}" + (f": {details}" if details else ""),
                         key=rec["token"])
 
     def _presentation_key_in_use(self, key: str, player_id: str | None = None,
@@ -5352,6 +5395,7 @@ class SLinkServer:
                 return area
         return None
 
+    @_requires_loaded_state
     async def handle_inject_link_api(self, request):
         """POST /api/inject_link — manually create a linked pair.
 
@@ -5478,6 +5522,7 @@ class SLinkServer:
             "message": f"Linked {a_name} <-> {b_name} on {self.adapter.area_display_name(area)}.",
         })
 
+    @_requires_loaded_state
     async def handle_inject_link_by_slot_api(self, request):
         """POST /api/inject_link_by_slot — link party slots without knowing the keys.
 

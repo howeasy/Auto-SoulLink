@@ -529,8 +529,11 @@ console. Other engine signals remain active. Pickup-delay and persistent-hold
 diagnostics are console-only; neither condition invents a successful commit.
 
 A missing-consumption hold expires after 1800 held frames with no union writes:
-APPLY owes one uncertain trade_done; PROMPT owes one menu_result decline. The
-terminal also schedules the normal pending rescan/settlement path. Local state
+APPLY owes one uncertain trade_done; PROMPT owes one menu_result with choice=0
+and uncertain=true. Both show TRADE UNCERTAIN - CHECK PARTY. The server records
+the PROMPT uncertainty and tells both players "Trade canceled - no response.",
+rather than claiming a deliberate decline. The terminal also schedules the normal
+pending rescan/settlement path. Local state
 stays held until reset to prevent re-staging, even after the server sees its terminal. Withdrawal after real
 request entry is acknowledgement-only. These actionable uncertainty outcomes
 show the check-party notice; diagnostic counters remain console-only.

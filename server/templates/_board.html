@@ -97,6 +97,13 @@
   </div>
 
   {# ── banners: things that are wrong get said first ───────────────── #}
+  {% if status is defined and status.get('load_failed') %}
+    <div class="save-warn">&#9888; <b>Run could not be loaded safely.</b> {{ status.load_failed }}
+      &mdash; Events are blocked. Restore a valid backup before continuing.</div>
+  {% endif %}
+  {% if status is defined and status.get('dispatch_errors') and (status.dispatch_errors.values() | sum) %}
+    <div class="save-warn"><b>Event errors:</b> A {{ status.dispatch_errors.get('a', 0) }}, B {{ status.dispatch_errors.get('b', 0) }}. Check the server log.</div>
+  {% endif %}
   {% if status.save_failed %}
     <div class="save-warn">&#9888; <b>Run progress is not being saved.</b> {{ status.save_failed }}
       &mdash; check the data directory is writable (a syncing folder can hold the lock). The run continues in memory; fix this before restarting the server.</div>

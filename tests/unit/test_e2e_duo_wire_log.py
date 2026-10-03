@@ -472,7 +472,9 @@ async def test_list_dict_players_and_non_object_json_through_handle_client(wired
     port, directory = wired
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     try:
-        assert await _send(writer, reader, msg) == {"commands": [{"cmd": "noop"}]}
+        reply = await _send(writer, reader, msg)
+        if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+            assert any(c.get("refused") == "malformed" for c in reply["commands"])
         rows = _lines(directory, "rejected")
         assert rows[1]["dir"] == "c2s"
         assert rows[1]["msg"] == (msg if isinstance(msg, dict) else None)
@@ -550,3 +552,20 @@ async def test_multibyte_raw_truncation_at_most_1024_bytes(wired, line):
         assert line.startswith(raw)
     finally:
         await _close_socket(writer)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [42, None, "a", [1], {"event": "tick", "player": 42}])
+async def test_non_object_json_through_handle_client_without_the_wire_tap(tmp_path, message):
+    from tests.unit.test_mixed_foundations import _hello
+    from tests.unit.test_server_run_reconnect import _send as send, _tcp
+    srv = SLinkServer(data_dir=str(tmp_path))
+    assert srv._wire_log is None
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        malformed = await send(socket, message)
+        assert any(c.get("refused") == "malformed" for c in malformed["commands"])
+        reply = await send(socket, _hello("a", {"rom_type": "red"}))
+        assert "commands" in reply and srv.is_admitted("a")
+        await send(socket, {"event": "no_catch", "player": "a", "area_id": "route_1"})
+        assert srv.state.area_states["route_1"].value == "dead_zone"

@@ -111,7 +111,7 @@ KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "
 
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
-    "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello|duplicate|superseded)
+    "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello (per player-slot/connection)|duplicate|superseded|load_failed|error|malformed|party_snapshot)
     # "phone": the O-29 tag; Gen 2 phone and capability-gated Emerald v2 Match Call consume it.
     "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),
     "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),

@@ -2163,9 +2163,10 @@ function Client.new(p)
                     self.pending_change = {kind="rescan", frame=self.frame}
                     if st.kind == "prompt" then
                         if not st.declared then
-                            owe("menu_result", {token=st.token, choice=0})
+                            owe("menu_result", {token=st.token, choice=0, uncertain=true})
+                            hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
                             st.declared = true
-                            log("[SLink-gen1] prompt hold expired; declined offer, native lease held until reset")
+                            log("[SLink-gen1] prompt hold expired; outcome uncertain, native lease held until reset")
                         end
                     else
                         trade_uncertain(st, "consumption evidence missing after bounded hold")
