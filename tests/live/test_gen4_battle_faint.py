@@ -168,6 +168,31 @@ def state_save_record(state_save: dict | None) -> dict:
             "state_binding": binding.get("state_binding")}
 
 
+# The two producer records state_save_binding accepts, and the wire kind each discloses. The receipt
+# echo in lua/tests/probe_gen4_battle_faint.lua classifies the same two origins from cfg.state_binding
+# (M.binding_kind); an unrecognised origin has no kind, so it never passes as a route record.
+BINDING_KINDS = {"diagnostic manifest": "diag_manifest", "recorded route save sha256": "route_recorded"}
+
+
+def binding_kind(state_binding: str | None) -> str | None:
+    for origin, kind in BINDING_KINDS.items():
+        if isinstance(state_binding, str) and state_binding.startswith(origin):
+            return kind
+    return None
+
+
+def check_receipt_binding(payload: dict, cfg: dict) -> None:
+    """A receipt must disclose the state/save provenance ITS OWN run bound: the staged battery's sha256,
+    the binding record, and which producer record paired them. Nothing inside the state file carries that
+    pairing, so a receipt that omits or misreports it is not evidence for the run that produced it --
+    refused here, beside the setup/sidecar disclosures."""
+    assert payload.get("state_save_sha256") == cfg["state_save_sha256"], \
+        "receipt does not disclose this run's bound state_save_sha256"
+    assert payload.get("state_binding") == cfg["state_binding"], "receipt carries another state binding"
+    assert payload.get("state_binding_kind") == binding_kind(cfg["state_binding"]), \
+        "receipt misreports the state/save binding kind"
+
+
 def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None) -> tuple[str, dict]:
     """Same grammar as test_gen4_probe_gates.row_o(): one PROBE o row + one terminal RESULT."""
     lines = text.splitlines()
@@ -418,11 +443,8 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
         assert payload.get("setup") == ("SYNTH" if synth else "NATIVE"), "receipt does not disclose the setup kind"
         if synth:
             assert payload["synth"]["sidecar_sha256"] == synth["sidecar_sha256"], "receipt carries another sidecar"
-        # the bound save sha256 is in this run's probe.json; it reaches the receipt itself only once
-        # lua/tests/probe_gen4_battle_faint.lua echoes cfg.state_save_sha256 beside `setup`/`synth` in its
-        # payload table (the `setup = ..., synth = cfg.synth` row). That script is not leased here, so the
-        # echo -- and then this line's sibling, payload["state_save_sha256"] == cfg["state_save_sha256"],
-        # beside the setup/sidecar disclosures above -- is the cross-lease step.
+        # the binding this run staged and paired is only in probe.json until the probe echoes it back
+        check_receipt_binding(payload, cfg)
         return status, payload, lane, out
     finally:
         if proc.poll() is None:
@@ -662,6 +684,47 @@ def test_config_carries_the_bound_state_save_provenance(tmp_path):
     assert (cfg["state_sha256"], cfg["state_save_sha256"], cfg["state_binding"]) == \
         (bound["state_sha256"], bound["state_save_sha256"], bound["state_binding"])
     assert build_config(**common)["state_save_sha256"] is None, "an unbound config must disclose nothing"
+
+
+def test_a_receipt_must_disclose_the_bound_state_save_and_red_revert():
+    cfg = {"state_save_sha256": "2" * 64, "state_binding": "diagnostic manifest (not a state decode)"}
+    good = {"state_save_sha256": "2" * 64, "state_binding": cfg["state_binding"], "state_binding_kind": "diag_manifest"}
+    wrong_sha = [{k: v for k, v in good.items() if k != "state_save_sha256"}, {**good, "state_save_sha256": "3" * 64}]
+    wrong_kind = [{**good, "state_binding_kind": "route_recorded"}, {**good, "state_binding_kind": None}]
+    wrong_record = [{**good, "state_binding": "recorded route save sha256 (not a state decode)"}]
+    check_receipt_binding(good, cfg)
+    for payload, why in [(p, "bound state_save_sha256") for p in wrong_sha] + \
+                         [(p, "binding kind") for p in wrong_kind] + \
+                         [(p, "another state binding") for p in wrong_record]:
+        with pytest.raises(AssertionError, match=why):
+            check_receipt_binding(payload, cfg)
+    # RED: with the sha256 disclosure neutralised the same receipts are accepted -- the refusals above
+    # are that comparison and not an accident of some other check. REVERT: the real one refuses again.
+    source = inspect.getsource(check_receipt_binding)
+    guard = 'payload.get("state_save_sha256") == cfg["state_save_sha256"]'
+    assert source.count(guard) == 1
+    namespace = {"binding_kind": binding_kind}
+    exec(source.replace(guard, "True"), namespace)
+    for payload in wrong_sha:
+        namespace["check_receipt_binding"](payload, cfg)
+    for payload in wrong_sha:
+        with pytest.raises(AssertionError, match="bound state_save_sha256"):
+            check_receipt_binding(payload, cfg)
+
+
+def test_the_lua_receipt_echo_classifies_exactly_the_same_bindings():
+    lupa = pytest.importorskip("lupa")
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    rt.globals().SLINK_GEN4_FAINT_TEST = True
+    m = rt.execute(SCRIPT.read_text(encoding="utf-8"))
+    for origin, kind in BINDING_KINDS.items():
+        record = f"{origin} (not a state decode)"
+        assert binding_kind(record) == kind == m.binding_kind(record)
+    # an absent, explicitly nil or unrecognised binding classifies as nil on both sides, never a default kind
+    for expr, cfg in (("return {}", {}), ("return {state_binding=nil}", {"state_binding": None}),
+                      ("return {state_binding='some other origin'}", {"state_binding": "some other origin"})):
+        assert binding_kind(cfg.get("state_binding")) is None
+        assert m.binding_kind(rt.execute(expr)) is None
 
 
 def lua_api():

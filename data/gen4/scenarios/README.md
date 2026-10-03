@@ -237,6 +237,65 @@ Run sequentially in this worktree; never use pytest-xdist. Retained states below
 are inputs, not reused qualification receipts. Producers stage private copies,
 create fresh timestamp/UUID lanes and clean up their owned processes only.
 
+### Retained-state provenance: a state hash is not a save hash
+
+`one_sha`/`two_sha` below hash the retained **state** files; the `G4_*_SAVE_SHA256` variables
+hash the **battery** each state was produced from. Different files: the binding check compares
+the battery hash against the save staged for that cell, so a state hash pasted into a
+`*_SAVE_SHA256` slot is refused by name instead of binding the wrong thing.
+
+`tools/gen4_routes.py` records no battery hash in a route lane — `<tag>_leg<N>.json` carries
+only the plan, and `stage_save` copies the bytes and verifies sha1 without writing a receipt
+(tools/gen4_fixtures.py:193-207) — so every route cell's `*_SAVE_SHA256` is an OPERATOR RECORD.
+`state_save_binding` re-checks it against the bytes it stages: that catches a stale or mistyped
+hash, but it cannot tell a proven pairing from a merely repeated one. Fill a variable only from
+a PROVEN row; an OPEN row stays unset and the loop stops by that cell's name.
+
+| row o cell | retained state (lane-relative) | battery staged for the cell | recorded sha256 | status |
+|---|---|---|---|---|
+| HG-one | `route/route_leg2_battle_settled.State` | `saves/hg_base_26310.SaveRAM` | `e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6` | OPEN |
+| HG-two | `g1hg-p2-route-1016/p2hg_leg2_battle_settled.State` | `g1inputs-c935-1015/hg_p2.SaveRAM` | `bf5d3b5ff7a194d50b19de917aba8617f61cf667c146b540e6f62508ade65893` | OPEN |
+| hge-one | `route_hge/route_hge_leg5_battle_settled.State` | `saves/hge_a_OOO_630.SaveRAM` | `a9e4a48b573365bbd6e99436ed9a411523822bed1acda4ecf3868280f98b775f` | OPEN |
+| hge-two | `g1hge-p2-route-1022/p2hge_leg5_battle_settled.State` | `g1inputs-c935-1015/hge_p2.SaveRAM` | `0c9017af93cda226e81bb33ddbec563fe521340a635815cc7a082168705f2b5c` | OPEN |
+| SS-one | `$env:G4_SS_ONE` (`ss1-de5-10031709/bridge-6_battle_settled.State`) | `saves/ss_DDDD_25944.SaveRAM` | from `G4_SS_ONE_MANIFEST`'s `save_sha256` | PROVEN by producer record |
+| SS-two | `ss2-de5-10031709/p2ss_leg5_battle_settled.State` | `g1inputs-c935-1015/ss_p2.SaveRAM` | `2eef6df1bd9d29b02b3699a9b99a98924b41d017360bd0104c4f744b44890a3e` | OPEN |
+
+The battery column and its hash come from the consumption-side records
+`q-de5-10031709/{HG-one,HG-two,hge-one,hge-two,SS-two-state}.json` and the file hashes in
+`q-de5-10031709/originals-at-recall.json`; re-hash the battery yourself before quoting it.
+Those records were written AFTER the route runs and no route lane names the `--save` the CLI was
+given, so on their own they prove which battery the row o staged, not which one the state came
+from. Resolve each OPEN row with ONE hash comparison against the battery that lane actually
+staged:
+
+```powershell
+# the PRODUCTION-TIME lane copies: all four route lanes ran under lane root C:/slink/g4 (bizhawk.ini:868)
+(Get-FileHash "C:/slink/g4/route/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM" -Algorithm SHA256).Hash.ToLower()          # HG-one
+(Get-FileHash "C:/slink/g4/g1hg-p2-route-1016/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM" -Algorithm SHA256).Hash.ToLower() # HG-two
+(Get-FileHash "C:/slink/g4/route_hge/SaveRAM/test.SaveRAM" -Algorithm SHA256).Hash.ToLower()                                   # hge-one
+(Get-FileHash "C:/slink/g4/g1hge-p2-route-1022/SaveRAM/test.SaveRAM" -Algorithm SHA256).Hash.ToLower()                          # hge-two
+(Get-FileHash "$root/ss2-de5-10031709/SaveRAM/Pokemon - SoulSilver Version (USA).SaveRAM" -Algorithm SHA256).Hash.ToLower()       # SS-two
+(Get-FileHash "C:/slink/g4/saves/hge_a_OOO_630.SaveRAM" -Algorithm SHA256).Hash.ToLower()   # hge-one default battery (tools/gen4_routes.py:100)
+```
+
+Each must EQUAL the hash in its table row, or that cell stays OPEN and blocks its row o. Equality
+is the proof: `stage_save` copied those bytes verbatim and verified sha1
+(tools/gen4_fixtures.py:193-207), and the lane `bizhawk.ini` pointed EmuHawk's NDS Save RAM at
+that directory, so an unchanged staged copy is the battery the state was produced from. A changed
+copy means the game flushed the battery mid-run and the pairing is unrecoverable from these
+artifacts — report it, do not substitute the state hash. Each lane also holds a `.SaveRAM.bak`;
+if the staged copy changed, compare that too, but review it as evidence rather than the same
+proof: nothing on record says which write produced it.
+
+Why HG-one and hge-one are not proven by naming alone: the HG route's default `--save` is
+`E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM`
+(tools/gen4_routes.py:98), a fourth battery no artifact in `route/` excludes, and
+`route*/bizhawk.ini:868` shows the four route lanes were produced under lane root `C:/slink/g4`,
+not this `F:` root — so even the hge default (tools/gen4_routes.py:100) named the C: copy of
+`saves/hge_a_OOO_630.SaveRAM` at that time. SS-one needs no such step: its `diagnostic.json`
+manifest is the producer record `check_state_manifest` compares, so point `G4_SS_ONE_MANIFEST` at
+the manifest that reviewed THIS state and the loop passes it as `manifest=`.
+
 ```powershell
 $env:SLINK_WORK_ROOT='F:/slink-work'
 $env:PYTEST_DEBUG_TEMPROOT='F:/slink-work/tmp'
@@ -248,6 +307,14 @@ foreach ($key in @('SLINK_GEN4_PROBE_QUALIFY','SLINK_GEN4_PERF_RECEIPT','SLINK_G
 }
 $tag=Get-Date -Format 'MMddHHmmss'
 $root='F:/slink-work/lanes/g4'
+
+# Battery provenance for the retained route states. Every value below is an OPERATOR RECORD (see the
+# table above); set one only from a PROVEN row, and leave an OPEN row unset so the loop stops by name.
+$env:G4_HG_ONE_SAVE_SHA256='<sha256 saves/hg_base_26310.SaveRAM, proven == route/SaveRAM staged copy>'
+$env:G4_HG_TWO_SAVE_SHA256='<sha256 g1inputs-c935-1015/hg_p2.SaveRAM, proven == g1hg-p2-route-1016/SaveRAM copy>'
+$env:G4_HGE_ONE_SAVE_SHA256='<sha256 saves/hge_a_OOO_630.SaveRAM, proven == route_hge/SaveRAM staged copy>'
+$env:G4_HGE_TWO_SAVE_SHA256='<sha256 g1inputs-c935-1015/hge_p2.SaveRAM, proven == g1hge-p2-route-1022/SaveRAM copy>'
+$env:G4_SS_TWO_SAVE_SHA256='<sha256 g1inputs-c935-1015/ss_p2.SaveRAM, proven == ss2-*/SaveRAM staged copy>'
 
 # 1. Row o: HG one/two, hge one/two, then SS one/two. Real producer; no function overrides.
 @'
@@ -276,9 +343,19 @@ for title, short, native, one, two, one_sha, two_sha in [
         state=f.need(root/relative, 'retained settled battle input')
         expected=two_sha if p2 else one_sha
         assert sha256(state)==expected, 'reviewed state hash mismatch'
-        setup={'producer':'tools/gen4_routes.py','qualified':False,'setup':'RETAINED_ROUTE_STATE','sha256':expected}
+        binding={}
         if title=='soulsilver' and not p2:
-            setup=check_state_manifest(state, os.environ['G4_SS_ONE_MANIFEST'], expected)
+            binding['manifest']=os.environ['G4_SS_ONE_MANIFEST']  # the D2 producer record; compared to the staged battery
+            setup=check_state_manifest(state, binding['manifest'], expected)
+        else:
+            key=f'G4_{short.upper()}_{"TWO" if p2 else "ONE"}_SAVE_SHA256'
+            if not os.environ.get(key):
+                raise SystemExit(f'OPEN {short}-{"two" if p2 else "one"}: {key} unset — a retained route state '
+                                 'carries no producer save hash; fill it only from a PROVEN row of the '
+                                 'retained-state provenance table')
+            binding['source_save_sha256']=os.environ[key]
+            setup={'producer':'tools/gen4_routes.py','qualified':False,'setup':'RETAINED_ROUTE_STATE','sha256':expected,
+                   'save_sha256':binding['source_save_sha256']}
         print(json.dumps({'state':str(state),'state_setup':setup}))
         log=state.with_name(state.name.replace('_battle_settled.State','.log'))
         text=f.need(log, 'settled input log').read_text()
@@ -287,7 +364,7 @@ for title, short, native, one, two, one_sha, two_sha in [
         synth=f.check_synth(save,title) if p2 else None
         scenario='seam_ufce_bit_p2' if p2 else 'seam_ufce_bit'
         before={p:f.digest(p) for p in (state,save)}
-        status,payload,lane,out=f.launch(title,scenario,state,gen4_pins.default_locations().roms[title],save,synth=synth)
+        status,payload,lane,out=f.launch(title,scenario,state,gen4_pins.default_locations().roms[title],save,synth=synth,**binding)
         verdict,why=f.receipt_verdict(out,title=title,rom_sha1=payload['rom_sha1'])
         print(json.dumps({'receipt':str(out),'verdict':verdict,'reason':why,'state_setup':setup}))
         assert all(f.digest(p)==h for p,h in before.items()), 'original input changed'
