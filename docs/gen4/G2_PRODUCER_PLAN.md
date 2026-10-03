@@ -188,3 +188,8 @@ Behaviour already observed on HG, SS and hge, but the receipts are NOT signable 
   - **Oracle:** party count +1; box 0 slot 0 empty; box dirty-mask bit 0 set; then SAVE + cold reload.
   - **Precondition:** party count < 6 (the 6/6 path is unverified: whether the box slot is still deleted).
 - **Conflict to settle live:** `lua/tests/gen4_route_play.lua:447,451` reads the state at man+0x14 (the deposit leg is PHYSICAL on it), while the asm says sysdata+0 (`:11368-11385`). Trust the PHYSICAL deposit read until a live trace says otherwise.
+
+### §6b CORRECTION 2 amendment (Sonnet withdraw-leg worker, coordinator-verified)
+- The box app in **mode 1 (WITHDRAW) does NOT pass through 0x5B**. State 0xB's mode-1 branch (`asm/overlay_14.s:11822-11831`) puts the cursor on box cell 0 (`ov14_021E7588(data, 0)`) and goes straight to **0x51**. Only mode 0 (DEPOSIT) goes to 0x5B with cell 0x1E (`:11814-11820`).
+- So the withdraw leg needs NO d-pad: at 0x51 with cell 0, press A, and state 0x57 commits.
+- The state word: the leg polls man+0x14 (`app_info()`), which is PHYSICAL on the deposit receipts. `PCBox_Main` receives `&man->proc_state`, so it is the same word as the asm's sysdata+0. The first live run logs the trace.

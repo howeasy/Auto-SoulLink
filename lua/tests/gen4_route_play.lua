@@ -5,12 +5,13 @@
 -- env: G4_REPO (repo root), G4_ROUTE (route.json), G4_OUT (log path), G4_LANE (state dir),
 --      G4_TAG (state name prefix), optional G4_LOAD_STATE (resume a resync state instead of booting),
 --      G4_PACE_MAX (max pace steps, default route's), G4_SETTLE (frames to wait after battle start).
--- exit status is the LAST log line `RESULT <status> ...` (BATTLE | PC_DEPOSIT | RESYNC | FAIL <why>).
+-- exit status is the LAST log line `RESULT <status> ...` (BATTLE | PC_DEPOSIT | PC_WITHDRAW | RESYNC | FAIL <why>).
 --
 -- Route kinds (route.kind): absent = walk to wild grass and fight; "errand" = enter/talk/exit a house
 -- (a door step ends the leg with RESYNC done=1); "pc" = the Cherrygrove Pokemon Center PC: walk to the tile
 -- south of the PC, face it, deposit party slot 1 (a SYNTH party-2 save) through the PC UI by BUTTONS ONLY,
 -- native SAVE, verify by RAM (tools/gen4_routes.py plan_pc; docs in that file and tests/TESTING.md);
+-- route.phase == "withdraw" = the sibling leg: WITHDRAW POKEMON, grab the box 0 slot 0 mon into a party with room;
 -- "hatch" = pace on plain floor until the SYNTH egg1 hatches (plan_hatch), decode the party before/after/after
 -- SAVE; "reload" = a fresh boot from the saved battery, confirmed by RAM.
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
@@ -485,7 +486,7 @@ local function in_state(want) return function(a) return a ~= nil and a.ovy == AP
 local function app_gone(a) return not (a and a.ovy == APP_OVY) end
 local function hx(v) return v and string.format("%#x", v) or "nil" end
 
-local function pc_deposit()
+local function face_pc() -- the shared preamble of the deposit and withdraw legs
   local pcr = route.pc
   local l = loc()
   if not l or l.x ~= pcr.stand[1] or l.y ~= pcr.stand[2] then finish("FAIL", "not_at_pc_stand", pos_s(l)) end
@@ -501,6 +502,10 @@ local function pc_deposit()
   if not wait_stable(30) then finish("FAIL", "pc_stand_not_stable", pos_s(loc())) end
   l = loc()
   if facing() ~= 0 then finish("FAIL", "not_facing_pc", pos_s(l), "facing", tostring(facing())) end
+end
+
+local function pc_deposit()
+  face_pc()
   local p0, b0 = party_state(), box_census()
   if not p0 or not b0 then finish("FAIL", "ram_unreadable", "party", tostring(p0), "boxes", tostring(b0)) end
   local pid = route.synth.new_pid
@@ -611,6 +616,137 @@ local function pc_deposit()
   save_state("saved"); shot("saved")
   finish("PC_DEPOSIT", string.format("party=2->1 box=%d/%d pid=%s modified=%s->%s save_driver=idle %s",
     at[1], at[2], hx(pid), hx(mod_after_deposit), hx(b2.mod), pos_s(loc())))
+end
+
+-- ----- the PC withdraw (route.kind == "pc", route.phase == "withdraw") -----------------------------------
+-- Sibling of pc_deposit; every input is cited in route.pc.withdraw.steps (tools/gen4_routes.py WITHDRAW_STEPS,
+-- pokeheartgold@ad7a3afa, docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"). Top menu: Down x1 then A = WITHDRAW
+-- POKEMON -> ScrCmd_158 1 (scr_seq_0003.s:821-856, OVY_14 mode 1). Mode 1 starts at state 0x51 with the cursor on
+-- box cell 0 (asm/overlay_14.s:11822-11831; mode 0 = the deposit leg starts at 0x5B). A on a box mon = grab + ONE
+-- msg_0025 prompt (ov14_021F0418), then state 0x57 commits with NO input (ov14_021EDF28 -> ov14_021E6184 ->
+-- Party_AddMon) and returns to 0x51. STATE WORD: man+0x14, exactly as pc_deposit reads it (that read is PHYSICAL on
+-- the deposit receipts); the asm calls it sysdata+0 (:11368-11385) -- the live trace in the log settles it.
+-- INFERRED, so polled/logged and never blind: the script-menu settle windows (no RAM signal for a script menu), the
+-- 0x57 -> 0x51 edge, and B at 0x51 reaching the exit YesNo. Precondition: a party with room (the 6/6 path is unverified).
+local ST_GRID, MENU_SETTLE = 0x51, 240
+local function box_slot_pid(box, slot)
+  local base = array_addr(RAM.id_pc)
+  local c = RAM.pc
+  return base and r32(base + c.box_base + box * c.box_stride + slot * c.mon_stride) or nil
+end
+local function app_input_state(a)
+  return a ~= nil and a.ovy == APP_OVY and (a.state == ST_GRID or a.state == ST_LIST)
+end
+local function withdrawn_ok(p0, b0, pid, home, label)
+  local p1, b1 = party_state(), box_census()
+  local ok = p1 ~= nil and b1 ~= nil and p1.n == p0.n + 1 and p1.pids[p1.n] == pid and b1.total == b0.total - 1
+    and not b1.where[pid] and box_slot_pid(home[1], home[2]) == 0
+  for i = 1, p0.n do if not (p1 and p1.pids[i] == p0.pids[i]) then ok = false end end
+  say(label, "party", p1 and p1.n, "pids", p1 and table.concat(p1.pids, ","), "boxed", b1 and b1.total,
+    "slot pid", hx(box_slot_pid(home[1], home[2])), "curBox", tostring(b1 and b1.cur), "modified", hx(b1 and b1.mod))
+  return ok, p1, b1
+end
+local function pc_withdraw()
+  local wd = route.pc.withdraw
+  face_pc()
+  local p0, b0 = party_state(), box_census()
+  if not p0 or not b0 then finish("FAIL", "ram_unreadable", "party", tostring(p0), "boxes", tostring(b0)) end
+  local pid = route.synth.new_pid
+  local home = b0.where[pid]
+  say("before: party", p0.n, "pids", table.concat(p0.pids, ","), "boxed", b0.total, "curBox", tostring(b0.cur),
+    "modified", hx(b0.mod), "synth pid", pid)
+  if p0.n > wd.party_max then finish("FAIL", "withdraw_party_full", "party", p0.n) end
+  if not home or home[1] ~= (b0.cur or 0) or home[2] ~= wd.box_cell then
+    finish("FAIL", "setup_not_in_cell", "clone at", home and (home[1] .. "/" .. home[2]) or "none", "curBox", tostring(b0.cur))
+  end
+  for _, v in ipairs(p0.pids) do if v == pid then finish("FAIL", "setup_clone_in_party") end end
+  shot("pc_facing")
+
+  -- 1. interact (A on the PC tile), then the two script menus by BUTTONS ONLY
+  local started = false
+  for try = 1, 4 do
+    tap("A", 3, 60)
+    say("pc interact try", try, "taskman", hex(taskman() or 0))
+    if (taskman() or 0) ~= 0 then started = true; break end
+  end
+  if not started then finish("FAIL", "pc_script_not_started", pos_s(loc())) end
+  frames(MENU_SETTLE)           -- INFERRED: "Which PC?" is up (a menu waits forever; early A would only speed the text)
+  tap("A", 3, MENU_SETTLE)      -- first row = the storage PC (scr_seq_0003.s:776-812)
+  for _ = 1, wd.menu_down do tap("Down", 3, 30) end -- DEPOSIT -> WITHDRAW POKEMON (scr_seq_0003.s:821-846)
+  shot("pc_menu_withdraw")
+  tap("A", 3, 10)               -- WITHDRAW POKEMON -> ScrCmd_158 1 (:851-856)
+  local launched = false
+  for f = 1, 3600 do
+    local a = watch()
+    if a and a.ovy == APP_OVY then launched = true; break end
+    emu.frameadvance()
+    if f % 600 == 0 then say("pc launch f+" .. f, "taskman", hex(taskman() or 0)); shot("pclaunch" .. f) end
+  end
+  if not launched then finish("FAIL", "pc_not_launched", "taskman", hex(taskman() or 0), pos_s(loc())) end
+  say("PC app up at frame", emu.framecount())
+
+  -- 2. the box grid: mode 1 = state 0x51, cursor on cell 0 (a 0x5B here is mode 0 = the DEPOSIT row was taken)
+  if not frames(1200, app_input_state) then finish("FAIL", "pc_input_state_not_reached", trace()) end
+  frames(30)
+  local a = watch()
+  if not (a and a.state == ST_GRID) then finish("FAIL", "pc_wrong_mode", "state", hx(a and a.state), trace()) end
+  if a.sel ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "sel", hx(a.sel), "want", wd.box_cell, trace()) end
+  shot("pc_grid")
+
+  -- 3. A = grab + one prompt; state 0x57 commits with no further input: poll the party count
+  tap("A", 2, 6)
+  local committed = false
+  for f = 1, 1500 do
+    watch()
+    if f % 10 == 0 then local p = party_state(); if p and p.n == p0.n + 1 then committed = true; break end end
+    emu.frameadvance()
+  end
+  say("grab trace", trace())
+  if not committed then finish("FAIL", "withdraw_not_committed", trace()) end
+  say("state 0x57 sampled:", tostring(trace():find(":0x57", 1, true) ~= nil))
+  if not frames(600, in_state(ST_GRID)) then say("INFERRED edge 0x57 -> 0x51 not seen in 600 frames", trace()) end
+  frames(30)
+
+  -- 4. verify by RAM: +1 party (appended, the rest unmoved), box slot empty, dirty MASK has the source box's bit
+  local ok, p1, b1 = withdrawn_ok(p0, b0, pid, home, "after:")
+  if not ok then finish("FAIL", "withdraw_state_wrong", trace()) end
+  local mod_after = b1.mod
+  if mod_after ~= nil and (mod_after & (1 << home[1])) == 0 then
+    finish("FAIL", "box_modified_flag_not_set", hx(mod_after), "box", home[1])
+  end
+  save_state("withdrawn"); shot("withdrawn")
+
+  -- 5. leave the PC exactly as the deposit leg does (B until the overlay is gone; B backs out of the script menus)
+  local gone = false
+  for _ = 1, 12 do
+    if tap("B", 2, 45, app_gone) then gone = true; break end
+  end
+  if not gone then finish("FAIL", "pc_not_closed", trace()) end
+  say("PC app closed at frame", emu.framecount(), "trace", trace())
+  local idle = false
+  for _ = 1, 60 do
+    if wait_idle(90, 90) then idle = true; break end
+    tap("B", 2, 30)
+  end
+  if not idle then finish("FAIL", "pc_script_not_closed", "taskman", hex(taskman() or 0)) end
+  shot("pc_off")
+
+  -- 6. native SAVE through the pack's persistence legs, then the save driver must be idle again
+  for _, name in ipairs({"open_start_menu", "start_menu_cursor_to_save", "start_menu_select_save",
+      "save_confirm_until_saved", "close_start_menu"}) do
+    local used = play_leg(route.persistence[name], name)
+    if not used then finish("FAIL", "save_leg_not_reached", name, pos_s(loc())) end
+    say("save leg", name, used, "frames")
+  end
+  if not wait_idle(60, 900) then finish("FAIL", "save_not_idle", "taskman", hex(taskman() or 0)) end
+  if not save_driver_idle() then finish("FAIL", "save_driver_not_idle") end
+  local ok2, _, b2 = withdrawn_ok(p0, b0, pid, home, "after save:")
+  if not ok2 then finish("FAIL", "state_after_save_wrong") end
+  if b2.mod ~= nil and b2.mod ~= 0 then finish("FAIL", "box_modified_flag_not_cleared", hx(b2.mod)) end
+  save_state("saved"); shot("saved")
+  finish("PC_WITHDRAW", string.format("party_before=%d party_after=%d box=%d/%d slot_after=empty pid=%s " ..
+    "mod_before=%s mod_after=%s mod_saved=%s save_driver=idle %s", p0.n, p1.n, home[1], home[2], hx(pid),
+    hx(b0.mod), hx(mod_after), hx(b2.mod), pos_s(loc())))
 end
 
 -- ----- egg hatch (route.kind == "hatch": SYNTH egg1 in party slot 1) -------------------------------
@@ -728,6 +864,13 @@ local function reload_check()
   local at = b.where[pid]
   say("reloaded: party", p.n, "pids", table.concat(p.pids, ","), "boxed", b.total, "clone at",
     at and (at[1] .. "/" .. at[2]) or "none", "curBox", tostring(b.cur), "modified", b.mod and string.format("%#x", b.mod) or "nil")
+  if route.op == "withdraw" then -- the withdrawn mon must have persisted in the PARTY (appended) and left the box
+    if p.n < 2 then finish("FAIL", "reload_party_count", p.n) end
+    if p.pids[p.n] ~= pid then finish("FAIL", "reload_clone_not_in_party", hx(p.pids[p.n])) end
+    if at then finish("FAIL", "reload_clone_still_boxed", at[1] .. "/" .. at[2]) end
+    if b.mod ~= nil and b.mod ~= 0 then finish("FAIL", "reload_modified_flag_set", b.mod) end
+    finish("RELOAD_OK", string.format("party=%d clone_slot=%d boxed=%d pid=%#x", p.n, p.n, b.total, pid))
+  end
   if p.n ~= 1 then finish("FAIL", "reload_party_count", p.n) end
   if not at then finish("FAIL", "reload_clone_not_boxed") end
   if p.pids[1] == pid then finish("FAIL", "reload_clone_in_party") end
@@ -807,7 +950,9 @@ for i = 1, #steps do
 end
 if route.kind == "reload" then reload_check() end
 if route.kind == "hatch" then hatch_leg() end
-if route.kind == "pc" then pc_deposit() end -- ends in finish(): PC_DEPOSIT or FAIL
+if route.kind == "pc" then -- ends in finish(): PC_DEPOSIT / PC_WITHDRAW or FAIL
+  if route.phase == "withdraw" then pc_withdraw() else pc_deposit() end
+end
 if route.kind == "errand" then -- only `talk` reaches here: face the NPC, A through the dialogue
   local want = {Up = 0, Down = 1, Left = 2, Right = 3}
   local face = route.talk.face

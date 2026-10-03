@@ -516,6 +516,44 @@ CHERRYGROVE_ID = 67  # MAP_CHERRYGROVE (include/constants/maps.h:71)
 PC_FACE = "Up"
 PC_BEHAVIOR = 0x83
 
+# The PC WITHDRAW leg (box -> party). Every input names its SOURCE (pokeheartgold @ad7a3afa, see
+# docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"); `inferred` marks a step with no source line, which the
+# Lua polls by a RAM signal instead of trusting. The party-full path ("Your party is full!",
+# ov14_021F0418) is UNVERIFIED, so a full party is a named precondition, not a run.
+WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
+WITHDRAW_MENU_DOWN = 1  # PC top menu rows: DEPOSIT 0, WITHDRAW POKEMON 1 (scr_seq_0003.s:821-846)
+WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
+WITHDRAW_STEPS = (
+    {"step": "interact", "press": "A", "inferred": False,
+     "source": "GetInteractedMetatileScript -> std_pokecenter_pc, scr_seq_0003.s:754-762 (scr_seq_0003_010)"},
+    {"step": "which_pc", "press": "A", "inferred": True,
+     "source": "scr_seq_0003.s:776-812 (_0A2E MenuExec, item 0 = the storage PC -> _0B01); menu readiness has "
+               "no RAM signal, so the Lua waits a settle window first (INFERRED timing)"},
+    {"step": "menu_down", "press": "Down", "inferred": False,
+     "source": "scr_seq_0003.s:821-833 (_0B17 rows DEPOSIT 0 / WITHDRAW POKEMON 1), cursor starts on row 0"},
+    {"step": "menu_withdraw", "press": "A", "inferred": False,
+     "source": "scr_seq_0003.s:834-846 (_0B53 Case 1 -> _0BB5), :851-856 ScrCmd_158 1 -> PCBox_LaunchApp mode 1"},
+    {"step": "app_state_0x51", "wait_state": 0x51, "inferred": False,
+     "source": "asm/overlay_14.s:11822-11831 (ov14_021EB2EC, table entry 0xB :36977): mode 1 -> next state 0x51, "
+               "cursor cell 0 (ov14_021E7588); mode 0 -> 0x5B (a 0x5B here means the DEPOSIT row was taken)"},
+    {"step": "cursor_on_cell", "cell": WITHDRAW_CELL, "inferred": False,
+     "source": "asm/overlay_14.s:11824-11826 (cursor set to cell 0 on entry); data+0x21 is read back, not driven"},
+    {"step": "grab", "press": "A", "inferred": False,
+     "source": "state 0x51 -> ov14_021F0418 (asm/overlay_14.s:16618, :21594-21677): grabs the box mon, ONE "
+               "msg_0025 prompt, schedules state 0x57; no menu, no destination pick"},
+    {"step": "commit", "wait_party_delta": 1, "state": 0x57, "inferred": False,
+     "source": "state 0x57 ov14_021EDF28 (asm/overlay_14.s:17139-17187) reads no input: ov14_021E637C -> "
+               "ov14_021E6184 -> Party_AddMon; polled by party count, 0x57 is only logged"},
+    {"step": "grid_restored", "wait_state": 0x51, "inferred": True,
+     "source": "0x57 -> 0x51 (asm/overlay_14.s:17183): the edge is source-read, the live timing is not; "
+               "logged, never required"},
+    {"step": "exit_app", "press": "B", "inferred": True,
+     "source": "B at 0x51 is INFERRED to reach the 'Continue Box operations?' YesNo (state 0x94, B = No) "
+               "the deposit leg exits through; the leg re-presses B until the overlay is gone"},
+    {"step": "save", "legs": "persistence", "inferred": False,
+     "source": "the same native SAVE legs as the deposit (pack route_legs)"},
+)
+
 
 @dataclass
 class Errand:
@@ -665,10 +703,13 @@ def plan_errand(world: World, errand: Errand, phase: str, start: dict, game: str
     return route
 
 
-def plan_pc(errand: Errand, start: dict, game: str = "HG") -> dict:
+def plan_pc(errand: Errand, start: dict, game: str = "HG", phase: str = "deposit") -> dict:
     """The interior leg of the PC stop: from `start` (the arrival tile the previous leg logged)
     to the tile SOUTH of the PC, which is where the player must stand to face it north (PC_FACE;
-    see PC_BEHAVIOR). The leg ends facing the PC; the Lua then runs the deposit."""
+    see PC_BEHAVIOR). The leg ends facing the PC; the Lua then runs `phase` ("deposit", or
+    "withdraw" which also carries the box-withdraw input plan, WITHDRAW_STEPS)."""
+    if phase not in ("deposit", "withdraw"):
+        raise RouteError("unknown_pc_phase", f"{phase!r} is not deposit or withdraw")
     w = errand.house
     sx, sy = _check_start(w, start)
     stand = (errand.npc[0], errand.npc[1] + 1)
@@ -682,13 +723,30 @@ def plan_pc(errand: Errand, start: dict, game: str = "HG") -> dict:
         "version": 1,
         "game": game,
         "kind": "pc",
-        "phase": "deposit",
+        "phase": phase,
         "start": {**_loc(w, (sx, sy)), "dir": start.get("dir")},
         "steps": _runs(w, path),
         "tiles": len(path) - 1,
-        "pc": {"x": errand.npc[0], "y": errand.npc[1], "stand": list(stand), "face": PC_FACE},
+        "pc": {
+            "x": errand.npc[0],
+            "y": errand.npc[1],
+            "stand": list(stand),
+            "face": PC_FACE,
+            **({"withdraw": withdraw_plan()} if phase == "withdraw" else {}),
+        },
         "approach_grass": [],
         "soft_events": [],
+    }
+
+
+def withdraw_plan() -> dict:
+    """The box-withdraw inputs the Lua leg follows: the ordered, source-cited steps plus the numbers
+    it drives (menu rows to go down, the box cell to grab)."""
+    return {
+        "menu_down": WITHDRAW_MENU_DOWN,
+        "box_cell": WITHDRAW_CELL,
+        "party_max": WITHDRAW_PARTY_MAX,
+        "steps": [dict(s) for s in WITHDRAW_STEPS],
     }
 
 
@@ -742,15 +800,18 @@ def plan_hatch(world: World, start: dict, game: str = "HG", max_steps: int = 700
     raise RouteError("no_pace_tile", f"no plain neighbour of ({sx},{sy})")
 
 
-def plan_pc_stop(rom, pret, world: World, start: dict, game: str = "HG") -> dict:
+def plan_pc_stop(rom, pret, world: World, start: dict, game: str = "HG", phase: str = "deposit") -> dict:
     """The whole PC stop planned offline: the outdoor walk to the Pokemon Center door, and the
     interior walk to the PC tile assuming the player arrives ON the interior warp tile facing up
-    (the live run re-plans the second leg from the arrival tile the first one logs)."""
+    (the live run re-plans the second leg from the arrival tile the first one logs). A `start`
+    already inside the Pokemon Center (a save made at the PC) plans only the interior leg."""
     pc = load_errand(rom, pret, "cherrygrove_pc", CHERRYGROVE_ID)
+    if start["map"] == pc.house_id:
+        return {phase: plan_pc(pc, start, game, phase)}
     arrive = {"map": pc.house_id, "x": pc.door_in[0], "y": pc.door_in[1], "dir": 0}
     return {
         "enter": plan_errand(world, pc, "enter", start, game),
-        "deposit": plan_pc(pc, arrive, game),
+        phase: plan_pc(pc, arrive, game, phase),
     }
 
 
@@ -909,6 +970,11 @@ class BridgePlanner:
 
 
 SYNTH_SCHEMA = "gen4-synth-v1"
+# run_lane PC targets -> (SYNTH kind of the input save, the passing Lua status, the plan_pc phase)
+PC_TARGETS = {
+    "pc": ("party2", "PC_DEPOSIT", "deposit"),
+    "pc_withdraw": ("party2", "PC_WITHDRAW", "withdraw"),
+}
 
 
 def synth_setup(save, kind: str = "party2") -> dict:
@@ -998,6 +1064,76 @@ def verify_saved(path, game: str, synth: dict) -> dict:
     }
 
 
+def withdraw_precondition(before: dict, synth: dict) -> None:
+    """Refuse a setup the withdraw leg cannot claim BEFORE any emulator runs: a party with no room
+    (the 6/6 path is unverified), or a SYNTH key that is not alone in box 0 slot WITHDRAW_CELL and
+    absent from the party. `before` is save_witness() of the input save."""
+    key = mon_key(synth["new_pid"], synth["otid"])
+    if len(before["party_keys"]) > WITHDRAW_PARTY_MAX:
+        raise RouteError(
+            "withdraw_party_full",
+            f"party {len(before['party_keys'])}/6: the full-party withdraw path is unverified",
+        )
+    home = [(b["box"], b["slot"]) for b in before["box_keys"] if b["key"] == key]
+    if home != [(0, WITHDRAW_CELL)] or key in before["party_keys"]:
+        raise RouteError(
+            "withdraw_setup",
+            f"clone {key} boxed at {home} (want [(0, {WITHDRAW_CELL})]), in party: {key in before['party_keys']}",
+        )
+
+
+def check_withdraw_ram(detail: str) -> dict:
+    """Judge the Lua leg's own RAM observation (the `RESULT PC_WITHDRAW` detail, key=value tokens)
+    host side: the party grew by one, the source slot is empty, and the box DIRTY MASK has the source
+    box's bit (a mask, so bit 0 for box 0 -- a non-zero word with another bit is a refusal). A
+    `nil` mask is the pack saying it records no dirty word (hge), never a missing token."""
+    obs = dict(t.split("=", 1) for t in detail.split() if "=" in t)
+    try:
+        before, after = int(obs["party_before"]), int(obs["party_after"])
+        box, slot = (int(v) for v in obs["box"].split("/"))
+        mod, saved = obs["mod_after"], obs["mod_saved"]
+        slot_after = obs["slot_after"]
+    except (KeyError, ValueError) as exc:
+        raise RouteError("withdraw_obs", f"unreadable withdraw observation {detail!r}: {exc!r}") from exc
+    if after != before + 1:
+        raise RouteError("withdraw_party_unchanged", f"party {before} -> {after}, want +1")
+    if slot_after != "empty":
+        raise RouteError("withdraw_slot_occupied", f"box {box} slot {slot} reads {slot_after}")
+    if mod != "nil" and not int(mod, 16) & (1 << box):
+        raise RouteError("withdraw_dirty_bit", f"dirty mask {mod} lacks bit {box} (box {box})")
+    if saved != "nil" and int(saved, 16) != 0:
+        raise RouteError("withdraw_dirty_not_cleared", f"dirty mask {saved} after the native SAVE")
+    return {"party_before": before, "party_after": after, "box": box, "slot": slot, "mod_after": mod,
+            "mod_saved": saved}
+
+
+def verify_saved_withdraw(path, game: str, synth: dict, before: dict, detail: str) -> dict:
+    """The battery after the withdraw + SAVE, decoded by the codec: the party is the input party plus
+    the SYNTH key appended, the key is in no box and the source slot is empty. The RAM half
+    (check_withdraw_ram) is judged on the same call so one receipt carries both."""
+    ram = check_withdraw_ram(detail)
+    save = parse_save(Path(path).read_bytes(), GAMES[game][2])
+    key = mon_key(synth["new_pid"], synth["otid"])
+    party = [mon["key"] for mon in save.party()]
+    boxes = save.boxes()
+    boxed = [(i, s) for i, box in enumerate(boxes) for s, mon in box["mons"].items() if mon["key"] == key]
+    if party != before["party_keys"] + [key] or boxed or ram["slot"] in boxes[ram["box"]]["mons"]:
+        raise RouteError(
+            "saved_mismatch",
+            f"saved file: party {party} (want {before['party_keys']} + [{key}]), clone boxed at {boxed}, "
+            f"slot {ram['box']}/{ram['slot']} occupied: {ram['slot'] in boxes[ram['box']]['mons']}",
+        )
+    meta = save.pc_meta()
+    return {"op": "withdraw", "party": len(party), "clone_key": key, "party_slot": len(party) - 1,
+            "box": ram["box"], "slot": ram["slot"], "cur_box": meta.get("cur_box"),
+            "battery_modified": meta.get("modified"), "ram": ram}
+
+
+def assert_reload_party(saved: dict, reloaded: dict) -> None:
+    if saved["party_keys"] != reloaded["party_keys"]:
+        raise RouteError("reload_keys", "cold reload changed the party (order or members)")
+
+
 def save_witness(path, game) -> dict:
     """Independent FILE oracle: newest coherent bank, wrap-aware counter, exact mon keys."""
     decoded = parse_save(Path(path).read_bytes(), GAMES[game][2])
@@ -1039,7 +1175,7 @@ RECEIPT_KINDS = {
         "script": "lua/tests/gen4_route_play.lua",
         "modules": BOUND_MODULES,
         "status_key": "final_status",
-        "pass": ("PC_DEPOSIT", "HATCH_OK"),
+        "pass": ("PC_DEPOSIT", "PC_WITHDRAW", "HATCH_OK"),
     },
     "catch": {
         "script": "lua/tests/probe_gen4_catch.lua",
@@ -1141,7 +1277,8 @@ def build_receipt(
         or None,
         # R2: RAM and the file differ -- say each, claim neither for the other
         "modified_flag": {
-            "ram": "set by the deposit; 0 after the native SAVE and after the cold reload (Lua log)",
+            "ram": f"set by the {(final.get('saved') or {}).get('op', 'deposit')}; 0 after the native SAVE "
+            "and after the cold reload (Lua log)",
             "battery": (final.get("saved") or {}).get("battery_modified"),
         }
         if (final.get("saved") or {}).get("clone_key")
@@ -1178,6 +1315,7 @@ def _cold_reload(rom_staged, ld, tag, leg, game, route, pc_extra, timeout, histo
         "ram": pc_extra["ram"],
         "synth": pc_extra["synth"],
         "profile": pc_extra["profile"],
+        **({"op": "withdraw"} if route.get("phase") == "withdraw" else {}),
     }
     rpath = ld / f"{tag}_reload.json"
     rpath.write_text(json.dumps(rroute, indent=1), encoding="utf-8")
@@ -1235,16 +1373,20 @@ def run_lane(
     """Plan + drive the route live. Leg 1 boots the staged save copy; a RESYNC (a coord-event
     cutscene advanced with A) saves a state, the next leg re-plans from the logged position and
     resumes from that state. `errand` ("pokegear") prepends the enter/talk/exit legs of a house
-    visit (see ERRANDS). `target` is "grass" (walk to a wild battle) or "pc" (walk to the
-    Cherrygrove Pokemon Center PC, deposit party slot 1 from a SYNTH party-2 save, native SAVE).
+    visit (see ERRANDS). `target` is "grass" (walk to a wild battle), "pc" (walk to the
+    Cherrygrove Pokemon Center PC, deposit party slot 1 from a SYNTH party-2 save, native SAVE) or
+    "pc_withdraw" (the same PC, withdraw box 0 slot 0 into a party with room, native SAVE; the input
+    is a boxed SYNTH save such as the deposit run's output).
     A leg that ends in a RESYNC with `done=0` was interrupted mid-walk: the same phase is
     re-planned from where it stopped. Returns the last leg's parsed result."""
-    if target not in ("grass", "pc", "hatch"):
-        raise RouteError("unknown_target", f"{target!r} is not grass, pc or hatch")
-    kind = {"pc": "party2", "hatch": "egg1"}.get(target)
+    if target not in ("grass", "hatch", *PC_TARGETS):
+        raise RouteError("unknown_target", f"{target!r} is not grass, pc, pc_withdraw or hatch")
+    kind = "egg1" if target == "hatch" else PC_TARGETS[target][0] if target in PC_TARGETS else None
     synth = synth_setup(save, kind) if kind else None  # refuse before touching the lane
     binding = receipt_binding(title=GAMES[game][1])
     before_save = save_witness(save, game) if kind else None
+    if target == "pc_withdraw":
+        withdraw_precondition(before_save, synth)
     ld = lane_dir(lane)
     ld.mkdir(parents=True, exist_ok=True)
     write_nds_run_config(
@@ -1259,10 +1401,13 @@ def run_lane(
     world = load_world(rom, pret)
     start = save_position(save, game)
     err = load_errand(rom, pret, errand, start["map"]) if errand else None
-    pc = load_errand(rom, pret, "cherrygrove_pc", CHERRYGROVE_ID) if target == "pc" else None
+    pc = load_errand(rom, pret, "cherrygrove_pc", CHERRYGROVE_ID) if target in PC_TARGETS else None
     queue = [("pokegear", p) for p in ERRAND_PHASES] if err else []
     if pc:
-        queue += [("cherrygrove_pc", "enter"), ("cherrygrove_pc", "deposit")]
+        pc_phase = PC_TARGETS[target][2]
+        # a save made at the PC (the boxed fixtures) is already inside: no door leg
+        queue += ([] if start["map"] == pc.house_id else [("cherrygrove_pc", "enter")])
+        queue += [("cherrygrove_pc", pc_phase)]
     if target == "hatch":
         queue += [("hatch", "hatch")]
     max_legs += len(queue) + (4 if pc else 0)  # a cutscene resync re-plans the same phase
@@ -1282,7 +1427,7 @@ def run_lane(
         if kind
         else {}
     )
-    final_ok = "PC_DEPOSIT" if target == "pc" else "HATCH_OK"
+    final_ok = PC_TARGETS[target][1] if target in PC_TARGETS else "HATCH_OK"
     load_state = ""
     result: dict = {}
     history: list[dict] = []
@@ -1293,8 +1438,8 @@ def run_lane(
             e = err if who == "pokegear" else pc
             if who == "hatch":
                 route = plan_hatch(world, start, game)
-            elif phase == "deposit":
-                route = plan_pc(e, start, game)
+            elif phase in ("deposit", "withdraw"):
+                route = plan_pc(e, start, game, phase)
             else:
                 route = plan_errand(world, e, phase, start, game)
             if who in ("cherrygrove_pc", "hatch"):
@@ -1338,9 +1483,14 @@ def run_lane(
             # the lane's battery file, decoded by the independent PYDEC oracle, then a COLD RELOAD:
             # a fresh boot from that battery must still show the deposit (G2: boot -> SAVE -> reload)
             try:
-                result["saved"] = (verify_saved_hatch if target == "hatch" else verify_saved)(
-                    saved_path, game, synth
-                )
+                if target == "pc_withdraw":
+                    result["saved"] = verify_saved_withdraw(
+                        saved_path, game, synth, before_save, result["detail"]
+                    )
+                else:
+                    result["saved"] = (verify_saved_hatch if target == "hatch" else verify_saved)(
+                        saved_path, game, synth
+                    )
                 result["battery_sha1"] = sha1_of(saved_path)
                 result["before_save"] = before_save
                 result["save_witness"] = save_witness(saved_path, game)
@@ -1352,6 +1502,8 @@ def run_lane(
                 else:
                     result["reload"]["witness"] = save_witness(saved_path, game)
                     assert_save_progress(before_save, result["save_witness"], result["reload"]["witness"])
+                    if target == "pc_withdraw":
+                        assert_reload_party(result["save_witness"], result["reload"]["witness"])
             except RouteError as exc:
                 result.update(status="SAVE_MISMATCH", detail=str(exc))
         if kind:
@@ -1397,8 +1549,10 @@ def _defaults(a) -> None:
 
 
 def _summary(route: dict) -> str:
-    if "enter" in route:
-        return f"PC stop: {route['enter']['tiles']} tiles to the door, {route['deposit']['tiles']} inside"
+    phase = next((p for p in ("deposit", "withdraw") if p in route), None)
+    if phase:
+        door = f"{route['enter']['tiles']} tiles to the door, " if "enter" in route else ""
+        return f"PC {phase}: {door}{route[phase]['tiles']} inside"
     return f"{route['tiles']} tiles, {len(route['steps'])} segments, grass {route['grass']['tile']}"
 
 
@@ -1413,16 +1567,17 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--rom")
         q.add_argument("--pret")
     p.add_argument("--out")
-    p.add_argument("--target", choices=["grass", "pc", "hatch"], default="grass")
+    p.add_argument("--target", choices=["grass", "pc", "pc_withdraw", "hatch"], default="grass")
     r.add_argument("--lane")
     r.add_argument("--tag", help="state/log name prefix (default: the lane name)")
     r.add_argument("--errand", choices=["pokegear"], help="house visit before the route")
     r.add_argument(
         "--target",
-        choices=["grass", "pc", "hatch"],
+        choices=["grass", "pc", "pc_withdraw", "hatch"],
         default="grass",
         help="grass: walk to a wild battle; pc: Cherrygrove PC deposit + native SAVE (needs a "
-        "SYNTH party-2 --save); hatch: pace on plain floor until the SYNTH egg1 hatches, "
+        "SYNTH party-2 --save); pc_withdraw: withdraw box 0 slot 0 + native SAVE + cold reload (needs "
+        "a boxed SYNTH --save with party < 6); hatch: pace on plain floor until the SYNTH egg1 hatches, "
         "native SAVE + cold reload (see tools/gen4_synth_save.py)",
     )
     r.add_argument("--timeout", type=int, default=900)
@@ -1451,13 +1606,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("\n".join(res["lines"]))
         print(f"leg {res['leg']} wall {res['wall']}s status {res['status']} {res['detail']}")
-        ok = {"pc": "PC_DEPOSIT", "hatch": "HATCH_OK"}.get(a.target, "BATTLE")
+        ok = PC_TARGETS[a.target][1] if a.target in PC_TARGETS else {"hatch": "HATCH_OK"}.get(a.target, "BATTLE")
         return 0 if res["status"] == ok else 1
     try:
         start = save_position(a.save, a.game)
         world = load_world(a.rom, a.pret)
-        if a.target == "pc":
-            route = plan_pc_stop(a.rom, a.pret, world, start, a.game)
+        if a.target in PC_TARGETS:
+            route = plan_pc_stop(a.rom, a.pret, world, start, a.game, PC_TARGETS[a.target][2])
         else:
             route = plan_route(world, start, wild_land_day(Path(a.pret)), a.game)
     except RomAbsent as exc:

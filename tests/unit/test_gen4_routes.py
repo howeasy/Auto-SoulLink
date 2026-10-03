@@ -679,10 +679,13 @@ class FakeDS:
     AV, MO = 0x02304800, 0x02304900
     PARTY_OFF, PC_OFF = 0x90, 0x10000
 
-    def __init__(self, ram_layout, stand, new_pid, *, wake_first=False, party=2):
+    def __init__(self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None):
         self.ram = bytearray(0x400000)
         self.R = ram_layout
         self.stand, self.new_pid, self.wake_first = stand, new_pid, wake_first
+        # withdraw: the source script model (scr_seq_0003.s: text prints with no WaitButton, then a menu),
+        # the SYNTH mon boxed at box 0 slot 0, and an optional commit fault (see commit_withdraw)
+        self.withdraw, self.fault, self.mcur, self.app_mode = withdraw, fault, 0, 0
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
         self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
@@ -708,8 +711,11 @@ class FakeDS:
         self.pc = self.SAVE + R["dyn_off"] + self.PC_OFF
         w(self.party, 6)
         w(self.party + R["party"]["count_off"], party)
-        for i, pid in enumerate((0x1111, new_pid)[:party]):
+        pids = [0x1111 + i for i in range(party)] if withdraw else (0x1111, new_pid)[:party]
+        for i, pid in enumerate(pids):
             w(self.party + R["party"]["mons_off"] + i * R["party"]["size"], pid)
+        if withdraw:
+            w(self.pc + R["pc"]["box_base"], new_pid)
         self.sync()
 
     # --- memory
@@ -753,7 +759,27 @@ class FakeDS:
             self.task(1)
             self.panel_sync()
 
+    def _script_src(self, held, new):
+        if self.sub in ("msg1", "msg2"):  # text still printing: a press does nothing
+            if self.t >= 100:
+                self.sub, self.t = ("menu_pc" if self.sub == "msg1" else "menu_sub"), 0
+            return
+        if self.sub == "menu_pc" and "A" in new:  # first row = the storage PC
+            self.sub, self.t, self.mcur = "msg2", 0, 0
+        elif self.sub == "menu_sub":  # DEPOSIT 0, WITHDRAW POKEMON 1 ... (scr_seq_0003.s:821-833)
+            if "Down" in new:
+                self.mcur = min(self.mcur + 1, 4)
+            if "A" in new:
+                self.mode, self.t, self.app_mode = "launching", 0, self.mcur
+            elif "B" in new:
+                self.sub, self.t = "menu_pc2", 0
+        elif self.sub == "menu_pc2" and "B" in new:
+            self.mode = "field"
+            self.task(0)
+
     def _script(self, held, new):
+        if self.withdraw:
+            return self._script_src(held, new)
         order = ["msg1", "menu_pc", "msg2", "menu_sub"]
         if self.t < 8:
             return
@@ -772,14 +798,14 @@ class FakeDS:
             self.w32(self.SUB0 + 4, self.MAN)
             self.w32(self.MAN + 0x0C, 14)
             self.w32(self.MAN + 0x1C, self.APPD)
-            self.ram[self.APPD - self.BASE + 0x21] = 0xFF
+            self.ram[self.APPD - self.BASE + 0x21] = 0 if self.withdraw and self.app_mode == 1 else 0xFF
             self.mode, self.cursor, self.toolbar = "app", 0, False
             self.app_state(0xB)
 
     def _app(self, held, new):
         st, t = self.st, self.t
         if st == 0xB and t >= 30:
-            self.app_state(0x5B)
+            self.app_state(0x51 if self.withdraw and self.app_mode == 1 else 0x5B)  # overlay_14.s:11822-11831
         elif st == 0x5B and t >= 10:
             if "Right" in new:
                 if self.wake_first and not self.woke:
@@ -818,6 +844,31 @@ class FakeDS:
         elif st == 0x6B and t >= 40:
             self.toolbar = False
             self.app_state(0x5B)
+        elif st == 0x51 and t >= 10:  # the box grid: A grabs (one prompt), B asks to leave
+            if "A" in new:
+                self.app_state(5)
+            elif "B" in new:
+                self.app_state(0x94)
+        elif st == 5 and t >= 20:
+            self.app_state(0x57)
+        elif st == 0x57 and t >= 10:  # reads no input
+            self.commit_withdraw()
+            self.app_state(0x51)
+
+    def commit_withdraw(self):
+        R = self.R
+        n = self.r(self.party + R["party"]["count_off"], 4)
+        if self.fault == "noop":
+            return
+        slot = self.pc + R["pc"]["box_base"]
+        pid = self.r(slot, 4)
+        if self.fault != "slot_kept":
+            self.w32(slot, 0)
+        self.w32(self.party + R["party"]["mons_off"] + n * R["party"]["size"], pid)
+        self.w32(self.party + R["party"]["count_off"], n + 1)
+        bit, mod = {"no_dirty": 0, "wrong_bit": 2}.get(self.fault, 1), R["pc"]["mod_off"]
+        if mod is not None and bit:
+            self.w32(self.pc + mod, self.r(self.pc + mod, 4) | bit)
 
     def commit(self):
         R = self.R
@@ -856,11 +907,21 @@ class FakeDS:
         self.panel_sync()
 
 
-def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE, library=False):
+def _run_lua_leg(
+    tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE, library=False, withdraw=False,
+    fault=None, plan=None, reload=None,
+):
     lupa = pytest.importorskip("lupa")
     _, err = _pc_stop()
     stand = (4, 2)
-    route = gr.plan_pc(err, {"map": 8, "x": stand[0], "y": stand[1], "dir": 1})
+    route = gr.plan_pc(
+        err, {"map": 8, "x": stand[0], "y": stand[1], "dir": 1}, "HG", "withdraw" if withdraw else "deposit"
+    )
+    if plan:
+        route["pc"]["withdraw"].update(plan)
+    if reload:  # the cold-reload leg of a run: a fresh boot, no steps (tools/gen4_routes.py _cold_reload)
+        route = {"version": 1, "game": "HG", "kind": "reload", "phase": "reload", "start": route["start"],
+                 "steps": [], "tiles": 0, **({"op": "withdraw"} if reload == "withdraw" else {})}
     route.update(
         run_from_wild=gr.pack_legs("HG", gr.PC_LEGS)["run_from_wild"],
         persistence=gr.pack_legs("HG", gr.SAVE_LEGS),
@@ -879,7 +940,7 @@ def _run_lua_leg(tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFE
     }
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party)
+    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party, withdraw=withdraw, fault=fault)
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     held: dict = {}
 
@@ -1418,3 +1479,266 @@ def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monk
     assert (
         rec["title"] == "soulsilver" and rec["rom_sha1"] == "f" * 40
     )  # B4: the title and ROM travel
+
+
+# --- the PC WITHDRAW leg (box -> party), sibling of the deposit -----------------------------------------
+WD_ORDER = [
+    "interact", "which_pc", "menu_down", "menu_withdraw", "app_state_0x51", "cursor_on_cell", "grab",
+    "commit", "grid_restored", "exit_app", "save",
+]
+
+
+def _wd_plan():
+    _, err = _pc_stop()
+    return gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1}, "HG", "withdraw")
+
+
+def test_withdraw_plan_carries_the_source_cited_steps_in_order():
+    r = _wd_plan()
+    wd = r["pc"]["withdraw"]
+    assert r["kind"] == "pc" and r["phase"] == "withdraw"
+    assert [s["step"] for s in wd["steps"]] == WD_ORDER
+    assert (wd["menu_down"], wd["box_cell"], wd["party_max"]) == (1, 0, 5)
+    assert all(s["source"] for s in wd["steps"]), "every input step cites its SOURCE"
+    # the input steps in press order: A (interact), A (menu 1), Down, A (WITHDRAW), A (grab), B (exit)
+    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Down", "A", "A", "B"]
+    # the box app is entered at state 0x51 (mode 1), the commit is state 0x57
+    by = {s["step"]: s for s in wd["steps"]}
+    assert by["app_state_0x51"]["wait_state"] == 0x51 and by["commit"]["state"] == 0x57
+    # INFERRED steps are exactly the ones the Lua polls or logs instead of trusting
+    assert {s["step"] for s in wd["steps"] if s["inferred"]} == {"which_pc", "grid_restored", "exit_app"}
+    # the deposit plan is untouched by the sibling
+    _, err = _pc_stop()
+    dep = gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1})
+    assert dep["phase"] == "deposit" and "withdraw" not in dep["pc"]
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1}, "HG", "release")
+    assert e.value.reason == "unknown_pc_phase"
+
+
+def test_withdraw_inputs_match_the_decomp():
+    for p, what in ((PRET, "pokeheartgold source"),):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    scr = (PRET / "files/fielddata/script/scr_seq/scr_seq_0003.s").read_text(encoding="utf-8")
+    menu = scr[scr.index("_0B17:") :][:400]
+    assert menu.index("msg_0191_00067, 76, 0") < menu.index("msg_0191_00068, 77, 1")  # DEPOSIT 0, WITHDRAW 1
+    assert gr.WITHDRAW_MENU_DOWN == 1
+    assert re.search(r"_0BB5:\s+CloseMsg\s+Call _0E16\s+ScrCmd_158 1\b", scr)  # WITHDRAW = box app mode 1
+    asm = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8")
+    table = asm[asm.index("ov14_021F7D9C: ;") :].split("\n")
+    assert table[1 + 0xB].split()[-1] == "ov14_021EB2EC"  # state 0xB is the mode switch
+    mode1 = asm[asm.index("_021EB342:") :][:400]
+    assert "bl ov14_021E7588" in mode1 and "mov r5, #0x51" in mode1  # mode 1: cursor cell 0, state 0x51
+    assert "mov r5, #0x5b" in asm[asm.index("_021EB312:") :][:900]  # mode 0 (deposit) is 0x5B
+    grab = asm[asm.index("ov14_021F0418: ;") :][:2600]
+    assert "mov r2, #0x57" in grab and "bl Party_GetCount" in grab and "cmp r0, #6" in grab
+
+
+def _wd(**over):
+    f = {"party_before": 1, "party_after": 2, "box": "0/0", "slot_after": "empty", "pid": "0x8e10e3f5",
+         "mod_before": "0", "mod_after": "0x1", "mod_saved": "0", "save_driver": "idle"}
+    f.update(over)
+    return " ".join(f"{k}={v}" for k, v in f.items()) + " m69 (11,13) d0"
+
+
+def test_withdraw_oracle_accepts_the_real_shape_and_refuses_each_missing_claim():
+    ok = gr.check_withdraw_ram(_wd())
+    assert (ok["party_before"], ok["party_after"], ok["box"], ok["slot"]) == (1, 2, 0, 0)
+    for over, reason in (
+        ({"party_after": 1}, "withdraw_party_unchanged"),  # the party did not grow
+        ({"party_after": 3}, "withdraw_party_unchanged"),  # grew by two
+        ({"slot_after": "0x8e10e3f5"}, "withdraw_slot_occupied"),  # the box slot still holds the mon
+        ({"mod_after": "0"}, "withdraw_dirty_bit"),  # dirty mask never set
+        ({"mod_after": "0x2"}, "withdraw_dirty_bit"),  # WRONG-BIT control: non-zero, but not box 0's bit
+        ({"mod_saved": "0x1"}, "withdraw_dirty_not_cleared"),  # still dirty after the native SAVE
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            gr.check_withdraw_ram(_wd(**over))
+        assert e.value.reason == reason, over
+    # controls: the mask is a MASK (other bits may be set), the bit follows the source box, hge has no word
+    assert gr.check_withdraw_ram(_wd(mod_after="0x3"))["mod_after"] == "0x3"
+    assert gr.check_withdraw_ram(_wd(box="1/4", mod_after="0x2"))["box"] == 1
+    with pytest.raises(gr.RouteError):
+        gr.check_withdraw_ram(_wd(box="1/4", mod_after="0x1"))
+    assert gr.check_withdraw_ram(_wd(mod_after="nil", mod_saved="nil"))["mod_after"] == "nil"
+    # an observation without a token is unreadable, never a pass
+    for missing in ("party_after", "box", "mod_after", "slot_after", "mod_saved"):
+        bad = " ".join(t for t in _wd().split() if not t.startswith(missing + "="))
+        with pytest.raises(gr.RouteError) as e:
+            gr.check_withdraw_ram(bad)
+        assert e.value.reason == "withdraw_obs", missing
+
+
+def _wd_witness(party, boxes):
+    return {"party_keys": party, "box_keys": [{"box": b, "slot": s, "key": k} for (b, s), k in boxes.items()]}
+
+
+WD_SYNTH = {"new_pid": 0xAAAA0001, "otid": 0xBBBB0002}
+WD_KEY = "AAAA0001:BBBB0002"
+
+
+def test_withdraw_precondition_refuses_a_full_party_and_a_misplaced_clone():
+    ok = _wd_witness(["P1"], {(0, 0): WD_KEY})
+    gr.withdraw_precondition(ok, WD_SYNTH)
+    gr.withdraw_precondition(_wd_witness(list("ABCDE"), {(0, 0): WD_KEY}), WD_SYNTH)  # 5 mons: room for one
+    for bad, reason in (
+        (_wd_witness(list("ABCDEF"), {(0, 0): WD_KEY}), "withdraw_party_full"),  # 6/6 is unverified
+        (_wd_witness(["P1"], {(0, 1): WD_KEY}), "withdraw_setup"),  # not cell 0
+        (_wd_witness(["P1"], {(1, 0): WD_KEY}), "withdraw_setup"),  # not box 0
+        (_wd_witness(["P1"], {}), "withdraw_setup"),  # not boxed at all
+        (_wd_witness(["P1", WD_KEY], {(0, 0): WD_KEY}), "withdraw_setup"),  # already in the party too
+        (_wd_witness(["P1"], {(0, 0): WD_KEY, (3, 3): WD_KEY}), "withdraw_setup"),  # boxed twice
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            gr.withdraw_precondition(bad, WD_SYNTH)
+        assert e.value.reason == reason, bad
+
+
+class _FakeWdBattery:
+    def __init__(self, party, boxes):
+        self._party, self._boxes = party, boxes
+
+    def party(self):
+        return [{"key": k} for k in self._party]
+
+    def boxes(self):
+        out = [{"mons": {}} for _ in range(18)]
+        for (b, s), key in self._boxes.items():
+            out[b]["mons"][s] = {"key": key}
+        return out
+
+    def pc_meta(self):
+        return {"box_count": 18, "cur_box": 0, "modified": 1}
+
+
+def _verify_wd(monkeypatch, tmp_path, party, boxes, detail=None):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeWdBattery(party, boxes))
+    before = _wd_witness(["P1"], {(0, 0): WD_KEY})
+    return gr.verify_saved_withdraw(f, "HG", WD_SYNTH, before, detail or _wd())
+
+
+def test_verify_saved_withdraw_demands_the_clone_appended_and_the_slot_empty(monkeypatch, tmp_path):
+    ok = _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {})
+    assert (ok["op"], ok["party"], ok["party_slot"], ok["box"], ok["slot"]) == ("withdraw", 2, 1, 0, 0)
+    for party, boxes, why in (
+        (["P1"], {(0, 0): WD_KEY}, "party unchanged"),
+        (["P1", WD_KEY], {(0, 0): WD_KEY}, "a boxed copy remains"),
+        (["P1", WD_KEY], {(5, 5): WD_KEY}, "boxed elsewhere"),
+        ([WD_KEY, "P1"], {}, "not appended"),
+        (["P1", WD_KEY], {(0, 0): "OTHER:0001"}, "source slot occupied by another mon"),
+        (["P1", "ZZ"], {}, "wrong mon joined"),
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            _verify_wd(monkeypatch, tmp_path, party, boxes)
+        assert e.value.reason == "saved_mismatch", why
+    with pytest.raises(gr.RouteError) as e:  # the RAM half is judged on the same call
+        _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {}, _wd(mod_after="0x2"))
+    assert e.value.reason == "withdraw_dirty_bit"
+    gr.assert_reload_party({"party_keys": ["P1", WD_KEY]}, {"party_keys": ["P1", WD_KEY]})
+    with pytest.raises(gr.RouteError) as e:  # a cold reload that lost the withdrawn mon
+        gr.assert_reload_party({"party_keys": ["P1", WD_KEY]}, {"party_keys": ["P1"]})
+    assert e.value.reason == "reload_keys"
+
+
+def test_withdraw_receipts_pass_kind_and_flag_text_name_the_withdraw():
+    assert "PC_WITHDRAW" in gr.RECEIPT_KINDS["route"]["pass"] and "PC_DEPOSIT" in gr.RECEIPT_KINDS["route"]["pass"]
+    assert gr.PC_TARGETS["pc_withdraw"] == ("party2", "PC_WITHDRAW", "withdraw")
+    assert gr.PC_TARGETS["pc"][1] == "PC_DEPOSIT"
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    final = {"status": "PC_WITHDRAW", "detail": "d", "saved": {"op": "withdraw", "clone_key": "K", "battery_modified": 1}}
+    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], final)
+    assert rec["final_status"] == "PC_WITHDRAW" and rec["modified_flag"]["ram"].startswith("set by the withdraw")
+
+
+def test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW party_before=1 party_after=2 box=0/0 slot_after=empty pid=0xcafebabe" in last, log
+    assert "mod_before=0 mod_after=0x1 mod_saved=0 save_driver=idle" in last
+    gr.check_withdraw_ram(last.split("PC_WITHDRAW", 1)[1])  # the host oracle accepts what the Lua reported
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
+    assert ds.r(ds.party + R["party"]["mons_off"] + R["party"]["size"], 4) == 0xCAFEBABE  # appended
+    # the state trace: the box app entered at the GRID state 0x51 (never the deposit's 0x5B list), 0x57 sampled
+    trace = next(ln for ln in log.splitlines() if "PC app closed" in ln)
+    assert ":0x51" in trace and ":0x57" in trace and ":0x5b" not in trace
+    assert "select try" not in log  # none of the deposit's party-slot selection
+
+
+def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monkeypatch):
+    for kw, want in (
+        ({"party": 6}, "RESULT FAIL withdraw_party_full"),  # unverified 6/6 path: refused in the Lua too
+        ({"fault": "noop"}, "RESULT FAIL withdraw_not_committed"),  # the grab never added the mon
+        ({"fault": "slot_kept"}, "RESULT FAIL withdraw_state_wrong"),  # party +1 but the box slot still full
+        ({"fault": "no_dirty"}, "RESULT FAIL box_modified_flag_not_set"),
+        ({"fault": "wrong_bit"}, "RESULT FAIL box_modified_flag_not_set"),  # non-zero mask, wrong bit
+        ({"plan": {"menu_down": 0}}, "RESULT FAIL pc_wrong_mode"),  # the DEPOSIT row: list state 0x5B, not 0x51
+        ({"plan": {"box_cell": 7}}, "RESULT FAIL setup_not_in_cell"),
+    ):
+        last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, **{"party": 1, **kw})
+        assert want in last, (kw, log[-600:])
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=5)  # control: room for one more
+    assert "RESULT PC_WITHDRAW party_before=5 party_after=6" in last
+
+
+def test_the_lua_reload_leg_wants_the_withdrawn_mon_in_the_party_and_out_of_the_box(tmp_path, monkeypatch):
+    # after a withdraw + SAVE + cold boot: party [x, clone], box empty
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", party=2, pid=0xCAFEBABE)
+    assert "RESULT RELOAD_OK party=2 clone_slot=2 boxed=0 pid=0xcafebabe" in last
+    # the clone still boxed and the party unchanged (the withdraw never persisted) is a named failure
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", withdraw=True, party=1)
+    assert "RESULT FAIL reload_party_count" in last
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", withdraw=True, party=2)  # clone not appended
+    assert "RESULT FAIL reload_clone_not_in_party" in last
+    # control: the deposit reload (no op) on the boxed state still passes, so `op` is what selects the check
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="deposit", withdraw=True, party=1)
+    assert "RESULT RELOAD_OK party=1 box=0/0" in last
+
+
+def test_run_lane_withdraw_runs_one_leg_from_the_pc_then_reloads_and_judges_the_battery(
+    real, tmp_path, monkeypatch
+):
+    pos = {"map": 69, "warp": -1, "x": 11, "y": 13, "dir": 0}  # a save made inside the Pokemon Center
+    key = gr.mon_key(_SYNTH["new_pid"], _SYNTH["otid"])
+    wit = iter((
+        {"bank": 0, "counter": 1, "party_keys": ["P1"], "box_keys": [{"box": 0, "slot": 0, "key": key}], "keys": sorted(["P1", key])},
+        {"bank": 1, "counter": 2, "party_keys": ["P1", key], "box_keys": [], "keys": sorted(["P1", key])},
+        {"bank": 1, "counter": 2, "party_keys": ["P1", key], "box_keys": [], "keys": sorted(["P1", key])},
+    ))
+    detail = ("party_before=1 party_after=2 box=0/0 slot_after=empty pid=0xabcd1234 mod_before=0 "
+              "mod_after=0x1 mod_saved=0 save_driver=idle m69")
+
+    def script(leg, route):
+        if route["kind"] == "reload":
+            assert leg == 2 and route["op"] == "withdraw" and not route["steps"]
+            return "[f2] RESULT RELOAD_OK party=2 clone_slot=2 boxed=0\n"
+        assert leg == 1 and route["kind"] == "pc" and route["phase"] == "withdraw" and route["start"]["map"] == 69
+        assert route["steps"] == [] and route["pc"]["withdraw"]["menu_down"] == 1  # already at the PC: no door leg
+        return f"[f1] RESULT PC_WITHDRAW {detail}\n"
+
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, script)
+    monkeypatch.setattr(gr, "save_witness", lambda *a: next(wit))
+    (tmp_path / "L").mkdir()
+    (tmp_path / "L" / "x.SaveRAM").write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeWdBattery(["P1", key], {}))
+    res = gr.run_lane(ROM, tmp_path / "boxed.SaveRAM", PRET, target="pc_withdraw", lane="L", tag="t")
+    assert res["status"] == "PC_WITHDRAW" and len(calls) == 2, res.get("detail")
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "PC_WITHDRAW" and rec["setup"] == "SYNTH"
+    assert [leg["status"] for leg in rec["legs"]] == ["PC_WITHDRAW", "RELOAD_OK"]
+    assert rec["battery"]["party_keys"] == ["P1", key] and rec["modified_flag"]["ram"].startswith("set by the withdraw")
+
+
+def test_run_lane_withdraw_refuses_a_full_party_before_touching_the_lane(tmp_path, monkeypatch):
+    key = gr.mon_key(_SYNTH["new_pid"], _SYNTH["otid"])
+    monkeypatch.setattr(gr, "synth_setup", lambda save, kind="party2": _SYNTH)
+    monkeypatch.setattr(
+        gr, "save_witness",
+        lambda *a: {"party_keys": list("ABCDEF"), "box_keys": [{"box": 0, "slot": 0, "key": key}]},
+    )
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(target="pc_withdraw", save=tmp_path / "s.SaveRAM", lane="never_created_wd_lane")
+    assert e.value.reason == "withdraw_party_full"
+    assert not gr.lane_dir("never_created_wd_lane").exists()
