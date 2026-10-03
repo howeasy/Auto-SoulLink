@@ -53,7 +53,7 @@ a clean or randomized-clean leg dies at LAUNCH instead of producing the server-s
 | same, `rules_changed` | a | widest-settings randomized clean | server rejects the randomized evolutions | RE-POINTED (companion overlay) |
 | same, `mixed_kind` | b | CLEAN | server rejects "Mixed artifact kinds ... 'clean' ... 'rand'" | RE-POINTED: the plain COMPANION build (hello kind `companion`); server still rejects "Mixed artifact kinds" naming `'rand'` and `'companion'` |
 | same, new `clean_refused` | b | CLEAN | (none: the clean cartridge never reached a verdict) | NEW launch-refusal proof, reusing `expect_refused`: the clean B must show the companion-patch refusal, no hello/MYKEY/write/save, and the server never sees it (`_observe_gen3_rand_refused`; the admission oracle needs this leg) |
-| same, `equivalent_pair` | a, b | clean-equivalent unknown-hash randomized clean + CLEAN partner | declared `rand`, effective `clean`, both admitted | RE-POINTED: the companion build with one unused 0xFF padding byte outside every protected span changed (`gen3_rand_equivalent_rom`), plus the plain companion partner |
+| same, `equivalent_pair` | a, b | clean-equivalent unknown-hash randomized clean + CLEAN partner | declared `rand`; effective pairing class `clean` (committed kind `clean` or `companion`, by hello order); both admitted | RE-POINTED: the companion build with one unused 0xFF padding byte outside every protected span changed (`gen3_rand_equivalent_rom`), plus the plain companion partner. The oracle accepts committed kind `clean` OR `companion`: the server commits the kind of the FIRST hello (`server/server.py:2271-2284`), and both are one pairing class. The cart is an unknown-hash companion admitted by anchors + mailbox |
 | `link_gen3_rand`, `trainer_panel_gen3_rand` | a, b | randomized clean pair | link / nearby-trainer panel on each side's OWN randomized tables | RE-POINTED (companion overlay pair) |
 | every row of the clean `--title frlg` / `--title emerald` plans (FR/LG/E duos, bootchecks, `zip_boot_firered`, `zip_boot_emerald`) | both | CLEAN FR/LG/E | clean-client behaviour | NOT CONVERTIBLE (their meaning is a clean client). The live successor is `--title frlgc` (companion twins). `run_pass` (reached through `main`) now refuses these titles by name unless `--dry-run/--list/--merge-summary` (F1); the duo harness refuses a clean launch up front (`_gen3_launch_refusal_problems`); their clean receipts are history |
 | `zip_boot_firered`, `zip_boot_emerald` | a | CLEAN, shipped client | identity line + TCP connect + hello | CONVERTED for direct `zip-boot --title firered|emerald` use into a refusal proof and RENAMED `zip_boot_firered_refused` / `zip_boot_emerald_refused`: PASS only on the shipped client's own `Unsupported Gen 3 cartridge ... needs the SLink companion patch` error, no `TCP connected`, no server hello |
@@ -140,3 +140,24 @@ the lane (`patch/build/rand_frlgcr/{a,b}_<title>.gba`), and the receipt records 
 zip rows) the release-zip hash as inputs. `--resume` re-runs on any difference; `--merge-summary` re-checks the recorded `rand:` hashes against
 the randomized ROMs present now and does not report PASS if they are gone or repointed (overlay and zip hashes are lane-local and are not
 compared across lanes).
+
+### link_gen3_rand: the disclosed natural REHUNT_FILTER (2026-10-03)
+
+A randomized ROM can place a very low catch-rate foe (rate 3..45) in the Route 1 / Route 102 grass, and the pair has only 2-4 Poke Balls,
+so the hunt can end `out-of-balls` for reasons that say nothing about the product. `link_gen3_rand` (and only it) therefore carries
+`"rehunt_filter": {"max_rate": 150, "max_rehunts": 12}` and `lua/tests/duo/gen3_rehunt_filter.lua`:
+
+- after each hunt it decodes the foe species' base catch rate from the **side's own ROM** (pret `gSpeciesInfo` address for that title,
+  28-byte records, `catchRate` at +8; never Radical Red data) and, when the rate is below 150, runs (`ctx.run_away`) and hunts again
+  (`ctx.hunt`) with no ball spent. Nothing is injected and no species is chosen: the foe is whatever the encounter produced.
+- every decision is logged as `REHUNT_FILTER species=.. catch_rate=.. rehunts=.. verdict=skip|keep|exhausted` in the side's receipt, and
+  the oracle copies the lines into the PYDEC notes (`REHUNT_FILTER side=a decisions=N skipped_low_catch_rate=K`).
+- after 12 skips the row fails by name (`REHUNT_FILTER exhausted`). An unreadable species or catch-rate byte means NO filtering, logged as
+  `REHUNT_FILTER unavailable ... -- NO filtering`, and the normal catch proceeds.
+- Emerald is covered: `link_gen3_rand` is one scenario function for FR/LG and Emerald (`scenario_gen3_rand_link.lua`), and the config
+  resolves the Emerald `gSpeciesInfo` address for the Emerald side. No other row's hunt path and no attempt budget
+  (`scenario_attempt_limit`) changed.
+
+Better long-term setup (not done): a disclosed SYNTH bag fixture holding Master Balls for these two rows, so the catch itself cannot fail on
+the ball RNG at all. It would be a tool-built setup fixture in the O-33 sense (the catch/link behaviour under test still runs natively),
+but it changes the fixture bytes and the save attestation for the rows, so it is left for the owner to rule on.

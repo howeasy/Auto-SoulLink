@@ -49,7 +49,8 @@ by name (exit 2), never skips. --dry-run prints each row's estimated wall time (
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass
-rewrites docs/gen3/probes/fc_SUMMARY_<cut8>.txt after every row.
+rewrites docs/gen3/probes/fc_SUMMARY_<cut8>.txt after every row (the latest invocation's rows) and the same text in
+fc_SUMMARY_<cut8>_run<UTC stamp>.txt, which no later invocation overwrites.
 
 Rules this runner enforces itself:
   - the lane must be at --cut with `git status --porcelain --untracked-files=no` empty, or the
@@ -1499,7 +1500,25 @@ def run_row(row, cut, lane, deadline):
     return verdict, len(attempts), attempts[-1]["tracked_after"]
 
 
-def write_summary(cut, results, suffix=""):
+def new_run_stamp(cut, suffix=""):
+    """A UTC stamp unique among this cut's existing per-invocation summaries (reserved by creating the file), so two invocations -- even in
+    the same second -- never share, and never overwrite, a `fc_SUMMARY_<cut8><suffix>_run<stamp>.txt`."""
+    base = utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp, n = base, 0
+    while True:
+        path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}_run{stamp}.txt")
+        try:
+            with open(path, "x", encoding="utf-8"):
+                return stamp
+        except FileExistsError:
+            n += 1
+            stamp = f"{base}-{n}"
+
+
+def write_summary(cut, results, suffix="", run_stamp=None):
+    """The summary of THIS invocation's rows. fc_SUMMARY_<cut8><suffix>.txt keeps its name and meaning (the latest invocation); with
+    `run_stamp` (new_run_stamp) the same text is also written to fc_SUMMARY_<cut8><suffix>_run<stamp>.txt, which no later invocation
+    overwrites -- a later pass over a subset of the rows no longer erases the earlier pass's summary."""
     counts = {k: sum(status_of(v) == k for _r, v, _n, _p in results)
               for k in ("RUN", "CARRIED", "CACHED", "FAIL")}
     lines = [f"# G4 final cut {cut} -- tools/gen3_final_cut.py summary "
@@ -1513,8 +1532,12 @@ def write_summary(cut, results, suffix=""):
     lines += ["", f"OVERALL: {'PASS' if passed and results else 'FAIL'} "
                   f"({counts['RUN'] + counts['CARRIED'] + counts['CACHED']}/{len(results)} rows)"]
     path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
+    text = "\n".join(lines) + "\n"
     with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(text)
+    if run_stamp:
+        with open(os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}_run{run_stamp}.txt"), "w", encoding="utf-8") as f:
+            f.write(text)
     return path, passed
 
 
@@ -2798,7 +2821,7 @@ def merge_summary(cut, rows, suffix=""):
             results.append((row, f"FAIL {stale}", 0, name))
         else:
             results.append((row, hdr["verdict"], text.count("\n--- attempt "), name))
-    path, ok = write_summary(cut, results, suffix)
+    path, ok = write_summary(cut, results, suffix, new_run_stamp(cut, suffix))
     print(_read(path))
     return 0 if ok else 1
 
@@ -2931,6 +2954,7 @@ def run_pass(args):
         print(f"[final_cut] ABORT: {exc}", file=sys.stderr)
         return 2
     results = []
+    run_stamp = new_run_stamp(cut, suffix)      # this invocation's own summary copy, never overwritten by a later pass
     for row in rows_here:
         prior = prior_verdict(row.id, cut, lane)
         rec = os.path.basename(receipt_path(row.id, cut))
@@ -2963,11 +2987,11 @@ def run_pass(args):
                 print(f"[final_cut] {row.id}: PASS but its outputs are incomplete; not cached",
                       file=sys.stderr)
             if not clean_after:
-                write_summary(cut, results, suffix)
+                write_summary(cut, results, suffix, run_stamp)
                 print("[final_cut] ABORT: the lane went tracked-dirty", file=sys.stderr)
                 return 2
-        write_summary(cut, results, suffix)
-    path, ok = write_summary(cut, results, suffix)
+        write_summary(cut, results, suffix, run_stamp)
+    path, ok = write_summary(cut, results, suffix, run_stamp)
     print(f"\n[final_cut] summary: {path}")
     print(_read(path))
     return 0 if ok else 1

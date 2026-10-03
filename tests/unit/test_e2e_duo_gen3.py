@@ -5784,3 +5784,356 @@ def test_the_orchestration_waits_with_the_checked_predicate_and_re_checks_at_the
     assert "same_save_hello_seen(text(same_path))" in src            # the wait predicate (raises on a violation)
     assert "same_save_hello_problems(text(same_path))" in src        # and the final problems list
     assert "accepted_reconnect_hellos(baseline" in src and "RECONNECT_HELLO same_save count=1" not in src
+
+
+def test_the_driver_logs_per_hello_what_the_tx_line_truncates():
+    """HELLO_FACTS (duo_gen3_main.lua hello_facts): the party a hello carried and whether it was withheld -- the two facts that decide
+    whether a '0 mons' hello is safe (server/state.py:1958-1959 vs :2087)."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("hello_facts"), source, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no hello_facts"
+    facts = runtime.execute(found.group(0) + "\nreturn hello_facts")
+    assert facts(runtime.eval("{party = {}, party_hidden = true}")) == "HELLO_FACTS party=0 party_hidden=true"
+    assert facts(runtime.eval("{party = {1, 2}}")) == "HELLO_FACTS party=2 party_hidden=false"
+    assert facts(runtime.eval("{party = {}}")) == "HELLO_FACTS party=0 party_hidden=false"
+    assert facts(runtime.eval("{}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts(runtime.eval("{party_hidden = false}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts("not a table") == "HELLO_FACTS party=absent party_hidden=false"
+    assert 'if name == "hello" then log(hello_facts(msg)) end' in source          # and every sent hello is logged with it
+
+
+# ── probe_protected_span_flip_gen3: a live OBSERVATION row, in no plan ───────────────────────────────────────────────
+PROBE = "probe_protected_span_flip_gen3"
+_PROBE_SLOT = b"\xcd\xe3\xe9\xe0\xc6\xdd\xe2\xdf\x00\xd8\xd9\xea\xff" + b"\x00" * 7        # "dev" text, 0xFF terminator, zero padding
+
+
+def _probe_rom_and_row(slot=_PROBE_SLOT):
+    rom = bytearray(b"\x55" * 0x400)
+    rom[0x100 + 0x20:0x100 + 0x20 + len(slot)] = slot
+    row = {"protected_spans": [{"offset": 0x100, "size": 0x100}, {"offset": 0x300, "size": 8}],
+           "payload_version_slot": {"offset": 0x20, "length": len(slot)}}
+    return bytes(rom), row
+
+
+def test_the_probe_flips_the_last_padding_byte_of_the_version_slot_by_a_fixed_rule():
+    rom, row = _probe_rom_and_row()
+    choice = duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)])
+    assert choice == {"offset": 0x100 + 0x20 + 19, "before": 0, "after": 1, "span": 0, "rule": "version-slot padding byte"}
+    assert duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)]) == choice                  # deterministic
+    flipped = rom[:choice["offset"]] + bytes([choice["after"]]) + rom[choice["offset"] + 1:]
+    assert [i for i in range(len(rom)) if rom[i] != flipped[i]] == [choice["offset"]]   # exactly one byte differs
+
+
+def test_the_probe_falls_back_when_the_slot_is_not_a_terminated_padded_string():
+    rom, row = _probe_rom_and_row(slot=b"\xcd" * 20)                                    # no 0xFF terminator, no padding
+    choice = duo.gen3_probe_flip_choice(rom, row, [])
+    assert choice["rule"] == "first non-slot payload byte" and choice["offset"] == 0x100
+    assert choice["offset"] not in range(0x100 + 0x20, 0x100 + 0x20 + 20)
+
+
+def test_the_probe_byte_must_be_in_a_protected_span_and_off_every_anchor():
+    rom, row = _probe_rom_and_row()
+    with pytest.raises(ValueError, match="on an anchor"):
+        duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 18, 4)])                  # an anchor covering the chosen byte
+    duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 19, 0)])                      # a zero-length anchor covers nothing
+    outside = {**row, "protected_spans": [{"offset": 0x100, "size": 0x10}]}                # the slot sits past the span
+    with pytest.raises(ValueError, match="not inside a protected span"):
+        duo.gen3_probe_flip_choice(rom, outside, [])
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
+def test_the_probe_byte_of_the_real_builds_is_padding_inside_a_span_off_the_anchors(title):
+    """Needs the real, uncommitted clean dump: a named skip when it is absent (tests/TESTING.md)."""
+    from tools.gen3_companions import published
+    from tools.gen3_final_cut import ROOT_DUMPS, main_checkout
+
+    root = os.environ.get("SLINK_GEN3_ROMS") or main_checkout()
+    dump = os.path.join(root, ROOT_DUMPS[title])
+    if not os.path.isfile(dump):
+        pytest.skip(f"clean {title} dump absent: {dump}")
+    patched, row = published(title, open(dump, "rb").read())
+    pack = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald"}[title]
+    anchors = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json").read_text(encoding="utf-8"))[title]["anchors"]
+    spans = [(a["rom_offset"], len(a["expected_hex"]["companion"]) // 2) for a in anchors.values()]
+    choice = duo.gen3_probe_flip_choice(patched, row, spans)
+    assert choice["rule"] == "version-slot padding byte" and (choice["before"], choice["after"]) == (0, 1)
+    assert any(s["offset"] <= choice["offset"] < s["offset"] + s["size"] for s in row["protected_spans"])
+    assert not any(a <= choice["offset"] < a + n for a, n in spans)
+    slot = row["payload_version_slot"]
+    base = row["protected_spans"][0]["offset"] + slot["offset"]
+    assert patched[base + 12] == 0xFF and choice["offset"] == base + slot["length"] - 1     # behind the string's terminator
+    assert duo.gen3_probe_flip_choice(patched, row, spans) == choice
+
+
+def test_the_probe_is_opt_in_and_in_no_plan():
+    from tools import gen3_final_cut as fc
+
+    row = duo.SCENARIOS[PROBE]
+    assert row["explicit_only"] is True and row["gen3_probe_flip"] is True and row["no_save"] == ("a", "b")
+    assert set(row["games"]) == {"gen3_frlg", "gen3_emerald"}
+    for game in ("gen3_frlg", "gen3_emerald"):
+        assert PROBE not in duo.scenarios_for(game) and duo.scenario_applies(PROBE, game)
+    for game in ("gen3_rr", "gen3_exp", "gen3_fr_trade"):         # (gen3_lgfr is the FR/LG family: LeafGreen as A, same probe)
+        assert not duo.scenario_applies(PROBE, game), game
+    cut = "c" * 40
+    os.environ.setdefault("SLINK_GEN3_RAND_ROMS", "R:/rand")
+    for plan in (fc.build_plan, fc.build_plan_rr, fc.build_plan_emerald, fc.build_plan_exp, fc.build_plan_frlgc, fc.build_plan_frlgc_rand):
+        assert not any("probe_protected_span_flip" in " ".join(r.argv) or "probe_flip" in r.id for r in plan(cut, "L:/lane", "L:/m")), plan
+    assert len(fc.build_plan_frlgc(cut, "L:/lane", "L:/m")) == 65 and len(fc.build_plan_frlgc_rand(cut, "L:/lane", "L:/m")) == 13
+    assert callable(duo.DuoRun.orchestrate_probe_protected_span_flip_gen3) and callable(duo.DuoRun.assert_probe_protected_span_flip_gen3_saved)
+
+
+def _probe_run(receipt_b, status_b=None):
+    run = object.__new__(duo.DuoRun)
+    run._probe_flip = {"title": "firered", "offset": 0xEB2E27, "before": 0, "after": 1}
+    notes, went = [], []
+    run._pydec_note = notes.append
+    run._read_receipt = lambda side: receipt_b
+    run._status = lambda: {"players": {"b": status_b or {}}}
+    run.wait_for = lambda desc, pred, timeout: pred() or (_ for _ in ()).throw(TimeoutError(desc))
+    run.go = lambda *a, **k: went.append(True)
+    return run, notes, went
+
+
+def test_the_probe_records_a_launch_refusal_without_judging_it():
+    run, notes, went = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=[SLink-gen3] refused: this firered cartridge ...\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert run._probe_observed["client"] == "refused_at_launch" and went == [True]
+    assert any("PROBE_FLIP_OBSERVED" in n and "client=refused_at_launch" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+
+
+@pytest.mark.parametrize("player, expect", [({"admission": "admitted", "admission_reason": "ok"}, "server=admitted"),
+                                            ({"admission": "rejected", "admission_reason": "companion_abi differs"}, "server=rejected"),
+                                            ({"identity_error": "Identity mismatch"}, "server=identity_error")])
+def test_the_probe_records_an_admitted_client_and_the_servers_verdict_either_way(player, expect):
+    run, notes, went = _probe_run("TX hello - {}\nHELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", player)
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == [True] and any(expect in n and "client=admitted" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+
+
+def test_the_probe_fails_only_when_the_harness_itself_broke():
+    run, _notes, went = _probe_run("")                                       # B did nothing at all: no observation possible
+    with pytest.raises(TimeoutError, match="launch outcome"):
+        run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == []
+    with pytest.raises(RuntimeError, match="no admission observation"):
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": ""})
+    run._probe_observed = {"client": "admitted", "reason": "", "server": "admitted", "server_reason": ""}
+    with pytest.raises(RuntimeError, match="not in its own receipt"):          # the claim must be in the side's own receipt
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\n"})
+
+
+def test_the_driver_lets_a_probe_record_a_refusal_but_nothing_else_changes():
+    from lupa import LuaRuntime
+
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("launch_verdict"), source, re.M | re.S)
+    verdict = LuaRuntime(unpack_returned_tuples=True).execute(found.group(0) + "\nreturn launch_verdict")
+    refused = "[SLink-gen3] refused: this firered cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
+    done, ok, msg = verdict(None, refused, False, True)
+    assert (done, ok) == (True, True) and "probe observed: refused at launch" in msg
+    assert verdict(None, "x", False, False)[:2] == (True, False)                    # an ordinary row: still a failure
+    assert verdict(None, "x", False)[:2] == (True, False)                           # the old three-argument call
+    assert verdict({}, None, False, True) is False                                  # a built client carries on, probe or not
+    assert verdict({}, None, True, True)[:2] == (True, False)                       # expect_refused still wins over a probe
+    assert 'PROBE_ADMISSION client=refused_at_launch reason=' in source and "D.probe_admission" in source
+
+
+def test_the_probe_scenario_module_records_what_the_client_announced_and_writes_nothing():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute("""
+        logs = {}
+        ctx = { last_sent = function() return { artifact_kind = "companion", companion_abi = 2, rom_sha1 = "ab" } end,
+                log = function(s) logs[#logs + 1] = s end, wait_go = function() return true end, frames = function() end,
+                writes = function() return 0 end }
+        module = dofile(WT .. "/lua/tests/duo/scenario_gen3_probe_flip.lua")
+    """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
+    ok, msg = runtime.eval("module(ctx)")
+    assert ok is True and "probe" in msg
+    logs = list(runtime.eval("logs").values())
+    assert logs[0] == "PROBE_CLIENT admitted artifact_kind=companion companion_abi=2 rom_sha1=ab" and logs[-1] == "PROBE_PASSIVE writes=0"
+
+
+# ── link_gen3_rand's disclosed natural REHUNT_FILTER (lua/tests/duo/gen3_rehunt_filter.lua) ───────────────────────────
+FILTER = REPO / "lua" / "tests" / "duo" / "gen3_rehunt_filter.lua"
+_CFG = "{max_rate = 150, max_rehunts = %d, species_info = 0x1000, stride = 28, catch_offset = 8}"
+
+
+def _filter_world(rates, rehunts=12, cfg=True, peek_fails=False, foes=None, escape_ok=True, hunt_ok_after=None):
+    """A Lua fake ctx. `foes` is the species of each successive encounter; `rates[species]` is the catch-rate byte in the fake ROM."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    foes = foes if foes is not None else list(rates)
+    rom = "".join(f"[{0x1000 + s * 28 + 8}] = {r}," for s, r in rates.items())
+    runtime.execute(f"""
+        foes = {{{",".join(str(f) for f in foes)}}}
+        rom = {{{rom}}}
+        calls = {{hunt = 0, run_away = 0, catch = 0, catch_args = nil}}
+        logs = {{}}
+        local seen = 0
+        ctx = {{
+            D = {{ rehunt_filter = {_CFG % rehunts if cfg else "nil"} }},
+            fmt = string.format,
+            log = function(s) logs[#logs + 1] = s end,
+            hunt = function(label) calls.hunt = calls.hunt + 1; return {("true" if hunt_ok_after is None else f"calls.hunt <= {hunt_ok_after}")} end,
+            enemy_species = function() return foes[calls.hunt] end,
+            peek_u8 = function(a) {"error('bus') end" if peek_fails else "return rom[a] end"},
+            run_away = function(label) calls.run_away = calls.run_away + 1; return {str(escape_ok).lower()}, "stuck" end,
+            catch = function(label, already) calls.catch = calls.catch + 1; calls.catch_args = tostring(label) .. "/" .. tostring(already); return "KEY", nil end,
+        }}
+        filter = dofile({str(FILTER).replace(chr(92), "/")!r})
+    """)
+    return runtime
+
+
+def _run_filter(runtime):
+    returned = runtime.eval('filter.catch(ctx, "link")')              # (key, why); a Lua nil comes back as None
+    result = list(returned) if isinstance(returned, tuple) else [returned]
+    result += [None] * (2 - len(result))
+    calls = runtime.eval("calls")
+    return result, {k: calls[k] for k in ("hunt", "run_away", "catch", "catch_args")}, list(runtime.eval("logs").values())
+
+
+def test_a_low_catch_rate_foe_is_run_from_and_hunted_again_without_a_ball():
+    runtime = _filter_world({100: 3, 101: 45, 102: 149, 103: 150})
+    result, calls, logs = _run_filter(runtime)
+    assert result == ["KEY", None]                                                         # then the ordinary catch, on the kept foe
+    assert (calls["hunt"], calls["run_away"], calls["catch"], calls["catch_args"]) == (4, 3, 1, "link/true")
+    assert logs == ["REHUNT_FILTER species=100 catch_rate=3 rehunts=1 verdict=skip floor=150",
+                    "REHUNT_FILTER species=101 catch_rate=45 rehunts=2 verdict=skip floor=150",
+                    "REHUNT_FILTER species=102 catch_rate=149 rehunts=3 verdict=skip floor=150",    # 149 is skipped ...
+                    "REHUNT_FILTER species=103 catch_rate=150 rehunts=3 verdict=keep floor=150"]     # ... 150 is kept
+
+
+def test_a_high_catch_rate_foe_is_caught_as_usual_with_no_run_and_no_rehunt():
+    runtime = _filter_world({16: 255})
+    result, calls, logs = _run_filter(runtime)
+    assert result == ["KEY", None] and (calls["hunt"], calls["run_away"], calls["catch_args"]) == (1, 0, "link/true")
+    assert logs == ["REHUNT_FILTER species=16 catch_rate=255 rehunts=0 verdict=keep floor=150"]
+
+
+def test_exhausting_the_rehunts_fails_by_name_and_throws_nothing():
+    runtime = _filter_world({100: 3, 101: 3, 102: 3, 103: 3, 104: 3}, rehunts=3)
+    result, calls, logs = _run_filter(runtime)
+    assert result[0] is None and result[1].startswith("REHUNT_FILTER exhausted:") and "species=103 rate=3" in result[1]
+    assert (calls["run_away"], calls["catch"]) == (3, 0)                              # no ball path at all
+    assert logs[-1] == "REHUNT_FILTER species=103 catch_rate=3 rehunts=3 verdict=exhausted floor=150"
+
+
+@pytest.mark.parametrize("kwargs, expect", [
+    ({"peek_fails": True}, "reason=the catch-rate byte is unreadable"),
+    ({"rates": {}, "foes": [0]}, "reason=no foe species"),
+    ({"rates": {}, "foes": [77]}, "reason=the catch-rate byte is unreadable"),
+])
+def test_an_unreadable_species_or_rate_means_no_filtering_and_says_so(kwargs, expect):
+    kwargs = {"rates": {100: 3}, **kwargs}
+    runtime = _filter_world(kwargs.pop("rates"), **kwargs)
+    result, calls, logs = _run_filter(runtime)
+    assert result == ["KEY", None] and (calls["run_away"], calls["catch"]) == (0, 1)        # the foe is caught as without the filter
+    assert len(logs) == 1 and logs[0].startswith("REHUNT_FILTER unavailable") and expect in logs[0] and "NO filtering" in logs[0]
+
+
+def test_an_unreadable_foe_is_disclosed_too():
+    runtime = _filter_world({100: 3}, foes=[])
+    runtime.execute("ctx.enemy_species = function() return nil, 'no wild enemy' end")
+    result, _calls, logs = _run_filter(runtime)
+    assert result == ["KEY", None] and "NO filtering" in logs[0] and "reason=no wild enemy" in logs[0]
+
+
+def test_the_filter_fails_by_name_when_the_escape_or_the_rehunt_fails():
+    result, calls, _ = _run_filter(_filter_world({100: 3, 101: 255}, escape_ok=False))
+    assert result == [None, "REHUNT_FILTER: the escape failed: stuck"] and calls["catch"] == 0
+    result, calls, _ = _run_filter(_filter_world({100: 3, 101: 255}, hunt_ok_after=1))
+    assert result == [None, "REHUNT_FILTER: re-hunt found no encounter"] and calls["catch"] == 0
+    result, calls, _ = _run_filter(_filter_world({100: 3}, hunt_ok_after=0))
+    assert result == [None, "no wild encounter"] and calls["catch"] == 0
+
+
+def test_without_the_parameter_the_filter_is_the_plain_catch():
+    result, calls, logs = _run_filter(_filter_world({100: 3}, cfg=False))
+    assert result == ["KEY", None] and logs == [] and (calls["hunt"], calls["run_away"], calls["catch_args"]) == (0, 0, "link/nil")
+
+
+def test_the_default_link_scenario_path_is_the_unchanged_ctx_catch_call():
+    """scenario_gen3_link.lua with no opts (every row but link_gen3_rand) still makes exactly `ctx.catch("link")`."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute("""
+        calls = {}
+        ctx = { wait_go = function() return true end,
+                catch = function(...) calls[#calls + 1] = table.pack(...); return nil, "boom" end }
+        link = dofile(WT .. "/lua/tests/duo/scenario_gen3_link.lua")
+    """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
+    assert list(runtime.eval("{link(ctx)}").values()) == [False, "hunt ended boom"]
+    assert runtime.eval("#calls") == 1 and runtime.eval("calls[1].n") == 1 and runtime.eval("calls[1][1]") == "link"
+    runtime.execute("calls = {}; own = {}")
+    runtime.execute("""
+        local r = {link(ctx, { catch = function(c, label) own[#own + 1] = label; return nil, "filtered" end })}
+        outcome = r[2]
+    """)
+    assert runtime.eval("#calls") == 0 and runtime.eval("own[1]") == "link" and runtime.eval("outcome") == "hunt ended filtered"
+
+
+def test_only_link_gen3_rand_carries_the_filter_and_no_attempt_budget_changed():
+    owners = sorted(p.name for p in (REPO / "lua" / "tests" / "duo").glob("*.lua")
+                    if "gen3_rehunt_filter" in p.read_text(encoding="utf-8") and p.name != "gen3_rehunt_filter.lua")
+    assert owners == ["scenario_gen3_rand_link.lua"]                                  # nothing else loads it
+    assert [n for n, row in duo.SCENARIOS.items() if "rehunt_filter" in row] == ["link_gen3_rand"]
+    assert duo.SCENARIOS["link_gen3_rand"]["rehunt_filter"] == {"max_rate": 150, "max_rehunts": 12}
+    assert "rng_attempts" not in duo.SCENARIOS["link_gen3_rand"]
+    assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [3, 3]   # the ball_hunt default
+    assert set(duo.SCENARIOS["link_gen3_rand"]["games"]) == {"gen3_frlg", "gen3_emerald"}      # Emerald runs the same scenario function
+
+
+def test_the_scenario_module_hands_the_filter_to_the_link_scenario():
+    text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_rand_link.lua").read_text(encoding="utf-8")
+    assert "gen3_rehunt_filter.lua" in text and "{ catch = filter.catch }" in text
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
+def test_the_rehunt_filter_config_points_at_the_titles_own_catch_rate_bytes(title):
+    cfg = duo.gen3_rehunt_filter_config({"max_rate": 150, "max_rehunts": 12}, title)
+    assert cfg["species_info"] == duo.gen3_sym(title, "gSpeciesInfo") and (cfg["stride"], cfg["catch_offset"]) == (28, 8)
+    assert (cfg["max_rate"], cfg["max_rehunts"]) == (150, 12)
+    rate_of = {"firered": (1, 45), "leafgreen": (150, 3), "emerald": (16, 255)}[title]       # Bulbasaur 45, Mewtwo 3, Pidgey 255
+    from tools.gen3_final_cut import ROOT_DUMPS, main_checkout
+
+    dump = os.path.join(os.environ.get("SLINK_GEN3_ROMS") or main_checkout(), ROOT_DUMPS[title])
+    if not os.path.isfile(dump):
+        pytest.skip(f"clean {title} dump absent: {dump}")
+    rom = open(dump, "rb").read()
+    species, rate = rate_of
+    assert rom[cfg["species_info"] - 0x08000000 + species * cfg["stride"] + cfg["catch_offset"]] == rate
+
+
+def test_rehunt_filter_lines_are_collected_from_a_receipt_for_the_pydec_notes():
+    text = "x\nREHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150\nCAUGHT k\nREHUNT_FILTER unavailable species=2 rehunts=0\n y REHUNT_FILTER\n"
+    assert duo.rehunt_filter_lines(text) == ["REHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150",
+                                             "REHUNT_FILTER unavailable species=2 rehunts=0"]
+    assert duo.rehunt_filter_lines("") == [] and duo.rehunt_filter_lines(None) == []
+
+
+def test_the_rand_link_oracle_notes_every_rehunt_decision():
+    run = object.__new__(duo.DuoRun)
+    notes = []
+    run._pydec_note = notes.append
+    run._check_gen3_rand_pair = lambda: None
+
+    def stop(results):
+        raise RuntimeError("stop after the note")
+    run.assert_link_gen3_saved = stop
+    line = "REHUNT_FILTER species=1 catch_rate=3 rehunts=1 verdict=skip floor=150"
+    with pytest.raises(RuntimeError, match="stop after the note"):
+        run.assert_link_gen3_rand_saved({"a": line + "\n", "b": ""})
+    assert notes == [f"REHUNT_FILTER side=a decisions=1 skipped_low_catch_rate=1\n  {line}",
+                     "REHUNT_FILTER side=b decisions=0 skipped_low_catch_rate=0"]

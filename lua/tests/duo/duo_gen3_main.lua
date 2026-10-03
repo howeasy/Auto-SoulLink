@@ -505,6 +505,15 @@ end
 
 local C = require("connector")
 local raw_send = C.send
+-- What the server needs to read a hello's party, which the 200-char `TX hello` line above cannot show: the party the hello carried
+-- (`absent` when the field is missing, else its length) and whether it declared the party WITHHELD (party_hidden). The Gen 3 client
+-- always sends `party` -- empty when withheld; server/state.py:1958-1959 keeps the stored party intact for a withheld hello and
+-- replaces it (party_keys emptied, :2065-2089) for an empty one that is not withheld, so a "0 mons" hello means two things.
+local function hello_facts(msg)
+    local party = type(msg) == "table" and msg.party
+    return string.format("HELLO_FACTS party=%s party_hidden=%s", type(party) == "table" and tostring(#party) or "absent",
+                         type(msg) == "table" and msg.party_hidden == true and "true" or "false")
+end
 C.send = function(line)
     local ok, msg = pcall(JSON.decode, line)
     local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
@@ -517,6 +526,7 @@ C.send = function(line)
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
         tx[#tx + 1] = { event = name, key = key, msg = ok and msg or nil }
         log(fmt("TX %s %s %s", name, key, name == "hello" and line:sub(1, 200) or line))
+        if name == "hello" then log(hello_facts(msg)) end
     end
     return raw_send(line)
 end
@@ -753,7 +763,7 @@ if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun))
 -- (SLINK_DUO.expect_refused: a clean companion-required cartridge, patch-first 2026-10-02) passes
 -- ONLY when run.lua refused it with the companion verdict and built nothing; an admitted client, a
 -- different refusal (bad hash, header-only) or no refusal at all fails it. -> done, pass, msg
-local function launch_verdict(client_built, refusal, expect_refused)
+local function launch_verdict(client_built, refusal, expect_refused, probe)
     if expect_refused then
         if client_built then return true, false, "expected a refusal but the cartridge was admitted and a client built" end
         if refusal and refusal:find("needs the SLink companion patch", 1, true) then
@@ -762,12 +772,17 @@ local function launch_verdict(client_built, refusal, expect_refused)
         return true, false, "expected the companion-patch refusal, got: " .. tostring(refusal or "no refusal logged")
     end
     if not client_built then
+        -- an OBSERVATION probe (SLINK_DUO.probe_admission) records a refusal as its result; it is not a failure of the harness
+        if probe then return true, true, "probe observed: refused at launch: " .. tostring(refusal or "no reason logged") end
         return true, false, "run.lua built no client: " .. tostring(refusal or "no reason logged")
     end
     return false
 end
-local launch_done, launch_pass, launch_msg = launch_verdict(SLINK_GEN3_CLIENT, refused, D.expect_refused)
+local launch_done, launch_pass, launch_msg = launch_verdict(SLINK_GEN3_CLIENT, refused, D.expect_refused, D.probe_admission)
 if launch_done then
+    if D.probe_admission and not SLINK_GEN3_CLIENT then
+        log("PROBE_ADMISSION client=refused_at_launch reason=" .. tostring(refused or "none logged"))
+    end
     if launch_pass then
         log("REFUSED_AT_LAUNCH " .. tostring(refused))
         log(fmt("WRITES %d", writes))

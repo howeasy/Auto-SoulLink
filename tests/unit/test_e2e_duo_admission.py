@@ -2123,3 +2123,95 @@ def test_the_multi_hello_shape_still_needs_the_servers_accepted_identity():
         before, refused, events, resumed, "AAAA:1111:01", "1234", allow_accepted_refreshes=True))
     assert any("OT ID changed" in p for p in duo.reconnect_same_problems(
         before, after, events, resumed, "AAAA:1111:01", "9999", allow_accepted_refreshes=True))
+
+
+# ── a WITHHELD (party_hidden) refresh hello reports 0 mons and is accepted; nothing else that differs is ──────────────
+# Evidence: duo_9ghb41vi (fc_frlgc_reconnect_gen3_fr_as_a_companion_d5a26da9): A's hellos 2, then 0 mons ("hello ... party=0",
+# server.py:2228 counts len(msg.get("party", []))). The Gen 3 client always sends `party` (empty when withheld, lua/gen3/client.lua:1171-1195)
+# plus party_hidden=true; server/state.py:1958-1959 and 2065 leave the stored party intact for that, but an EMPTY party that is not
+# withheld replaces it (:2067, :2087). The 200-char TX hello cannot show party_hidden, so the driver logs HELLO_FACTS per hello.
+FACTS_VISIBLE = {"party": 2, "hidden": False}
+FACTS_WITHHELD = {"party": 0, "hidden": True}
+FACTS_EMPTY = {"party": 0, "hidden": False}
+
+
+def _baselined(events):
+    return _with_new_events(events, _hello_row("Connected (firered, 2 mons)", "viridian_city"))
+
+
+def _after(base, *rows):
+    return _with_new_events(base, *rows)          # `rows` given NEWEST FIRST, as the server stores them
+
+
+def _verdict(base, after, facts):
+    before, aft, _events = _reconnect_snapshots()
+    return (duo.accepted_reconnect_hellos(base, after, facts),
+            duo.reconnect_same_problems(before, aft, base, after, "AAAA:1111:01", "1234",
+                                        allow_accepted_refreshes=True, hello_facts=facts))
+
+
+def test_hello_facts_are_read_in_order_from_the_clients_log():
+    text = ("booted\nHELLO_FACTS party=2 party_hidden=false\nTX hello - {}\nHELLO_FACTS party=0 party_hidden=true\n"
+            "HELLO_FACTS party=absent party_hidden=false\n")
+    assert duo.hello_facts_from(text) == [{"party": 2, "hidden": False}, {"party": 0, "hidden": True},
+                                          {"party": None, "hidden": False}]
+    assert duo.hello_facts_from("") == [] and duo.hello_facts_from("HELLO_FACTS party=x party_hidden=true") == []
+
+
+def test_a_withheld_zero_mon_refresh_hello_is_accepted():
+    _b, _a, events = _reconnect_snapshots()
+    base = _baselined(events)
+    after = _after(base, _hello_row("Connected (firered, 0 mons)", "viridian_city_mart"), _hello_row("Connected (firered, 2 mons)"))
+    assert _verdict(base, after, [FACTS_VISIBLE, FACTS_WITHHELD]) == (True, [])
+    three = _after(base, _hello_row("Connected (firered, 0 mons)"), _hello_row("Connected (firered, 2 mons)"),
+                   _hello_row("Connected (firered, 2 mons)"))
+    assert _verdict(base, three, [FACTS_VISIBLE, FACTS_VISIBLE, FACTS_WITHHELD]) == (True, [])
+    assert _verdict(base, _after(base, _hello_row("Connected (firered, 2 mons)")), []) == (True, [])   # no odd row: no facts needed
+
+
+@pytest.mark.parametrize("name, rows, facts, expect", [
+    ("present-and-empty, not withheld (the server empties party_keys)",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_EMPTY], "was not withheld"),
+    ("a hello whose party field was absent and not withheld",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, {"party": None, "hidden": False}],
+     "was not withheld"),
+    ("a different non-zero count",
+     ["Connected (firered, 3 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_VISIBLE], "baseline party is 2"),
+    ("a withheld hello that reports a count",
+     ["Connected (firered, 1 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, {"party": 1, "hidden": True}],
+     "baseline party is 2"),
+    ("facts that cannot be matched to the rows",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_WITHHELD], "cannot be matched"),
+    ("no facts at all for an odd row",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [], "cannot be matched"),
+    ("another rom",
+     ["Connected (leafgreen, 2 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_VISIBLE], "another identity"),
+    ("only withheld hellos: nothing re-asserted the party",
+     ["Connected (firered, 0 mons)"], [FACTS_WITHHELD], "baseline party"),
+    ("the withheld fact belongs to a different hello",
+     ["Connected (firered, 2 mons)", "Connected (firered, 0 mons)"], [FACTS_VISIBLE, FACTS_WITHHELD], "was not withheld"),
+])
+def test_every_other_zero_or_different_party_hello_still_fails(name, rows, facts, expect):
+    _b, _a, events = _reconnect_snapshots()
+    base = _baselined(events)
+    after = _after(base, *[_hello_row(text) for text in rows])
+    ok, problems = _verdict(base, after, facts)
+    assert ok is False and any(expect in p for p in problems), (name, problems)
+
+
+def test_the_relaxation_leaves_every_other_gate_of_the_multi_hello_shape_in_place():
+    before, aft, events = _reconnect_snapshots()
+    base = _baselined(events)
+    mix = [_hello_row("Connected (firered, 0 mons)"), _hello_row("Connected (firered, 2 mons)")]
+    facts = [FACTS_VISIBLE, FACTS_WITHHELD]
+
+    def problems(after, status=aft, ot="1234"):
+        return duo.reconnect_same_problems(before, status, base, after, "AAAA:1111:01", ot, allow_accepted_refreshes=True,
+                                           hello_facts=facts)
+    assert problems(_after(base, *mix)) == []
+    assert any("only accepted" in p for p in problems(_after(base, _hello_row("REJECTED — wrong save/slot"), *mix)))
+    assert any("count changed" in p for p in problems(_after(base, {"player": "a", "type": "capture", "text": "dup"}, *mix)))
+    refused = {**aft, "status": {"players": {**aft["status"]["players"],
+                                             "a": {**aft["status"]["players"]["a"], "identity_error": "x"}}}}
+    assert any("accepted identity" in p for p in problems(_after(base, *mix), status=refused))
+    assert any("OT ID changed" in p for p in problems(_after(base, *mix), ot="9999"))

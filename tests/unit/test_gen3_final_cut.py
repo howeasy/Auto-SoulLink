@@ -2008,3 +2008,61 @@ def test_a_row_that_is_not_an_e2e_duo_run_or_left_nothing_keeps_nothing(tmp_path
 def test_the_kept_directory_is_gitignored_so_the_lane_stays_tracked_clean():
     ignored = subprocess.run(["git", "-C", fc.REPO, "check-ignore", "-q", "patch/build/fc_rows/some_row/e2e_x_a_result.txt"])
     assert ignored.returncode == 0, "patch/build/fc_rows must be ignored (patch/.gitignore build/)"
+
+
+# ---------------------------------------------------------------------------
+# per-invocation summaries never clobber an earlier pass's
+# ---------------------------------------------------------------------------
+
+def _run_files(probes, cut):
+    return sorted(p.name for p in probes.glob(f"fc_SUMMARY_{cut[:8]}_run*.txt"))
+
+
+def test_a_later_invocation_never_overwrites_an_earlier_invocations_summary(pass_env, monkeypatch):
+    cut, ran, probes = pass_env
+    monkeypatch.setattr(fc, "utcnow", lambda: __import__("datetime").datetime(2026, 10, 3, 12, 0, 0, tzinfo=__import__("datetime").UTC))
+    assert _run(cut) == 0                                              # pass 1: both rows
+    first = _run_files(probes, cut)
+    assert len(first) == 1
+    text1 = (probes / first[0]).read_text(encoding="utf-8")
+    assert "states_firered_town" in text1 and "states_firered_battle" in text1 and "OVERALL: PASS (2/2 rows)" in text1
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--rows", "states_firered_town"]) == 0   # pass 2: a subset
+    runs = _run_files(probes, cut)
+    assert len(runs) == 2 and len(set(runs)) == 2                      # even within the same UTC second: distinct names
+    assert (probes / first[0]).read_text(encoding="utf-8") == text1    # the first pass's summary is byte-for-byte untouched
+    plain = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+    assert "states_firered_battle" not in plain and "OVERALL: PASS (1/1 rows)" in plain     # the plain name = the latest pass
+    second = next(r for r in runs if r != first[0])
+    assert (probes / second).read_text(encoding="utf-8") == plain
+
+
+def test_one_invocation_keeps_one_run_file_updated_after_every_row(pass_env):
+    cut, ran, probes = pass_env
+    assert _run(cut) == 0
+    (name,) = _run_files(probes, cut)
+    assert name.startswith(f"fc_SUMMARY_{cut[:8]}_run") and (probes / name).read_text(encoding="utf-8") ==         (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+
+
+def test_a_title_summary_keeps_its_suffix_in_both_names(pass_env):
+    cut, _ran, probes = pass_env
+    fc.write_summary(cut, [], "_frlgc", "20261003T120000Z")
+    assert (probes / f"fc_SUMMARY_{cut[:8]}_frlgc.txt").is_file()
+    assert (probes / f"fc_SUMMARY_{cut[:8]}_frlgc_run20261003T120000Z.txt").is_file()
+
+
+def test_merge_summary_also_keeps_its_own_copy_and_the_readers_ignore_run_files(pass_env):
+    cut, _ran, probes = pass_env
+    assert _run(cut) == 0
+    (first,) = _run_files(probes, cut)
+    before = (probes / first).read_text(encoding="utf-8")
+    _receipt(probes, "states_firered_town", cut, "PASS")
+    _receipt(probes, "states_firered_battle", cut, "PASS")
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--merge-summary",
+                    "--rows", "states_firered_town,states_firered_battle"]) == 0
+    runs = _run_files(probes, cut)
+    assert len(runs) == 2 and (probes / first).read_text(encoding="utf-8") == before
+    # summaries are never evidence: no reader treats a run file as a receipt
+    for name in runs:
+        assert fc.receipt_evidence(name, (probes / name).read_text(encoding="utf-8"), str(probes)) is None
+    assert set(fc.collect_evidence(str(probes))) == {"states_firered_town", "states_firered_battle"}
+    assert fc.prior_verdict("states_firered_town", cut) == "PASS"

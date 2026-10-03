@@ -993,7 +993,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
-                        + tuple(duo_module.GEN3_RAND_SCENARIOS)):
+                        + tuple(duo_module.GEN3_RAND_SCENARIOS) + ("probe_protected_span_flip_gen3",)):   # the opt-in LIVE PROBE row
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS + GEN3_RR_EXPLICIT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
