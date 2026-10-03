@@ -148,3 +148,35 @@ async def test_a_hello_from_a_does_not_admit_b_on_the_same_socket(tmp_path, monk
         await _send(socket, _hello("b", {"rom_type": "red"}))
         await _send(socket, tick)
         assert srv.is_admitted("b") and ("b", "tick") in dispatched
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_area", [False, True])
+async def test_non_hello_adapter_error_refuses_and_keeps_the_socket(tmp_path, monkeypatch, caplog, bad_area):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        await _send(socket, _hello("a", {"rom_type": "red"}))
+        adapter = srv.state._adapter_for("a")
+        def broken(_area):
+            raise RuntimeError("pack decode failed")
+        monkeypatch.setattr(adapter, "is_gift_area", broken)
+        reply = await _send(socket, {"event": "capture", "player": "a", "area_id": ["route_1"] if bad_area else "route_1",
+                                     "key": "A:1", "species_id": 19, "level": 5})
+        assert any(c.get("refused") == "error" for c in reply["commands"])
+        assert "capture" in caplog.text
+        assert ("unhashable" if bad_area else "pack decode failed") in caplog.text
+        tick = await _send(socket, {"event": "tick", "player": "a", "party": []})
+        assert not any(c.get("refused") for c in tick["commands"])
+        assert srv.connected_players["a"]["connected"] and srv.connected_players["a"]["last_event"] == "tick"
+
+
+def test_hello_dispatch_error_still_rolls_back_and_raises(tmp_path, monkeypatch):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    adapter = srv.adapter
+    def broken(*_args):
+        raise RuntimeError("hello decode failed")
+    monkeypatch.setattr(srv.state, "handle_event", broken)
+    with pytest.raises(RuntimeError, match="hello decode failed"):
+        srv._dispatch("a", _hello("a", {"rom_type": "red"}))
+    assert srv.adapter is adapter and srv.state.adapter is adapter

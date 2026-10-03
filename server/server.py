@@ -2109,6 +2109,15 @@ class SLinkServer:
         return commands
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
+        try:
+            return self._dispatch_event(player_id, msg)
+        except Exception:
+            if msg.get("event") == "hello":
+                raise  # the hello transaction owns rollback and retains its fatal boundary
+            log.exception("[%s] failed to dispatch %s", player_id, msg.get("event", "unknown"))
+            return [{"cmd": "noop", "refused": "error"}]
+
+    def _dispatch_event(self, player_id: str, msg: dict) -> list:
         if self.state.load_failed:
             return [{"cmd": "noop", "refused": "load_failed"}]
         event = msg.get("event", "unknown")
