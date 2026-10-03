@@ -2144,7 +2144,8 @@ def test_hunt_logs_driver_ball_counts_for_the_oracle():
 
 @pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
 @pytest.mark.parametrize("case", ["one", "three", "wrong_delta", "untouched", "saved_disagrees",
-                                  "no_caught", "two_caught", "noncontiguous", "extra_miss"])
+                                  "no_caught", "two_caught", "noncontiguous", "extra_miss",
+                                  "later_miss", "later_hunt_no_throw"])
 def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case):
     run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
     proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
@@ -2168,6 +2169,8 @@ def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case)
     elif case == "extra_miss":
         throws = [("missed", 20, 20), ("caught", 20, 19)]
         saved = 19
+    elif case == "later_miss":
+        saved = 16
     elif case == "noncontiguous":
         throws[1] = ("missed", 18, 17)  # total decrement still equals count; chain is impossible
     path, sram, _rom = paths["a"]
@@ -2179,10 +2182,15 @@ def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case)
         if line.startswith("[hunt] threw ball"):
             lines.extend(f"[hunt] threw ball index 0 -> {why} balls_before={before} balls_after={after}"
                          for why, before, after in throws)
+            if case in ("later_miss", "later_hunt_no_throw"):
+                # These rows' later A hunt is sacrifice; it cannot reach use_item.
+                lines.append("[hunt] encounter 1 at (10,35) mode=sacrifice balls=17")
+                if case == "later_miss":
+                    lines.append("[hunt] threw ball index 0 -> missed balls_before=17 balls_after=16")
         else:
             lines.append(line)
     results = {"a": "\n".join(lines) + "\n", "b": proper}
-    if case in ("one", "three"):
+    if case in ("one", "three", "later_hunt_no_throw"):
         run.assert_linked_faint_saved(results, active=True)
     else:
         with pytest.raises(RuntimeError, match="SYNTH catch"):
