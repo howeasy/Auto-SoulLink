@@ -700,18 +700,37 @@ function Client.new(p)
             -- received mon as a catch. A transient empty-journal read instead needs this flag
             -- until visibility returns, so observe_known cannot silently seed its new key.
             local posted = st.trade_apply and (st.trade_apply.posted or st.trade_apply.possibly_posted)
-            if not (journal and journal.busy and not journal.failure
-                    and not awaiting_trade_run and not posted) then
-                st.flags = {}
+            -- LOST-CAPTURE: an acquisition signal is never dropped just because the journal answered "busy". Two clients may share one
+            -- journal file whose OS guard makes the other's read momentarily busy (journal:hidden() is then true although it holds NO
+            -- record); with the trade run unbound (awaiting_trade_run, the rand rows) the old test cleared the flags and observe_known
+            -- absorbed the caught mon as known. A busy journal with no failure and no posted trade cannot own a party change (a
+            -- trade needs a bound run), so the signal is held, bounded, until the journal answers; the other flags keep the old rule.
+            local keep = journal and journal.busy and not journal.failure and not posted
+                         and (not awaiting_trade_run or f.acquire)
+            if keep and f.acquire then
+                local now = io.framecount()
+                if not st.acq_held or now < st.acq_held then st.acq_held = now end
+                if now - st.acq_held > 1800 then          -- bounded (30 s of frames): then drop, LOUDLY, never silently
+                    keep = false
+                    log(string.format("ACQ expired after=%d frames reason=recovery_hidden retained=false DROPPED caught=%s",
+                                      now - st.acq_held, tostring(f.caught)))
+                    st.acq_held = nil
+                elseif now == st.acq_held then            -- first frame of this hold: the evidence line, once
+                    log(string.format("ACQ held reason=recovery_hidden retained=true caught=%s awaiting_run=%s", tostring(f.caught),
+                                      tostring(awaiting_trade_run)))
+                end
+            elseif not keep and f.acquire then
+                st.acq_held = nil
+                log(string.format("ACQ held reason=recovery_hidden retained=false caught=%s", tostring(f.caught)))
             end
-            if f.acquire and (st.flags ~= f or not st.acq_held) then      -- once per hold (a retained flag set repeats per frame)
-                st.acq_held = st.flags == f
-                log(string.format("ACQ held reason=recovery_hidden retained=%s caught=%s", tostring(st.flags == f), tostring(f.caught)))
-            end
+            if not keep then st.flags = {} end
             st.trade, f.trade = nil, nil
             return
         end
-        st.acq_held = nil
+        if st.acq_held then
+            log(string.format("ACQ resumed after=%d frames (journal visible again)", io.framecount() - st.acq_held))
+            st.acq_held = nil
+        end
         st.flags = {}
         local party = party_read(f.pc)                          -- a PC settle reads occupancy
         if not party then
@@ -1154,7 +1173,7 @@ function Client.new(p)
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
-        st.opp_seen, st.pre_announced_id = nil, nil
+        st.opp_seen, st.pre_announced_id, st.acq_held = nil, nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until = nil, 0
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
