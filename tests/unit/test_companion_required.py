@@ -49,12 +49,13 @@ def test_gen1_rby_admits_a_cartridge_that_reports_the_mailbox(rom_type, kind):
     assert _refusal({"rom_type": rom_type, "artifact_kind": kind, "panel": True}) is None
 
 
-def test_patched_keeps_the_callers_artifact_kind_except_where_the_kind_is_the_evidence():
+def test_patched_never_changes_the_callers_artifact_kind():
     from tests.unit.companion_evidence import patched
     for rom_type in ("red", "firered", "emerald", "firered_rr"):
         assert patched({"rom_type": rom_type, "artifact_kind": "clean"})["artifact_kind"] == "clean", rom_type
-    assert patched({"rom_type": "purered", "artifact_kind": "clean"})["artifact_kind"] == "overlay"
-    assert patched({"rom_type": "purered", "artifact_kind": "rand_overlay"})["artifact_kind"] == "rand_overlay"
+    # pureRGB's evidence IS the kind: a clean pure hello must stay clean (and be refused), never be upgraded
+    assert patched({"rom_type": "purered", "artifact_kind": "clean"})["artifact_kind"] == "clean"
+    assert patched({"rom_type": "purered"})["artifact_kind"] == "overlay"
 
 
 def test_a_patched_red_still_pairs_with_a_clean_yellow():

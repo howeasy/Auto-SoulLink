@@ -41,7 +41,8 @@ KEY_A, KEY_B = "AABB:30B8:10", "CCDD:7B0B:13"
 
 
 def _cart(rom_type: str, declare: bool = False) -> dict:
-    cart = {"rom_type": rom_type, "artifact_kind": "clean"}
+    # a pureRGB half's patch evidence IS its artifact_kind, so it declares the overlay itself
+    cart = {"rom_type": rom_type, "artifact_kind": "overlay" if rom_type.lower().startswith("pure") else "clean"}
     if rom_type.lower() not in ("crystal", "gold", "silver"):
         # a Gen 1 / Gen 3 half connects PATCHED: the server refuses a clean companion-title hello before the
         # mixed-games gate this matrix is about (companion required, owner 2026-10-02); its kind is not the evidence

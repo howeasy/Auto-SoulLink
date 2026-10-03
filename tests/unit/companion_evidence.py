@@ -28,11 +28,8 @@ def companion(rom_type: str) -> dict:
 def patched(hello: dict) -> dict:
     """`hello` with the companion evidence for its rom_type merged under any field it already sets.
 
-    The caller's artifact_kind wins (a "clean" Gen 1/Gen 3 half keeps committing "clean"): the evidence for
-    those families is the panel / `companion_abi` field, not the kind. pureRGB's evidence IS the kind, so
-    a non-overlay kind is lifted to "overlay" there.
+    The caller's artifact_kind always wins: a "clean" Gen 1/Gen 3 half keeps committing "clean" (its evidence is
+    the panel / `companion_abi` field), and a "clean" pureRGB hello stays clean and is REFUSED (its evidence
+    IS the kind). A pureRGB caller that means a patched cartridge says "overlay" itself.
     """
-    merged = {**companion(hello.get("rom_type", "")), **hello}
-    if str(hello.get("rom_type", "")).lower() in _PURE and merged.get("artifact_kind") not in ("overlay", "rand_overlay"):
-        merged["artifact_kind"] = "overlay"
-    return merged
+    return {**companion(hello.get("rom_type", "")), **hello}

@@ -45,7 +45,8 @@ def cutover(monkeypatch):
 
 
 def _cart(rom_type):
-    cart = {"rom_type": rom_type, "artifact_kind": "clean"}
+    # a pureRGB half's patch evidence IS its artifact_kind, so it declares the overlay itself
+    cart = {"rom_type": rom_type, "artifact_kind": "overlay" if rom_type.lower().startswith("pure") else "clean"}
     if rom_type.lower() not in ("crystal", "gold", "silver"):
         # a Gen 1 / Gen 3 half connects PATCHED (companion required, owner 2026-10-02); its kind is not the evidence
         cart = patched(cart)
