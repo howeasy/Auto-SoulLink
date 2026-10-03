@@ -38,6 +38,8 @@
                wTopMenuItemY wListScrollOffset wPlayerMonNumber wWhichPokemon wPartyCount
                wBattleMonMoves wBattleMonPP wBattleMonHP wEnemyMonHP wEnemySelectedMove
                wCurItem hJoyPressed hJoy5 (optional, enrich the evidence)
+               wNumBagItems wBagItems (optional together, enable balls_before/balls_after
+                                       and observed throw:caught / throw:missed receipts)
                wNumRunAttempts (optional for construction, but D.run's receipt that the RUN
                                 press was taken; without it D.run refuses with why=no_run_counter
                                 rather than repress blind)
@@ -332,6 +334,7 @@ function M.new(o)
         t.bag_cursor=D.state();t.bag_cursor.index=bag_index()
         if t.bag_cursor.index~=index then t.why="bag cursor stuck at "..t.bag_cursor.index;return t end
         -- Receipt-only observations. Do not change the input-free post-A wait below.
+        -- A curated caller bundle must supply BOTH optional bag symbols.
         local function ball_quantity()
             if not A.wNumBagItems or not A.wBagItems then return nil end
             local total=0

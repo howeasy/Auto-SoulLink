@@ -192,7 +192,8 @@ SCENARIOS = {
     # named `("gen1",)` went with them.
     # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
     # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
-    # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
+    # exactly ONE Poke Ball unless a row declares the disclosed 20-ball SYNTH recipe.
+    # The hunt fights one Tackle first
     # when the foe is at full HP (lua/tests/gen1_rb_hunt_inputs.lua).
     # `frames` is only a runaway guard: the main runs at 16x, so 150000 frames (~156 s) expired
     # inside a wall-clock wait; the real bound is `timeout`, enforced by this runner's cleanup.
@@ -207,7 +208,7 @@ SCENARIOS = {
                                "oracle": "assert_linked_faint_saved",
                                "oracle_kwargs": {"active": False}},
     "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
-                                "target": "battle", "no_setup": True, "frames": 2500000,
+                                "target": "battle", "gen1_synth": "explode", "rng_attempts": 4, "no_setup": True, "frames": 2500000,
                                 "oracle": "assert_linked_faint_saved",
                                 "oracle_kwargs": {"active": True}},
     # The same linked faint landing while B's linked mon sits on the BENCH of a wild battle
@@ -219,7 +220,8 @@ SCENARIOS = {
                                       "oracle": "assert_linked_faint_saved",
                                       "oracle_kwargs": {"active": False, "bench_battle": True}},
     "explode_bench_battle_new": {"flags": ["--explode-mode"], "timeout": 1500,
-                                 "games": ("gen1_new",), "target": "battle", "no_setup": True,
+                                 "games": ("gen1_new",), "target": "battle", "gen1_synth": "explode",
+                                 "rng_attempts": 4, "no_setup": True,
                                  "frames": 2500000, "oracle": "assert_linked_faint_saved",
                                  "oracle_kwargs": {"active": False, "bench_battle": True,
                                                    "explode": True}},
@@ -255,7 +257,7 @@ SCENARIOS = {
     "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
                     # O-33: private qualified battle-save copies with 20 Poke Balls.
                     # Catch/link/explode still run natively; each PYDEC receipt discloses SYNTH.
-                    "target": "battle", "gen1_synth": "explode", "no_setup": True, "frames": 2500000,
+                    "target": "battle", "gen1_synth": "explode", "rng_attempts": 4, "no_setup": True, "frames": 2500000,
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
     # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
@@ -883,7 +885,11 @@ SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its batt
 EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION"
 # A third explode miss may reach its declared fourth attempt; other rows keep their budgets.
 EXPLODE_BALL_MISS = "hunt ended out-of-balls"
-LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS, EXPLODE_BALL_MISS)
+LATE_ATTEMPT_RNG = (
+    (SPECIES_BUDGET_MISS, None),  # preserve the existing species-hunt policy
+    (EXPLODE_KO_MISS, frozenset({"explode_new"})),
+    (EXPLODE_BALL_MISS, frozenset({"explode_new", "linked_faint_active_new", "explode_bench_battle_new"})),
+)
 
 
 def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
@@ -929,8 +935,8 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
     return bool(causes) and all(
-        any(phrase in (text or "") and (phrase != EXPLODE_BALL_MISS or scenario == "explode_new")
-            for phrase in LATE_ATTEMPT_RNG) for text in causes)
+        any(phrase in (text or "") and (scenarios is None or scenario in scenarios)
+            for phrase, scenarios in LATE_ATTEMPT_RNG) for text in causes)
 
 
 def scenario_attempt_limit(name, game):
@@ -966,13 +972,6 @@ def scenario_attempt_limit(name, game):
         return 3 if entry.get("ball_hunt") else 1
     if name == "species_clause_new":
         return 8
-    if name == "explode_new":
-        # EX-3/EX-4: the linked mon IS the lead at the second battle, but the speed order is a
-        # coin flip across Route 1's encounters and the hunt weakens the catch to ~3/15 HP, so
-        # one foe hit kills it about half the time (~25-49% failure per attempt as the
-        # explode-KO phrase). The Lua card heals it before the encounter; 4 covers the crit/tie
-        # cases that remain.
-        return 4
     if name == "poison_new":
         # The forest hunt races the wild table against the starter's HP; run 4 of the full
         # runner lost both attempts to 'a wild foe knocked the starter out' (owner: raise it).
@@ -5967,7 +5966,7 @@ class DuoRun:
 
         cached = self.__dict__.setdefault("_gen1_synth_fixtures", {})
         if inst in cached:
-            path, digest = cached[inst]
+            path, digest, _disclosure = cached[inst]
             if hashlib.sha256(Path(path).read_bytes()).hexdigest() != digest:
                 raise RuntimeError(f"{inst}: SYNTH setup fixture changed after qualification")
             return path
@@ -5979,10 +5978,73 @@ class DuoRun:
         raw, disclosure = module.build_explode_synth(title, source.read_bytes(), rom.read_bytes())
         path = Path(self.data_dir) / f"explode_{inst}.SaveRAM"
         path.write_bytes(raw)
-        disclosure.update(inst=inst, source=str(source), fixture=str(path))
+        disclosure.update(inst=inst, scenario=self.scenario, attempt=self.attempt,
+                          source=str(source), fixture=str(path))
         self._pydec_note("GEN1_SYNTH_SETUP " + json.dumps(disclosure, sort_keys=True))
-        cached[inst] = (str(path), disclosure["fixture_sha256"])
+        cached[inst] = (str(path), disclosure["fixture_sha256"], dict(disclosure))
         return str(path)
+
+    def assert_gen1_synth_setup(self, results, *, complete=True):
+        """Bind each first catch encounter to this attempt's qualified SYNTH disclosure.
+
+        Later hunts legitimately spend balls. On early failure an unfinished partner may
+        not have reached grass yet; a PASS or RNG-cause half must always carry its first read.
+        """
+        if getattr(self, "cfg", {}).get("gen1_synth") != "explode":
+            return
+        from server.adapters import gen1_codec
+
+        def fail(why):
+            raise RuntimeError("GEN1 SYNTH setup: " + why)
+
+        try:
+            text = Path(self._pydec_path).read_text(encoding="utf-8")
+            records = [json.loads(line.removeprefix("GEN1_SYNTH_SETUP "))
+                       for line in text.splitlines() if line.startswith("GEN1_SYNTH_SETUP ")]
+        except (OSError, TypeError, ValueError, AttributeError) as exc:
+            fail("disclosure unavailable or malformed: " + str(exc))
+        if (len(records) != 2 or any(not isinstance(row, dict) for row in records)
+                or sorted(str(row.get("inst")) for row in records) != ["a", "b"]):
+            fail("one unambiguous disclosure per instance is required")
+        by_inst = {row["inst"]: row for row in records}
+        cached = getattr(self, "_gen1_synth_fixtures", {})
+        for inst in ("a", "b"):
+            if inst not in cached:
+                fail(f"{inst}: no qualified setup for this attempt")
+            path, digest, expected = cached[inst]
+            row = by_inst[inst]
+            if json.dumps(row, sort_keys=True) != json.dumps(expected, sort_keys=True):
+                fail(f"{inst}: disclosure differs from this attempt's qualified setup")
+            try:
+                raw = Path(path).read_bytes()
+                rom_hash = hashlib.sha1((Path(REPO) / self._rom_for(inst)).read_bytes()).hexdigest()
+            except OSError as exc:
+                fail(f"{inst}: setup/cartridge bytes unavailable: {exc}")
+            if hashlib.sha256(raw).hexdigest() != digest:
+                fail(f"{inst}: setup bytes changed after qualification")
+            if rom_hash != row["rom_sha1"]:
+                fail(f"{inst}: cartridge differs from the setup qualification")
+            foundation = "gen1_purergb" if row["title"].startswith("pure") else "gen1_rby"
+            layout = gen1_codec.for_foundation(foundation)
+            quantity = sum(qty for item, qty in layout.decode_bag(raw) if item in layout.ball_items)
+            if type(row["balls_after"]) is not int or row["balls_after"] != quantity:
+                fail(f"{inst}: disclosed balls_after disagrees with the setup bytes")
+            receipt = (results or {}).get(inst) or ""
+            encounters = [line for line in receipt.splitlines() if line.startswith("[hunt] encounter ")]
+            if not encounters:
+                if complete or classify_gen1_result(receipt) in ("PASS", "CAUSE_RNG"):
+                    fail(f"{inst}: first catch encounter ball count missing")
+                continue
+            observed = re.fullmatch(
+                r"\[hunt\] encounter 1 at \(-?\d+,-?\d+\) mode=catch balls=(\d+)", encounters[0])
+            if not observed or int(observed[1]) != quantity:
+                fail(f"{inst}: first catch encounter differs from disclosed balls_after={quantity}: {encounters[0]}")
+            seen = self.__dict__.setdefault("_gen1_synth_observed", set())
+            proof = (inst, digest, quantity)
+            if proof not in seen:
+                self._pydec_note(f"GEN1_SYNTH_OBSERVED inst={inst} balls={observed[1]} "
+                                 f"disclosed={quantity} fixture_sha256={digest}")
+                seen.add(proof)
 
     def _fixture_save_path(self, inst):
         """The committed or disclosed private fixture this instance was seeded from.
@@ -6130,6 +6192,7 @@ class DuoRun:
         bench of a wild battle when the command arrives, and every B marker has to show the write
         landing INSIDE that battle -- the pre-fix client deferred it to the overworld checkpoint.
         """
+        self.assert_gen1_synth_setup(results)
         for process in self.emus:
             process.wait(timeout=30)
         matches = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
@@ -6292,6 +6355,7 @@ class DuoRun:
         showed the catch's own moves BEFORE the write and four EXPLOSIONs after it, and the
         commit was the coerced turn rather than a queued one.
         """
+        self.assert_gen1_synth_setup(results)
         self.assert_linked_faint_saved(results, active=True, explode=True)
         a_text, b_text = results["a"], results["b"]
 
@@ -7937,19 +8001,24 @@ class DuoRun:
             # Bind every receipt, including a no-save half, to the cartridge the launcher
             # resolved. Repeated builds must all agree; one good line cannot mask a bad one.
             built = [line for line in receipt.splitlines() if line.startswith("client built:")]
-            pattern = (rf"client built: title=\S+ pack=\S+ kind=\S+ player={inst} "
-                       r"rom=([0-9a-fA-F]{8}) -> \S+")
+            pattern = (rf"client built: title=\S+ pack=(?P<pack>\S+) kind=(?P<kind>\S+) player={inst} "
+                       r"rom=(?P<rom>[0-9a-fA-F]{8}) -> \S+")
             matches = [re.fullmatch(pattern, line) for line in built]
             if not matches or any(match is None for match in matches):
                 raise RuntimeError(f"{inst}: client built ROM receipt missing or malformed")
+            expected_pack = "gen1_purergb" if is_pure_pairing(self.game) else "gen1_rby"
+            allowed = {"gen1_rby": {"named"}, "gen1_purergb": {"overlay", "rand_overlay"}}
+            if any(match["pack"] != expected_pack or match["kind"] not in allowed[expected_pack]
+                   for match in matches):
+                raise RuntimeError(f"{inst}: client built ROM kind is not an admitted companion/overlay")
             rom = self._rom_for(inst)
             digest = hashlib.sha1((Path(REPO) / rom).read_bytes()).hexdigest()
-            prefixes = {match[1].lower() for match in matches}
+            prefixes = {match["rom"].lower() for match in matches}
             if prefixes != {digest[:8]}:
                 raise RuntimeError(f"{inst}: client built ROM prefixes {sorted(prefixes)} "
                                    f"differ from booted cartridge {rom} sha1={digest}")
             self._pydec_note(f"GEN1_ROM_SHA1 inst={inst} rom={rom} sha1={digest} "
-                             f"receipt={digest[:8]} match=true")
+                             f"receipt={matches[0]['rom']} computed={digest[:8]} match=true")
             dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
             if not re.search(r"(?m)^SAVE_WITNESS[_ ]", receipt):
                 self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
@@ -10095,6 +10164,7 @@ class DuoRun:
                     self.orchestrate()
             except GameRngMiss:
                 ra, rb = self.wait_results()
+                self.assert_gen1_synth_setup({"a": ra, "b": rb}, complete=False)
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
                                           scenario_attempt_limit(self.scenario, self.game), scenario=self.scenario):
                     raise  # an unrelated failed half is never a game-RNG retry
@@ -10104,6 +10174,7 @@ class DuoRun:
             self._note_result_lines({"a": ra, "b": rb})
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
+            self.assert_gen1_synth_setup({"a": ra, "b": rb}, complete=pa and pb)
             if pa and pb:
                 if scenario_family(getattr(self, "game", "")) == "gen2_new":
                     self._wait_gen2_exit_flush()
@@ -10159,6 +10230,13 @@ class DuoRun:
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
         except ClientFinishedEarly as exc:
+            if self.cfg.get("gen1_synth") == "explode":
+                try:
+                    self.assert_gen1_synth_setup(
+                        {inst: self._read_receipt(inst) or "" for inst in ("a", "b")}, complete=False)
+                except RuntimeError as binding_error:
+                    self._pydec_note(f"PYDEC: FAIL {binding_error}")
+                    raise
             if self.scenario == "gen2_species_clause":
                 # Preserve the pre-cleanup process/RESULT observation: cleanup kills A before
                 # its normal waiting-for-link timeout when B exhausts the duplicate hunt.
@@ -10479,7 +10557,7 @@ def run_scenario_with_rng_retry(name, args):
             return ok, attempt
         why = ("B's first wild foe shared no type with A" if name == "type_clause_gen3" and
                "RESULT: FAIL (RNG: type first encounter has no overlap)" in
-               (receipts.get("b") or "").splitlines() else "the cartridge's only ball missed")
+               (receipts.get("b") or "").splitlines() else "the game reported a retryable RNG result")
         print(f"[duo] {name}: {why}; restarting attempt {attempt + 1} of {limit} "
               "with a fresh server, run directory and SaveRAM seeds")
     return False, limit

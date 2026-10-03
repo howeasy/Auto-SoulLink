@@ -924,7 +924,9 @@ def _put_fainted_in_box12(sram, rom):
 
 def _oracle_runner(tmp_path, scenario):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.scenario = scenario
+    run.scenario, run.game, run.attempt = scenario, "gen1_new", 1
+    run.data_dir = str(tmp_path)
+    run._pydec_path = str(tmp_path / "pydec.txt")
     run.cfg = duo.SCENARIOS[scenario]
     run.gcfg = duo.GAMES["gen1_new"]
     run._saveram_dir = lambda inst: str(tmp_path / f"save_{inst}")
@@ -937,6 +939,9 @@ def _oracle_runner(tmp_path, scenario):
     paths = {}
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
+        if run.cfg.get("gen1_synth"):
+            # The model starts from the same qualified/disclosed input as the live row.
+            sram = bytearray(Path(run._prepare_gen1_explode_fixture(inst)).read_bytes())
         path = Path(run._saveram_dir(inst)) / run._gen1_save_name(inst)   # the companion's save, as the oracle reads it
         path.parent.mkdir(parents=True)
         paths[inst] = (path, sram, rom)
@@ -984,7 +989,13 @@ def _linked_faint_fixture(tmp_path, scenario):
     run, paths = _oracle_runner(tmp_path, scenario)
     run.data_dir = str(tmp_path)
     run._link_keys = {}
+    hunts = {}
     for inst, (path, sram, rom) in paths.items():
+        if run.cfg.get("gen1_synth"):
+            balls = codec.bag_quantity(sram, codec.POKE_BALL)
+            hunts[inst] = f"[hunt] encounter 1 at (10,35) mode=catch balls={balls}\n"
+            sram[codec._BAG_COUNT + 2] = balls - 1  # model one native prerequisite throw
+            _seal_main(sram)
         run._link_keys[inst] = _put_fainted_in_box12(sram, rom)
         path.write_bytes(sram)
     (tmp_path / "links.json").write_text(json.dumps({"links": [{
@@ -1002,7 +1013,7 @@ def _linked_faint_fixture(tmp_path, scenario):
               f'RX memorialize key={run._link_keys["b"]}\n'
               'GAME_OVER RX game_over\n'
               'TX {"event":"memorialize_done"}\n')
-    return run, paths, a_text, b_text
+    return run, paths, hunts.get("a", "") + a_text, hunts.get("b", "") + b_text
 
 
 def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_path, capsys):
@@ -2053,3 +2064,23 @@ def test_saved_gen1_party_reports_rom_scan_failure_as_named_qualification(runner
     with pytest.raises(RuntimeError, match="qualification: neither the clean nor the overlay anchor set holds"):
         runner._saved_gen1_party("a")
     assert seen == [(b"saved party", rom.read_bytes())]
+
+
+def test_prepared_admission_cartridge_remains_selected_at_oracle_time(runner, monkeypatch):
+    _fake_pipeline(monkeypatch)
+    runner.prepare_admit_randomized_new()
+    expected = runner._admit_roms["a"]
+    runner.game = "gen1_new"
+    runner.emus = []
+    observed = []
+    runner.assert_stub_oracle = lambda _results: observed.append(runner._rom_for("a"))
+    results = {}
+    for inst in ("a", "b"):
+        rom = Path(duo.REPO) / runner._rom_for(inst)
+        prefix = hashlib.sha1(rom.read_bytes()).hexdigest()[:8]
+        kind = "named"  # Entry's vanilla companion fallback, including randomized companions
+        results[inst] = (f"client built: title=red pack=gen1_rby kind={kind} player={inst} "
+                         f"rom={prefix} -> 127.0.0.1:54321")
+    runner._run_oracle(results)
+    assert observed == [expected] and runner._admit_roms == {"a": expected}
+    assert (Path(duo.REPO) / expected).read_bytes() == b"random-red"
