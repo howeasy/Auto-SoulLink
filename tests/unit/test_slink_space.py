@@ -73,16 +73,19 @@ def _link(target, link):
 def _no_process_scan(monkeypatch):
     """Most tests don't need the (slow) process scan; the in-use tests re-enable it."""
     monkeypatch.setattr(ss, "processes", lambda: [])
+    monkeypatch.setattr(ss, "process_scan_problem", lambda: None)
 
 
 @pytest.fixture
 def real_processes(monkeypatch):
     monkeypatch.setattr(ss, "processes", _REAL_PROCESSES)
+    monkeypatch.setattr(ss, "process_scan_problem", _REAL_PROBLEM)
     monkeypatch.setattr(ss, "_PROCS", None)
     monkeypatch.setattr(ss, "_CWDS", None)
 
 
 _REAL_PROCESSES = ss.processes
+_REAL_PROBLEM = ss.process_scan_problem
 
 
 @pytest.fixture
@@ -409,16 +412,70 @@ def test_old_temp_with_a_process_inside_refused(W, real_processes):
         proc.wait()
 
 
-def test_without_cwd_scan_temps_get_a_24h_floor(W, monkeypatch):
-    monkeypatch.setattr(ss, "cwd_scan_available", lambda: False)
+def _removable_world(W):
+    """An old lane, an old temp and a merged old worktree: all stale with a working scan."""
+    lane = W.c / "slink" / "old-lane"
+    lane.mkdir()
+    _age(lane)
     pyt = W.c / "temp" / "pytest-of-me" / "pytest-8"
     pyt.mkdir(parents=True)
-    t = time.time() - 3 * 3600
-    os.utime(pyt, (t, t))
-    assert item(plan(W), pyt)["status"] == "keep"
-    t = time.time() - 25 * 3600
-    os.utime(pyt, (t, t))
-    assert item(plan(W), pyt)["status"] == "stale"
+    _age(pyt, 2)
+    wt = add_wt(W, "merged-old")
+    return [lane, pyt, wt]
+
+
+def _scan_breaks(monkeypatch, procs, cwd=None, cwd_ok=True):
+    monkeypatch.setattr(ss, "process_scan_problem", _REAL_PROBLEM)
+    monkeypatch.setattr(ss, "processes", procs)
+    monkeypatch.setattr(ss, "_proc_cwd", cwd or (lambda pid: "C:/"))
+    monkeypatch.setattr(ss, "cwd_scan_available", lambda: cwd_ok)
+    monkeypatch.setattr(ss, "_CWDS", None)
+
+
+def _assert_all_refused(W, paths, why):
+    p, m = plan(W), plan(W, "move")
+    for path in paths:
+        it = item(p, path)
+        assert it["status"] == "refuse" and why in it["reason"], (path, it["reason"])
+    assert p["actions"] == [] and not any(a["src"] for a in m["actions"])
+
+
+def test_working_scan_control(W, monkeypatch):
+    paths = _removable_world(W)
+    _scan_breaks(monkeypatch, lambda: [(4, "System")])
+    assert {item(plan(W), x)["status"] for x in paths} == {"stale"}
+
+
+def test_process_scan_that_raises_refuses_everything(W, monkeypatch):
+    paths = _removable_world(W)
+
+    def broken():
+        raise OSError("powershell missing")
+    _scan_breaks(monkeypatch, broken)
+    _assert_all_refused(W, paths, "process scan unavailable")
+
+
+def test_empty_process_scan_refuses_everything(W, monkeypatch):
+    paths = _removable_world(W)
+    _scan_breaks(monkeypatch, lambda: [])
+    _assert_all_refused(W, paths, "process scan unavailable")
+
+
+def test_no_cwd_scan_refuses_everything(W, monkeypatch):
+    paths = _removable_world(W)
+    _scan_breaks(monkeypatch, lambda: [(4, "System")], cwd_ok=False)
+    _assert_all_refused(W, paths, "process scan unavailable")
+
+
+def test_unreadable_cwd_of_a_live_process_refuses_everything(W, monkeypatch):
+    paths = _removable_world(W)
+    proc = _sleeper(W.tmp)
+    try:
+        _scan_breaks(monkeypatch, lambda: [(proc.pid, "app32.exe")], cwd=lambda pid: None)
+        _assert_all_refused(W, paths, "incomplete")
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 def test_users_of_matches_whole_path_components(W, monkeypatch):

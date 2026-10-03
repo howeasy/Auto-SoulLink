@@ -36,7 +36,6 @@ DEFAULT_WORK_ROOT = "F:/slink-work"
 CATEGORIES = ("wt", "lanes", "tmp", "cache", "evidence")
 DEFAULT_LANE_AGE = 3 * 86400
 DEFAULT_TMP_AGE = 2 * 3600
-TMP_FLOOR_NO_CWD = 24 * 3600
 _EVIDENCE_NAME = re.compile(r"evidence|receipt|proof", re.I)
 _DRIVE_COPY = re.compile(r" \(\d+\)(\.[^./\\ ]+)?$")  # Google Drive conflict copy: "master (1)"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -223,21 +222,45 @@ def processes() -> list[tuple[int, str]]:
         else:
             cmd = ["ps", "-eo", "pid=,args="]
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                 errors="replace", timeout=120).stdout
-        except (OSError, subprocess.SubprocessError):
-            out = ""
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=120)
+            if r.returncode:
+                raise OSError(f"{cmd[0]} exited {r.returncode}: {r.stderr.strip()[:200]}")
+        except (OSError, subprocess.SubprocessError) as e:
+            _PROCS = e  # cached failure: every caller sees it, nobody re-runs it
+            raise
         procs = []
-        for line in out.splitlines():
+        for line in r.stdout.splitlines():
             pid, _, cmdline = line.strip().replace("\t", " ", 1).partition(" ")
             if pid.isdigit() and cmdline:
                 procs.append((int(pid), cmdline))
         _PROCS = procs
+    if isinstance(_PROCS, BaseException):
+        raise _PROCS
     return _PROCS
 
 
+def process_scan_problem() -> str | None:
+    """Why the in-use scan can't be trusted, or None.  Removal and moves fail closed on it."""
+    try:
+        procs = processes()
+    except Exception as e:
+        return f"process scan unavailable ({e})"
+    if not procs:
+        return "process scan unavailable (no processes listed)"
+    if not cwd_scan_available():
+        return "process scan unavailable (no cwd scan on this platform)"
+    _cwds()
+    if _CWD_MISSING:
+        return f"process scan incomplete (cwd unreadable for live pid {_CWD_MISSING[:5]})"
+    return None
+
+
 _CWDS: dict | None = None
-_PEB_PARAMS, _PARAMS_CURDIR = 0x20, 0x38  # x64 PEB.ProcessParameters, ...CurrentDirectory
+_CWD_MISSING: list = []
+# PEB.ProcessParameters and RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath offsets
+_PEB64 = (0x20, 0x38)
+_PEB32 = (0x10, 0x24)
 
 
 def cwd_scan_available() -> bool:
@@ -267,13 +290,24 @@ def _win_cwd(pid: int) -> str | None:
             raise OSError("ReadProcessMemory")
         return buf.raw
 
+    def u(raw):
+        return int.from_bytes(raw, "little")
+
     try:
-        pbi = (c.c_void_p * 6)()  # PROCESS_BASIC_INFORMATION; [1] = PebBaseAddress
-        if nt.NtQueryInformationProcess(h, 0, pbi, c.sizeof(pbi), None) != 0 or not pbi[1]:
+        # A 32-bit (WOW64) process keeps its live cwd in the 32-bit PEB (class 26 gives it).
+        peb32 = c.c_void_p()
+        if nt.NtQueryInformationProcess(h, 26, c.byref(peb32), c.sizeof(peb32), None) != 0:
             return None
-        params = int.from_bytes(read(pbi[1] + _PEB_PARAMS, 8), "little")
-        ustr = read(params + _PARAMS_CURDIR, 16)  # UNICODE_STRING: Length, Max, pad, Buffer
-        length, buf = int.from_bytes(ustr[:2], "little"), int.from_bytes(ustr[8:], "little")
+        if peb32.value:
+            (p_off, d_off), ptr, peb = _PEB32, 4, peb32.value
+        else:
+            pbi = (c.c_void_p * 6)()  # PROCESS_BASIC_INFORMATION; [1] = PebBaseAddress
+            if nt.NtQueryInformationProcess(h, 0, pbi, c.sizeof(pbi), None) != 0 or not pbi[1]:
+                return None
+            (p_off, d_off), ptr, peb = _PEB64, 8, pbi[1]
+        params = u(read(peb + p_off, ptr))
+        ustr = read(params + d_off, 2 * ptr)  # UNICODE_STRING: Length, Max, [pad], Buffer
+        length, buf = u(ustr[:2]), u(ustr[ptr:2 * ptr])
         return read(buf, length).decode("utf-16-le") if length and buf else None
     except OSError:
         return None
@@ -281,33 +315,43 @@ def _win_cwd(pid: int) -> str | None:
         k.CloseHandle(h)
 
 
+def _proc_cwd(pid: int) -> str | None:
+    if _IS_WIN:
+        return _win_cwd(pid)
+    try:
+        return os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return None
+
+
 def _cwds() -> dict[int, str]:
-    """pid -> current directory for every process we may read; cached for one scan."""
-    global _CWDS
+    """pid -> current directory for every listed process; cached for one scan.  A live
+    process whose cwd can't be read goes to _CWD_MISSING (the scan is then incomplete)."""
+    global _CWDS, _CWD_MISSING
     if _CWDS is None:
-        out = {}
+        out, missing = {}, []
         for pid, _ in processes():
-            try:
-                cwd = _win_cwd(pid) if _IS_WIN else os.readlink(f"/proc/{pid}/cwd")
-            except OSError:
-                cwd = None
+            cwd = _proc_cwd(pid)
             if cwd:
                 out[pid] = cwd
-        _CWDS = out
+            elif pid != os.getpid() and pid_alive(pid):
+                missing.append(pid)
+        _CWDS, _CWD_MISSING = out, missing
     return _CWDS
 
 
 def users_of(path) -> list[int]:
     """Pids whose command line names this path (whole components) or whose current
     directory is inside it.  Best effort: open handles are not scanned."""
+    if process_scan_problem():
+        return []  # callers refuse on process_scan_problem() before anything is removed
     n = _norm(path).lower()
     named = re.compile(re.escape(n) + r"(?=$|[/\s\"'])")
     pids = {pid for pid, cmd in processes() if named.search(cmd.replace("\\", "/").lower())}
-    if cwd_scan_available():
-        for pid, cwd in _cwds().items():
-            c = _norm(cwd).lower()
-            if c == n or c.startswith(n + "/"):
-                pids.add(pid)
+    for pid, cwd in _cwds().items():
+        c = _norm(cwd).lower()
+        if c == n or c.startswith(n + "/"):
+            pids.add(pid)
     pids.discard(os.getpid())
     return sorted(pids)
 
@@ -460,6 +504,9 @@ def _worktree_item(repo, w, scanned, now, lane_age) -> dict:
     age = _age(now, item["newest"])
     if age < lane_age:
         return {**item, "status": "keep", "reason": f"merged+clean but active {_hage(age)} ago"}
+    prob = process_scan_problem()
+    if prob:
+        return {**item, "status": "refuse", "reason": prob}
     lock_note = f"; stale lock (pid {item['lock_pid']} dead)" if item["lock"] else ""
     return {**item, "status": "stale", "reason": f"merged into master and clean{lock_note}"}
 
@@ -485,6 +532,9 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
         if rule == "worktrees":  # a worktrees-only place: only an empty leftover is safe to drop
             if st["files"]:
                 return {**item, "status": "keep", "reason": "unregistered dir, inspect by hand"}
+            prob = process_scan_problem()
+            if prob:
+                return {**item, "status": "refuse", "reason": prob}
             return {**item, "status": "stale", "reason": "empty leftover worktree dir"}
         rule = "evidence" if _EVIDENCE_NAME.search(name) else "lane"
         item["rule"] = rule
@@ -497,12 +547,12 @@ def _path_item(p, label, rule, movable, now, lane_age, tmp_age) -> dict:
     if pids:
         return {**item, "status": "refuse", "reason": f"in use by pid {pids[:5]}"}
     limit = tmp_age if rule == "tmp" else lane_age
-    floor = ""
-    if rule == "tmp" and not cwd_scan_available():  # can't see who sits in it: wait a day
-        limit, floor = max(limit, TMP_FLOOR_NO_CWD), " (no cwd scan: 24h floor)"
     age = _age(now, st["newest"])
     if age < limit:
-        return {**item, "status": "keep", "reason": f"active {_hage(age)} ago{floor}"}
+        return {**item, "status": "keep", "reason": f"active {_hage(age)} ago"}
+    prob = process_scan_problem()
+    if prob:
+        return {**item, "status": "refuse", "reason": prob}
     since = time.strftime("%Y-%m-%d %H:%M", time.localtime(st["newest"]))
     return {**item, "status": "stale", "reason": f"{rule} untouched since {since}"}
 
@@ -704,6 +754,10 @@ def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
             continue
         if it.get("lock") and not (it.get("lock_pid") and not it.get("lock_alive")):
             refuse(f"locked ({it['lock']})")
+            continue
+        prob = process_scan_problem()
+        if prob:
+            refuse(prob)
             continue
         pids = users_of(it["path"])
         if pids:
