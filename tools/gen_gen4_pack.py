@@ -1595,7 +1595,10 @@ def build_route_legs(ui: dict, build: str) -> dict:
             # This fight-to-faint loop still requires its own PHYSICAL replay.
             [_step(["A"], 3, 40), _step(["A"], 3, 50), _step(["A"], 3, 30),
              *[_step(["A"], 2, 44) for _ in range(6)]],
-            enemy_hp_zero, 3000, "SOURCE", [*battle_src, S_ENC_START],
+            # Budget (an operational timeout, not the criterion): the DIAGNOSTIC F:/slink-work/lanes/g4/diag-fight-hg-telemetry
+            # met `until` at 3280 frames (Cyndaquil L5 vs Rattata L4, 5 hits, ~690-780 frames/turn, no misses). 6000 = 3280 +
+            # three extra turns at ~780 (misses / low damage rolls). The old 3000 overran after the frame-1200 RNG shift.
+            enemy_hp_zero, 6000, "SOURCE", [*battle_src, S_ENC_START],
             "wild battle settled on the main command menu (gen4_routes:battle_settled)",
             battle_note + "; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, "
             "asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)"),

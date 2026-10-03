@@ -27,6 +27,7 @@ import pytest
 
 from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
 from tools import gen4_evidence, gen4_pins
+from tools.gen4_fixtures import lane_root
 
 pytestmark = pytest.mark.usefixtures("model_surface")
 
@@ -813,6 +814,56 @@ def test_recipe_predicate_chain_null_is_not_success(api):
     assert not api.predicate(title, r.globals().read, to_lua(r, {**predicate, "value": None, "zero": True}))
 
 
+
+@pytest.mark.parametrize("finish", [True, False])
+def test_recipe_telemetry_is_sparse_and_survives_the_unchanged_bound(api, finish):
+    r = api._runtime
+    state = {"frames": 0, "samples": []}
+    leg = {"name": "fight_until_enemy_faints", "max_frames": 95,
+           "steps": [{"press": ["A"], "hold_frames": 2, "then_wait_frames": 13}],
+           "until": {"symbol": "sFieldSysPtr", "deref": [], "offset": 4, "zero": True}}
+    def step(buttons):
+        state["frames"] += 1
+    def ready(predicate):
+        return finish and state["frames"] >= 65
+    def observe():
+        state["samples"].append(state["frames"])
+        return to_lua(r, {"value": max(0, 65 - state["frames"]), "enemy_hp": max(0, 65 - state["frames"]),
+                          "our_hp": 20, "turn_count": state["frames"] // 30})
+    journal = r.table()
+    if finish:
+        assert api.play_recipe(to_lua(r, leg), step, ready, observe, journal) == 65
+    else:
+        with pytest.raises(Exception, match="until predicate not reached"):
+            api.play_recipe(to_lua(r, leg), step, ready, observe, journal)
+    assert len(journal) == 1
+    record = from_lua(journal[1])
+    assert record["frames_used"] == (65 if finish else 95)
+    assert record["outcome"] == ("until_met" if finish else "bound")
+    assert state["samples"] == ([0, 30, 60, 65] if finish else [0, 30, 60, 90, 95])
+    assert record["samples"][len(record["samples"])]["final"] is True
+
+
+def test_fight_trace_reads_the_pack_predicate_source_and_our_hp(api):
+    r = api._runtime
+    artifact = json.loads((REPO / "data/games/gen4_hgss/profile.json").read_text())["titles"]["heartgold"]
+    artifact["symbols"]["sFieldSysPtr"]["address"] = 100
+    b = artifact["profile"]["battle"]
+    leg = {**artifact["route_legs"]["fight_until_enemy_faints"], "name": "fight_until_enemy_faints"}
+    words = {100: 200, 200: 300, 304: 400, 412: 12, 428: 500, 548: 600,
+             600 + b["mons_off"] + b["hp_off"]: 20,
+             600 + b["mons_off"] + b["mon_size"] + b["hp_off"]: 17,
+             500 + b["outcome_off"]: 0}
+    sample = from_lua(api.recipe_sample(to_lua(r, artifact), lambda addr: words.get(addr, 0), to_lua(r, leg)))
+    assert sample["value"] == sample["enemy_hp"] == 17 and sample["our_hp"] == 20
+    assert sample["battle_active"] is True and sample["battle_outcome"] == 0
+    assert sample["turn_count_available"] is False
+    words[600 + b["mons_off"] + b["mon_size"] + b["hp_off"]] = 0
+    assert api.predicate(to_lua(r, artifact), lambda addr: words.get(addr, 0), to_lua(r, leg["until"])) is True
+    words[548] = 0
+    missing = from_lua(api.recipe_sample(to_lua(r, artifact), lambda addr: words.get(addr, 0), to_lua(r, leg)))
+    assert missing["value_available"] is False and missing.get("enemy_hp") is None
+
 def test_synth_identity_survives_native_party_to_box_deposit():
     from types import SimpleNamespace
 
@@ -1448,7 +1499,7 @@ def phase_settle_policy(title, artifact):
         return None
     assert artifact["rom"]["sha1"] == "4fcded0e2713dc03929845de631d0932ea2b5a37", "settle measurement ROM changed"
     return {"max_frames": 16, "measured_max": 11, "margin": 5, "units": "emulator frames",
-            "receipt": "C:/slink/g4/g1-settle-HG-1144-serial/settle.json",
+            "receipt": str(lane_root() / "g1-settle-HG-1144-serial/settle.json"),
             "receipt_sha256": "ddf1dc69d852f30988aba4c0b8af61697ec6307e0b6d4371fe29188e9f1e5d38",
             "state_sha256": "86efe700aed2d8e2737330c98bb2881891daeb1004382be43a1577e349ffb627",
             "note": "serial PHYSICAL diagnostic: faint 10, start 11; add 5 frames scheduling margin; never qualifies row n alone"}
@@ -1546,6 +1597,7 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
     if specs is None:
         return None, reason
     samples, written_battery, save_driver_cases, box_batteries, dirty_observations = {}, None, {}, {}, {}
+    route_legs = {}
     for case in ("party-write", "no-write", "box-write", "box-no-dirty"):
         if case not in specs:
             continue
@@ -1555,6 +1607,8 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
         if status == "FAIL":
             raise AssertionError(f"persistence instrumentation FAIL: {batch / case}: {payload}")
         observation = payload.get("observation")
+        if observation and observation.get("route_legs"):
+            route_legs[case] = observation["route_legs"]
         if not observation or observation.get("save_finish_hits", 0) < 1:
             return None, payload.get("reason", f"i: {case} native-save evidence absent")
         trace = observation.get("save_driver_trace")
@@ -1604,7 +1658,7 @@ def persistence_rows(module, codec, decoded, title, source, save, profile, artif
             "box_original": specs.get("box_original"), "box_target": specs.get("box_target"), "cold_reload": reloaded["hp"],
             "box_open": specs.get("box_open"),
             "box_cold_reload": box_reloaded.get("box-write"), "box_without_dirty_cold_reload": box_reloaded.get("box-no-dirty"),
-            "dirty_flag_observations": dirty_observations,
+            "dirty_flag_observations": dirty_observations, "route_legs": route_legs,
             "save_driver_cases": save_driver_cases,
             "save_completed": len(save_driver_cases) == 4 and all(save_driver_complete(trace) for trace in save_driver_cases.values()),
             "oracle": "save-driver active-to-idle state reads + server.adapters.gen4_codec.parse_save + independent cold RAM PK4 decode"}, None
@@ -1666,7 +1720,7 @@ def test_gen4_hook_probe(api, title):
         assert synth_identity_present(decoded, cfg["new_pid"]), "SYNTH sidecar new_pid absent from decoded party/boxes"
     if os.environ.get("SLINK_GEN4_PROBE_SKIP_PERF_REASON"):
         cfg["skip_perf_reason"] = os.environ["SLINK_GEN4_PROBE_SKIP_PERF_REASON"]
-    root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", "C:/slink/g4/probe-gates"))
+    root = Path(os.environ.get("SLINK_GEN4_PROBE_RUNS", str(lane_root() / "probe-gates")))
     assert " " not in str(root.resolve()) and "google drive" not in str(root.resolve()).lower(), "short non-Drive lane root required"
     batch = root / (title + "-" + uuid.uuid4().hex[:12])
     batch.mkdir(parents=True, exist_ok=False)

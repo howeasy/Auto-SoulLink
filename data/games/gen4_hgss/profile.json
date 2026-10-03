@@ -3500,7 +3500,7 @@
         },
         "fight_until_enemy_faints": {
           "evidence": "SOURCE",
-          "max_frames": 3000,
+          "max_frames": 6000,
           "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)",
           "open": null,
           "route_status": "recipe_source",
@@ -8758,7 +8758,7 @@
         },
         "fight_until_enemy_faints": {
           "evidence": "SOURCE",
-          "max_frames": 3000,
+          "max_frames": 6000,
           "note": "D-pad+A path EXISTS (BattleInput_CheckTouch falls through to BattleInput_CheckCursorInput when no touch hits): the cursor starts disabled, the first of A/B/X/Y/D-pad is consumed to enable it (X is harmless afterwards), a key-driven selection enables the next menu at once. No menu-ready RAM predicate is pinned (the BattleSystem.battleInput offset is unresolved), so `until` is the end condition only and the cycle timing is a PHYSICAL cell; until = BattleContext.battleMons[1].hp == 0 (singles: the enemy is battler 1; BATTLE_BASE offsets, asm-literal derived) and is only meaningful after battle_settled (hp is 0 before the party is copied)",
           "open": null,
           "route_status": "recipe_source",

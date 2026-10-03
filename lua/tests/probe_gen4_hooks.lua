@@ -119,20 +119,54 @@ function M.save_completed(trace)
     end
     return active and trace[#trace].state==1 and trace[#trace].frame>first.frame
 end
-function M.predicate(title,read,p)
+function M.predicate_value(title,read,p)
     local sym=need(title.symbols[p.symbol],"predicate symbol:"..tostring(p.symbol))
     local base=read(sym.address)
     -- The pinned reset leg explicitly tests the root pointer variable itself.
-    if p.zero and #(p.deref or {})==0 and p.offset==0 then return base==0 end
+    if p.zero and #(p.deref or {})==0 and p.offset==0 then return base,sym.address end
+    local parent
     for _,offset in ipairs(p.deref or {}) do
-        if base==0 then return false end
+        if base==0 then return nil end
+        parent=base
         base=read(base+offset)
     end
-    if base==0 then return false end -- A null chain is not a valid target field.
-    local value=read(base+p.offset)
+    if base==0 then return nil end -- A null chain is not a valid target field.
+    return read(base+p.offset),base+p.offset,base,parent
+end
+function M.predicate(title,read,p)
+    local value=M.predicate_value(title,read,p)
+    if value==nil then return false end
     if p.nonzero then return value~=0 end
     if p.zero then return value==0 end
     return value==p.value
+end
+function M.recipe_sample(title,read,leg)
+    local value,address,base,parent=M.predicate_value(title,read,leg["until"])
+    local sample={value=value,value_available=value~=nil,source_address=address}
+    if leg.name=="fight_until_enemy_faints" then
+        local b=title.profile.battle
+        local function hp(v) return b.hp_signed and v>=0x80000000 and v-0x100000000 or v end
+        sample.turn_count_available=false
+        for _,case in ipairs(title.phase_cases or {}) do
+            if case.name=="battle" and case.predicate then
+                sample.battle_active=M.predicate(title,read,case.predicate); break
+            end
+        end
+        if value~=nil then sample.enemy_hp=hp(value) end
+        -- Enemy source is the pack predicate; derive battler 0 from BATTLE_BASE,
+        -- never from a second hard-coded pointer or HP offset.
+        if address and b.hp_width==4 and leg["until"].offset==b.mons_off+b.mon_size+b.hp_off then
+            sample.our_hp=hp(read(base+b.mons_off+b.hp_off))
+            if b.turn_count_off and b.turn_count_width==4 then
+                sample.turn_count=read(base+b.turn_count_off); sample.turn_count_available=true
+            end
+            if b.d7 and b.d7.ctx_cmd_off then sample.command=read(base+b.d7.ctx_cmd_off) end
+            if parent and b.outcome_off and b.outcome_mask then
+                sample.battle_outcome=read(parent+b.outcome_off)&b.outcome_mask
+            end
+        end
+    end
+    return sample
 end
 function M.internal_load_id(entry,read_register)
     local id=entry.id
@@ -149,25 +183,53 @@ function M.internal_load_id(entry,read_register)
     end
     return id
 end
-function M.play_recipe(leg,step,until_matches)
+function M.play_recipe(leg,step,until_matches,observe,journal)
     local used=0
+    local record={name=leg.name,max_frames=leg.max_frames,frames_used=0,outcome="running",samples={},
+        predicate=clone(leg["until"])}
+    if journal then journal[#journal+1]=record end
+    local function sample(final)
+        if not observe then return end
+        local ok,value=pcall(observe)
+        local row=ok and value or {telemetry_error=tostring(value)}
+        row.frames_used=used; row.final=final==true
+        local last=record.samples[#record.samples]
+        if last and last.frames_used==used then record.samples[#record.samples]=row
+        else record.samples[#record.samples+1]=row end
+    end
+    local function finish(outcome)
+        record.frames_used=used; record.outcome=outcome; sample(true)
+        return used
+    end
     local function advance(buttons)
         if used>=leg.max_frames then return false end
         step(buttons); used=used+1
+        record.frames_used=used
+        if used%30==0 then sample(false) end
         return until_matches(leg["until"])
     end
-    if until_matches(leg["until"]) then return 0 end
+    sample(false)
+    local ok,result=pcall(function()
+    if until_matches(leg["until"]) then return finish("until_met") end
     while used<leg.max_frames do
         local before=used
         for _,s in ipairs(leg.steps) do
             local buttons={}; for _,button in ipairs(s.press) do buttons[button]=true end
-            for _=1,s.hold_frames do if advance(buttons) then return used end end
-            for _=1,s.then_wait_frames do if advance({}) then return used end end
+            for _=1,s.hold_frames do if advance(buttons) then return finish("until_met") end end
+            for _=1,s.then_wait_frames do if advance({}) then return finish("until_met") end end
         end
-        if used==before and advance({}) then return used end -- wait-only recipe
+        if used==before and advance({}) then return finish("until_met") end -- wait-only recipe
     end
-    check(until_matches(leg["until"]),"route until predicate not reached: "..leg.name)
+    local met=until_matches(leg["until"])
+    finish(met and "until_met" or "bound")
+    check(met,"route until predicate not reached: "..leg.name)
     return used
+    end)
+    if not ok then
+        if record.outcome=="running" then finish("error") end
+        error(result,0)
+    end
+    return result
 end
 function M.valid_handle(h)
     return type(h)=="string" and h~="" and h:gsub("[%-%{%}]", ""):match("^0+$")==nil
@@ -693,6 +755,7 @@ local function run()
         check(size>0 and offset+size<=g.dynamic_region_size,"runtime SaveArray extent")
         return save+g.dynamic_region_off+offset,size
     end
+    local route_telemetry={}
     local bridge_driver,bridge_sequence,pc_cycle_done=nil,0,false
     local bridge_gaps={}
     local function bridge_play(name)
@@ -747,10 +810,23 @@ local function run()
     local function play_route(route)
         for _,leg in ipairs(route or {}) do
             if leg.bridge then
-                phase="route-unverified"; bridge_play(leg.bridge)
+                phase="route-unverified"
+                local row={name=leg.bridge,kind="bridge",frames_used=0,outcome="running",samples={}}
+                route_telemetry[#route_telemetry+1]=row
+                local before=advanced
+                local ok,why=pcall(bridge_play,leg.bridge)
+                row.frames_used=advanced-before; row.outcome=ok and "until_met" or "error"
+                if not ok then error(why,0) end
             elseif leg.steps then
                 phase="route-unverified"
-                M.play_recipe(leg,step,function(p) return M.predicate(title,read,p) end)
+                local before=advanced
+                local ok,why=pcall(M.play_recipe,leg,step,function(p) return M.predicate(title,read,p) end,
+                    function()
+                        local value=M.recipe_sample(title,read,leg)
+                        value.emulator_frame=emu.framecount(); return value
+                    end,route_telemetry)
+                route_telemetry[#route_telemetry].frames_used=advanced-before
+                if not ok then error(why,0) end
             else
             local buttons={}; for _,button in ipairs(leg.buttons or {}) do
                 check(({A=true,B=true,X=true,Y=true,Start=true,Select=true,Up=true,Down=true,Left=true,Right=true,L=true,R=true})[button],"non-button route input")
@@ -759,7 +835,12 @@ local function run()
             phase="route-unverified"
             if leg.phase then phase=leg.phase end -- verified each frame against pack field/overlay predicates
             check(type(leg.frames)=="number" and leg.frames%1==0 and leg.frames>0 and leg.frames<=12000,"route frame bound")
-            for _=1,leg.frames do step(buttons) end
+            local row={name=leg.name or leg.phase or "buttons",kind="frames",frames_used=0,outcome="running",samples={}}
+            route_telemetry[#route_telemetry+1]=row
+            local before=advanced
+            local ok,why=pcall(function() for _=1,leg.frames do step(buttons) end end)
+            row.frames_used=advanced-before; row.outcome=ok and "until_met" or "error"
+            if not ok then error(why,0) end
             end
         end
     end
@@ -1114,6 +1195,12 @@ local function run()
             errors[phase_monitor and "n" or "m"]=tostring(fatal)
         end
         for row in ROWS:gmatch(".") do if not observations[row] and not errors[row] then errors[row]=fatal end end
+    end
+    if #route_telemetry>0 then
+        for _,row in ipairs({"m","i"}) do
+            observations[row]=observations[row] or {}
+            observations[row].route_legs=route_telemetry
+        end
     end
     local cleanup_error
     for h in pairs(owned) do local good,why=pcall(remove,h); if not good then cleanup_error=tostring(why) end end
