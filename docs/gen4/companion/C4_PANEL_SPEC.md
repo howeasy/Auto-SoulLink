@@ -4,7 +4,11 @@
 > - **`SEQ_SE_GS_GEARCANCEL` = 2368** (`include/constants/sndseq.h:1366`). Resolved; no longer open.
 > - **Rows are 16 UTF-16 units incl. the 0xFFFF terminator**: the host truncates to 15 (`panel_producer.h:3-5`). Accepted.
 > - **The ROM owns no page cursor**; the host re-posts pages (Gen 3/Gen 2 precedent). Accepted.
-> - **Q1, the `result` byte for A-on-last-page: asked of the ABI owner (Gen 5).** The draft's `0x7F` for both A-last and B keeps the Gen 2 rule (A on the last page closes, no wrap), but the ABI comment says 0 = A/more. Decided by the ABI owner, not here.
+> - **Q1 RULED by the ABI owner (Gen 5, 2026-10-02): option (a).**
+>   - The native side writes `0x7F` whenever the panel closes for ANY reason, including A on the last page (the Gen 2 no-wrap UX). `0` only when A advances to a further page.
+>   - Hosts: a 0 on page == pages-1 is treated as close (never wrap on NDS); any non-zero result is done.
+>   - Reason: the Gen 3 host wraps on 0 (`lua/gen3/native.lua:1148-1157`), so 0x7F is the backward-compatible close.
+>   - The abi.h comment edit is queued with the SLINK_TITLE follow-up; cite this ruling until then.
 > - **Q2, hge msgdata for the label row:** OPEN, being researched (does hge's build rebuild msg NARC member 196, or does C6 ship a byte replacement?).
 >
 > **Status: DRAFT** (OMP cx-ac8472b6, 2026-10-02). Peer spec draft for coordinator review and
