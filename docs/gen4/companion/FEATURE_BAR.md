@@ -123,7 +123,7 @@ The shared NDS stack (with Gen 5) supplies the ABI, producers, pins and receipts
   - `sStartMenuActions` @0x020FA0F4 (104 B);
   - `FieldSystem_GetStartMenuButtonInhibitFlags_Normal` @0x0203BE60;
   - the other 72.
-  So one site serves both. The HG/SS edit lands in the source rebuild, which recompresses the ARM9; on hge it is a `hooks` line.
+  So one site serves both. The HG/SS edit lands in the source rebuild, which recompresses the ARM9. On hge the row's `.func`/`.ident` change via `repoints` rows (a data-pointer repoint, like `hg-engine/repoints:44-46`), and only the inhibit-bit clear is a `hooks` row (C6 spec).
 - **`gScriptCmdTable` @0x020FAD00:** exactly one of 853 entries differs in hge, #208.
   - #486 is `0x02040895` in both, the same function as #1 (`ScrCmd_Dummy`).
   - ~~Repointing #486 does not collide~~ SUPERSEDED: #486 is USED by scripts (see the next section). Use #1.
