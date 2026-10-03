@@ -527,8 +527,9 @@ PC_BEHAVIOR = 0x83
 
 # The PC WITHDRAW leg (box -> party). Every input names its SOURCE (pokeheartgold @ad7a3afa, see
 # docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"); `inferred` marks a step with no source line, which the
-# Lua polls by a RAM signal instead of trusting. The party-full path ("Your party is full!",
-# ov14_021F0418) is UNVERIFIED, so a full party is a named precondition, not a run.
+# Lua polls by a RAM signal instead of trusting. A full party is refused by the source itself
+# (ov14_021F13B0, :23513-23514 takes a branch that never schedules the commit), and the leg
+# refuses it by name before any input, because the run's SYNTH fixture must have room.
 WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
 # Opcode 752 MenuExec uses ov27's touchscreen grid (NOT opcode 67's 2D menu).
 # scrcmd_c.c:5025-5032 -> ov01_021F6ABC(fs,3,7,p_ret); overlay_27.s
@@ -575,6 +576,24 @@ WITHDRAW_RECOVER_A = 0
 WITHDRAW_A_PERIOD = 120
 WITHDRAW_MENU_ATTEMPTS = 3
 WITHDRAW_LAUNCH_WAIT = 900  # frames to wait for the app after the sub-menu A (a real launch is ~500)
+# KEYBOARD box-mon menu, pokeheartgold@ad7a3afa. The FIRST A at idle 0x51 on an occupied BOX
+# cell (cell < 0x1E) does NOT transfer: ov14_021EDA4C's button branch falls into _021EDDC4
+# (asm/overlay_14.s:16968-16999), which builds the 4-item action menu and parks
+# GridInputHandler.nextInput on the first party-band cell, 0x22, then calls ov14_021F04D4 ->
+# state 0x58. The descriptor ov14_021F7D2C (:36938-36940) is 0x45 WITHDRAW / 0x41 SUMMARY /
+# 0x43 MARKING / 0x44 RELEASE, WITHDRAW FIRST; msg_0024 ids 69/65/67/68. State 0x58
+# (ov14_021EE850, :18286-18295) frees the heap block and RETURNS 0x51, so the settled witnesses
+# are nextInput (data+0x34 -> work+0x2C -> grid+0x0D) == 0x22, the selected-cell byte
+# data+0x21 == the cursor cell, and work+4 == 0 (the generic async wait reads that same flag:
+# ov14_021EB1C0, :11619-11622, dispatching the deferred handler at data+0x30).
+WITHDRAW_CONTEXT_TARGET = 0x22
+WITHDRAW_CONTEXT_SELECT_KEY = "A"
+WITHDRAW_CONTEXT_SELECT_COUNT = 1
+# The commit continuation is 0x55, NOT the 0x57 the plan used to name. 0x57 is the TOUCH grab:
+# ov14_021F0418 (:21594-21677) is reached only from the branch at :16575-16618, whose cell comes
+# from ov14_021F6A14 = TouchscreenHitbox_FindRectAtTouchNew (:34563-34565), and it schedules 0x57
+# at :21672. A keyboard leg never samples it, so nothing may oracle on it.
+WITHDRAW_COMMIT_STATE = 0x55
 WITHDRAW_STEPS = (
     {"step": "interact", "press": "A", "inferred": False,
      "source": "GetInteractedMetatileScript -> std_pokecenter_pc, scr_seq_0003.s:754-762 (scr_seq_0003_010)"},
@@ -592,15 +611,34 @@ WITHDRAW_STEPS = (
                "cursor cell 0 (ov14_021E7588); mode 0 -> 0x5B (a 0x5B here means the DEPOSIT row was taken)"},
     {"step": "cursor_on_cell", "cell": WITHDRAW_CELL, "inferred": False,
      "source": "asm/overlay_14.s:11824-11826 (cursor set to cell 0 on entry); data+0x21 is read back, not driven"},
-    {"step": "grab", "press": "A", "inferred": False,
-     "source": "state 0x51 -> ov14_021F0418 (asm/overlay_14.s:16618, :21594-21677): grabs the box mon, ONE "
-               "msg_0025 prompt, schedules state 0x57; no menu, no destination pick"},
-    {"step": "commit", "wait_party_delta": 1, "state": 0x57, "inferred": False,
-     "source": "state 0x57 ov14_021EDF28 (asm/overlay_14.s:17139-17187) reads no input: ov14_021E637C -> "
-               "ov14_021E6184 -> Party_AddMon; polled by party count, 0x57 is only logged"},
+    {"step": "select_box_mon", "press": "A", "count": 1, "inferred": False,
+     "source": "idle 0x51 with the cursor on an occupied BOX cell (<0x1E): ov14_021EDA4C falls into "
+               "_021EDDC4 (asm/overlay_14.s:16968-16999), which builds the action menu "
+               "ov14_021F7D2C (:36938-36940 = 0x45 WITHDRAW, 0x41 SUMMARY, 0x43 MARKING, 0x44 "
+               "RELEASE; WITHDRAW FIRST), parks nextInput on 0x22 and calls ov14_021F04D4. The mon is "
+               "NOT transferred and the party is untouched: this A only opens the menu"},
+    {"step": "menu_context", "wait_cursor": WITHDRAW_CONTEXT_TARGET, "inferred": False,
+     "source": "state 0x58 (ov14_021EE850, asm/overlay_14.s:18286-18295) frees the heap block and "
+               "returns 0x51; settled when nextInput == 0x22, data+0x21 == the cursor cell and "
+               "work+4 == 0 (the async-callback flag ov14_021EB1C0, :11619-11622, waits on before "
+               "dispatching data+0x30). A cursor on 0x23/0x24/0x25 is another menu row, not WITHDRAW"},
+    {"step": "select_withdraw", "press": WITHDRAW_CONTEXT_SELECT_KEY,
+     "count": WITHDRAW_CONTEXT_SELECT_COUNT, "inferred": False,
+     "source": "the SECOND fresh A at nextInput 0x22 is case 4 of the 0x1E-base jump table (r5 = "
+               "0x22 - 0x1E), _021EDB98 (asm/overlay_14.s:16697-16706,16730-16746): Party_GetCount "
+               "chooses the sound, then ov14_021F2270(data, 4, 0xA7) -- highlight wait returning "
+               "state 8 with data+0x30 = 0xA7 (:25375-25378). No third A exists on this path"},
+    {"step": "commit", "wait_party_delta": 1, "state": WITHDRAW_COMMIT_STATE, "inferred": False,
+     "source": "0xA7 -> ov14_021F27CC -> ov14_021F13B0 (:23511-23528): a party of 6 takes the "
+               "refusal branch and never reaches the commit; otherwise state 0x53 "
+               "(ov14_021EDE38, :17037-17044) -> 0x54 (:17055-17058) -> 0x55 (ov14_021EDE88, "
+               ":17064-17119), whose ov14_021E637C (:17100) reaches ov14_021E6184 (:1113-1119): "
+               "Party_AddMon then PCStorage_DeleteBoxMonByIndexPair. NO further input; oracled by "
+               "the party delta, the appended key and the cleared box slot, 0x55 is only logged. "
+               "0x57 is the TOUCH grab (ov14_021F0418, :21672) and is never sampled"},
     {"step": "grid_restored", "wait_state": 0x51, "inferred": True,
-     "source": "0x57 -> 0x51 (asm/overlay_14.s:17183): the edge is source-read, the live timing is not; "
-               "logged, never required"},
+     "source": "0x55 hands over to the 0x56 continuation (:17110-17113) and the box grid comes back "
+               "to 0x51; the live timing is not measured -- logged, never required"},
     {"step": "exit_app", "press": "B", "inferred": True,
      "source": "B at 0x51 is INFERRED to reach the 'Continue Box operations?' YesNo (state 0x94, B = No) "
                "the deposit leg exits through; the leg re-presses B until the overlay is gone"},
@@ -795,18 +833,24 @@ def plan_pc(errand: Errand, start: dict, game: str = "HG", phase: str = "deposit
 
 def withdraw_plan() -> dict:
     """The box-withdraw inputs the Lua leg follows: the ordered, source-cited steps plus the numbers
-    it drives (menu rows to go down, the box cell to grab)."""
+    it drives (menu rows to go down, the box cell to select, the cursor the action menu parks on)."""
     return {
         "menu_steps": WITHDRAW_MENU_STEPS,
         "menu_key": WITHDRAW_MENU_KEY,
         "menu_hold": WITHDRAW_MENU_HOLD,
         "witness": {**WITHDRAW_WITNESS, "source_symbols": list(WITHDRAW_WITNESS["source_symbols"])},
         # ov14_021EDA4C / ov14_021F6E8C -> GridInputHandler_GetNextInput.
-        # The cached selection byte data+0x21 is not the button cursor target.
+        # data+0x21 is the cached selection byte (written by ov14_021F04D4, :21583-21585), NOT the
+        # button cursor target; work+4 is the async-callback flag ov14_021EB1C0 waits on.
         "cursor": {"data_work_off": 0x34, "work_grid_off": 0x2C,
-                   "target_off": 0xD, "buttons_off": 8,
-                   "source": "asm/overlay_14.s:16573-16665,35157-35232; src/unk_02019BA4.c:121-128,177-184,226-228"},
+                   "target_off": 0xD, "buttons_off": 8, "work_busy_off": 4, "selected_off": 0x21,
+                   "source": "asm/overlay_14.s:16573-16665,16968-16999,35157-35232; "
+                             "src/unk_02019BA4.c:121-128,177-184,226-228"},
         "box_cell": WITHDRAW_CELL,
+        "context_target": WITHDRAW_CONTEXT_TARGET,
+        "context_select_key": WITHDRAW_CONTEXT_SELECT_KEY,
+        "context_select_count": WITHDRAW_CONTEXT_SELECT_COUNT,
+        "commit_state": WITHDRAW_COMMIT_STATE,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,
         "script_wait": WITHDRAW_LAUNCH_WAIT,
@@ -1182,13 +1226,14 @@ def verify_saved(path, game: str, synth: dict) -> dict:
 
 def withdraw_precondition(before: dict, synth: dict) -> None:
     """Refuse a setup the withdraw leg cannot claim BEFORE any emulator runs: a party with no room
-    (the 6/6 path is unverified), or a SYNTH key that is not alone in box 0 slot WITHDRAW_CELL and
-    absent from the party. `before` is save_witness() of the input save."""
+    (the source refuses a full party itself, ov14_021F13B0 :23513-23514, and the leg names it before
+    any input), or a SYNTH key that is not alone in box 0 slot WITHDRAW_CELL and absent from the
+    party. `before` is save_witness() of the input save."""
     key = mon_key(synth["new_pid"], synth["otid"])
     if len(before["party_keys"]) > WITHDRAW_PARTY_MAX:
         raise RouteError(
             "withdraw_party_full",
-            f"party {len(before['party_keys'])}/6: the full-party withdraw path is unverified",
+            f"party {len(before['party_keys'])}/6: a full party has no room for the clone",
         )
     home = [(b["box"], b["slot"]) for b in before["box_keys"] if b["key"] == key]
     if before.get("cur_box") not in (0, None):  # the grid shows the DISPLAYED box: cell 0 must be box 0's

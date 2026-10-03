@@ -684,6 +684,7 @@ class FakeDS:
     def __init__(
         self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None,
         extra_a=0, recover_msg=False, launch_delay=0, print_frames=0, witness_mode_override=None,
+        menu_cursor=0x22, menu_sel=0, menu_busy=8, menu_stuck=False,
     ):
         self.ram = bytearray(0x400000)
         self.R = ram_layout
@@ -700,6 +701,11 @@ class FakeDS:
         self.print_frames=print_frames
         self.pc_choice=0
         self.witness_mode_override=witness_mode_override
+        # the keyboard box-mon menu (overlay_14.s:16968-16999): the first A parks nextInput on
+        # menu_cursor through the async wait, and the second A at that cursor is WITHDRAW
+        self.menu_cursor, self.menu_sel, self.menu_busy = menu_cursor, menu_sel, menu_busy
+        self.menu_stuck = menu_stuck  # the grid is back at 0x51 but work+4 never clears
+        self.busy = 0
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
         self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
@@ -888,14 +894,50 @@ class FakeDS:
         elif st == 0x6B and t >= 40:
             self.toolbar = False
             self.app_state(0x5B)
-        elif st == 0x51 and t >= 10:  # the box grid: A grabs (one prompt), B asks to leave
-            if "A" in new:
+        elif st == 0x51 and t >= 10:  # the box grid, KEYBOARD: two A, not one
+            # SOURCE ov14_021EDA4C: an A with the cursor on an occupied BOX cell (<0x1E) does NOT
+            # transfer -- it builds the mon's action menu (0x45 WITHDRAW first), parks nextInput on
+            # 0x22 and hands over to the async wait (:16968-16999). Only a SECOND A at 0x22, case 4
+            # of the 0x1E-base jump table (:16730-16746), selects WITHDRAW.
+            cell = self.r(self.GRID + 0xD, 1)
+            occupied = self.r(self.pc + self.R["pc"]["box_base"], 4) != 0
+            if "A" in new and cell < 0x1E and occupied:
                 self.app_state(5)
+                self.busy = self.menu_busy
+                self.w32(self.PC_WORK + 4, 1)          # work+4: async callback in flight
+                self.w32(self.APPD + 0x30, 0x51)       # the deferred continuation
+                self.ram[self.GRID - self.BASE + 0xD] = self.menu_cursor
+                self.ram[self.APPD - self.BASE + 0x21] = self.menu_sel
+            elif "A" in new and cell == self.menu_cursor:
+                if self.fault == "fill_party":  # the party filled up before WITHDRAW was chosen
+                    n = self.r(self.party + self.R["party"]["count_off"], 4)
+                    for i in range(n, 6):
+                        self.w32(self.party + self.R["party"]["mons_off"] + i * self.R["party"]["size"], 0xF00D + i)
+                    self.w32(self.party + self.R["party"]["count_off"], 6)
+                self.app_state(0xA7)
             elif "B" in new:
                 self.app_state(0x94)
-        elif st == 5 and t >= 20:
-            self.app_state(0x57)
-        elif st == 0x57 and t >= 10:  # reads no input
+        elif st == 5:  # the generic async wait (ov14_021EB1C0): dispatch data+0x30 once work+4 clears
+            if self.busy > 0:
+                self.busy -= 1
+                if self.busy == 0 and not self.menu_stuck:
+                    self.w32(self.PC_WORK + 4, 0)
+                elif self.busy == 0:
+                    self.app_state(0x51)
+                    self.t = 10
+            elif self.r(self.PC_WORK + 4, 4) == 0:
+                self.app_state(self.r(self.APPD + 0x30, 4))
+                self.t = 10  # the grid handler reads input every frame: no entry settle after the menu
+        elif st == 0xA7 and t >= 10:  # ov14_021F13B0 (:23511-23528)
+            if self.r(self.party + self.R["party"]["count_off"], 4) >= 6:
+                self.app_state(6)  # 'Your party is full!' -- refuses, never schedules the commit
+            else:
+                self.app_state(0x53)
+        elif st == 0x53 and t >= 10:  # ov14_021EDE38: data+0x22 = 2, reads no input
+            self.app_state(0x54)
+        elif st == 0x54 and t >= 10:  # ov14_021EDE70
+            self.app_state(0x55)
+        elif st == 0x55 and t >= 20:  # ov14_021EDE88 -> ov14_021E637C -> ov14_021E6184: reads no input
             self.commit_withdraw()
             self.app_state(0x51)
 
@@ -1628,8 +1670,8 @@ def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monk
 
 # --- the PC WITHDRAW leg (box -> party), sibling of the deposit -----------------------------------------
 WD_ORDER = [
-    "interact", "script_a", "menu_move", "menu_withdraw", "app_state_0x51", "cursor_on_cell", "grab",
-    "commit", "grid_restored", "exit_app", "save",
+    "interact", "script_a", "menu_move", "menu_withdraw", "app_state_0x51", "cursor_on_cell",
+    "select_box_mon", "menu_context", "select_withdraw", "commit", "grid_restored", "exit_app", "save",
 ]
 
 
@@ -1648,11 +1690,17 @@ def test_withdraw_plan_carries_the_source_cited_steps_in_order():
     assert wd["script_a"] == gr.WITHDRAW_SCRIPT_A == 3 and wd["menu_attempts"] >= 2
     assert wd["recover_a"] == gr.WITHDRAW_RECOVER_A == 0
     assert all(s["source"] for s in wd["steps"]), "every input step cites its SOURCE"
-    # the input steps in press order: A (interact), A (menu 1), Down, A (WITHDRAW), A (grab), B (exit)
-    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Right", "A", "A", "B"]
-    # the box app is entered at state 0x51 (mode 1), the commit is state 0x57
+    # the input steps in press order: A (interact), A (menu 1), Right, A (WITHDRAW row), A (the box
+    # mon's action menu), A (WITHDRAW in it), B (exit)
+    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Right", "A", "A", "A", "B"]
+    # the box app is entered at state 0x51 (mode 1); the KEYBOARD commit continuation is 0x55
     by = {s["step"]: s for s in wd["steps"]}
-    assert by["app_state_0x51"]["wait_state"] == 0x51 and by["commit"]["state"] == 0x57
+    assert by["app_state_0x51"]["wait_state"] == 0x51 and by["commit"]["state"] == 0x55
+    # the keyboard menu: one A opens it, the cursor must park on the context cell, one more selects
+    assert (by["select_box_mon"]["press"], by["select_box_mon"]["count"]) == ("A", 1)
+    assert by["menu_context"]["wait_cursor"] == wd["context_target"] == 0x22
+    assert by["select_withdraw"]["press"] == wd["context_select_key"] == "A"
+    assert wd["context_select_count"] == 1 and wd["commit_state"] == gr.WITHDRAW_COMMIT_STATE == 0x55
     # INFERRED steps are exactly the ones the Lua polls or logs instead of trusting
     assert {s["step"] for s in wd["steps"] if s["inferred"]} == {"script_a", "grid_restored", "exit_app"}
     # the deposit plan is untouched by the sibling
@@ -1679,8 +1727,8 @@ def test_withdraw_inputs_match_the_decomp():
     mode1 = asm[asm.index("_021EB342:") :][:400]
     assert "bl ov14_021E7588" in mode1 and "mov r5, #0x51" in mode1  # mode 1: cursor cell 0, state 0x51
     assert "mov r5, #0x5b" in asm[asm.index("_021EB312:") :][:900]  # mode 0 (deposit) is 0x5B
-    grab = asm[asm.index("ov14_021F0418: ;") :][:2600]
-    assert "mov r2, #0x57" in grab and "bl Party_GetCount" in grab and "cmp r0, #6" in grab
+    touch = asm[asm.index("ov14_021F0418: ;") :][:2600]  # the TOUCH grab, not the keyboard path
+    assert "mov r2, #0x57" in touch and "bl Party_GetCount" in touch and "cmp r0, #6" in touch
 
 
 def test_withdraw_decomp_menu_path_has_three_npcmsg_and_no_waitbutton_the_a_count_stays_inferred():
@@ -1732,8 +1780,9 @@ def test_the_plan_not_the_lua_decides_the_press_counts(tmp_path, monkeypatch):
 def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(tmp_path, monkeypatch):
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
     rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
-    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 6, rows
-    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu"]
+    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 8, rows
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right",
+                                    "A submenu", "A box mon menu", "A WITHDRAW"]
     assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
     assert "RESULT PC_WITHDRAW" in last
 
@@ -1895,7 +1944,7 @@ def test_withdraw_precondition_refuses_a_full_party_and_a_misplaced_clone():
     gr.withdraw_precondition(ok, WD_SYNTH)
     gr.withdraw_precondition(_wd_witness(list("ABCDE"), {(0, 0): WD_KEY}), WD_SYNTH)  # 5 mons: room for one
     for bad, reason in (
-        (_wd_witness(list("ABCDEF"), {(0, 0): WD_KEY}), "withdraw_party_full"),  # 6/6 is unverified
+        (_wd_witness(list("ABCDEF"), {(0, 0): WD_KEY}), "withdraw_party_full"),  # no room, by source's own rule
         (_wd_witness(["P1"], {(0, 1): WD_KEY}), "withdraw_setup"),  # not cell 0
         (_wd_witness(["P1"], {(1, 0): WD_KEY}), "withdraw_setup"),  # not box 0
         (_wd_witness(["P1"], {}), "withdraw_setup"),  # not boxed at all
@@ -2017,9 +2066,11 @@ def test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp
     R = ds.R
     assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
     assert ds.r(ds.party + R["party"]["mons_off"] + R["party"]["size"], 4) == 0xCAFEBABE  # appended
-    # the state trace: the box app entered at the GRID state 0x51 (never the deposit's 0x5B list), 0x57 sampled
+    # the state trace: the box app entered at the GRID state 0x51 (never the deposit's 0x5B list),
+    # ran the KEYBOARD chain 5 -> 0xA7 -> 0x53 -> 0x54 -> 0x55, and never touched 0x57 (the TOUCH grab)
     trace = next(ln for ln in log.splitlines() if "PC app closed" in ln)
-    assert ":0x51" in trace and ":0x57" in trace and ":0x5b" not in trace
+    assert ":0x51" in trace and ":0x55" in trace and ":0x57" not in trace and ":0x5b" not in trace
+    assert "menu witness: cursor 0x22 selected 0 buttons true busy false" in log
     assert "select try" not in log  # none of the deposit's party-slot selection
 
 
@@ -2272,9 +2323,9 @@ def test_pc_witness_offsets_against_pinned_source_xmap_and_rom(title):
 
 def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monkeypatch):
     for kw, want in (
-        ({"party": 6}, "RESULT FAIL withdraw_party_full"),  # unverified 6/6 path: refused in the Lua too
-        ({"fault": "noop"}, "RESULT FAIL withdraw_not_committed"),  # the grab never added the mon
-        ({"fault": "slot_kept"}, "RESULT FAIL withdraw_state_wrong"),  # party +1 but the box slot still full
+        ({"party": 6}, "RESULT FAIL withdraw_party_full"),  # the source refuses it too; refused before any input
+        ({"fault": "noop"}, "RESULT FAIL withdraw_not_committed"),  # 0x55 copied nothing into the party
+        ({"fault": "slot_kept"}, "RESULT FAIL withdraw_not_committed"),  # party +1 but the box slot still full
         ({"fault": "no_dirty"}, "RESULT FAIL box_modified_flag_not_set"),
         ({"fault": "wrong_bit"}, "RESULT FAIL box_modified_flag_not_set"),  # non-zero mask, wrong bit
         ({"plan": {"menu_steps": 0}}, "RESULT FAIL pc_wrong_mode"),  # the DEPOSIT row: list state 0x5B, not 0x51
@@ -2286,6 +2337,137 @@ def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monk
         assert want in last, (kw, log[-600:])
     last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=5)  # control: room for one more
     assert "RESULT PC_WITHDRAW party_before=5 party_after=6" in last
+
+
+def _press_rows(log):
+    return re.findall(r"\[f\d+\] press (\d+) (.+?) taskman", log)
+
+
+def test_the_keyboard_box_mon_menu_needs_the_second_a_red_revert(tmp_path, monkeypatch):
+    """MODEL: the fake's FIRST A only opens the mon's action menu (0x51 -> 5 -> 0x51 at cursor 0x22,
+    party untouched), exactly as ov14_021EDA4C does. Delete the second A -- the leg as it stood --
+    and nothing commits."""
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    original = Path.read_text
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert ":0x55" in log  # the keyboard chain ran to the real commit state
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda path, *a, **k: (
+                source.replace("for _ = 1, wd.context_select_count do", "for _ = 1, 0 do")
+                if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else original(path, *a, **k)
+            ),
+        )
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT FAIL withdraw_not_committed" in last, last
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 1  # the menu transferred nothing
+    assert ds.r(ds.pc, 4) == 0xCAFEBABE and ds.r(ds.pc + R["pc"]["mod_off"], 4) == 0
+
+
+def test_the_box_menu_refuses_before_the_second_a_on_every_wrong_settlement(tmp_path, monkeypatch):
+    for fake, want in (
+        ({"menu_cursor": 0x23}, "box_menu_wrong_cursor"),  # SUMMARY, not WITHDRAW
+        ({"menu_sel": 0xFF}, "box_menu_wrong_selection"),  # the selection cache never landed
+        ({"menu_busy": 100000}, "box_menu_busy"),  # stuck in the async wait (state 5): never idle
+        ({"menu_stuck": True}, "box_menu_busy"),  # grid back at 0x51 with the callback flag (work+4) still set
+    ):
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake=fake)
+        assert want in last, (fake, last)
+        assert [r[1] for r in _press_rows(log)][-1] == "A box mon menu"  # refused BEFORE the 2nd A
+        R = ds.R
+        assert ds.r(ds.party + R["party"]["count_off"], 4) == 1 and ds.r(ds.pc, 4) == 0xCAFEBABE
+
+
+def test_a_full_party_is_refused_by_the_source_and_never_adds_a_mon(tmp_path, monkeypatch):
+    # the fake fills the party to 6 before WITHDRAW is chosen; ov14_021F13B0 (:23511-23528) then takes
+    # the refusal branch instead of scheduling the commit, so the slot is never cleared
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fault="fill_party")
+    assert "RESULT FAIL withdraw_not_committed" in last, log
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 6
+    assert ds.r(ds.pc, 4) == 0xCAFEBABE  # still boxed: nothing was copied into the party
+    assert ds.r(ds.pc + R["pc"]["mod_off"], 4) == 0  # and the box was never even marked dirty
+
+
+def test_the_withdraw_leg_never_oracles_on_a_sampled_state_word(tmp_path, monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    assert '":0x57"' not in source and "state 0x57" not in source  # 0x57 is the TOUCH grab
+    assert all(s.get("state") != 0x57 for s in gr.withdraw_plan()["steps"])
+    assert gr.withdraw_plan()["commit_state"] == 0x55
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert "state 0x55 sampled: true" in log and ":0x57" not in log
+    R = ds.R  # the DATA oracles carry the claim, not the state word
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
+
+
+def test_every_withdraw_witness_offset_turns_its_oracle_red_when_moved(tmp_path, monkeypatch):
+    cursor = gr.withdraw_plan()["cursor"]
+    for key, bad in (
+        ("target_off", 0xE),  # the cursor is read one byte past nextInput
+        ("work_busy_off", 0x2C),  # reads the grid pointer: an async callback that never clears
+        ("selected_off", 0x30),  # reads the deferred continuation, not data+0x21
+        ("work_grid_off", 0x30),  # work+0x30 is not the grid
+        ("data_work_off", 0x38),  # data+0x38 is not the work struct
+    ):
+        last, _, log = _run_lua_leg(
+            tmp_path, monkeypatch, withdraw=True, party=1, plan={"cursor": {**cursor, key: bad}}
+        )
+        assert "RESULT FAIL" in last, (key, bad, log[-500:])
+
+
+def test_the_keyboard_menu_ids_cursor_and_commit_state_come_from_the_pinned_source():
+    if not Path(PRET).exists():
+        pytest.skip(f"pokeheartgold source absent: {PRET}")
+    lines = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8").splitlines()
+
+    def block(label, n):
+        i = next(k for k, l in enumerate(lines) if l.startswith(label))
+        return "\n".join(lines[i : i + n])
+
+    # the box mon's action menu: WITHDRAW FIRST, then SUMMARY, MARKING, RELEASE (msg_0024 69/65/67/68)
+    assert re.findall(r"0x([0-9A-Fa-f]{2}), 0x00, 0x00, 0x00", block("ov14_021F7D2C:", 3)) == [
+        "45", "41", "43", "44",
+    ]
+    # the first A: that menu, nextInput parked on 0x22, then the async hand-off (:16968-16999)
+    ctx = block("_021EDDC4:", 32)
+    assert "ov14_021F7D2C" in ctx and "mov r1, #0x22" in ctx
+    assert "bl GridInputHandler_SetNextInput" in ctx and "bl ov14_021F04D4" in ctx
+    assert "mov r2, #0x58" in block("ov14_021F04D4:", 50)  # the continuation is state 0x58
+    assert "bl Heap_Free" in block("ov14_021EE850:", 9)  # ... which frees the block
+    assert "mov r0, #0x51" in block("ov14_021EE850:", 9)  # ... and returns to the grid
+    # the generic async wait reads work+4 before dispatching the deferred handler at data+0x30
+    wait = block("ov14_021EB1C0:", 15)
+    assert "ldr r1, [r0, #0x34]" in wait and "ldr r1, [r1, #4]" in wait
+    assert "ldr r1, [r0, #0x30]" in wait and "blx r1" in wait
+    # the second A: jump-table case 4 (r5 = 0x22 - 0x1E) -> Party_GetCount -> highlight wait 0xA7
+    case4 = block("_021EDB98:", 17)
+    assert "bl Party_GetCount" in case4 and "bl ov14_021F2270" in case4 and "mov r2, #0xa7" in case4
+    assert "case 4" in block("_021EDB64:", 9)  # the table is 0x1E-based
+    hl = block("ov14_021F2270:", 100)
+    assert "str r6, [r5, #0x30]" in hl and "mov r0, #8" in hl  # state 8 + the deferred 0xA7
+    # 0xA7 tails into the party-full check, and 0x55 is the commit that appends and deletes
+    assert "ov14_021F13B0" in block("ov14_021F27CC:", 4)
+    full = block("ov14_021F13B0:", 60)
+    assert "bl Party_GetCount" in full and "cmp r0, #6" in full and "mov r2, #0x53" in full
+    assert "bl ov14_021E637C" in block("ov14_021EDE88:", 56)  # state 0x55
+    add = block("ov14_021E6184:", 25)
+    assert "bl Party_AddMon" in add and "PCStorage_DeleteBoxMonByIndexPair" in block(
+        "ov14_021E6100:", 10
+    )
+    # 0x57 belongs to the TOUCH grab alone: the only ov14_021F0418 caller sits behind the touch hitbox
+    assert "TouchscreenHitbox_FindRectAtTouchNew" in block("ov14_021F6A14:", 6)
+    assert "bl ov14_021F6A14" in block("ov14_021EDA4C:", 12) and "bl ov14_021F0418" in block(
+        "ov14_021EDA4C:", 50
+    )
+    touch = block("ov14_021F0418:", 90)
+    assert "mov r2, #0x57" in touch and "cmp r0, #6" in touch  # the touch branch, never a keyboard one
+    assert gr.WITHDRAW_CONTEXT_TARGET == 0x22 and gr.WITHDRAW_COMMIT_STATE == 0x55
 
 
 def test_wiring_the_lua_reload_branch_selects_its_check_by_op_on_synthetic_ram(tmp_path, monkeypatch):

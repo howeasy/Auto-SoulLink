@@ -11,7 +11,7 @@
 -- (a door step ends the leg with RESYNC done=1); "pc" = the Cherrygrove Pokemon Center PC: walk to the tile
 -- south of the PC, face it, deposit party slot 1 (a SYNTH party-2 save) through the PC UI by BUTTONS ONLY,
 -- native SAVE, verify by RAM (tools/gen4_routes.py plan_pc; docs in that file and tests/TESTING.md);
--- route.phase == "withdraw" = the sibling leg: WITHDRAW POKEMON, grab the box 0 slot 0 mon into a party with room;
+-- route.phase == "withdraw" = the sibling leg: WITHDRAW POKEMON -> the box mon's action menu -> WITHDRAW, into a party with room;
 -- "hatch" = pace on plain floor until the SYNTH egg1 hatches (plan_hatch), decode the party before/after/after
 -- SAVE; "reload" = a fresh boot from the saved battery, confirmed by RAM.
 -- RESYNC detail: `map= x= y= dir= done=<0|1> state=<path>`; done=0 = interrupted mid-walk (re-plan the
@@ -472,10 +472,14 @@ local function app_info()
   local data = r32(man + 0x1C)
   local a = {ovy = r32(man + 0x0C)}
   if a.ovy == APP_OVY then a.state = r32(man + 0x14) end -- PCBox_Main dispatches on *state (man->proc_state)
-  if a.ovy == APP_OVY and inram(data) then a.sel = r8(data + 0x21) end
-  if a.ovy == APP_OVY and inram(data) and route.phase=="withdraw" then
-    local c=route.pc.withdraw.cursor
+  -- data+0x21 is the cached selection cell (ov14_021F04D4 writes it), not the button cursor; the
+  -- withdraw leg reads it through the plan so a mutated offset turns its witness red.
+  local wcur = route.phase=="withdraw" and route.pc.withdraw.cursor or nil
+  if a.ovy == APP_OVY and inram(data) then a.sel = r8(data + (wcur and wcur.selected_off or 0x21)) end
+  if a.ovy == APP_OVY and inram(data) and wcur then
+    local c=wcur
     local work=r32(data+c.data_work_off)
+    a.grid_busy = inram(work) and r32(work+c.work_busy_off)~=0
     local grid=inram(work) and r32(work+c.work_grid_off) or 0
     if inram(grid) then a.grid_target=r8(grid+c.target_off); a.button_mode=r32(grid+c.buttons_off)~=0 end
   end
@@ -686,12 +690,21 @@ end
 -- Sibling of pc_deposit; every input is cited in route.pc.withdraw.steps (tools/gen4_routes.py WITHDRAW_STEPS,
 -- pokeheartgold@ad7a3afa, docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"). Top menu: Right x1 then A = WITHDRAW
 -- POKEMON -> ScrCmd_158 1 (scr_seq_0003.s:821-856, OVY_14 mode 1). Mode 1 starts at state 0x51 with the cursor on
--- box cell 0 (asm/overlay_14.s:11822-11831; mode 0 = the deposit leg starts at 0x5B). A on a box mon = grab + ONE
--- msg_0025 prompt (ov14_021F0418), then state 0x57 commits with NO input (ov14_021EDF28 -> ov14_021E6184 ->
--- Party_AddMon) and returns to 0x51. STATE WORD: man+0x14, exactly as pc_deposit reads it (that read is PHYSICAL on
--- the deposit receipts); the asm calls it sysdata+0 (:11368-11385) -- the live trace in the log settles it.
--- INFERRED, so polled/logged and never blind: the script-menu settle windows (no RAM signal for a script menu), the
--- 0x57 -> 0x51 edge, and B at 0x51 reaching the exit YesNo. Precondition: a party with room (the 6/6 path is unverified).
+-- box cell 0 (asm/overlay_14.s:11822-11831; mode 0 = the deposit leg starts at 0x5B).
+-- KEYBOARD, so TWO A. The first, on the box mon, only OPENS its action menu (ov14_021F7D2C = 0x45 WITHDRAW,
+-- 0x41 SUMMARY, 0x43 MARKING, 0x44 RELEASE, WITHDRAW first; ov14_021EDA4C -> _021EDDC4, :16968-16999): it parks
+-- nextInput on 0x22 and hands over to state 0x58, which frees the heap block and returns to 0x51
+-- (ov14_021EE850, :18286-18295) with nothing transferred. The second A at cursor 0x22 IS WITHDRAW (jump-table
+-- case 4, _021EDB98, :16730-16746) -> highlight wait (state 8, data+0x30 = 0xA7) -> 0xA7 -> 0x53 -> 0x54 -> 0x55,
+-- and 0x55 appends the mon and deletes the box record with NO further input (ov14_021E637C -> ov14_021E6184 ->
+-- Party_AddMon). 0x57 is the TOUCH grab (ov14_021F0418, :21672, reachable only through
+-- TouchscreenHitbox_FindRectAtTouchNew) that a keyboard leg never sees, so NO sampled state word is an oracle:
+-- the oracles are party +1, the appended key and the cleared box slot. STATE WORD: man+0x14, exactly as
+-- pc_deposit reads it (that read is PHYSICAL on the deposit receipts); the asm calls it sysdata+0 (:11368-11385)
+-- -- the live trace in the log settles it.
+-- INFERRED, so polled/logged and never blind: the script-menu settle windows (no RAM signal for a script menu),
+-- the 0x55 -> 0x56 -> 0x51 edge, and B at 0x51 reaching the exit YesNo. Precondition: a party with room (the
+-- source refuses a full party itself, ov14_021F13B0 :23513-23514).
 local ST_GRID = 0x51
 local function box_slot_pid(box, slot)
   local base = array_addr(RAM.id_pc)
@@ -819,22 +832,75 @@ local function pc_withdraw()
   if not a then finish("FAIL", why, "taskman", hex(taskman() or 0), pos_s(loc()), trace()) end
   -- data+0x21 is a selection cache and can still be FF. State51 reads
   -- GridInputHandler.nextInput (data+34 -> work+2C -> grid+D).
-  -- All entry paths already enable button mode; the first A below is the grab.
+  -- All entry paths already enable button mode; the first A below only OPENS the box mon's action
+  -- menu (WITHDRAW/SUMMARY/MARKING/RELEASE, ov14_021F7D2C) -- it transfers nothing.
   if a.grid_target ~= wd.box_cell then finish("FAIL", "cursor_not_on_cell", "grid",hx(a.grid_target),"cache",hx(a.sel),"want",wd.box_cell,trace()) end
   shot("pc_grid")
 
-  -- 4. A = grab + one prompt; state 0x57 commits with no further input: poll the party count
+  -- 4. the FIRST A on the box mon: opens the action menu, parks nextInput on the plan's
+  --    context_target and hands over to state 0x58, which frees the heap block and returns to
+  --    0x51. Settle on the read-only witnesses: the cursor parked on the context cell, the
+  --    selection cache still on the cursor cell, and no async callback in flight (work+4).
   tap("A", 2, 6)
+  pressed("A box mon menu")
+  local opened, settled, sample = false, false, nil
+  for _ = 1, wd.launch_wait do
+    local x = watch()
+    if x and x.ovy == APP_OVY then
+      if x.state ~= ST_GRID then opened = true end
+      if opened then
+        sample = x -- the newest read-only witnesses, menu-open frames included (busy never clears)
+        if x.state == ST_GRID and x.grid_target == wd.context_target
+            and x.sel == wd.box_cell and not x.grid_busy then
+          settled = true; break
+        end
+      end
+    end
+    emu.frameadvance()
+  end
+  say("menu witness: cursor", hx(sample and sample.grid_target), "selected", hx(sample and sample.sel),
+    "buttons", tostring(sample and sample.button_mode), "busy", tostring(sample and sample.grid_busy))
+  -- every way the menu can fail to open has its own name: no menu at all, another row of it
+  -- (0x23 SUMMARY / 0x24 MARKING / 0x25 RELEASE), a stale selection cache, or async work still
+  -- running when the grid came back.
+  if not settled then
+    if not opened then finish("FAIL", "box_menu_not_opened", "party", p0.n, trace())
+    elseif sample == nil then finish("FAIL", "box_menu_not_settled", "party", p0.n, trace())
+    elseif sample.grid_target ~= wd.context_target then
+      finish("FAIL", "box_menu_wrong_cursor", hx(sample.grid_target), "want", wd.context_target, trace())
+    elseif sample.sel ~= wd.box_cell then
+      finish("FAIL", "box_menu_wrong_selection", hx(sample.sel), "want", wd.box_cell, trace())
+    else finish("FAIL", "box_menu_busy", trace()) end
+  end
+  -- opening a menu moves no mon: if the party changed here, the grid was not the one we read.
+  local pmid = party_state()
+  if pmid == nil or pmid.n ~= p0.n then
+    finish("FAIL", "box_menu_moved_party", pmid and pmid.n or "nil", trace())
+  end
+
+  -- 5. the SECOND fresh A at the context cursor is WITHDRAW: highlight wait (state 8) -> 0xA7 ->
+  --    0x53 -> 0x54 -> 0x55, which appends the mon and deletes the box record with NO further
+  --    input. Poll it with an EMPTY joypad: the party delta, the appended key and the cleared
+  --    box slot are the oracles, never a sampled state word.
+  for _ = 1, wd.context_select_count do
+    tap(wd.context_select_key, 2, 6)
+    pressed(wd.context_select_key .. " WITHDRAW")
+  end
   local committed = false
   for f = 1, 1500 do
     watch()
-    if f % 10 == 0 then local p = party_state(); if p and p.n == p0.n + 1 then committed = true; break end end
+    if f % 10 == 0 then
+      local p = party_state()
+      if p and p.n == p0.n + 1 and p.pids[p.n] == pid and box_slot_pid(home[1], home[2]) == 0 then
+        committed = true; break
+      end
+    end
     emu.frameadvance()
   end
-  say("grab trace", trace())
+  say("select trace", trace())
   if not committed then finish("FAIL", "withdraw_not_committed", trace()) end
-  say("state 0x57 sampled:", tostring(trace():find(":0x57", 1, true) ~= nil))
-  if not frames(600, in_state(ST_GRID)) then say("INFERRED edge 0x57 -> 0x51 not seen in 600 frames", trace()) end
+  say("state 0x55 sampled:", tostring(trace():find(":0x55", 1, true) ~= nil))
+  if not frames(600, in_state(ST_GRID)) then say("INFERRED edge 0x55 -> 0x51 not seen in 600 frames", trace()) end
   frames(30)
 
   -- 5. verify by RAM: +1 party (appended, the rest unmoved), box slot empty, dirty MASK has the source box's bit
