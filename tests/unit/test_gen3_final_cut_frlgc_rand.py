@@ -216,7 +216,7 @@ def test_the_zip_rows_record_the_release_zip_and_a_swapped_zip_stops_a_resume(ra
                 Path(path).write_bytes(key.encode())
         note = "# " + fc.inputs_note(fc.hash_inputs(fc.row_inputs(row, str(lane))))
         assert fc.resume_inputs_problem(row, note, str(lane)) is None, rid
-        zip_path.write_bytes(b"a swapped zip")
+        zip_path.write_bytes(b"a swapped zip, longer")   # a different SIZE: file_digest memoises on (path, size, mtime_ns), and a same-size rewrite within the mtime tick is served the stale digest
         assert "zip:dist" in fc.resume_inputs_problem(row, note, str(lane)), rid
         zip_path.write_bytes(b"the built zip")
 
