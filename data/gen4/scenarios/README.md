@@ -81,9 +81,14 @@ foreach ($title in @('heartgold','heartgold_hge','soulsilver')) {
     Get-Content -LiteralPath (Join-Path $batch.FullName 'combined.txt')
 }
 
-# 3. First PC withdraw trial; require this target at consumption.
-python tools/gen4_routes.py run --game HG --target pc_withdraw --save "$root/g1inputs-c935-1015/hg_boxed.SaveRAM" --lane "wd-hg-$tag"
-python -c "from tools.gen4_routes import verify_receipt; print(verify_receipt('$root/wd-hg-$tag/wd-hg-${tag}_receipt.json','route',want='PC_WITHDRAW'))"
+# 3. First PC withdraw trial, a disclosed DIAGNOSTIC (not qualification); require this target at
+#    consumption. Lane names are capped at 24 chars (tools/gen4_fixtures.lane_dir), so no SHA prefix.
+#    The route receipt binds its input by save_sha1 + sidecar_sha256; compare them with
+#    heartgold_row_i.json by hand. Row o (step 1) binds its inputs inline (digest + check_synth).
+#    The scenario rule covers the a-n probe surface only.
+$wd='wd-hg-'+(Get-Date -Format 'MMddHHmmss')
+python tools/gen4_routes.py run --game HG --target pc_withdraw --save "$root/g1inputs-c935-1015/hg_boxed.SaveRAM" --lane $wd
+python -c "from tools.gen4_routes import verify_receipt; print(verify_receipt('$root/$wd/${wd}_receipt.json','route',want='PC_WITHDRAW'))"
 
 # 4. PERF LAST. Any remaining EmuHawk is foreign: record the PIDs and stop.
 $env:SLINK_GEN4_HEARTGOLD_SAVE="$root/saves/hg_base_26310.SaveRAM"
