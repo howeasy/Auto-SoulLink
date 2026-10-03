@@ -761,11 +761,14 @@ def file_digest(path, algo="sha256"):
     return _HASHES[key]
 
 
-def rom_pins(tree, include_expansion=False):
+def rom_pins(tree, include_expansion=False, require_companions=False):
     """{pin key: digest} from the tree's OWN pin tables: tools/gen_gen3_write_checkpoint.py ROMS
     (sha1 of the clean dumps) and patch/dist/companion_pins.json ("rr"): the companion's exact sha1 and md5, its canonical sha1 and
     the earlier builds it lists as canonical-equal (version-masked identity, patch/tools/rom_identity.py).
-    Missing tables raise LaneError (fail closed)."""
+    Missing tables raise LaneError (fail closed).
+    patch/dist/gen3_companions.json also adds `<title>_companion[:md5|:canonical]` for firered/leafgreen/emerald; they are NOT in
+    the default `need` set (the clean-ROM plans must not depend on them), `require_companions=True` (a companion re-cut) makes
+    them mandatory: absent or malformed raises LaneError."""
     src = _read(os.path.join(tree, "tools", "gen_gen3_write_checkpoint.py"))
     pins = {}
     # each entry reads up to the next key only: an entry whose sha1 is not text (the RR companion's, taken from
@@ -801,9 +804,40 @@ def rom_pins(tree, include_expansion=False):
     need = {"firered", "leafgreen", "radical_red_companion", "radical_red_companion:md5"}
     if not need <= set(pins):
         raise LaneError(f"{tree}: pin tables incomplete (have {sorted(pins)})")
+    pins.update(gen3_companion_pins(tree, strict=require_companions))
     if include_expansion:
         pins["exp"] = expansion_rom_pin(tree)
     return pins
+
+
+GEN3_COMPANION_TITLES = ("firered", "leafgreen", "emerald")
+
+
+def gen3_companion_pins(tree, strict=False):
+    """{<title>_companion: rom_sha1, <title>_companion:md5, <title>_companion:canonical} from patch/dist/gen3_companions.json
+    (the one owner of these keys; RR's come from companion_pins.json). Lenient: absent file or a malformed title row adds nothing.
+    strict: every title needs a valid sha1 + md5 + canonical sha1 + production flag, else LaneError."""
+    path = os.path.join(tree, "patch", "dist", "gen3_companions.json")
+    if not os.path.exists(path):
+        if strict:
+            raise LaneError(f"{path}: gen3_companions.json absent (companion pins required)")
+        return {}
+    try:
+        titles = json.loads(_read(path)).get("titles") or {}
+    except (ValueError, AttributeError) as exc:
+        raise LaneError(f"{path}: not JSON ({exc})") from exc
+    out = {}
+    for title in GEN3_COMPANION_TITLES:
+        row = titles.get(title)
+        row = row if isinstance(row, dict) else {}
+        got = {f"{title}_companion": row.get("rom_sha1"), f"{title}_companion:md5": row.get("rom_md5"),
+               f"{title}_companion:canonical": row.get("canonical_sha1")}
+        bad = [k for k, v in got.items()
+               if not re.fullmatch(r"[0-9a-f]{32}" if k.endswith(":md5") else r"[0-9a-f]{40}", str(v))]
+        if strict and (bad or row.get("production") is not True):
+            raise LaneError(f"{path}: {title} companion pin missing or malformed ({bad or 'not production'})")
+        out.update({k: v for k, v in got.items() if k not in bad})
+    return out
 
 
 def expansion_rom_pin(tree):

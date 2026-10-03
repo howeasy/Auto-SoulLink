@@ -1690,3 +1690,57 @@ def test_default_lanes_follow_slink_work_root(tmp_path):
     root = tmp_path.as_posix()
     assert f"lane={root}/lanes/gen3/gen3-lane-clean" in dry({"SLINK_WORK_ROOT": root})
     assert ".claude/worktrees/gen3-lane-clean" in dry({}, drop=("SLINK_WORK_ROOT",))
+
+
+# ---- R1: the FR/LG/Emerald companion pins (patch/dist/gen3_companions.json), kept out of the default plans' need set ----
+
+COMPANION_KEYS = {f"{t}_companion{s}" for t in ("firered", "leafgreen", "emerald") for s in ("", ":md5", ":canonical")}
+
+
+def test_default_rom_pins_carry_the_gen3_companions_from_their_own_file_only():
+    pins = fc.rom_pins(fc.REPO)
+    row = json.loads(open(os.path.join(fc.REPO, "patch/dist/gen3_companions.json")).read())["titles"]["firered"]
+    assert COMPANION_KEYS <= set(pins)
+    assert pins["firered_companion"] == row["rom_sha1"] and pins["firered_companion:md5"] == row["rom_md5"]
+    assert pins["firered_companion:canonical"] == row["canonical_sha1"]
+    assert pins["firered"] == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"          # the clean pin is unchanged
+    assert pins["firered_companion"] != pins["firered"]                          # companion never aliases clean
+    rr = {k for k in pins if k.startswith("radical_red_companion")}              # RR still owned by companion_pins.json
+    assert rr == {"radical_red_companion", "radical_red_companion:md5", "radical_red_companion:canonical",
+                  "radical_red_companion:equivalent_sha1s"}
+
+
+def _tree_without_gen3_companions(tmp_path, with_file=None):
+    import shutil
+    tree = tmp_path / "tree"
+    (tree / "tools").mkdir(parents=True)
+    (tree / "patch/dist").mkdir(parents=True)
+    shutil.copyfile(os.path.join(fc.REPO, "tools/gen_gen3_write_checkpoint.py"), tree / "tools/gen_gen3_write_checkpoint.py")
+    shutil.copyfile(os.path.join(fc.REPO, "patch/dist/companion_pins.json"), tree / "patch/dist/companion_pins.json")
+    if with_file is not None:
+        (tree / "patch/dist/gen3_companions.json").write_text(json.dumps(with_file))
+    return tree
+
+
+def test_default_rom_pins_work_without_gen3_companions_and_strict_refuses(tmp_path):
+    tree = _tree_without_gen3_companions(tmp_path)
+    pins = fc.rom_pins(str(tree))                                                # default path: absent file is fine
+    assert not [k for k in pins if k.startswith(("firered_companion", "leafgreen_companion", "emerald_companion"))]
+    with pytest.raises(fc.LaneError, match="gen3_companions"):
+        fc.rom_pins(str(tree), require_companions=True)                          # a --title frlgc plan fails closed
+
+
+def test_strict_companion_pins_refuse_a_missing_or_malformed_title(tmp_path):
+    real = json.loads(open(os.path.join(fc.REPO, "patch/dist/gen3_companions.json")).read())
+    ok = fc.rom_pins(fc.REPO, require_companions=True)
+    assert COMPANION_KEYS <= set(ok)
+    for title, field in (("leafgreen", None), ("firered", "rom_sha1"), ("emerald", "rom_md5")):
+        bad = json.loads(json.dumps(real))
+        if field is None:
+            del bad["titles"][title]
+        else:
+            bad["titles"][title][field] = "zz"
+        tree = _tree_without_gen3_companions(tmp_path / title, bad)
+        fc.rom_pins(str(tree))                                                   # the default path is unaffected
+        with pytest.raises(fc.LaneError, match=title):
+            fc.rom_pins(str(tree), require_companions=True)
