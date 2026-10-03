@@ -12,5 +12,5 @@
 - **Trade delivery = PARTY ONLY.** No "deliver to box" arm. Owner: "It should not. In party only."
   - The companion trade copies the native NPC-trade shape (FEATURE_BAR "Full-party decision"): the player picks a party slot (`GetPartySelection`, 255 = cancel), and the received record overwrites it via `Party_SafeCopyMonToSlot_ResetAprijuiceModifiers` (`src/party.c:97`).
   - So a full party cannot arise, and no PC/box commit path, `PCStorage_PlaceMonInFirstEmptySlotInAnyBox` scratch, or `CountPCEmptySpace` gate is built.
-  - The shared ABI's box-arm stage length and `SLINK_RB_COMMIT_MUTATES_INPUT` are not exercised by Gen 4.
+  - The shared ABI's box-arm stage length is not used by Gen 4. (Coordinator correction, from the C5 spec review:) `SLINK_BIND_GEN4_PK4` still SETS `SLINK_RB_COMMIT_MUTATES_INPUT` (`patch/src/nds/common/record_binding.h:167`), so every scene hands the engine a scratch copy (`trade_producer.h:293-298`). For the party raw copy that is harmless (an extra copy; the stage stays pristine), so the flag stays. No shared edit needed.
 - **FAILURE sound: PENDING** (owner: "Sound can pend for now"). It stays open, with no substitute chosen. SUCCESS 1501 / NOTIFY 1500 stand, BOO 1536 stays provisional. C3 may ship without code 2 wired, and must say so.
