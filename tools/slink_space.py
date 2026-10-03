@@ -750,7 +750,7 @@ def _prune_actions(repo, items) -> list[dict]:
 
 def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
     root = Path(params["root"])
-    actions, refused = [], []
+    actions, refused, seen_dst = [], [], set()
     for it in items:
         if (not it.get("movable") or it["kind"] in ("admin", "drive-copy")
                 or not os.path.lexists(it["path"])):
@@ -789,6 +789,10 @@ def _move_actions(params, items) -> tuple[list[dict], list[dict]]:
         if os.path.lexists(dst):
             refuse(f"destination exists: {dst.as_posix()}")
             continue
+        if _norm(dst) in seen_dst:
+            refuse(f"destination collides with another item in this plan: {dst.as_posix()}")
+            continue
+        seen_dst.add(_norm(dst))
         a = {"src": it["path"], "dst": dst.as_posix(), "size": it["size"], "fp": it.get("fp"),
              "links": it.get("links", [])}
         if it["kind"] == "worktree":

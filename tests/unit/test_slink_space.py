@@ -808,6 +808,17 @@ def test_copy_tree_move_verifies_before_deleting_the_source(W, monkeypatch):
     assert (src / "sub" / "state.bin").stat().st_size == 300 and (src / "log.txt").exists()
 
 
+def test_move_refuses_two_items_with_one_destination(W):
+    a = add_wt(W, "dup", commits=1, old=False)
+    b = W.c / "slink" / "dup"
+    _git(W.repo, "worktree", "add", "-q", "-b", "dup2", str(b), "master")
+    m = plan(W, "move")
+    dsts = [x["dst"] for x in m["actions"]]
+    assert dsts.count((W.root / "wt" / "dup").as_posix()) == 1
+    refused = {ss._norm(r["path"]): r["reason"] for r in m["refused"]}
+    assert any("collides" in refused.get(ss._norm(x), "") for x in (a, b))
+
+
 def test_move_file_verifies_the_copy_before_removing_the_source(W, monkeypatch):
     src = W.tmp / "run.log"
     src.write_bytes(b"L" * 500)
