@@ -1087,8 +1087,9 @@ def _move_worktree_copy(repo, a):
 
 
 def _move_dir(_repo, a):
-    _copy_tree(a["src"], a["dst"], move=True)
+    _copy_tree(a["src"], a["dst"])  # copies and verifies files + bytes
     _relink(a["dst"], a["links"])
+    _rmtree(a["src"])  # only once the destination is complete
 
 
 def _move_file(_repo, a):

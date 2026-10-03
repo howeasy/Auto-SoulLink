@@ -784,6 +784,31 @@ def test_copy_tree_move_verifies_before_deleting_the_source(W, monkeypatch):
     assert (src / "sub" / "state.bin").stat().st_size == 300 and (src / "log.txt").exists()
 
 
+def test_move_file_verifies_the_copy_before_removing_the_source(W, monkeypatch):
+    src = W.tmp / "run.log"
+    src.write_bytes(b"L" * 500)
+
+    def truncating(s, d):
+        Path(d).write_bytes(Path(s).read_bytes()[:100])
+    monkeypatch.setattr(ss.shutil, "copy2", truncating)
+    with pytest.raises(RuntimeError, match="size"):
+        ss._move_file(None, {"src": str(src), "dst": str(W.tmp / "ev" / "run.log")})
+    assert src.stat().st_size == 500
+
+
+def test_move_dir_relinks_before_deleting_the_source(W, monkeypatch):
+    src = W.tmp / "lane-src"
+    src.mkdir()
+    (src / "s").write_text("state")
+
+    def boom(*_a):
+        raise OSError("relink failed")
+    monkeypatch.setattr(ss, "_relink", boom)
+    with pytest.raises(OSError):
+        ss._move_dir(None, {"src": str(src), "dst": str(W.tmp / "lane-dst"), "links": []})
+    assert (src / "s").read_text() == "state"
+
+
 def _readd_setup(W, name):
     p = add_wt(W, name, commits=1, old=False)
     head = _git(p, "rev-parse", "HEAD").strip()
