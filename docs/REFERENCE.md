@@ -3,7 +3,7 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, companion-patched; a clean cartridge is refused)
   — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
   frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
   `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
@@ -42,9 +42,12 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     before the probe was retired) — and the fly warp reaches thirteen destinations of which
     two carry encounters.
   Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
-  The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
-  VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
-  non-reentrant audio routine, so ABI 3 ships panel-only and says so in its capability bits.
+  The Red/Blue companion patch (required; Yellow and Archipelago are exempt and have none) adds
+  the in-game SLINK panel and native sound. The VBlank `PlaySound` path ABI 2 used was swallowed
+  during music fades and re-entered a non-reentrant audio routine, so sound now runs on the main
+  thread: `SlinkSfxService` (`patch/gen1/src/slink.asm`, `SLINK_CAP_SFX`) plays the semantic
+  code the client posts at mailbox `+7` (`request_sfx_local` in `lua/gen1/client.lua`, gated on
+  `panel:sfx_present()` and `native_sounds`).
 - **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) —
   🟡 **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
   `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec
@@ -925,7 +928,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
 | OBS scene trigger integration (simpleobsws v5 async) | ✅ Working |
 | OBS priority-based trigger resolution (draggable rules list) | ✅ Working |
-| **Radical Red Companion Patch** (optional native layer — [patch/README.md](../patch/README.md)) | |
+| **Radical Red Companion Patch** (required native layer — [patch/README.md](../patch/README.md)) | |
 | Companion patch build + distribution (`patch/tools/build.py`, UPS at `/companion/`, in-browser patcher) | ✅ Working |
 | Build reproducibility gate (`build.py --check` asserts the committed UPS rebuilds byte-identically) | ✅ Working |
 | Mailbox ABI v1 (`0x0203F800`) — opcode dispatch + seq/ack protocol | ✅ Working |
@@ -1223,9 +1226,9 @@ SLink auto-detects AP-patched ROMs and adjusts all memory addresses automaticall
 
 > **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
 
-SLink fully supports **Pokémon Radical Red 4.1** and other [CFRU-based](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) ROM hacks via the `radical_red` profile in `memory_gba.lua`. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla and AP.
+SLink supports **Pokémon Radical Red 4.1** ([CFRU](https://github.com/Skeli789/Complete-Fire-Red-Upgrade)) through the `gen3_rr` pack (`data/games/gen3_rr/`: `profile.json`, `engine_signals.json`, `write_checkpoint.json`), companion-patched only. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla.
 
-**Auto-detection:** The ROM is identified by scanning for CFRU signature bytes in the ROM binary. `memory_gba.lua` calls `M._detectCFRU()` during `initProfile()`, which checks for known CFRU function signatures. If detected, the `radical_red` profile is applied automatically — no manual configuration needed. The status page shows "FireRed (Radical Red)" for RR clients.
+**Admission:** There is no CFRU signature scan any more. `lua/gen3/entry.lua` `Entry.admit` matches the cartridge hash against the pinned `rom_sha1`/`rom_md5` rows in `engine_signals.json`; a hash in no table is admitted by anchors (every engine site of exactly one pack/title/kind still reads as pinned in ROM), and a header-only match is refused (`admit_routed`). A clean or randomized-clean RR is refused too: the `gen3_rr` pack sets `companion_required`, and the server refuses it at the hello (`companion_refusal` in `server/adapters/gen3_frlge.py`).
 
 ### Key architectural differences from vanilla/AP
 
