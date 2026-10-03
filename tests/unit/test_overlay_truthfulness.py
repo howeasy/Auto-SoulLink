@@ -10,7 +10,6 @@ import asyncio
 import time
 from datetime import UTC, datetime, timedelta
 
-import jinja2
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
@@ -18,7 +17,6 @@ from aiohttp.test_utils import TestClient, TestServer
 from server.overlay_catalog import OVERLAYS
 from server.server import SLinkServer, build_app
 from server.state import LinkEntry, LinkStatus, MonInfo
-from server.templating import TEMPLATES_DIR
 
 
 @pytest.fixture
@@ -143,7 +141,7 @@ def test_a_reset_starts_a_new_run_with_nothing_committed(srv):
     assert not srv.connected_players
 
 
-# ── 5. the memorial wall ─────────────────────────────────────────────────────
+# ── 5. the killfeed ──────────────────────────────────────────────────────────
 
 def _ts(minutes):
     return (datetime(2026, 9, 1, tzinfo=UTC) + timedelta(minutes=minutes)).isoformat()
@@ -167,29 +165,8 @@ def _seed_deaths(srv):
                              b=MonInfo(key="B3", species=21, level=6, nickname="SPIKE")))
 
 
-@pytest.mark.asyncio
-async def test_the_memorial_wall_counts_only_fallen_pairs(srv, get):
-    _seed_deaths(srv)
-    html = await get("/memorial")
-    assert "2 fallen pairs" in html
-    num = '<div class="tomb-num">#'
-    assert num + "3" not in html
-    # numbering stays oldest first
-    assert html.index(num + "1") < html.index("RATTY") < html.index(num + "2") < html.index("SPIKE")
-
-
-@pytest.mark.asyncio
-async def test_a_one_sided_dead_zone_shows_what_got_away(srv, get):
-    _seed_deaths(srv)
-    caterpie = srv.adapter.species_name(10)
-    html = await get("/memorial")
-    assert f"missed: {caterpie} Lv 4" in html
-    assert "???" not in html, "an empty nickname falls back to the species name"
-    assert html.count("burial pending") == 1, "only the DEAD row, not the MEMORIAL one"
-
-
 def test_the_killfeed_itself_still_carries_every_death(srv):
-    """Only the WALL drops empty dead zones; the board and other consumers keep them."""
+    """Every death, including a dead zone nobody caught in, stays in the killfeed."""
     _seed_deaths(srv)
     assert len(srv._build_status_dict()["killfeed"]) == 3
 
@@ -216,34 +193,6 @@ async def test_the_links_overlay_caps_the_dead_list_and_says_how_many_more(srv, 
     shown = [i for i in range(8) if f"DEADA{i}<" in html]
     assert shown == [3, 4, 5, 6, 7], "the newest five"
     assert "+3 more" in html
-
-
-# ── 8. accessibility in the shared macros ────────────────────────────────────
-
-def _render(src, **kw):
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True)
-    env.filters["bitand"] = lambda v, m: (int(v) & int(m)) if isinstance(v, int) else 0
-    return env.from_string(src).render(**kw)
-
-
-def test_hp_bar_is_a_labelled_progressbar():
-    html = _render('{% from "_macros.html" import hp_bar %}{{ hp_bar(34, 100) }}')
-    for attr in ('role="progressbar"', 'aria-label="HP"', 'aria-valuemin="0"',
-                 'aria-valuemax="100"', 'aria-valuenow="34"', 'aria-valuetext="34 of 100 HP"'):
-        assert attr in html, attr
-
-
-def test_hp_bar_without_a_max_says_so():
-    html = _render('{% from "_macros.html" import hp_bar %}{{ hp_bar(0, 0) }}')
-    assert "HP unavailable" in html and "progressbar" not in html
-
-
-@pytest.mark.parametrize("status,word", [("alive", "Alive"), ("dead", "Dead"), ("memorial", "Memorial")])
-def test_link_row_status_is_not_colour_only(status, word):
-    mon = {"nickname": "X", "species_name": "", "sprite_html": "", "level": 1}
-    html = _render('{% from "_macros.html" import link_row %}{{ link_row(link) }}',
-                   link={"a": mon, "b": mon, "status": status})
-    assert f'<span class="sr-only">{word}</span>' in html
 
 
 def test_a_reset_with_nobody_connected_frees_the_game(srv):

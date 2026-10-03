@@ -187,7 +187,9 @@ OPTION_SUPPORT = {
                      "gen3_frlge_rr": {"ok": True},
                      "gen3_exp": {"ok": False, "why": "Explode Mode is not supported on the Emerald Expansion."}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
-                        "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
+                        # Gen3Adapter.rival_trainer_ids() lists Radical Red's rivals only, so the swap never fires here
+                        "rom_types": {title: {"ok": False, "why": "Not available on FireRed, LeafGreen or Emerald yet."}
+                                      for title in ("firered", "leafgreen", "emerald")},
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},

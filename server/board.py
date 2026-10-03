@@ -306,7 +306,8 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
 # older link or burial has no time and the page says so instead of inventing one.
 
 _EPOCH = datetime.min.replace(tzinfo=UTC)
-_CAUSES = {"battle": "fainted in battle", "whiteout": "whiteout", "dead_zone": "dead zone"}
+_CAUSES = {"battle": "fainted in battle", "whiteout": "whiteout", "dead_zone": "dead zone",
+           "identity_lost": "identity lost", "npc_trade_clause": "NPC trade clause violation"}
 
 
 def _when(raw: str | None) -> datetime | None:

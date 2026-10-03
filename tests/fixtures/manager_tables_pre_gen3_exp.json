@@ -291,8 +291,9 @@
     "why": "Only Gen 2 has a Pokégear phone for the companion to ring."
    },
    "rival_team_swap": {
-    "ok": true,
-    "why": ""
+    "ok": false,
+    "why": "Not available on FireRed, LeafGreen or Emerald yet.",
+    "always": false
    },
    "species_lock": {
     "ok": true,
@@ -341,8 +342,9 @@
     "why": "Only Gen 2 has a Pokégear phone for the companion to ring."
    },
    "rival_team_swap": {
-    "ok": true,
-    "why": ""
+    "ok": false,
+    "why": "Not available on FireRed, LeafGreen or Emerald yet.",
+    "always": false
    },
    "species_lock": {
     "ok": true,

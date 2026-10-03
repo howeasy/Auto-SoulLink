@@ -1,9 +1,7 @@
 """Owner ruling 35: accept the NPC exchange, then retire only its violating pair."""
 
 from copy import deepcopy
-from pathlib import Path
 
-import jinja2
 import pytest
 
 from server.server import SLinkServer
@@ -191,10 +189,9 @@ def test_npc_clause_has_a_named_memorial_cause(tmp_path):
     _exchange(srv, entry, ids["Charmander"])
     memorial = srv._build_status_dict()["killfeed"][0]
     assert memorial["cause"] == "npc_trade_clause"
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(Path(__file__).resolve().parents[2] / "server/templates"),
-                             autoescape=True, undefined=jinja2.ChainableUndefined)
-    html = str(env.get_template("_macros.html").module.tombstone(memorial, 1))
-    assert "NPC trade clause violation" in html
+    from server.board import timeline
+    deaths = [e for e in timeline(srv._build_status_dict())["entries"] if e["kind"] == "death"]
+    assert [e["cause"] for e in deaths] == ["NPC trade clause violation"]
 
 
 @pytest.mark.parametrize("title,refusal", (("firered", "party_hidden"), ("emerald", "party_hidden"),

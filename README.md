@@ -42,7 +42,7 @@ Pick these when you create a run. The form greys out anything the chosen game ca
 |---|---|---|
 | Species, Gender, Type Clause | Refuse a link when both Pokémon share an evolution family, a gender, or a type. | All (no Gender Clause on Gen 1) |
 | Explode Mode | When your partner's Pokémon dies, yours is forced to use Explosion. | All except Emerald Expansion |
-| Rival Swap | Rival battles use your partner's real team instead of the usual one. | All except Emerald Expansion |
+| Rival Swap | Rival battles use your partner's real team instead of the usual one. | Gen 1, pureRGB, Gen 2, Radical Red |
 | Native Sounds | Run events play sounds through the game itself. | Patched games |
 | Phone Calls | Your partner rings your Pokégear when a pair links, an area closes or a Pokémon falls. | Gold, Silver, Crystal |
 | Battle Calc | Shows the damage of the highlighted move in battle. | Radical Red |
