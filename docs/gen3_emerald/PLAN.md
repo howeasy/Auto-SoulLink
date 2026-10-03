@@ -178,4 +178,5 @@ Battle Frontier/Pyramid/Trainer Hill/Contests/Secret Bases rule support (writes 
 | EG5 | · | |
 | EG6 | · | |
 | XG0 | SIGNED 2026-09-26 by the owner (in chat: "Signed"), Linux reference host `hgbox`, gcc-arm-none-eabi 13.2.1; native Windows unsupported; no second-host cross-check | `docs/gen3_emerald/XG0_request.md` (commit `ab270159`; two clean builds ROM sha1 `28877d73`) |
-| XG1–XG4 | · | |
+| XG3 | SIGNED 2026-10-02 by the owner in chat ("Yes, sign XG3 at 0b3f15ea"); routing flip NOT included (owner: after landing) | `docs/gen3_emerald/XG3_request_draft.md`; final cut `0b3f15ea` 30/30 `docs/gen3/probes/fc_SUMMARY_0b3f15ea_exp.txt` |
+| XG1, XG2, XG4 | · | |

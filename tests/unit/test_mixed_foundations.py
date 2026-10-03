@@ -20,12 +20,16 @@ from server.adapters import (
     get_adapter,
 )
 from server.server import _KNOWN_ARTIFACT_KINDS, SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.protocol_schema import ARTIFACT_KINDS
 
+# Patch-first (owner 2026-10-02): a clean FR/LG/Emerald/RR hello is refused for lack of the companion, so
+# every cartridge that has to CONNECT here declares the companion.
 RR = {"rom_type": "firered_rr", "artifact_kind": "companion"}
 RR_CLEAN = {"rom_type": "firered_rr", "artifact_kind": "clean"}
-FR = {"rom_type": "firered", "artifact_kind": "clean"}
-EM = {"rom_type": "emerald", "artifact_kind": "clean"}
+FR = {"rom_type": "firered", "artifact_kind": "companion"}
+LG = {"rom_type": "leafgreen", "artifact_kind": "companion"}
+EM = {"rom_type": "emerald", "artifact_kind": "companion"}
 
 
 async def _session(srv):
@@ -45,8 +49,11 @@ async def _session(srv):
     return send, close
 
 
-def _hello(player: str, cart: dict, **extra) -> dict:
-    return {"event": "hello", "player": player, "trainer_name": player.upper(),
+def _hello(player: str, cart: dict, *, with_companion=True, **extra) -> dict:
+    # Deliberate missing-patch controls opt out; ordinary fixtures reach the
+    # pairing/identity guard with their title's exact mailbox ABI.
+    evidence = companion(cart.get("rom_type", "")) if with_companion else {}
+    return {**evidence, "event": "hello", "player": player, "trainer_name": player.upper(),
             "ot_id": "30B8" if player == "a" else "7B0B", "has_pokeballs": True,
             "party": [], **cart, **extra}
 
@@ -147,21 +154,25 @@ async def test_the_reverse_arrival_order_is_refused_too(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_clean_rr_pairs_with_a_companion_rr_and_firered_with_leafgreen(tmp_path):
-    """Variants of ONE foundation still pair, and the companion patch is per cartridge."""
+async def test_a_clean_rr_is_refused_for_the_companion_and_firered_pairs_with_leafgreen(tmp_path):
+    """Variants of ONE foundation still pair (FireRed with LeafGreen). A clean RR no longer pairs with a
+    companion RR: it is refused outright for lacking the companion (patch-first, owner 2026-10-02) --
+    refused for THAT reason, not as a mixed game."""
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
         assert not _refused(await send(_hello("a", RR)))
-        assert not _refused(await send(_hello("b", RR_CLEAN)))
-        assert not srv.state.identity_error.get("b")
+        reply = await send(_hello("b", RR_CLEAN, with_companion=False))
+        assert not _refused(reply) and any("COMPANION" in c.get("text", "") for c in reply["commands"])
+        assert "needs the SLink companion patch" in srv.state.identity_error["b"]
     finally:
         await close()
     srv2 = SLinkServer(data_dir=str(tmp_path / "second"))
     send, close = await _session(srv2)
     try:
         assert not _refused(await send(_hello("a", FR)))
-        assert not _refused(await send(_hello("b", {"rom_type": "leafgreen"})))
+        assert not _refused(await send(_hello("b", LG)))
+        assert not srv2.state.identity_error.get("b")
     finally:
         await close()
 
@@ -316,9 +327,13 @@ async def test_a_present_artifact_kind_is_never_coerced_to_clean(tmp_path, bad):
         assert not srv.state.rom_type and "a" not in srv.state.player_identity
         # Fail-closed for a direct caller too, not only through the socket.
         assert "Bad artifact_kind" in srv._mixed_games_error("a", "firered", bad)
-        # And the run is still open: omitting the key is what defaults to clean.
-        assert not _refused(await send(_hello("a", {"rom_type": "firered"})))
-        assert srv.state.artifact_kind == "clean"
+        # And the run is still open: omitting the key is what defaults to clean, which a companion
+        # title now refuses for the companion (not as a bad kind); declaring the companion connects.
+        reply = await send(_hello("a", {"rom_type": "firered"}, with_companion=False))
+        assert not _refused(reply) and "needs the SLink companion patch" in srv.state.identity_error["a"]
+        assert srv.state.artifact_kind == ""
+        assert not _refused(await send(_hello("a", FR)))
+        assert srv.state.artifact_kind == "companion"
     finally:
         await close()
 
@@ -363,7 +378,9 @@ async def test_a_declared_named_artifact_kind_still_commits_as_clean(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        assert not _refused(await send(_hello("a", {"rom_type": "firered",
+        # Yellow: a companion title's header-named cartridge is refused for the companion now, so the
+        # rule is pinned on the one title that still declares `named` and connects clean.
+        assert not _refused(await send(_hello("a", {"rom_type": "yellow",
                                                     "artifact_kind": "named"})))
         assert srv.state.artifact_kind == "clean"
     finally:
@@ -377,7 +394,7 @@ async def test_the_matching_and_the_omitted_foundation_are_both_accepted(tmp_pat
     try:
         assert not _refused(await send(_hello("a", RR, foundation="gen3_rr")))
         assert srv.state.rom_type == "firered_rr"
-        assert not _refused(await send(_hello("b", RR_CLEAN)))   # key omitted entirely
+        assert not _refused(await send(_hello("b", RR)))
         assert not srv.state.identity_error
     finally:
         await close()
@@ -390,7 +407,7 @@ async def test_an_absent_foundation_is_derived_so_an_old_client_still_connects(t
     send, close = await _session(srv)
     try:
         assert not _refused(await send(_hello("a", RR)))
-        assert not _refused(await send(_hello("b", RR_CLEAN)))
+        assert not _refused(await send(_hello("b", RR)))
         assert not srv.state.identity_error
     finally:
         await close()
@@ -403,8 +420,10 @@ async def test_gen1_named_still_pairs_with_clean_and_a_second_game_is_still_refu
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        assert not _refused(await send(_hello("a", {"rom_type": "red", "artifact_kind": "clean"})))
-        assert not _refused(await send(_hello("b", {"rom_type": "blue", "artifact_kind": "named"})))
+        # Yellow (clean) beside a patched Blue (named): the one clean/named pairing that still connects
+        assert not _refused(await send(_hello("a", {"rom_type": "yellow", "artifact_kind": "clean"})))
+        assert not _refused(await send(_hello("b", {"rom_type": "blue", "artifact_kind": "named",
+                                                    "panel": True})))
         assert srv.state.artifact_kind == "clean"
         assert _refused(await send(_hello("b", {"rom_type": "PureBlue", "artifact_kind": "clean"})))
         assert "Mixed games" in srv.state.identity_error["b"]

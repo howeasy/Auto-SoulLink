@@ -155,7 +155,7 @@ async def test_macro_smoke_harness_renders_its_mock_cast(client):
 # the live router above, which is the right way to cover new ones -- and exactly the wrong way to
 # notice that collapsing nine pages into three quietly dropped sixty parametrized tests. Change
 # this number on purpose, in the same commit that changes the router.
-EXPECTED_GET_ROUTES = 69
+EXPECTED_GET_ROUTES = 70   # +1: /timeline (the run's story)
 
 
 def test_route_count_changes_are_deliberate():
@@ -169,7 +169,7 @@ def test_route_count_changes_are_deliberate():
 # that with x-init="init(...)" runs the method TWICE — once with every parameter undefined.
 # That is what pointed the stylesheet <link> at /static/themes/undefined.css (a 404 on every
 # dashboard load) and registered duplicate htmx:afterSettle / storage listeners.
-HTML_ROUTES = ["/", "/memorial", "/stream", "/debug", "/twitch", "/obs", "/launcher/a"]
+HTML_ROUTES = ["/", "/memorial", "/timeline", "/stream", "/debug", "/twitch", "/obs", "/launcher/a"]
 
 
 @pytest.mark.asyncio
@@ -225,7 +225,7 @@ async def test_sprites_carry_the_class_the_stylesheet_selects_on(client, srv):
 # ── a run the Manager spawned sends its pages to the Manager ─────────────────────────────
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path,target", [
-    ("/", "/runs/r1"), ("/memorial", "/runs/r1"), ("/debug", "/runs/r1/debug"),
+    ("/", "/runs/r1"), ("/memorial", "/runs/r1"), ("/debug", "/runs/r1/debug"), ("/timeline", "/runs/r1/timeline"),
     ("/twitch", "/broadcast/twitch"), ("/obs", "/broadcast/obs"),
     ("/calc/normal.html", "/runs/r1/calc/normal.html"), ("/patcher", "/patcher"),
     ("/stream", "/broadcast"),

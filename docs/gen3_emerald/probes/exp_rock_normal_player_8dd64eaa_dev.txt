@@ -1,0 +1,38 @@
+DEV source=8dd64eaa4b9ae019208215aea92d52e7e0fcbd8f; TEST-ONLY; SLINK_ROCK_PLAYER_PROBE=1; ordinary native input experiment; NOT default/final-cut qualification
+
+========== scenario: exp_static_rock_gen3 ==========
+[duo] exp_static_rock_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=ec5846b2bf9b9e4db84413363975190dc6fdb5dfcfc994d953c7c545a02f836a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=d27a56c97a80ca958f862b4510f185183da0427bec9847dc21a796dce8388d81 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=8dd64eaa4b9ae019208215aea92d52e7e0fcbd8f
+[duo] server up: tcp=62817 http=62818 data=C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 07:32:00,684 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 07:32:00,684 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for exp_static_rock_gen3: e2e_exp_static_rock_gen3_a_attempt1_result.txt, e2e_exp_static_rock_gen3_a_result.txt, e2e_exp_static_rock_gen3_b_attempt1_result.txt, e2e_exp_static_rock_gen3_b_result.txt, e2e_exp_static_rock_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi path=C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 3.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi path=C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 3.3s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 20.8s
+[duo] timing results 2.6s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=956ddb40fb0ba3ceddd955562472b1419f48c9f82e6afc5b96b9ba4986e25ffa file=956ddb40fb0ba3ceddd955562472b1419f48c9f82e6afc5b96b9ba4986e25ffa match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=515a2c35df855ad9f20d4ef2d00c3668cf7b5fa5c0f732487800297213c21327 file=515a2c35df855ad9f20d4ef2d00c3668cf7b5fa5c0f732487800297213c21327 match=true saves=1 counter=4->5 rtc=normalized
+[duo] exp static/wild: native battle, ordinary capture, independent saved keys and controls
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] exp_static_rock_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\exp-xg3-state\acquisition\rock_normal_player_8dd64eaa\slink_duo_exp_static_rock_gen3_gai21eqi
+
+========== summary ==========
+  exp_static_rock_gen3: PASS (attempt 1 of 1)
+
+EXIT 0

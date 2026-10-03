@@ -12,8 +12,9 @@
         <p class="patcher-lead">
           Apply the SLink companion patch to your <strong>{{ target.base_hint }}</strong>
           right here — the patch runs entirely in your browser, nothing is uploaded.
-          The patch is <strong>optional</strong>: without it the SLink Lua client falls
-          back to its existing behaviour, and unpatched players are unaffected.
+          The patch is <strong>required</strong> for every game except Pokémon Yellow,
+          Archipelago builds and the Emerald Expansion. A clean cartridge is refused at
+          launch, so each player patches their own before loading it.
         </p>
         {# One page, several games. A UPS carries the CRC32 of the exact dump it was
            diffed against, so the target has to be chosen before the file is applied
@@ -29,10 +30,9 @@
         </nav>
         {% if target.slug != "rr" %}
         <p class="patcher-muted">
-          Pokemon Yellow is not listed because there is no companion build for it: its
-          WRAM has no free bytes for the mailbox the patch needs. Yellow plays fine —
-          the core Soul Link rules need no patch on any Game Boy title — it simply has
-          no in-game panel.
+          Pokémon Yellow is not listed because there is no companion build for it: its
+          WRAM has no free bytes for the mailbox the patch needs. That is why Yellow is
+          exempt from the requirement: it plays unpatched, without the in-game panel.
         </p>
         {% endif %}
       </header>
@@ -66,28 +66,21 @@
       <section class="patcher-card">
         <h2>What the patch unlocks</h2>
         <p class="patcher-muted">
-          These native in-game features <strong>require</strong> the patch (both linked
-          players must be patched for the peer/trade features). Everything else in SLink
-          works without it.
+          What the patch adds to the cartridge. Both linked players need it, and a
+          cartridge without it is refused.
         </p>
         <ul class="patcher-features">
-          <li><strong>Native message box</strong> — momentous overworld events (a link
-            forms, a shiny is found, an area becomes a dead zone) show in the real in-game
-            text box instead of the HUD.</li>
-          <li><strong>Peer ghost</strong> — your partner walks your overworld as a real
-            NPC, rendered as their own trainer avatar &amp; colours, moving in real time.</li>
-          <li><strong>Talk to your partner</strong> — face the ghost + press A for a native
-            <em>Trade / Say hey</em> menu. Trade plays the real in-game trade scene on both
-            sides (including trade-evolution); Say hey pings your partner.</li>
+          <li><strong>Native trade</strong> — the real in-game trade scene on both sides
+            (including trade-evolution), from the SLINK menu.</li>
           <li><strong>Native sound</strong> — link / KO / shiny cues play through the game's
             own sound engine instead of a Lua RAM-poke.</li>
           <li><strong>Bundled Battle Calc</strong> — an in-battle damage / type-effectiveness
             readout for the highlighted move, folded into the same patch.</li>
         </ul>
         <p class="patcher-muted">
-          Patch-dependent augmentations (<strong>Explode Mode</strong>, <strong>Rival Swap</strong>,
-          <strong>Overworld Presence</strong>) are toggled per-run when you create a run in the
-          <strong>Manager</strong> — under the “Requires ROM patch” section.
+          Run options (<strong>Battle</strong> and <strong>Native UI</strong> groups, including
+          Explode Mode, Rival Swap and Native Sounds) are set when you create a run in the
+          <strong>Manager</strong>; an option the cartridge cannot honour is greyed with the reason.
         </p>
       </section>
 

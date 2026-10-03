@@ -95,11 +95,32 @@ def test_w6_facts_are_the_pinned_overlay():
         names = {r["name"] for r in f["allow"]}
         # data/script labels (SlinkSpecialPhoneCallList, SlinkTradeReceptionistScript) are never writer code
         # SlinkMainMenuBridge: TITLE-VERSION A's ROM0 SetUpMenu bridge (patch/gen2/src/version.asm)
+        # SlinkTitleBridge: the titled overlays' ROM0 title-screen bridge (title-publish dc0a9c5b); the live gate
+        # derives its allowlist from the symbol file, so it follows the build
         assert names == {"SLink service bank", "SlinkDelayFrameBridge", "SlinkResetSoundBridge",
-                         "SlinkMainMenuBridge", "SlinkStartMenuEntry"}
+                         "SlinkMainMenuBridge", "SlinkStartMenuEntry", "SlinkTitleBridge"}
         assert all(r["bank"] != 0 or r["hi"] <= 0x100 for r in f["allow"]), "a ROM0 range runs past the header"
         entry = next(r for r in f["allow"] if r["name"] == "SlinkStartMenuEntry")
         assert entry["bank"] == 4 and entry["hi"] - entry["lo"] == 12   # call FadeToMenu / farcall / ld a,6 / ret
         assert f["span"] == list(MAILBOX_SPANS[title])
         (phone,) = f["regions"]
         assert phone["hi"] - phone["lo"] == 2 and phone["wram_bank"] == 1 and phone["slink_allow"] == ["SLink service bank"]
+
+
+# -- Gold's U1 leg: the disclosed SYNTH poisoned lead on the CURRENT drivers (sweep ffd54b44) ------------------------
+
+def test_gold_u1_leg_runs_the_current_drivers_on_the_synth_poisoned_lead_with_a_pinned_clock():
+    from tests.live import test_gen2_w6_gate as w6
+    assert w6.U1_CHAIN_FOR["gold"] == "head" and w6.SYNTH_PSN_U1 == {"gold": "gold_synth_psn"}
+    assert "gold" in w6.U1_CLOCK and ("gold", "u1") in __import__("tools.verify_gen2_release", fromlist=["x"]).W6_CLOCK_LEGS
+    # Crystal and Silver keep their frozen chains (their natural hunts pass); only Gold changed
+    assert w6.U1_CHAIN_FOR["crystal"] == "a882a763" and w6.U1_CHAIN_FOR["silver"] == "a7bf1773"
+    assert set(w6.SYNTH_PSN_U1) == {"gold"}
+
+
+def test_the_head_chain_resolves_to_an_exact_commit_and_supports_synth_facts():
+    import inspect
+    from tests.live import test_gen2_w6_gate as w6
+    _, files, module = w6.frozen_u1("head")
+    assert files and all(len(entry["ref"]) == 40 and entry["ref"] != "HEAD" for entry in files.values())
+    assert "synth_psn" in inspect.signature(module.u1_facts).parameters, "the 09-24 chains predate the synth setup"

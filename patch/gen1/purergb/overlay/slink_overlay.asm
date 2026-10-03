@@ -13,6 +13,7 @@
 ; tail), lease 'SLT1' v1 over the first 16 bytes of wSerialPartyMonsPatchList, the same states,
 ; generations, timings and result codes. Only the addresses moved, and the profile carries them.
 
+DEF SLINK_TRADE_ENABLED EQU 1  ; the trade modules below are always linked; slink.asm advertises them
 INCLUDE "engine/slink/slink.asm"
 INCLUDE "engine/slink/trade_service.asm"
 INCLUDE "engine/slink/native_trade.asm"
@@ -21,3 +22,5 @@ INCLUDE "engine/slink/trade_ui.asm"
 INCLUDE "engine/slink/trade_prompt.asm"
 INCLUDE "engine/slink/apex_guard.asm"
 INCLUDE "engine/slink/slink_home.asm"
+INCLUDE "engine/slink/title_band.asm"
+INCLUDE "engine/slink/main_menu_version.asm"

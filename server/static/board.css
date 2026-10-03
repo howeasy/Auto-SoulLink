@@ -48,7 +48,7 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .mk-conn.disconnected { border-left-color: var(--c-dim); }
 /* Active rule clauses above the board. */
 .lock-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: var(--space-3); color: var(--c-dim); font-size: var(--fs-sm); }
-.badge-lock { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--c-edge-ui, var(--c-edge)); color: var(--c-txt); white-space: nowrap; }
+.badge-lock { display: inline-flex; align-items: center; gap: 4px; padding: 1px var(--chip-pad-x); border: 1px solid var(--c-edge-ui, var(--c-edge)); color: var(--c-txt); white-space: nowrap; }
 
 /* An uncertain native trade (--c-pend, same amber as a pending capture) escalates to a
  * conflict (--c-dead) once it's clear it needs a human — same shape as .identity-warn. */
@@ -56,6 +56,14 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .trade-problem.trade-problem-conflict { border-left-color: var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); }
 .trade-problem b { display: block; margin-bottom: .25em; }
 .trade-problem-mons, .trade-problem-verdict, .trade-problem-text { display: block; font-size: var(--fs-sm); }
+/* conn-watch.js: the board's poll stopped getting answers. Empty (connected), it takes no space. */
+.mk-connlost { margin: var(--space-2) var(--space-5) 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--c-pend); background: color-mix(in srgb, var(--c-pend) 12%, transparent); color: var(--c-txt); border-radius: 4px; font-size: var(--fs-sm); }
+.mk-connlost:empty { display: none; }
+body.conn-lost #content { opacity: .6; transition: opacity .3s; }
+.trade-resolve { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.trade-resolve-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; border: 0; font-size: var(--fs-sm); }
+.trade-resolve select { font: inherit; }
+.trade-resolve-out:empty { display: none; }
 .trade-last-note { margin-bottom: var(--space-3); font-size: var(--fs-sm); opacity: .75; }
 
 :root {
@@ -154,6 +162,8 @@ body.mgr .launcher { min-height: 0; max-height: calc(100vh - 57px); }
 .mk-rail-item svg { width: 1.05em; height: 1.05em; flex: none; }
 .mk-rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .mk-rail-pin { font-size: var(--fs-xs); color: var(--c-gold); }
+/* The run's game, as plain text under its name (owner: no new chips or badges). */
+.mk-rail-game { display: block; font-size: var(--fs-xs); color: var(--c-dim); overflow: hidden; text-overflow: ellipsis; }
 .mk-dot { width: .6em; height: .6em; border-radius: 50%; flex: none; background: var(--c-dim); }
 .mk-dot.running  { background: var(--c-alive); box-shadow: 0 0 6px var(--c-alive); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
@@ -185,7 +195,7 @@ body.calc-host .mk-page { padding-top: var(--space-3); }
   backdrop-filter: blur(6px);
 }
 .mk-runname { margin: 0; font-size: var(--fs-h1); }
-.mk-pill { padding: 2px 9px; border-radius: 999px; font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; border: 1px solid currentColor; }
+.mk-pill { padding: 2px var(--chip-pad-x); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; border: 1px solid currentColor; }
 .mk-pill.running  { color: var(--c-alive); }
 .mk-pill.stopped  { color: var(--c-dim); }
 .mk-pill.archived { color: var(--c-dim); opacity: .7; }
@@ -199,7 +209,7 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-meta b { color: var(--c-txt); font-weight: 400; }
 .mk-meta code { color: var(--c-dim); }
 .mk-tabs { display: flex; gap: var(--space-1); }
-.mk-tab { padding: var(--space-1) var(--space-3); border: 1px solid transparent; border-radius: 999px; background: none; color: var(--c-dim); font: inherit; font-size: var(--fs-md); cursor: pointer; }
+.mk-tab { padding: var(--space-1) max(var(--space-3), var(--chip-pad-x)); border: 1px solid transparent; background: none; color: var(--c-dim); font: inherit; font-size: var(--fs-md); cursor: pointer; }
 .mk-tab:hover { color: var(--c-txt); }
 .mk-tab.active { color: var(--c-brand); border-color: color-mix(in srgb, var(--c-brand) 45%, transparent); background: color-mix(in srgb, var(--c-brand) 12%, transparent); }
 
@@ -349,7 +359,7 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .tr-variant { border-left: 2px solid color-mix(in srgb, var(--c-pend) 50%, transparent); padding-left: var(--space-2); }
 .tr-variant-hdr { display: flex; align-items: baseline; gap: var(--space-2); margin-bottom: 2px; }
 .tr-variant-label { color: var(--c-pend); font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-.mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: var(--fs-sm); letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
+.mk-tag { display: inline-block; padding: 1px var(--chip-pad-x); font-size: var(--fs-sm); letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
 .mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 .mk-tag.fight { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 
@@ -440,7 +450,7 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-pairs.compact .mk-spr.big > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
 .mk-pairs.compact .mk-spr.big > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; }
 .mk-pairs.compact .mk-slot { width: var(--mk-spr-s); height: var(--mk-spr-s); }
-.mk-pairs.compact .mk-sub.faint { display: none; }
+.mk-pairs.compact .mk-sub.faint { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }  /* .sr-only: off screen, still read */
 
 
 @media (max-width: 760px) {
@@ -501,7 +511,9 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
  * the three-column spine, just tighter. .mk-now (the per-player battle card) keeps
  * stacking; only the pair row is pinned side by side. */
 @media (max-width: 600px) {
-  .mk-pair { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0; }
+  /* fit-content caps the bond column, so a long route wraps (.mk-bond-area below) instead of
+   * widening the spine and squeezing both halves. */
+  .mk-pair { grid-template-columns: minmax(0, 1fr) fit-content(32%) minmax(0, 1fr); gap: 0; }
   .mk-pair > *:nth-child(1) { grid-column: 1 !important; }
   .mk-pair > *:nth-child(2) { grid-column: 2 !important; }
   .mk-pair > *:nth-child(3) { grid-column: 3 !important; }
@@ -509,17 +521,34 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
   .mk-pair .mk-half-in { gap: var(--space-1); }
   .mk-pair .mk-half-nick { font-size: var(--fs-sm); }
   .mk-pair .mk-half-txt .mk-sub { font-size: var(--fs-xs); }
-  .mk-pair .mk-sub.faint { display: none; }   /* ability + held item: decisions.md #2 */
+  .mk-pair .mk-sub.faint { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }   /* ability + held item: decisions.md #2; .sr-only, so still read */
   .mk-pair .mk-spr.big, .mk-pair .mk-spr.big > span { width: 40px !important; height: 40px !important; }
   .mk-pair .mk-spr.big img.mon-sprite { width: 40px; height: 40px; }
   .mk-pair .mk-spr.big > span > img { width: calc(40px * 12 / 7) !important; height: calc(40px * 12 / 7) !important; margin: calc(40px * -5 / 14) !important; }
   .mk-pair .mk-slot { width: 40px; height: 40px; }
   .mk-pair .mk-half-txt .mk-hp-num { font-size: 10px; }
   .mk-bond { padding: var(--space-1) 2px; border-inline: 1px solid var(--c-sep); border-block: none; }
-  .mk-bond-area { font-size: 10px; }
+  /* Two lines rather than an ellipsis: on a phone the route name is the row's only label. */
+  .mk-bond-area { font-size: 10px; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
   .mk-bond-glyph { font-size: var(--fs-sm); }
-  .mk-bond-state { display: none; }
+  .mk-bond-state { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 }
+
+/* ── Timeline (/timeline): the run's story, one row per event ─────────────── */
+.tl-list { list-style: none; margin: 0; padding: 0; }
+.tl-ev { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: var(--space-3); border-bottom: 1px solid var(--c-sep); border-left: 3px solid var(--c-alive); }
+.tl-ev:last-child { border-bottom: none; }
+.tl-ev.death, .tl-ev.dead_zone { border-left-color: var(--c-dead); }
+.tl-ev.memorial { border-left-color: var(--c-dim); }
+.tl-ev.open { grid-template-columns: minmax(0, 1fr); border-left-color: var(--c-pend); }
+.tl-when { color: var(--c-dim); font-size: var(--fs-sm); padding-top: 2px; }
+.tl-what { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.tl-mons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.tl-mon { display: inline-flex; align-items: center; gap: var(--space-1); }
+.tl-ev.death .mk-spr, .tl-ev.dead_zone .mk-spr { filter: grayscale(1); opacity: .6; }
+.tl-tie { font-family: var(--font-mono); color: var(--c-dim); }
+.mk-zone > .mk-note { margin: 0 0 var(--space-3); }
+@media (max-width: 600px) { .tl-ev { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } }
 
 /* ── Log ───────────────────────────────────────────────────────────────── */
 
@@ -574,11 +603,9 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-newpage .mk-form { max-width: none; gap: var(--space-5); }
 .mk-field.big input { font-size: var(--fs-h1); padding: var(--space-3); }
 .mk-games { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.mk-gchip { padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge-ui, var(--c-edge)); border-radius: 999px; background: var(--c-card); color: var(--c-txt); font: inherit; font-size: var(--fs-md); cursor: pointer; }
+.mk-gchip { padding: var(--space-2) max(var(--space-3), var(--chip-pad-x)); border: 1px solid var(--c-edge-ui, var(--c-edge)); background: var(--c-card); color: var(--c-txt); font: inherit; font-size: var(--fs-md); cursor: pointer; }
 .mk-gchip:hover { border-color: var(--c-brand); }
 .mk-gchip.active { color: var(--c-bg); background: var(--c-brand); border-color: var(--c-brand); }
-.mk-gchip.detect { border-style: dashed; }
-.mk-gchip.detect.active { border-style: solid; }
 .mk-optgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--space-3); }
 /* the randomizer's option groups: one fieldset per UPR area, chips for modes, a range per curve */
 .mk-rgroups { columns: 2 340px; column-gap: var(--space-3); }
@@ -592,7 +619,7 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-rhelp.note { color: var(--c-pend); }
 .mk-rchoice { display: flex; flex-direction: column; gap: var(--space-2); }
 .mk-rchips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.mk-rchips .mk-gchip { padding: var(--space-1) var(--space-3); min-height: 36px; }
+.mk-rchips .mk-gchip { padding: var(--space-1) max(var(--space-3), var(--chip-pad-x)); min-height: 36px; }
 .mk-range { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label out" "range out"; gap: 2px var(--space-3); align-items: center; }
 .mk-range .mk-rlabel { grid-area: label; }
 .mk-range input[type=range] { grid-area: range; width: 100%; margin: 0; min-height: 28px; accent-color: var(--c-brand); }
@@ -685,7 +712,8 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: .96; }
 .mk-btn:disabled:active { scale: 1; }
 .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item { min-height: 40px; box-sizing: border-box; }
-.mk-btn:focus-visible, .mk-btn:has(> input:focus-visible), .mk-gchip:focus-visible, .mk-tab:focus-visible, .mk-rail-item:focus-visible, .mk-opt:focus-within {
+/* .mk-gchip / .mk-tab are clipped chips: their ring is inset (slink.css, the chip rule). */
+.mk-btn:focus-visible, .mk-btn:has(> input:focus-visible), .mk-rail-item:focus-visible, .mk-opt:focus-within {
   outline: 2px solid var(--c-brand); outline-offset: 2px;
 }
 /* Concentric: a button inside a padded 8px/10px surface keeps its corners inside the parent's. */

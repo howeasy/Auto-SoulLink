@@ -439,21 +439,68 @@ function M.battle_bench_problem(run)
     return nil
 end
 
+-- docs/gen2/OVERLAY_ADMISSION.md D5: the EXECUTED artifact a receipt is checked against. view == nil is the clean pack
+-- (every pre-overlay caller); otherwise view = {kind, rom_sha1, base_sha1, binding_sha256, checkpoint}
+-- (lua/gen2/artifact.lua). Returns the pack whose title row is the executed one (an overlay swaps in
+-- view.checkpoint), the executed sha1 (nil for a clean view: the O-23 owner rule below applies), kind and binding;
+-- or nil,why.
+local function executed(pack, title, view)
+    local base = type(pack) == "table" and type(pack.source) == "table" and pack.source.rom_sha1
+    if view == nil then return pack, nil, "clean", nil end
+    if type(view) ~= "table" or not base or type(pack.titles) ~= "table" or type(pack.titles[title]) ~= "table"
+       or type(view.rom_sha1) ~= "string" or #view.rom_sha1 ~= 40 then
+        return nil, "artifact view required"
+    end
+    if view.kind == "clean" then
+        if view.rom_sha1 ~= base or view.binding_sha256 ~= nil then return nil, "clean view is not this pack ROM" end
+        return pack, nil, "clean", nil
+    end
+    if view.kind ~= "overlay" or view.rom_sha1 == base or view.base_sha1 ~= base or not hex64(view.binding_sha256)
+       or type(view.checkpoint) ~= "table" then
+        return nil, "overlay view is not a bound overlay of this pack"
+    end
+    local titles, effective = {}, {}
+    for key, value in pairs(pack.titles) do titles[key] = value end
+    titles[title] = view.checkpoint
+    for key, value in pairs(pack) do effective[key] = value end
+    effective.titles = titles
+    return effective, view.rom_sha1, "overlay", view.binding_sha256
+end
+-- A receipt (or one of its runs) belongs to the executed kind only when it says so: an overlay names its kind and
+-- binding, a clean one names neither.
+local function kind_mismatch(item, kind, binding)
+    if kind == "overlay" then return item.artifact_kind ~= "overlay" or item.binding_sha256 ~= binding end
+    return (item.artifact_kind ~= nil and item.artifact_kind ~= "clean") or item.binding_sha256 ~= nil
+end
+
 -- scope, or nil,why: `receipt` is a PHYSICAL write-window receipt that may authorize `title`.
 -- scope = {kinds=M.WRITE_KINDS, covered={declared, proven}, uncovered={pack controls still OPEN}}.
-function M.qualified(pack, title, receipt)
+-- D5: an overlay view is proved only by receipts captured on that overlay (its own sha1, kind and binding) and by its
+-- OWN title's window: the O-23 Gold-for-Silver reuse is clean-only.
+function M.qualified(pack, title, receipt, view)
     local owner = M.RECEIPT_TITLE[title]
     if not owner then return nil, "no PHYSICAL write-window receipt path for " .. tostring(title) end
     if type(receipt) ~= "table" or receipt.schema ~= M.RECEIPT_SCHEMA or type(receipt.runs) ~= "table" then
         return nil, "PHYSICAL write-window receipt required"
+    end
+    local overlay_rom, kind, binding
+    if view ~= nil then
+        local effective
+        effective, overlay_rom, kind, binding = executed(pack, title, view)
+        if not effective then return nil, overlay_rom end
+        pack = effective
+        if kind == "overlay" then owner = title end
+    else
+        kind = "clean"
     end
     local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
     if type(data) ~= "table" or type(pack.source) ~= "table" or type(data.physical) ~= "table"
        or type(data.physical.required_controls) ~= "table" then
         return nil, "write-window receipt needs this title's checkpoint pack"
     end
-    local rom = owner == title and pack.source.rom_sha1 or M.OWNER_ROM_SHA1[owner]
-    if receipt.title ~= owner or receipt.rom_sha1 ~= rom or receipt.pack_commit ~= pack.source.commit then
+    local rom = overlay_rom or (owner == title and pack.source.rom_sha1 or M.OWNER_ROM_SHA1[owner])
+    if receipt.title ~= owner or receipt.rom_sha1 ~= rom or kind_mismatch(receipt, kind, binding)
+       or receipt.pack_commit ~= pack.source.commit then
         return nil, "write-window receipt belongs to another title, ROM or pack"
     end
     if not same(receipt.checkpoint, data.primary) then
@@ -466,7 +513,8 @@ function M.qualified(pack, title, receipt)
            or run.evidence_level ~= "PHYSICAL" or run.result ~= "PASS" then
             return "write-window receipt " .. mode .. " run is not a passed PHYSICAL gate run"
         end
-        if run.title ~= owner or run.rom_sha1 ~= rom or run.pack_commit ~= pack.source.commit
+        if run.title ~= owner or run.rom_sha1 ~= rom or kind_mismatch(run, kind, binding)
+           or run.pack_commit ~= pack.source.commit
            or run.fixture ~= owner .. M.RUNS[mode] or run.core_mode ~= "CGB" or run.input_mode ~= "normal_buttons"
            or not hex64(run.fixture_sha256) or not named(run.attempt_id) or ids[run.attempt_id]
            or not named(run.qualification_attempt_id) then
@@ -589,13 +637,24 @@ end
 -- U3 binding: true when the receipt's town and battle runs ran on exactly the fixture bytes a passed
 -- full-chain qualification report (tests/fixtures/gen2/receipts/<fixture>.qualification.json, decoded
 -- by the caller into reports[<fixture>]) recorded, from that report's attempt; else nil,why. Pure.
-function M.bind_fixture_qualification(receipt, reports)
+-- D5: a run is bound to the SELECTED view before its report: an overlay run names the overlay sha1, kind and binding, a
+-- clean run names neither (a clean Silver run is Gold's by O-23, so the clean ROM is checked by M.qualified).
+local function owned(run, view)
+    if type(run) ~= "table" then return false end
+    if view ~= nil and view.kind == "overlay" then
+        return run.rom_sha1 == view.rom_sha1 and not kind_mismatch(run, "overlay", view.binding_sha256)
+    end
+    return not kind_mismatch(run, "clean", nil)
+end
+function M.bind_fixture_qualification(receipt, reports, view)
     if type(receipt) ~= "table" or type(receipt.runs) ~= "table" or type(reports) ~= "table" then
         return nil, "receipt and qualification reports required"
     end
+    if view ~= nil and view.kind ~= "clean" and view.kind ~= "overlay" then return nil, "artifact view required" end
     for _, mode in ipairs({"town", "battle", "boxes", "battle_faint", "battle_bench"}) do
         local run = receipt.runs[mode]
         if mode ~= "town" and mode ~= "battle" and run == nil then goto continue end
+        if run ~= nil and not owned(run, view) then return nil, mode .. ": run belongs to another ROM or artifact kind" end
         local report = type(run) == "table" and reports[run.fixture]
         if type(report) ~= "table" or report.schema ~= "fixture-qualification-v1" or report.passed ~= true
            or type(report.errors) ~= "table" or next(report.errors) ~= nil then
@@ -624,7 +683,7 @@ function M.bind_fixture_qualification(receipt, reports)
     return true
 end
 
-function M.new(pack, title, io, evaluator, ownership, receipt)
+function M.new(pack, title, io, evaluator, ownership, receipt, view)
     assert(type(evaluator) == "table" and type(evaluator.check) == "function", "shared GB evaluator required")
     assert(type(ownership) == "table", "explicit host ownership observations required")
     for _, name in ipairs({"capture", "valid", "admitted", "no_conflicting_owner",
@@ -634,10 +693,17 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
     local self = {}
     local evaluate, evaluate_frame
     local scope, unqualified
+    -- D5: the checkpoint rows and the admitted identity are the EXECUTED artifact's (an invalid view leaves the
+    -- receipt unqualified: M.qualified refuses it, and no write is ever authorized)
+    local checked, executed_sha = pack, nil
+    if view ~= nil then
+        local effective = executed(pack, title, view)
+        if effective then pack, executed_sha = effective, view.rom_sha1 end
+    end
     if receipt == nil then
         unqualified = "Gen 2 checkpoint is SOURCE_CANDIDATE; runtime qualification is OPEN"
     else
-        local ok, result, why = pcall(M.qualified, pack, title, receipt)
+        local ok, result, why = pcall(M.qualified, checked, title, receipt, view)
         if ok then scope, unqualified = result, why
         else unqualified = "malformed write-window receipt: " .. tostring(result) end
     end
@@ -681,7 +747,9 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
         local owner = assert(hold.ownership_requirements, "game ownership facts required")
         local held = ownership.capture()
         if held == nil or ownership.valid(held) ~= true then return false, "frame identity unavailable" end
-        if ownership.admitted(title, pack.source.rom_sha1) ~= true then return false, "exact admitted identity unavailable" end
+        if ownership.admitted(title, executed_sha or pack.source.rom_sha1) ~= true then
+            return false, "exact admitted identity unavailable"
+        end
         if ownership.no_conflicting_owner() ~= true then return false, "another writer, save or trade owns the game" end
         if ownership.effective_wram_bank() ~= owner.effective_wram_bank then return false, "effective WRAM bank differs" end
         local function read(address, domain)
@@ -723,7 +791,8 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
                 "fresh bank/ownership policy required")
             local held = ownership.capture()
             assert(held ~= nil and ownership.valid(held) == true, "synchronous CPU hold unavailable")
-            assert(ownership.admitted(title, pack.source.rom_sha1) == true, "exact admitted identity unavailable")
+            assert(ownership.admitted(title, executed_sha or pack.source.rom_sha1) == true,
+                   "exact admitted identity unavailable")
             assert(ownership.no_conflicting_owner() == true, "another writer, save or trade owns the game")
             local function banks_match()
                 return ownership.mapped_rom_bank() == owner.mapped_rom_bank
@@ -785,7 +854,7 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
                 local failed = M.failing_predicates(primary, read)
                 if failed[1] then return false, failed[1] .. " predicate refused" end
                 if not banks_match() or ownership.valid(held) ~= true
-                    or ownership.admitted(title, pack.source.rom_sha1) ~= true
+                    or ownership.admitted(title, executed_sha or pack.source.rom_sha1) ~= true
                     or ownership.no_conflicting_owner() ~= true then
                     return false, "held identity, bank or ownership changed"
                 end

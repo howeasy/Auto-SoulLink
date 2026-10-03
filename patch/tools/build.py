@@ -129,7 +129,7 @@ def validate_frame_replay(spec, facts, clean):
             "gmain":spec["GMAIN"],"original_tail":tail["bytes"]}
 
 
-def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False):
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False, version=None):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
@@ -171,7 +171,9 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
     if trade_candidate:
         flag = "-DSLINK_NATIVE_COMPANION=1"
     entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
-    run([GCC, *CFLAGS, flag,
+    # The companion prints "SoulLink <version>" on the main menu (native_menu.h): the charmap bytes are a compile-time define
+    menu = ["-D" + gen3_title.menu_define(version or gen3_title.DEFAULT_VERSION)] if trade_candidate else []
+    run([GCC, *CFLAGS, flag, *menu,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
     run([LD, "-T", str(header.with_suffix(".ld")), "-e", entry,
          "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
@@ -244,6 +246,12 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
             data[offset:offset+8] = thumb_entry_jump(spec[key],destination)
             trade_detours.append({"address":spec[key],"original":spec[key+"_BYTES"],
                                   "replacement":data[offset:offset+8].hex(),"symbol":symbol})
+    title_spans = []
+    if production:
+        # The SoulLink title wordmark: static graphics in the ROM's free tail past the payload's linker bound
+        if gen3_title.TARGETS[title]["base"] < spec["CODE_CANDIDATE"] + 0x14000:
+            raise ValueError("title assets overlap the payload's linker region")
+        title_spans = gen3_title.apply_title(data, title)
     rom = out / "probe.gba"
     rom.write_bytes(data)
     receipt = {"status": "PRODUCTION_COMPANION" if production else "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
@@ -261,7 +269,22 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
                "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
                "frame_detour": frame_receipt,
                "trade_detours": trade_detours,
+               "title": {"spans": title_spans} if production else None,
+               # the version the payload prints on the main menu (native_menu.h), from the same --version
+               "menu": {"version": version or gen3_title.DEFAULT_VERSION,
+                        "text": gen3_title.menu_text(version or gen3_title.DEFAULT_VERSION)} if trade_candidate else None,
                "compiler": run([GCC, "--version"])}
+    if trade_candidate:
+        # Version-masked identity (owner ruling 2026-10-02, patch/tools/rom_identity.py): the menu version is a FIXED-WIDTH field, so a
+        # stamped build differs from this one only inside it. Record where the field is and the hashes with it zeroed.
+        field = gen3_title.menu_field(version or gen3_title.DEFAULT_VERSION)
+        payload_slot = rom_identity.slot_from_text(bytes(blob), field)
+        rom_slot = {"offset": spec["CODE_CANDIDATE"] - ROM_BASE + payload_slot["offset"], "length": payload_slot["length"]}
+        if bytes(data[rom_slot["offset"]:rom_slot["offset"] + rom_slot["length"]]) != field:
+            raise ValueError("the version field is not where the payload says it is")
+        receipt.update(canonical_sha1=rom_identity.canonical_sha1(bytes(data), [rom_slot]),
+                       canonical_payload_sha256=rom_identity.canonical_sha256(bytes(blob), [payload_slot]),
+                       version_slot=rom_slot, payload_version_slot=payload_slot)
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(f"{'PRODUCTION' if production else 'DIAGNOSTIC ONLY'}: {rom}")
     return out, receipt
@@ -270,9 +293,26 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
 PUBLISHED_TARGETS = {"firered":"FireRed", "leafgreen":"LeafGreen", "emerald":"Emerald"}
 
 
-def publish_native(title, rom_path, *, check=False):
+def equivalents_after_rebuild(old, new):
+    """The equivalent_* lists a republished record carries: earlier exact builds that are canonical-equal to the new one (same
+    canonical ROM and payload identity, so a version stamp only). A real change to the code retires them: they would vouch for
+    bytes that no longer match."""
+    if not old or old.get("canonical_sha1") != new["canonical_sha1"] \
+            or old.get("canonical_payload_sha256") != new["canonical_payload_sha256"]:
+        return {}
+    out = {}
+    sha1s = sorted({*old.get("equivalent_sha1s", ()), old["rom_sha1"]} - {new["rom_sha1"]})
+    payloads = sorted({*old.get("equivalent_payload_sha256", ()), old["payload_sha256"]} - {new["payload_sha256"]})
+    if sha1s:
+        out["equivalent_sha1s"] = sha1s
+    if payloads:
+        out["equivalent_payload_sha256"] = payloads
+    return out
+
+
+def publish_native(title, rom_path, *, check=False, version=None):
     """Build, round-trip and pin one vanilla ABI2 UPS; RR keeps its ABI1 pipeline."""
-    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True)
+    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True, version=version)
     clean, patched = Path(rom_path).read_bytes(), (out/"probe.gba").read_bytes()
     patch = make_ups.ups_create(clean, patched)
     if make_ups.ups_apply(clean, patch) != patched:
@@ -286,19 +326,69 @@ def publish_native(title, rom_path, *, check=False):
            "payload_sha256":receipt["payload_sha256"],
            "protected_spans":[{"offset":require_ready(title)["CODE_CANDIDATE"]-ROM_BASE,"size":receipt["payload_bytes"]}]
                + [{"offset":item.get("address",item.get("detour"))-ROM_BASE,"size":len(bytes.fromhex(item["original"]))}
-                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]}
+                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]
+               + [{"offset":span["offset"],"size":span["size"]} for span in receipt["title"]["spans"]],
+           "menu_version":receipt["menu"]["version"],
+           "canonical_sha1":receipt["canonical_sha1"],"canonical_payload_sha256":receipt["canonical_payload_sha256"],
+           "version_slot":receipt["version_slot"],"payload_version_slot":receipt["payload_version_slot"]}
     manifest = Path(DIST)/"gen3_companions.json"
     data = json.loads(manifest.read_text()) if manifest.exists() else {"schema":"slink-gen3-companions-v1","titles":{}}
+    old = data["titles"].get(title) or {}
     if check:
-        if (Path(DIST)/name).read_bytes() != patch or data["titles"].get(title) != row:
+        # equivalent_* lists name earlier exact builds proven canonical-equal; they are not part of what the source builds
+        if (Path(DIST)/name).read_bytes() != patch or {k: v for k, v in old.items() if not k.startswith("equivalent_")} != row:
             raise ValueError(f"{title} published UPS/manifest differs from source")
         print(f"CHECK OK: {name} and manifest reproduce")
     else:
         Path(DIST).mkdir(parents=True,exist_ok=True)
         (Path(DIST)/name).write_bytes(patch)
-        data["titles"][title]=row
+        data["titles"][title]={**row, **equivalents_after_rebuild(old, row)}
         manifest.write_text(json.dumps(data,indent=2,sort_keys=True)+"\n")
         print(f"PUBLISHED {name}: sha1 {row['rom_sha1']}")
+
+
+PINS_NAME = "companion_pins.json"
+
+
+def pins_path():
+    """The committed pin file, even while --check redirects DIST to a temp dir."""
+    return companion_pins.PINS
+
+
+def rr_pin_entry(patched, blob, version):
+    """Radical Red's row for patch/dist/companion_pins.json: it has no gen3_companions.json record. The version field is found by
+    its own bytes in the payload, so the slot cannot drift from what the compiler laid down."""
+    field = gen3_title.menu_field(version)
+    payload_slot = rom_identity.slot_from_text(blob, field)
+    slot = {"offset": CODE_BASE - ROM_BASE + payload_slot["offset"], "length": payload_slot["length"]}
+    if patched[slot["offset"]:slot["offset"] + slot["length"]] != field:
+        raise ValueError("the version field is not where the payload says it is")
+    return {"patched_md5": hashlib.md5(patched).hexdigest(), "rom_sha1": hashlib.sha1(patched).hexdigest(),
+            "canonical_sha1": rom_identity.canonical_sha1(patched, [slot]),
+            "version": version, "version_slot": slot}
+
+
+def read_pins():
+    return companion_pins.load(pins_path())
+
+
+def write_pin(slug, entry):
+    """Read-modify-write one slug of patch/dist/companion_pins.json (patch/tools/companion_pins.py); every other slug, and every key
+    of this one that the build does not own, is left as found. The equivalent_* lists name builds canonical-equal to the OLD
+    canonical identity, so a changed one retires them (update() merges and cannot delete, so they are emptied; absent = empty)."""
+    old = read_pins()["pins"].get(slug) or {}
+    fields = dict(entry)
+    if old.get("canonical_sha1") != entry["canonical_sha1"]:
+        fields.update({key: [] for key in old if key.startswith("equivalent_")})
+    companion_pins.update(slug, fields, pins_path())
+
+
+def pin_problems(slug, entry):
+    """Why the committed pin file's `slug` row is not what this build produces (empty = reproduces)."""
+    have = read_pins()["pins"].get(slug)
+    if have is None:
+        return [f"{slug}: no row in {PINS_NAME}"]
+    return [f"{slug}.{key}: committed {have.get(key)!r}, built {value!r}" for key, value in entry.items() if have.get(key) != value]
 
 
 def _toolchain_dir():
@@ -368,7 +458,10 @@ DEFAULT_RR = r"E:/Google Drive/SLink/Pokemon - Radical Red.gba"
 BATTLE_CALC_UPS = os.path.join(SRC, "rr41_battle_calc.ups")
 
 sys.path.insert(0, HERE)
+import companion_pins  # noqa: E402
+import gen3_title  # noqa: E402
 import make_ups  # noqa: E402
+import rom_identity  # noqa: E402
 
 CFLAGS = ["-mthumb", "-mcpu=arm7tdmi", "-mtune=arm7tdmi", "-Os", "-ffreestanding",
           "-fno-builtin", "-fomit-frame-pointer", "-fno-toplevel-reorder",
@@ -412,6 +505,8 @@ def main():
     ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
+    ap.add_argument("--version", default=None,
+                    help="SoulLink version printed on the main menu: 'dev' (default) or vX.Y.Z[-dev]; a release re-stamps it")
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
                     help="skip folding in the RR4.1_Custom Battle Calc delta "
@@ -421,6 +516,11 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.version is not None:
+        try:
+            gen3_title.check_version(args.version)
+        except ValueError as error:
+            ap.error(str(error))
     if args.trade_candidate:
         if args.arena_probe or args.check or args.describe or args.no_verify_md5:
             ap.error("trade candidate cannot combine with probes/check/describe/verification bypass")
@@ -442,7 +542,7 @@ def main():
         if args.no_verify_md5:
             ap.error("base verification bypass is not supported for pinned companion targets")
         try:
-            publish_native(args.target,args.rom,check=args.check)
+            publish_native(args.target,args.rom,check=args.check,version=args.version)
         except (ValueError,OSError) as error:
             ap.error(str(error))
         return 0
@@ -481,7 +581,9 @@ def main():
     elf = os.path.join(BUILD, "handlers.elf")
     binf = os.path.join(BUILD, "handlers.bin")
     print("[1/7] compile")
-    run([GCC, *CFLAGS, "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
+    # "SoulLink <version>" on the main menu (native_menu.h): the charmap bytes are a compile-time define
+    run([GCC, *CFLAGS, "-D" + gen3_title.menu_define(args.version or gen3_title.DEFAULT_VERSION),
+         "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
     print(f"[2/7] link @ {CODE_BASE:#x}")
     run([LD, "-T", os.path.join(SRC, "slink.ld"), "-e", "slink_hook",
          "--no-warn-rwx-segments", obj, "-o", elf])
@@ -584,17 +686,25 @@ def main():
                      "— Battle Calc layout changed; re-RE before re-pointing")
         data[bt_off:bt_off + 4] = thumb_bl(BT_DETOUR, bt_hook_addr)
         print(f"      re-pointed BattlePutTextOnWindow detour @ {BT_DETOUR:#x} -> shim {bt_hook_addr:#x}")
+    # The SoulLink title wordmark, in the 1.6 MB 0xFF run at 0x08B71D04 (no payload or Battle Calc byte lives there)
+    title_spans = gen3_title.apply_title(data, "radical_red")
+    print(f"      title wordmark: {len(title_spans)} spans; main menu line {gen3_title.menu_text(args.version or gen3_title.DEFAULT_VERSION)!r}")
     with open(out_rom, "wb") as f:
         f.write(data)
 
     _verify(out_rom)
     print("[7/7] patches")
     patched = bytes(data)
+    # --no-battle-calc is a different ROM from the published companion, so it neither writes nor checks the pin row
+    pin = None if args.no_battle_calc else rr_pin_entry(patched, blob, args.version or gen3_title.DEFAULT_VERSION)
     ups = make_ups.ups_create(clean, patched)
     assert hashlib.md5(make_ups.ups_apply(clean, ups)).hexdigest() == hashlib.md5(patched).hexdigest()
     with open(os.path.join(DIST, "SLink-RR.ups"), "wb") as f:
         f.write(ups)
     print(f"      SLink-RR.ups ({len(ups)} B) round-trip OK")
+    if pin and not args.check:
+        write_pin("rr", pin)
+        print(f"      {PINS_NAME}: rr md5 {pin['patched_md5']}, canonical sha1 {pin['canonical_sha1']}")
     if args.check:
         with open(committed_ups, "rb") as f:
             want = f.read()
@@ -607,6 +717,9 @@ def main():
                      f"{hashlib.md5(ups).hexdigest()}) != committed "
                      f"({len(want)} B, md5 {hashlib.md5(want).hexdigest()}) — "
                      "handlers.c and dist/SLink-RR.ups are out of sync; rebuild and commit")
+        problems = pin_problems("rr", pin) if pin else []
+        if problems:
+            sys.exit("CHECK FAIL: " + PINS_NAME + " differs from the rebuilt companion: " + "; ".join(problems))
         print(f"\nCHECK OK. dist/SLink-RR.ups reproduces from source "
               f"(patched md5 {hashlib.md5(patched).hexdigest()})")
         return 0

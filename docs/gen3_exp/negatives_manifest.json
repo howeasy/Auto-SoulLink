@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "source_head": "ccfa94e0021d8f9f11180866cf1c8d666bedc6dc",
+  "evidence": "PHYSICAL_DEV_OBSERVER",
+  "scope": "Three raw PC window claims, not client reporting or frozen final-cut qualification. Whole observer copies include legitimate pc_move positives. Other Emerald negative groups remain unrun, not silently imported.",
+  "receipts": [
+    {
+      "file": "docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log",
+      "artifact": "pc_release_bypass",
+      "scope": "observer",
+      "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only.",
+      "must_not": [
+        {
+          "kind": "faint",
+          "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "capture_wild",
+          "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "mon_given",
+          "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "whiteout",
+          "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "trade_done",
+          "why": "src/pokemon_storage_system.c:6391-6450,6558-6561: GRAB purges a box slot; held release clears the flag and skips the begin snapshot. Raw release is present unpaired; it is not expected-zero pc_move. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        }
+      ],
+      "pc_window": {
+        "frames": [
+          5813,
+          6991
+        ],
+        "source_head": "048db86b63258002dda0f099d6c9baeaf0e9f62c",
+        "full_shadow": "docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal.shadow.log",
+        "result": "docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt",
+        "claim": "raw observer window only; client reporting remains unqualified",
+        "shadow_text_sha256": "7c3cc13245a2a29fa73aa3c97ac3a0bccff3dd7acfaec3d76c2338fa4ac2a18c",
+        "result_text_sha256": "9f0fd4249328006918effb00c7b81e70363c63e61a38a91a77f29a768eacb6f4",
+        "hash_scope": "UTF-8 text with CRLF normalized to LF; original observer/result content unchanged"
+      }
+    },
+    {
+      "file": "docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log",
+      "artifact": "pc_release_cancel",
+      "scope": "observer",
+      "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only.",
+      "must_not": [
+        {
+          "kind": "faint",
+          "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "capture_wild",
+          "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "mon_given",
+          "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "whiteout",
+          "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "trade_done",
+          "why": "src/pokemon_storage_system.c:2917-2923: NO returns to storage without ReleaseMon. Raw release is absent in the cancel window; real release begin/completion fires afterward at9782. docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        }
+      ],
+      "pc_window": {
+        "frames": [
+          6991,
+          8667
+        ],
+        "source_head": "048db86b63258002dda0f099d6c9baeaf0e9f62c",
+        "full_shadow": "docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal.shadow.log",
+        "result": "docs/gen3_exp/probes/pc_048db86b_20261002T011841Z_normal_result.txt",
+        "claim": "raw observer window only; client reporting remains unqualified",
+        "shadow_text_sha256": "7c3cc13245a2a29fa73aa3c97ac3a0bccff3dd7acfaec3d76c2338fa4ac2a18c",
+        "result_text_sha256": "9f0fd4249328006918effb00c7b81e70363c63e61a38a91a77f29a768eacb6f4",
+        "hash_scope": "UTF-8 text with CRLF normalized to LF; original observer/result content unchanged"
+      }
+    },
+    {
+      "file": "docs/gen3_exp/probes/pc_full_box_observer.shadow.log",
+      "artifact": "pc_full_box",
+      "scope": "observer",
+      "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only.",
+      "must_not": [
+        {
+          "kind": "faint",
+          "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "capture_wild",
+          "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "mon_given",
+          "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "whiteout",
+          "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        },
+        {
+          "kind": "trade_done",
+          "why": "src/pokemon_storage_system.c:2862-2871: failed TryStorePartyMonInBox does not execute deposit join. Raw deposit is absent in the refusal window; deposit/box-place fires later at3154 into box1slot0. docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt and its complete observer log bind the frames; tests/unit/test_gen3_final_cut_exp.py replays existing strict raw-window/liveness helpers. These normalized expected-zero rows cover unrelated battle/acquisition events only. Native PC inputs do not execute a battle, acquisition or trade."
+        }
+      ],
+      "pc_window": {
+        "frames": [
+          1602,
+          2168
+        ],
+        "source_head": "ccfa94e0021d8f9f11180866cf1c8d666bedc6dc",
+        "full_shadow": "docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox.shadow.log",
+        "result": "docs/gen3_exp/probes/pc_ccfa94e0_20261002T012919Z_fullbox_result.txt",
+        "claim": "raw observer window only; client reporting remains unqualified",
+        "shadow_text_sha256": "726ca08f7aa3cb9a8aff2aba88c014e487a99815019b47c29026febf2362b5b0",
+        "result_text_sha256": "8b10e02537a0bd0b608b9b6d8be78a2856f56f63bc16aa6aaa226904cc8ecbdb",
+        "hash_scope": "UTF-8 text with CRLF normalized to LF; original observer/result content unchanged"
+      }
+    }
+  ],
+  "receipt_source_heads": [
+    "048db86b63258002dda0f099d6c9baeaf0e9f62c",
+    "ccfa94e0021d8f9f11180866cf1c8d666bedc6dc"
+  ]
+}

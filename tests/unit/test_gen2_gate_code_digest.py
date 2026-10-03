@@ -35,7 +35,7 @@ def receipt_writes(source):
                 dumped = dumped.left
             if not (isinstance(dumped, ast.Call) and ast.unparse(dumped.func) == "json.dumps"):
                 continue
-            if not any(word in target for word in ("RECEIPTS", "receipt_path", "receipts/", "path")) or "RUNS" in target:
+            if not any(word in target for word in ("RECEIPTS", "receipt_path", "receipt_file", "receipts/", "path")) or "RUNS" in target:
                 continue
             value = dumped.args[0]
             out.append((func.name, _is_stamped(value) or (isinstance(value, ast.Name) and value.id in stamped_names)))

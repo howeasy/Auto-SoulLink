@@ -1,0 +1,15 @@
+# G4 final cut 59a8c2c3846b514acc5b22451dfedc56716a3d80 -- tools/gen3_final_cut.py summary (written 2026-10-02T20:30:58Z)
+# RUN 8 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_gen3_exp_as_a_59a8c2c3.txt |
+| 2 | exp_static_grass_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_grass_gen3_exp_as_a_59a8c2c3.txt |
+| 3 | exp_static_surf_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_surf_gen3_exp_as_a_59a8c2c3.txt |
+| 4 | exp_static_rock_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_rock_gen3_exp_as_a_59a8c2c3.txt |
+| 5 | exp_static_altering0_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering0_gen3_exp_as_a_59a8c2c3.txt |
+| 6 | exp_static_altering1_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering1_gen3_exp_as_a_59a8c2c3.txt |
+| 7 | gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_gen3_exp_as_a_59a8c2c3.txt |
+| 8 | egg_receive_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_egg_receive_gen3_exp_as_a_59a8c2c3.txt |
+
+OVERALL: PASS (8/8 rows)

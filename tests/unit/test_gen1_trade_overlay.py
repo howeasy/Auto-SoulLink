@@ -54,6 +54,15 @@ class Fake:
     def call(self, name, *args):
         return getattr(self.driver, name)(self.driver, *args)
 
+    def consume(self):
+        expected = bytes(self.driver.expected[i] for i in range(1, 17))
+        base = self.ram["wSerialPartyMonsPatchList"]
+        backup = self.ram["wEnemyMons"] + self.derived["battle_struct_size"]
+        sp = 0xDE80
+        self.memory[base:base + 16] = self.memory[backup:backup + 16]
+        self.memory[sp:sp + 16] = expected[::-1]
+        return self.call("picked_up", sp)
+
     def arm(self):
         self.writer.arm(self.writer, "overworld")
 
@@ -155,7 +164,8 @@ def test_arm_stages_enemy_preimage_and_publishes_generation_last(command):
     assert f.overlay() == MAGIC + bytes((1, command, 7, 6, 255, 2, 1, 0)) + token
     assert f.writes[-1] == (r["wSerialPartyMonsPatchList"] + 6, 7)
     assert f.call("clobbered") is False
-    assert f.call("picked_up") is True
+    assert f.call("picked_up") is False  # a service poll is not consumption
+    assert f.consume() is True
     f.memory[r["wSerialPartyMonsPatchList"] + 2] ^= 1  # native owns scratch now
     assert f.call("clobbered") is False
     assert dict(f.call("service_address").items()) == {"bank": 0x3F, "addr": 0x4500}

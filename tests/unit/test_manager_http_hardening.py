@@ -256,7 +256,7 @@ async def test_corrupt_registry_returns_actionable_errors_without_mutation(manag
         pytest.fail("a corrupted registry must stop before spawning a run")
 
     monkeypatch.setattr(manager, "_spawn_run", unexpected_spawn)
-    for path, body in (("/api/runs/r1/delete", None), ("/api/runs/new", {"name": "New run"})):
+    for path, body in (("/api/runs/r1/delete", None), ("/api/runs/new", {"name": "New run", "game": "gen1"})):
         response = await manager_client.post(path, json=body)
         assert response.status == 503
         assert "repair registry.json" in (await response.json())["error"]
@@ -343,18 +343,18 @@ async def test_a_spawn_that_exits_on_startup_raises_with_its_reason(tmp_path, mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES) + [" gen3_ap", "GEN3_AP"])
-async def test_manager_refuses_to_create_an_unadmitted_game(manager_client, manager_dir, monkeypatch, game):
-    """AP FRLG stays listed with a 'not admitted' label (docs/gen3/PLAN.md:112), but a run for
-    it would be refused by the client at hello, so /api/runs/new refuses it first: 400, nothing
-    written, nothing spawned. Vanilla gen3 and gen3_e (Emerald, EG4) are still created."""
+@pytest.mark.parametrize("game", ["gen3_ap", " gen3_ap", "GEN3_AP", "gen1_ap"])
+async def test_manager_refuses_to_create_an_archipelago_game(manager_client, manager_dir, monkeypatch, game):
+    """The Archipelago games are no longer listed (owner 2026-10-02: no SLink client supports them
+    yet), so /api/runs/new refuses their keys like any unlisted game: 400, nothing written, nothing
+    spawned. Vanilla gen3 and gen3_e (Emerald, EG4) are still created."""
     async def unexpected_spawn(*args, **kwargs):
-        pytest.fail("an unadmitted game must not spawn a run")
+        pytest.fail("an unlisted game must not spawn a run")
 
     monkeypatch.setattr(manager, "_spawn_run", unexpected_spawn)
     response = await manager_client.post("/api/runs/new", json={"name": "x", "game": game})
     assert response.status == 400
-    assert "cannot create a run" in (await response.json())["error"]
+    assert "choose the game" in (await response.json())["error"]
     assert manager._load_registry() == []
     assert [p.name for p in manager_dir.iterdir()] == []
 
@@ -377,3 +377,59 @@ async def test_manager_creates_an_emerald_run_now_that_eg4_admits_it(manager_cli
 def test_a_saved_run_with_an_unknown_game_key_still_labels():
     """A registry run saved under a game key no longer in GAMES must not raise KeyError."""
     assert manager.GAME_LABELS.get("gen3_gone", "gen3_gone") == "gen3_gone"
+
+
+@pytest.mark.parametrize("locks", [1, 4, 5])
+def test_atomic_json_retries_only_target_permission_locks(tmp_path, monkeypatch, locks):
+    import time
+    path = tmp_path / "locked.json"
+    path.write_text('{"old":true}')
+    replace = json_files.os.replace
+    calls, delays = [], []
+    def locked(source, target):
+        calls.append((source, target))
+        if len(calls) <= locks:
+            raise PermissionError("Drive lock")
+        return replace(source, target)
+    monkeypatch.setattr(json_files.os, "replace", locked)
+    monkeypatch.setattr(time, "sleep", delays.append)
+    if locks == 5:
+        with pytest.raises(PermissionError, match="Drive lock"):
+            json_files.atomic_write_json(path, {"new": True})
+        assert json.loads(path.read_text()) == {"old": True}
+    else:
+        json_files.atomic_write_json(path, {"new": True})
+        assert json.loads(path.read_text()) == {"new": True}
+    assert len(calls) == min(locks + 1, 5)
+    assert delays == pytest.approx([0.2 * (n + 1) for n in range(min(locks, 4))])
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_atomic_json_does_not_retry_non_permission_error(tmp_path, monkeypatch):
+    calls = []
+    def broken(*args):
+        calls.append(args)
+        raise OSError("disk full")
+    monkeypatch.setattr(json_files.os, "replace", broken)
+    with pytest.raises(OSError, match="disk full"):
+        json_files.atomic_write_json(tmp_path / "out.json", {})
+    assert len(calls) == 1 and not (tmp_path / "out.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_obs_config_is_published_atomically(tmp_path, monkeypatch):
+    from server.obs_controller import OBSController
+    obs = OBSController.__new__(OBSController)
+    path = tmp_path / "obs.json"
+    path.write_text('{"old":true}')
+    obs._config_path, obs._config = str(path), {"players": {}}
+    replace = json_files.os.replace
+    seen = []
+    def publish(source, target):
+        assert json.loads(path.read_text()) == {"old": True}
+        seen.append(json.loads(Path(source).read_text()))
+        return replace(source, target)
+    monkeypatch.setattr(json_files.os, "replace", publish)
+    obs.save_config()
+    assert seen == [{"players": {}}] and json.loads(path.read_text()) == obs._config
+    assert not list(tmp_path.glob("*.tmp"))

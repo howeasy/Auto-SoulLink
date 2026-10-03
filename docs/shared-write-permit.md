@@ -168,6 +168,7 @@ Gen 1 evidence. Gen 2 runtime activation is outside this extraction.
 
 Non-author review and unchanged independent Gen 1 physical receipts remain
 required before accepting the rebind. Affected lanes are `live-new-gates`,
-`duo-pairs`, `inspect-purergb-overlay` and `duo-pairs-purergb`. Rollback must restore
+`duo-pairs`, `inspect-purergb` (the overlay builds; it absorbed `inspect-purergb-overlay`
+on 2026-10-02) and `duo-pairs-purergb`. Rollback must restore
 the Gen 1 writes/Entry loading changes and bundle manifest together; leaving a
 consumer pointed at an omitted module is not a valid rollback.

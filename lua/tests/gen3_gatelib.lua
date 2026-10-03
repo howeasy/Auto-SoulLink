@@ -165,22 +165,33 @@ function Lib.open(name)
     end
 
     local admitted
-    local function admit()
-        if admitted then return admitted end
-        local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
+    -- The cartridge's identity exactly as lua/gen3/run.lua hands it to Entry (one builder, so the
+    -- bare Entry.admit below and the launcher's Entry.admit_routed see the same cartridge).
+    local function admit_args(Entry)
         local function rom_read(off, len)
             local out = {}
             for i = 1, len do out[i] = memory.read_u8(off + i - 1, "ROM") end
             return out
         end
         local ok_hc, code = pcall(Entry.header_code, rom_read)
-        local why
-        admitted, why = Entry.admit({
+        return {
             root = ROOT, json = json, rom_read = rom_read, header_code = ok_hc and code or "",
             rom_hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
-        })
+        }
+    end
+    local function admit()
+        if admitted then return admitted end
+        local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
+        local why
+        admitted, why = Entry.admit(admit_args(Entry))
         if not admitted then t.fail("cartridge admitted by lua/gen3/entry.lua", why) end
         return admitted
+    end
+    -- The LAUNCHER's verdict on this cartridge (Entry.admit_routed, what lua/slink.lua and run.lua
+    -- call): the admission, or nil + the refusal. Patch-first: a clean RR is refused here.
+    function t.routed()
+        local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
+        return Entry.admit_routed(admit_args(Entry))
     end
 
     -- A fresh Safety + Writes (+ native instance unless with_native is false) over the entry.lua

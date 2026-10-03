@@ -10,18 +10,30 @@ import gen3_nature_rows as n
 from server.adapters import gen3_codec as c
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def staged_rr_companion():
+    """The staged RR companion (gitignored build output), here or up the tree; absent skips.
+    own_facts() refuses anything but the pinned COMPANION_SHA1, so a wrong one fails."""
+    from e2e_duo import GEN3_TITLES
+    rel = GEN3_TITLES['radical_red']['staged']
+    for base in (ROOT, *ROOT.parents):
+        if (base / rel).is_file():
+            return base / rel
+    pytest.skip(f'{rel} absent (build the RR companion patch)')
+
+
 @pytest.fixture
 def producer():
     from e2e_duo import gen3_decode, gen3_key
     before = gen3_decode((ROOT/'tests/fixtures/gen3/rr_battle2.sav').read_bytes(), rr=True)
     partner = gen3_decode((ROOT/'tests/fixtures/gen3/rr_battle2_b.sav').read_bytes(), rr=True)
     old = deepcopy(before[0][1]); new = deepcopy(old)
-    target=n.own_facts(type('R',(),{'_gen3_rom':lambda s,i:'E:/Google Drive/SLink/patch/build/slink_RR.gba'})())['target_nature']
+    rom = staged_rr_companion()
+    target=n.own_facts(type('R',(),{'_gen3_rom':lambda s,i:str(rom)})())['target_nature']
     new['personality'] += (target - old['personality'] % 25) % 25 or 25
     raw = c.encode_party_mon(old, rr=True)
     post = c.decode_party_mon(c.encode_party_mon(new, rr=True), rr=True)
     after = deepcopy(before); after[0][1] = post
-    rom = Path('E:/Google Drive/SLink/patch/build/slink_RR.gba')
     sha = hashlib.sha1(rom.read_bytes()).hexdigest()
     pre = dict(key=gen3_key(old),slot=1,raw_hex=raw.hex(),raw_sha1=hashlib.sha1(raw).hexdigest(),rom_sha1=sha)
     change = dict(event='key_change',old_key=gen3_key(old),new_key=gen3_key(post),reason='nature_change')

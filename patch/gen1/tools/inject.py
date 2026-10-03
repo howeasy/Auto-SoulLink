@@ -41,6 +41,7 @@ from manifest import (  # noqa: E402
     MENU_PATCHES,
     PROTECTED_RANGE,
 )
+from title_screen import DEFAULT_VERSION, FREE_FROM, title_spans  # noqa: E402
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 PAYLOAD_FILE = os.path.normpath(os.path.join(_HERE, "..", "dist", "slink_bank3f.bin"))
@@ -118,13 +119,15 @@ def describe(rom: bytes) -> dict:
     return out
 
 
-def inject(rom: bytes, payload: bytes | None = None) -> bytes:
+def inject(rom: bytes, payload: bytes | None = None, version: str = DEFAULT_VERSION) -> bytes:
     """Return the patched ROM, or raise InjectError having written nothing."""
     payload = payload if payload is not None else load_payload()
     state = describe(rom)
 
     if not state["size_ok"]:
         raise InjectError(f"expected a {ROM_SIZE}-byte Game Boy ROM, got {len(rom)} bytes")
+    if len(payload) > FREE_FROM - INJECT_OFFSET:
+        raise InjectError("the payload runs into the title band at the end of bank $3F")
 
     # ── Already patched? Say which, and refuse the ones we cannot safely redo. ─────────
     # The reapply matrix, stated rather than discovered at runtime: an exact match is a
@@ -153,7 +156,11 @@ def inject(rom: bytes, payload: bytes | None = None) -> bytes:
             f"the VBlank hook site {HOOK_SITE:#06x} holds {site}, expected "
             f"{HOOK_ORIGINAL.hex()}")
     lo, hi = PROTECTED_RANGE
-    for off, original, new, why in MENU_PATCHES:
+    try:
+        spans = MENU_PATCHES + title_spans(rom, version)
+    except ValueError as exc:
+        raise InjectError(f"refusing to patch; nothing was written: {exc}") from None
+    for off, original, new, why in spans:
         if not (off + len(new) <= lo or off > hi):
             problems.append(f"{off:#06x} ({why}) overlaps the protected cartridge header")
         found = rom[off:off + len(original)]
@@ -167,7 +174,7 @@ def inject(rom: bytes, payload: bytes | None = None) -> bytes:
     # ── Write ─────────────────────────────────────────────────────────────────────────
     data = bytearray(rom)
     data[INJECT_OFFSET:INJECT_OFFSET + len(payload)] = payload
-    for off, _original, new, _why in MENU_PATCHES:
+    for off, _original, new, _why in spans:
         data[off:off + len(new)] = new
     data[HOOK_SITE + 1] = HOOK_BANK
     data[HOOK_SITE + 3] = HOOK_TARGET & 0xFF
@@ -181,7 +188,7 @@ def inject(rom: bytes, payload: bytes | None = None) -> bytes:
         raise InjectError("internal error: the cartridge header changed")
     if len(out) != len(rom):
         raise InjectError("internal error: the ROM changed size")
-    for off, _original, new, why in MENU_PATCHES:
+    for off, _original, new, why in spans:
         if out[off:off + len(new)] != new:
             raise InjectError(f"internal error: {why} did not land at {off:#06x}")
     if out[INJECT_OFFSET:INJECT_OFFSET + len(payload)] != payload:
@@ -195,6 +202,8 @@ def main() -> int:
     ap.add_argument("rom")
     ap.add_argument("out", nargs="?")
     ap.add_argument("--check", action="store_true", help="report only, write nothing")
+    ap.add_argument("--version", default=DEFAULT_VERSION,
+                    help="shown on the main menu: dev (default) or vX.Y.Z[-dev]")
     args = ap.parse_args()
 
     with open(args.rom, "rb") as f:
@@ -212,7 +221,7 @@ def main() -> int:
     if not args.out:
         ap.error("an output path is required unless --check is given")
     try:
-        out = inject(rom)
+        out = inject(rom, version=args.version)
     except InjectError as exc:
         print(f"[gen1-inject] {exc}", file=sys.stderr)
         return 1

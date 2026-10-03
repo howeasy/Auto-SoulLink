@@ -204,7 +204,7 @@ Signed cell grammar (tools/verify_gen2_release.py g4_signature_errors): `owner Y
 | G2 | — | — | — | — |
 | G3a | — | — | — | — |
 | G3 | — | — | — | — |
-| G4 | owner 2026-09-26: "Sign G4 now (Recommended)" | b4741403 | overlays Crystal b405446e / Gold 69067c4b / Silver 583d8df4 (UPS 88ca93d1 / a40ba8e2 / c9ffe317); signed in chat after the owner found the Manager could not provision the patched cart; promotion (`--promote-overlays`) follows the re-sweep at the post-wiring digest | — |
+| G4 | owner 2026-10-02: "Sign G4 now (Recommended)" | dc0a9c5b | overlays Crystal d5f342db / Gold 51b076ac / Silver 209e0b46 (UPS 473cf2ba / 7f56020d / 408f8a57), canonical identity (version field, checksums and Stadium table masked, patch/tools/rom_identity.py) 69dff8c2 / 12b41ebc / 891a3fa7; re-signed in chat for the rebuilt SoulLink overlays (wordmark-only titles, "SoulLink dev" on the main menu, all three booted live) because the 2026-09-26 signature (overlays b405446e / 69067c4b / 583d8df4, tree b4741403) covered the previous builds; signed together with the owner ruling "Version-masked identity", so the signature rests on the canonical identity and a release stamp that only changes the version field keeps it; promotion (`--promote-overlays`) follows the re-sweep at the post-wiring digest | — |
 | G5 | — | — | — | — |
 | G6 | — | — | — | — |
 

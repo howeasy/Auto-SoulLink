@@ -156,11 +156,16 @@ def _absent_gen2_clone(exc):
     while exc is not None and id(exc) not in seen:
         seen.add(id(exc))
         name = getattr(exc, "filename", None) if isinstance(exc, FileNotFoundError) else None
-        if name:
-            rel = os.path.relpath(os.path.abspath(str(name)), _GEN2_BUILD)
+        # A worktree under F:/slink-work/wt reaches .cache through a junction, so the tool reports the
+        # missing file at its RESOLVED path: accept the build tree and the junction's target alike.
+        for root in dict.fromkeys((_GEN2_BUILD, os.path.realpath(_GEN2_BUILD))) if name else ():
+            try:
+                rel = os.path.relpath(os.path.abspath(str(name)), root)
+            except ValueError:   # another drive on Windows: outside this root
+                continue
             repo = rel.replace("\\", "/").split("/")[0]
-            if not rel.startswith("..") and repo and not os.path.isdir(os.path.join(_GEN2_BUILD, repo)):
-                return f"{repo} not cloned: {os.path.join(_GEN2_BUILD, repo)}"
+            if not rel.startswith("..") and repo and not os.path.isdir(os.path.join(root, repo)):
+                return f"{repo} not cloned: {os.path.join(root, repo)}"
         exc = exc.__cause__ or exc.__context__
     return None
 

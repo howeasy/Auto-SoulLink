@@ -43,6 +43,45 @@ local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
 end
 
+-- Diagnostics only: the observer's input_ready battle_menu is the stable input
+-- boundary. Do not sample the earlier wBattleMode transition (enemy data may
+-- not exist yet), and do not log every frame/turn of the same encounter.
+function PI.hunt_diagnostics(sting, emit)
+    local encounters, candidates, unreadable, mismatches, sampled = 0, 0, 0, 0, false
+    local self = {}
+    function self.observe(point, foe, phase, frame, read_error)
+        if point.battle_mode ~= 1 then sampled = false; return end
+        if sampled or phase ~= "hunt" or point.input_ready ~= true
+           or not point.ui or point.ui.kind ~= "battle_menu" then return end
+        sampled = true
+        encounters = encounters + 1
+        local valid = type(foe) == "table" and integer(foe.species_id, 1, 251)
+                      and integer(foe.level, 1, 100) and type(foe.moves) == "table" and #foe.moves == 4
+        local moves, candidate = {}, false
+        if valid then
+            for i, move in ipairs(foe.moves) do
+                if not integer(move, 0, 255) then valid = false; break end
+                moves[i] = move
+                if move == sting then candidate = true end
+            end
+        end
+        if not valid then moves, candidate = {}, false; unreadable = unreadable + 1 end
+        if candidate then candidates = candidates + 1 end
+        local detected = point.foe_sting == true
+        if valid and detected ~= candidate then mismatches = mismatches + 1 end
+        emit({schema="gen2-poison-hunt-encounter-v1", encounter=encounters, frame=frame,
+              map_group=point.map_group, map_number=point.map_number, readable=valid,
+              species_id=valid and foe.species_id or 0, level=valid and foe.level or 0, moves=moves,
+              candidate=candidate, foe_sting=detected,
+              read_error=not valid and (read_error or "enemy battle view unavailable") or nil})
+    end
+    function self.summary()
+        return {schema="gen2-poison-hunt-summary-v1", encounters=encounters, candidates=candidates,
+                unreadable=unreadable, foe_sting_mismatches=mismatches}
+    end
+    return self
+end
+
 -- Pure: first step of a cheapest path (floor 1, grass GRASS_COST) to any goal tile; "arrived" on a goal.
 -- Warps are walls (never entered by accident); the first step must be live-steppable. Steps follow the shared
 -- rule (lua/tests/gen2_walk.lua): with map.ledges a HOP_* tile is land and hops from it in its direction.
@@ -558,6 +597,11 @@ function PI.new(ctx, SG, F, FI, opts)
     local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES, target=opts.target})
     local base = SG.qualify_observer(ctx)
     local sting = facts.moves.POISON_STING
+    local hunt = PI.hunt_diagnostics(sting, function(row)
+        row.moves = ctx.json.array(row.moves)
+        if ctx.log then ctx.log("POISON_ENCOUNTER " .. ctx.json.encode(row)) end
+    end)
+    driver.hunt_summary = hunt.summary
     -- Diagnostics only (never an oracle): after STUCK_FRAMES on one tile, log the map-event state and every
     -- map object / object struct once, labels from the title's rgblink .sym (Gold runs 1-2: a blocker at
     -- Route 30 (5,23) with no trainer battle).
@@ -604,9 +648,10 @@ function PI.new(ctx, SG, F, FI, opts)
         end
         point.poison_fainted = opts.fainted() == true
         local battle = ctx.reads.read_battle()
+        local foe, foe_error
         point.active_slot = battle and battle.mode ~= 0 and battle.active_slot or nil
         if battle and battle.mode ~= 0 then
-            local foe = ctx.reads.read_battle_mon("enemy")
+            foe, foe_error = ctx.reads.read_battle_mon("enemy")
             point.foe_sting = false
             for _, move in ipairs(foe and foe.moves or {}) do if move == sting then point.foe_sting = true end end
             local mine = ctx.reads.read_battle_mon("player")
@@ -635,6 +680,7 @@ function PI.new(ctx, SG, F, FI, opts)
                 point.ui.pp = mine and mine.pp or nil
             else point.input_ready = false end
         end
+        hunt.observe(point, foe, driver.phase, ctx.api.framecount(), foe_error)
         -- Diagnostics only: one line per battle start/end and per move choice screen (party HP/status).
         local mode = point.battle_mode
         local moves = point.ui and point.ui.kind == "move_menu" and type(point.ui.items) == "table"

@@ -1,6 +1,6 @@
 # XG3 gift, egg and scripted-static SOURCE census (2026-09-29)
 
-This card adds `expansion_gifts.json` for the unrouted `gen3_exp` build `28877d73`. It is a declaration census, not a checkpoint gift-area list or a live observer qualification. `write_checkpoint.json` still has `gift_areas: []` and the open XG3 entry; no routing changes were made.
+This card adds `expansion_gifts.json` for the unrouted `gen3_exp` build `28877d73`. It is a declaration census, not a checkpoint gift-area list or a live observer qualification. The original card left `write_checkpoint.json` with `gift_areas: []`; EXP-GIFT-AREAS (below) has since consumed the census. No routing changes were made.
 
 ## Pin and method
 
@@ -23,3 +23,22 @@ Four active rows have no single resolved area: Kyogre at `data/maps/MarineCave_E
 The first new missing-census test failed RED with `FileNotFoundError` for `expansion_gifts.json`. Independent review `cx-be402c88` found truncated nested native arguments, incomplete include closure, latent opponent `createmon` classification, and the static `gift_area` hazard. New corrective tests failed RED on absent balanced-argument and closure functions (`2 failed, 2 passed`); after correction all four focused tests passed (`4 passed in 1.26s`). The generator's `--check` compares the artifact byte for byte against the pinned source. No emulator, new build, full suite, or live claim was made.
 
 Next: independently review source reachability, expand shared Kecleon caller maps, resolve the two cave maps without inventing areas, and decide which gifts/eggs belong in checkpoint `gift_areas`. Only then add checkpoint consumption in its own scoped card and obtain PHYSICAL observer receipts for representative gifts, eggs, and statics.
+
+## EXP-GIFT-AREAS (2026-10-01): checkpoint consumption
+
+`write_checkpoint.json` now emits `gift_areas: {"ids": [...], "source": ...}` (the shape `lua/gen3/client.lua:121-138` reads; the old `[]` made it treat every area as a gift area, so no `no_catch` or NEW ENCOUNTER banner could fire). The five ids are the areas of the active gift/egg rows, each read through `area_map.json`:
+
+| id (map group:num) | source declaration |
+| --- | --- |
+| `lavaridge_town` (0:12) | `LavaridgeTown/scripts.inc:245` giveegg Wynaut |
+| `littleroot_town_professor_birchs_lab` (1:4) | `LittlerootTown_ProfessorBirchsLab/scripts.inc:336,377,418` givemon Cyndaquil, Totodile, Chikorita |
+| `mossdeep_city_stevens_house` (14:7) | `MossdeepCity_StevensHouse/scripts.inc:86` givemon Beldum |
+| `route119_weather_institute_2f` (32:1) | `Route119_WeatherInstitute_2F/scripts.inc:85` givemon Castform |
+| `rustboro_city_devon_corp_2f` (11:1) | `RustboroCity_DevonCorp_2F/scripts.inc:146,191` givemon Lileep, Anorith |
+
+Why `area_map.json` grew from 240 to 253 entries: before, none of these maps had an area of their own, so the census `gift_area` column fell back (BFS) onto neighbouring WILD routes (`route_101`, `route_104`, `route_112`) which must never be gift areas. `tools/gen_area_map.py` now names the five gift maps (the map's own location name, as Emerald's `statics.json` gifts) and the eight static-battle maps (their MAPSEC area, as Emerald's statics): AncientTomb 24:68 `ancient_tomb`, AquaHideout_B1F 24:24 `aqua_hideout`, BattleFrontier_OutsideEast 26:14 `battle_frontier`, DesertRuins 24:6 `desert_ruins`, IslandCave 24:67 `island_cave`, MarineCave_End 24:103 `marine_cave`, SkyPillar_Top 24:85 `sky_pillar`, TerraCave_End 24:105 `terra_cave`. The Kyogre/Groudon rows therefore now resolve to an area (they were the two "no connected mapped area" rows above).
+
+`tools/gen_gen3_write_checkpoint.py` fails the build if a gift map has no area, or if any gift area is also a wild encounter area in `expansion_encounters.json` (a `route_101`-class leak). Statics are not gift areas: Marine/Terra Cave Kyogre/Groudon are `setwildbattle` fights that may be caught, Kecleon callers (Route 119/120) likewise, and the runtime starter (`src/battle_setup.c:1009`) happens on wild `route_101` before the player has balls. The Daycare egg, NPC trades and Mystery Gift are named exclusions, not covered by this list.
+
+Side effect of the new area entries: the BFS area of 28 trainers moved (13 Lavaridge gym `route_112` to `lavaridge_town`, 6 Weather Institute `route_119` to `route119_weather_institute_2f`, 9 Aqua Hideout `lilycove_city` to `aqua_hideout`), so `gen3_exp_trainers.json` was regenerated (the calc set `EmeraldExpansion.js` it also writes is byte-identical) and one trainer-set test pin updated. Wild encounters are unchanged.
+

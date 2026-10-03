@@ -1,0 +1,11 @@
+# G4 final cut 59a8c2c3846b514acc5b22451dfedc56716a3d80 -- tools/gen3_final_cut.py summary (written 2026-10-02T20:28:42Z)
+# RUN 4 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | choice_gift_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_choice_gift_gen3_exp_as_a_59a8c2c3.txt |
+| 2 | gift_box_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_gift_box_gen3_exp_as_a_59a8c2c3.txt |
+| 3 | whiteout_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_whiteout_gen3_exp_as_a_59a8c2c3.txt |
+| 4 | release_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_release_gen3_exp_as_a_59a8c2c3.txt |
+
+OVERALL: PASS (4/4 rows)

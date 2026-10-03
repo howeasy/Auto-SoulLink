@@ -67,6 +67,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from server.adapters import get_adapter
 from server.server import SLinkServer, build_app
+from tests.unit.companion_evidence import companion
 from tests.unit.test_dashboard_contract import parse
 
 # ── the two admitted Gen 3 cartridges ─────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ from tests.unit.test_dashboard_contract import parse
 # artifact kind is set once from the first hello (server.py:2174) and every later hello
 # must agree, or the foundation lock refuses it (test_mixed_foundations).
 RUNS = {
-    "firered": ("clean", 27, "Leader", "Roxanne"),
+    "firered": ("companion", 27, "Leader", "Roxanne"),   # a clean FireRed is refused (patch-first, 2026-10-02)
     "firered_rr": ("companion", 43, "Gym Leader", "Falkner"),
 }
 
@@ -136,9 +137,9 @@ def _events(rom_type: str) -> list[dict]:
     a_party = [_party(A_PIKA, 25, "Sparky", 12)]
     b_party = [_party(B_RATT, 19, "Ratty", 12, status=POISON, stages=STAGES)]
     return [
-        {"event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
+        {**companion(rom_type), "event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
          "trainer_name": "ALICE", "has_pokeballs": True, "party": []},
-        {"event": "hello", "player": "b", "rom_type": rom_type, "artifact_kind": kind,
+        {**companion(rom_type), "event": "hello", "player": "b", "rom_type": rom_type, "artifact_kind": kind,
          "trainer_name": "BOB", "has_pokeballs": True, "party": []},
         {"event": "tick", "player": "a", "has_pokeballs": True,
          "party": [_party(A_BOOT, 1, "Boot", 5, slot=0)]},
@@ -587,3 +588,22 @@ def _battle_sides(board):
     foe = next((n for n in by_class(battle, "mk-cbt") if "foe" in (n.get("class") or "").split()), None)
     assert mine is not None and foe is not None, "the battle drew no own mon / no foe"
     return mine, foe
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connected", [False, True])
+@pytest.mark.parametrize("admission", ["admitted", "rejected"])
+async def test_companion_refusal_renders_patch_advice_not_wrong_save(tmp_path, connected, admission):
+    from server.adapters.base import companion_required_reason
+    from server.board import connection_state
+    reason = companion_required_reason("arbitrary title")
+    player = {"identity_error": reason, "connected": connected, "admission": admission}
+    state = connection_state(player, live=True)
+    assert state["slug"] == "companion" and "patch" in state["label"].lower()
+    assert "cartridge download" in state["line"] and "/patcher" in state["line"]
+    assert connection_state({"identity_error": "Trainer identity mismatch"}, live=True)["slug"] == "identity"
+    server = SLinkServer(data_dir=str(tmp_path))
+    server.state.identity_error["a"] = reason
+    async with TestClient(TestServer(build_app(server))) as client:
+        html = await (await client.get("/")).text()
+    assert "Companion patch required" in html and "Patch this cartridge" in html

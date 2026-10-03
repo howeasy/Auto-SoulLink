@@ -1,0 +1,47 @@
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_scripted_play.ini --lua=lua/tests/gen3_scripted_play.lua patch/build/gen3_pokeemerald.gba
+[gate] gen3_scripted_play: (no RESULT line)  (12s)
+launch ok flag (unreliable): False
+run dir: C:\slink-wt\exp-xg3-state\pcruns\exp_pc
+--- patch/build/gen3_scripted_play_emerald_result.txt True
+phase start frame=1 title=emerald_expansion_28877d73
+phase resume frame=1 from=emerald_enter_pc
+phase shadow frame=613 observer started admitted_by=hash
+phase leg-start frame=613 emerald_enter_pc
+phase emerald_enter_pc-start frame=613 at (6,17)
+phase in-pc frame=733 map=514 at=(7,8)
+phase leg-state-saved frame=733 emerald_enter_pc -> C:/slink-wt/exp-xg3-state/pcstates/slink_em_emerald_enter_pc.State
+phase leg-done frame=733 emerald_enter_pc
+phase leg-start frame=733 emerald_pc_deposit
+phase pc-exit frame=1537 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1643 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1749 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=1855 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=1887 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase deposited frame=1887 party 2 -> 1, 504F4F4D:20250925 now box 0 slot 2
+phase leg-state-saved frame=1887 emerald_pc_deposit -> C:/slink-wt/exp-xg3-state/pcstates/slink_em_emerald_pc_deposit.State
+phase leg-done frame=1887 emerald_pc_deposit
+phase leg-start frame=1887 emerald_pc_withdraw
+phase pc-exit frame=2533 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2639 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2745 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=2
+phase pc-exit frame=2851 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=2
+phase pc-exit frame=2883 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase withdrawn frame=2883 party 1 -> 2, 5A49476A:20250925 left box 0 slot 0
+phase leg-state-saved frame=2883 emerald_pc_withdraw -> C:/slink-wt/exp-xg3-state/pcstates/slink_em_emerald_pc_withdraw.State
+phase leg-done frame=2883 emerald_pc_withdraw
+phase leg-start frame=2883 emerald_pc_box_place
+RESULT: FAIL emerald_pc_box_place: pc_move_mode_not_active tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+
+--- patch/build/gen3_scripted_play_emerald_result.shadow.log True
+NOTE observer building unadmitted gen3_exp/emerald_expansion_28877d73
+STATUS frame=613 registered=22 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=714 kind=map_load key= address=135875778 callback_address=135875778 cpsr=536870975 mode=thumb raw_r15=135875780 sp=50363880 thumb=1
+STATUS frame=1213 registered=22 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=558
+SHADOW t=2 frame=1522 kind=pc_box_place key= address=136103998 callback_address=136103998 cpsr=1610612799 mode=thumb raw_r15=136104000 sp=50363792 thumb=1
+SHADOW t=3 frame=1522 kind=pc_deposit key= address=136127458 callback_address=136127458 cpsr=63 mode=thumb raw_r15=136127460 sp=50363816 thumb=1
+STATUS frame=1813 registered=22 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1113
+STATUS frame=2413 registered=22 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1704
+SHADOW t=4 frame=2494 kind=pc_withdraw key= address=136104062 callback_address=136104062 cpsr=1610612799 mode=thumb raw_r15=136104064 sp=50363816 thumb=1
+STATUS frame=3013 registered=22 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2259
+
+EXIT 0

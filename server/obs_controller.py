@@ -23,6 +23,8 @@ import json
 import logging
 import os
 
+from server import json_files
+
 log = logging.getLogger(__name__)
 
 try:
@@ -174,9 +176,7 @@ class OBSController:
 
     def save_config(self):
         try:
-            os.makedirs(os.path.dirname(self._config_path), exist_ok=True)
-            with open(self._config_path, "w") as f:
-                json.dump(self._config, f, indent=2)
+            json_files.atomic_write_json(self._config_path, self._config)
         except Exception as e:
             log.warning(f"[OBS] Failed to save config: {e}")
 

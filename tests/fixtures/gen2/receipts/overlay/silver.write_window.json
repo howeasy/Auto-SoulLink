@@ -1,0 +1,2429 @@
+{
+ "artifact_kind": "overlay",
+ "battle_hold": {
+  "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+  "anchors": {
+   "battle_turn": {
+    "address": 16734,
+    "bank": 15,
+    "evidence": "SOURCE",
+    "expected_hex": "CDEB4320EACDB7423824CDCB423805CDB6451803CD1446",
+    "instruction_set": "SM83",
+    "rom_offset": 246110,
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 187,
+     "line_start": 174,
+     "path": "engine/battle/core.asm",
+     "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+    }
+   },
+   "start_battle_caller": {
+    "address": 29516,
+    "bank": 15,
+    "evidence": "SOURCE",
+    "expected_hex": "CD0040CD5674F1EA68D537C9",
+    "instruction_set": "SM83",
+    "rom_offset": 258892,
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 7825,
+     "line_start": 7820,
+     "path": "engine/battle/core.asm",
+     "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+    }
+   }
+  },
+  "caller_stack": {
+   "bank": 1,
+   "exclusive_stack_end": 57343,
+   "minimum_sp": 57091,
+   "must_fit_entire_read": true,
+   "read_domain": "System Bus",
+   "region": "WRAMX",
+   "required_read_bytes": 2,
+   "required_words": [
+    {
+     "endianness": "little",
+     "offset_from_sp": 0,
+     "value": 29519
+    }
+   ],
+   "search_for_return_address": false,
+   "source": [
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2926,
+     "line_start": 2921,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 70,
+     "line_start": 70,
+     "path": "home/init.asm",
+     "source_text_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8"
+    }
+   ]
+  },
+  "execution_before": {
+   "bank": 15,
+   "instruction": "call DetermineMoveOrder",
+   "instruction_offset": 10,
+   "pc": 16744,
+   "rom_offset": 246120,
+   "source": {
+    "commit": "656583c939d30f920a316177311a502dd222b57c",
+    "line_end": 181,
+    "line_start": 181,
+    "path": "engine/battle/core.asm",
+    "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+   }
+  },
+  "id": "battle-turn-before-determine-move-order",
+  "oracles": {
+   "EnemyTurn_EndOpponentProtectEndureDestinyBond": {
+    "address": 18054,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "CDAD3B"
+   },
+   "HandlePlayerMonFaint": {
+    "address": 20640,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "CD934E"
+   },
+   "LostBattle": {
+    "address": 21145,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "3E01EA"
+   }
+  },
+  "ownership_requirements": {
+   "cached_frame_acceptance_allowed": false,
+   "effective_wram_bank": 1,
+   "host": [
+    "admitted exact ROM identity",
+    "unchanged session/reset epoch",
+    "no pending trade or serial-owner lease",
+    "no save, box-load, or staged-writer owner",
+    "synchronous CPU hold before the instruction",
+    "recheck every anchor in ROM and mapped System Bus",
+    "all reads and bank/PC/stack evidence available in the same hold"
+   ],
+   "mapped_rom_bank": 15,
+   "mapped_rom_bank_must_equal_shadow": true,
+   "rom_bank_shadow": {
+    "address": 65439,
+    "bank": 0,
+    "equals": 15,
+    "read_domain": "System Bus",
+    "region": "HRAM",
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 26,
+     "line_start": 26,
+     "path": "ram/hram.asm",
+     "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+    },
+    "symbol": "hROMBank",
+    "width": 1
+   },
+   "serial_control": {
+    "address": 65282,
+    "mask": 128,
+    "source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 133,
+      "line_start": 133,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 135,
+      "line_start": 135,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     }
+    ],
+    "value": 0
+   },
+   "wram_bank_register": {
+    "address": 65392,
+    "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 688,
+     "line_start": 688,
+     "path": "constants/hardware.inc",
+     "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+    }
+   }
+  },
+  "state_predicates": [
+   {
+    "address": 53314,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "LINK_NULL: a write in a link battle desyncs the other Game Boy",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 4,
+      "line_start": 2,
+      "path": "constants/serial_constants.asm",
+      "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 1955,
+     "line_start": 1955,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wLinkMode",
+    "value": 0,
+    "width": 1
+   }
+  ],
+  "transformed_bit": 3,
+  "transformed_source": {
+   "commit": "656583c939d30f920a316177311a502dd222b57c",
+   "line_end": 211,
+   "line_start": 207,
+   "path": "constants/battle_constants.asm",
+   "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+  },
+  "write": {
+   "skip_action": 1,
+   "sources": [
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 257,
+     "line_start": 254,
+     "path": "constants/battle_constants.asm",
+     "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+    },
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 7,
+     "line_start": 5,
+     "path": "engine/battle/effect_commands.asm",
+     "source_text_sha256": "899551eed12752fb9c712b36ffa1b4134485f42e069ef218fe58fb66e13fe38b"
+    }
+   ],
+   "targets": {
+    "wBattleMonHP": {
+     "address": 51996,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wBattleMonHP",
+     "width": 2
+    },
+    "wBattleMonSpecies": {
+     "address": 51980,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wBattleMonSpecies",
+     "width": 1
+    },
+    "wBattlePlayerAction": {
+     "address": 53220,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wBattlePlayerAction",
+     "width": 1
+    },
+    "wBattleType": {
+     "address": 53529,
+     "bank": 1,
+     "evidence": "SYM",
+     "symbol": "wBattleType",
+     "width": 1
+    },
+    "wCurBattleMon": {
+     "address": 53190,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wCurBattleMon",
+     "width": 1
+    },
+    "wPlayerSubStatus5": {
+     "address": 52042,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wPlayerSubStatus5",
+     "width": 1
+    }
+   }
+  }
+ },
+ "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+ "checkpoint": {
+  "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+  "anchors": {
+   "ow_player_input": {
+    "address": 26791,
+    "bank": 37,
+    "evidence": "SOURCE",
+    "expected_hex": "CD236AD8A720123E04210444CF380ACDCC683807CD636A3802AFC9F53E04212244CFF137C9",
+    "instruction_set": "SM83",
+    "macro_source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 11,
+     "line_start": 7,
+     "path": "macros/farcall.asm",
+     "source_text_sha256": "6d7b0a22c83e49765b8b0ecdca0ae10109569fe45d29de22369017018d7c20e8"
+    },
+    "rom_offset": 616615,
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 500,
+     "line_start": 473,
+     "path": "engine/overworld/events.asm",
+     "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+    }
+   },
+   "player_events_caller": {
+    "address": 26462,
+    "bank": 37,
+    "evidence": "SOURCE",
+    "expected_hex": "AFFA5FD1A7C0CD1168CD9767381BCDA4673816CD617A3811CD1968380CCD67683807CDA7683802AFC9",
+    "instruction_set": "SM83",
+    "rom_offset": 616286,
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 268,
+     "line_start": 238,
+     "path": "engine/overworld/events.asm",
+     "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+    },
+    "unique_direct_transfer_source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line": 262,
+     "path": "engine/overworld/events.asm"
+    }
+   }
+  },
+  "caller_stack": {
+   "bank": 1,
+   "exclusive_stack_end": 57343,
+   "minimum_sp": 57091,
+   "must_fit_entire_read": true,
+   "read_domain": "System Bus",
+   "region": "WRAMX",
+   "required_read_bytes": 2,
+   "required_words": [
+    {
+     "endianness": "little",
+     "offset_from_sp": 0,
+     "value": 26499
+    }
+   ],
+   "search_for_return_address": false,
+   "source": [
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2926,
+     "line_start": 2921,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 70,
+     "line_start": 70,
+     "path": "home/init.asm",
+     "source_text_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8"
+    }
+   ]
+  },
+  "execution_before": {
+   "bank": 37,
+   "instruction": "call CheckAPressOW",
+   "instruction_offset": 15,
+   "pc": 26806,
+   "rom_offset": 616630,
+   "source": {
+    "commit": "656583c939d30f920a316177311a502dd222b57c",
+    "line_end": 483,
+    "line_start": 483,
+    "path": "engine/overworld/events.asm",
+    "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+   }
+  },
+  "id": "ow-player-input-before-check-a-press",
+  "ownership_requirements": {
+   "cached_frame_acceptance_allowed": false,
+   "effective_wram_bank": 1,
+   "host": [
+    "admitted exact ROM identity",
+    "unchanged session/reset epoch",
+    "no pending trade or serial-owner lease",
+    "no save, box-load, or staged-writer owner",
+    "synchronous CPU hold before the instruction",
+    "recheck every anchor in ROM and mapped System Bus",
+    "all reads and bank/PC/stack evidence available in the same hold"
+   ],
+   "mapped_rom_bank": 37,
+   "mapped_rom_bank_must_equal_shadow": true,
+   "rom_bank_shadow": {
+    "address": 65439,
+    "bank": 0,
+    "equals": 37,
+    "read_domain": "System Bus",
+    "region": "HRAM",
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 26,
+     "line_start": 26,
+     "path": "ram/hram.asm",
+     "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+    },
+    "symbol": "hROMBank",
+    "width": 1
+   },
+   "serial_control": {
+    "address": 65282,
+    "mask": 128,
+    "source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 133,
+      "line_start": 133,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 135,
+      "line_start": 135,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     }
+    ],
+    "value": 0
+   },
+   "wram_bank_register": {
+    "address": 65392,
+    "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 688,
+     "line_start": 688,
+     "path": "constants/hardware.inc",
+     "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+    }
+   }
+  },
+  "state_predicates": [
+   {
+    "address": 53593,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "ordinary map handler",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 174,
+      "line_start": 170,
+      "path": "constants/ram_constants.asm",
+      "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2294,
+     "line_start": 2294,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wMapStatus",
+    "value": 2,
+    "width": 1
+   },
+   {
+    "address": 53594,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "map events enabled; not a menu detector",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 179,
+      "line_start": 177,
+      "path": "constants/ram_constants.asm",
+      "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2295,
+     "line_start": 2295,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wMapEventStatus",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53599,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "no pending player event",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 2155,
+      "line_start": 2147,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2311,
+     "line_start": 2311,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wScriptRunning",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53598,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "reject WAIT and WAIT_MOVEMENT even when dispatch bit is clear",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 202,
+      "line_start": 198,
+      "path": "constants/ram_constants.asm",
+      "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 2155,
+      "line_start": 2147,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 33,
+      "line_start": 30,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2310,
+     "line_start": 2310,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wScriptMode",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53595,
+    "bank": 1,
+    "mask": 12,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "reject running and deferred dispatch; availability remains unmeasured",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 186,
+      "line_start": 182,
+      "path": "constants/ram_constants.asm",
+      "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 244,
+      "line_start": 241,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2297,
+     "line_start": 2297,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wScriptFlags",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53603,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "conservative rejection of nested script state",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 2199,
+      "line_start": 2196,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2315,
+     "line_start": 2315,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wScriptStackSize",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 55482,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "strict zero is stronger than the engine disable mask",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 37,
+      "line_start": 30,
+      "path": "home/joypad.asm",
+      "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2619,
+     "line_start": 2619,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wJoypadDisable",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 49612,
+    "bank": 0,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "reject paused game/save logic",
+    "region": "WRAM0",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 37,
+      "line_start": 30,
+      "path": "home/joypad.asm",
+      "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 117,
+     "line_start": 117,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wGameLogicPaused",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 49606,
+    "bank": 0,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "normal input only; no automated stream",
+    "region": "WRAM0",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 262,
+      "line_start": 253,
+      "path": "home/joypad.asm",
+      "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 111,
+     "line_start": 111,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wInputType",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53526,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "overworld battle-mode value; not an ownership proof alone",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 7987,
+      "line_start": 7983,
+      "path": "engine/battle/core.asm",
+      "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2186,
+     "line_start": 2186,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wBattleMode",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53221,
+    "bank": 0,
+    "mask": 128,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "reject scripted movement",
+    "region": "WRAM0",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 103,
+      "line_start": 103,
+      "path": "constants/ram_constants.asm",
+      "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 48,
+      "line_start": 44,
+      "path": "engine/overworld/scripting.asm",
+      "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 1866,
+     "line_start": 1866,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wStateFlags",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 65441,
+    "bank": 0,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "reject map entry lifecycle",
+    "region": "HRAM",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 131,
+      "line_start": 127,
+      "path": "engine/overworld/events.asm",
+      "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 28,
+     "line_start": 28,
+     "path": "ram/hram.asm",
+     "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+    },
+    "symbol": "hMapEntryMethod",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 53314,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "LINK_NULL; host serial/trade ownership must also be absent",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 4,
+      "line_start": 2,
+      "path": "constants/serial_constants.asm",
+      "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 1955,
+     "line_start": 1955,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wLinkMode",
+    "value": 0,
+    "width": 1
+   },
+   {
+    "address": 65485,
+    "bank": 0,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "disconnected serial status",
+    "region": "HRAM",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 25,
+      "line_start": 25,
+      "path": "constants/serial_constants.asm",
+      "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 126,
+     "line_start": 126,
+     "path": "ram/hram.asm",
+     "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+    },
+    "symbol": "hSerialConnectionStatus",
+    "value": 255,
+    "width": 1
+   },
+   {
+    "address": 53722,
+    "bank": 1,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "strict first-save prerequisite for box/memorial writes; not save durability proof",
+    "region": "WRAMX",
+    "semantic_source": [
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 346,
+      "line_start": 344,
+      "path": "engine/menus/save.asm",
+      "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 337,
+      "line_start": 333,
+      "path": "engine/menus/save.asm",
+      "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 191,
+      "line_start": 186,
+      "path": "engine/menus/save.asm",
+      "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+     },
+     {
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "line_end": 56,
+      "line_start": 54,
+      "path": "engine/menus/intro_menu.asm",
+      "source_text_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef"
+     }
+    ],
+    "source": {
+     "commit": "656583c939d30f920a316177311a502dd222b57c",
+     "line_end": 2407,
+     "line_start": 2407,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+    },
+    "symbol": "wSavedAtLeastOnce",
+    "value": 1,
+    "width": 1
+   }
+  ]
+ },
+ "code_digest": {
+  "commit": "fe70cc3a36aedda0f6c2d4bce2842fb47bd72ad1",
+  "digest": "e916da7b63e903c9219f24a786a903bb1d39de9ad39457a7c82a4299d35bad64",
+  "dirty": [
+   "data/games/gen2_crystal/admission.json",
+   "data/games/gen2_crystal/overlay/binding.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal.engine_sites.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal.write_window.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_battle.qualification.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_bill.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_grass.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_synth_kyle.synth.json",
+   "data/games/gen2_crystal/receipts/overlay/crystal_town.qualification.json",
+   "data/games/gen2_gold/admission.json",
+   "data/games/gen2_gold/overlay/binding.json",
+   "data/games/gen2_gold/receipts/overlay/gold.engine_sites.json",
+   "data/games/gen2_gold/receipts/overlay/gold.write_window.json",
+   "data/games/gen2_gold/receipts/overlay/gold_battle.qualification.json",
+   "data/games/gen2_gold/receipts/overlay/gold_battle_errand.qualification.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_bill.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_grass.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_synth_kyle.synth.json",
+   "data/games/gen2_gold/receipts/overlay/gold_town.qualification.json",
+   "data/games/gen2_silver/admission.json",
+   "data/games/gen2_silver/overlay/binding.json",
+   "data/games/gen2_silver/receipts/overlay/silver.engine_sites.json",
+   "data/games/gen2_silver/receipts/overlay/silver.write_window.json",
+   "data/games/gen2_silver/receipts/overlay/silver_battle.qualification.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_bill.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_grass.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_synth_kyle.synth.json",
+   "data/games/gen2_silver/receipts/overlay/silver_town.qualification.json"
+  ],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "covered_controls": [
+  "idle reacquisition",
+  "warp/Continue"
+ ],
+ "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+ "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+ "runs": {
+  "battle": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_battle",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "battle_model": {
+    "active_slot": 0,
+    "battle_hp_hex": "0014",
+    "party_hp_hex": "0014",
+    "rule": "UpdateBattleMonInParty copies wBattleMon over party slot wCurBattleMon; an in-battle KO must write wBattleMonHP (MODEL-only here)"
+   },
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": null,
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 13,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3403,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3413,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3415,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3431,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3441,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 13,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "battle",
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": null,
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "walk"
+    },
+    {
+     "accepted": 9,
+     "frame": 3642,
+     "phase": "battle"
+    },
+    {
+     "accepted": 10,
+     "frame": 4356,
+     "phase": "post_battle"
+    },
+    {
+     "accepted": 11,
+     "frame": 4358,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": null,
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {
+    "battle": {
+     "accepted": 0,
+     "both_edges": 663,
+     "edge_raw": 0,
+     "failing_sets": [
+      {
+       "frames": 664,
+       "symbols": [
+        "wScriptRunning",
+        "wScriptMode",
+        "wScriptFlags",
+        "wBattleMode"
+       ]
+      }
+     ],
+     "frames": 664,
+     "raw": 0,
+     "refusals": {},
+     "write": {
+      "after_hex": "0014",
+      "before_hex": "0014",
+      "faint_reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:195: active faint timing is not qualified",
+      "faint_refused": true,
+      "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:167: write ownership refused",
+      "refused": true,
+      "slot": 0
+     }
+    }
+   },
+   "write": null
+  },
+  "battle_bench": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_battle_bench",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "battle_frames": {
+    "accepted": 1,
+    "refusals": {},
+    "refused": 0
+   },
+   "bench_write": {
+    "action_after_hex": "00",
+    "action_before_hex": "00",
+    "active_slot": 0,
+    "battle_hp_after_hex": "0014",
+    "battle_hp_before_hex": "0014",
+    "battle_mode": 1,
+    "battle_type": 0,
+    "frame": 6931,
+    "hp_after_hex": "0000",
+    "hp_before_hex": "0011",
+    "ok": true,
+    "pc": 64,
+    "reason": "battle frame",
+    "seq": 2,
+    "slot": 1,
+    "status_after_hex": "00",
+    "where": "frame_end"
+   },
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "catch": {
+    "party_after": 2,
+    "party_before": 1
+   },
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+   "harness_write_scopes": [
+    "u2-battle-bench"
+   ],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 40,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3403,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3413,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3415,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3431,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3441,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 40,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "battle_bench",
+   "oracles": {
+    "BattleMenuPKMN_Loop": {
+     "addr": 24774,
+     "bank": 15,
+     "hex": "3e1421"
+    },
+    "CheckIfCurPartyMonIsFitToFight": {
+     "addr": 22302,
+     "bank": 15,
+     "hex": "fa05d0"
+    },
+    "PlayerSwitch": {
+     "addr": 25060,
+     "bank": 15,
+     "hex": "3e01ea"
+    }
+   },
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "catch"
+    },
+    {
+     "accepted": 11,
+     "frame": 5950,
+     "phase": "hunt"
+    },
+    {
+     "accepted": 23,
+     "frame": 6432,
+     "phase": "battle"
+    },
+    {
+     "accepted": 24,
+     "frame": 7402,
+     "phase": "post_battle"
+    },
+    {
+     "accepted": 25,
+     "frame": 7404,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "refusals": {
+    "active": {
+     "after_hex": "000014",
+     "before_hex": "000014",
+     "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:195: active faint timing is not qualified",
+     "refused": true,
+     "slot": 0
+    },
+    "overworld": {
+     "after_hex": "000011",
+     "before_hex": "000011",
+     "reason": "not in a battle",
+     "refused": true,
+     "slot": 1
+    }
+   },
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "trace": [
+    {
+     "frame": 6716,
+     "party_mon": 0,
+     "seq": 1,
+     "what": "fit_check"
+    },
+    {
+     "frame": 6949,
+     "party_mon": 0,
+     "seq": 3,
+     "what": "pkmn_loop"
+    },
+    {
+     "frame": 7044,
+     "party_mon": 1,
+     "seq": 4,
+     "what": "fit_check"
+    },
+    {
+     "frame": 7116,
+     "party_mon": 1,
+     "seq": 5,
+     "what": "pkmn_loop"
+    }
+   ],
+   "windows": {}
+  },
+  "battle_faint": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_battle_faint",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "battle_hold": {
+    "accepted": 2,
+    "hits": [
+     {
+      "bank": 15,
+      "frame": 6974,
+      "pc": 16744,
+      "seq": 1
+     },
+     {
+      "bank": 15,
+      "frame": 7577,
+      "pc": 16744,
+      "seq": 3
+     }
+    ],
+    "other_bank": 8,
+    "raw": 2,
+    "refusals": {},
+    "refused": 0
+   },
+   "battle_writes": [
+    {
+     "action_after_hex": "00",
+     "action_before_hex": "00",
+     "active_slot": 0,
+     "battle_hp_after_hex": "0014",
+     "battle_hp_before_hex": "0014",
+     "frame": 6974,
+     "hp_after_hex": "0000",
+     "hp_before_hex": "0011",
+     "ok": true,
+     "reason": null,
+     "seq": 1,
+     "slot": 1,
+     "status_after_hex": "00",
+     "status_before_hex": "00"
+    },
+    {
+     "action_after_hex": "01",
+     "action_before_hex": "00",
+     "active_slot": 0,
+     "battle_hp_after_hex": "0000",
+     "battle_hp_before_hex": "0012",
+     "frame": 7577,
+     "hp_after_hex": "0000",
+     "hp_before_hex": "0012",
+     "ok": true,
+     "reason": null,
+     "seq": 3,
+     "slot": 0,
+     "status_after_hex": "00",
+     "status_before_hex": "00"
+    }
+   ],
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "catch": {
+    "party_after": 2,
+    "party_before": 1
+   },
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+   "harness_write_scopes": [
+    "u2-battle-faint"
+   ],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 40,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3403,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3413,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3415,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3431,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3441,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 40,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "battle_faint",
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "catch"
+    },
+    {
+     "accepted": 11,
+     "frame": 5950,
+     "phase": "hunt"
+    },
+    {
+     "accepted": 23,
+     "frame": 6432,
+     "phase": "battle"
+    },
+    {
+     "accepted": 24,
+     "frame": 8057,
+     "phase": "post_battle"
+    },
+    {
+     "accepted": 25,
+     "frame": 8059,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "trace": [
+    {
+     "frame": 7268,
+     "seq": 2,
+     "what": "enemy_turn"
+    },
+    {
+     "frame": 7577,
+     "seq": 4,
+     "what": "faint"
+    },
+    {
+     "frame": 7735,
+     "seq": 5,
+     "what": "lost"
+    }
+   ],
+   "windows": {}
+  },
+  "boxes": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_boxes",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": null,
+   "catch": {
+    "party_after": 3,
+    "party_before": 1
+   },
+   "control": null,
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+   "harness_write_scopes": [
+    "u2-box-ops"
+   ],
+   "input_mode": "normal_buttons",
+   "layout": {
+    "active_flat": 11628,
+    "current_box": 0,
+    "memorial_flat": 31200
+   },
+   "liveness": {
+    "accepted": 45,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3403,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3413,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3415,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3431,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3441,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 45,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "boxes",
+   "ops": [
+    {
+     "changed": [
+      {
+       "after_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "before_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "flat": 11628
+      }
+     ],
+     "deferred": false,
+     "frame": 15733,
+     "key": "A81F:C78C:10",
+     "ok": true,
+     "op": "deposit",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f23000000460000000400000011001100090008000900090009100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "box_deposit",
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "before_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "flat": 11628
+      }
+     ],
+     "deferred": false,
+     "frame": 15735,
+     "key": "A81F:C78C:10",
+     "ok": true,
+     "op": "withdraw",
+     "party_after_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f00080008000800070007100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "party_collection",
+      "box_withdraw"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "0110ff00000000000000000000000000000000000000100021000000c78c000039000000000000000000006c2e230000004600000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "before_hex": "00ff0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "flat": 31200
+      }
+     ],
+     "deferred": false,
+     "frame": 15737,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "memorialize",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f00080008000800070007100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "backing_box",
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "before_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "flat": 11628
+      }
+     ],
+     "deferred": false,
+     "frame": 15739,
+     "key": "A81F:C78C:10",
+     "ok": true,
+     "op": "deposit",
+     "party_after_hex": "019effffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "box_deposit",
+      "party_collection"
+     ]
+    }
+   ],
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": null,
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "walk"
+    },
+    {
+     "accepted": 9,
+     "frame": 3642,
+     "phase": "battle"
+    },
+    {
+     "accepted": 10,
+     "frame": 5256,
+     "phase": "save"
+    },
+    {
+     "accepted": 12,
+     "frame": 6161,
+     "phase": "walk"
+    },
+    {
+     "accepted": 23,
+     "frame": 6436,
+     "phase": "battle"
+    },
+    {
+     "accepted": 24,
+     "frame": 14828,
+     "phase": "save"
+    },
+    {
+     "accepted": 25,
+     "frame": 15522,
+     "phase": "post_save"
+    },
+    {
+     "accepted": 26,
+     "frame": 15733,
+     "phase": "ops"
+    },
+    {
+     "accepted": 30,
+     "frame": 15740,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "reset": {
+    "cartram_sha256": "4f873831fe7de88de590bad994593bf45fb29d991f1bb94f53b5678e71c19359",
+    "flushed": true,
+    "frame": 15740
+   },
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": {
+    "cartram_sha256": "625362eb3b293eb9e01ff70234dddf381ab5caeabaad41933840f6cb989b6054",
+    "flushed": true,
+    "frame": 15522
+   },
+   "save2": null,
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {}
+  },
+  "boxes_reload": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_boxes_reload",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": "7b1dac6603276c2befd030df4639debcacbda6abd727ca3b1d04dfe539e4e6c0",
+   "catch": null,
+   "control": null,
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "000fdb99f6eaaa6713190ced08095beb2a0aad8ec0ab8330da0aeed55754b5e5",
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "layout": {
+    "active_flat": 11628,
+    "current_box": 0,
+    "memorial_flat": 31200
+   },
+   "liveness": {
+    "accepted": 16,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3377,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3379,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3381,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3383,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3389,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 16,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "boxes_reload",
+   "ops": [],
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": {
+    "active_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "backing_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "memorial_hex": "0110ff00000000000000000000000000000000000000100021000000c78c000039000000000000000000006c2e230000004600000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "party_hex": "019effffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "reset": null,
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": null,
+   "save2": null,
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {}
+  },
+  "boxes_reset": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_boxes_reset",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": "4f873831fe7de88de590bad994593bf45fb29d991f1bb94f53b5678e71c19359",
+   "catch": null,
+   "control": {
+    "active_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "backing_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "memorial_hex": "0110ff00000000000000000000000000000000000000100021000000c78c000039000000000000000000006c2e230000004600000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "party_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f23000000460000000400000011001100090008000900090009100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_battle",
+   "fixture_sha256": "3520290ea1e918a14429db70ac57a2840bb37295333909458de49dd722fc6bf3",
+   "harness_write_scopes": [
+    "u2-box-ops"
+   ],
+   "input_mode": "normal_buttons",
+   "layout": {
+    "active_flat": 11628,
+    "current_box": 0,
+    "memorial_flat": 31200
+   },
+   "liveness": {
+    "accepted": 31,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3377,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3379,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3381,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3383,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3385,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3387,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 4290,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 31,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "boxes_reset",
+   "ops": [
+    {
+     "changed": [],
+     "deferred": false,
+     "frame": 3377,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "memorialize",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f23000000460000000400000011001100090008000900090009100021000000c78c000039000000000000000000006c2e1d00000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [],
+     "deferred": true,
+     "frame": 3379,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "withdraw",
+     "party_after_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f23000000460000000400000011001100090008000900090009100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f2300000046000000040000001100110009000800090009000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": "backing removal deferred to the save witness",
+     "stage": 1,
+     "written": [
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "0110ffffffffffffffffffffffffffffffffffffffff100021000000c78c00006000000000000000000000a81f230000004600000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8f88838684985050505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "before_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+       "flat": 11628
+      }
+     ],
+     "deferred": false,
+     "frame": 3381,
+     "key": "A81F:C78C:10",
+     "ok": true,
+     "op": "deposit",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "039e1010ff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c00006000000000000000000000a81f23000000460000000400000011001100090008000900090009100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b958491500000000092888b9584915000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050508f88838684985050505050000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 1,
+     "written": [
+      "box_deposit",
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "00ffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "before_hex": "0110ff00000000000000000000000000000000000000100021000000c78c000039000000000000000000006c2e230000004600000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "flat": 31200
+      }
+     ],
+     "deferred": false,
+     "frame": 4291,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "settle",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 2,
+     "written": [
+      "backing_box"
+     ]
+    },
+    {
+     "changed": [
+      {
+       "after_hex": "0110ff00000000000000000000000000000000000000100021000000c78c000039000000000000000000006c2e230000004600000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "before_hex": "00ffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+       "flat": 31200
+      }
+     ],
+     "deferred": false,
+     "frame": 4293,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "memorialize",
+     "party_after_hex": "019effffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": null,
+     "stage": 2,
+     "written": [
+      "backing_box",
+      "party_collection"
+     ]
+    },
+    {
+     "changed": [],
+     "deferred": true,
+     "frame": 5036,
+     "key": "6C2E:C78C:10",
+     "ok": true,
+     "op": "withdraw",
+     "party_after_hex": "029e10ffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b100021000000c78c000039000000000000000000006c2e2300000046000000030000000f000f0008000800080007000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b845050508f888386849850505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "party_before_hex": "019effffff0000009e000a2b0000c78c00008700000000000000000000a4fc231e000046000000050000000b0014000c000b000a000a000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000092888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "reason": "backing removal deferred to the save witness",
+     "stage": 3,
+     "written": [
+      "party_collection"
+     ]
+    }
+   ],
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": null,
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3374,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "ops"
+    },
+    {
+     "accepted": 5,
+     "frame": 3384,
+     "phase": "to_save"
+    },
+    {
+     "accepted": 6,
+     "frame": 3386,
+     "phase": "save"
+    },
+    {
+     "accepted": 7,
+     "frame": 4080,
+     "phase": "post_save"
+    },
+    {
+     "accepted": 8,
+     "frame": 4291,
+     "phase": "ops"
+    },
+    {
+     "accepted": 11,
+     "frame": 4296,
+     "phase": "to_save"
+    },
+    {
+     "accepted": 12,
+     "frame": 4298,
+     "phase": "save"
+    },
+    {
+     "accepted": 13,
+     "frame": 4824,
+     "phase": "post_save"
+    },
+    {
+     "accepted": 14,
+     "frame": 5035,
+     "phase": "ops"
+    },
+    {
+     "accepted": 16,
+     "frame": 5039,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q6",
+   "reset": {
+    "cartram_sha256": "7b1dac6603276c2befd030df4639debcacbda6abd727ca3b1d04dfe539e4e6c0",
+    "flushed": true,
+    "frame": 5039
+   },
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": {
+    "cartram_sha256": "14548da31daa5e5f6bae3a62d6626b5c9ff649c2e2db74ee626afae6704253ca",
+    "flushed": true,
+    "frame": 4080
+   },
+   "save2": {
+    "cartram_sha256": "f6f9984fe4fc0c346cf42153891db87f1f6da248b507e2dcd423187084caa600",
+    "flushed": true,
+    "frame": 4824
+   },
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {}
+  },
+  "reload": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_town_reload",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "battle_model": null,
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": "ce134c2cda17328a587aaf08dad5dd23255c471fce12ddfd0f63fa7cbd04863a",
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_town",
+   "fixture_sha256": "cd362fa10917aa0d84b2a3121e9eade69134934c0f625a4023040090e851fd2c",
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 3,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3377,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3379,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 3,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "reload",
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": {
+    "active_box_hex": "019effffffffffffffffffffffffffffffffffffffff9ead0a2b0000c78c00008700000000000000000000a4fc231e00004600000005ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff938e938e83888b84505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "backing_box_hex": "019effffffffffffffffffffffffffffffffffffffff9ead0a2b0000c78c00008700000000000000000000a4fc231e00004600000005ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff938e938e83888b84505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "current_box": 0,
+    "party_hp_hex": "0013"
+   },
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3375,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q7",
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": null,
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {},
+   "write": null
+  },
+  "town": {
+   "artifact_kind": "overlay",
+   "attempt_id": "u2-silver_town",
+   "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+   "battle_model": null,
+   "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+   "boot_cartram_sha256": null,
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "silver_town",
+   "fixture_sha256": "74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5",
+   "harness_write_scopes": [
+    "u2-test-box-write",
+    "u2-test-party-write"
+   ],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 33,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3375,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3377,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3455,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3456,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3458,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3974,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3976,
+      "pc": 26806
+     },
+     {
+      "bank": 37,
+      "frame": 3978,
+      "pc": 26806
+     }
+    ],
+    "other_bank": 0,
+    "raw": 33,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "town",
+   "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+   "persist": null,
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3375,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3376,
+     "phase": "start_menu"
+    },
+    {
+     "accepted": 2,
+     "frame": 3420,
+     "phase": "start_close"
+    },
+    {
+     "accepted": 3,
+     "frame": 3456,
+     "phase": "face"
+    },
+    {
+     "accepted": 4,
+     "frame": 3457,
+     "phase": "talk"
+    },
+    {
+     "accepted": 5,
+     "frame": 3619,
+     "phase": "talk_close"
+    },
+    {
+     "accepted": 6,
+     "frame": 3975,
+     "phase": "to_save"
+    },
+    {
+     "accepted": 7,
+     "frame": 3977,
+     "phase": "save"
+    },
+    {
+     "accepted": 8,
+     "frame": 4671,
+     "phase": "post_save"
+    },
+    {
+     "accepted": 9,
+     "frame": 4869,
+     "phase": "exit"
+    },
+    {
+     "accepted": 30,
+     "frame": 5848,
+     "phase": "warp"
+    },
+    {
+     "accepted": 30,
+     "frame": 5869,
+     "phase": "post_warp"
+    },
+    {
+     "accepted": 31,
+     "frame": 5885,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "r2q7",
+   "result": "PASS",
+   "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+   "save": {
+    "cartram_sha256": "ce134c2cda17328a587aaf08dad5dd23255c471fce12ddfd0f63fa7cbd04863a",
+    "flushed": true,
+    "frame": 4671,
+    "mon_hp": 34,
+    "party_hp_hex": "0013",
+    "saves": 1
+   },
+   "schema": "gen2-write-window-run-v1",
+   "title": "silver",
+   "windows": {
+    "mid_warp": {
+     "accepted": 0,
+     "both_edges": 29,
+     "edge_raw": 0,
+     "failing_sets": [
+      {
+       "frames": 30,
+       "symbols": [
+        "wMapStatus",
+        "wScriptRunning",
+        "wScriptMode",
+        "hMapEntryMethod"
+       ]
+      }
+     ],
+     "frames": 30,
+     "raw": 0,
+     "refusals": {},
+     "write": {
+      "after_hex": "0013",
+      "before_hex": "0013",
+      "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:167: write ownership refused",
+      "refused": true,
+      "slot": 0
+     }
+    },
+    "save_paused": {
+     "accepted": 0,
+     "both_edges": 294,
+     "edge_raw": 0,
+     "failing_sets": [
+      {
+       "frames": 295,
+       "symbols": [
+        "wScriptRunning",
+        "wScriptMode",
+        "wScriptFlags",
+        "wGameLogicPaused"
+       ]
+      }
+     ],
+     "frames": 295,
+     "raw": 0,
+     "refusals": {},
+     "write": {
+      "after_hex": "0013",
+      "before_hex": "0013",
+      "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:167: write ownership refused",
+      "refused": true,
+      "slot": 0
+     }
+    },
+    "script_text": {
+     "accepted": 0,
+     "both_edges": 385,
+     "edge_raw": 0,
+     "failing_sets": [
+      {
+       "frames": 386,
+       "symbols": [
+        "wScriptRunning",
+        "wScriptMode",
+        "wScriptFlags"
+       ]
+      }
+     ],
+     "frames": 386,
+     "raw": 0,
+     "refusals": {},
+     "write": {
+      "after_hex": "0013",
+      "before_hex": "0013",
+      "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:167: write ownership refused",
+      "refused": true,
+      "slot": 0
+     }
+    },
+    "start_menu": {
+     "accepted": 0,
+     "both_edges": 42,
+     "edge_raw": 1,
+     "failing_sets": [
+      {
+       "frames": 43,
+       "symbols": [
+        "wScriptRunning",
+        "wScriptMode",
+        "wScriptFlags"
+       ]
+      }
+     ],
+     "frames": 43,
+     "raw": 0,
+     "refusals": {},
+     "write": {
+      "after_hex": "0013",
+      "before_hex": "0013",
+      "reason": "...worktrees/mandatory-rom-patch-3fcfda/lua/gen2/writes.lua:167: write ownership refused",
+      "refused": true,
+      "slot": 0
+     }
+    }
+   },
+   "write": {
+    "box": {
+     "after_hex": "019effffffffffffffffffffffffffffffffffffffff9ead0a2b0000c78c00008700000000000000000000a4fc231e00004600000005ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff938e938e83888b84505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "backing_before_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "backing_flat": 16384,
+     "before_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "bus": {
+      "address": 44396,
+      "cartram_value": 0,
+      "value": 10
+     },
+     "count_after": 1,
+     "count_before": 0,
+     "current_box": 0,
+     "flat": 11628,
+     "length": 1102,
+     "owner": "active",
+     "readback_hex": "019effffffffffffffffffffffffffffffffffffffff9ead0a2b0000c78c00008700000000000000000000a4fc231e00004600000005ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff92888b9584915000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff938e938e83888b84505050ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "saved_at_least_once": 1
+    },
+    "frame": 3375,
+    "party": {
+     "address": 55884,
+     "bank": 1,
+     "before_hex": "0014",
+     "offset": 34,
+     "readback_hex": "0013",
+     "slot": 0,
+     "written_hex": "0013"
+    },
+    "reason": "checkpoint anchors and CPU match"
+   }
+  }
+ },
+ "schema": "gen2-write-window-receipt-v2",
+ "title": "silver"
+}

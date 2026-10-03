@@ -1,0 +1,12 @@
+cut=ccfa94e0021d8f9f11180866cf1c8d666bedc6dc
+script=patch/build/exp_pc_fullbox_stage.lua
+fixture=tests\fixtures\gen3\exp_pc_box0_full_synth.sav
+fixture_sha256=79c19313a21d794dbfe1de4e0f0e7da8b23f3d7f445c8b63dca6515b23f4df04
+rom_sha1=28877d733492299599f2b8fff50493109d72653c
+source_script_sha256=562d37bd0b78c0fcaa2fd05582413abae911fde12e50e56f13a2ef08cd8ec9b2
+from=None
+stop_after=None
+state=None
+result=C:\slink-wt\exp-xg3\docs\gen3_exp\probes\pc_ccfa94e0_20261002T012919Z_stage_result.txt
+shadow=None
+passed=True

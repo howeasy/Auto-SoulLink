@@ -18,6 +18,7 @@ import lupa
 import pytest
 
 from tests.unit.test_gb_panel import _abi
+from tests.unit.test_gen2_client import NEEDS_OVERLAY, Refused, World
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
@@ -250,7 +251,7 @@ def test_overlay_block_equals_the_pinned_slink_sym_and_admission_row(title):
     out = PROVENANCE["outputs"][ARTIFACT[title]]
     row = next(r for r in json.loads((REPO / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
                if r["kind"] == "overlay")
-    assert row["status"] == "BUILT" and row["selection"] == "FUTURE"
+    assert row["status"] == "ADMITTED" and row["selection"] == "SELECTED"   # activated 2026-10-02
     assert ov["rom_sha1"] == row["sha1"] == out["sha1"] != ov["base_sha1"]
     assert ov["md5"] == row["md5"] == out["md5"]
 
@@ -259,6 +260,8 @@ def _overlay_root(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True)
     for name in ["overlay_provenance.json", *PROVENANCE["symbols"]]:
         shutil.copy(REPO / "data/gen2" / name, tmp_path / "data/gen2" / name)
+    (tmp_path / "patch/gb").mkdir(parents=True)
+    shutil.copy(REPO / "patch/gb/slink_abi.inc", tmp_path / "patch/gb/slink_abi.inc")
     return tmp_path
 
 
@@ -273,6 +276,27 @@ def test_overlay_block_refuses_a_sym_that_is_not_the_pinned_one(tmp_path):
     sym = root / "data/gen2/crystal_slink.sym"
     sym.write_text(sym.read_text().replace("00:cfd8 wSlinkMailbox", "00:cfd0 wSlinkMailbox"))
     with pytest.raises(ValueError, match="differs from overlay provenance"):
+        gen_gen2_profile.overlay_block(_Ctx, "crystal", root)
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_profile_pins_the_mailbox_abi_the_server_checks_the_hello_against(title):
+    """The server admits a Gen 2 hello only when its companion_abi equals profile.overlay.abi, so that number
+    must be the build's own SLINK_ABI_VERSION (patch/gb/slink_abi.inc) and the Lua client's P.ABI_VERSION."""
+    from tests.unit.test_gb_panel import _abi
+    P = lupa.LuaRuntime(unpack_returned_tuples=True).eval(f'dofile("{PANEL}")')
+    assert type(profile(title)["overlay"]["abi"]) is int
+    assert profile(title)["overlay"]["abi"] == _abi()["SLINK_ABI_VERSION"] == P.ABI_VERSION
+
+
+def test_overlay_block_reads_the_abi_from_the_build_source_and_refuses_a_missing_one(tmp_path):
+    root = _overlay_root(tmp_path)
+    assert gen_gen2_profile.overlay_block(_Ctx, "crystal", root)["abi"] == 3
+    inc = root / "patch/gb/slink_abi.inc"
+    inc.write_text(inc.read_text().replace("DEF SLINK_ABI_VERSION EQU 3", "DEF SLINK_ABI_VERSION EQU 4"))
+    assert gen_gen2_profile.overlay_block(_Ctx, "crystal", root)["abi"] == 4
+    inc.write_text(inc.read_text().replace("DEF SLINK_ABI_VERSION EQU 4", ""))
+    with pytest.raises(ValueError, match="SLINK_ABI_VERSION"):
         gen_gen2_profile.overlay_block(_Ctx, "crystal", root)
 
 
@@ -298,16 +322,18 @@ def _service(w, state, frames=1, caps=CAP_PANEL):
         w.frames(1)
 
 
-def test_production_client_on_a_clean_cartridge_advertises_no_panel():
-    from tests.unit.test_gen2_client import World
-    w = World("crystal", production=True)
-    hello = w.hello()
-    w.frames(5)
-    assert hello["panel"] is False and hello["panel_abi"] == 0 and hello["sfx"] is False
-    tm = w.profile["overlay"]["ram"]["wTilemap"]
-    assert not [x for x in w.written() if tm <= x[0] < tm + 360]
+def test_a_clean_cartridge_is_refused_before_a_panel_can_be_advertised():
+    """Patch-first (owner 2026-10-02): the panel ships in the SLink companion overlay, and the
+    launcher refuses a clean Gen 2 cartridge outright, so no production client exists that could
+    claim a panel on one. This is the replacement for the advertisement assertion that used to run
+    on exactly this cartridge; whether an ADMITTED client advertises the panel is pinned below,
+    which is what decides per artifact kind on the server (artifact_kind == overlay)."""
+    with pytest.raises(Refused) as caught:
+        World("crystal", production=True, clean=True)
+    assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 
+@NEEDS_OVERLAY
 def test_production_client_holds_link_panel_rows_and_paints_on_the_await_transition():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)
@@ -317,6 +343,7 @@ def test_production_client_holds_link_panel_rows_and_paints_on_the_await_transit
     _service(w, state, 3)
     hello = w.hello()
     assert hello["panel"] is True and hello["panel_abi"] == 3 and hello["sfx"] is False
+    assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
     w.reply({"cmd": "link_panel", "rows": ["SOUL LINK", "PAIRED"]})
     _service(w, state, 2)                                    # rows held; CLOSED observed
     before = len(w.written())
@@ -422,6 +449,7 @@ def _service_sfx(w, state, frames=1, caps=CAPS_FULL):
         w.frames(1)
 
 
+@NEEDS_OVERLAY
 def test_production_client_advertises_sfx_and_posts_the_mapped_code():
     from tests.unit.test_gen2_client import World
     w = World("gold", production=True)
@@ -440,6 +468,7 @@ def test_production_client_advertises_sfx_and_posts_the_mapped_code():
     assert [x for x in w.written() if x[0] == mb + 7] and w.io.read_u8(mb + 7) == 2
 
 
+@NEEDS_OVERLAY
 def test_production_client_native_sounds_off_posts_nothing():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)
@@ -453,6 +482,7 @@ def test_production_client_native_sounds_off_posts_nothing():
     assert not [x for x in w.written() if x[0] == mb + 7]
 
 
+@NEEDS_OVERLAY
 def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
     from tests.unit.test_gen2_client import World
     w = World("crystal", production=True)
@@ -460,3 +490,75 @@ def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
     _service_sfx(w, state, 3, caps=CAP_PANEL)
     hello = w.hello()
     assert hello["panel"] is True and hello["sfx"] is False
+
+
+# -- the server's evidence: hello.companion_abi is read from the cartridge's own LIVE mailbox -----------
+
+@NEEDS_OVERLAY
+@pytest.mark.parametrize("fault", ["live", "stalled", "no_service", "wrong_abi", "wrong_beacon", "wrong_cookie"])
+def test_hello_publishes_companion_abi_only_from_the_cartridges_own_mailbox_signature(fault):
+    """A clean cartridge has no SLNK service, so the beacon/ABI/cookie do not read right and `companion_abi` is not
+    sent; a foreign-ABI or half-written mailbox is not evidence either (and `panel_abi` alone is raw RAM). `live` is
+    the known-positive control. `stalled` (the counter stopped, as in a battle text prompt that never reaches
+    DelayFrame) is STILL evidence: the signature says what the cartridge is, the counter only gates painting."""
+    w = World("crystal", production=True)
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    state = {"counter": 0}
+    if fault != "no_service":
+        _service(w, state, 3)
+        if fault == "wrong_abi":
+            w.emu.poke("System Bus", mb + 4, w.lua.table_from([4]))
+        elif fault == "wrong_beacon":
+            w.emu.poke("System Bus", mb, w.lua.table_from([0x53, 0x4C, 0x4E, 0x00]))
+        elif fault == "wrong_cookie":
+            w.emu.poke("System Bus", mb + 31, w.lua.table_from([0x00]))
+        elif fault == "stalled":
+            w.frames(120)                                     # the counter stops moving
+        w.frames(1)
+    hello = w.hello()
+    if fault in ("live", "stalled"):
+        assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int
+    else:
+        assert hello.get("companion_abi") is None, hello
+
+
+@NEEDS_OVERLAY
+@pytest.mark.parametrize("warmup", [0, 1, 3])
+def test_the_first_hello_of_an_overlay_carries_the_evidence_even_when_the_script_starts_on_a_checkpoint(warmup):
+    """The hello is final (the server refuses it and nothing re-sends), and a script can load while the game already
+    stands in the overworld: the evidence must already be there on the very first checkpoint frame, without waiting
+    for the service counter to be seen moving."""
+    w = World("crystal", production=True)
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    counter = {"c": 100}
+
+    def tick():
+        counter["c"] = (counter["c"] + 1) & 0xFFFF
+        w.emu.poke("System Bus", mb, w.lua.table_from(
+            [0x53, 0x4C, 0x4E, 0x4B, 3, counter["c"] & 0xFF, counter["c"] >> 8, 0, CAP_PANEL]))
+        w.emu.poke("System Bus", mb + 31, w.lua.table_from([0xA5]))
+
+    step = w.frames
+
+    def frames(n=1):
+        for _ in range(n):
+            tick()
+            step(1)
+    tick()                                   # the cartridge was already running when the script loaded
+    frames(warmup)
+    w.hold()
+    frames(1)
+    w.checkpoint_ok = True
+    w.hold()
+    frames(1)
+    (hello,) = w.sent("hello")
+    assert hello["companion_abi"] == 3 and type(hello["companion_abi"]) is int, hello
+
+
+@NEEDS_OVERLAY
+def test_a_cartridge_with_no_service_says_hello_at_once_and_carries_no_evidence():
+    """Nothing waits for the service: a clean cartridge's hello goes out on the first checkpoint frame WITHOUT
+    evidence, so the server's refusal reaches the player (HUD text) immediately."""
+    w = World("crystal", production=True)
+    hello = w.hello()
+    assert hello.get("companion_abi") is None

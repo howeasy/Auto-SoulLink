@@ -1,0 +1,47 @@
+duo instance b scenario=whiteout_gen3 phase=initial title=emerald_expansion_28877d73 attempt=1
+speedmode requested=300 call=ok
+SYMS_ABSENT emerald_expansion_28877d73 Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder,gActiveBattler,gStatuses3
+TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)
+[client] [SLink] TCP connecting to 127.0.0.1:54482 (non-blocking)…
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+[client] [SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player b -> 127.0.0.1:54482 (rom 28877d73)
+client built by lua/gen3/run.lua: title=emerald_expansion_28877d73 player=b -> 127.0.0.1:54482
+[client] [SLink] TCP connected to 127.0.0.1:54482
+[client] [SLink-gen3] baseline(quiet): boxes ok=true n=0 gen=1 party=0
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"oldale_town","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+booted frame=610 map=map=10 at=(6,17) balls=5
+HELLO_WATCH {"baselined":true,"frozen":false,"game_is_live":true,"hello_ready":true,"hello_sent":true,"hello_visible":true,"hello_why":"verified overworld checkpoint","in_battle":false,"journal_busy":"unavailable","journal_failure":"unavailable","live_why":"unavailable","location":{"map_group":0,"map_num":10},"map_x":6,"map_y":17,"party_hidden":"unavailable","phase":"await-start","policy_ok":true,"policy_reason":"overworld","policy_why":"verified overworld checkpoint","raw":{"callback1":{"match":"thumb-bit-stripped","names":["CB1_Overworld"],"raw":135868577},"callback2":{"match":"thumb-bit-stripped","names":["CB2_Overworld"],"raw":135879677},"field_message_box_mode":{"address":33580524,"raw":0,"size":1},"gPaletteFade":{"active_mask":"0x80","active_offset":15,"active_word":0,"address":33755796,"bytes":[0,0,0,0,140,20,0,3,144,20,0,3,103,0,0,0,0,128,6,32,0,0,0,0]},"sGlobalScriptContextStatus":{"address":50337477,"raw":2,"size":1},"sLockFieldControls":{"address":50337476,"raw":0,"size":1},"tasks":[{"address":50359328,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_WeatherMain"],"raw":135578037},"isActive":1,"slot":0},{"address":50359368,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunPerStepCallback"],"raw":135574237},"isActive":1,"slot":1},{"address":50359408,"data0_raw":10,"data0_s16":10,"func":{"match":"thumb-bit-stripped","names":["Task_MuddySlope"],"raw":135574381},"isActive":1,"slot":2},{"address":50359448,"data0_raw":0,"data0_s16":0,"func":{"match":"thumb-bit-stripped","names":["Task_RunTimeBasedEvents"],"raw":135574285},"isActive":1,"slot":3},{"address":50359568,"data0_raw":1,"data0_s16":1,"func":{"match":"thumb-bit-stripped","names":["Task_MapNamePopUpWindow"],"raw":135782349},"isActive":1,"slot":6}]},"refusal_clauses":{},"sample_frame":610,"samples":0,"snapshot":{"gPokemonStoragePtr":33585408,"gSaveBlock1Ptr":33619680,"gSaveBlock2Ptr":33635376},"snapshot_why":"unavailable","start_frame":610,"wire_event":"tick","wire_seq":3}
+JITTER requested=0 applied=0 attempt=1
+RX box_mon key=504F4F4D:DFDAF6DA
+[client] [SLink-gen3] write overworld 0x020079A4 +80 frame 2162
+[client] [SLink-gen3] write overworld 0x02031BC8 +100 frame 2162
+[client] [SLink-gen3] write overworld 0x02031B54 +1 frame 2162
+TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":56,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+MIRROR_DEPOSITED 504F4F4D:DFDAF6DA
+DEPOSITED_FOR_REBUILD 504F4F4D:DFDAF6DA
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 43922
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 43922
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 43922
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 43922
+RX msgbox text=Route 103 is a dead zone!

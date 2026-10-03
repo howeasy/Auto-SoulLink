@@ -95,19 +95,19 @@ def summary(parts: dict) -> str:
 def test_sp_lowwater_on_the_patched_rom(emuhawk, title):  # noqa: F811
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
-              or live.receipt_missing_reason(spec.name))
+              or live.receipt_missing_reason(spec.name, kind="overlay"))
     if reason:
         pytest.skip(reason)
     from run_gb_gate import run_gate
 
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
-    live.qualified_identity(spec.name, staged)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    live.qualified_identity(spec.name, staged, kind="overlay")
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json", "overlay").read_text(encoding="utf-8"))
     facts = lowwater_facts(title)
     parts, failed = {}, []
     for mode in MODES:   # one fresh boot per mode: phone ARMED is single-slot
-        env = live.inspect_env(spec, staged)
+        env = live.inspect_env(spec, staged, kind="overlay")
         env["SLINK_GEN2_SFX_FACTS"] = json.dumps(facts)
         env["SLINK_GEN2_QUALIFICATION_ATTEMPT"] = qualification["attempt_id"]
         env["SLINK_GEN2_SP_LOWWATER"] = mode
@@ -123,7 +123,15 @@ def test_sp_lowwater_on_the_patched_rom(emuhawk, title):  # noqa: F811
     receipt = combine(parts, title, staged)
     assert receipt["overlay_sha1"] == facts["overlay_sha1"] and receipt["evidence_level"] == "PHYSICAL", receipt
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
+    # B1/B2: overlay evidence lands in the overlay namespace and carries its own artifact identity. This
+    # gate's Lua (gen2_sp_lowwater_gate.lua) is not in stream B's file grant, so the executed sha1 is the
+    # independently hashed staged identity rather than an in-emulator observation; the binding is still
+    # checked in-emulator by every gate's shared scripted-gate context. The identity goes on BEFORE the row
+    # check: the verifier's row check requires it, so checking first could never pass.
+    identity = live.identity(title, "overlay")
+    receipt.update(artifact_kind=identity["kind"], rom_sha1=identity["rom_sha1"],
+                   base_sha1=identity["base_sha1"], binding_sha256=identity["binding_sha256"])
     errors = gate._sp_lowwater_gate_row_errors(REPO, title, receipt)
     assert not errors, errors
-    (REPO / live.RECEIPTS / f"{title}_overlay.sp_lowwater_gate.json").write_text(
+    live.receipt_file(f"{title}.sp_lowwater_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

@@ -18,14 +18,90 @@ any randomizer change inside the companion's protected code/data spans. The
 final ROM hash belongs to the run contract. Native capability and randomized
 pairing remain separate; the hello uses the existing `rand` wire kind.
 
+**Title screen and main menu.** Every Gen 3 companion (FireRed, LeafGreen, Emerald, and Radical Red's ABI1 build) puts a
+SoulLink wordmark in the Pokémon logo's style on the title and prints the patch version (`SoulLink vX.Y.Z`, or `SoulLink
+dev`) on the main menu, the New Game / Continue screen. The version lives there and nowhere else (owner, 2026-10-02: like
+the Game Boy menus).
+
+*Title:* a static asset patch with no code (`patch/tools/gen3_title.py`, art from `tools/gen_gen1_title.py`): the title's own
+LZ77 graphics are relocated into the ROM's free tail with the wordmark added and the two literal-pool words that name them are
+repointed, so the game's loader draws it and the fade-in, flash and restarts treat it as part of the title. FR / LG / RR use
+the Charizard / Venusaur layer on its empty rows under the flames, the wordmark's ink centred on PRESS START, in the logo
+palette's unused bank; Emerald uses the affine Pokémon-logo layer (the clouds and Rayquaza scroll and blend) under the
+"Emerald Version" banner, in the logo's own palette indices, centred on the screen, so it slides in with the logo. The
+title spans join the manifest's protected spans.
+
+*Main menu:* neither menu has a static BG asset (the whole BG0 map is built by windows at run time), so the payload's frame
+hook owns one window (`patch/src/trade_targets/native_menu.h`, shared by the FR / LG / Emerald companions and Radical Red's
+`handlers.c`). While `gMain.callback2` is the menu and its task (always `gTasks[0]`) idles in its input or cursor function,
+it draws the line once in the game's own font, right-aligned on tile rows 17-18, and frees the window the moment the menu is
+left. That is the free band under the boxes, or, with a Mystery Gift box there, the right half of that box (the layout is
+read from `gTasks[0].data[0]`). FR / LG have no menu at all on a cartridge without a save (the game goes straight to the
+intro); Emerald shows New Game / Option with the line below. `build.py --version vX.Y.Z[-dev]` (default `dev`, at most ten
+characters) encodes the line in the charmap and passes it to the compiler as `-DSLINK_MENU_TEXT=...`; the receipt and the
+manifest row record it as `menu_version`. Per-game addresses are the `SLINK_TARGET_MENU_*` defines in the target headers
+(RR's `SLM_*` literals in `handlers.c`; RR's menu is FireRed's, byte for byte). The state byte is arena offset `0x920` on the
+native companions and `0x0203FF61` on RR.
+
+Measured facts: `tests/fixtures/gen3/title_*.json` (`lua/tests/probe_gen3_title_vram.lua`, `tools/analyze_gen3_title.py`) and
+`tests/fixtures/gen3/menu_*.json` (`lua/tests/probe_gen3_menu_plan.lua`, vanilla menus in every layout); tests:
+`tests/unit/test_gen3_title_screen.py`, `tests/unit/test_gen3_menu_version.py` (the ROM checks need `SLINK_GEN3_ROMS`, the
+compile checks a toolchain).
+**Version-masked identity** (owner ruling 2026-10-02). The version is a FIXED-WIDTH field: `slm_text` in `native_menu.h` is always
+`SLM_FIELD` = 20 bytes (the charmap text, its 0xFF terminator, zero padding the compiler adds), so a release stamp changes those bytes
+and nothing else: not one address, not the payload size (`tests/unit/test_gen3_canonical_identity.py` builds two versions and diffs
+them, with a control that fails on the old variable-width array). `build.py` finds the field in the payload by its own bytes
+(`patch/tools/rom_identity.py`) and records, per companion, `version_slot` {offset,length} (in the ROM), `payload_version_slot` (in the
+payload), `canonical_sha1` (the ROM with the field zeroed) and, for the native ones, `canonical_payload_sha256`: in `gen3_companions.json`
+for FR / LG / Emerald, in the `rr` row of `companion_pins.json` (with `patched_md5` and `rom_sha1`; `build.py` read-modify-writes only
+that row through `patch/tools/companion_pins.py`) for Radical Red. Qualification and evidence key on the canonical identity; the exact hash
+still names the cartridge on disk (admission rows, the UPS, the web patcher's md5). A hash is accepted for a record if it is the published
+exact value or is listed in the record's `equivalent_sha1s` / `equivalent_payload_sha256` (earlier exact builds proven canonical-equal;
+absent = none; `build.py` extends the lists on a version-only rebuild and retires them on a real change). Nothing carries the Radical Red
+companion's sha1 as a literal: `tools/rr_companion.py` reads the `rr` row.
+
+**Releasing (every family).** `python tools/stamp_release.py --version vX.Y.Z` rebuilds Red/Blue, pureRGB, Gen 2 and Gen 3 with that version,
+regenerates everything that names the exact bytes (UPS, sym/map, provenance, admission rows, `companion_pins.json`, the UPR ini and, unless
+`--no-jar`, the fork jar's overlay entries via `tools/upr_resource_update.py`, the Gen 2 grant when the overlay rows are ADMITTED, the md5
+tables in the READMEs), stops with exit 2 if any family's canonical identity moved (that is a code change, not a stamp), and writes
+`patch/dist/companion_version.json` (version + sha256 of every shipped companion file). Commit the result, tag, then
+`python tools/make_release.py --version X.Y.Z --with-patch`, which refuses companions that record does not vouch for. `--plan` prints the
+steps. `python tools/stamp_release.py --version dev` restores the committed dev builds.
+
+**Published:** `SLink-{FireRed,LeafGreen,Emerald,RR}.ups`, `gen3_companions.json` and `companion_pins.json` are the default `dev` build with
+the title wordmark and the fixed-width menu line (2026-10-02), and `build.py --check` reproduces them (the Radical Red `--check` also
+verifies the `rr` row). The frozen-cut receipts under `docs/gen3/probes` are bound to earlier exact hashes (see docs/gen3_requirements.md).
+`tools/make_release.py` does not yet re-stamp the version.
+
 > The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
 > `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
 > six patches; `/patcher` applies any of them in the browser.
 
-An **optional** native code-injection layer for Radical Red. When applied, the SLink Lua
-client detects it and uses native in-game features; without it, everything falls back to
-the existing behaviour. **Unpatched players are unaffected.**
+A native code-injection layer for Radical Red. When applied, the SLink Lua client detects
+it and uses native in-game features. The Soul Link rules themselves run in Lua on every
+cartridge, patched or not.
+
+## Patch-first (owner, 2026-10-01; companion REQUIRED 2026-10-02)
+
+The companion is **required** for every title that has one: Red/Blue, pureRGB, Gold/Silver/Crystal,
+FireRed/LeafGreen/Emerald and Radical Red. The Manager patches it into every cartridge it prepares,
+with no opt-out (`server/cartridges.py` `COMPANION_TITLES`), and it **refuses** a pick it cannot
+patch instead of handing out a clean one. A clean (unpatched) cartridge of those titles is refused
+twice more, so it cannot be used by bypassing the Manager: by the launcher (`lua/gen1/entry.lua`
+`admit_routed`, `lua/gen2/entry.lua` `Entry.admit`, `lua/gen3/entry.lua` `admit_routed`) and by the
+server at the hello (`GameRulesAdapter.companion_refusal`, overridden per adapter). A randomized
+cartridge is randomized and then patched; a randomized-clean one is refused like any clean one. The
+player-facing reason: this cartridge needs the SLink companion patch, so prepare it through the Manager
+or `/patcher`.
+
+**Exempt, still admitted clean:** Yellow (zero free WRAM, so no companion exists), the Archipelago
+builds (allowed clean, but not offered by the Manager until a client supports them),
+the Emerald Expansion (`gen3_exp`, its companion does not exist yet) and Gen 4/5 (never run against a
+real game). Those keep sharing the Lua rule paths, which is why those paths stay.
+
+**New ROM-side features are companion-only.** They get no Lua/HUD fallback, so a cartridge
+without the companion simply lacks them, the way Rival Swap answers `patch_required` on Gen 3.
 
 ## Prerequisites — the patch is per-RR-build
 
@@ -42,7 +118,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `70e7e746e573a2d00df5d3ef41d19d61`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `567eaeeae74f0e8ea412097cf9fda42f`.
 Then load the patched ROM in BizHawk as usual.
 
 UPS only — no IPS is provided. The patch now bundles the **Battle Calc** (the in-battle
@@ -84,12 +160,14 @@ set per run in the run manager's **New run** form or via server CLI flags):
 | `native_sounds` | OFF | `--native-sounds` | Lua m4a `playSE` poke |
 | `battle_calc` | ON | `--no-battle-calc` | damage display hidden (kill-switch byte) |
 | `pc_trade_npc` | ON | `--no-pc-trade-npc` | no Pokémon-Center trade NPC (only effective while overworld presence is OFF) |
+| `phone_calls` | ON | `--no-phone-calls` | Gen 2 only: no Pokégear call for first link / dead zone / fallen (the HUD pop-up still shows) |
 
 Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
 `--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC
 box⇄party storage (24/25), the native trade scene (21), memorialize (26), party freeze and the
-peer-interact plumbing — they're correctness paths, not preferences (the Lua fallbacks remain
-for unpatched ROMs only).
+peer-interact plumbing — they're correctness paths, not preferences. (Storage 24/25 and
+memorialize 26 are built and reserved in the ABI but not wired: box, party and memorial moves
+always go through the armed Lua write sink in `lua/gen3/boxes.lua`.)
 
 ## What's wired into a real run TODAY
 
@@ -121,12 +199,6 @@ for unpatched ROMs only).
 - **Native sound.** Server `play_sound` cues (link formed, KO, shiny, …) play through the patch
   (`PlaySE`) when present **and the `native_sounds` toggle is ON**, instead of the Lua m4a
   RAM-poke — fallback keeps unpatched ROMs (and toggled-off runs) working.
-- **Native PC box ⇄ party storage** (`DEPOSIT_MON` 24 / `WITHDRAW_MON` 25) — server-driven
-  box/party sync runs through CFRU's own compressed-box conversion (async, settled in the
-  client's storage poll; Lua RAM-poke path remains the unpatched fallback).
-- **Native memorialize** (`MEMORIALIZE` 26) — dead linked mons move to the memorial box in one
-  frame-hook pass (compress + zero + swap-with-last, survivors keep their slot indices). Async
-  like storage; on any failure the client reverts to the Lua path for the rest of the session.
 - **Event-push ring** (`EvRing 0x0203FD10`) — the patch pushes faint-settled (gBattleResults
   counter deltas) and battle-outcome edges; the client drains them each frame
   (`MB.events_drain`). Foundation: today they're logged alongside the proven Lua detection;
@@ -142,6 +214,10 @@ production client doesn't invoke them yet — each needs its own server/client i
   (`lua/tests/test_live_forcemove.lua`) but **deliberately never sent by the client**: the
   controller swap softlocked in real play, so the Lua Variant-3 RAM path is the single
   production mechanism.  Reserved in the ABI; see `patch/ROADMAP.md` §2.
+- Storage: `DEPOSIT_MON` 24 / `WITHDRAW_MON` 25 (CFRU's own compressed-box conversion) and
+  `MEMORIALIZE` 26 (compress + zero + swap-with-last, survivors keep their slot indices).
+  `lua/gen3/boxes.lua` reads `io.native_executor`, which only tests inject, so server-driven
+  box/party sync and memorialize always run the armed Lua write path. Reserved in the ABI.
 - Mon: `CREATE_MON`, `GIVE_MON` (`SET_ENEMY_PARTY` rival-team-swap and `SET_PARTY_MON` trade ARE wired)
 - Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
 - Rules/UI: `PLAY_FANFARE` (`SHOW_MENU`, `PLAY_SE` ARE wired)
@@ -158,8 +234,8 @@ The trade-carrying Red/Blue patches are separate UPS files for their exact clean
 
 | Patch | Clean ROM md5 | Patched ROM md5 |
 |---|---|---|
-| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `cd0af68e5097b8cfa9733225ef055e8a` |
-| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `40cc749ee03edfd4a9b31bf088c1a4d2` |
+| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `a9a70f99008559734ba01a9a80d78d5c` |
+| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `fa47b8ba0c10e82f2545791abd157ad3` |
 
 Rebuild them from the clean dumps and the current Gen 1 build:
 

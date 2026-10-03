@@ -9,6 +9,10 @@ from tools import gen3_borrowed_rows as d
 
 
 def runner(case):
+    # Absent companion build skips (tests/TESTING.md); a present-but-wrong one still fails
+    # own_facts' COMPANION_SHA1 check.
+    if not (ROOT/h.ROM_REL).is_file():
+        pytest.skip(f"RR companion build absent: {h.ROM_REL}")
     r=object.__new__(h.DuoRun)
     r.game="gen3_rr";r.gcfg=h.GAMES["gen3_rr"];r.scenario="borrowed_party_"+case+"_gen3"
     r.cfg=dict(d.ROWS[r.scenario]);r.attempt=1

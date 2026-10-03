@@ -27,6 +27,13 @@ tests/fixtures/gen2/receipts/<fixture>.qualification.json:
 Silver has no run of its own: its checkpoint rows are identical to Gold's, so the Gold receipt (Gold's
 pinned ROM) covers it exactly while those rows stay identical. Skipped without EmuHawk, the pinned build or
 a qualified fixture (the release runner counts a skip as a failure).
+
+OVERLAY (SLINK_GEN2_ARTIFACT=overlay, docs/gen2/OVERLAY_ADMISSION.md D4): every mode boots <title>_overlay on the overlay
+qualification receipts, runs the overlay binding checkpoint rows (data/games/gen2_<t>/overlay/binding.json) and
+writes tests/fixtures/gen2/receipts/overlay/<title>.write_window.json. O-23 (Silver rides Gold) stays clean-only: Silver
+overlay writes ITS OWN receipt (title silver, fixtures silver_town/silver_battle) and no run is a confirmation. Each
+overlay receipt and run records artifact_kind, the overlay own rom_sha1 and the binding sidecar sha256, checked
+against the hashed staged overlay; the validators take the execution view.
 """
 from __future__ import annotations
 
@@ -52,7 +59,9 @@ pytestmark = [
 ]
 
 GATE = "lua/tests/gen2_write_windows.lua"
-TITLES = ("crystal", "gold")
+KIND = live.KIND
+# O-23: Silver rides Gold on the CLEAN artifact only; an overlay Silver is a title of its own (D4).
+TITLES = ("crystal", "gold", "silver") if KIND == "overlay" else ("crystal", "gold")
 RECEIPT_SCHEMA = "gen2-write-window-receipt-v2"
 # The pack physical.required_controls this receipt covers; every other one stays OPEN (M.qualified scope).
 COVERED_CONTROLS = ["idle reacquisition", "warp/Continue"]
@@ -70,8 +79,25 @@ REACQUIRE = {"town": [("idle", "start_menu"), ("face", "talk"), ("to_save", "sav
              "battle_bench": [("idle", "hunt"), ("post_battle", "done")]}
 
 
-def receipt_path(title: str, *, repo: Path = REPO) -> Path:
-    return repo / "tests/fixtures/gen2/receipts" / f"{title}.write_window.json"
+def receipt_path(title: str, *, repo: Path = REPO, kind: str | None = None) -> Path:
+    return live.receipt_file(f"{title}.write_window.json", kind, repo=repo)
+
+
+def owner_of(title: str) -> str:
+    """The title whose receipt covers `title`: Gold for Silver on the clean artifact (O-23), itself on an overlay."""
+    return title if KIND == "overlay" else ("gold" if title == "silver" else title)
+
+
+def exec_pack(title: str):
+    """(pack, view) the validators run against. Clean: write_checkpoint.json as committed, no view. Overlay: that pack with
+    this title row replaced by the overlay binding checkpoint (D2), and the view {kind, rom_sha1, base_sha1,
+    binding_sha256, checkpoint} built from the HASHED staged overlay (live.identity), never from the environment."""
+    from tools import gen2_fixtures
+    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    if KIND == "clean":
+        return pack, None
+    row = gen2_fixtures.exec_checkpoint(title, "overlay", REPO)
+    return {**pack, "titles": {title: row}}, {**live.identity(title, "overlay"), "checkpoint": row}
 
 
 def sram_flat(bank: int, address: int) -> int:
@@ -93,6 +119,16 @@ def offsets(symbols, current_box: int) -> dict:
             "backing": sram_flat(backing.bank, backing.address)}
 
 
+def work_root(kind=None):
+    """This artifact's U2 scratch root (D4: an overlay run never writes into the clean lane's paths). Created on
+    demand: a fresh worktree has no .cache/gen2-fixtures/u2-write-windows*, and the round-1 overlay U2 run failed
+    copying its reload candidate into the CLEAN, non-existent directory."""
+    kind = kind or KIND
+    root = REPO / ".cache/gen2-fixtures" / ("u2-write-windows-overlay" if kind == "overlay" else "u2-write-windows")
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def saved_image(directory: Path, fixture: str) -> Path:
     """The post-save SaveRAM image the town gate flushed, digest-checked and kept (lua/tests/
     gen2_write_windows.lua U.saved_path). Never the lane's SaveRAM file: the gate keeps playing after the
@@ -105,6 +141,8 @@ def run_record(text: str) -> dict:
     assert "RESULT: PASS" in text.splitlines()[-1], text[-2000:]
     run = live.tag_json(text, "U2_RUN")
     assert run["result"] == "PASS", run["result"]
+    from tools import gen2_fixtures
+    gen2_fixtures.check_run_identity(run, live.identity(run["title"], KIND))   # the hashed staged artifact
     return run
 
 
@@ -177,12 +215,20 @@ def verify_battle(text: str, primary: dict) -> dict:
     return run
 
 
-def build_receipt(title: str, pack: dict, runs: dict) -> dict:
+def build_receipt(title: str, pack: dict, runs: dict, identity: dict | None = None) -> dict:
     """The receipt M.qualified checks: the pack binding, the exact checkpoint rows and the three gate run
-    records as printed (their evidence_level is the gate's own), plus the covered controls."""
-    return {"schema": RECEIPT_SCHEMA, "title": title, "rom_sha1": pack["source"]["rom_sha1"],
-            "pack_commit": pack["source"]["commit"], "checkpoint": pack["titles"][title]["primary"],
-            "runs": runs, "covered_controls": list(COVERED_CONTROLS)}
+    records as printed (their evidence_level is the gate's own), plus the covered controls.
+
+    identity: the hashed staged artifact (live.identity). An overlay receipt records its own rom_sha1, artifact_kind
+    and binding sha256 (the lineage, pack_commit, stays the clean pack's); clean receipts are unchanged."""
+    overlay = identity is not None and identity["kind"] == "overlay"
+    out = {"schema": RECEIPT_SCHEMA, "title": title,
+           "rom_sha1": identity["rom_sha1"] if overlay else pack["source"]["rom_sha1"],
+           "pack_commit": pack["source"]["commit"], "checkpoint": pack["titles"][title]["primary"],
+           "runs": runs, "covered_controls": list(COVERED_CONTROLS)}
+    if overlay:
+        out.update(artifact_kind="overlay", binding_sha256=identity["binding_sha256"])
+    return out
 
 
 def _module():
@@ -191,10 +237,14 @@ def _module():
     return lua, lua.eval("dofile")((REPO / "lua/gen2_write_safety.lua").as_posix())
 
 
-def lua_qualified(pack: dict, title: str, receipt: dict):
-    """lua/gen2_write_safety.lua M.qualified (the production check): (scope dict, None) or (None, why)."""
+def lua_qualified(pack: dict, title: str, receipt: dict, view: dict | None = None):
+    """lua/gen2_write_safety.lua M.qualified (the production check): (scope dict, None) or (None, why).
+    view: the executed-artifact view (None = the clean pack, exactly as before)."""
     lua, module = _module()
-    result = module.qualified(lua.table_from(pack, recursive=True), title, lua.table_from(receipt, recursive=True))
+    args = [lua.table_from(pack, recursive=True), title, lua.table_from(receipt, recursive=True)]
+    if view is not None:
+        args.append(lua.table_from(view, recursive=True))
+    result = module.qualified(*args)
     scope, why = result if isinstance(result, tuple) else (result, None)
     if scope is None:
         return None, why
@@ -202,11 +252,13 @@ def lua_qualified(pack: dict, title: str, receipt: dict):
             "uncovered": list(scope.uncovered.values())}, None
 
 
-def lua_bind(receipt: dict, reports: dict):
+def lua_bind(receipt: dict, reports: dict, view: dict | None = None):
     """lua/gen2_write_safety.lua M.bind_fixture_qualification: (True, None) or (None, why)."""
     lua, module = _module()
-    result = module.bind_fixture_qualification(lua.table_from(receipt, recursive=True),
-                                               lua.table_from(reports, recursive=True))
+    args = [lua.table_from(receipt, recursive=True), lua.table_from(reports, recursive=True)]
+    if view is not None:
+        args.append(lua.table_from(view, recursive=True))
+    result = module.bind_fixture_qualification(*args)
     return result if isinstance(result, tuple) else (result, None)
 
 
@@ -222,8 +274,8 @@ def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification
     case["attempt_id"] = f"u2-{lane}"   # one attempt id per run (M.qualified requires them distinct)
     env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
     env["SLINK_GEN2_U2"] = json.dumps({"mode": mode, "qualification_attempt_id": qualification_attempt_id})
-    directory = REPO / ".cache/gen2-fixtures/u2-write-windows" / lane
-    passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=1500,
+    directory = work_root() / lane
+    passed, path, text = run_gate(GATE, rom_key=live.rom_key(spec.title), target=spec.target, timeout=1500,
                                   saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=speed_percent,
                                   env_overrides=env)
     assert passed, f"{lane} FAILED; result {path}: {text[-3000:]}"
@@ -232,7 +284,7 @@ def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification
 
 @pytest.mark.parametrize("title", TITLES)
 def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
-    from tools import gen2_fixtures, gen2_source_data
+    from tools import gen2_fixtures
     town_spec, battle_spec = gen2_fixtures.BY_NAME[f"{title}_town"], gen2_fixtures.BY_NAME[f"{title}_battle"]
     for spec in (town_spec, battle_spec):
         reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
@@ -243,11 +295,11 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
     for spec in (town_spec, battle_spec):
         staged[spec.name] = (REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM").read_bytes()
         live.qualified_identity(spec.name, staged[spec.name])   # the staged bytes are the qualified candidate
-        reports[spec.name] = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json")
+        reports[spec.name] = json.loads(live.receipt_file(f"{spec.name}.qualification.json")
                                         .read_text(encoding="utf-8"))
-    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    pack, view = exec_pack(title)
     primary = pack["titles"][title]["primary"]
-    symbols = gen2_source_data.load_context(title, root=REPO).symbols
+    symbols = gen2_fixtures.exec_context(title, KIND, REPO).symbols
     town_q = reports[town_spec.name]["attempt_id"]
 
     town_fixture = REPO / "tests/fixtures/gen2" / f"{town_spec.name}.SaveRAM"
@@ -255,7 +307,7 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
     saved = saved_image(directory, town_spec.name)
     town = verify_town(text, primary, symbols, saved.read_bytes(), staged[town_spec.name])
 
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_town.reload_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_town.reload_candidate.SaveRAM"
     shutil.copyfile(saved, candidate)
     _, text = _run(town_spec, candidate, candidate.read_bytes(), "reload", f"{title}_town_reload", town_q)
     reload = verify_reload(text, primary, symbols, town, candidate.read_bytes())
@@ -268,12 +320,13 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
         assert (REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM").read_bytes() == staged[spec.name], \
             f"{spec.name} changed while the gates ran"
 
-    receipt = live.stamped(build_receipt(title, pack, {"town": town, "reload": reload, "battle": battle}))
-    scope, why = lua_qualified(pack, title, receipt)
+    receipt = live.stamped(build_receipt(title, pack, {"town": town, "reload": reload, "battle": battle},
+                                         live.identity(title)))
+    scope, why = lua_qualified(pack, title, receipt, view)
     assert scope is not None, why
-    bound, why = lua_bind(receipt, reports)
+    bound, why = lua_bind(receipt, reports, view)
     assert bound is True, why
-    if title == "gold":
+    if title == "gold" and KIND == "clean":   # O-23 is clean-only
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert lua_qualified(silver, "silver", receipt)[0] is not None
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -387,7 +440,7 @@ def verify_boxes_reload(text: str, primary: dict, symbols, reset: dict, candidat
 @pytest.mark.parametrize("title", TITLES)
 def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     """Adds runs boxes/boxes_reset/boxes_reload to the committed <title>.write_window.json and re-qualifies it."""
-    from tools import gen2_fixtures, gen2_source_data
+    from tools import gen2_fixtures
     from tests.live.test_gen2_frame_align import u1_facts
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
@@ -401,38 +454,38 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)
-    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    report = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack, view = exec_pack(title)
     primary = pack["titles"][title]["primary"]
-    ctx = gen2_source_data.load_context(title, root=REPO)
+    ctx = gen2_fixtures.exec_context(title, KIND, REPO)
     q = report["attempt_id"]
-    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q))}
+    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO, kind=KIND), q))}
 
     directory, text = _run(spec, fixture, staged, "boxes", f"{title}_boxes", q, facts)
     boxes = verify_boxes(text, primary, ctx.symbols, saved_image(directory, spec.name).read_bytes(),
                          reset_image(directory, spec.name).read_bytes())
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.reset_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_battle.reset_candidate.SaveRAM"
     shutil.copyfile(reset_image(directory, spec.name), candidate)
     directory, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reset", f"{title}_boxes_reset", q)
     reset = verify_boxes_reset(text, primary, ctx.symbols, boxes, candidate.read_bytes(),
                                saved_image(directory, spec.name).read_bytes(),
                                saved2_image(directory, spec.name).read_bytes(),
                                reset_image(directory, spec.name).read_bytes())
-    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.box_reload_candidate.SaveRAM"
+    candidate = work_root() / f"{title}_battle.box_reload_candidate.SaveRAM"
     shutil.copyfile(reset_image(directory, spec.name), candidate)
     _, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reload", f"{title}_boxes_reload", q)
     reload = verify_boxes_reload(text, primary, ctx.symbols, reset, candidate.read_bytes())
     assert fixture.read_bytes() == staged, f"{spec.name} changed while the gates ran"
 
     receipt["runs"].update({"boxes": boxes, "boxes_reset": reset, "boxes_reload": reload})
-    scope, why = lua_qualified(pack, title, receipt)
+    scope, why = lua_qualified(pack, title, receipt, view)
     assert scope is not None, why
     assert set(scope["kinds"]) >= {"party_collection", "box_withdraw", "backing_box"}, scope
-    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+    reports = {name: json.loads(live.receipt_file(f"{name}.qualification.json").read_text(encoding="utf-8"))
                for name in (f"{title}_town", f"{title}_battle")}
-    bound, why = lua_bind(receipt, reports)
+    bound, why = lua_bind(receipt, reports, view)
     assert bound is True, why
-    if title == "gold":
+    if title == "gold" and KIND == "clean":   # O-23 is clean-only
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert lua_qualified(silver, "silver", receipt)[0] is not None
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -469,7 +522,7 @@ def verify_battle_faint(text: str, primary: dict, hold: dict) -> dict:
 def test_battle_faint_run(title, emuhawk):  # noqa: F811 - pytest fixture
     """Adds run battle_faint (and the pack's battle_hold rows) to the committed <title>.write_window.json."""
     from tests.live.test_gen2_frame_align import u1_facts
-    from tools import gen2_fixtures, gen2_source_data
+    from tools import gen2_fixtures
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
@@ -481,25 +534,25 @@ def test_battle_faint_run(title, emuhawk):  # noqa: F811 - pytest fixture
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)
-    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    report = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack, view = exec_pack(title)
     primary, hold = pack["titles"][title]["primary"], pack["titles"][title]["battle_hold"]
-    ctx = gen2_source_data.load_context(title, root=REPO)
+    ctx = gen2_fixtures.exec_context(title, KIND, REPO)
     q = report["attempt_id"]
-    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q))}
+    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO, kind=KIND), q))}
     _, text = _run(spec, fixture, staged, "battle_faint", f"{title}_battle_faint", q, facts)
     run = verify_battle_faint(text, primary, hold)
     assert fixture.read_bytes() == staged, f"{spec.name} changed while the gate ran"
     receipt["runs"]["battle_faint"] = run
     receipt["battle_hold"] = hold
-    scope, why = lua_qualified(pack, title, receipt)
+    scope, why = lua_qualified(pack, title, receipt, view)
     assert scope is not None, why
     assert "battle_faint" in scope["kinds"], scope
-    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+    reports = {name: json.loads(live.receipt_file(f"{name}.qualification.json").read_text(encoding="utf-8"))
                for name in (f"{title}_town", f"{title}_battle")}
-    bound, why = lua_bind(receipt, reports)
+    bound, why = lua_bind(receipt, reports, view)
     assert bound is True, why
-    if title == "gold":
+    if title == "gold" and KIND == "clean":   # O-23 is clean-only
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert "battle_faint" in lua_qualified(silver, "silver", receipt)[0]["kinds"]
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -548,25 +601,25 @@ def verify_battle_bench(text: str, primary: dict, oracles: dict) -> dict:
 def test_battle_bench_run(title, emuhawk):  # noqa: F811 - pytest fixture
     """Adds run battle_bench to the committed <title>.write_window.json (Silver: a confirmation in Gold's)."""
     from tests.live.test_gen2_frame_align import u1_facts
-    from tools import gen2_fixtures, gen2_source_data
+    from tools import gen2_fixtures
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
     if reason:
         pytest.skip(reason)
-    owner = "gold" if title == "silver" else title
+    owner = owner_of(title)
     receipt = json.loads(receipt_path(owner).read_text(encoding="utf-8"))
     receipt = live.stamped(receipt, base=receipt)   # extends a committed receipt: stamped only if that one is ours
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)
-    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    report = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack, view = exec_pack(title)
     primary = pack["titles"][title]["primary"]
-    ctx = gen2_source_data.load_context(title, root=REPO)
+    ctx = gen2_fixtures.exec_context(title, KIND, REPO)
     q = report["attempt_id"]
     oracles = bench_oracles(ctx)
-    env = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q)),
+    env = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO, kind=KIND), q)),
            "SLINK_GEN2_BENCH_ORACLES": json.dumps(oracles)}
     _, text = _run(spec, fixture, staged, "battle_bench", f"{title}_battle_bench", q, env, speed_percent=100)
     run = verify_battle_bench(text, primary, oracles)
@@ -576,19 +629,19 @@ def test_battle_bench_run(title, emuhawk):  # noqa: F811 - pytest fixture
     problem = module.run_problem(lua.table_from(run, recursive=True), "battle_bench",
                                  lua.table_from(primary, recursive=True))
     assert problem is None, problem
-    if title == "silver":
+    if title == "silver" and KIND == "clean":   # a confirmation in the Gold receipt (O-23); an overlay Silver has its own
         receipt.setdefault("confirmations", {})["silver"] = {"battle_bench": run}
     else:
         receipt["runs"]["battle_bench"] = run
-    gold_pack = json.loads((REPO / f"data/games/gen2_{owner}/write_checkpoint.json").read_text(encoding="utf-8"))
-    scope, why = lua_qualified(gold_pack, owner, receipt)
+    gold_pack, owner_view = exec_pack(owner)
+    scope, why = lua_qualified(gold_pack, owner, receipt, owner_view)
     assert scope is not None, why
-    assert "battle_bench" in scope["kinds"] or title == "silver", scope
-    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+    assert "battle_bench" in scope["kinds"] or (title == "silver" and KIND == "clean"), scope
+    reports = {name: json.loads(live.receipt_file(f"{name}.qualification.json").read_text(encoding="utf-8"))
                for name in (f"{owner}_town", f"{owner}_battle")}
-    bound, why = lua_bind(receipt, reports)
+    bound, why = lua_bind(receipt, reports, view)
     assert bound is True, why
-    if owner == "gold":
+    if owner == "gold" and KIND == "clean":   # O-23 is clean-only
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert lua_qualified(silver, "silver", receipt)[0] is not None
     receipt_path(owner).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")

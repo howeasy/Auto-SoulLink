@@ -63,20 +63,22 @@ from tools import make_release
 # share an adapter and an area map, so any two of them can link; the same holds for
 # FireRed/LeafGreen, Gold/Silver/Crystal, HeartGold/SoulSilver, Black/White. What
 # separates families is a different map (Radical Red from vanilla FireRed, Emerald,
-# Platinum from HGSS, B2W2 from BW) or a reshuffled world (the Archipelago builds).
-# "" is today's behaviour: the run learns its cartridges from the first hellos.
+# Platinum from HGSS, B2W2 from BW). The Archipelago builds are not listed: no SLink client
+# supports them yet (Gen 1 has no AP profile, the Gen 3 launcher refuses a header-only build).
+# Every new run names its family up front, so the Manager knows which cartridge (and which
+# companion) to hand out. Runs created before 2026-10-01 may still carry "" (detected).
 GAMES = [
-    ("", "Detect when players connect", []),
     ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
-    ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
-    ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
     ("gen3_e", "Emerald", ["emerald"]),
+    ("gen3_exp", "Emerald Expansion", ["emerald_expansion_28877d73"]),
 ]
-UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
+# Listed but not admitted by the client: shown in the Manager with a "not admitted" label, never created. Empty
+# since the Archipelago games left the list (owner 2026-10-02), the seam stays for the next one.
+UNADMITTED_GAMES: frozenset[str] = frozenset()
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a run's game names (upr_settings.FAMILY_*): a pure run takes pure
@@ -87,11 +89,12 @@ GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # verifies against), so a run named "gen3_rr" never lands in randomizer_games and never offers
 # the randomizer -- see test_manager_names_the_frlg_family / the RR refusal test in
 # test_upr_pipeline_gen3.py.
-GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
+GAME_FAMILY = {"gen1": "gen1_rby", "gen1_purergb": "gen1_purergb",
                "gen2": "gen2_gsc", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
                 "gen2_gsc": "Gold / Silver / Crystal",
-                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
+                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald",
+                "gen3_exp": "Emerald Expansion"}
 # Owner ruling 37 (2026-09-27): a Radical Red run cannot be randomized at all. It is absent
 # from GAME_FAMILY above, which the UI honours (randomizer_games), but _game_family() then
 # answers None and `handle_cartridges` SKIPPED its "this run is X; these are Y cartridges"
@@ -101,6 +104,10 @@ FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pure
 NON_RANDOMIZABLE_GAMES = {
     "gen3_rr": ("Randomized Radical Red is not supported in this release; "
                 "the randomizer supports FireRed / LeafGreen / Emerald"),
+    # Also absent from GAME_FAMILY on purpose: the creator feeds GAME_FAMILY[game] to the
+    # randomizer form as its family, and "gen3_exp" is not one of upr_settings.FAMILIES.
+    "gen3_exp": ("The Emerald Expansion has no randomizer and no companion patch -- it is a prebuilt "
+                 "reference ROM; the randomizer supports FireRed / LeafGreen / Emerald"),
 }
 
 
@@ -144,10 +151,6 @@ def _legacy_cartridges(run: dict) -> dict | None:
                         for p, v in (rnd.get("players") or {}).items()}}
 
 
-# The titles the SLink companion exists for (a UPS in patch/dist, a target in
-# server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal", "Gold", "Silver",
-                    "FireRed", "LeafGreen", "Emerald")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -155,7 +158,7 @@ COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal"
 OPTION_GROUPS = [
     ("Link clauses", ["species_lock", "gender_lock", "type_lock"]),
     ("Battle", ["explode_mode", "rival_team_swap", "overworld_presence"]),
-    ("Native UI", ["native_messages", "native_sounds", "battle_calc", "pc_trade_npc"]),
+    ("Native UI", ["native_messages", "native_sounds", "phone_calls", "battle_calc", "pc_trade_npc"]),
 ]
 OPTIONS = {
     "species_lock": ("Species Clause", "Reject links where both mons are in the same evolution family."),
@@ -166,6 +169,7 @@ OPTIONS = {
     "overworld_presence": ("Overworld Presence", "See your partner walking in your overworld as a live peer ghost."),
     "native_messages": ("Native Messages", "Notifications as native in-game text boxes instead of the Lua HUD overlay."),
     "native_sounds": ("Native Sounds", "Notification sounds through the game's own audio engine (needs the companion patch or pureRGB overlay on that cartridge — inert on an unpatched one)."),
+    "phone_calls": ("Phone Calls", "Your partner rings your Pokégear when a pair links, an area dies or a mon falls (Gen 2 companion; the HUD pop-up always shows too)."),
     "battle_calc": ("Battle Calc", "The bundled in-battle damage and type-effectiveness calculator."),
     "pc_trade_npc": ("PC Trade NPC", "A Pokémon-Center trade NPC, when Overworld Presence is off."),
 }
@@ -180,13 +184,15 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen2_gsc": {"ok": True},
-                     "gen3_frlge_rr": {"ok": True}},
+                     "gen3_frlge_rr": {"ok": True},
+                     "gen3_exp": {"ok": False, "why": "Explode Mode is not supported on the Emerald Expansion."}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
                         "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},
-                        "gen3_frlge_rr": {"ok": True}},
+                        "gen3_frlge_rr": {"ok": True},
+                        "gen3_exp": {"ok": False, "why": "Needs the companion patch (gEnemyParty is encrypted), and the Emerald Expansion has none."}},
     "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
     "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal, FireRed/LeafGreen/Emerald).",
@@ -194,20 +200,25 @@ OPTION_SUPPORT = {
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
-                      "gen3_frlge_rr": {"ok": True}},
+                      "gen3_frlge_rr": {"ok": True},
+                      "gen3_exp": {"ok": False, "why": "Needs a companion patch with a native sound path, and the Emerald Expansion has none."}},
+    "phone_calls": {"all": False, "why": "Only Gen 2 has a Pokégear phone for the companion to ring.",
+                    "gen2_gsc": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen2_gsc": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 2 damage."},
-                    "gen3_frlge_rr": {"ok": True}},
+                    "gen3_frlge_rr": {"ok": True},
+                    "gen3_exp": {"ok": True}},
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
                      "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
-                     "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen3_frlge_rr": {"ok": True}},
+                     "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist, which the companion overlay makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen3_frlge_rr": {"ok": True},
+                     "gen3_exp": {"ok": False, "why": "The Emerald Expansion has no companion patch, so no Pokémon-Center trade NPC to switch off."}},
 }
 
 
@@ -226,6 +237,7 @@ RUN_FLAGS = (
     ("native_sounds", "--native-sounds", False),
     ("battle_calc", "--no-battle-calc", True),
     ("pc_trade_npc", "--no-pc-trade-npc", True),
+    ("phone_calls", "--no-phone-calls", True),
     ("verbose", "--verbose", False),
 )
 
@@ -308,11 +320,15 @@ def new_run_form() -> dict:
         "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
         "gen1_games": [k for k, _, m in GAMES if m and all(
-            rt in ("red", "blue", "yellow", "red_ap", "blue_ap",
-                   "purered", "pureblue", "puregreen") for rt in m)],
+            rt in ("red", "blue", "yellow", "purered", "pureblue", "puregreen") for rt in m)],
         # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
-        "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY],
+        "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY and k not in NON_RANDOMIZABLE_GAMES],
     }
+
+
+def _companion_titles() -> tuple:
+    from server.cartridges import COMPANION_TITLES   # lazy: provisioning pulls the patch tools
+    return COMPANION_TITLES
 
 
 def _json_for_script(obj) -> str:
@@ -1152,9 +1168,9 @@ class RunManager:
             "presets": _load_presets(),
             "current": run.get("randomizer") if run else None,
             "cartridges": (run.get("cartridges") or _legacy_cartridges(run)) if run else None,
-            # The SLink companion exists for these titles (server/patcher.py TARGETS): the
-            # form greys the checkbox, with the reason, for a pick outside them.
-            "companion_titles": COMPANION_TITLES,
+            # The titles that get the SLink companion (server/cartridges.py decides per player);
+            # the form only explains why a pick outside them is handed out as picked.
+            "companion_titles": _companion_titles(),
         }
 
     @staticmethod
@@ -1223,9 +1239,11 @@ class RunManager:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
         if len(name) > 80:
             return web.json_response({"ok": False, "error": "name is too long (80 characters max)"}, status=400)
-        # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
-        # because the client would refuse the run at hello.
+        # Only a listed game can be created (an unlisted one, e.g. an Archipelago key from an old
+        # page, is refused here instead of at hello).
         game = str(body.get("game", "") or "").strip().lower()  # one normalized key: check, store, message
+        if game not in GAME_MEMBERS:
+            return web.json_response({"ok": False, "error": "choose the game this run plays"}, status=400)
         if game in UNADMITTED_GAMES:
             return web.json_response({"ok": False, "error": f"{GAME_LABELS[game]}: cannot create a run"},
                                      status=400)
@@ -1250,8 +1268,7 @@ class RunManager:
             "status":     "stopped",
             "pid":        None,
             **run_options(body),
-            # The game FAMILY, when named up front; "" means detect from the first hello.
-            "game": game if game in GAME_MEMBERS else "",
+            "game": game,  # the game FAMILY
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
@@ -1454,7 +1471,13 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
         from server import cartridges
-        from server.upr_pipeline import FAMILY_GEN2, family_of, find_upr_jar
+        from server.upr_pipeline import (
+            EXPANSION_REFUSAL,
+            FAMILY_GEN2,
+            FAMILY_GEN3_EXP,
+            family_of,
+            find_upr_jar,
+        )
         from server.upr_settings import (
             FAMILY_PURE,
             FAMILY_VANILLA,
@@ -1471,7 +1494,7 @@ class RunManager:
         spec, categories = body.get("spec"), body.get("categories")
         randomize = bool(body.get("randomize", implied_randomize or spec is not None
                                       or categories is not None or bool(settings)))
-        companion = bool(body.get("companion", False))
+        companion = bool(body.get("companion", True))  # patch-first; per player in cartridges.py
         missing = [n for n, v in (("rom_a", rom_a), ("rom_b", rom_b)) if not v]
         if randomize:
             missing += [n for n, v in (("jar", jar),) if not v]
@@ -1496,6 +1519,8 @@ class RunManager:
                     f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
                     f"{FAMILY_WORDS.get(family, family)} cartridges -- pick "
                     f"{FAMILY_WORDS.get(wanted, wanted)} dumps")}, status=400)
+        if family == FAMILY_GEN3_EXP and randomize:
+            return web.json_response({"ok": False, "error": EXPANSION_REFUSAL}, status=400)
         if randomize and family == FAMILY_GEN2:
             return web.json_response({"ok": False, "error": (
                 "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
@@ -1934,6 +1959,7 @@ class RunManager:
         if show_calc:
             tabs.append(("Calc", f"{base}/calc/normal.html", panel == "calc"))
         tabs.append(("Debug", f"{base}/debug", panel == "debug"))
+        tabs.append(("Timeline", f"{base}/timeline", panel == "timeline"))
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
@@ -1956,6 +1982,16 @@ class RunManager:
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
         ctx = await self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
+
+    async def handle_run_timeline(self, request: web.Request) -> web.Response:
+        """GET /runs/{run_id}/timeline — the run's story, from its status payload: live when
+        it is running, what it persisted when it is not (so a stopped run still has one)."""
+        from server.board import timeline
+        runs, run = self._run_or_404(request)
+        ctx = await self._run_panel_ctx(request, runs, run, panel="timeline", label="Timeline")
+        status = await self._run_status(request, run)
+        ctx.update({"available": True, "story": timeline(status), "players": status.get("players") or {}})
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
@@ -2244,6 +2280,7 @@ async def main(host: str, port: int, public_host: str = ""):
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
     # A run's secondary pages in the Manager's chrome, and the per-run relay their JS uses.
     app.router.add_get("/runs/{run_id}/debug",            manager.handle_run_debug)
+    app.router.add_get("/runs/{run_id}/timeline",         manager.handle_run_timeline)
     app.router.add_get("/runs/{run_id}/calc",             manager.handle_run_calc)
     app.router.add_get("/runs/{run_id}/calc/{path:.*}",   manager.handle_run_calc)
     app.router.add_get("/calc/{path:.*}",                 manager.handle_calc_asset)

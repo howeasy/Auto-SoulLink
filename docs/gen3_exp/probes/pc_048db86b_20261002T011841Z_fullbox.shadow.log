@@ -1,0 +1,5 @@
+NOTE observer building unadmitted gen3_exp/emerald_expansion_28877d73
+STATUS frame=613 registered=44 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1557 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=586
+STATUS frame=2157 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1142
+STATUS frame=2757 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1734

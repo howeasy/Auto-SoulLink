@@ -1,0 +1,79 @@
+{
+  "evidence": "Disclosed SYNTH setup; WIP f255 HEAD informational, actual generator/script hashes bound. Native CONTINUE/SAVE byte qualification only: both field HP1/max20/hpLost19 witnessed before SAVE and independently decoded after. No acquisition or whiteout behavior claim.",
+  "recipe": "Original exp_pc[_b] lead only: BoxPokemon.hpLost low14 @record+0x1E 0->19 and cachedPokemon.hp @+0x56 20->1. Secure block, mon checksum, maxHP20, moves33/45, all other party/boxes unchanged. Disclosed CONTINUE_GAME_WARP flag set for qualification.",
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "fixtures": [
+    {
+      "side": "a",
+      "seed": "tests/fixtures/gen3/exp_pc.sav",
+      "seed_sha256": "28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a",
+      "raw_seed": "patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_synth_unqualified.sav",
+      "raw_sha256": "1c490670d228d263627f6f7528bac2c2b36b9813fa549597e92a359820dd2b11",
+      "file": "tests/fixtures/gen3/exp_whiteout_synth.sav",
+      "sha256": "647902dd0f460961156e77f091f18300d90543a9686fb37a8249ed4d3cb6aeaa",
+      "qualification_status": "NATIVE_CONTINUE_SAVE_ONLY",
+      "native_hp_witness": {
+        "hp": 1,
+        "max_hp": 20,
+        "hp_lost": 19,
+        "frame": 596
+      },
+      "independent_lead": {
+        "hp": 1,
+        "max_hp": 20,
+        "key": "4D55444B:20250925"
+      },
+      "counter": [
+        2,
+        3
+      ],
+      "source_head": "f255136395a6b4613937e4f061e1bda901cc4615",
+      "source_disclosure": "WIP tracked edits present; HEAD informational; native qualification proves fixture bytes only, not the final corrected code cut",
+      "generator_sha256": "12721753ba2e67520a224306b7d286dba9aabcccf55d328df1772266ce16279f",
+      "qualification_script_sha256": "2bb3e5ffd36aba4cf2094695a7f56b78c62ecfbd57c2488ab1ebb19f11e2255c",
+      "qualification_script": "patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_qualify.lua",
+      "native_console": "phase start frame=1 title=emerald\nphase seeded frame=1 domain=SRAM counter=2\nphase overworld-cb2 frame=514 map=0.10 pos=(6,17)\nEXP_WHITEOUT_FIELD hp=1 max_hp=20 hp_lost=19 pid=4D55444B ot_id=20250925 frame=596\nphase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1\nphase save-menu frame=596 counter=2\nphase save-dialog frame=656 row=3/6\nphase saved frame=1183 counter=2->3\nphase flushed frame=1587 map=0.10 pos=(6,17)\nRESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)\n",
+      "record_preservation": "All six party record slots and entire selected storage byte-identical between raw and native save.",
+      "first_attempt_launcher": {
+        "exit": 1,
+        "reason": "run_gate did not recognize aliased result destination; original owned Lua RESULT PASS and flushed SaveRAM retained and independently recovered without rerun",
+        "first_console": "SOURCE=f255136395a6b4613937e4f061e1bda901cc4615 SYNTH native CONTINUE/SAVE only; no acquisition or whiteout exercised.\nSYNTH seed whiteout_synth: C:\\slink-wt\\exp-xg3-state\\whiteout-qual-f2551363\\fixture-runs\\make_exp_exp_whiteout_synth_native\\gen3 pokeemerald.SaveRAM sha256=1c490670d228d263627f6f7528bac2c2b36b9813fa549597e92a359820dd2b11 counter=2 party=[{'key': '4D55444B:20250925', 'species': 258, 'level': 5}, {'key': '504F4F4D:20250925', 'species': 261, 'level': 3}]\n[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_exp_whiteout_qualify.ini --lua=patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_qualify.lua patch/build/gen3_pokeemerald.gba\n[gate] exp_whiteout_qualify: (no RESULT line)  (6s)\n\n",
+        "first_result": "phase start frame=1 title=emerald\nphase seeded frame=1 domain=SRAM counter=2\nphase overworld-cb2 frame=514 map=0.10 pos=(6,17)\nEXP_WHITEOUT_FIELD hp=1 max_hp=20 hp_lost=19 pid=4D55444B ot_id=20250925 frame=596\nphase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1\nphase save-menu frame=596 counter=2\nphase save-dialog frame=656 row=3/6\nphase saved frame=1183 counter=2->3\nphase flushed frame=1587 map=0.10 pos=(6,17)\nRESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)\n",
+        "independent_recovery_exit": 0
+      }
+    },
+    {
+      "side": "b",
+      "seed": "tests/fixtures/gen3/exp_pc_b.sav",
+      "seed_sha256": "9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085",
+      "raw_seed": "patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_synth_b_unqualified.sav",
+      "raw_sha256": "8fd06453dede85975d8a76550be54e7017a1e7093440b52a9bf2b4f7a1f7757d",
+      "file": "tests/fixtures/gen3/exp_whiteout_synth_b.sav",
+      "sha256": "ea9c481f5d2ca7ee1048c6c5ec1bc204819e79d71a2a656a623798f50a6a510a",
+      "qualification_status": "NATIVE_CONTINUE_SAVE_ONLY",
+      "native_hp_witness": {
+        "hp": 1,
+        "max_hp": 20,
+        "hp_lost": 19,
+        "frame": 596
+      },
+      "independent_lead": {
+        "hp": 1,
+        "max_hp": 20,
+        "key": "4D55444B:DFDAF6DA"
+      },
+      "counter": [
+        3,
+        4
+      ],
+      "source_head": "f255136395a6b4613937e4f061e1bda901cc4615",
+      "source_disclosure": "WIP tracked edits present; HEAD informational; native qualification proves fixture bytes only, not the final corrected code cut",
+      "generator_sha256": "12721753ba2e67520a224306b7d286dba9aabcccf55d328df1772266ce16279f",
+      "qualification_script_sha256": "b8cfc00d2fca3ba9d11b41664601ba9358701090c5e8e77196ce7efbbb0299ca",
+      "qualification_script": "patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_qualify.lua",
+      "native_console": "SYNTH seed whiteout_synth: C:\\slink-wt\\exp-xg3-state\\whiteout-qual-f2551363\\fixture-runs\\make_exp_exp_whiteout_synth_b_native\\gen3 pokeemerald.SaveRAM sha256=8fd06453dede85975d8a76550be54e7017a1e7093440b52a9bf2b4f7a1f7757d counter=3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}, {'key': '504F4F4D:DFDAF6DA', 'species': 261, 'level': 3}]\n[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_exp_whiteout_qualify.ini --lua=patch/build/exp_whiteout_qualify_f2551363/exp_whiteout_qualify.lua patch/build/gen3_pokeemerald.gba\n[gate] exp_whiteout_qualify: RESULT: PASS counter 3 -> 4 map=0.10 pos=(6,17)  (7s)\nphase start frame=1 title=emerald\nphase seeded frame=1 domain=SRAM counter=3\nphase overworld-cb2 frame=514 map=0.10 pos=(6,17)\nEXP_WHITEOUT_FIELD hp=1 max_hp=20 hp_lost=19 pid=4D55444B ot_id=DFDAF6DA frame=596\nphase field frame=596 map=0.10 pos=(6,17) saveFileStatus=1\nphase save-menu frame=596 counter=3\nphase save-dialog frame=656 row=3/6\nphase saved frame=1183 counter=3->4\nphase flushed frame=1603 map=0.10 pos=(6,17)\nRESULT: PASS counter 3 -> 4 map=0.10 pos=(6,17)\nwrote C:\\slink-wt\\exp-xg3\\patch\\build\\exp_whiteout_qualify_f2551363\\exp_whiteout_synth_b_native.sav (131072 bytes) sha256=ea9c481f5d2ca7ee1048c6c5ec1bc204819e79d71a2a656a623798f50a6a510a slot=0 counter=4 trainer='EMERB'#DFDAF6DA party=[{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}, {'key': '504F4F4D:DFDAF6DA', 'species': 261, 'level': 3}]\n",
+      "record_preservation": "All six party record slots and entire selected storage byte-identical between raw and native save.",
+      "launcher_exit": 0
+    }
+  ]
+}

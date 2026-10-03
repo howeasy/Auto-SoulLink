@@ -1,7 +1,7 @@
 """Private, hash-pinned Gen 2 trade server bootstrap; never a production admission grant.
 
 python -m tools.gen2_trade_lane --manifest ATTEMPT.json -- <server arguments>
-The override exists only in this child process and is attributed HARNESS_ONLY_OVERLAY.
+This process observes the production server and journals native trade; it grants no Lua admission override.
 """
 from __future__ import annotations
 
@@ -18,10 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.repo_paths import inside_repo  # noqa: E402
+
 SCENARIOS = frozenset({"gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout",
                        "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item",
                        "gen2_trade_evolve"})
-ATTRIBUTION = "HARNESS_ONLY_OVERLAY"
+ATTRIBUTION = "PHYSICAL_RECEIPTED"
 TITLES = {name: title for title in ("crystal", "gold", "silver") for name in (title, title.title())}
 TOP_KEYS = {"schema", "run_id", "scenario", "evidence_class", "provenance_sha256", "players"}
 PLAYER_KEYS = {"title", "rom_type", "foundation", "artifact_kind", "rom_sha1", "base_sha1", "ups_sha256", "sym_sha256"}
@@ -50,7 +52,8 @@ def _json(raw):
 def _repo_path(root, relative):
     _need(isinstance(relative, str), "artifact path missing")
     path = (root / relative).resolve()
-    _need(path.is_relative_to(root), "artifact path escapes repository")
+    # a junctioned .cache (F:/slink-work worktrees) resolves outside root: tools/repo_paths.py allows its target
+    _need(inside_repo(path, root), "artifact path escapes repository")
     return path
 
 
@@ -318,6 +321,7 @@ def server_arguments(argv):
         parser.add_argument("--" + flag, action="store_true", dest=dest)
     parser.add_argument("--no-battle-calc", action="store_false", dest="battle_calc")
     parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc")
+    parser.add_argument("--no-phone-calls", action="store_false", dest="phone_calls")
     parser.add_argument("--manager-port", type=int, default=0)
     return vars(parser.parse_args(argv))
 

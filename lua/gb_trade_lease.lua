@@ -31,11 +31,13 @@ local function same_token(a, b)
     return true
 end
 
---- spec (every field required, a missing one asserts):
+--- spec (lease, party_capacity, check and stage are required; pickup is optional):
 ---   lease          base address of the 16-byte frame
 ---   party_capacity slots; bounds offer/own slots and the eligibility mask (2^capacity)
 ---   check(payload, token4) -> nil | error string   (per-game payload validation, no writes)
 ---   stage(payload, preimage16)                      (per-game staging, before the frame publishes)
+---   pickup(evidence, expected16) -> bool | nil,error (optional binder-owned consumption witness)
+---     false = poll/no evidence; nil,error = native boundary reached but binding unverified (hold).
 --- io needs read_u8/read_range; writes needs write_bytes (armed by the caller).
 function L.new(spec, io, writes)
     assert(type(spec) == "table", "lease spec required")
@@ -44,8 +46,9 @@ function L.new(spec, io, writes)
     end
     assert(type(io) == "table" and io.read_u8 ~= nil and io.read_range ~= nil, "injected read IO required")
     assert(type(writes) == "table" and writes.write_bytes ~= nil, "armed writes instance required")
+    assert(spec.pickup == nil or type(spec.pickup) == "function", "pickup verifier must be a function")
     local overlay, capacity, check, stage = spec.lease, spec.party_capacity, spec.check, spec.stage
-    local self = {expected = nil, phase = nil, visit_token = nil}
+    local self = {expected = nil, phase = nil, visit_token = nil, entry_observed = false}
 
     local function frame()
         local bytes = io.read_range(overlay, 16)
@@ -143,7 +146,7 @@ function L.new(spec, io, writes)
         writes:write_bytes(overlay, bytes)
         writes:write_bytes(overlay + 6, {generation})
         bytes[7] = generation
-        self.expected, self.phase = bytes, "armed"
+        self.expected, self.phase, self.pickup_error, self.entry_observed = bytes, "armed", nil, false
         return generation
     end
 
@@ -163,8 +166,20 @@ function L.new(spec, io, writes)
         -- service.asm:139-171: only cmd8 with matching gen/token releases the
         -- foreground lease and restores the backup over the borrowed union.
         writes:write_bytes(overlay + 5, {RELEASE})
-        self.expected, self.phase = nil, nil
+        self.expected, self.phase, self.entry_observed = nil, nil, false
         return true
+    end
+
+    function self:observe_entry()
+        if self.phase ~= "armed" or not self.expected or self.entry_observed then return false end
+        self.entry_observed = true -- reset only when a new request is successfully armed
+        return true
+    end
+
+    function self:hold_consumed(why)
+        if self.phase ~= "armed" or not self.expected then return false end
+        self.phase, self.pickup_error = "picked_up", tostring(why)
+        return nil, self.pickup_error
     end
 
     function self:clobbered()
@@ -172,18 +187,37 @@ function L.new(spec, io, writes)
         if self.phase == "picked_up" or self.phase == "done" then return false end
         local current = frame()
         if completion(current) then return false end -- DONE is native progress
-        if not current then return true end
-        for i = 1, 16 do
-            if current[i] ~= self.expected[i] then return true end
+        local changed = current == nil
+        if current then
+            for i = 1, 16 do
+                if current[i] ~= self.expected[i] then changed = true; break end
+            end
         end
-        return false
+        if changed and spec.pickup and self.entry_observed then
+            -- The entry was seen, but the exact consumption hit may have been dropped.
+            -- A restored/clobbered borrowed union is now ambiguous: never re-stage over it.
+            self:hold_consumed("service entry observed; consumption witness missing")
+            return false
+        end
+        return changed
     end
 
-    function self:picked_up()
-        -- Call from the bank-qualified on_bus_exec at the trade service, BEFORE it
-        -- restores anything (service.asm:90-95). After pickup, the cartridge owns the
-        -- frame until DONE and clobber re-arming must stop.
-        if self.phase ~= "armed" or self:clobbered() then return false end
+    function self:picked_up(evidence)
+        if self.phase ~= "armed" or not self.expected then return false end
+        if spec.pickup then
+            -- Borrowed-buffer binders prove consumption at their native restore boundary.
+            -- A poll or a changed buffer alone must not revoke cancellation.
+            local ok, verified, why = pcall(spec.pickup, evidence, self.expected)
+            if not ok then verified, why = nil, "pickup witness error: " .. tostring(verified) end
+            if verified == nil then
+                -- The native boundary was reached. Never re-stage/cancel over native work
+                -- merely because its retained request could not be bound to ours.
+                return self:hold_consumed(why)
+            end
+            if not verified then return false end
+        elseif self:clobbered() then
+            return false -- owned-mailbox binders retain their qualified entry-hook contract
+        end
         self.phase = "picked_up"
         return true
     end

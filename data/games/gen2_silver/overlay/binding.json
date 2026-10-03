@@ -1,0 +1,5989 @@
+{
+  "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+  "builder_substitutions": [
+    {
+      "after_hex": "cd63000000",
+      "before_hex": "3e01eaeace",
+      "reason": "pinned DelayFrame -> SlinkDelayFrameBridge + two nops",
+      "source": "tools/build_gen2_companion.py:176-187",
+      "symbol": "DelayFrame"
+    },
+    {
+      "after_hex": "cd9a00",
+      "before_hex": "cdda1c",
+      "reason": "pinned SetUpMenu call operand -> SlinkMainMenuBridge",
+      "source": "tools/build_gen2_companion.py:140-150",
+      "symbol": "MainMenuJoypadLoop"
+    }
+  ],
+  "changes": [],
+  "checkpoint": {
+    "battle_hold": {
+      "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+      "anchors": {
+        "battle_turn": {
+          "address": 16734,
+          "bank": 15,
+          "evidence": "SOURCE",
+          "expected_hex": "CDEB4320EACDB7423824CDCB423805CDB6451803CD1446",
+          "instruction_set": "SM83",
+          "rom_offset": 246110,
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 187,
+            "line_start": 174,
+            "path": "engine/battle/core.asm",
+            "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+          }
+        },
+        "start_battle_caller": {
+          "address": 29516,
+          "bank": 15,
+          "evidence": "SOURCE",
+          "expected_hex": "CD0040CD5674F1EA68D537C9",
+          "instruction_set": "SM83",
+          "rom_offset": 258892,
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 7825,
+            "line_start": 7820,
+            "path": "engine/battle/core.asm",
+            "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+          }
+        }
+      },
+      "caller_stack": {
+        "bank": 1,
+        "exclusive_stack_end": 57343,
+        "minimum_sp": 57091,
+        "must_fit_entire_read": true,
+        "read_domain": "System Bus",
+        "region": "WRAMX",
+        "required_read_bytes": 2,
+        "required_words": [
+          {
+            "endianness": "little",
+            "offset_from_sp": 0,
+            "value": 29519
+          }
+        ],
+        "search_for_return_address": false,
+        "source": [
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2926,
+            "line_start": 2921,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 70,
+            "line_start": 70,
+            "path": "home/init.asm",
+            "source_text_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8"
+          }
+        ]
+      },
+      "execution_before": {
+        "bank": 15,
+        "instruction": "call DetermineMoveOrder",
+        "instruction_offset": 10,
+        "pc": 16744,
+        "rom_offset": 246120,
+        "source": {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 181,
+          "line_start": 181,
+          "path": "engine/battle/core.asm",
+          "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+        }
+      },
+      "id": "battle-turn-before-determine-move-order",
+      "oracles": {
+        "EnemyTurn_EndOpponentProtectEndureDestinyBond": {
+          "address": 18054,
+          "bank": 15,
+          "evidence": "SYM",
+          "expected_hex": "CDAD3B"
+        },
+        "HandlePlayerMonFaint": {
+          "address": 20640,
+          "bank": 15,
+          "evidence": "SYM",
+          "expected_hex": "CD934E"
+        },
+        "LostBattle": {
+          "address": 21145,
+          "bank": 15,
+          "evidence": "SYM",
+          "expected_hex": "3E01EA"
+        }
+      },
+      "ownership_requirements": {
+        "cached_frame_acceptance_allowed": false,
+        "effective_wram_bank": 1,
+        "host": [
+          "admitted exact ROM identity",
+          "unchanged session/reset epoch",
+          "no pending trade or serial-owner lease",
+          "no save, box-load, or staged-writer owner",
+          "synchronous CPU hold before the instruction",
+          "recheck every anchor in ROM and mapped System Bus",
+          "all reads and bank/PC/stack evidence available in the same hold"
+        ],
+        "mapped_rom_bank": 15,
+        "mapped_rom_bank_must_equal_shadow": true,
+        "rom_bank_shadow": {
+          "address": 65439,
+          "bank": 0,
+          "equals": 15,
+          "read_domain": "System Bus",
+          "region": "HRAM",
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 26,
+            "line_start": 26,
+            "path": "ram/hram.asm",
+            "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+          },
+          "symbol": "hROMBank",
+          "width": 1
+        },
+        "serial_control": {
+          "address": 65282,
+          "mask": 128,
+          "source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 133,
+              "line_start": 133,
+              "path": "constants/hardware.inc",
+              "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 135,
+              "line_start": 135,
+              "path": "constants/hardware.inc",
+              "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+            }
+          ],
+          "value": 0
+        },
+        "wram_bank_register": {
+          "address": 65392,
+          "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 688,
+            "line_start": 688,
+            "path": "constants/hardware.inc",
+            "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+          }
+        }
+      },
+      "state_predicates": [
+        {
+          "address": 53314,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "LINK_NULL: a write in a link battle desyncs the other Game Boy",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 4,
+              "line_start": 2,
+              "path": "constants/serial_constants.asm",
+              "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 1955,
+            "line_start": 1955,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wLinkMode",
+          "value": 0,
+          "width": 1
+        }
+      ],
+      "transformed_bit": 3,
+      "transformed_source": {
+        "commit": "656583c939d30f920a316177311a502dd222b57c",
+        "line_end": 211,
+        "line_start": 207,
+        "path": "constants/battle_constants.asm",
+        "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+      },
+      "write": {
+        "skip_action": 1,
+        "sources": [
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 257,
+            "line_start": 254,
+            "path": "constants/battle_constants.asm",
+            "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 7,
+            "line_start": 5,
+            "path": "engine/battle/effect_commands.asm",
+            "source_text_sha256": "899551eed12752fb9c712b36ffa1b4134485f42e069ef218fe58fb66e13fe38b"
+          }
+        ],
+        "targets": {
+          "wBattleMonHP": {
+            "address": 51996,
+            "bank": 0,
+            "evidence": "SYM",
+            "symbol": "wBattleMonHP",
+            "width": 2
+          },
+          "wBattleMonSpecies": {
+            "address": 51980,
+            "bank": 0,
+            "evidence": "SYM",
+            "symbol": "wBattleMonSpecies",
+            "width": 1
+          },
+          "wBattlePlayerAction": {
+            "address": 53220,
+            "bank": 0,
+            "evidence": "SYM",
+            "symbol": "wBattlePlayerAction",
+            "width": 1
+          },
+          "wBattleType": {
+            "address": 53529,
+            "bank": 1,
+            "evidence": "SYM",
+            "symbol": "wBattleType",
+            "width": 1
+          },
+          "wCurBattleMon": {
+            "address": 53190,
+            "bank": 0,
+            "evidence": "SYM",
+            "symbol": "wCurBattleMon",
+            "width": 1
+          },
+          "wPlayerSubStatus5": {
+            "address": 52042,
+            "bank": 0,
+            "evidence": "SYM",
+            "symbol": "wPlayerSubStatus5",
+            "width": 1
+          }
+        }
+      }
+    },
+    "contest_mask": {
+      "address": 54642,
+      "bank": 1,
+      "bit": 2,
+      "read_domain": "System Bus",
+      "region": "WRAMX",
+      "source": {
+        "commit": "656583c939d30f920a316177311a502dd222b57c",
+        "line_end": 2489,
+        "line_start": 2489,
+        "path": "ram/wram.asm",
+        "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+      },
+      "sources": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 235,
+          "line_start": 232,
+          "path": "constants/ram_constants.asm",
+          "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 34,
+          "line_start": 34,
+          "path": "data/events/engine_flags.asm",
+          "source_text_sha256": "53221289c0a7b6921bb67464c25bbd363544694df2c054c31a36ff45de0ad43a"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 83,
+          "line_start": 81,
+          "path": "engine/events/bug_contest/contest_2.asm",
+          "source_text_sha256": "f254735541e54be9302b147fcd9e46bfc892d059871ff82dc34b7b8c8acfe820"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 5,
+          "line_start": 2,
+          "path": "engine/events/misc_scripts.asm",
+          "source_text_sha256": "93026f9885a21c8a45171d9fb6f4f5eabddaf9e387de2bbd09d2286501035c99"
+        }
+      ],
+      "symbol": "wStatusFlags2",
+      "width": 1
+    },
+    "irq_anchor": {
+      "reason": "No generated IRQ anchor proof in this pack; never substitute Gen 1 DelayFrame offsets or stack words.",
+      "status": "UNAVAILABLE"
+    },
+    "maturity": "SOURCE_CANDIDATE",
+    "physical": {
+      "liveness": "UNMEASURED",
+      "negative_controls": "UNRUN",
+      "required_controls": [
+        "idle reacquisition",
+        "textbox",
+        "START and nested menus",
+        "battle/evolution/whiteout",
+        "warp/Continue",
+        "Elm scene and script waits",
+        "ice/automated/scripted movement",
+        "deferred script/phone",
+        "Cable Club/trade",
+        "save/box-load/overwrite",
+        "reset/state-load/ROM-change",
+        "corrupt anchor/caller/bank/unreadable predicate"
+      ],
+      "status": "OPEN"
+    },
+    "primary": {
+      "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+      "anchors": {
+        "ow_player_input": {
+          "address": 26791,
+          "bank": 37,
+          "evidence": "SOURCE",
+          "expected_hex": "CD236AD8A720123E04210444CF380ACDCC683807CD636A3802AFC9F53E04212244CFF137C9",
+          "instruction_set": "SM83",
+          "macro_source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 11,
+            "line_start": 7,
+            "path": "macros/farcall.asm",
+            "source_text_sha256": "6d7b0a22c83e49765b8b0ecdca0ae10109569fe45d29de22369017018d7c20e8"
+          },
+          "rom_offset": 616615,
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 500,
+            "line_start": 473,
+            "path": "engine/overworld/events.asm",
+            "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+          }
+        },
+        "player_events_caller": {
+          "address": 26462,
+          "bank": 37,
+          "evidence": "SOURCE",
+          "expected_hex": "AFFA5FD1A7C0CD1168CD9767381BCDA4673816CD617A3811CD1968380CCD67683807CDA7683802AFC9",
+          "instruction_set": "SM83",
+          "rom_offset": 616286,
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 268,
+            "line_start": 238,
+            "path": "engine/overworld/events.asm",
+            "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+          },
+          "unique_direct_transfer_source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line": 262,
+            "path": "engine/overworld/events.asm"
+          }
+        }
+      },
+      "caller_stack": {
+        "bank": 1,
+        "exclusive_stack_end": 57343,
+        "minimum_sp": 57091,
+        "must_fit_entire_read": true,
+        "read_domain": "System Bus",
+        "region": "WRAMX",
+        "required_read_bytes": 2,
+        "required_words": [
+          {
+            "endianness": "little",
+            "offset_from_sp": 0,
+            "value": 26499
+          }
+        ],
+        "search_for_return_address": false,
+        "source": [
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2926,
+            "line_start": 2921,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 70,
+            "line_start": 70,
+            "path": "home/init.asm",
+            "source_text_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8"
+          }
+        ]
+      },
+      "execution_before": {
+        "bank": 37,
+        "instruction": "call CheckAPressOW",
+        "instruction_offset": 15,
+        "pc": 26806,
+        "rom_offset": 616630,
+        "source": {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 483,
+          "line_start": 483,
+          "path": "engine/overworld/events.asm",
+          "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+        }
+      },
+      "id": "ow-player-input-before-check-a-press",
+      "ownership_requirements": {
+        "cached_frame_acceptance_allowed": false,
+        "effective_wram_bank": 1,
+        "host": [
+          "admitted exact ROM identity",
+          "unchanged session/reset epoch",
+          "no pending trade or serial-owner lease",
+          "no save, box-load, or staged-writer owner",
+          "synchronous CPU hold before the instruction",
+          "recheck every anchor in ROM and mapped System Bus",
+          "all reads and bank/PC/stack evidence available in the same hold"
+        ],
+        "mapped_rom_bank": 37,
+        "mapped_rom_bank_must_equal_shadow": true,
+        "rom_bank_shadow": {
+          "address": 65439,
+          "bank": 0,
+          "equals": 37,
+          "read_domain": "System Bus",
+          "region": "HRAM",
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 26,
+            "line_start": 26,
+            "path": "ram/hram.asm",
+            "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+          },
+          "symbol": "hROMBank",
+          "width": 1
+        },
+        "serial_control": {
+          "address": 65282,
+          "mask": 128,
+          "source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 133,
+              "line_start": 133,
+              "path": "constants/hardware.inc",
+              "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 135,
+              "line_start": 135,
+              "path": "constants/hardware.inc",
+              "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+            }
+          ],
+          "value": 0
+        },
+        "wram_bank_register": {
+          "address": 65392,
+          "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 688,
+            "line_start": 688,
+            "path": "constants/hardware.inc",
+            "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+          }
+        }
+      },
+      "state_predicates": [
+        {
+          "address": 53593,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "ordinary map handler",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 174,
+              "line_start": 170,
+              "path": "constants/ram_constants.asm",
+              "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2294,
+            "line_start": 2294,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wMapStatus",
+          "value": 2,
+          "width": 1
+        },
+        {
+          "address": 53594,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "map events enabled; not a menu detector",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 179,
+              "line_start": 177,
+              "path": "constants/ram_constants.asm",
+              "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2295,
+            "line_start": 2295,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wMapEventStatus",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53599,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "no pending player event",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 2155,
+              "line_start": 2147,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2311,
+            "line_start": 2311,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wScriptRunning",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53598,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "reject WAIT and WAIT_MOVEMENT even when dispatch bit is clear",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 202,
+              "line_start": 198,
+              "path": "constants/ram_constants.asm",
+              "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 2155,
+              "line_start": 2147,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 33,
+              "line_start": 30,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2310,
+            "line_start": 2310,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wScriptMode",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53595,
+          "bank": 1,
+          "mask": 12,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "reject running and deferred dispatch; availability remains unmeasured",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 186,
+              "line_start": 182,
+              "path": "constants/ram_constants.asm",
+              "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 244,
+              "line_start": 241,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2297,
+            "line_start": 2297,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wScriptFlags",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53603,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "conservative rejection of nested script state",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 2199,
+              "line_start": 2196,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2315,
+            "line_start": 2315,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wScriptStackSize",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 55482,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "strict zero is stronger than the engine disable mask",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 37,
+              "line_start": 30,
+              "path": "home/joypad.asm",
+              "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2619,
+            "line_start": 2619,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wJoypadDisable",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 49612,
+          "bank": 0,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "reject paused game/save logic",
+          "region": "WRAM0",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 37,
+              "line_start": 30,
+              "path": "home/joypad.asm",
+              "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 117,
+            "line_start": 117,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wGameLogicPaused",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 49606,
+          "bank": 0,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "normal input only; no automated stream",
+          "region": "WRAM0",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 262,
+              "line_start": 253,
+              "path": "home/joypad.asm",
+              "source_text_sha256": "bdb3b3a79d790ce6a348057c995f07435fb3ecad9307e8b41db78d4c6087ffe6"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 111,
+            "line_start": 111,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wInputType",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53526,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "overworld battle-mode value; not an ownership proof alone",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 7987,
+              "line_start": 7983,
+              "path": "engine/battle/core.asm",
+              "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2186,
+            "line_start": 2186,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wBattleMode",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53221,
+          "bank": 0,
+          "mask": 128,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "reject scripted movement",
+          "region": "WRAM0",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 103,
+              "line_start": 103,
+              "path": "constants/ram_constants.asm",
+              "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 48,
+              "line_start": 44,
+              "path": "engine/overworld/scripting.asm",
+              "source_text_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 1866,
+            "line_start": 1866,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wStateFlags",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 65441,
+          "bank": 0,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "reject map entry lifecycle",
+          "region": "HRAM",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 131,
+              "line_start": 127,
+              "path": "engine/overworld/events.asm",
+              "source_text_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 28,
+            "line_start": 28,
+            "path": "ram/hram.asm",
+            "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+          },
+          "symbol": "hMapEntryMethod",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 53314,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "LINK_NULL; host serial/trade ownership must also be absent",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 4,
+              "line_start": 2,
+              "path": "constants/serial_constants.asm",
+              "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 1955,
+            "line_start": 1955,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wLinkMode",
+          "value": 0,
+          "width": 1
+        },
+        {
+          "address": 65485,
+          "bank": 0,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "disconnected serial status",
+          "region": "HRAM",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 25,
+              "line_start": 25,
+              "path": "constants/serial_constants.asm",
+              "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 126,
+            "line_start": 126,
+            "path": "ram/hram.asm",
+            "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+          },
+          "symbol": "hSerialConnectionStatus",
+          "value": 255,
+          "width": 1
+        },
+        {
+          "address": 53722,
+          "bank": 1,
+          "mask": 255,
+          "operator": "masked_equal",
+          "qualification": "PROPOSED_STRICT_CONJUNCTION",
+          "read_domain": "System Bus",
+          "reason": "strict first-save prerequisite for box/memorial writes; not save durability proof",
+          "region": "WRAMX",
+          "semantic_source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 346,
+              "line_start": 344,
+              "path": "engine/menus/save.asm",
+              "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 337,
+              "line_start": 333,
+              "path": "engine/menus/save.asm",
+              "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 191,
+              "line_start": 186,
+              "path": "engine/menus/save.asm",
+              "source_text_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 56,
+              "line_start": 54,
+              "path": "engine/menus/intro_menu.asm",
+              "source_text_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef"
+            }
+          ],
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 2407,
+            "line_start": 2407,
+            "path": "ram/wram.asm",
+            "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+          },
+          "symbol": "wSavedAtLeastOnce",
+          "value": 1,
+          "width": 1
+        }
+      ]
+    },
+    "runtime_authorized": false
+  },
+  "header_anchors": [
+    {
+      "hex": "251403815c162c0101",
+      "offset": 607424
+    },
+    {
+      "hex": "250f038d5c162c0101",
+      "offset": 607433
+    },
+    {
+      "hex": "250603995c16090101",
+      "offset": 607442
+    },
+    {
+      "hex": "250f03a55c162c0101",
+      "offset": 607451
+    },
+    {
+      "hex": "250f03b15c16570101",
+      "offset": 607460
+    },
+    {
+      "hex": "250b03bd5c162c0101",
+      "offset": 607469
+    },
+    {
+      "hex": "251403c95c161b1101",
+      "offset": 607478
+    },
+    {
+      "hex": "250f03d55c162c0101",
+      "offset": 607487
+    },
+    {
+      "hex": "2501010d4f162c0004",
+      "offset": 607496
+    },
+    {
+      "hex": "250e03e15c281b1101",
+      "offset": 607505
+    },
+    {
+      "hex": "250e03ed5c281b1101",
+      "offset": 607514
+    },
+    {
+      "hex": "250403f95c28250101",
+      "offset": 607523
+    },
+    {
+      "hex": "250403055d28250101",
+      "offset": 607532
+    },
+    {
+      "hex": "250b03115d28250101",
+      "offset": 607541
+    },
+    {
+      "hex": "2506031d5d28090101",
+      "offset": 607550
+    },
+    {
+      "hex": "250403295d28250101",
+      "offset": 607559
+    },
+    {
+      "hex": "2501026d522a350009",
+      "offset": 607568
+    },
+    {
+      "hex": "25010291522c350001",
+      "offset": 607577
+    },
+    {
+      "hex": "250101854f28250004",
+      "offset": 607586
+    },
+    {
+      "hex": "250603355d54090101",
+      "offset": 607595
+    },
+    {
+      "hex": "250603415d54090101",
+      "offset": 607604
+    },
+    {
+      "hex": "2507064d5d51030101",
+      "offset": 607613
+    },
+    {
+      "hex": "251503595d531b1101",
+      "offset": 607622
+    },
+    {
+      "hex": "250302f95351030001",
+      "offset": 607631
+    },
+    {
+      "hex": "250302d55352030002",
+      "offset": 607640
+    },
+    {
+      "hex": "2503028d5355030002",
+      "offset": 607649
+    },
+    {
+      "hex": "250301b15354150002",
+      "offset": 607658
+    },
+    {
+      "hex": "250403655d36150101",
+      "offset": 607667
+    },
+    {
+      "hex": "250403715d36150101",
+      "offset": 607676
+    },
+    {
+      "hex": "2504037d5d36150101",
+      "offset": 607685
+    },
+    {
+      "hex": "250603895d36090101",
+      "offset": 607694
+    },
+    {
+      "hex": "250603955d36090101",
+      "offset": 607703
+    },
+    {
+      "hex": "250803a15d361b1101",
+      "offset": 607712
+    },
+    {
+      "hex": "250b03ad5d36150101",
+      "offset": 607721
+    },
+    {
+      "hex": "250603b95d42090101",
+      "offset": 607730
+    },
+    {
+      "hex": "250603c55d42090101",
+      "offset": 607739
+    },
+    {
+      "hex": "250a03d15d43150101",
+      "offset": 607748
+    },
+    {
+      "hex": "250403dd5d38150101",
+      "offset": 607757
+    },
+    {
+      "hex": "250302595735030003",
+      "offset": 607766
+    },
+    {
+      "hex": "250302d55640030003",
+      "offset": 607775
+    },
+    {
+      "hex": "250302a15742030003",
+      "offset": 607784
+    },
+    {
+      "hex": "250302f95637030003",
+      "offset": 607793
+    },
+    {
+      "hex": "2503021d5738030003",
+      "offset": 607802
+    },
+    {
+      "hex": "250301995636150003",
+      "offset": 607811
+    },
+    {
+      "hex": "250603e95d0c090101",
+      "offset": 607820
+    },
+    {
+      "hex": "250403f55d0c250101",
+      "offset": 607829
+    },
+    {
+      "hex": "250b03015e0c250101",
+      "offset": 607838
+    },
+    {
+      "hex": "250f030d5e0c250101",
+      "offset": 607847
+    },
+    {
+      "hex": "250e03195e0c1b1101",
+      "offset": 607856
+    },
+    {
+      "hex": "250202b1500b2b0001",
+      "offset": 607865
+    },
+    {
+      "hex": "250201894e0c250001",
+      "offset": 607874
+    },
+    {
+      "hex": "250403255e25450101",
+      "offset": 607883
+    },
+    {
+      "hex": "250403315e25450101",
+      "offset": 607892
+    },
+    {
+      "hex": "2507063d5e24450101",
+      "offset": 607901
+    },
+    {
+      "hex": "250706495e24450101",
+      "offset": 607910
+    },
+    {
+      "hex": "250102255224450004",
+      "offset": 607919
+    },
+    {
+      "hex": "2501016d4f25450008",
+      "offset": 607928
+    },
+    {
+      "hex": "2501028d50082b000b",
+      "offset": 607937
+    },
+    {
+      "hex": "250102f95012350004",
+      "offset": 607946
+    },
+    {
+      "hex": "2501021d5114350001",
+      "offset": 607955
+    },
+    {
+      "hex": "2501024d5115350001",
+      "offset": 607964
+    },
+    {
+      "hex": "250101594e062d0004",
+      "offset": 607973
+    },
+    {
+      "hex": "250b03555e062d0101",
+      "offset": 607982
+    },
+    {
+      "hex": "250e03615e061b1101",
+      "offset": 607991
+    },
+    {
+      "hex": "2509036d5e062d0101",
+      "offset": 608000
+    },
+    {
+      "hex": "250f03795e062d0101",
+      "offset": 608009
+    },
+    {
+      "hex": "2506036d5b1b090101",
+      "offset": 606497
+    },
+    {
+      "hex": "250603855e06090101",
+      "offset": 608018
+    },
+    {
+      "hex": "250f03915e062d0101",
+      "offset": 608027
+    },
+    {
+      "hex": "2507069d5e082b0101",
+      "offset": 608036
+    },
+    {
+      "hex": "250603a95e08090101",
+      "offset": 608045
+    },
+    {
+      "hex": "250706b55e12350101",
+      "offset": 608054
+    },
+    {
+      "hex": "250703c15e123d0101",
+      "offset": 608063
+    },
+    {
+      "hex": "250706cd5e14350101",
+      "offset": 608072
+    },
+    {
+      "hex": "250703d95e143d0101",
+      "offset": 608081
+    },
+    {
+      "hex": "251103795b1b1b1101",
+      "offset": 606506
+    },
+    {
+      "hex": "250403855b1b2d0101",
+      "offset": 606515
+    },
+    {
+      "hex": "250403915b1b2d0101",
+      "offset": 606524
+    },
+    {
+      "hex": "2504039d5b1b2d0101",
+      "offset": 606533
+    },
+    {
+      "hex": "250403a95b1b2d0101",
+      "offset": 606542
+    },
+    {
+      "hex": "250d03b55b1b2d0101",
+      "offset": 606551
+    },
+    {
+      "hex": "250b03c15b1b2d0101",
+      "offset": 606560
+    },
+    {
+      "hex": "250706cd5b19470101",
+      "offset": 606569
+    },
+    {
+      "hex": "250f03d95b1a2c0101",
+      "offset": 606578
+    },
+    {
+      "hex": "250403e55b1a2c0101",
+      "offset": 606587
+    },
+    {
+      "hex": "250102715119470001",
+      "offset": 606596
+    },
+    {
+      "hex": "25010295511a470001",
+      "offset": 606605
+    },
+    {
+      "hex": "250101e94e1b2d0001",
+      "offset": 606614
+    },
+    {
+      "hex": "250202d5500f350001",
+      "offset": 608090
+    },
+    {
+      "hex": "250201c54e103d0001",
+      "offset": 608099
+    },
+    {
+      "hex": "250e03e55e101b1101",
+      "offset": 608108
+    },
+    {
+      "hex": "251103f15e103d0101",
+      "offset": 608117
+    },
+    {
+      "hex": "250403fd5e103d0101",
+      "offset": 608126
+    },
+    {
+      "hex": "250403095f103d0101",
+      "offset": 608135
+    },
+    {
+      "hex": "251003155f103d0101",
+      "offset": 608144
+    },
+    {
+      "hex": "250403215f103d0101",
+      "offset": 608153
+    },
+    {
+      "hex": "2506032d5f10090101",
+      "offset": 608162
+    },
+    {
+      "hex": "250403395f103d0101",
+      "offset": 608171
+    },
+    {
+      "hex": "250403455f103d0101",
+      "offset": 608180
+    },
+    {
+      "hex": "250b03515f103d0101",
+      "offset": 608189
+    },
+    {
+      "hex": "250b035d5f103d0101",
+      "offset": 608198
+    },
+    {
+      "hex": "250b03695f103d0101",
+      "offset": 608207
+    },
+    {
+      "hex": "250b03755f103d0101",
+      "offset": 608216
+    },
+    {
+      "hex": "250b03815f103d0101",
+      "offset": 608225
+    },
+    {
+      "hex": "250b038d5f103d0101",
+      "offset": 608234
+    },
+    {
+      "hex": "250b03995f103d0101",
+      "offset": 608243
+    },
+    {
+      "hex": "250d03a55f10120101",
+      "offset": 608252
+    },
+    {
+      "hex": "250706b15f0f350101",
+      "offset": 608261
+    },
+    {
+      "hex": "250706bd5f0f350101",
+      "offset": 608270
+    },
+    {
+      "hex": "250403c95f0f250101",
+      "offset": 608279
+    },
+    {
+      "hex": "25030215563b030004",
+      "offset": 608288
+    },
+    {
+      "hex": "2503029d5548040001",
+      "offset": 608297
+    },
+    {
+      "hex": "250301f1553c3e0002",
+      "offset": 608306
+    },
+    {
+      "hex": "250403d55f3c3e0101",
+      "offset": 608315
+    },
+    {
+      "hex": "250603e15f3c090101",
+      "offset": 608324
+    },
+    {
+      "hex": "250603ed5f3c3e0101",
+      "offset": 608333
+    },
+    {
+      "hex": "250403f95f3c3e0101",
+      "offset": 608342
+    },
+    {
+      "hex": "25040305603c3e0101",
+      "offset": 608351
+    },
+    {
+      "hex": "250b0311603c3e0101",
+      "offset": 608360
+    },
+    {
+      "hex": "2504031d603c3e0101",
+      "offset": 608369
+    },
+    {
+      "hex": "250d0329603c1b1101",
+      "offset": 608378
+    },
+    {
+      "hex": "25070635603b030101",
+      "offset": 608387
+    },
+    {
+      "hex": "25070641603b030101",
+      "offset": 608396
+    },
+    {
+      "hex": "25030245532f020001",
+      "offset": 608405
+    },
+    {
+      "hex": "25030169532e1c0002",
+      "offset": 608414
+    },
+    {
+      "hex": "2505034d602e1c0101",
+      "offset": 608423
+    },
+    {
+      "hex": "25050359602e1c0101",
+      "offset": 608432
+    },
+    {
+      "hex": "25040365602e1c0101",
+      "offset": 608441
+    },
+    {
+      "hex": "25090371602e1d0101",
+      "offset": 608450
+    },
+    {
+      "hex": "250302355733030001",
+      "offset": 608459
+    },
+    {
+      "hex": "250301b55232150001",
+      "offset": 608468
+    },
+    {
+      "hex": "2504037d6032150101",
+      "offset": 608477
+    },
+    {
+      "hex": "2514038960321b1101",
+      "offset": 608486
+    },
+    {
+      "hex": "250b03956032150101",
+      "offset": 608495
+    },
+    {
+      "hex": "250603a16032090101",
+      "offset": 608504
+    },
+    {
+      "hex": "250603ad6032150101",
+      "offset": 608513
+    },
+    {
+      "hex": "250403b96032150101",
+      "offset": 608522
+    },
+    {
+      "hex": "250802c5601b2d0002",
+      "offset": 608531
+    },
+    {
+      "hex": "250802d1603c3e0002",
+      "offset": 608540
+    },
+    {
+      "hex": "251203dd605e360101",
+      "offset": 608549
+    },
+    {
+      "hex": "251203e9605e360101",
+      "offset": 608558
+    },
+    {
+      "hex": "251203f5605e360101",
+      "offset": 608567
+    },
+    {
+      "hex": "25120301615e360101",
+      "offset": 608576
+    },
+    {
+      "hex": "2512030d615e360101",
+      "offset": 608585
+    },
+    {
+      "hex": "25190319611b2d0101",
+      "offset": 608594
+    },
+    {
+      "hex": "25190325613c3e0101",
+      "offset": 608603
+    },
+    {
+      "hex": "2503023161341a0001",
+      "offset": 608612
+    },
+    {
+      "hex": "250f033d6134150101",
+      "offset": 608621
+    },
+    {
+      "hex": "251402496117410001",
+      "offset": 608630
+    },
+    {
+      "hex": "250301e95758460001",
+      "offset": 608639
+    },
+    {
+      "hex": "250603556159460101",
+      "offset": 608648
+    },
+    {
+      "hex": "250e03616159461101",
+      "offset": 608657
+    },
+    {
+      "hex": "250e036d6159461101",
+      "offset": 608666
+    },
+    {
+      "hex": "250e03796159461101",
+      "offset": 608675
+    },
+    {
+      "hex": "250e03856159461101",
+      "offset": 608684
+    },
+    {
+      "hex": "251103916159461101",
+      "offset": 608693
+    },
+    {
+      "hex": "251a039d61593c1101",
+      "offset": 608702
+    },
+    {
+      "hex": "25030249554a04000d",
+      "offset": 608711
+    },
+    {
+      "hex": "25030225554b040001",
+      "offset": 608720
+    },
+    {
+      "hex": "25030201554c040001",
+      "offset": 608729
+    },
+    {
+      "hex": "2503024d544f030001",
+      "offset": 608738
+    },
+    {
+      "hex": "2503011d5450160008",
+      "offset": 608747
+    },
+    {
+      "hex": "250b03a96150160101",
+      "offset": 608756
+    },
+    {
+      "hex": "250d03b56150160101",
+      "offset": 608765
+    },
+    {
+      "hex": "250903c161501b1101",
+      "offset": 608774
+    },
+    {
+      "hex": "250403cd6150160101",
+      "offset": 608783
+    },
+    {
+      "hex": "250603d96150090101",
+      "offset": 608792
+    },
+    {
+      "hex": "250603e56150160101",
+      "offset": 608801
+    },
+    {
+      "hex": "250403f16150160101",
+      "offset": 608810
+    },
+    {
+      "hex": "250706fd614c040101",
+      "offset": 608819
+    },
+    {
+      "hex": "2503027d573f030001",
+      "offset": 608828
+    },
+    {
+      "hex": "2503026d554904000d",
+      "offset": 608837
+    },
+    {
+      "hex": "250302c55742030003",
+      "offset": 608846
+    },
+    {
+      "hex": "250301c155440e0001",
+      "offset": 608855
+    },
+    {
+      "hex": "250603096244090101",
+      "offset": 608864
+    },
+    {
+      "hex": "250603156244090101",
+      "offset": 608873
+    },
+    {
+      "hex": "2504032162440e0101",
+      "offset": 608882
+    },
+    {
+      "hex": "2504032d62440e0101",
+      "offset": 608891
+    },
+    {
+      "hex": "2504033962440e0101",
+      "offset": 608900
+    },
+    {
+      "hex": "250b034562440e0101",
+      "offset": 608909
+    },
+    {
+      "hex": "2504035162440e0101",
+      "offset": 608918
+    },
+    {
+      "hex": "2518035d62450e0101",
+      "offset": 608927
+    },
+    {
+      "hex": "25070669623f030101",
+      "offset": 608936
+    },
+    {
+      "hex": "250403756249150101",
+      "offset": 608945
+    },
+    {
+      "hex": "250302fd4f5d460004",
+      "offset": 608954
+    },
+    {
+      "hex": "250301a94f2d460004",
+      "offset": 608963
+    },
+    {
+      "hex": "25060381622d090101",
+      "offset": 608972
+    },
+    {
+      "hex": "2504038d625d250101",
+      "offset": 608981
+    },
+    {
+      "hex": "250603996200091101",
+      "offset": 608990
+    },
+    {
+      "hex": "250703a56200261101",
+      "offset": 608999
+    },
+    {
+      "hex": "250703b16200261101",
+      "offset": 609008
+    },
+    {
+      "hex": "250703bd6200261101",
+      "offset": 609017
+    },
+    {
+      "hex": "250403f15b23260101",
+      "offset": 606623
+    },
+    {
+      "hex": "250e03fd5b231b1101",
+      "offset": 606632
+    },
+    {
+      "hex": "250603095c23090101",
+      "offset": 606641
+    },
+    {
+      "hex": "250706155c21450101",
+      "offset": 606650
+    },
+    {
+      "hex": "250102015221450003",
+      "offset": 606659
+    },
+    {
+      "hex": "25010249522645000c",
+      "offset": 606668
+    },
+    {
+      "hex": "2501013d4f23260001",
+      "offset": 606677
+    },
+    {
+      "hex": "250302dd543e030001",
+      "offset": 609026
+    },
+    {
+      "hex": "25030295544d030001",
+      "offset": 609035
+    },
+    {
+      "hex": "25030271544e030000",
+      "offset": 609044
+    },
+    {
+      "hex": "250301b95446160000",
+      "offset": 609053
+    },
+    {
+      "hex": "250b03c96246160101",
+      "offset": 609062
+    },
+    {
+      "hex": "250b03d56246160101",
+      "offset": 609071
+    },
+    {
+      "hex": "250b03e16246160101",
+      "offset": 609080
+    },
+    {
+      "hex": "250b03ed6246160101",
+      "offset": 609089
+    },
+    {
+      "hex": "250b03f96246160101",
+      "offset": 609098
+    },
+    {
+      "hex": "250b03056346160101",
+      "offset": 609107
+    },
+    {
+      "hex": "250b03116346160101",
+      "offset": 609116
+    },
+    {
+      "hex": "250c031d6346160101",
+      "offset": 609125
+    },
+    {
+      "hex": "250c03296346160101",
+      "offset": 609134
+    },
+    {
+      "hex": "250c03356346160101",
+      "offset": 609143
+    },
+    {
+      "hex": "250c03416346160101",
+      "offset": 609152
+    },
+    {
+      "hex": "2504034d6346160101",
+      "offset": 609161
+    },
+    {
+      "hex": "250603596346090101",
+      "offset": 609170
+    },
+    {
+      "hex": "250603656346160101",
+      "offset": 609179
+    },
+    {
+      "hex": "250d03716346120101",
+      "offset": 609188
+    },
+    {
+      "hex": "250d037d6346160101",
+      "offset": 609197
+    },
+    {
+      "hex": "2510038963461b1101",
+      "offset": 609206
+    },
+    {
+      "hex": "250d03956346160101",
+      "offset": 609215
+    },
+    {
+      "hex": "250403a1634d160101",
+      "offset": 609224
+    },
+    {
+      "hex": "250706ad634d030101",
+      "offset": 609233
+    },
+    {
+      "hex": "250706b9633e030101",
+      "offset": 609242
+    },
+    {
+      "hex": "250706c5634e030101",
+      "offset": 609251
+    },
+    {
+      "hex": "250102b9511d350001",
+      "offset": 609260
+    },
+    {
+      "hex": "250102dd511f350002",
+      "offset": 609269
+    },
+    {
+      "hex": "250101ad4e202c0001",
+      "offset": 609278
+    },
+    {
+      "hex": "250403d163202c0101",
+      "offset": 609287
+    },
+    {
+      "hex": "251403dd63201b1101",
+      "offset": 609296
+    },
+    {
+      "hex": "250603e96320090101",
+      "offset": 609305
+    },
+    {
+      "hex": "250403f563202c0101",
+      "offset": 609314
+    },
+    {
+      "hex": "2504030164202c0101",
+      "offset": 609323
+    },
+    {
+      "hex": "2504030d64202c0101",
+      "offset": 609332
+    },
+    {
+      "hex": "250302d952310f0001",
+      "offset": 609341
+    },
+    {
+      "hex": "2503022d5356030004",
+      "offset": 609350
+    },
+    {
+      "hex": "250301fd5230150004",
+      "offset": 609359
+    },
+    {
+      "hex": "2510031964301b1101",
+      "offset": 609368
+    },
+    {
+      "hex": "250403256430150101",
+      "offset": 609377
+    },
+    {
+      "hex": "250403316430150101",
+      "offset": 609386
+    },
+    {
+      "hex": "250a033d6430150101",
+      "offset": 609395
+    },
+    {
+      "hex": "250b03496430150101",
+      "offset": 609404
+    },
+    {
+      "hex": "250603556430090101",
+      "offset": 609413
+    },
+    {
+      "hex": "250603616430150101",
+      "offset": 609422
+    },
+    {
+      "hex": "2504036d6431150101",
+      "offset": 609431
+    },
+    {
+      "hex": "2507067964310f0101",
+      "offset": 609440
+    },
+    {
+      "hex": "25070685645a460101",
+      "offset": 609449
+    },
+    {
+      "hex": "250102c14f5a4d0002",
+      "offset": 609458
+    },
+    {
+      "hex": "250102d94f5b4d0002",
+      "offset": 609467
+    },
+    {
+      "hex": "250102155002340001",
+      "offset": 609476
+    },
+    {
+      "hex": "250101114e013c0002",
+      "offset": 609485
+    },
+    {
+      "hex": "250903916401320101",
+      "offset": 609494
+    },
+    {
+      "hex": "2505039d64013c0101",
+      "offset": 609503
+    },
+    {
+      "hex": "251303a964013c0101",
+      "offset": 609512
+    },
+    {
+      "hex": "250403b564013c0101",
+      "offset": 609521
+    },
+    {
+      "hex": "250503c164013c0101",
+      "offset": 609530
+    },
+    {
+      "hex": "250403cd645a250101",
+      "offset": 609539
+    },
+    {
+      "hex": "250403d9645a250101",
+      "offset": 609548
+    },
+    {
+      "hex": "250403e5645b250101",
+      "offset": 609557
+    },
+    {
+      "hex": "250706f16402340101",
+      "offset": 609566
+    },
+    {
+      "hex": "250302755639030001",
+      "offset": 609575
+    },
+    {
+      "hex": "250301395647150001",
+      "offset": 609584
+    },
+    {
+      "hex": "251003fd6447150101",
+      "offset": 609593
+    },
+    {
+      "hex": "2519030965471b1101",
+      "offset": 609602
+    },
+    {
+      "hex": "250b03156547150101",
+      "offset": 609611
+    },
+    {
+      "hex": "250603216547090101",
+      "offset": 609620
+    },
+    {
+      "hex": "2506032d6547150101",
+      "offset": 609629
+    },
+    {
+      "hex": "250403396547150101",
+      "offset": 609638
+    },
+    {
+      "hex": "251003456547150101",
+      "offset": 609647
+    },
+    {
+      "hex": "250a03516547150101",
+      "offset": 609656
+    },
+    {
+      "hex": "2505035d6547150101",
+      "offset": 609665
+    },
+    {
+      "hex": "250503696547150101",
+      "offset": 609674
+    },
+    {
+      "hex": "250706756539030101",
+      "offset": 609683
+    },
+    {
+      "hex": "250706816539150101",
+      "offset": 609692
+    },
+    {
+      "hex": "2504038d6539150101",
+      "offset": 609701
+    },
+    {
+      "hex": "2501024550042b0004",
+      "offset": 609710
+    },
+    {
+      "hex": "2501026950052b0004",
+      "offset": 609719
+    },
+    {
+      "hex": "250101354e03260001",
+      "offset": 609728
+    },
+    {
+      "hex": "250b03996503260101",
+      "offset": 609737
+    },
+    {
+      "hex": "250603a56503090101",
+      "offset": 609746
+    },
+    {
+      "hex": "250403b16503260101",
+      "offset": 609755
+    },
+    {
+      "hex": "250403bd6503260101",
+      "offset": 609764
+    },
+    {
+      "hex": "250403c96503260101",
+      "offset": 609773
+    },
+    {
+      "hex": "250403d56504260101",
+      "offset": 609782
+    },
+    {
+      "hex": "250a03e16504260101",
+      "offset": 609791
+    },
+    {
+      "hex": "250706ed65052b0101",
+      "offset": 609800
+    },
+    {
+      "hex": "251407f55707420101",
+      "offset": 606686
+    },
+    {
+      "hex": "251407015807420101",
+      "offset": 606695
+    },
+    {
+      "hex": "2514070d5807420101",
+      "offset": 606704
+    },
+    {
+      "hex": "251407195817410101",
+      "offset": 606713
+    },
+    {
+      "hex": "251407255817410101",
+      "offset": 606722
+    },
+    {
+      "hex": "251407315817410101",
+      "offset": 606731
+    },
+    {
+      "hex": "2514073d5817410101",
+      "offset": 606740
+    },
+    {
+      "hex": "251407495817410101",
+      "offset": 606749
+    },
+    {
+      "hex": "251407555817410101",
+      "offset": 606758
+    },
+    {
+      "hex": "251407615817410101",
+      "offset": 606767
+    },
+    {
+      "hex": "2514076d5817410101",
+      "offset": 606776
+    },
+    {
+      "hex": "251407795817410101",
+      "offset": 606785
+    },
+    {
+      "hex": "251407855818430101",
+      "offset": 606794
+    },
+    {
+      "hex": "251504915818431101",
+      "offset": 606803
+    },
+    {
+      "hex": "2516029d5813230001",
+      "offset": 606812
+    },
+    {
+      "hex": "251602a95813590001",
+      "offset": 606821
+    },
+    {
+      "hex": "251803b55811bd1101",
+      "offset": 606830
+    },
+    {
+      "hex": "251803c15811bd1101",
+      "offset": 606839
+    },
+    {
+      "hex": "251803cd5811bd1101",
+      "offset": 606848
+    },
+    {
+      "hex": "251803d95811bd1101",
+      "offset": 606857
+    },
+    {
+      "hex": "251803e55811bd1101",
+      "offset": 606866
+    },
+    {
+      "hex": "250102f15809280004",
+      "offset": 606875
+    },
+    {
+      "hex": "251707fd5809281101",
+      "offset": 606884
+    },
+    {
+      "hex": "251707095909281101",
+      "offset": 606893
+    },
+    {
+      "hex": "251707155909281101",
+      "offset": 606902
+    },
+    {
+      "hex": "251707215909281101",
+      "offset": 606911
+    },
+    {
+      "hex": "2517072d5909551101",
+      "offset": 606920
+    },
+    {
+      "hex": "250a03395909280101",
+      "offset": 606929
+    },
+    {
+      "hex": "25150445590a281203",
+      "offset": 606938
+    },
+    {
+      "hex": "25150451590a281203",
+      "offset": 606947
+    },
+    {
+      "hex": "2515045d590a281201",
+      "offset": 606956
+    },
+    {
+      "hex": "25150469590d331203",
+      "offset": 606965
+    },
+    {
+      "hex": "25150475590d331203",
+      "offset": 606974
+    },
+    {
+      "hex": "25120781591c440101",
+      "offset": 606983
+    },
+    {
+      "hex": "2512078d591c440101",
+      "offset": 606992
+    },
+    {
+      "hex": "25120799591c440101",
+      "offset": 607001
+    },
+    {
+      "hex": "251207a5591c440101",
+      "offset": 607010
+    },
+    {
+      "hex": "251207b1591c440101",
+      "offset": 607019
+    },
+    {
+      "hex": "251207bd591c2d0101",
+      "offset": 607028
+    },
+    {
+      "hex": "250f03c95923641101",
+      "offset": 607037
+    },
+    {
+      "hex": "251907d55923481101",
+      "offset": 607046
+    },
+    {
+      "hex": "250a07e15923481101",
+      "offset": 607055
+    },
+    {
+      "hex": "250a07ed5923481101",
+      "offset": 607064
+    },
+    {
+      "hex": "251c04f9590e280204",
+      "offset": 607073
+    },
+    {
+      "hex": "250707055a10281101",
+      "offset": 607082
+    },
+    {
+      "hex": "250e07115a10281101",
+      "offset": 607091
+    },
+    {
+      "hex": "2519071d5a103d1101",
+      "offset": 607100
+    },
+    {
+      "hex": "251907295a10281101",
+      "offset": 607109
+    },
+    {
+      "hex": "251b04355a22281403",
+      "offset": 607118
+    },
+    {
+      "hex": "251b04415a22281403",
+      "offset": 607127
+    },
+    {
+      "hex": "251b044d5a22281403",
+      "offset": 607136
+    },
+    {
+      "hex": "251b04595a22281403",
+      "offset": 607145
+    },
+    {
+      "hex": "251a04655a27331205",
+      "offset": 607154
+    },
+    {
+      "hex": "251a04715a27331205",
+      "offset": 607163
+    },
+    {
+      "hex": "251a047d5a27331205",
+      "offset": 607172
+    },
+    {
+      "hex": "251a04895a27331205",
+      "offset": 607181
+    },
+    {
+      "hex": "251a04955a27331205",
+      "offset": 607190
+    },
+    {
+      "hex": "251b04a15a1e28140a",
+      "offset": 607199
+    },
+    {
+      "hex": "251b04ad5a1e28140a",
+      "offset": 607208
+    },
+    {
+      "hex": "251b04b95a1e28140a",
+      "offset": 607217
+    },
+    {
+      "hex": "251b04c55a1e28140a",
+      "offset": 607226
+    },
+    {
+      "hex": "251b04d15a1e28140a",
+      "offset": 607235
+    },
+    {
+      "hex": "251b04dd5a1e28140a",
+      "offset": 607244
+    },
+    {
+      "hex": "251b04e95a1e28140a",
+      "offset": 607253
+    },
+    {
+      "hex": "251b04f55a1e28140a",
+      "offset": 607262
+    },
+    {
+      "hex": "251b04015b2d441403",
+      "offset": 607271
+    },
+    {
+      "hex": "2515040d5b2d441203",
+      "offset": 607280
+    },
+    {
+      "hex": "251504195b2d441103",
+      "offset": 607289
+    },
+    {
+      "hex": "251504255b2d441203",
+      "offset": 607298
+    },
+    {
+      "hex": "251b04315b2b331403",
+      "offset": 607307
+    },
+    {
+      "hex": "251b043d5b2b331403",
+      "offset": 607316
+    },
+    {
+      "hex": "251504495b29491205",
+      "offset": 607325
+    },
+    {
+      "hex": "250104555b29491205",
+      "offset": 607334
+    },
+    {
+      "hex": "251504615b5c281203",
+      "offset": 607343
+    },
+    {
+      "hex": "251504215c3d101201",
+      "offset": 607352
+    },
+    {
+      "hex": "2515042d5c34101201",
+      "offset": 607361
+    },
+    {
+      "hex": "251906395c3a100201",
+      "offset": 607370
+    },
+    {
+      "hex": "251b04455c41101401",
+      "offset": 607379
+    },
+    {
+      "hex": "251b04515c41101401",
+      "offset": 607388
+    },
+    {
+      "hex": "2507035d5c50150101",
+      "offset": 607397
+    },
+    {
+      "hex": "251604695c50220001",
+      "offset": 607406
+    },
+    {
+      "hex": "251504755c574f1201",
+      "offset": 607415
+    }
+  ],
+  "kind": "overlay",
+  "map_sha256": "a5df95d58377195941ce4cc9c762f46285ac7caa397989ab1a7cb9bb1ccc383d",
+  "overlay_provenance_sha256": "10898a960d0001672f686ee038499e1cbb26924cf6883ffa33adf002d9127f28",
+  "profile_rom": {
+    "BaseData": {
+      "addr": 23307,
+      "bank": 20,
+      "flat": 334603
+    },
+    "CheckEncounterRoamMon": {
+      "addr": 26650,
+      "bank": 10,
+      "flat": 174106
+    },
+    "EvosAttacksPointers": {
+      "addr": 26557,
+      "bank": 16,
+      "flat": 272317
+    },
+    "FishGroups": {
+      "addr": 27127,
+      "bank": 36,
+      "flat": 600567
+    },
+    "GrassMonProbTable": {
+      "addr": 26407,
+      "bank": 10,
+      "flat": 173863
+    },
+    "InitRoamMons": {
+      "addr": 26583,
+      "bank": 10,
+      "flat": 174039
+    },
+    "ItemNames": {
+      "addr": 16384,
+      "bank": 108,
+      "flat": 1769472
+    },
+    "JohtoGrassWildMons": {
+      "addr": 27445,
+      "bank": 10,
+      "flat": 174901
+    },
+    "JohtoWaterWildMons": {
+      "addr": 30313,
+      "bank": 10,
+      "flat": 177769
+    },
+    "KantoGrassWildMons": {
+      "addr": 30656,
+      "bank": 10,
+      "flat": 178112
+    },
+    "KantoWaterWildMons": {
+      "addr": 32067,
+      "bank": 10,
+      "flat": 179523
+    },
+    "MoveNames": {
+      "addr": 21876,
+      "bank": 108,
+      "flat": 1774964
+    },
+    "Moves": {
+      "addr": 23294,
+      "bank": 16,
+      "flat": 269054
+    },
+    "PokemonNames": {
+      "addr": 19316,
+      "bank": 108,
+      "flat": 1772404
+    },
+    "RoamMaps": {
+      "addr": 26971,
+      "bank": 10,
+      "flat": 174427
+    },
+    "RockMonMaps": {
+      "addr": 25677,
+      "bank": 46,
+      "flat": 762957
+    },
+    "SwarmGrassWildMons": {
+      "addr": 32284,
+      "bank": 10,
+      "flat": 179740
+    },
+    "SwarmWaterWildMons": {
+      "addr": 32473,
+      "bank": 10,
+      "flat": 179929
+    },
+    "TimeFishGroups": {
+      "addr": 27614,
+      "bank": 36,
+      "flat": 601054
+    },
+    "TreeMonMaps": {
+      "addr": 25574,
+      "bank": 46,
+      "flat": 762854
+    },
+    "TreeMons": {
+      "addr": 25712,
+      "bank": 46,
+      "flat": 762992
+    },
+    "WaterMonProbTable": {
+      "addr": 26421,
+      "bank": 10,
+      "flat": 173877
+    }
+  },
+  "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+  "schema": "gen2-overlay-binding-v1",
+  "sites": {
+    "bag_ball_received": {
+      "addr": 21257,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {
+        "combine": "ALL",
+        "flags": {
+          "C": 1
+        },
+        "registers": {
+          "DE": 54780
+        },
+        "required": true,
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_successful_ball_pocket_write",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBalls": {
+          "addr": 54781,
+          "bank": 1
+        },
+        "wCurItem": {
+          "addr": 53250,
+          "bank": 1
+        },
+        "wItemQuantityChange": {
+          "addr": 53257,
+          "bank": 1
+        },
+        "wNumBalls": {
+          "addr": 54780,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 54025,
+      "runtime_enabled": false,
+      "semantics": "Only success reaches SCF/RET. DE must point at wNumBalls; reject other pockets. Read back pocket contents and quantity rather than assuming a one-item delta.",
+      "signal": "bag_ball_received",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/items.asm",
+          "line_end": 232,
+          "line_start": 230,
+          "repo": "pokegold",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L230"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/items.asm",
+          "line_end": 234,
+          "line_start": 158,
+          "repo": "pokegold",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L158"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/items.asm",
+          "line_end": 42,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L1"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/items.asm",
+          "line_end": 158,
+          "line_start": 136,
+          "repo": "pokegold",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/items.asm#L136"
+        }
+      ],
+      "symbol": "PutItemInPocket.done",
+      "symbol_offset": 1
+    },
+    "battle_end": {
+      "addr": 29782,
+      "bank": 15,
+      "event_role": "OBSERVATION",
+      "expected_hex": "cd307d2005",
+      "guards": {},
+      "instructions": [
+        "call IsLinkBattle",
+        "jr nz, .HandleEndOfBattle"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_end_processing",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleMode": {
+          "addr": 53526,
+          "bank": 1
+        },
+        "wBattleResult": {
+          "addr": 53225,
+          "bank": 0
+        },
+        "wLinkMode": {
+          "addr": 53314,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 15,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 259158,
+      "runtime_enabled": false,
+      "semantics": "Entry precedes end-result handling, evolution and cleanup. wBattleResult remains a bitfield; this is not completion or whiteout proof.",
+      "signal": "battle_end_result",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 7967,
+          "line_start": 7965,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7965"
+        }
+      ],
+      "symbol": "ExitBattle",
+      "symbol_offset": 0
+    },
+    "battle_faint": {
+      "addr": 20724,
+      "bank": 15,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fac6cf4f2142cb",
+      "guards": {},
+      "instructions": [
+        "ld a, [wCurBattleMon]",
+        "ld c, a",
+        "ld hl, wBattleParticipantsNotFainted"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_party_copyback",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleMonHP": {
+          "addr": 51996,
+          "bank": 0
+        },
+        "wBattleResult": {
+          "addr": 53225,
+          "bank": 0
+        },
+        "wCurBattleMon": {
+          "addr": 53190,
+          "bank": 0
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 15,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 250100,
+      "runtime_enabled": false,
+      "semantics": "Engine faint handling has selected wCurBattleMon. Battle HP/status copyback has not yet run; snapshot battle and party records separately.",
+      "signal": "player_faint",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 2554,
+          "line_start": 2551,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L2551"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 2515,
+          "line_start": 2514,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L2514"
+        }
+      ],
+      "symbol": "UpdateFaintedPlayerMon",
+      "symbol_offset": 0
+    },
+    "capture_box": {
+      "addr": 27569,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e01",
+      "guards": {},
+      "instructions": [
+        "ld a, BANK(sBoxCount)"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "post_insert_pre_nickname",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60337,
+      "runtime_enabled": false,
+      "semantics": "SendMonIntoBox predef has returned on the full-party catch branch, before the box-count full flag check. Final-slot and nonfinal-slot runtime controls remain open.",
+      "signal": "capture_box",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 612,
+          "line_start": 607,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L607"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 570,
+          "line_start": 543,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L543"
+        }
+      ],
+      "symbol": "PokeBallEffect.SendToPC",
+      "symbol_offset": 8
+    },
+    "capture_box_finalized": {
+      "addr": 27721,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa19d1",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "capture_box"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wBattleType]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_nickname_requires_acquisition_latch",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wWildMon": {
+          "addr": 53583,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60489,
+      "runtime_enabled": false,
+      "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful box insertion may publish final identity; without it this site emits nothing.",
+      "signal": "capture_box",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 692,
+          "line_start": 691,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 680,
+          "line_start": 661,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L661"
+        }
+      ],
+      "symbol": "PokeBallEffect.return_from_capture",
+      "symbol_offset": 0
+    },
+    "capture_party": {
+      "addr": 27470,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa02d0",
+      "guards": {},
+      "instructions": [
+        "ld a, [wCurItem]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "post_insert_pre_nickname",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60238,
+      "runtime_enabled": false,
+      "semantics": "Party-count fork selected TryAddMonToParty; its predef has returned. Caught metadata and nickname work remain; retain acquisition until final identity readback.",
+      "signal": "capture_party",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 558,
+          "line_start": 544,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L544"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 570,
+          "line_start": 543,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L543"
+        }
+      ],
+      "symbol": "PokeBallEffect.skip_pokedex",
+      "symbol_offset": 27
+    },
+    "capture_party_finalized": {
+      "addr": 27721,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa19d1",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "capture_party"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wBattleType]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_nickname_requires_acquisition_latch",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wWildMon": {
+          "addr": 53583,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60489,
+      "runtime_enabled": false,
+      "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful party insertion may publish final identity; without it this site emits nothing.",
+      "signal": "capture_party",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 692,
+          "line_start": 691,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 680,
+          "line_start": 661,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L661"
+        }
+      ],
+      "symbol": "PokeBallEffect.return_from_capture",
+      "symbol_offset": 0
+    },
+    "change_box_begin": {
+      "addr": 19242,
+      "bank": 5,
+      "event_role": "OBSERVATION",
+      "expected_hex": "d5",
+      "guards": {},
+      "instructions": [
+        "push de"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_confirmation",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 5,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 84778,
+      "runtime_enabled": false,
+      "semantics": "Box-change attempt; confirmations can still refuse. Retain old-box context.",
+      "signal": "change_box",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/save.asm",
+          "line_end": 41,
+          "line_start": 40,
+          "repo": "pokegold",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L40"
+        }
+      ],
+      "symbol": "ChangeBoxSaveGame",
+      "symbol_offset": 0
+    },
+    "change_box_loaded": {
+      "addr": 19276,
+      "bank": 5,
+      "event_role": "OBSERVATION",
+      "expected_hex": "cd814c",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "change_box_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "call SavingDontTurnOffThePower"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_old_box_save_and_new_box_load",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 5,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 84812,
+      "runtime_enabled": false,
+      "semantics": "Confirmations passed, SaveBox returned, wCurBox changed and LoadBox returned. UI/game-logic resumption remains.",
+      "signal": "change_box",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/save.asm",
+          "line_end": 55,
+          "line_start": 40,
+          "repo": "pokegold",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L40"
+        }
+      ],
+      "symbol": "ChangeBoxSaveGame",
+      "symbol_offset": 34
+    },
+    "contest_box_finalized": {
+      "addr": 31945,
+      "bank": 49,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wCurBox"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "contest_box_inserted"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_contest_box_name_requires_insert_latch",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wScriptVar": {
+          "addr": 53619,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 49,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 818377,
+      "runtime_enabled": false,
+      "semantics": "Return shared by success and box-capacity refusal. Publish only with contest_box_inserted latch; never trust BUGCONTEST_BOXED_MON alone. Crystal also writes caught metadata on refusal.",
+      "signal": "contest_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 116,
+          "line_start": 111,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L111"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 118,
+          "line_start": 102,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L102"
+        }
+      ],
+      "symbol": "CheckPartyFullAfterContest.BoxFull",
+      "symbol_offset": 9
+    },
+    "contest_box_inserted": {
+      "addr": 31885,
+      "bank": 49,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa04d0",
+      "guards": {},
+      "instructions": [
+        "ld a, [wCurPartySpecies]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_successful_contest_box_insert_before_name",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 49,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 818317,
+      "runtime_enabled": false,
+      "semantics": "Capacity refusal bypasses this site. Record success-only insertion latch before nickname/caught metadata; receiver first box record.",
+      "signal": "contest_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 91,
+          "line_start": 72,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L72"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 103,
+          "line_start": 71,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L71"
+        }
+      ],
+      "symbol": "CheckPartyFullAfterContest.TryAddToBox",
+      "symbol_offset": 50
+    },
+    "contest_party_finalized": {
+      "addr": 31834,
+      "bank": 49,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {},
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_contest_party_name_and_metadata",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wScriptVar": {
+          "addr": 53619,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 49,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 818266,
+      "runtime_enabled": false,
+      "semantics": "Party copy, OT and nickname finalization complete; Crystal caught location complete. Contest buffer cleared and success published. Receiver PartyCount-1.",
+      "signal": "contest_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 70,
+          "line_start": 57,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L57"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/caught_nickname.asm",
+          "line_end": 72,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/caught_nickname.asm#L1"
+        }
+      ],
+      "symbol": "CheckPartyFullAfterContest.Party_SkipNickname",
+      "symbol_offset": 26
+    },
+    "contest_selected": {
+      "addr": 26479,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "faedd0",
+      "guards": {},
+      "instructions": [
+        "ld a, [wTempEnemyMonSpecies]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "contest_buffer_selected_before_party_or_box_acquisition",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wContestMon": {
+          "addr": 56551,
+          "bank": 1
+        },
+        "wTempEnemyMonSpecies": {
+          "addr": 53485,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 59247,
+      "runtime_enabled": false,
+      "semantics": "GeneratePartyMonStats completed after first catch or accepted replacement. Decline returns earlier. This is provisional contest buffer, not final party/box capture.",
+      "signal": "contest_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/bug_contest/caught_mon.asm",
+          "line_end": 14,
+          "line_start": 12,
+          "repo": "pokegold",
+          "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/bug_contest/caught_mon.asm#L12"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/bug_contest/caught_mon.asm",
+          "line_end": 35,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/bug_contest/caught_mon.asm#L1"
+        }
+      ],
+      "symbol": "BugContest_SetCaughtContestMon.firstcatch",
+      "symbol_offset": 3
+    },
+    "continue_confirmed": {
+      "addr": 24068,
+      "bank": 1,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e08",
+      "guards": {},
+      "instructions": [
+        "ld a, $8"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "loaded_confirmed_before_map_entry",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPlayerID": {
+          "addr": 53665,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 1,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 24068,
+      "runtime_enabled": false,
+      "semantics": "TryLoadSaveFile succeeded and Continue/RTC confirmations passed. Clock/roamer/mobile/map setup remains; no overworld admission.",
+      "signal": "continue_loaded",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/intro_menu.asm",
+          "line_end": 272,
+          "line_start": 271,
+          "repo": "pokegold",
+          "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L271"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/intro_menu.asm",
+          "line_end": 271,
+          "line_start": 251,
+          "repo": "pokegold",
+          "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L251"
+        }
+      ],
+      "symbol": "Continue.Check2Pass",
+      "symbol_offset": 0
+    },
+    "evolution_species_published": {
+      "addr": 25582,
+      "bank": 16,
+      "event_role": "OBSERVATION",
+      "expected_hex": "e5",
+      "guards": {},
+      "identity_migration": {
+        "old_species_by_new": {
+          "101": 100,
+          "103": 102,
+          "105": 104,
+          "106": 236,
+          "107": 236,
+          "11": 10,
+          "110": 109,
+          "112": 111,
+          "117": 116,
+          "119": 118,
+          "12": 11,
+          "121": 120,
+          "124": 238,
+          "125": 239,
+          "126": 240,
+          "130": 129,
+          "134": 133,
+          "135": 133,
+          "136": 133,
+          "139": 138,
+          "14": 13,
+          "141": 140,
+          "148": 147,
+          "149": 148,
+          "15": 14,
+          "153": 152,
+          "154": 153,
+          "156": 155,
+          "157": 156,
+          "159": 158,
+          "160": 159,
+          "162": 161,
+          "164": 163,
+          "166": 165,
+          "168": 167,
+          "169": 42,
+          "17": 16,
+          "171": 170,
+          "176": 175,
+          "178": 177,
+          "18": 17,
+          "180": 179,
+          "181": 180,
+          "182": 44,
+          "184": 183,
+          "186": 61,
+          "188": 187,
+          "189": 188,
+          "192": 191,
+          "195": 194,
+          "196": 133,
+          "197": 133,
+          "199": 79,
+          "2": 1,
+          "20": 19,
+          "205": 204,
+          "208": 95,
+          "210": 209,
+          "212": 123,
+          "217": 216,
+          "219": 218,
+          "22": 21,
+          "221": 220,
+          "224": 223,
+          "229": 228,
+          "230": 117,
+          "232": 231,
+          "233": 137,
+          "237": 236,
+          "24": 23,
+          "242": 113,
+          "247": 246,
+          "248": 247,
+          "25": 172,
+          "26": 25,
+          "28": 27,
+          "3": 2,
+          "30": 29,
+          "31": 30,
+          "33": 32,
+          "34": 33,
+          "35": 173,
+          "36": 35,
+          "38": 37,
+          "39": 174,
+          "40": 39,
+          "42": 41,
+          "44": 43,
+          "45": 44,
+          "47": 46,
+          "49": 48,
+          "5": 4,
+          "51": 50,
+          "53": 52,
+          "55": 54,
+          "57": 56,
+          "59": 58,
+          "6": 5,
+          "61": 60,
+          "62": 61,
+          "64": 63,
+          "65": 64,
+          "67": 66,
+          "68": 67,
+          "70": 69,
+          "71": 70,
+          "73": 72,
+          "75": 74,
+          "76": 75,
+          "78": 77,
+          "8": 7,
+          "80": 79,
+          "82": 81,
+          "85": 84,
+          "87": 86,
+          "89": 88,
+          "9": 8,
+          "91": 90,
+          "93": 92,
+          "94": 93,
+          "97": 96,
+          "99": 98
+        },
+        "old_species_witness": "unique pre-evolution of the published species (A)",
+        "source_table": "EvosAttacksPointers"
+      },
+      "instructions": [
+        "push hl"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_party_species_list_publish",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wEvolutionOldSpecies": {
+          "addr": 53459,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wPartySpecies": {
+          "addr": 55843,
+          "bank": 1
+        },
+        "wTempMonSpecies": {
+          "addr": 53259,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 16,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 271342,
+      "runtime_enabled": false,
+      "semantics": "Evolved struct and move work preceded this point; parallel species marker has now been written. wEvolutionOldSpecies retains old species for key migration.",
+      "signal": "evolution_species",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/evolve.asm",
+          "line_end": 318,
+          "line_start": 313,
+          "repo": "pokegold",
+          "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L313"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/evolve.asm",
+          "line_end": 314,
+          "line_start": 292,
+          "repo": "pokegold",
+          "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L292"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/evolve.asm",
+          "line_end": 228,
+          "line_start": 225,
+          "repo": "pokegold",
+          "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/evolve.asm#L225"
+        }
+      ],
+      "symbol": "EvolveAfterBattle_MasterLoop.skip_unown",
+      "symbol_offset": 6
+    },
+    "gift_begin": {
+      "addr": 25230,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "d5",
+      "guards": {},
+      "instructions": [
+        "push de"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_gift_insert_attempt",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurItem": {
+          "addr": 53250,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wScriptBank": {
+          "addr": 53600,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 57998,
+      "runtime_enabled": false,
+      "semantics": "Record script-gift intent before party/box insertion; failure exit is not acquisition.",
+      "signal": "gift_static",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/move_mon.asm",
+          "line_end": 1633,
+          "line_start": 1632,
+          "repo": "pokegold",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1632"
+        }
+      ],
+      "symbol": "GivePoke",
+      "symbol_offset": 0
+    },
+    "gift_box_finalized": {
+      "addr": 25516,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {
+        "combine": "ALL",
+        "registers": {
+          "B": 1
+        },
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "gift_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_box_gift_identity_and_name",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 58284,
+      "runtime_enabled": false,
+      "semantics": "Box nickname copy and CloseSRAM completed before B=1 return. Failures return with B=2; receiver is first box slot.",
+      "signal": "gift_static",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/move_mon.asm",
+          "line_end": 1775,
+          "line_start": 1759,
+          "repo": "pokegold",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1759"
+        }
+      ],
+      "symbol": "GivePoke.skip_nickname",
+      "symbol_offset": 33
+    },
+    "gift_party_finalized": {
+      "addr": 25487,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c8",
+      "guards": {
+        "combine": "ALL",
+        "flags": {
+          "Z": 1
+        },
+        "registers": {
+          "B": 0
+        },
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "gift_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ret z"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_party_gift_identity_and_name",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 58255,
+      "runtime_enabled": false,
+      "semantics": "RET Z is party success after metadata and optional name work. Require Z and B=0; failures return separately with B=2.",
+      "signal": "gift_static",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/move_mon.asm",
+          "line_end": 1764,
+          "line_start": 1759,
+          "repo": "pokegold",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1759"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/move_mon.asm",
+          "line_end": 1777,
+          "line_start": 1632,
+          "repo": "pokegold",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/move_mon.asm#L1632"
+        }
+      ],
+      "symbol": "GivePoke.skip_nickname",
+      "symbol_offset": 4
+    },
+    "hatch_finalized": {
+      "addr": 29733,
+      "bank": 5,
+      "event_role": "OBSERVATION",
+      "expected_hex": "2105d0",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wCurPartyMon"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "hatch_species"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld hl, wCurPartyMon"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_hatch_metadata_and_name_requires_slot_latch",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wPartySpecies": {
+          "addr": 55843,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 5,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 95269,
+      "runtime_enabled": false,
+      "semantics": "The next-slot path is shared with unhatched/non-egg skips. Publish gift_daycare only with matching hatch_species latch for current wCurPartyMon; OT/HP/name work completed on that matched path.",
+      "signal": "egg_hatch",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/breeding.asm",
+          "line_end": 344,
+          "line_start": 343,
+          "repo": "pokegold",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L343"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/breeding.asm",
+          "line_end": 344,
+          "line_start": 296,
+          "repo": "pokegold",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L296"
+        }
+      ],
+      "symbol": "HatchEggs.next",
+      "symbol_offset": 0
+    },
+    "hatch_species": {
+      "addr": 29549,
+      "bank": 5,
+      "event_role": "OBSERVATION",
+      "expected_hex": "ea51d1",
+      "guards": {},
+      "instructions": [
+        "ld [wNamedObjectIndex], a"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_egg_species_marker",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wPartySpecies": {
+          "addr": 55843,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 5,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 95085,
+      "runtime_enabled": false,
+      "semantics": "The parallel party species entry has replaced EGG. HP, OT identity and naming still change later; publication must be deferred.",
+      "signal": "egg_hatch",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/breeding.asm",
+          "line_end": 251,
+          "line_start": 244,
+          "repo": "pokegold",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L244"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/breeding.asm",
+          "line_end": 243,
+          "line_start": 206,
+          "repo": "pokegold",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/breeding.asm#L206"
+        }
+      ],
+      "symbol": "HatchEggs.nottogepi",
+      "symbol_offset": 6
+    },
+    "link_trade_received": {
+      "addr": 19607,
+      "bank": 10,
+      "event_role": "OBSERVATION",
+      "expected_hex": "f1",
+      "guards": {
+        "combine": "ALL",
+        "memory_equals": [
+          {
+            "addr": 53314,
+            "bank": 1,
+            "symbol": "wLinkMode",
+            "value": 2,
+            "width": 1
+          }
+        ],
+        "required": true,
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "pop af"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_animation_before_received_party_copy",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurOTTradePartyMon": {
+          "addr": 52974,
+          "bank": 0
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wLinkMode": {
+          "addr": 53314,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 10,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 167063,
+      "runtime_enabled": false,
+      "semantics": "Incoming party copy and forced evolution follow. Intermediate transaction marker only, not completed trade or durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+      "signal": "link_trade",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/link/link.asm",
+          "line_end": 1809,
+          "line_start": 1808,
+          "repo": "pokegold",
+          "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1808"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "constants/serial_constants.asm",
+          "line_end": 8,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/serial_constants.asm#L1"
+        }
+      ],
+      "symbol": "LinkTrade.done_animation",
+      "symbol_offset": 0
+    },
+    "link_trade_saved": {
+      "addr": 19732,
+      "bank": 10,
+      "event_role": "OBSERVATION",
+      "expected_hex": "0e28",
+      "guards": {
+        "combine": "ALL",
+        "memory_equals": [
+          {
+            "addr": 53314,
+            "bank": 1,
+            "symbol": "wLinkMode",
+            "value": 2,
+            "width": 1
+          }
+        ],
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "link_trade_received"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld c, 40"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_received_copy_evolution_and_trade_save",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wLinkMode": {
+          "addr": 53314,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 10,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 167188,
+      "runtime_enabled": false,
+      "semantics": "SaveAfterLinkTrade returned after AddTempmonToParty and forced evolution. Receiver is appended party slot. Host scenario save and cold reload remain required for durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+      "signal": "link_trade",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/link/link.asm",
+          "line_end": 1875,
+          "line_start": 1873,
+          "repo": "pokegold",
+          "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1873"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/link/link.asm",
+          "line_end": 1874,
+          "line_start": 1807,
+          "repo": "pokegold",
+          "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/link/link.asm#L1807"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/save.asm",
+          "line_end": 40,
+          "line_start": 27,
+          "repo": "pokegold",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L27"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "constants/serial_constants.asm",
+          "line_end": 8,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/serial_constants.asm#L1"
+        }
+      ],
+      "symbol": "LinkTrade.save",
+      "symbol_offset": 6
+    },
+    "map_entry_complete": {
+      "addr": 26289,
+      "bank": 37,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {},
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_map_setup_status_publish",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wMapGroup": {
+          "addr": 55808,
+          "bank": 1
+        },
+        "wMapNumber": {
+          "addr": 55809,
+          "bank": 1
+        },
+        "wMapStatus": {
+          "addr": 53593,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 37,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 616113,
+      "runtime_enabled": false,
+      "semantics": "RunMapSetupScript returned, entry method cleared, MAPSTATUS_HANDLE published. No write-checkpoint authority.",
+      "signal": "map_load",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/events.asm",
+          "line_end": 131,
+          "line_start": 125,
+          "repo": "pokegold",
+          "source_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/events.asm#L125"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/events.asm",
+          "line_end": 133,
+          "line_start": 106,
+          "repo": "pokegold",
+          "source_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/events.asm#L106"
+        }
+      ],
+      "symbol": "EnterMap.dontresetpoison",
+      "symbol_offset": 8
+    },
+    "new_game": {
+      "addr": 23582,
+      "bank": 1,
+      "event_role": "OBSERVATION",
+      "expected_hex": "afeacbc1cd3a5c",
+      "guards": {},
+      "instructions": [
+        "xor a",
+        "ld [wDebugFlags], a",
+        "call ResetWRAM"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_reset_wram",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wPlayerID": {
+          "addr": 53665,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 1,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 23582,
+      "runtime_enabled": false,
+      "semantics": "New-game entry precedes ResetWRAM and campaign initialization; it is not an admitted live-session boundary.",
+      "signal": "new_game",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/intro_menu.asm",
+          "line_end": 4,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/intro_menu.asm#L1"
+        }
+      ],
+      "symbol": "NewGame",
+      "symbol_offset": 0
+    },
+    "npc_trade_begin": {
+      "addr": 19049,
+      "bank": 63,
+      "event_role": "OBSERVATION",
+      "expected_hex": "1e01",
+      "guards": {},
+      "instructions": [
+        "ld e, NPCTRADE_GIVEMON"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_npc_trade_replacement",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 63,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 1034857,
+      "runtime_enabled": false,
+      "semantics": "Snapshot selected outgoing party identity before removal and append.",
+      "signal": "npc_trade",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/npc_trade.asm",
+          "line_end": 115,
+          "line_start": 114,
+          "repo": "pokegold",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L114"
+        }
+      ],
+      "symbol": "DoNPCTrade",
+      "symbol_offset": 0
+    },
+    "npc_trade_finalized": {
+      "addr": 19341,
+      "bank": 63,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "npc_trade_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_npc_trade_identity_and_stats",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wOTTrademonSpecies": {
+          "addr": 50689,
+          "bank": 0
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 63,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 1035149,
+      "runtime_enabled": false,
+      "semantics": "Name, OT, DVs, OT ID, item and stats are complete. Receiver is PARTY_COUNT_MINUS_ONE; restored wCurPartyMon is the outgoing selection and must not select the receiver.",
+      "signal": "npc_trade",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/npc_trade.asm",
+          "line_end": 244,
+          "line_start": 114,
+          "repo": "pokegold",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L114"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/npc_trade.asm",
+          "line_end": 168,
+          "line_start": 167,
+          "repo": "pokegold",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L167"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/npc_trade.asm",
+          "line_end": 272,
+          "line_start": 266,
+          "repo": "pokegold",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/npc_trade.asm#L266"
+        }
+      ],
+      "symbol": "DoNPCTrade",
+      "symbol_offset": 292
+    },
+    "pc_deposit_begin": {
+      "addr": 30835,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e08cd492e",
+      "guards": {},
+      "instructions": [
+        "predef SendGetMonIntoFromBox"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_transfer_attempt",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 931955,
+      "runtime_enabled": false,
+      "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+      "signal": "pc_deposit",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 1756,
+          "line_start": 1746,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1746"
+        }
+      ],
+      "symbol": "DepositPokemon",
+      "symbol_offset": 24
+    },
+    "pc_deposit_complete": {
+      "addr": 30852,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa04d0",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "pc_deposit_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wCurPartySpecies]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_successful_copy_and_compaction",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 931972,
+      "runtime_enabled": false,
+      "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+      "signal": "pc_deposit",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 1761,
+          "line_start": 1746,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1746"
+        }
+      ],
+      "symbol": "DepositPokemon",
+      "symbol_offset": 41
+    },
+    "pc_release_box_begin": {
+      "addr": 28407,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e03213d60cf",
+      "guards": {},
+      "instructions": [
+        "farcall RemoveMonFromPartyOrBox"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "confirmed_before_removal",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 929527,
+      "runtime_enabled": false,
+      "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+      "signal": "pc_release",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 445,
+          "line_start": 424,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L424"
+        }
+      ],
+      "symbol": "BillsPC_Withdraw.release",
+      "symbol_offset": 49
+    },
+    "pc_release_box_complete": {
+      "addr": 28413,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "cd5f79",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "pc_release_box_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "call ReleasePKMN_ByePKMN"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_confirmed_removal",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 929533,
+      "runtime_enabled": false,
+      "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+      "signal": "pc_release",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 446,
+          "line_start": 424,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L424"
+        }
+      ],
+      "symbol": "BillsPC_Withdraw.release",
+      "symbol_offset": 55
+    },
+    "pc_release_party_begin": {
+      "addr": 27938,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e03213d60cf",
+      "guards": {},
+      "instructions": [
+        "farcall RemoveMonFromPartyOrBox"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "confirmed_before_removal",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 929058,
+      "runtime_enabled": false,
+      "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+      "signal": "pc_release",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 206,
+          "line_start": 183,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L183"
+        }
+      ],
+      "symbol": "BillsPCDepositFuncRelease",
+      "symbol_offset": 53
+    },
+    "pc_release_party_complete": {
+      "addr": 27944,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "cd5f79",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "pc_release_party_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "call ReleasePKMN_ByePKMN"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_confirmed_removal",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 929064,
+      "runtime_enabled": false,
+      "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+      "signal": "pc_release",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 207,
+          "line_start": 183,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L183"
+        }
+      ],
+      "symbol": "BillsPCDepositFuncRelease",
+      "symbol_offset": 59
+    },
+    "pc_withdraw_begin": {
+      "addr": 30968,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e08cd492e",
+      "guards": {},
+      "instructions": [
+        "predef SendGetMonIntoFromBox"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_transfer_attempt",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 932088,
+      "runtime_enabled": false,
+      "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+      "signal": "pc_withdraw",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 1811,
+          "line_start": 1798,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1798"
+        }
+      ],
+      "symbol": "TryWithdrawPokemon",
+      "symbol_offset": 31
+    },
+    "pc_withdraw_complete": {
+      "addr": 30986,
+      "bank": 56,
+      "event_role": "OBSERVATION",
+      "expected_hex": "fa04d0",
+      "guards": {
+        "combine": "ALL",
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "pc_withdraw_begin"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wCurPartySpecies]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_successful_copy_and_compaction",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 56,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 932106,
+      "runtime_enabled": false,
+      "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+      "signal": "pc_withdraw",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/pokemon/bills_pc.asm",
+          "line_end": 1816,
+          "line_start": 1798,
+          "repo": "pokegold",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/pokemon/bills_pc.asm#L1798"
+        }
+      ],
+      "symbol": "TryWithdrawPokemon",
+      "symbol_offset": 49
+    },
+    "poison_faint": {
+      "addr": 18047,
+      "bank": 20,
+      "event_role": "OBSERVATION",
+      "expected_hex": "3e20cd3a3b3600",
+      "guards": {},
+      "instructions": [
+        "ld a, MON_STATUS",
+        "call GetPartyParamLocation",
+        "ld [hl], 0"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_poison_hp_zero",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurPartyMon": {
+          "addr": 53253,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wPoisonStepPartyFlags": {
+          "addr": 53034,
+          "bank": 0
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 20,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 329343,
+      "runtime_enabled": false,
+      "semantics": "This branch follows one HP of poison damage and a zero HP result. Status reset follows; wCurPartyMon identifies the affected slot.",
+      "signal": "poison_faint",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/poisonstep.asm",
+          "line_end": 90,
+          "line_start": 59,
+          "repo": "pokegold",
+          "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/poisonstep.asm#L59"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/poisonstep.asm",
+          "line_end": 18,
+          "line_start": 16,
+          "repo": "pokegold",
+          "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/poisonstep.asm#L16"
+        }
+      ],
+      "symbol": "DoPoisonStep.DamageMonIfPoisoned",
+      "symbol_offset": 27
+    },
+    "roamer_box_finalized": {
+      "addr": 27721,
+      "bank": 3,
+      "event_role": "CLASSIFICATION_ONLY",
+      "expected_hex": "fa19d1",
+      "guards": {
+        "combine": "ALL",
+        "memory_equals": [
+          {
+            "addr": 53529,
+            "bank": 1,
+            "symbol": "wBattleType",
+            "value": 5,
+            "width": 1
+          }
+        ],
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "capture_box"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wBattleType]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_roamer_name_requires_success_and_type_guards",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wWildMon": {
+          "addr": 53583,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60489,
+      "runtime_enabled": false,
+      "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful box insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+      "signal": "roamer_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 692,
+          "line_start": 691,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/wildmons.asm",
+          "line_end": 571,
+          "line_start": 563,
+          "repo": "pokegold",
+          "source_sha256": "ed44ca8144bff61cc343a898d9037434e9d5a2ace4a28c604da3686fc1b1abbd",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/wildmons.asm#L563"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "constants/battle_constants.asm",
+          "line_end": 103,
+          "line_start": 89,
+          "repo": "pokegold",
+          "source_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/battle_constants.asm#L89"
+        }
+      ],
+      "symbol": "PokeBallEffect.return_from_capture",
+      "symbol_offset": 0
+    },
+    "roamer_party_finalized": {
+      "addr": 27721,
+      "bank": 3,
+      "event_role": "CLASSIFICATION_ONLY",
+      "expected_hex": "fa19d1",
+      "guards": {
+        "combine": "ALL",
+        "memory_equals": [
+          {
+            "addr": 53529,
+            "bank": 1,
+            "symbol": "wBattleType",
+            "value": 5,
+            "width": 1
+          }
+        ],
+        "required": true,
+        "requires_prior": {
+          "consume_once": true,
+          "invalidate_on": [
+            "failure",
+            "cancel",
+            "reset",
+            "reload",
+            "source_change"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "mode": "ANY",
+          "scope": "current_operation",
+          "site_ids": [
+            "capture_party"
+          ]
+        },
+        "runtime_guard_qualification": "OPEN"
+      },
+      "instructions": [
+        "ld a, [wBattleType]"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_roamer_name_requires_success_and_type_guards",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "sBoxCount": {
+          "addr": 44396,
+          "bank": 1
+        },
+        "sBoxMons": {
+          "addr": 44418,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wCurPartySpecies": {
+          "addr": 53252,
+          "bank": 1
+        },
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wWildMon": {
+          "addr": 53583,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 60489,
+      "runtime_enabled": false,
+      "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful party insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+      "signal": "roamer_capture",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/items/item_effects.asm",
+          "line_end": 692,
+          "line_start": 691,
+          "repo": "pokegold",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/items/item_effects.asm#L691"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/wildmons.asm",
+          "line_end": 571,
+          "line_start": 563,
+          "repo": "pokegold",
+          "source_sha256": "ed44ca8144bff61cc343a898d9037434e9d5a2ace4a28c604da3686fc1b1abbd",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/wildmons.asm#L563"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "constants/battle_constants.asm",
+          "line_end": 103,
+          "line_start": 89,
+          "repo": "pokegold",
+          "source_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/constants/battle_constants.asm#L89"
+        }
+      ],
+      "symbol": "PokeBallEffect.return_from_capture",
+      "symbol_offset": 0
+    },
+    "save_completed": {
+      "addr": 19725,
+      "bank": 5,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {},
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_success_return",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wCurBox": {
+          "addr": 55484,
+          "bank": 1
+        },
+        "wSaveFileExists": {
+          "addr": 53658,
+          "bank": 1
+        },
+        "wSavedAtLeastOnce": {
+          "addr": 53722,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 5,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 85261,
+      "runtime_enabled": false,
+      "semantics": "All _SaveGameData calls have returned at this terminal RET. It is a CPU completion candidate, not CartRAM durability or recovery proof.",
+      "signal": "save_completed",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/save.asm",
+          "line_end": 292,
+          "line_start": 273,
+          "repo": "pokegold",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L273"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/menus/save.asm",
+          "line_end": 292,
+          "line_start": 273,
+          "repo": "pokegold",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/menus/save.asm#L273"
+        }
+      ],
+      "symbol": "_SaveGameData",
+      "symbol_offset": 65
+    },
+    "script_wild_staged": {
+      "addr": 29333,
+      "bank": 37,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {},
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_script_wild_species_and_level_staging",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleScriptFlags": {
+          "addr": 53632,
+          "bank": 1
+        },
+        "wCurPartyLevel": {
+          "addr": 53312,
+          "bank": 1
+        },
+        "wMapGroup": {
+          "addr": 55808,
+          "bank": 1
+        },
+        "wMapNumber": {
+          "addr": 55809,
+          "bank": 1
+        },
+        "wScriptBank": {
+          "addr": 53600,
+          "bank": 1
+        },
+        "wScriptPos": {
+          "addr": 53601,
+          "bank": 1
+        },
+        "wTempWildMonSpecies": {
+          "addr": 53527,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 37,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 619157,
+      "runtime_enabled": false,
+      "semantics": "CPU interpreter handler has consumed scripted wild species/level and set battle-script flags. This is origin staging, not catch completion; per-story static policy must join a later success-only capture.",
+      "signal": "gift_static",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/scripting.asm",
+          "line_end": 1054,
+          "line_start": 1047,
+          "repo": "pokegold",
+          "source_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/scripting.asm#L1047"
+        }
+      ],
+      "symbol": "Script_loadwildmon",
+      "symbol_offset": 17
+    },
+    "soft_reset": {
+      "addr": 1456,
+      "bank": 0,
+      "event_role": "OBSERVATION",
+      "expected_hex": "cd4f3daf",
+      "guards": {},
+      "instructions": [
+        "call InitSound",
+        "xor a"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "reset_entry",
+      "physical_firing": "OPEN",
+      "point_symbols": {},
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 0,
+        "required": false,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 1456,
+      "runtime_enabled": false,
+      "semantics": "Reset entry invalidates observations; subsequent Init also has cold-start callers. This is not a new-game classifier.",
+      "signal": "soft_reset",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "home/init.asm",
+          "line_end": 3,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/init.asm#L1"
+        }
+      ],
+      "symbol": "Reset",
+      "symbol_offset": 0
+    },
+    "trainer_ready": {
+      "addr": 29636,
+      "bank": 15,
+      "event_role": "OBSERVATION",
+      "expected_hex": "c9",
+      "guards": {},
+      "instructions": [
+        "ret"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "return_after_trainer_setup",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleMode": {
+          "addr": 53526,
+          "bank": 1
+        },
+        "wOtherTrainerClass": {
+          "addr": 53528,
+          "bank": 1
+        },
+        "wOtherTrainerID": {
+          "addr": 53531,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 15,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 259012,
+      "runtime_enabled": false,
+      "semantics": "ReadTrainerParty and trainer-mode assignment precede the return. No claim that a runtime hook has fired.",
+      "signal": "trainer_battle_start",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 7879,
+          "line_start": 7878,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7878"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 7880,
+          "line_start": 7827,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7827"
+        }
+      ],
+      "symbol": "InitEnemyTrainer.done",
+      "symbol_offset": 0
+    },
+    "whiteout_before_heal": {
+      "addr": 16939,
+      "bank": 3,
+      "event_role": "OBSERVATION",
+      "expected_hex": "213942191919",
+      "guards": {
+        "combine": "ALL",
+        "memory_equals": [
+          {
+            "addr": 53600,
+            "bank": 1,
+            "symbol": "wScriptBank",
+            "value": 4,
+            "width": 1
+          },
+          {
+            "addr": 53601,
+            "bank": 1,
+            "byte_order": "little",
+            "symbol": "wScriptPos",
+            "value": 26791,
+            "width": 2
+          }
+        ],
+        "registers": {
+          "DE": 27
+        },
+        "required": true,
+        "runtime_guard_qualification": "OPEN",
+        "script_context": {
+          "addr": 26779,
+          "bank": 4,
+          "expected_hex": "4cc268530f2e008a280f1b00",
+          "symbol": "Script_Whiteout"
+        },
+        "script_spans": [
+          {
+            "addr": 26766,
+            "bank": 4,
+            "end": 26773,
+            "symbol": "Script_BattleWhiteout"
+          },
+          {
+            "addr": 26773,
+            "bank": 4,
+            "end": 26779,
+            "symbol": "OverworldWhiteoutScript"
+          },
+          {
+            "addr": 26779,
+            "bank": 4,
+            "end": 26815,
+            "symbol": "Script_Whiteout"
+          },
+          {
+            "addr": 26815,
+            "bank": 4,
+            "end": 26818,
+            "symbol": "Script_Whiteout.bug_contest"
+          },
+          {
+            "addr": 26818,
+            "bank": 4,
+            "end": 26823,
+            "symbol": "Script_Whiteout.WhitedOutText"
+          }
+        ],
+        "stack_words_equals": [
+          {
+            "byte_order": "little",
+            "meaning": "FarCall_hl call FarCall_JumpToHL return address",
+            "sp_offset": 0,
+            "value": 11828,
+            "width": 2
+          },
+          {
+            "byte_order": "little",
+            "meaning": "Script_special farcall return after saved AF word",
+            "sp_offset": 4,
+            "value": 27991,
+            "width": 2
+          }
+        ]
+      },
+      "instructions": [
+        "ld hl, SpecialsPointers",
+        "add hl, de",
+        "add hl, de",
+        "add hl, de"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "before_heal_dispatch",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wPartyCount": {
+          "addr": 55842,
+          "bank": 1
+        },
+        "wPartyMon1": {
+          "addr": 55850,
+          "bank": 1
+        },
+        "wScriptBank": {
+          "addr": 53600,
+          "bank": 1
+        },
+        "wScriptPos": {
+          "addr": 53601,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 3,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 49707,
+      "runtime_enabled": false,
+      "semantics": "CPU Special dispatch runs before HealParty. Every generated DE, script-bank, script-position and two-level CPU return-stack guard is mandatory; ordinary heals must not be treated as whiteout.",
+      "signal": "whiteout",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/specials.asm",
+          "line_end": 6,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "2c86084855998e078e930deb88f70ced8523ec40da1bdd5520fff4393115466b",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/specials.asm#L1"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/events/whiteout.asm",
+          "line_end": 14,
+          "line_start": 9,
+          "repo": "pokegold",
+          "source_sha256": "f96dfa2b188e4622e12498cd4b5cbab596c0138446b8e549f1305d5ffb874b06",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/events/whiteout.asm#L9"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/overworld/scripting.asm",
+          "line_end": 263,
+          "line_start": 257,
+          "repo": "pokegold",
+          "source_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/overworld/scripting.asm#L257"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "home/map.asm",
+          "line_end": 1510,
+          "line_start": 1482,
+          "repo": "pokegold",
+          "source_sha256": "3f010e2839eeee13f451580c81ec8787639ccab0b5915546f8cb183fd390cbeb",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/map.asm#L1482"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "macros/scripts/events.asm",
+          "line_end": 510,
+          "line_start": 507,
+          "repo": "pokegold",
+          "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L507"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "macros/scripts/events.asm",
+          "line_end": 550,
+          "line_start": 548,
+          "repo": "pokegold",
+          "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L548"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "macros/scripts/events.asm",
+          "line_end": 102,
+          "line_start": 99,
+          "repo": "pokegold",
+          "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L99"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "macros/scripts/events.asm",
+          "line_end": 874,
+          "line_start": 871,
+          "repo": "pokegold",
+          "source_sha256": "b59af972dec6c4012dab9abd51188bb0d65c3f1226c40f3534b04abe9433ccb5",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/macros/scripts/events.asm#L871"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "home/farcall.asm",
+          "line_end": 9,
+          "line_start": 1,
+          "repo": "pokegold",
+          "source_sha256": "3b40cb8d4dcd26d35e71425af1792217508676f109cb7326ceabdb2b7becf0f1",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/farcall.asm#L1"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "home/header.asm",
+          "line_end": 9,
+          "line_start": 8,
+          "repo": "pokegold",
+          "source_sha256": "16520be0bd315fadeca15a6e7e949bdd681ea4648c2758762f56a192950c1abc",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/header.asm#L8"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "home/header.asm",
+          "line_end": 15,
+          "line_start": 12,
+          "repo": "pokegold",
+          "source_sha256": "16520be0bd315fadeca15a6e7e949bdd681ea4648c2758762f56a192950c1abc",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/home/header.asm#L12"
+        }
+      ],
+      "symbol": "Special",
+      "symbol_offset": 0
+    },
+    "wild_ready": {
+      "addr": 29696,
+      "bank": 15,
+      "event_role": "OBSERVATION",
+      "expected_hex": "110090",
+      "guards": {},
+      "instructions": [
+        "ld de, vTiles2"
+      ],
+      "kind": "CPU_INSTRUCTION",
+      "maturity": "SOURCE_CANDIDATE",
+      "phase": "after_enemy_load",
+      "physical_firing": "OPEN",
+      "point_symbols": {
+        "wBattleMode": {
+          "addr": 53526,
+          "bank": 1
+        },
+        "wBattleType": {
+          "addr": 53529,
+          "bank": 1
+        },
+        "wEnemyMonSpecies": {
+          "addr": 53487,
+          "bank": 1
+        }
+      },
+      "rom_bank_guard": {
+        "addr": 65439,
+        "expected": 15,
+        "required": true,
+        "symbol": "hROMBank"
+      },
+      "rom_offset": 259072,
+      "runtime_enabled": false,
+      "semantics": "LoadEnemyMon and wild move/PP staging precede this local label; presentation work remains. Source candidate only.",
+      "signal": "wild_battle_start",
+      "source_evidence": [
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 7904,
+          "line_start": 7903,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7903"
+        },
+        {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "file": "engine/battle/core.asm",
+          "line_end": 7902,
+          "line_start": 7881,
+          "repo": "pokegold",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "url": "https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c/engine/battle/core.asm#L7881"
+        }
+      ],
+      "symbol": "InitEnemyWildmon.skip_unown",
+      "symbol_offset": 0
+    }
+  },
+  "summary": {
+    "changed_checkpoint_anchors": 0,
+    "changed_header_anchors": 0,
+    "changed_profile_rom": 0,
+    "changed_sites": 0,
+    "checkpoint_anchors": 4,
+    "header_anchors": 368,
+    "sites": 43
+  },
+  "sym_sha256": "77ab711fd072363460c98f89f0acc3a04f08215560693388a7530dea5b3eccf8",
+  "title": "silver",
+  "ups_sha256": "408f8a576c252ba7366056f750812db4d1b738c2ff38bb0b911de58936ad5025"
+}

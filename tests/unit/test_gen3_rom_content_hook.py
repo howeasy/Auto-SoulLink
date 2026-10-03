@@ -1,4 +1,7 @@
-"""CR-R2 wiring uses one cartridge reader and never exports content on clean ROMs."""
+"""CR-R2 wiring uses one cartridge reader and never exports content on non-randomized ROMs.
+
+Companion artifacts only: a randomized FR/LG is admitted as rand_companion (the wire still says
+"rand"); the clean cartridge is not a production artifact."""
 
 import pytest
 
@@ -47,7 +50,7 @@ def make_world(kind, mode, monkeypatch):
 
 
 def test_rand_hello_has_cached_rom_content_and_rand_kind(monkeypatch):
-    world, calls = make_world("rand", "ok", monkeypatch)
+    world, calls = make_world("rand_companion", "ok", monkeypatch)
     hello = world.events("hello")[-1]
     assert hello["artifact_kind"] == "rand"
     assert hello["rom_content"] == {"tables": [{"addr": 0x0823EAC8, "hex": "abcd"}], "fingerprint": "ab" * 20}
@@ -61,7 +64,7 @@ def test_rand_hello_has_cached_rom_content_and_rand_kind(monkeypatch):
 
 @pytest.mark.parametrize("mode", ["nil", "throw"])
 def test_reader_failure_is_logged_once_and_hello_continues(mode, monkeypatch):
-    world, calls = make_world("rand", mode, monkeypatch)
+    world, calls = make_world("rand_companion", mode, monkeypatch)
     assert "rom_content" not in world.events("hello")[-1]
     world.connected = False
     world.step()
@@ -72,7 +75,7 @@ def test_reader_failure_is_logged_once_and_hello_continues(mode, monkeypatch):
     assert calls == {"new": 1, "payload": 1}
 
 
-def test_clean_hello_never_constructs_or_calls_the_reader(monkeypatch):
-    world, calls = make_world("clean", "throw", monkeypatch)
+def test_companion_hello_never_constructs_or_calls_the_reader(monkeypatch):
+    world, calls = make_world("companion", "throw", monkeypatch)
     assert "rom_content" not in world.events("hello")[-1]
     assert calls == {"new": 0, "payload": 0}

@@ -28,6 +28,7 @@ from server.templating import resolve_theme
 # ── Paths ───────────────────────────────────────────────────────────────────
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
+_COMPANION_PINS = os.path.join(_DIST, "companion_pins.json")
 _PURE_ADMISSION = os.path.normpath(os.path.join(
     _SERVER_DIR, "..", "data", "games", "gen1_purergb", "admission_overlay.json"))
 
@@ -49,18 +50,45 @@ def _pure_md5s(title: str) -> tuple[str, str]:
     raise KeyError(f"no overlay admission row for {title}")
 
 
-def _gen2_overlay_md5(title: str) -> str:
-    """The admitted SLink overlay's md5 for one Gen 2 title, read live from its own
-    admission table (data/games/gen2_<title>/admission.json) — the overlay is rebuilt as
-    patch/gen2/src/*.asm changes, so this, unlike base_md5 below, is a value that drifts."""
+def _gen2_overlay_row(title: str) -> dict:
+    """One Gen 2 title's overlay row, read live from data/games/gen2_<title>/admission.json."""
     import json
 
     path = os.path.normpath(os.path.join(_SERVER_DIR, "..", "data", "games", f"gen2_{title}",
                                          "admission.json"))
     with open(path, encoding="utf-8") as fh:
         artifacts = json.load(fh)["artifacts"]
-    overlay = next(a for a in artifacts if a["kind"] == "overlay")
-    return overlay["md5"]
+    return next(a for a in artifacts if a["kind"] == "overlay")
+
+
+def _gen2_overlay_md5(title: str) -> str:
+    """The SLink overlay's md5 for one Gen 2 title — the overlay is rebuilt as
+    patch/gen2/src/*.asm changes, so this, unlike base_md5 below, is a value that drifts."""
+    return _gen2_overlay_row(title)["md5"]
+
+
+def gen2_overlay_admitted(title: str) -> bool:
+    """Does the launcher (lua/gen2/entry.lua) admit this title's overlay? Its row must be
+    activated (tools/gen_gen2_admission.py --promote-overlays): SELECTED/ADMITTED under G4, with the
+    grant fingerprint and binding pin the launcher also requires (lua/gen2/entry.lua Entry.admit)."""
+    def is_hex64(value):
+        return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+    row = _gen2_overlay_row(title)
+    gate = row.get("runtime_gate") or {}
+    return (row.get("selection") == "SELECTED" and row.get("status") == "ADMITTED"
+            and gate.get("id") == "G4" and gate.get("state") == "ADMITTED"
+            and is_hex64(gate.get("grant_fingerprint")) and is_hex64(row.get("binding_sha256")))
+
+
+def _companion_md5(slug: str) -> str:
+    """The patched ROM md5 of a companion whose build manifest is patch/dist/companion_pins.json (Radical Red and the
+    vanilla Red/Blue patches). Data, not a literal: the stamp tool rewrites it for a release (tools/stamp_release.py)."""
+    import json
+
+    with open(_COMPANION_PINS, encoding="utf-8") as fh:
+        return json.load(fh)["pins"][slug]["patched_md5"]
+
 
 # ── Targets ─────────────────────────────────────────────────────────────────
 # A REGISTRY, not a single file. There are three companion patches now and they are not
@@ -83,7 +111,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Radical Red",
         "patch":       "SLink-RR.ups",
         "base_md5":    "8529f3a45d32bce4da637976fcf269d4",
-        "patched_md5": "70e7e746e573a2d00df5d3ef41d19d61",
+        "patched_md5": _companion_md5("rr"),
         "accept":      ".gba,application/octet-stream",
         "out_name":    "Pokemon - Radical Red (SLink companion).gba",
         "base_hint":   "a clean Radical Red 4.1 ROM",
@@ -93,7 +121,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Pokemon Red",
         "patch":       "SLink-RB-Red.ups",
         "base_md5":    "3d45c1ee9abd5738df46d2bdda8b57dc",
-        "patched_md5": "cd0af68e5097b8cfa9733225ef055e8a",
+        "patched_md5": _companion_md5("rb-red"),
         "accept":      ".gb,.gbc,application/octet-stream",
         "out_name":    "Pokemon Red (SLink companion).gb",
         "base_hint":   "a clean US/English Pokemon Red dump",
@@ -103,7 +131,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Pokemon Blue",
         "patch":       "SLink-RB-Blue.ups",
         "base_md5":    "50927e843568814f7ed45ec4f944bd8b",
-        "patched_md5": "40cc749ee03edfd4a9b31bf088c1a4d2",
+        "patched_md5": _companion_md5("rb-blue"),
         "accept":      ".gb,.gbc,application/octet-stream",
         "out_name":    "Pokemon Blue (SLink companion).gb",
         "base_hint":   "a clean US/English Pokemon Blue dump",

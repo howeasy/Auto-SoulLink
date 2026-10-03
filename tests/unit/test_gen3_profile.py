@@ -15,6 +15,8 @@ import sys
 
 import pytest
 
+from tools import rr_companion
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SRC = REPO / "lua" / "games" / "gen3_frlge.lua"
 PROFILES = {p: REPO / "data" / "games" / p / "profile.json" for p in ("gen3_frlg", "gen3_rr")}
@@ -243,7 +245,8 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     base_src["derived.SHEDINJA_SPECIES_ID"] = shedinja_cite
     for section, key in RR_BINARY_VALUES:
         cite = title["_src"].get(f"{section}.{key}")
-        assert cite and cite.startswith("rom:patch/build/slink_RR.gba sha1=")
+        # the witnessed build is named by its canonical sha1 (version field zeroed), which a release stamp does not move
+        assert cite and cite.startswith(f"rom:patch/build/slink_RR.gba canonical-sha1={rr_companion.canonical_sha1()} ")
         base_src[f"{section}.{key}"] = cite
     assert title["_src"] == base_src
     assert title["derived"]["SHEDINJA_SPECIES_ID"] == 303
@@ -330,18 +333,19 @@ def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
         rr_rom_facts(bytes(image))
 
 
-@pytest.mark.parametrize("path,digest", [
-    (REPO / "patch/build/slink_RR.gba", "da579690db7d6933a0952a1f490312842793f71a"),
+@pytest.mark.parametrize("path,accepted", [
+    # the companion: the exact published build or an earlier one its pin row lists as canonical-equal (patch/dist/companion_pins.json)
+    (REPO / "patch/build/slink_RR.gba", rr_companion.accepted_sha1s()),
     (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
-     "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
+     {"964f951a0fdaf209e4ea1344883ef0d557bb3a80"}),
 ])
-def test_rr_rom_anchors_match_both_admitted_binaries(path, digest):
+def test_rr_rom_anchors_match_both_admitted_binaries(path, accepted):
     from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
 
     if not path.exists():
         pytest.skip("local copyrighted RR ROM absent; embedded-anchor MODEL tests still run")
     raw = path.read_bytes()
-    assert hashlib.sha1(raw).hexdigest() == digest
+    assert hashlib.sha1(raw).hexdigest() in accepted
     facts = rr_rom_facts(raw)
     for (section, key), value in RR_BINARY_VALUES.items():
         assert facts[section, key][0] == value

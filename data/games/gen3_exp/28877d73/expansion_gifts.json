@@ -37,7 +37,7 @@
   },
   "declarations": [
     {
-      "area_id": "route_120",
+      "area_id": "ancient_tomb",
       "arguments": [
         "SPECIES_REGISTEEL",
         "40"
@@ -59,7 +59,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": "lilycove_city",
+      "area_id": "aqua_hideout",
       "arguments": [
         "SPECIES_ELECTRODE",
         "30"
@@ -81,7 +81,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": "lilycove_city",
+      "area_id": "aqua_hideout",
       "arguments": [
         "SPECIES_ELECTRODE",
         "30"
@@ -103,7 +103,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": "artisan_cave",
+      "area_id": "battle_frontier",
       "arguments": [
         "SPECIES_SUDOWOODO",
         "40"
@@ -455,7 +455,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_111",
+      "area_id": "desert_ruins",
       "arguments": [
         "SPECIES_REGIROCK",
         "40"
@@ -498,7 +498,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_105",
+      "area_id": "island_cave",
       "arguments": [
         "SPECIES_REGICE",
         "40"
@@ -520,12 +520,12 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_112",
+      "area_id": "lavaridge_town",
       "arguments": [
         "SPECIES_WYNAUT"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_112",
+      "gift_area": "lavaridge_town",
       "kind": "egg",
       "line": 245,
       "map_group_num": "0:12",
@@ -541,13 +541,13 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_101",
+      "area_id": "littleroot_town_professor_birchs_lab",
       "arguments": [
         "SPECIES_CYNDAQUIL",
         "5"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_101",
+      "gift_area": "littleroot_town_professor_birchs_lab",
       "kind": "gift",
       "line": 336,
       "map_group_num": "1:4",
@@ -563,13 +563,13 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_101",
+      "area_id": "littleroot_town_professor_birchs_lab",
       "arguments": [
         "SPECIES_TOTODILE",
         "5"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_101",
+      "gift_area": "littleroot_town_professor_birchs_lab",
       "kind": "gift",
       "line": 377,
       "map_group_num": "1:4",
@@ -585,13 +585,13 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_101",
+      "area_id": "littleroot_town_professor_birchs_lab",
       "arguments": [
         "SPECIES_CHIKORITA",
         "5"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_101",
+      "gift_area": "littleroot_town_professor_birchs_lab",
       "kind": "gift",
       "line": 418,
       "map_group_num": "1:4",
@@ -607,7 +607,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": null,
+      "area_id": "marine_cave",
       "arguments": [
         "SPECIES_KYOGRE",
         "70"
@@ -626,16 +626,16 @@
       "species_resolution": "constant",
       "status": "active",
       "target": null,
-      "unresolved_area": "map has no mapped area in area_map/BFS graph"
+      "unresolved_area": null
     },
     {
-      "area_id": "mossdeep_city",
+      "area_id": "mossdeep_city_stevens_house",
       "arguments": [
         "SPECIES_BELDUM",
         "5"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "mossdeep_city",
+      "gift_area": "mossdeep_city_stevens_house",
       "kind": "gift",
       "line": 86,
       "map_group_num": "14:7",
@@ -849,14 +849,14 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_119",
+      "area_id": "route119_weather_institute_2f",
       "arguments": [
         "SPECIES_CASTFORM_NORMAL",
         "25",
         "ITEM_MYSTIC_WATER"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_119",
+      "gift_area": "route119_weather_institute_2f",
       "kind": "gift",
       "line": 85,
       "map_group_num": "32:1",
@@ -960,13 +960,13 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_104",
+      "area_id": "rustboro_city_devon_corp_2f",
       "arguments": [
         "SPECIES_LILEEP",
         "20"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_104",
+      "gift_area": "rustboro_city_devon_corp_2f",
       "kind": "gift",
       "line": 146,
       "map_group_num": "11:1",
@@ -982,13 +982,13 @@
       "unresolved_area": null
     },
     {
-      "area_id": "route_104",
+      "area_id": "rustboro_city_devon_corp_2f",
       "arguments": [
         "SPECIES_ANORITH",
         "20"
       ],
       "condition": "IS_EMERALD",
-      "gift_area": "route_104",
+      "gift_area": "rustboro_city_devon_corp_2f",
       "kind": "gift",
       "line": 191,
       "map_group_num": "11:1",
@@ -1092,7 +1092,7 @@
       "unresolved_area": null
     },
     {
-      "area_id": null,
+      "area_id": "terra_cave",
       "arguments": [
         "SPECIES_GROUDON",
         "70"
@@ -1111,7 +1111,7 @@
       "species_resolution": "constant",
       "status": "active",
       "target": null,
-      "unresolved_area": "map has no mapped area in area_map/BFS graph"
+      "unresolved_area": null
     },
     {
       "area_id": null,

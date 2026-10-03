@@ -1,0 +1,35 @@
+
+========== scenario: linked_faint_active_gen3 ==========
+[duo] linked_faint_active_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=b809371beb3c4ff326bb16e03beda29cfa4434f074e807cc87218dbafb455e4b profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=6df0441f43e89e68aa7a5716793aa140e2bda022+dirty dirty=[calc/src/js/data/sets/games/EmeraldExpansion.js]
+[duo] server up: tcp=55157 http=55158 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:05:25,671 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:05:25,671 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.2s
+[duo] cleared 7 stale artifact(s) for linked_faint_active_gen3: e2e_linked_faint_active_gen3_a_1_witness.bin, e2e_linked_faint_active_gen3_a_attempt1_result.txt, e2e_linked_faint_active_gen3_a_result.txt, e2e_linked_faint_active_gen3_b_1_witness.bin, e2e_linked_faint_active_gen3_b_attempt1_result.txt, e2e_linked_faint_active_gen3_b_result.txt, e2e_linked_faint_active_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6 path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6 path=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 13.6s
+[duo] timing results 180.2s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked 4D55444B:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+[duo] timing oracle 0.0s
+[duo] PYDEC: FAIL the receipt's source is +dirty (calc/src/js/data/sets/games/EmeraldExpansion.js): a G4 receipt must come from a clean cut
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_0i1z4xt6
+[duo] linked_faint_active_gen3: attempt 1 aborted — RuntimeError: the receipt's source is +dirty (calc/src/js/data/sets/games/EmeraldExpansion.js): a G4 receipt must come from a clean cut
+
+========== summary ==========
+  linked_faint_active_gen3: FAIL (attempt 1 of 1) — RuntimeError: the receipt's source is +dirty (calc/src/js/data/sets/games/EmeraldExpansion.js): a G4 receipt must come from a clean cut
+EXIT 1

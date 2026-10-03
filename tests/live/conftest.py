@@ -9,6 +9,10 @@ verify_gen2_release._inspect_run_row_errors judges it: a PASS for every title an
 xfail or error is not a pass). It is written on FAIL too, so a failed run can never leave an older PASS standing.
 SLINK_GEN2_NO_ATTEST=1 (tools/verify_gen2_release.py's live-new-gates lane) runs the gates without writing it: only the
 final sweep's gate/inspect_run cell attests, so a verification run never unpins the committed record.
+
+OVERLAY (SLINK_GEN2_ARTIFACT=overlay, docs/gen2/OVERLAY_ADMISSION.md D4): the same run on the overlay cartridges writes
+tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json instead, additionally recording each title's
+{kind, rom_sha1, binding_sha256} from the HASHED staged overlay (never from the env); the clean file is never touched.
 """
 from __future__ import annotations
 
@@ -19,6 +23,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 NEW_GATES = "tests/live/test_gen2_new_gates.py"
 ATTESTATION = "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json"
+OVERLAY_ATTESTATION = "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json"
 COUNTS = ("passed", "failed", "skipped", "errors", "xfailed", "xpassed", "deselected")
 _run = {"counts": dict.fromkeys(COUNTS, 0), "titles": {}, "seen": False}
 
@@ -58,14 +63,17 @@ def pytest_runtest_logreport(report):
         _run["titles"][title] = "PASS" if ok else "FAIL"
 
 
-def attestation(counts, titles, stamp):
+def attestation(counts, titles, stamp, identities=None):
     from tools.verify_gen2_release import INSPECT_RUN_IDS, INSPECT_RUN_SCHEMA
 
     clean = counts["passed"] > 0 and all(counts[key] == 0 for key in COUNTS if key != "passed")
     every = all(titles.get(title) == "PASS" for title in ("crystal", "gold", "silver"))
-    return {"schema": INSPECT_RUN_SCHEMA, "result": "PASS" if clean and every else "FAIL", "evidence_level": "PHYSICAL",
-            "test": NEW_GATES, "requirement_ids": list(INSPECT_RUN_IDS), "titles": dict(sorted(titles.items())),
-            "pytest": dict(counts), "code_digest": stamp}
+    record = {"schema": INSPECT_RUN_SCHEMA, "result": "PASS" if clean and every else "FAIL", "evidence_level": "PHYSICAL",
+              "test": NEW_GATES, "requirement_ids": list(INSPECT_RUN_IDS), "titles": dict(sorted(titles.items())),
+              "pytest": dict(counts), "code_digest": stamp}
+    if identities is not None:   # overlay only: the hashed staged artifact per title (clean records stay byte-identical)
+        record["artifacts"] = dict(sorted(identities.items()))
+    return record
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -73,5 +81,10 @@ def pytest_sessionfinish(session, exitstatus):
         return   # SLINK_GEN2_NO_ATTEST: verify_gen2_release's live-new-gates lane re-proves without re-attesting
     from tests.live import test_gen2_new_gates as live
 
-    record = attestation(_run["counts"], _run["titles"], live.code_stamp())
-    (REPO / ATTESTATION).write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    overlay = live.KIND == "overlay"
+    identities = {title: {key: live.identity(title)[key] for key in ("kind", "rom_sha1", "binding_sha256")}
+                  for title in ("crystal", "gold", "silver")} if overlay else None
+    record = attestation(_run["counts"], _run["titles"], live.code_stamp(), identities)
+    out = REPO / (OVERLAY_ATTESTATION if overlay else ATTESTATION)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")

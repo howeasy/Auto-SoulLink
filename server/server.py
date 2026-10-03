@@ -486,6 +486,18 @@ _FOUNDATION_ABSENT = object()
 _KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
 
 
+def _companion_refusal(player_id: str, msg: dict) -> str:
+    """Patch-first (owner 2026-10-02): why this hello's cartridge lacks the SLink companion patch its
+    title requires, or "". The adapter CLASS owns the rule (`companion_refusal`, a class lookup like
+    `pairing_kind`), so no game or title is named here. Module level: `_decide_admission` is also
+    called unbound on a stub self."""
+    from server.adapters import adapter_class_for_rom_type
+    rom_type = msg.get("rom_type", "")
+    cls = adapter_class_for_rom_type(rom_type) if isinstance(rom_type, str) and rom_type else None
+    why = cls.companion_refusal(msg) if cls else None
+    return f"Slot {player_id.upper()}: {why}" if why else ""
+
+
 def _randomized_binding_error(rom_type, kind, committed_rom_type, committed_kind, *, candidate_class=None) -> str:
     """Both halves of the run identity require an explicit randomized-title binding."""
     from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
@@ -518,6 +530,16 @@ def prompt_event_type(text: str) -> str | None:
     return None
 
 
+def _requires_loaded_state(handler):
+    @functools.wraps(handler)
+    async def guarded(self, request, *args, **kwargs):
+        if self.state.load_failed:
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "run could not be loaded; restore a backup or reset first"}, status=409)
+        return await handler(self, request, *args, **kwargs)
+    return guarded
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -526,12 +548,13 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True,
+                 battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True,
                  wire_log: str = None):
         # --wire-log DIR: capture every line of every connection (card gen3-P1-C1-3).
         # None (the default) means no _WireTap is ever built and nothing changes.
         self._wire_log = wire_log
         self._wire_files: dict = {}
+        self.dispatch_errors = {"a": 0, "b": 0}
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -547,7 +570,8 @@ class SLinkServer:
                                         native_messages=native_messages,
                                         native_sounds=native_sounds,
                                         battle_calc=battle_calc,
-                                        pc_trade_npc=pc_trade_npc)
+                                        pc_trade_npc=pc_trade_npc,
+                                        phone_calls=phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         # Game adapter — shared with state machine for consistent behavior.
@@ -818,6 +842,11 @@ class SLinkServer:
         Returns the admission record; never raises. A player who cannot be admitted is not
         an error condition, it is a run that has not started for them yet.
         """
+        # The same refusal as the wire seam in handle_client (HUD line there), so a hello that
+        # reaches `_dispatch` another way is held to it too.
+        needs_companion = _companion_refusal(player_id, msg)
+        if needs_companion:
+            return {"state": "rejected", "reason": needs_companion}
         payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
         refused = _randomized_binding_error(
             msg.get("rom_type", self.state.rom_type), kind, self.state.rom_type, self.state.artifact_kind,
@@ -1447,8 +1476,10 @@ class SLinkServer:
             if self._calc_profile():
                 tabs.append(("Calc", "/calc/normal.html", panel == "calc"))
             tabs.append(("Debug", "/debug", panel == "debug"))
-        ctx = self._rail_ctx(page="run" if panel in ("calc", "debug") else "broadcast",
-                             panel=panel if panel in ("calc", "debug") else "",
+            tabs.append(("Timeline", "/timeline", panel == "timeline"))
+        run_panel = panel in ("calc", "debug", "timeline")
+        ctx = self._rail_ctx(page="run" if run_panel else "broadcast",
+                             panel=panel if run_panel else "",
                              tab=panel if panel in ("twitch", "obs") else "")
         ctx.update({
             "page_title": self._page_title(), "theme": resolve_theme(request),
@@ -1576,7 +1607,7 @@ class SLinkServer:
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
-        hello_seen = False
+        hello_players = set()
         conn_gen: dict[str, int] = {}   # player -> the generation this connection's hello was given
         no_hello_warned = False
         try:
@@ -1618,14 +1649,27 @@ class SLinkServer:
                     continue
                 if self._wire_log:
                     writer.c2s(line, msg)
-                    if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
-                        await self._respond(writer, [{"cmd": "noop"}])
-                        continue
+                if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+                    await self._respond(writer, [{"cmd": "noop", "refused": "malformed"}])
+                    continue
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
                     log.warning(f"Rejected unknown player_id: {repr(player_id)} from {peer}")
                     await self._respond(writer, [{"cmd": "noop"}])
+                    continue
+
+                # Hello-first. A connection has proved nothing until it has said hello, so
+                # nothing else on it is listened to. Without this a cartridge whose hello was
+                # lost still had its ticks reconciled into whichever slot it named, and a
+                # wrong save's party discarded the run's linked keys (reconnect_new,
+                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
+                if msg.get("event") != "hello" and player_id not in hello_players:
+                    if not no_hello_warned:
+                        no_hello_warned = True
+                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
+                                    f"{peer} — dropping this connection's events until it says hello")
+                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
                     continue
 
                 # Retain overlapping connections until each closes, including a socket
@@ -1719,24 +1763,26 @@ class SLinkServer:
                     # `_dispatch`'s "hello" branch and committed only on acceptance, so a
                     # contract- or identity-rejected hello leaves connected_players and the
                     # adapter exactly as they were.
+                    # Patch-first (owner 2026-10-02): a title that requires the SLink companion
+                    # patch is refused when the hello shows none -- the cartridge bypassed the
+                    # Manager. Same refusal shape as the checks above; the adapter owns the rule.
+                    _needs = _companion_refusal(player_id, msg)
+                    if _needs:
+                        log.warning(f"[{player_id}] REJECTED: {_needs}")
+                        self.state.identity_error[player_id] = _needs
+                        self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, _needs, msg)
+                        await self._respond(writer, [{
+                            "cmd": "hud_show", "text": "[x] NEEDS COMPANION PATCH",
+                            "color": [255, 0, 0], "duration": 600,
+                        }])
+                        self._notify_sse()
+                        continue
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
                         self._rom_type_rejected.discard(player_id)
                         self.state.identity_error.pop(player_id, None)
-                # Hello-first. A connection has proved nothing until it has said hello, so
-                # nothing else on it is listened to. Without this a cartridge whose hello was
-                # lost still had its ticks reconciled into whichever slot it named, and a
-                # wrong save's party discarded the run's linked keys (reconnect_new,
-                # 2026-09-17). The per-slot identity gate in _dispatch is the second line.
-                if msg.get("event") != "hello" and not hello_seen:
-                    if not no_hello_warned:
-                        no_hello_warned = True
-                        log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
-                                    f"{peer} — dropping this connection's events until it says hello")
-                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
-                    continue
-
                 # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
                 # and every client sends hello on (re)connect and counts up from there. So a
                 # seq is only ever a duplicate of one seen on THIS connection — comparing
@@ -1750,7 +1796,7 @@ class SLinkServer:
                     log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
                     last_seq = seq
                 if msg.get("event") == "hello":
-                    hello_seen = True
+                    hello_players.add(player_id)
                     self._conn_gen[player_id] = conn_gen[player_id] = self._conn_gen.get(player_id, 0) + 1
                 elif conn_gen.get(player_id, self._conn_gen.get(player_id)) != self._conn_gen.get(player_id):
                     # KEY-SCOPE-5: a newer connection helloed as this player; a delayed line from
@@ -2076,6 +2122,22 @@ class SLinkServer:
         return commands
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
+        try:
+            return self._dispatch_event(player_id, msg)
+        except Exception:
+            if msg.get("event") == "hello":
+                raise  # the hello transaction owns rollback and retains its fatal boundary
+            self.dispatch_errors[player_id] = self.dispatch_errors.get(player_id, 0) + 1
+            if self.dispatch_errors[player_id] == 1:
+                log.error("[%s] failed to dispatch %s", player_id, msg.get("event", "unknown"), exc_info=True)
+            return [{"cmd": "noop", "refused": "error"}]
+
+    def _dispatch_event(self, player_id: str, msg: dict) -> list:
+        if self.state.load_failed:
+            return [{"cmd": "noop", "refused": "load_failed"}]
+        malformed = self.state.normalize_party_snapshot(player_id, msg)
+        if malformed is not None:
+            return malformed
         event = msg.get("event", "unknown")
         # enemy_party is client JSON read by every battle view: keep only a list of objects.
         if "enemy_party" in msg:
@@ -2227,6 +2289,7 @@ class SLinkServer:
 
             self._log_event(player_id, "hello",
                             f"Connected ({rom}, {party_n} mons)", loc or area)
+            log.info("[%s] route %s -> %s (production)", player_id, rom, staged_adapter.game_id)
             self.player_area[player_id] = loc or area
             self.player_area_id[player_id] = area
             # Commit ROM type once — static for the run's lifetime.
@@ -2859,6 +2922,8 @@ class SLinkServer:
         return {
             # "" when the last save succeeded; the error text when it did not.
             "save_failed": s.save_failed,
+            "load_failed": s.load_failed,
+            "dispatch_errors": dict(getattr(self, "dispatch_errors", {"a": 0, "b": 0})),
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
@@ -2971,6 +3036,7 @@ class SLinkServer:
                 "native_sounds": s.native_sounds,
                 "battle_calc": s.battle_calc,
                 "pc_trade_npc": s.pc_trade_npc,
+                "phone_calls": s.phone_calls,
             },
             "recent_events": list(self._recent_events),
             "killfeed": sorted(
@@ -3183,6 +3249,17 @@ class SLinkServer:
         if request.query.get("_smoke") != "1":      # the macro harness stays reachable
             self._to_manager(request, "/runs/{id}")
         return await self._handle_memorial_template(request)
+
+    async def handle_timeline_html(self, request):
+        """GET /timeline — the run's story in order (route name: docs/public_ui/DECISIONS.md
+        #1). Built from the status payload by server.board.timeline; a Manager run's lives at
+        /runs/{id}/timeline."""
+        from server.board import timeline
+        self._to_manager(request, "/runs/{id}/timeline")
+        d = self._build_status_dict()
+        ctx = self._panel_ctx(request, panel="timeline", label="Timeline")
+        ctx.update({"story": timeline(d), "players": d.get("players") or {}})
+        return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def _handle_memorial_template(self, request):
         """Jinja-rendered memorial wall."""
@@ -3635,6 +3712,7 @@ class SLinkServer:
     def _build_attempts_overlay_context(self) -> dict:
         return {"attempts_count": self.state.attempts_count}
 
+    @_requires_loaded_state
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
         try:
@@ -4565,6 +4643,7 @@ class SLinkServer:
         }
         return aiohttp_web.json_response(raw)
 
+    @_requires_loaded_state
     async def handle_debug_inject_event(self, request):
         """POST /api/debug/inject_event — send a synthetic event through the state machine."""
         try:
@@ -4590,6 +4669,7 @@ class SLinkServer:
             log.exception(f"Debug inject_event error: {e}")
             return aiohttp_web.json_response({"ok": False, "error": str(e)}, status=500)
 
+    @_requires_loaded_state
     async def handle_debug_queue_command(self, request):
         """POST /api/debug/queue_command — manually queue a command for a player."""
         try:
@@ -4613,6 +4693,7 @@ class SLinkServer:
             "queue_length": len(self.state.queued_commands[player]),
         })
 
+    @_requires_loaded_state
     async def handle_debug_set_pokeballs(self, request):
         """POST /api/debug/set_pokeballs — toggle pokeballs_obtained."""
         try:
@@ -4631,6 +4712,7 @@ class SLinkServer:
             "pokeballs_obtained": value,
         })
 
+    @_requires_loaded_state
     async def handle_debug_set_area_state(self, request):
         """POST /api/debug/set_area_state — manually set an area's state."""
         try:
@@ -4655,6 +4737,7 @@ class SLinkServer:
             "ok": True, "area_id": area_id, "state": new_state,
         })
 
+    @_requires_loaded_state
     async def handle_debug_clear_pending(self, request):
         """POST /api/debug/clear_pending — clear pending captures (all or by area)."""
         try:
@@ -4674,6 +4757,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True, "message": msg})
 
+    @_requires_loaded_state
     async def handle_debug_unlink(self, request):
         """POST /api/debug/unlink — remove a link entry.
 
@@ -4737,6 +4821,7 @@ class SLinkServer:
             "message": f"Unlinked {a_name} <-> {b_name} on {self.adapter.area_display_name(area_id)}. Area reset.",
         })
 
+    @_requires_loaded_state
     async def handle_debug_resolve_trade(self, request):
         """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt",
         "sides"?: {"a"|"b": "traded"|"none"}} —
@@ -4757,6 +4842,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True})
 
+    @_requires_loaded_state
     async def handle_debug_resolve_ambiguous_key(self, request):
         """POST /api/debug/resolve_ambiguous_key {"player": "a"|"b", "key": str} — after checking
         the cartridge, clear a KEY-SCOPE-3 latch (the key names one mon again)."""
@@ -4774,6 +4860,7 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True})
 
+    @_requires_loaded_state
     async def handle_debug_revive(self, request):
         """POST /api/debug/revive — revive a dead/memorial link back to alive.
 
@@ -4829,6 +4916,8 @@ class SLinkServer:
         a_name = entry.a.nickname if entry.a else "?"
         b_name = entry.b.nickname if entry.b else "?"
 
+        s.run_over = False
+        s._check_game_over()
         s._save()
         log.info(f"[revive] Revived link: {a_name} <-> {b_name} on {area_id}")
         self._notify_sse()
@@ -4940,7 +5029,8 @@ class SLinkServer:
             native_messages=self.state.native_messages,
             native_sounds=self.state.native_sounds,
             battle_calc=self.state.battle_calc,
-            pc_trade_npc=self.state.pc_trade_npc)
+            pc_trade_npc=self.state.pc_trade_npc,
+            phone_calls=self.state.phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -4994,7 +5084,8 @@ class SLinkServer:
                                    native_messages=self.state.native_messages,
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
-                                   pc_trade_npc=self.state.pc_trade_npc)
+                                   pc_trade_npc=self.state.pc_trade_npc,
+                                   phone_calls=self.state.phone_calls)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -5094,8 +5185,10 @@ class SLinkServer:
             name = ((mon.nickname or self.adapter_for(pid).species_name(mon.species))
                     if mon and mon.key == key else "")
             names.append(name or self._mon_display_name(pid, key))
+        details = " ".join(part for part in (
+            str(rec["verdict"]) if rec.get("verdict") else "", rec.get("problem") or "") if part)
         self._log_event("", f"trade_{rec['outcome']}",
-                        f"{names[0]} <-> {names[1]}: {rec['verdict']} {rec['problem']}".strip(),
+                        f"{names[0]} <-> {names[1]}" + (f": {details}" if details else ""),
                         key=rec["token"])
 
     def _presentation_key_in_use(self, key: str, player_id: str | None = None,
@@ -5315,6 +5408,7 @@ class SLinkServer:
                 return area
         return None
 
+    @_requires_loaded_state
     async def handle_inject_link_api(self, request):
         """POST /api/inject_link — manually create a linked pair.
 
@@ -5441,6 +5535,7 @@ class SLinkServer:
             "message": f"Linked {a_name} <-> {b_name} on {self.adapter.area_display_name(area)}.",
         })
 
+    @_requires_loaded_state
     async def handle_inject_link_by_slot_api(self, request):
         """POST /api/inject_link_by_slot — link party slots without knowing the keys.
 
@@ -5496,6 +5591,7 @@ def build_app(srv):
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)
+    app.router.add_get("/timeline",    srv.handle_timeline_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
     app.router.add_get("/api/events",  srv.handle_sse)
     app.router.add_post("/api/reset",              srv.handle_reset_api)
@@ -5567,16 +5663,10 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                type_lock: bool = False, explode_mode: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
-               battle_calc: bool = True, pc_trade_npc: bool = True,
+               battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True,
                manager_port: int = 0, verbose: bool = False,
-               wire_log: str = None, test_only_route: list = None):
+               wire_log: str = None):
     _configure_logging(data_dir, verbose)
-    # TEST-ONLY ROUTES (ruling 39). A server process routes only what it was told to: absent
-    # the flag the registry answers for itself and refuses everything an owner ruling refuses.
-    # Each route it IS told to open is logged by set_test_only_routes with production:false, so
-    # a run that used the seam can never be read as a production one.
-    from server.adapters import set_test_only_routes
-    set_test_only_routes(test_only_route or ())
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
         if os.path.exists(links_path):
@@ -5594,6 +5684,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
                       pc_trade_npc=pc_trade_npc,
+                      phone_calls=phone_calls,
                       wire_log=wire_log)
 
     # TCP game server.
@@ -5678,18 +5769,14 @@ if __name__ == "__main__":
         help="Hide the bundled Battle Calc damage display (RR + patch; shown by default)")
     parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc",
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
+    parser.add_argument("--no-phone-calls", action="store_false", dest="phone_calls",
+        help="Gen 2 + companion: do not ring a Pokégear call for first link / dead zone / fallen (on by default)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     parser.add_argument("--wire-log",     default=None, metavar="DIR",
                         help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
     parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
                         help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
-    parser.add_argument("--test-only-route", action="append", default=[], metavar="ROM_TYPE",
-                        help="TEST-ONLY: route a ruling-refused rom_type in THIS process "
-                             "(repeatable). The gen3_exp duos use it for the Emerald expansion, "
-                             "which every production server refuses by name (ruling 39). No "
-                             "client message, run registry or Manager row can set it, and each "
-                             "route it opens is logged with production:false")
     args = parser.parse_args()
     allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
@@ -5703,7 +5790,7 @@ if __name__ == "__main__":
                      native_sounds=args.native_sounds,
                      battle_calc=args.battle_calc,
                      pc_trade_npc=args.pc_trade_npc,
+                     phone_calls=args.phone_calls,
                      manager_port=args.manager_port,
                      verbose=args.verbose,
-                     wire_log=args.wire_log,
-                     test_only_route=args.test_only_route))
+                     wire_log=args.wire_log))

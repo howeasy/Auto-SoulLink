@@ -1,0 +1,92 @@
+# gen3_final_cut row=frlgc_whiteout_gen3_em_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario whiteout_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:26:10 cpu=27% emuhawk=1 python=9
+start_utc=2026-10-03T08:26:08Z tracked_clean_before=True
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=63225 http=63226 data=F:\slink-work\tmp\duo_b1omq4p5
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for whiteout_gen3: e2e_whiteout_gen3_a_1_witness.bin, e2e_whiteout_gen3_a_attempt1_result.txt, e2e_whiteout_gen3_a_result.txt, e2e_whiteout_gen3_b_1_witness.bin, e2e_whiteout_gen3_b_attempt1_result.txt, e2e_whiteout_gen3_b_result.txt, e2e_whiteout_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_b1omq4p5 path=F:\slink-work\tmp\duo_b1omq4p5\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_b1omq4p5 path=F:\slink-work\tmp\duo_b1omq4p5\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 7.6s
+[duo] RESULT_LINE a: RESULT: FAIL (helper: whiteout a (em_oldale_center_to_pc): step Up stalled at (10,4))
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both halves to deposit their linked catch for the rebuild
+[duo] whiteout_gen3: a client finished before 'both halves to deposit their linked catch for the rebuild' (a: RESULT: FAIL (helper: whiteout a (em_oldale_center_to_pc): step Up stalled at (10,4)); b: no RESULT)
+--- whiteout_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 633
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 633
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town_pokemon_center_1f","player":"a","seq":10}
+TX trade_request - {"event":"trade_request","player":"a","seq":20}
+RX show_choices text=OAK: Took you long enough.
+EMERB is waiting. Make it quick.
+[client] [SLink-gen3] write native 0x0201B560 +15 frame 978
+[client] [SLink-gen3] write native 0x0201B360 +60 frame 978
+[client] [SLink-gen3] write native 0x0201B010 +1 frame 978
+[client] [SLink-gen3] write native 0x0201B00C +2 frame 978
+[client] [SLink-gen3] write native 0x0201B008 +2 frame 978
+[client] [SLink-gen3] write native 0x0201B006 +2 frame 978
+TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":29,"token":"t1"}
+RX choose_mon
+[client] [SLink-gen3] write native 0x0201B00C +2 frame 1205
+[client] [SLink-gen3] write native 0x0201B008 +2 frame 1205
+[client] [SLink-gen3] write native 0x0201B006 +2 frame 1205
+TX mon_chosen - {"event":"mon_chosen","player":"a","seq":35,"slot":0,"token":"t1"}
+RX msgbox text=Pick a linked POKeMON!
+RX choose_mon
+[client] [SLink-gen3] write native 0x0201B00C +2 frame 1372
+[client] [SLink-gen3] write native 0x0201B008 +2 frame 1372
+[client] [SLink-gen3] write native 0x0201B006 +2 frame 1372
+[client] [gen3] RESULT: FAIL whiteout a (em_oldale_center_to_pc): step Up stalled at (10,4)
+RESULT: FAIL (helper: whiteout a (em_oldale_center_to_pc): step Up stalled at (10,4))
+--- whiteout_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0201B800 +4 frame 532
+[client] [SLink-gen3] write native 0x0201B808 +1 frame 532
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0201B800 +4 frame 534
+[client] [SLink-gen3] write native 0x0201B808 +1 frame 534
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 543
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 543
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 543
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 543
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 633
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 633
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 633
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 633
+[duo] data dir kept: F:\slink-work\tmp\duo_b1omq4p5
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1)
+exit=1 end_utc=2026-10-03T08:26:20Z tracked_clean_after=True classification=real

@@ -20,11 +20,16 @@ explains a failure later:
     7. patch-build        — the clean dumps still hold what the manifest displaces
     8. live-gates         — the companion patch on real cartridges: hook, mailbox, START-menu
                             row, and the panel on a randomized+injected ROM
-    9. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
-   10. inspect-purergb    — the same inspect gate on the three built pureRGB cartridges
-   11. apex-purergb       — the APEX CHIP identity contract on the real PureRed cartridge
+    9. live-new-gates     — the rewritten Gen 1 modules on patched Red/Blue and clean Yellow
+   10. inspect-purergb    — the same inspect gate on the three pureRGB companion overlays
+   11. apex-purergb       — the APEX CHIP identity contract on the PureRed overlay
    12. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
-   13. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
+   13. duo-pairs          — every gen1_new scenario, patched Red (A) against patched Blue (B),
+                            through the real server
+
+THE COMPANION IS REQUIRED (owner 2026-10-02). The launcher and server refuse a CLEAN Red, Blue,
+PureRed, PureBlue or PureGreen, so every emulator lane boots the companion artifact instead
+(red_patched/blue_patched, the *_overlay keys); Yellow has no companion and stays clean.
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -52,7 +57,7 @@ _PY = sys.executable
 
 # Lanes that need an emulator, and therefore minutes rather than seconds.
 _SLOW = {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb", "live-trade-gates",
-         "duo-pairs", "inspect-purergb-overlay", "live-trade-gates-purergb", "apex-refusal-purergb",
+         "duo-pairs", "live-trade-gates-purergb", "apex-refusal-purergb",
          "duo-pairs-purergb"}
 
 # ── Skips that are allowed, each with the reason it is allowed ──────────────────────────
@@ -147,30 +152,34 @@ LANES = [
          [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
          # The vanilla three, named: the module also carries the pureRGB cases now, and this lane's
-         # coverage must not grow by accident (inspect-purergb is the lane for those).
-         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(("red", "blue", "yellow"))},
-         why="the rewritten Gen 1 modules on all three cartridges: pinned engine sites "
-             "present, hooks armed, live party decoded identically in Lua and Python, "
+         # coverage must not grow by accident (inspect-purergb is the lane for those). Red and
+         # Blue boot their companion builds -- a clean Red/Blue is refused (owner 2026-10-02).
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(("red_patched", "blue_patched", "yellow"))},
+         why="the rewritten Gen 1 modules on patched Red/Blue and clean Yellow: pinned engine "
+             "sites present, hooks armed, live party decoded identically in Lua and Python, "
              "overworld write checkpoint reached (docs/gen1_requirements.md R-1, S, W-7, "
              "F-6)"),
     Lane("inspect-purergb",
          [_PY, "-m", "pytest", "tests/live/test_gen1_new_gates.py", "-q", "-p", "no:randomly",
           "-rs"],
-         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(("purered", "pureblue", "puregreen"))},
-         why="the rewritten client on the three built pureRGB cartridges: pinned engine sites "
-             "present, hooks armed, live party decoded identically in Lua and Python, overworld "
-             "write checkpoint reached -- skip = lane failure, so the staged .gbc files and the "
-             "per-title fixtures have to be in the tree"),
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": " ".join(
+             ("purered_overlay", "pureblue_overlay", "puregreen_overlay"))},
+         why="the rewritten client on the three pureRGB companion overlays (patch/dist/SLink-"
+             "Pure*.ups applied to the sha1-verified clean build), booting the CLEAN pure "
+             "town/battle fixtures unchanged (A4): pinned engine sites present, hooks armed, live "
+             "party decoded identically in Lua and Python, overworld write checkpoint reached -- "
+             "skip = lane failure, so the UPS artifacts, the clean pure builds and the per-title "
+             "fixtures have to be in the tree"),
     Lane("apex-purergb",
          [_PY, "-m", "pytest",
           "tests/live/test_gen1_new_gates.py::test_apex_chip_contract_on_a_pure_cartridge",
           "-q", "-p", "no:randomly", "-rs"],
-         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": "purered"},
-         why="the APEX CHIP identity contract on the real PureRed cartridge (PLAN T1/T3): a "
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_ROMS": "purered_overlay"},
+         why="the APEX CHIP identity contract on the PureRed overlay cartridge (PLAN T1/T3): a "
              "predicted key collision restores the two DV bytes and sends no key_change, a real "
              "use sends one key_change{apex_chip} whose alias the ack clears. Selected by node "
-             "id, so nothing is collected-then-deselected; skip = lane failure, so the staged "
-             ".gbc and purered_town.SaveRAM have to be in the tree"),
+             "id, so nothing is collected-then-deselected; skip = lane failure, so the overlay "
+             "and purered_town.SaveRAM have to be in the tree"),
     Lane("live-trade-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_trade_gates.py", "-q", "-p",
           "no:randomly", "-rs"],
@@ -178,17 +187,6 @@ LANES = [
          why="the SLINK TRADE receptionist on the patched Red/Blue cartridges AND the pureRGB "
              "companion overlay: menu, offer, refusal and acceptance texts, every client line "
              "schema-valid (docs/gen1_requirements.md T-1, T-2; PLAN M3 for the overlay case)"),
-    Lane("inspect-purergb-overlay",
-         [_PY, "-m", "pytest",
-          "tests/live/test_gen1_new_gates.py::test_inspect_gate_overlay_round_trip",
-          "-q", "-p", "no:randomly", "-rs"],
-         env={"SLINK_LIVE": "1"},
-         why="A4 live: the three pureRGB companion-overlay cartridges (patch/dist/SLink-Pure*.ups "
-             "applied to the sha1-verified clean build) boot the CLEAN pure town/battle fixtures "
-             "unchanged, decode identically in Lua and Python -- the overlay adds ROM code, it "
-             "does not move SRAM. Selected by node id (parametrised over the three titles x two "
-             "targets), so nothing is collected-then-deselected; skip = lane failure, so the UPS "
-             "artifacts, the clean pure builds and the pure fixtures have to be in the tree"),
     Lane("live-trade-gates-purergb",
          [_PY, "-m", "pytest",
           "tests/live/test_gen1_trade_gates.py::test_receptionist_query_offer_and_native_notices"
@@ -221,10 +219,10 @@ LANES = [
           "-rs"],
          env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
          why="the same scenarios on the pureRGB foundation (docs/purergb/PLAN.md §13 P3b/P4/P5): "
-             "PureRed vs PureBlue on the clean builds (rules, PC/save, reconnect, whiteout, poison, "
-             "rival swap, randomized admission on the fork jar), the companion overlay pairing "
-             "(native trade YES/NO, Explode Mode) and PureRed vs PureGreen; a deferred scenario is "
-             "not collected, so every skip here is a missing artifact"),
+             "PureRed vs PureBlue and PureRed vs PureGreen, every scenario on the companion "
+             "overlays (rules, PC/save, reconnect, whiteout, poison, rival swap, native trade "
+             "YES/NO, Explode Mode, randomized admission on the fork jar); a missing companion "
+             "artifact fails, never skips"),
 ]
 
 
@@ -242,10 +240,9 @@ REQUIREMENTS = {
     "patch-build": ["T-1"],
     "live-gates": ["T-1 prerequisites (panel, menu row, randomized+injected panel)"],
     "live-new-gates": ["R-1", "S", "W-7", "F-6"],
-    "inspect-purergb": ["R-1", "S", "W-7", "F-6"],
+    "inspect-purergb": ["R-1", "S", "W-7", "F-6", "A4 (PLAN M3)"],
     "apex-purergb": ["T1", "T3"],
     "live-trade-gates": ["T-1", "T-2"],
-    "inspect-purergb-overlay": ["R-1", "S", "W-7", "F-6", "A4 (PLAN M3)"],
     "live-trade-gates-purergb": ["T-1", "T-2", "PLAN M3"],
     "apex-refusal-purergb": ["U6 (PLAN M3, ROM-level guard)"],
     "duo-pairs": ["D-1", "D-3", "T-3", "T-4"],

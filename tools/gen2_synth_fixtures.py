@@ -402,11 +402,16 @@ TRADE_FIXTURES = ("crystal_synth_trade_evolve", "gold_synth_trade_evolve")
 # same synthetic swap the trade_evolve recipe already makes, for the same reason: PokeBallEffect skips the catch
 # roll for MASTER_BALL, engine/items/item_effects.asm), so the catch battle is a single, first-throw turn instead
 # of psn1's long multi-throw ordeal -- Totodile absorbs at most one hit's worth of ResidualDamage before it ends.
+_PSN_EDITS = {"party_status": {"slot": 0, "status": PSN, "hp": 8}, "balls": [["MASTER_BALL", 5]]}
+# "psn_u1" is the same setup on Crystal's own U1 fixture (crystal_battle, not an errand base): its natural Route 30
+# wild-Weedle hunt is a pure lottery on the Poison Sting hit (sweeps gen2-fsw-1003-0029/-rerun1: 64 encounters, ONE
+# candidate, the lead faints before it is poisoned, bit-for-bit on attempts 1 and 2). Getting poisoned is SETUP, not
+# the behaviour under test (DoPoisonStep's faint branch), exactly the Gold ruling above (owner rule O-33, disclosed).
 PSN_RECIPES = {
-    "psn": ("battle_errand", {"party_status": {"slot": 0, "status": PSN, "hp": 8},
-                              "balls": [["MASTER_BALL", 5]]}),
+    "psn": ("battle_errand", _PSN_EDITS),
+    "psn_u1": ("battle", _PSN_EDITS),
 }
-PSN_FIXTURES = ("gold_synth_psn",)
+PSN_FIXTURES = ("gold_synth_psn", "crystal_synth_psn_u1")
 
 
 CLOCK_SCHEMA = "gen2-clock-setup-v1"
@@ -429,8 +434,8 @@ def day_clock(raw, *, hour, now, title, minute=0, second=0):
     time, so the game clock of a played fixture drifts with the wall clock (EVO-U1: silver_battle read 19:xx at
     08:23 local). Game time = the save's wStart time + RTC (FixTime). The RTC only moves forward (to the next
     matching instant), and CartRAM is untouched. The disclosure (gen2-clock-setup-v1) re-derives from the base
-    bytes: verify_gen2_release re-runs this function on the committed fixture and compares every field (always
-    with the minute=0, second=0 default: no committed fixture's disclosure carries a non-zero one).
+    bytes: verify_gen2_release re-runs this function on the committed fixture (or its validated poison setup),
+    using the disclosed minute/second, and compares every field. Legacy omitted minute/second fields mean zero.
     minute/second (default 0): still a deterministic, disclosed target -- never host-clock-dependent -- but lets
     a caller land on a different FixTime catch-up length (and so a different frame-based RNG seed) than
     hour:00:00, e.g. e2e_duo.py's retry-on-out-of-Balls attempt: pinning every boot to the same hour:00:00

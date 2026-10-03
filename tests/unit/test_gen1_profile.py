@@ -82,3 +82,16 @@ def test_rom_sha1s_are_the_clean_dumps():
     assert prof["red"]["rom_sha1"] == "ea9bcae617fdf159b045185467ae58b2e4a48b9a"
     assert prof["blue"]["rom_sha1"] == "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2"
     assert prof["yellow"]["rom_sha1"] == "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1"
+
+
+@pytest.mark.parametrize("foundation,path", [
+    ("pret", "gen1_rby/profile.json"),
+    ("purergb", "gen1_purergb/profile.json"),
+    ("purergb_overlay", "gen1_purergb/profile_overlay.json"),
+])
+def test_trade_slot_symbol_is_generated_from_pinned_symbols(foundation, path):
+    profiles = json.loads((REPO / "data/games" / path).read_text())["titles"]
+    assert "wTradingWhichPlayerMon" in gen.RAM_SYMBOLS
+    for title, profile in profiles.items():
+        syms = gen.parse_sym(gen.F.sym_path(foundation, title))
+        assert profile["ram"]["wTradingWhichPlayerMon"] == syms["wTradingWhichPlayerMon"][1]

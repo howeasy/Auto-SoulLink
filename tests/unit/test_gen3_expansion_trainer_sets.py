@@ -466,9 +466,9 @@ def test_key_trainer_name_collisions_within_an_area_get_distinct_fight_labels():
 def test_grematchtable_area_matches_independently_derived_map_area():
     """Item 2 (MAJOR): literal ground-truth check for four gRematchTable rows, read straight
     from src/battle_setup.c at the pin (not from the generator's own output) and resolved to
-    an area through the SAME area_of_map() BFS-fallback the generator uses -- Rustboro City,
-    Mauville City and Lavaridge Town carry no area_map.json entry of their own, so this
-    actually exercises the BFS fallback, not a direct lookup."""
+    an area through the SAME area_of_map() BFS-fallback the generator uses -- Rustboro City
+    and Mauville City are named in area_map.json since EXP-TOWNS (before it the BFS filed them
+    under route_104/route_110); Lavaridge Town has an entry since EXP-GIFT-AREAS."""
     src = _need_source()
     keys = map_keys(src)
     all_maps = map_jsons(src)
@@ -478,9 +478,9 @@ def test_grematchtable_area_matches_independently_derived_map_area():
     battle_setup = _read(src / "src/battle_setup.c")
 
     cases = [
-        ("REMATCH_ROXANNE", "TRAINER_ROXANNE_", "MAP_RUSTBORO_CITY", "route_104"),
-        ("REMATCH_WATTSON", "TRAINER_WATTSON_", "MAP_MAUVILLE_CITY", "route_110"),
-        ("REMATCH_FLANNERY", "TRAINER_FLANNERY_", "MAP_LAVARIDGE_TOWN", "route_112"),
+        ("REMATCH_ROXANNE", "TRAINER_ROXANNE_", "MAP_RUSTBORO_CITY", "rustboro_city"),
+        ("REMATCH_WATTSON", "TRAINER_WATTSON_", "MAP_MAUVILLE_CITY", "mauville_city"),
+        ("REMATCH_FLANNERY", "TRAINER_FLANNERY_", "MAP_LAVARIDGE_TOWN", "lavaridge_town"),
         ("REMATCH_TATE_AND_LIZA", "TRAINER_TATE_AND_LIZA_", "MAP_MOSSDEEP_CITY", "mossdeep_city"),
     ]
     data = _pack()

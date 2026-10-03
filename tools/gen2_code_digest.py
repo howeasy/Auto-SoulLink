@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -56,12 +57,30 @@ def digest_of(rows) -> str:
     return hashlib.sha256("\n".join(sorted(f"{path} {blob}" for path, blob in rows)).encode()).hexdigest()
 
 
+# The overlay row of a pack's admission.json (the SLink companion build: its sha1/md5/UPS, BUILT -> ADMITTED, the grant
+# fingerprint) is a BUILD OUTPUT the owner promotes and a release stamp regenerates. The evidence is bound to it by its own
+# means (overlay_sha1 + equivalent_sha1s, the G4 grant fingerprint), not by this digest: hashing it here would make promoting
+# the overlays, or stamping a release version, stale every receipt that justified the promotion. Every other row (the clean
+# ROMs, the G1 gate) stays in the digest.
+ADMISSION_PACK = re.compile(r"data/games/gen2_(?:crystal|gold|silver)/admission\.json")
+
+
+def admission_id(text: str) -> str:
+    """A stand-in for the blob id of an admission.json: the sha256 of its canonical JSON without the overlay row(s)."""
+    doc = json.loads(text)
+    doc["artifacts"] = [row for row in doc.get("artifacts", []) if row.get("kind") != "overlay"]
+    return "norm:" + hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def head_digest(root: Path = ROOT, rev: str = "HEAD") -> str:
     rows = []
     for line in _git(root, "ls-tree", "-r", rev).splitlines():
         meta, _, path = line.partition("\t")
         if is_production(path):
-            rows.append((path, meta.split()[2]))
+            blob = meta.split()[2]
+            if ADMISSION_PACK.fullmatch(path):
+                blob = admission_id(_git(root, "show", f"{rev}:{path}"))
+            rows.append((path, blob))
     return digest_of(rows)
 
 

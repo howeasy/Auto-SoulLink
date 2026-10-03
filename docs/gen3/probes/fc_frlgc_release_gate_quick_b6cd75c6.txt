@@ -1,0 +1,81 @@
+# gen3_final_cut row=frlgc_release_gate_quick item=FRLGC-GATE cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/verify_gen3_release.py --quick   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: FAIL exit=1
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5 rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:44:01 cpu=68% emuhawk=1 python=11
+start_utc=2026-10-03T08:43:59Z tracked_clean_before=True
+Gen 3 release gate — 5 lanes
+
+[ .. ] unit
+  skips with no entry in ALLOWED_SKIPS:
+    - SKIPPED [7] tests\unit\test_gen3_exp_manager.py:68: patch/build/gen3_pokeemerald.gba is not built here
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:414: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:614: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:640: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+    - SKIPPED [2] tests\unit\test_gen3_expansion_gifts.py:19: pinned expansion source absent: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:24: local pinned expansion source or copyrighted build artifacts absent
+    - SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:39: local pinned expansion source or copyrighted build artifacts absent
+    - SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:50: local pinned expansion source or copyrighted build artifacts absent
+    - SKIPPED [1] tests\unit\test_gen3_menu_version.py:97: patch/vendor/pokefirered is not in this checkout (the vendored decomp lives in the root checkout)
+.................................. [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+.............................                                            [100%]
+=========================== short test summary info ===========================
+SKIPPED [7] tests\unit\test_gen3_exp_manager.py:68: patch/build/gen3_pokeemerald.gba is not built here
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:414: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:614: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:640: pokeemerald not cloned: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+SKIPPED [2] tests\unit\test_gen3_expansion_gifts.py:19: pinned expansion source absent: F:\slink-work\lanes\gen3\gen3-lane-clean\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:24: local pinned expansion source or copyrighted build artifacts absent
+SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:39: local pinned expansion source or copyrighted build artifacts absent
+SKIPPED [1] tests\unit\test_gen3_expansion_wild_rom.py:50: local pinned expansion source or copyrighted build artifacts absent
+SKIPPED [1] tests\unit\test_gen3_menu_version.py:97: patch/vendor/pokefirered is not in this checkout (the vendored decomp lives in the root checkout)
+5845 passed, 16 skipped in 704.28s (0:11:44)
+
+[FAIL] unit               5845 passed, 16 skipped (9 unexplained), 0 failed, 0 xfailed, 0 deselected  (706s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+[ .. ] shadow-negatives-emerald
+[PASS] shadow-negatives-emerald exit 0  (0s)
+
+GATE FAILED — unit
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
+exit=1 end_utc=2026-10-03T08:55:49Z tracked_clean_after=True classification=real

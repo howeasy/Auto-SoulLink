@@ -61,6 +61,12 @@ def load_area_names_from_obj_map(json_path: str) -> "dict[str, str]":
     return result
 
 
+def companion_required_reason(title: str) -> str:
+    """The player-facing refusal for a clean cartridge of a title that requires the companion."""
+    return (f"this {title} cartridge needs the SLink companion patch; "
+            "prepare it through the Manager or /patcher")
+
+
 class GameRulesAdapter(ABC):
     """Interface for game-specific Soul Link rule logic.
 
@@ -327,6 +333,19 @@ class GameRulesAdapter(ABC):
         run-level capability, so clean and overlay must never mix).
         """
         return {"named": "clean"}.get(kind, kind)
+
+    @staticmethod
+    def companion_refusal(hello: dict) -> str | None:
+        """Patch-first (owner 2026-10-02): why this hello's cartridge is refused for lacking the
+        SLink companion patch, or None when it may connect.
+
+        A pure CLASS lookup on the hello, like `pairing_kind` (the server asks it before any
+        adapter is installed for a hello that may be refused). Inert by default: a game with no
+        companion, or whose companion is optional (Yellow, Archipelago builds, the Emerald
+        Expansion, Gen 4/5), is never refused. A companion title overrides this and returns
+        `companion_required_reason(title)` for a hello with no evidence of the patch.
+        """
+        return None
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

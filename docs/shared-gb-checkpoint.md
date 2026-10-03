@@ -44,7 +44,8 @@ implementation. Missing shared dependency refuses rather than reverting to old c
 The same source cut must ship `gb_checkpoint.lua`, rebind production Entry and
 retain Gen 1/pureRGB independent regressions. MODEL controls do not qualify the
 physical rebind. Required later lanes remain live-new-gates, duo-pairs,
-inspect-purergb-overlay and duo-pairs-purergb, with liveness and refusal controls.
+inspect-purergb (the overlay builds; it absorbed inspect-purergb-overlay on 2026-10-02) and
+duo-pairs-purergb, with liveness and refusal controls.
 Rollback restores the previous binder and Entry/bundle composition together.
 
 ## Gen 2 source candidate

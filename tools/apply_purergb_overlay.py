@@ -41,7 +41,7 @@ OVERLAY_DST = "engine/slink"
 ROMX_SECTIONS = [
     "SLink Hook", "SLink Panel", "SLink foreground trade service", "SLink Native Trade",
     "SLink trade receptionist", "SLink trade UI helpers", "SLink partner trade prompt",
-    "SLink APEX guard",
+    "SLink APEX guard", "SLink title band", "SLink main menu version",
 ]
 OVERLAY_BANK = 0x3F
 MAILBOX_SECTION = "SLink Mailbox"
@@ -110,6 +110,53 @@ EDITS: list[tuple[str, str, str]] = [
      "\tld l, e\n"
      "\tld a, $FF\n"
      "\tld [hli], a ; set first byte of DVs to max\n"),
+    # Title band: SoulLink logo + patch version on the vanilla-style title only (title_band.asm). The Pure
+    # title animates rows 7-8 itself, so IsPureTitleScreenEnabled sends it to the original printer.
+    ("engine/movie/title.asm",
+     "PrintGameVersionOnTitleScreen:\n",
+     "PrintGameVersionOnTitleScreen:\n"
+     "\tcall IsPureTitleScreenEnabled\n"
+     "\tjr nz, .slinkVanillaPrint ; SLink overlay: the Pure title is left untouched\n"
+     "\tfarcall SlinkTitleBand ; SLink overlay: the SoulLink logo beside the game's own line\n"
+     "\tIF DEF(_GREEN) ; the game's own line moves right, clear of the wordmark; \"Green Version\" is a tile longer\n"
+     "\t\thlcoord 10, 8\n"
+     "\tELSE\n"
+     "\t\thlcoord 11, 8\n"
+     "\tENDC\n"
+     "\tjr .slinkPrint\n"
+     ".slinkVanillaPrint\n"),
+    ("engine/movie/title.asm",
+     "\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n",
+     ".slinkPrint\n\tld de, VersionOnTitleScreenText\n\tjp PlaceString\n"),
+    # The opt-in Pure title only has room for one text line (tile row 9, 12 BG ids): drawn once the PureRed
+    # banner has finished animating, and cleared again before the player-pointing tiles overwrite its ids.
+    ("engine/movie/title.asm",
+     "\tcall PureTitleScreenVersionAnimation\n\tjr .skipOldTitleStuff1\n",
+     "\tcall PureTitleScreenVersionAnimation\n"
+     "\tfarcall SlinkTitleLinePure ; SLink overlay: \"SoulLink vX.Y.Z\" under the PureRed banner\n"
+     "\tjr .skipOldTitleStuff1\n"),
+    ("engine/movie/title.asm",
+     "\t; load the \"player pointing\" tiles in\n",
+     "\tfarcall SlinkTitleLinePureClear ; SLink overlay: the pointing tiles overwrite the ids the line uses\n"
+     "\t; load the \"player pointing\" tiles in\n"),
+    ("engine/movie/title2.asm",
+     "\tld h, d\n\tld l, $48\n",
+     "\tld h, d\n\tld l, $50 ; SLink overlay: scroll from tile row 10, so the title band's second row stays still\n"),
+    # Main menu version line (main_menu_version.asm). Both the save-file and the no-save branch fall into .next2, so one
+    # hook covers both layouts; it lands inside the DisableTextDelay window the menu opens before its boxes, on the
+    # row above pureRGB's own version line. farcall, not call: MainMenu is in ROMX bank $01 and the overlay in $3F.
+    ("engine/menus/main_menu.asm",
+     "\tcoord hl, $00, $11\n\tld de, VersionText\n\tcall PlaceString\n",
+     "\tcoord hl, $00, $11\n\tld de, VersionText\n\tcall PlaceString\n"
+     "\tfarcall SlinkMainMenuVersion ; SLink overlay: the patch version, baked at build time\n"),
+    # DisplayContinueGameInfo draws a box over rows 7-16 from column 4 (TextBoxBorder takes b+2 rows), so its bottom
+    # border cuts the version on row 16; clear the four cells left of the box so no "SLIN" stub is left beside it.
+    ("engine/menus/main_menu.asm",
+     ".choseContinue\n\tcall DisplayContinueGameInfo\n",
+     ".choseContinue\n"
+     "\tcoord hl, $00, $10 ; SLink overlay: the version line the box is about to cut\n"
+     "\tld bc, 4\n\tld a, \" \"\n\tcall FillMemory\n"
+     "\tcall DisplayContinueGameInfo\n"),
     ("main.asm",
      'INCLUDE "engine/events/silph_card_key_scripts.asm"\n',
      'INCLUDE "engine/events/silph_card_key_scripts.asm"\n\n'

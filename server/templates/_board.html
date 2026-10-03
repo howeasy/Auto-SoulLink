@@ -81,6 +81,8 @@
 </div>
 <div id="mk-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="mk-toast-host" class="mk-toast-host" aria-hidden="true"></div>
+{# conn-watch.js fills this when the poll below stops getting answers; empty, it takes no space. #}
+<div class="mk-connlost" role="status"></div>
 
 <div id="content" hx-ext="morph" hx-get="{{ poll_url }}" hx-trigger="every 2s" hx-swap="morph:outerHTML" hx-target="this" hx-select="#content">
   {# The run's phase lives inside the polled fragment so it moves with the run. #}
@@ -97,6 +99,13 @@
   </div>
 
   {# ── banners: things that are wrong get said first ───────────────── #}
+  {% if status is defined and status.get('load_failed') %}
+    <div class="save-warn">&#9888; <b>Run could not be loaded safely.</b> {{ status.load_failed }}
+      &mdash; Events are blocked. Restore a valid backup before continuing.</div>
+  {% endif %}
+  {% if status is defined and status.get('dispatch_errors') and (status.dispatch_errors.values() | sum) %}
+    <div class="save-warn"><b>Event errors:</b> A {{ status.dispatch_errors.get('a', 0) }}, B {{ status.dispatch_errors.get('b', 0) }}. Check the server log.</div>
+  {% endif %}
   {% if status.save_failed %}
     <div class="save-warn">&#9888; <b>Run progress is not being saved.</b> {{ status.save_failed }}
       &mdash; check the data directory is writable (a syncing folder can hold the lock). The run continues in memory; fix this before restarting the server.</div>
@@ -127,7 +136,29 @@
       <span class="trade-problem-verdict">A: {{ tp.verdict.get('a') or 'awaiting' }} &middot; B: {{ tp.verdict.get('b') or 'awaiting' }}</span>
       {% if tp.problem %}<span class="trade-problem-text">{{ tp.problem }}</span>{% endif %}
       {% if status.trade_held %}<span class="trade-problem-text trade-problem-held">Waiting on this trade: {% for h in status.trade_held %}{{ h.player | upper }} {{ h.event }} {{ h.key }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-      <span class="trade-problem-hint">Resolve after checking both parties: POST /api/debug/resolve_trade {"token": "{{ tp.token }}", "action": "adopt", "commit" or "rollback"} (a side's known traded/none stands; name a contradicted side with "sides": {"a": "traded"|"none"})</span>
+      {# Settles it through POST /api/debug/resolve_trade (trade-resolve.js). data-morph-keep: the
+         2 s refresh leaves the choices alone; a new token is a new form. #}
+      <form class="trade-resolve" id="trade-resolve-{{ tp.token }}" data-token="{{ tp.token }}" data-morph-keep>
+        <span class="trade-problem-text">Resolve by hand, after checking both parties (trade <code>{{ tp.token }}</code>). A side whose outcome is known keeps it; the action decides the sides the server cannot.</span>
+        <fieldset class="trade-resolve-row">
+          <legend class="sr-only">Action</legend>
+          <label><input type="radio" name="action" value="adopt"> Adopt <span class="mk-sub">— keep what each side reported</span></label>
+          <label><input type="radio" name="action" value="commit"> Commit <span class="mk-sub">— undecided sides traded</span></label>
+          <label><input type="radio" name="action" value="rollback"> Roll back <span class="mk-sub">— undecided sides did not</span></label>
+        </fieldset>
+        <div class="trade-resolve-row">
+          {% for pid in ('a', 'b') %}
+          <label>Player {{ pid | upper }}
+            <select name="side_{{ pid }}">
+              <option value="">as reported ({{ tp.verdict.get(pid) or 'awaiting' }})</option>
+              <option value="traded">traded</option>
+              <option value="none">did not trade</option>
+            </select></label>
+          {% endfor %}
+          <button type="submit" class="mk-btn">Resolve…</button>
+        </div>
+        <output class="trade-resolve-out trade-problem-text" role="status"></output>
+      </form>
     </div>
   {% elif status.trade_last %}
     {# Quiet by design: a settled trade is not a banner-worthy event once trade_problem
@@ -246,6 +277,7 @@
                 <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>
                 <a class="mk-btn" href="{{ launchers.b }}">Player B · .lua</a></li>
               {% endif %}
+              {% if not roms %}<li>Each player prepares their cartridge with the companion patch (<a href="/patcher">/patcher</a>), required except for Yellow, Archipelago builds and the Emerald Expansion.</li>{% endif %}
               <li>Each player loads their {% if roms %}cartridge{% else %}save{% endif %} in BizHawk, <b>then</b> the launcher in the Lua console. It finds the game and connects — the card above turns green.</li>
               <li>The first catch both of you make in the same area starts the board.</li>
             </ol>

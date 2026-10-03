@@ -167,6 +167,43 @@ def _duo_marker(inst, text):
     return duo
 
 
+def _executed_identity(title, kind="clean"):
+    if kind not in ("clean", "overlay"):
+        raise RuntimeError("unknown Gen 2 executed artifact")
+    directory = REPO_ROOT / f"data/games/gen2_{title}"
+    if kind == "clean":
+        profile = json.loads((directory / "profile.json").read_text())["titles"][title]
+        return profile["rom_sha1"], None
+    publication = json.loads((REPO_ROOT / "data/gen2/overlay_provenance.json").read_text())
+    raw = (directory / "overlay/binding.json").read_bytes().replace(b"\r\n", b"\n")
+    binding = json.loads(raw)
+    sha = publication["outputs"]["poke" + title]["sha1"]
+    if binding.get("rom_sha1") != sha or binding.get("kind") != kind or binding.get("title") != title:
+        raise RuntimeError("overlay executed binding differs from publication")
+    return sha, hashlib.sha256(raw).hexdigest()
+
+
+def _checkpoint_for(title, kind="clean"):
+    directory = REPO_ROOT / f"data/games/gen2_{title}"
+    if kind == "overlay":
+        return json.loads((directory / "overlay/binding.json").read_text())["checkpoint"]
+    return json.loads((directory / "write_checkpoint.json").read_text())["titles"][title]
+
+
+def _client_artifact(inst, client, duo):
+    kind = client.get("artifact_kind", "clean")
+    if duo.get("artifact_kind", "clean") != kind:
+        raise RuntimeError(f"{inst}: CLIENT/DUO_GEN2 artifact kind differs")
+    sha, binding = _executed_identity(client["title"], kind)
+    if client["rom_sha1"] != sha:
+        raise RuntimeError(f"{inst}: wrong executed artifact ROM pin")
+    if kind == "overlay" and (client.get("qualification") != "PHYSICAL_RECEIPTED"
+                              or client.get("production_admitted") is not True
+                              or client.get("binding_sha256") != binding or duo.get("binding_sha256") != binding):
+        raise RuntimeError(f"{inst}: overlay artifact lacks production/binding proof")
+    return kind, sha
+
+
 def _boot_marker(inst, text):
     """SAVE_WITNESS + CLIENT for one instance, plus this instance's title cross-checked across
     its OWN markers (DUO_GEN2 always, RECEIPT when present) -- never a caller-supplied title.
@@ -186,10 +223,12 @@ def _boot_marker(inst, text):
         raise RuntimeError(f"{inst}: DUO_GEN2 title/rom_sha1 {duo['title']!r}/{duo['rom_sha1']!r} "
                            f"disagrees with CLIENT {title!r}/{client.get('rom_sha1')!r} -- "
                            f"inconsistent title markers")
+    kind, _sha = _client_artifact(inst, client, duo)
 
     receipt = _last_tagged(text, "RECEIPT")
     if receipt is not None and (receipt.get("title") != title
-                                or receipt.get("rom_sha1") != client.get("rom_sha1")):
+                                or receipt.get("rom_sha1") != client.get("rom_sha1")
+                                or receipt.get("artifact_kind", "clean") != kind):
         raise RuntimeError(f"{inst}: RECEIPT title/rom_sha1 {receipt.get('title')!r}/"
                            f"{receipt.get('rom_sha1')!r} disagrees with CLIENT/DUO_GEN2 "
                            f"{title!r}/{client.get('rom_sha1')!r} -- inconsistent title markers")
@@ -436,6 +475,9 @@ def _pair_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sav
         raise RuntimeError(f"no links.json under data_dir: {links_path}")
     raw_links_text = links_path.read_text(encoding="utf-8")
     document = json.loads(raw_links_text)
+    kinds = {(_last_tagged(results[side], "CLIENT") or {}).get("artifact_kind", "clean") for side in ("a", "b")}
+    if len(kinds) != 1 or next(iter(kinds)) != (document.get("artifact_kind") or "clean"):
+        raise RuntimeError("duo receipts belong to another server artifact kind")
     rows = document.get("links") or []
     statuses = {status} if isinstance(status, str) else set(status)
     matches = [row for row in rows if row.get("area_id") == area_id and row.get("status") in statuses]
@@ -508,10 +550,9 @@ def _hex_bytes(value, size, label):
     return bytes.fromhex(value)
 
 
-def _faint_checkpoint(write, layout):
+def _faint_checkpoint(write, layout, artifact_kind="clean"):
     """Check measured PC/bank, both anchors in both domains, caller and state predicates."""
-    pack = json.loads((REPO_ROOT / f"data/games/gen2_{layout.title}/write_checkpoint.json").read_text())
-    primary = pack["titles"][layout.title]["primary"]
+    primary = _checkpoint_for(layout.title, artifact_kind)["primary"]
     point = write["checkpoint"]
     _faint_need(isinstance(point, dict), "checkpoint observation missing")
     for field, expected in (("pc", primary["execution_before"]["pc"]),
@@ -566,7 +607,7 @@ def _faint_predicate(point, predicate):
 RECEIPT_TITLE = {"crystal": "crystal", "gold": "gold", "silver": "gold"}
 
 
-def _faint_battle_bench(write, layout, captured):
+def _faint_battle_bench(write, layout, captured, artifact_kind="clean"):
     """O-32 (0752a3ab): a bench death on receipt at a battle frame end. The frame evidence follows
     gen2_write_safety.lua evaluate_frame (the battle hold's WRAM bank, serial and wLinkMode predicates)
     with wBattleMode WILD or TRAINER (reads.lua read_battle's enumeration). PC == the frame end the U2
@@ -576,9 +617,14 @@ def _faint_battle_bench(write, layout, captured):
     the release verifier's write-window lane. Not the active battler: the harness's write-time battle
     snapshot (row.battle, read_battle), and `captured` binds the target to the mon this battle caught."""
     title = layout.title
-    data = json.loads((REPO_ROOT / f"data/games/gen2_{title}/write_checkpoint.json").read_text())["titles"][title]
-    owner = RECEIPT_TITLE[title]
-    receipt = json.loads((REPO_ROOT / f"data/games/gen2_{title}/receipts/{owner}.write_window.json").read_text())
+    data = _checkpoint_for(title, artifact_kind)
+    owner = title if artifact_kind == "overlay" else RECEIPT_TITLE[title]
+    namespace = "overlay/" if artifact_kind == "overlay" else ""
+    receipt = json.loads((REPO_ROOT / f"data/games/gen2_{title}/receipts/{namespace}{owner}.write_window.json").read_text())
+    if artifact_kind == "overlay":
+        sha, binding = _executed_identity(title, artifact_kind)
+        _faint_need(receipt.get("rom_sha1") == sha and receipt.get("artifact_kind") == artifact_kind
+                    and receipt.get("binding_sha256") == binding, "U2 receipt belongs to another artifact")
     runs = receipt.get("runs") or {}
     _faint_need(receipt.get("title") == owner and receipt.get("battle_hold") == data["battle_hold"]
                 and all(isinstance(runs.get(mode), dict) and runs[mode].get("result") == "PASS"
@@ -603,7 +649,7 @@ def _faint_battle_bench(write, layout, captured):
                 and _frame(captured) <= _frame(write), "battle_bench target not proven off the active battler")
 
 
-def _faint_write(write, layout, linked, final, key, captured=None):
+def _faint_write(write, layout, linked, final, key, captured=None, artifact_kind="clean"):
     """B's (or a clause rejection's) party HP/status zero: at the overworld checkpoint (why=overworld), or,
     O-32, on receipt at a battle frame end (every permit why=battle_bench; `captured` proves the slot is
     not the active battler -- callers without that evidence refuse a bench write)."""
@@ -617,9 +663,9 @@ def _faint_write(write, layout, linked, final, key, captured=None):
     _faint_need(isinstance(log, list) and len(log) == 2, "B write must carry exactly two permit spans")
     why = "battle_bench" if all(isinstance(row, dict) and row.get("why") == "battle_bench" for row in log) else "overworld"
     if why == "battle_bench":
-        _faint_battle_bench(write, layout, captured)
+        _faint_battle_bench(write, layout, captured, artifact_kind)
     else:
-        _faint_checkpoint(write, layout)
+        _faint_checkpoint(write, layout, artifact_kind)
     n = layout.party_size * layout.constants["PARTY_LENGTH"]
     before = _hex_bytes(write.get("before_party_hex"), n, "before party")
     after = _hex_bytes(write.get("after_party_hex"), n, "after party")
@@ -737,7 +783,7 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
                 "B production signals lack battle_faint")
     pack = json.loads((REPO_ROOT / f"data/games/gen2_{title_b}/write_checkpoint.json").read_text())
     _faint_need(pack["source"] == layout.profile["source"], "battle hold source differs")
-    hold = pack["titles"][title_b]["battle_hold"]
+    hold = _checkpoint_for(title_b, client.get("artifact_kind", "clean"))["battle_hold"]
     active, write, link = (_one_marker(b, tag) for tag in ("LINKED_ACTIVE", "BATTLE_HOLD_WRITE", "LINK_SAVE"))
     slot = active.get("slot")
     _faint_need(type(slot) is int and 0 <= slot < layout.constants["PARTY_LENGTH"]
@@ -861,7 +907,7 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=Fa
             _faint_need(isinstance(client.get("registered_sites"), list)
                         and site in client["registered_sites"], f"A production signals lack {site}")
         layout = codec.for_foundation(title)
-        _faint_need(client.get("rom_sha1") == layout.profile["titles"][title]["rom_sha1"], f"{inst}: wrong ROM pin")
+        _faint_need(client.get("rom_sha1") == _executed_identity(title, client.get("artifact_kind", "clean"))[0], f"{inst}: wrong ROM pin")
         stage = _one_marker(text, "LINK_SAVE")
         _faint_need(type(stage.get("gate_saves")) is int and type(stage.get("client_saves")) is int
                     and stage["gate_saves"] == stage["client_saves"] >= 1
@@ -943,7 +989,7 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=Fa
             observed = [codec.decode_party_mon(raw[index * layout.party_size:(index + 1) * layout.party_size], layout,
                           species_marker=raw[index * layout.party_size]) for index in range(len(final))]
             _faint_need([codec.key(mon) for mon in observed] == [codec.key(mon) for mon in final], "active checkpoint repeat changes identity")
-            _faint_write(repeat, layout, observed, observed, b_key)
+            _faint_write(repeat, layout, observed, observed, b_key, artifact_kind=(_last_tagged(results["b"], "CLIENT") or {}).get("artifact_kind", "clean"))
     else:
         _bench_faint_writes(results, parties, stages, b_key)
     log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
@@ -981,7 +1027,7 @@ def _bench_faint_writes(results, parties, stages, b_key):
         _faint_need(commands[ordinal] < position, "B write precedes force_faint receipt")
         if previous is None:
             _faint_need(_frame(stages["b"]) < _frame(write) <= _frame(witness, "save_completed_frame"), "B write chronology differs")
-        _faint_write(write, layout, linked if previous is None else final, final, b_key)
+        _faint_write(write, layout, linked if previous is None else final, final, b_key, artifact_kind=(_last_tagged(results["b"], "CLIENT") or {}).get("artifact_kind", "clean"))
         if previous is not None:
             _faint_need(_frame(write) >= _frame(previous) and write["slot"] == previous["slot"]
                         and bytes.fromhex(write["before_party_hex"]) == bytes.fromhex(previous["after_party_hex"])
@@ -1056,9 +1102,8 @@ def _admit_markers(results, admitted, refused):
                 "refused receipt evidence differs")
     text = results[admitted]
     witness, client, title = _boot_marker(admitted, text)
-    from tools.gen2_source_data import load_context
     _admit_need(client.get("production_admitted") is True
-                and client.get("rom_sha1") == load_context(title, root=REPO_ROOT).source_record()["rom_sha1"],
+                and client.get("rom_sha1") == _executed_identity(title, client.get("artifact_kind", "clean"))[0],
                 "admitted half lacks production/pinned ROM")
     hello, hold = _one_marker(text, "HELLO"), _one_marker(text, "HOLD")
     _one_marker(text, "BOOTED")
@@ -1154,13 +1199,11 @@ def _reconnect_pass(text):
 
 
 def _reconnect_head(text, player):
-    from tools.gen2_source_data import load_context
-
     head, client = _one_marker(text, "DUO_GEN2"), _one_marker(text, "CLIENT")
     _duo_marker(player, text)
     _reconnect_need(head.get("player") == player and head.get("scenario") == "gen2_reconnect",
                     "player/scenario differs")
-    pin = load_context(head["title"], root=REPO_ROOT).source_record()["rom_sha1"]
+    _kind, pin = _client_artifact(player, client, head)
     _reconnect_need(head["rom_sha1"] == client.get("rom_sha1") == pin
                     and client.get("title") == head["title"] and client.get("production_admitted") is True,
                     "production client/title/ROM pin differs")
@@ -1306,7 +1349,8 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
                                 and ot == original_ot and linked_key in keys,
                                 "same-save seed lost initial linked image")
             else:
-                qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT)
+                kind = _one_marker(relaunch_results[phase], "CLIENT").get("artifact_kind", "clean")
+                qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT, kind=kind)
                 _reconnect_need(qualified_ot == ot != original_ot and linked_key not in keys,
                                 "wrong-save seed is not qualified other-OT battle input")
         _reconnect_need(set(snapshots) == {"initial", "disconnected", "same_save", "before_wrong", "wrong_save"},
@@ -1362,7 +1406,6 @@ def soft_reset_oracle(results, *, data_dir, before, after, boot_saveram, on_veri
     """Both native saves preserve the party; one WRAM-clear reset produces one same-OT rehello."""
     from server.adapters import gen2_codec as codec
     from tools.gen2_fixtures import _saved_field
-    from tools.gen2_source_data import load_context
 
     def need(condition, reason):
         if not condition:
@@ -1381,7 +1424,7 @@ def soft_reset_oracle(results, *, data_dir, before, after, boot_saveram, on_veri
             hello, receipt, booted = (_one_marker(text, tag) for tag in ("HELLO", "RECEIPT", "BOOTED"))
             need(head.get("player") == inst and head.get("scenario") == "gen2_soft_reset", "player/scenario differs")
             need(client.get("production_admitted") is True
-                 and head["rom_sha1"] == load_context(title, root=REPO_ROOT).source_record()["rom_sha1"], "production/pinned ROM differs")
+                 and head["rom_sha1"] == _executed_identity(title, client.get("artifact_kind", "clean"))[0], "production/pinned ROM differs")
             need(receipt.get("schema") == "gen2-duo-soft-reset-v1" and receipt.get("input_mode") == "normal_buttons"
                  and receipt.get("harness_write_scopes") == [], "receipt schema/input/write scopes differ")
             for field in ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"):
@@ -1506,7 +1549,8 @@ def _clause_captures(results, boot_saveram, kind):
         head, cap, receipt = (_one_marker(text, tag) for tag in ("DUO_GEN2", "ENGINE_CAPTURE", "RECEIPT"))
         packs, slots, source = _clause_source(title)
         _clause_need(head.get("player") == inst and head.get("scenario") == f"gen2_{kind}_clause"
-                     and client.get("production_admitted") is True and head["rom_sha1"] == source["rom_sha1"], "clause production/header differs")
+                     and client.get("production_admitted") is True
+                     and head["rom_sha1"] == _executed_identity(title, client.get("artifact_kind", "clean"))[0], "clause production/header differs")
         _clause_need(receipt.get("schema") == f"gen2-duo-{kind}-clause-v1", "clause receipt schema differs")
         for field in ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"):
             _clause_need(receipt.get(field) == head.get(field), f"clause receipt {field} differs")
@@ -1628,7 +1672,7 @@ def _clause_rejection(results, decoded, document, events, kind):
         pre.append(codec.decode_party_mon(before[start:start + layout.party_size], layout, species_marker=before[start]))
         post.append(codec.decode_party_mon(after[start:start + layout.party_size], layout, species_marker=after[start]))
     captures = [row for _, row in _tag_rows(text, "ENGINE_CAPTURE") if row.get("key") == key]
-    _faint_write(write, layout, pre, post, key, captured=captures[0] if len(captures) == 1 else None)
+    _faint_write(write, layout, pre, post, key, captured=captures[0] if len(captures) == 1 else None, artifact_kind=(_last_tagged(text, "CLIENT") or {}).get("artifact_kind", "clean"))
     _clause_need(pre[write["slot"]]["hp"] > 0 and _frame(write) < _frame(own["witness"], "save_completed_frame"), "rejection did not faint a live mon before save")
     by_key = {codec.key(mon): mon for mon in post}
     _clause_need(len(by_key) == len(post) and set(by_key) == {codec.key(mon) for mon in own["party"]} | {key}, "write party differs from saved inventory")
@@ -1770,7 +1814,7 @@ def _wave_head(results, inst, scenario, schema):
                and head.get("scenario") == scenario and receipt.get("schema") == schema,
                f"{inst}: production/header/receipt schema differs")
     layout = codec.for_foundation(title)
-    _wave_need(client.get("rom_sha1") == layout.profile["titles"][title]["rom_sha1"], f"{inst}: wrong ROM pin")
+    _wave_need(client.get("rom_sha1") == _executed_identity(title, client.get("artifact_kind", "clean"))[0], f"{inst}: wrong ROM pin")
     return witness, layout, title
 
 

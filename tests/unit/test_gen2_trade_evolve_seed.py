@@ -51,7 +51,7 @@ def test_the_runner_stages_the_seed_for_trade_evolve_a_only():
         assert rows["a"]["synth"] == fixtures["a"] and rows["a"]["name"] == e2e_duo.GEN2_TRADE_FIXTURES[game]["a"]
         assert rows["a"]["fixture"] == FIX / f"{fixtures['a']}.SaveRAM"   # boots through the PLAYED errand base
         assert "synth" not in rows["b"] and rows["b"]["name"] == e2e_duo.GEN2_TRADE_FIXTURES[game]["b"]
-        assert any(line.startswith(f"gen2_trade_evolve  attempts=1  targets=a:{fixtures['a']}, b:{fixtures['b']}")
+        assert any(line.startswith(f"gen2_trade_evolve  attempts=2  targets=a:{fixtures['a']}, b:{fixtures['b']}")
                    for line in e2e_duo.list_lines(game))
     rows = e2e_duo.gen2_preflight(game="gen2_new", scenario="gen2_trade_new")   # every other case: errand seeds
     assert "synth" not in rows["a"] and rows["a"]["name"] == "crystal_battle_errand"

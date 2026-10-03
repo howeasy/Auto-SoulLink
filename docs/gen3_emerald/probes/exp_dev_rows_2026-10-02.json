@@ -1,0 +1,157 @@
+{
+  "scope": "19 historical DEV receipts at different cuts; every frozen final-cut row must still RUN",
+  "rows": [
+    {
+      "row": "exp_static_static_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_live_exp_static_static_gen3_65e667e6_dev.txt",
+      "source_head": "65e667e62c5aecd80759c876b7d65bfbdbcc5367",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_static_run_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_live_exp_static_static_run_gen3_65e667e6_dev.txt",
+      "source_head": "65e667e62c5aecd80759c876b7d65bfbdbcc5367",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_grass_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_live_exp_static_grass_gen3_65e667e6_dev.txt",
+      "source_head": "65e667e62c5aecd80759c876b7d65bfbdbcc5367",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_surf_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_live_exp_static_surf_gen3_b32454c5_dev.txt",
+      "source_head": "b32454c5dd3f46aa7a94d07840703a1532deb8c5",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_rock_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_rock_default_cd6b0648_dev.txt",
+      "source_head": "cd6b0648d92fe3c70b48fb4e602ebfd8106f9435",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_fish_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_parallel_exp_static_fish_gen3_1a735d4e_dev.txt",
+      "source_head": "1a735d4e81d2cc06cf1fd593f7d83d6d2927d1da",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_altering0_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_parallel_exp_static_altering0_gen3_1a735d4e_dev.txt",
+      "source_head": "1a735d4e81d2cc06cf1fd593f7d83d6d2927d1da",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "exp_static_altering1_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_parallel_exp_static_altering1_gen3_db1ed073_dev.txt",
+      "source_head": "db1ed0736c3a6c6c38b6032ea06559f60b233fe5",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "gift_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_acq_gift_gen3_b5024ed7_dev_console.txt",
+      "source_head": "b5024ed74315b00bda86972e902f00c49687929b",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "egg_hatch_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_acq_egg_hatch_gen3_6282a092_dev_console.txt",
+      "source_head": "6282a0923e501947256053c1209a631eea340e3d",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "egg_receive_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_acq_egg_receive_gen3_b5024ed7_dev_console.txt",
+      "source_head": "b5024ed74315b00bda86972e902f00c49687929b",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "choice_gift_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_acq_choice_gift_gen3_6282a092_dev_console.txt",
+      "source_head": "6282a0923e501947256053c1209a631eea340e3d",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "gift_box_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_box_fixed_ec79c703_console.txt",
+      "source_head": "ec79c7032365777527d2ea8ec466cf30e841b42b",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "faint_cmd_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_live_faint_cmd_gen3_65e667e6_dev.txt",
+      "source_head": "65e667e62c5aecd80759c876b7d65bfbdbcc5367",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "linked_faint_active_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_parallel_linked_faint_active_gen3_1a735d4e_dev.txt",
+      "source_head": "1a735d4e81d2cc06cf1fd593f7d83d6d2927d1da",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "boxsync_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/dev_2026-10-01/boxsync_gen3.log",
+      "source_head": "ea9c8a070e2a9f44c56d6a2957d577525f674871",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "whiteout_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/exp_parallel_whiteout_gen3_1a735d4e_dev.txt",
+      "source_head": "1a735d4e81d2cc06cf1fd593f7d83d6d2927d1da",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "link_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/dev_2026-10-01/link_gen3.log",
+      "source_head": "ea9c8a070e2a9f44c56d6a2957d577525f674871",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    },
+    {
+      "row": "release_gen3",
+      "development_verdict": "PASS",
+      "receipt": "docs/gen3_emerald/probes/dev_2026-10-01/rel1.log",
+      "source_head": "343d2345fe7d301aa3f1b0b9be13d9e1f8d7a665",
+      "pydec_pass": true,
+      "scope": "Historical DEV at named source, not final-cut qualification or carry authority"
+    }
+  ]
+}

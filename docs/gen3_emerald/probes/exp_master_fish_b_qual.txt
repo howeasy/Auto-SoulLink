@@ -1,0 +1,12 @@
+SOURCE=65e667e62c5aecd80759c876b7d65bfbdbcc5367; SYNTH item add ownMaster4qty1; method->native encounter slot->capture publish->save, NOT catchrate; pendingCONTINUE/SAVE noencounter
+RAW_SHA256=1566df12ff31533f64b8ce1f6ad2e9eb3f067169d0e7d30ab5961acbfd3f6c8e
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=3
+phase overworld-cb2 frame=514 map=0.17 pos=(39,2)
+phase field frame=596 map=0.17 pos=(39,2) saveFileStatus=1
+phase save-menu frame=596 counter=3
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=3->4
+phase flushed frame=1587 map=0.17 pos=(39,2)
+RESULT: PASS counter 3 -> 4 map=0.17 pos=(39,2)
+MASTER_PENDING_NATIVE_SAVE_PASS raw=1566df12ff31533f64b8ce1f6ad2e9eb3f067169d0e7d30ab5961acbfd3f6c8e saved=3828a12d460c6d0503a6b44e65893d272861341b4e497bbcea5e6e7975311600

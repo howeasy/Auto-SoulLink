@@ -93,7 +93,15 @@ local function log(s)
     _console_log("[duo" .. D.player:upper() .. "] " .. s)
     if logf then logf:write(s .. "\n"); logf:flush() end
 end
-local function jlog(tag, value) log(tag .. " " .. assert(json.encode(value))) end
+local receipt_identity
+local function jlog(tag, value)
+    if tag == "RECEIPT" and receipt_identity then
+        assert(value.rom_sha1 == receipt_identity.rom_sha1, "receipt executed identity differs")
+        value.artifact_kind = receipt_identity.kind
+        value.binding_sha256 = receipt_identity.binding_sha256
+    end
+    log(tag .. " " .. assert(json.encode(value)))
+end
 local function finish(pass, msg)
     log("RESULT: " .. (pass and "PASS" or "FAIL") .. (msg and (" (" .. msg .. ")") or ""))
     if logf then logf:close(); logf = nil end
@@ -111,7 +119,7 @@ local R = dofile(ROOT .. "/lua/tests/duo/gen2_route29_inputs.lua")
 local name = D.scenario:gsub("^gen2_", "")
 local okS, S = pcall(dofile, ROOT .. "/lua/tests/duo/scenario_gen2_" .. name .. ".lua")
 if not okS then finish(false, "no gen2_new scenario " .. tostring(D.scenario)) end
--- P4.3e native trade: the disclosed HARNESS_ONLY_OVERLAY harness (lua/tests/duo/gen2_trade.lua is its contract)
+-- Native trade runs the unmodified production loader (lua/tests/duo/gen2_trade.lua is its contract).
 local TR = S.TRADE and S.T or nil
 local wire = dofile(ROOT .. "/lua/gen2/wire.lua")
 
@@ -231,7 +239,7 @@ end)
 if not ok then finish(false, "bad environment: " .. tostring(ctx)) end
 ctx.log = log
 jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
-                  title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint,
+                  title=ctx.env.title, rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.env.kind, binding_sha256=ctx.env.binding_sha256, fixture_sha256=ctx.qualify.stage_fingerprint,
                   synth=ctx.case.synth})
 
 local started, gen2, parts = pcall(TR and function() return TR.start_production(ROOT, SG, json) end or start_production)
@@ -247,8 +255,20 @@ do
 end
 jlog("CLIENT", {qualification=tostring(parts.qualification), production_admitted=parts.production_admitted == true,
                 pack=tostring(parts.pack), title=tostring(parts.title),
-                rom_sha1=tostring(parts.profile and parts.profile.rom_sha1), registered_sites=json.array(registered)})
-if parts.production_admitted ~= true then finish(false, "client is not the production graph") end
+                rom_sha1=tostring(parts.runtime_rom_sha1), artifact_kind=parts.artifact_kind,
+                binding_sha256=ctx.env.binding_sha256, registered_sites=json.array(registered)})
+if parts.production_admitted ~= true or parts.qualification ~= "PHYSICAL_RECEIPTED" then finish(false, "client is not the production graph") end
+if parts.runtime_rom_sha1 ~= ctx.env.exec_sha1 or parts.artifact_kind ~= ctx.env.kind then
+    finish(false, "production artifact differs from the staged identity")
+end
+receipt_identity = {kind=parts.artifact_kind, rom_sha1=parts.runtime_rom_sha1,
+                    binding_sha256=ctx.env.binding_sha256}
+local function execution_checkpoint()
+    if ctx.env.kind == "overlay" then
+        return assert(parts.view, "overlay execution view missing").checkpoint
+    end
+    return parts.data and parts.data.checkpoint and parts.data.checkpoint.titles[ctx.env.title]
+end
 -- The client detects its title from the ROM header (run.lua Entry.detect_title); the gate booted the
 -- fixture for SLINK_GEN2_TITLE. A cross-title lane mix-up must fail here, not deep in the route.
 if parts.title ~= ctx.env.title then
@@ -363,7 +383,7 @@ local function bus_hex(addr, n, domain)
     return table.concat(out)
 end
 local function checkpoint_evidence()
-    local primary = parts.data.checkpoint.titles[ctx.env.title].primary
+    local primary = execution_checkpoint().primary
     local anchor = primary.anchors.ow_player_input
     local sp = api.register("SP")
     local values = {}
@@ -419,8 +439,7 @@ end end
 -- PARTY_HP_WRITE, and observation-only exec hooks at the pack's battle_hold oracles (in-bank + expected bytes,
 -- as lua/tests/gen2_write_windows.lua battle_faint), logged while rec.trace_on. One seq counter orders both.
 rec.seq, rec.trace = 0, {}
-local battle_hold = S.BATTLE_TRACE and parts.data and parts.data.checkpoint
-    and parts.data.checkpoint.titles[ctx.env.title].battle_hold or nil
+local battle_hold = S.BATTLE_TRACE and (execution_checkpoint() or {}).battle_hold or nil
 if S.BATTLE_TRACE and not (battle_hold and W.faint_active_battler) then
     finish(false, "the production client composes no battle hold")
 end

@@ -1,0 +1,27 @@
+SOURCE=f12d549b87c41a73962543c3b46a351ec8aab937 (retrospective author attribution; original output did not stamp source; seed qualification only)
+SEED-PENDING SOURCE/MODEL + native CONTINUE/SAVE only; no live encounter/capture claim
+SYNTH flag 0x12a=0
+SYNTH flag 0x867=1
+SYNTH flag 0x868=1
+SYNTH flag 0x869=1
+SYNTH flag 0x86a=1
+SYNTH flag 0x86b=1
+SYNTH flag 0x86c=1
+SYNTH flag 0x86d=1
+SYNTH flag 0x86e=1
+SYNTH own medium-slow party level100/full HP; slot0 Surf/Rock Smash with own-ROM PP; no battle forced
+SYNTH row0 Ball item 1, quantity20; native throws pending
+SYNTH continue warp 0.17 (39,2); selector0; acquisition pending
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_pokeemerald.gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(39,2)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=514 map=0.17 pos=(39,2)
+phase field frame=596 map=0.17 pos=(39,2) saveFileStatus=1
+phase save-menu frame=596 counter=2
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=2->3
+phase flushed frame=1587 map=0.17 pos=(39,2)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(39,2)
+
+SEED_PENDING PASS case=surf counter=2->3 file=tests\fixtures\gen3\exp_static_surf_synth.sav sha256=4bfdd1c5ae72ae20b7edc21fab1ee88bf6f5630f11fce473b61932ce6083dd94

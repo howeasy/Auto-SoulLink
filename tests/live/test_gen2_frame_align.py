@@ -20,6 +20,12 @@ binds the staged fixture bytes and the qualification attempt (signals.bind_fixtu
 
 Skipped without EmuHawk, the pinned build, the fixture or its qualification receipt (the release runner
 counts a skip as a failure).
+
+OVERLAY (docs/gen2/OVERLAY_ADMISSION.md D4/D7): SLINK_GEN2_ARTIFACT=overlay boots <title>_overlay on the overlay
+qualification receipt (tests/fixtures/gen2/receipts/overlay/<fixture>.qualification.json), arms the overlay execution
+binding's own sites (data/games/gen2_<t>/overlay/binding.json) and writes
+tests/fixtures/gen2/receipts/overlay/<title>.engine_sites.json; the clean files are never touched. The recorded
+identity (rom_sha1, binding_sha256) is checked against the hashed staged overlay, not the environment.
 """
 from __future__ import annotations
 
@@ -39,7 +45,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from tests.live import test_gen2_new_gates as live  # noqa: E402
 from tests.live.test_gen2_new_gates import emuhawk  # noqa: E402,F401 - pytest fixture
-from tools import gen2_fixtures, gen2_source_data, gen2_synth_fixtures  # noqa: E402
+from tools import gen2_fixtures, gen2_synth_fixtures  # noqa: E402
 
 pytestmark = [
     pytest.mark.live,
@@ -65,6 +71,30 @@ U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver
 # un-pinned RTC leaves them exposed to the exact same real-clock coin-flip: fsw-postrc 2026-09-25,
 # gate/engine_sites/crystal ran its whole ~880-battle Route 30 hunt at hour 23/0/1/2 and never saw a Caterpie.
 U1_CLOCK = {"crystal": 11, "gold": 11, "silver": 11}
+# Fixed attempts, shared by clean/overlay. Repeating 11:00 can replay the same RNG
+# sequence; use the duo's 23-minute spacing, with no search for a favourable seed.
+U1_RETRY_MINUTES = (0, 23, 46)
+
+
+def u1_clock_setup(raw: bytes, title: str, *, now: int):
+    attempt = os.environ.get("SLINK_GEN2_U1_ATTEMPT", "1")
+    if attempt not in ("1", "2", "3"):
+        raise ValueError("SLINK_GEN2_U1_ATTEMPT must be 1, 2 or 3")
+    minute = U1_RETRY_MINUTES[int(attempt) - 1]
+    boot, clock = gen2_synth_fixtures.day_clock(raw, hour=U1_CLOCK[title], now=now, title=title, minute=minute)
+    # New U1 evidence is explicit even for attempt 1; legacy day_clock callers
+    # retain their byte-identical omission of zero minutes/seconds.
+    clock.update(game_minute=minute, game_second=0)
+    return boot, clock
+
+
+def u1_receipt_metadata(clock: dict) -> dict:
+    """Bind the attempt to the clock that actually staged this capture."""
+    if clock.get("game_hour") != 11 or clock.get("game_second") != 0 or clock.get("game_minute") not in U1_RETRY_MINUTES:
+        raise ValueError("U1 clock is outside the prescribed attempt schedule")
+    return {"u1_attempt": U1_RETRY_MINUTES.index(clock["game_minute"]) + 1, "clock_setup": clock}
+
+
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
 # Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
 # parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361). This is the
@@ -97,6 +127,10 @@ POISON_HEAL = dict.fromkeys(("crystal", "gold", "silver"), ("CherrygroveCity", "
 # pair on the FAR side of the 60-wide map (x=4) and the long walk back there crossed enough Route 29 grass to
 # trigger a wild encounter mid-tick (fsw-postrc-psn2: "a battle started on the park tiles"); both re-asserted
 # floor at runtime below like every other title's pair.
+# Titles whose U1 poison leg boots a disclosed SYNTH poisoned lead (tools/gen2_synth_fixtures.py PSN_FIXTURES) instead
+# of hunting a poisoner: Gold (its Wade fight is a deterministic loss) and Crystal (its Weedle hunt is a lottery).
+# Silver still hunts. Both catch on the SAME Route 29 patch (xy 52-53,12), so the park pair below serves both.
+SYNTH_PSN_FIXTURE = {"gold": "gold_synth_psn", "crystal": "crystal_synth_psn_u1"}
 SYNTH_PSN_HUNT = "Route29"
 SYNTH_PSN_PARK = ({"x": 53, "y": 11}, {"x": 52, "y": 11})
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
@@ -331,8 +365,8 @@ def poison_facts(ctx, *, synth_psn=False) -> dict:
     boot fixture is already poisoned; card gen2-u1e-poison, regression fix re-sweep 7ba4d552)."""
     title = ctx.title
     if synth_psn:
-        if title != "gold":
-            raise ValueError("synth_psn facts are Gold-only (gold_synth_psn)")
+        if title not in SYNTH_PSN_FIXTURE:
+            raise ValueError(f"synth_psn facts are Gold/Crystal-only ({sorted(SYNTH_PSN_FIXTURE.values())})")
         route, hunt_name, park, heal, trainer = (), SYNTH_PSN_HUNT, SYNTH_PSN_PARK, None, None
     else:
         route, hunt_name, park = POISON_ROUTE[title], POISON_HUNT[title], POISON_PARK[title]
@@ -470,9 +504,58 @@ def tag_json(text: str, tag: str):
     return live.tag_json(text, tag)
 
 
-def verify(text: str, pack: dict, title: str) -> dict:
-    """Independent re-check of the gate output; returns the receipt the gate printed."""
-    sites = pack["titles"][title]["sites"]
+def parse_poison_hunt(text: str) -> dict | None:
+    """Read diagnostic evidence on PASS or FAIL; older logs have neither marker.
+
+    A mismatch count remains visible rather than being reinterpreted as bad luck.
+    These observations are not a substitute for the poison_faint site proof.
+    """
+    encounters = [json.loads(line.removeprefix("POISON_ENCOUNTER ")) for line in text.splitlines()
+                  if line.startswith("POISON_ENCOUNTER ")]
+    summaries = [json.loads(line.removeprefix("POISON_HUNT ")) for line in text.splitlines()
+                 if line.startswith("POISON_HUNT ")]
+    if not summaries and not encounters:
+        return None
+    if len(summaries) != 1 or not isinstance(summaries[0], dict):
+        raise ValueError("poison hunt needs exactly one summary")
+    summary = summaries[0]
+    fields = ("encounters", "candidates", "unreadable", "foe_sting_mismatches")
+    if summary.get("schema") != "gen2-poison-hunt-summary-v1" or any(
+            type(summary.get(key)) is not int or summary[key] < 0 for key in fields):
+        raise ValueError("poison hunt summary malformed")
+    counts = dict.fromkeys(fields, 0)
+    for index, row in enumerate(encounters, 1):
+        if (not isinstance(row, dict) or row.get("schema") != "gen2-poison-hunt-encounter-v1"
+                or type(row.get("encounter")) is not int or row["encounter"] != index
+                or any(type(row.get(key)) is not bool for key in ("readable", "candidate", "foe_sting"))):
+            raise ValueError("poison hunt encounter malformed or out of order")
+        moves = row.get("moves")
+        if (not isinstance(moves, list) or any(type(move) is not int or not 0 <= move <= 255 for move in moves)
+                or type(row.get("species_id")) is not int or type(row.get("level")) is not int):
+            raise ValueError("poison hunt foe data malformed")
+        if row["readable"]:
+            if len(moves) != 4 or not 1 <= row["species_id"] <= 251 or not 1 <= row["level"] <= 100:
+                raise ValueError("poison hunt foe data outside Gen 2 bounds")
+        elif moves or row["species_id"] != 0 or row["level"] != 0:
+            raise ValueError("unreadable poison hunt foe carries invented data")
+        candidate = row["readable"] and 0x28 in moves  # POISON_STING, pinned GSC move constant
+        if row["candidate"] != candidate:
+            raise ValueError("poison hunt candidate disagrees with raw move IDs")
+        counts["encounters"] += 1
+        counts["candidates"] += candidate
+        counts["unreadable"] += not row["readable"]
+        counts["foe_sting_mismatches"] += row["readable"] and candidate != row["foe_sting"]
+    if any(summary[key] != counts[key] for key in fields):
+        raise ValueError("poison hunt summary disagrees with encounter records")
+    return summary
+
+
+def verify(text: str, pack: dict, title: str, identity: dict | None = None) -> dict:
+    """Independent re-check of the gate output; returns the receipt the gate printed.
+
+    identity: run_gb_gate.artifact_identity of the staged artifact; None is the clean pack exactly as before."""
+    overlay = identity is not None and identity["kind"] == "overlay"
+    sites = gen2_fixtures.exec_sites(title, "overlay", REPO) if overlay else pack["titles"][title]["sites"]
     expect = expect_for(title)
     summary = tag_json(text, "HIT_SUMMARY")
     for name, row in summary.items():
@@ -508,8 +591,11 @@ def verify(text: str, pack: dict, title: str) -> dict:
     receipt = tag_json(text, "RECEIPT")
     assert receipt["title"] == title and receipt["fixture"] == U1_FIXTURE[title], receipt
     source = pack["source"]
-    assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
-        source["rom_sha1"], source["commit"], pack["specs_sha256"])
+    assert (receipt["pack_commit"], receipt["pack_specs_sha256"]) == (source["commit"], pack["specs_sha256"])
+    if overlay:   # the overlay's own sha1 and sidecar, equal to the HASHED staged artifact (never the clean pack's)
+        gen2_fixtures.check_run_identity(receipt, identity)
+    else:
+        assert receipt["rom_sha1"] == source["rom_sha1"] and "artifact_kind" not in receipt
     assert sorted(receipt["proven"]) == sorted(expect) and receipt["harness_write_scopes"] == []
     assert receipt["evidence_level"] == "PHYSICAL" and receipt["decoy"]["bank_rejects"] == receipt["decoy"]["raw"]
     # the gate emits effect_to_callback_frames in the receipt, not on the ALIGN line (first live PASS 2026-09-23)
@@ -528,7 +614,9 @@ def verify(text: str, pack: dict, title: str) -> dict:
         assert w["callback"] == w["armed"] and w["de"] == 27 and w["party_hp"] and not any(w["party_hp"]), w
         assert w["healed_frame"] >= w["callback"], w
         faints = [hit["seq"] for hit in summary["battle_faint"]["log"]]
-        assert w["seq"] > max(faints), (w, faints)
+        # the CLOSING faint is the last one before the whiteout; a later leg (the evolution grind) may faint
+        # again after it (round-2 Gold: faints [9, 72] around whiteout 12), so never compare to max(faints)
+        assert any(seq < w["seq"] for seq in faints), (w, faints)
         captures = [hit["seq"] for hit in summary["capture_party"]["log"]]
         assert captures[0] < w["seq"] < captures[1] < summary["pc_deposit_begin"]["log"][0]["seq"], (captures, w)
         counts = {}
@@ -565,12 +653,16 @@ def verify(text: str, pack: dict, title: str) -> dict:
         assert (e["kind"], e["cause"], e["site_id"]) == ("faint", "poison", "poison_faint"), e
         assert (e["slot"], e["species"], e["dvs"]) == (p["slot"], p["species"], p["dvs"]), (e, p)
         assert {k: v for k, v in receipt["poison_alignment"].items() if k in p} == p, receipt["poison_alignment"]
+    hunt = parse_poison_hunt(text)
+    if hunt is not None:
+        receipt["poison_hunt"] = hunt
     return receipt
 
 
 @pytest.mark.parametrize("title", TITLES)
 def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     spec = gen2_fixtures.BY_NAME[U1_FIXTURE[title]]
+    kind = live.KIND
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
     if reason:
@@ -580,37 +672,40 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)   # the staged bytes are the qualified candidate
-    ctx = gen2_source_data.load_context(spec.title, root=REPO)
+    ctx = gen2_fixtures.exec_context(spec.title, kind, REPO)   # overlay-resolved symbols/bytes on an overlay run
     env = live.inspect_env(spec, staged)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
-                                                     qualification["attempt_id"], synth_psn=title == "gold"))
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind=kind),
+                                                     qualification["attempt_id"], synth_psn=title in SYNTH_PSN_FIXTURE))
     source_path, clock, psn_setup = fixture, None, None
     boot = staged
-    if title == "gold":
-        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (a benched Sentret appended at
-        # PSN+12/18HP) instead of the played gold_battle_errand bytes; `staged`/`fixture` above stay the PLAYED
-        # base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
-        boot, psn_setup = gen2_synth_fixtures.build_named("gold_synth_psn", root=REPO)
+    if title in SYNTH_PSN_FIXTURE:
+        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (the lead poisoned at 8 HP, 5 Master
+        # Balls) instead of the played bytes; `staged`/`fixture` above stay the PLAYED base for
+        # qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
+        boot, psn_setup = gen2_synth_fixtures.build_named(SYNTH_PSN_FIXTURE[title], root=REPO)
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-        boot, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()), title=title)
+        boot, clock = u1_clock_setup(boot, title, now=int(time.time()))
     if boot != staged:
-        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}-boot.SaveRAM"
+        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}{'-overlay' if kind == 'overlay' else ''}-boot.SaveRAM"
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_bytes(boot)
-    passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
+    passed, path, text = run_gate(GATE, rom_key=live.rom_key(spec.title), target=spec.target,
                                   timeout=7200 if title in EVOLUTION_TITLES else 3600 if title in POISON_TITLES else 1200,
-                                  saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
+                                  saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof"
+                                                  / (f"{spec.name}-overlay" if kind == "overlay" else spec.name)),
                                   fixture_path=str(source_path), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
 
     pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
-    receipt = verify(text, pack, title)
+    receipt = verify(text, pack, title, live.identity(title))
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     if clock is not None:
-        receipt["clock_setup"] = clock
+        receipt.update(u1_receipt_metadata(clock))
     if psn_setup is not None:
         receipt["poison_setup"] = psn_setup
-    (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = live.receipt_file(f"{title}.engine_sites.json")   # overlay: receipts/overlay/, never a clean path
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

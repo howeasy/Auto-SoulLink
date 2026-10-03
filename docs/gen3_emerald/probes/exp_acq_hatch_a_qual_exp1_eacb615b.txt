@@ -1,0 +1,16 @@
+SEED-PENDING: changed EXP1 recipe; native CONTINUE/SAVE only; R4 hatch not exercised; tile/facing SOURCE/MODEL
+SYNTH_QUALIFY case=hatch side=a run=C:\slink-wt\exp-xg3\patch\build\gen3_fixture_runs\exp_acquisition_hatch_a_35c4d53b seed_sha256=059983904583dea48623e062fd13458689524f3067d79d2d4f93885ef98553c0
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_pokeemerald.gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=14.7 pos=(3,5)  (4s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=513 map=14.7 pos=(3,5)
+phase field frame=596 map=14.7 pos=(3,5) saveFileStatus=1
+phase save-menu frame=596 counter=2
+phase save-dialog frame=656 row=3/6
+phase saved frame=1183 counter=2->3
+phase flushed frame=1603 map=14.7 pos=(3,5)
+RESULT: PASS counter 2 -> 3 map=14.7 pos=(3,5)
+SYNTH_QUALIFY PASS case=hatch side=a counter=2->3 file=tests/fixtures/gen3/exp_hatch_synth.sav sha256=8e70297f326859746be19723757312dd8544431beba2d33c17a1fafe2a0c75ad acquisition_pending=true
+
+exit=0

@@ -1,0 +1,12 @@
+# gen3_final_cut row=frlgc_source_emerald item=FRLGC-SOURCE cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_final_cut.py companion-check --lane F:/slink-work/lanes/gen3/gen3-lane-clean --title emerald   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:46:25 cpu=30% emuhawk=1 python=7
+start_utc=2026-10-03T07:46:24Z tracked_clean_before=True
+emerald: SLink-Emerald.ups on the clean dump (f3ae088181bf) == patch/build/slink_Emerald.gba sha1 f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b md5 c3e65a0c553f13b6e2030f459d14313b
+RESULT: PASS emerald staged companion is the pinned composition
+exit=0 end_utc=2026-10-03T07:46:27Z tracked_clean_after=True classification=pass

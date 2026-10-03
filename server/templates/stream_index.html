@@ -324,6 +324,8 @@
       color: var(--c-link);
       border-color: var(--c-link);
     }
+    .copy-msg { font-size: var(--fs-sm); color: var(--c-dim); white-space: nowrap; }
+    .copy-msg:empty { display: none; }
     .copy-btn:hover { background: color-mix(in srgb, var(--c-link) 22%, transparent); }
     .open-btn {
       background: color-mix(in srgb, var(--c-alive) 12%, transparent);
@@ -532,8 +534,9 @@
       <div class="size-hint" x-text="current.sizes.join('   |   ')"></div>
 
       <div class="url-row">
-        <span class="url-box" x-text="previewUrl()" :class="{copied: justCopied}"></span>
+        <span class="url-box" x-ref="urlBox" x-text="previewUrl()" :class="{copied: justCopied}"></span>
         <button class="copy-btn" @click="copy()">Copy</button>
+        <span class="copy-msg" role="status" x-text="copyMsg"></span>
         <a class="open-btn" :href="previewUrl()" target="_blank" rel="noopener">Open ↗</a>
       </div>
 
@@ -543,6 +546,7 @@
           <span class="cfg-lbl" style="padding-top:6px">Set attempts</span>
           <input type="number" min="0" x-model.number="attemptsValue">
           <button class="copy-btn" @click="setAttempts()">Set</button>
+          <span class="copy-msg" role="status" x-text="attemptsMsg"></span>
         </div>
       </template>
     </div>
@@ -576,6 +580,8 @@ function overlayLauncher() {
     params: { theme: 'transparent', layout: '', speed: '1', pause: '2' },
     activeFilters: new Set(),
     justCopied: false,
+    copyMsg: '',
+    attemptsMsg: '',
     attemptsValue: 0,
     // Rail collapse state persists in localStorage so the choice survives
     // page refresh + navigation between the manager + per-run server's
@@ -646,12 +652,36 @@ function overlayLauncher() {
       return '/stream/' + cur.slug + (q.length ? '?' + q.join('&') : '');
     },
 
+    // navigator.clipboard exists only on a secure origin (https, localhost); the Manager on
+    // http://<lan-ip>:8090 has none. Fall back to execCommand on a hidden textarea, and if
+    // that is refused too, select the URL in the box and ask for Ctrl+C.
     copy() {
       var url = window.location.origin + this.previewUrl();
-      navigator.clipboard.writeText(url).then(() => {
-        this.justCopied = true;
-        setTimeout(() => { this.justCopied = false; }, 1400);
-      });
+      var done = (msg) => {
+        this.copyMsg = msg;
+        this.justCopied = msg === 'Copied';
+        clearTimeout(this._copyTimer);
+        this._copyTimer = setTimeout(() => { this.copyMsg = ''; this.justCopied = false; }, 2400);
+      };
+      var fallback = () => {
+        var ta = document.createElement('textarea');
+        ta.value = url;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+        ta.remove();
+        if (ok) { done('Copied'); return; }
+        try { window.getSelection().selectAllChildren(this.$refs.urlBox); } catch (_) {}
+        done('Press Ctrl+C');
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(url).then(() => done('Copied'), fallback);
+      } else {
+        fallback();
+      }
     },
 
     fetchAttempts() {
@@ -662,11 +692,18 @@ function overlayLauncher() {
 
     setAttempts() {
       var val = parseInt(this.attemptsValue, 10);
-      if (isNaN(val) || val < 0) return;
+      if (isNaN(val) || val < 0) { this.attemptsMsg = 'Enter a whole number, 0 or more'; return; }
+      this.attemptsMsg = 'Saving…';
       fetch('/api/attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: val }),
+      }).then(r => r.json().catch(() => ({})).then(d => {
+        if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        this.attemptsMsg = 'Saved: attempt #' + d.attempts_count;
+      })).catch(e => {
+        // proxy_failed / No active run come from the Manager when no run answers
+        this.attemptsMsg = 'Not saved: ' + (e.message === 'proxy_failed' ? 'the run did not answer' : e.message);
       });
     },
   };

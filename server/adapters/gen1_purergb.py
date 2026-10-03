@@ -31,7 +31,7 @@ from pathlib import Path
 from server.pokemon_data import species_name as national_species_name
 
 from . import gen1_codec
-from .base import humanize_area_id
+from .base import companion_required_reason, humanize_area_id
 from .gen1_rby import _GIFT_MAP_ID, Gen1Adapter
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_purergb"
@@ -78,6 +78,15 @@ def _display_case(name: str) -> str:
 
 class Gen1PureRGBAdapter(Gen1Adapter):
     """One per-player view of a pureRGB cartridge (PureRed/PureBlue/PureGreen)."""
+
+    @staticmethod
+    def companion_refusal(hello):
+        # Owner 2026-10-02: every pureRGB title requires the companion; the overlay builds
+        # declare artifact_kind overlay / rand_overlay, a clean or rand pure build is refused.
+        rom_type = hello.get("rom_type")
+        if rom_type in _ROM_VARIANT and hello.get("artifact_kind") not in ("overlay", "rand_overlay"):
+            return companion_required_reason(rom_type)
+        return None
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

@@ -35,16 +35,9 @@
 <p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>
 <p class="mk-cap">The run starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion overlay</b>, the same cartridge with the companion already linked in. Anything already modified is listed but greyed. Each player then downloads the cartridge the run made from the board or the Launchers menu.</p>
 
-<div class="mk-optgrid">
-  <label class="mk-opt described" :class="!companionOk().ok ? 'off-unavailable' : (rdraft.companion ? 'on' : '')">
-    <input type="checkbox" x-model="rdraft.companion" :disabled="!companionOk().ok">
-    <span class="mk-opt-txt">
-      <span class="mk-opt-name">SLink companion</span>
-      <span class="mk-opt-desc">The native Cable Club trade, the START-menu SLINK panel and the native notification sounds, patched into each cartridge (a pureRGB pick becomes its companion overlay). Optional: without it the Lua HUD does the same job on screen, silently.</span>
-      <span class="mk-opt-why" x-show="!companionOk().ok" x-text="companionOk().why"></span>
-    </span>
-  </label>
-</div>
+{# Patch-first: the companion is not a choice. It goes into every cartridge that has one;
+   only a title without a build (Yellow) is handed out as picked, and says why. #}
+<p class="mk-cap"><b>SLink companion</b> — the native Cable Club trade, the START-menu SLINK panel and the native notification sounds are patched into each cartridge (a pureRGB pick becomes its companion overlay). Required: a clean cartridge is refused at launch, except Yellow, Archipelago builds and the Emerald Expansion, which go out as picked.<span x-show="!companionOk().ok"> <span x-text="companionOk().why"></span></span></p>
 
 <div class="mk-preview-rules">
   {# the picks, as the list describes them (pinned is pinned whatever the jar) #}

@@ -167,8 +167,32 @@ class Refused(Exception):
     """Entry.build refused the production graph (the Lua reason is the message)."""
 
 
+
+# Patch-first (owner 2026-10-02): the SLink companion is REQUIRED for every Gen 2 title, so
+# lua/gen2/entry.lua's `eligible` refuses a CLEAN row ("needs the SLink companion patch") and the
+# production graph composes only an ACTIVATED overlay row. Until tools/gen_gen2_admission.py
+# --promote-overlays lands such a row there is NO legal production cartridge for Gen 2 at all, so
+# these tests read the shipped catalog row itself instead of pinning the CLEAN fixture the owner
+# ruled out. The skip is a dependency signal, never a green: it names itself and clears itself.
+def overlay_row(title):
+    rows = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text(encoding="utf-8"))["artifacts"]
+    return next(r for r in rows if r["kind"] == "overlay")
+
+
+def overlay_admitted(title):
+    row = overlay_row(title)
+    return (row.get("status") == "ADMITTED" and row.get("selection") == "SELECTED"
+            and (row.get("runtime_gate") or {}).get("state") == "ADMITTED")
+
+
+NEEDS_OVERLAY = pytest.mark.skipif(
+    not all(overlay_admitted(t) for t in ("crystal", "gold", "silver")),
+    reason="no ADMITTED Gen 2 overlay row yet: the launcher refuses every Gen 2 cartridge "
+           "(clean needs the SLink companion; the overlay row is still BUILT/FUTURE) -- "
+           "production-graph coverage returns when the overlay rows are promoted")
+
 class World:
-    def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None):
+    def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None, clean=False):
         self.title = title
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         if swaps:
@@ -181,6 +205,13 @@ class World:
         self.points = {n: pt for s in self.sites.values() for n, pt in s["point_symbols"].items()}
         repo = "pokecrystal" if title == "crystal" else "pokegold"
         rom = (ROOT / f".cache/gen2-build/{repo}/{self.profile['artifact']}.gbc").read_bytes()
+        if production and not clean:
+            # Patch-first: the only legal production cartridge is the overlay, i.e. the clean build
+            # with the shipped UPS applied (its sha1 is the ADMITTED overlay row's).
+            from patch.tools.make_ups import ups_apply
+            rows = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
+            ups = next(r for r in rows if r["kind"] == "overlay")["ups"]["file"]
+            rom = ups_apply(rom, (ROOT / ups).read_bytes())
         self.emu, self.io, self.net, self.hud, self.logs, log = self.lua.execute(EMULATOR)(
             rom, self.profile["ram"]["hROMBank"])
         self.checkpoint_ok = False
@@ -1275,6 +1306,7 @@ def falsify_production(check, swaps):
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@NEEDS_OVERLAY
 def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title):
     world = production(title)
     parts = world.parts
@@ -1295,6 +1327,7 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     assert world.emu.callbacks["SLink-gen2-checkpoint"] is None
 
 
+@NEEDS_OVERLAY
 def test_production_no_hello_before_an_accepted_checkpoint_hold():
     def check(world):
         world.frames(120)
@@ -1310,6 +1343,7 @@ def test_production_no_hello_before_an_accepted_checkpoint_hold():
         "if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then", "if false then")))
 
 
+@NEEDS_OVERLAY
 def test_production_refuses_an_unarmed_or_unheld_write():
     def check(world):
         attempt = world.lua.eval("""function(w, arm) return pcall(function()
@@ -1326,6 +1360,7 @@ def test_production_refuses_an_unarmed_or_unheld_write():
         "return kind ~= nil and checkpoint:check(kind) == true", "return true")))
 
 
+@NEEDS_OVERLAY
 def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
     world = production()
     bench = mon(species=172, dvs=0x3AAA)
@@ -1355,6 +1390,7 @@ def production_battle_hold(world, caller=True):
     return hit
 
 
+@NEEDS_OVERLAY
 def test_production_active_death_lands_only_inside_the_battle_hold():
     """O-30: behind the PHYSICAL battle_faint receipt the production graph hooks the battle hold; the write lands
     only when the held evaluation accepts it (here: the StartBattle caller word), never elsewhere in battle."""
@@ -1377,6 +1413,7 @@ def test_production_active_death_lands_only_inside_the_battle_hold():
     assert "show:!! PIKA KO'd" in world.shown()
 
 
+@NEEDS_OVERLAY
 def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
     world = production()
     lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
@@ -1395,13 +1432,14 @@ def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
     assert receipts == {"lua/gen2/entry.lua production"}
 
 
+@NEEDS_OVERLAY
 def test_production_refuses_what_the_receipts_do_not_cover():
     """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
     command NACKs at the hold with the missing kind, and no byte moves."""
-    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/crystal.write_window.json").read_text())
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/overlay/crystal.write_window.json").read_text())
     for mode in ("boxes", "boxes_reset", "boxes_reload", "battle_faint", "battle_bench"):
         del receipt["runs"][mode]
-    world = production(files={"/receipts/crystal.write_window.json": json.dumps(receipt)})
+    world = production(files={"/receipts/overlay/crystal.write_window.json": json.dumps(receipt)})
     active = mon()
     world.party([active, mon(species=172, dvs=0x3AAA)])
     world.hello()
@@ -1418,6 +1456,7 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     assert any(text.startswith("show:KO held") for text in world.shown()) and world.written() == []
 
 
+@NEEDS_OVERLAY
 def test_production_key_agrees_with_the_python_codec_on_the_same_record():
     def check(world):
         starter, caught = mon(species=155, ot=0x0BCD, dvs=0xFEDC), mon(species=19, ot=0x0BCD, dvs=0x1357)
@@ -1441,9 +1480,10 @@ def test_production_key_agrees_with_the_python_codec_on_the_same_record():
     ("gold", "gold.engine_sites.json", "silver.engine_sites.json"),
     ("crystal", "crystal.write_window.json", "gold.write_window.json"),  # only Silver follows Gold's U2
 ])
+@NEEDS_OVERLAY
 def test_each_title_admits_only_with_its_own_receipts(title, name, other):
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
-        production(title, files={f"/receipts/{name}": (RECEIPTS / other).read_text()})
+        production(title, files={f"/receipts/overlay/{name}": (RECEIPTS / "overlay" / other).read_text()})
 
 
 @pytest.mark.parametrize("name,path,value", [
@@ -1452,14 +1492,29 @@ def test_each_title_admits_only_with_its_own_receipts(title, name, other):
     ("crystal.write_window.json", ("runs", "town", "evidence_level"), "MODEL"),
     ("crystal_battle.qualification.json", ("fixtures", 0, "artifacts", "fixture", "sha256"), "0" * 64),
 ])
+@NEEDS_OVERLAY
 def test_a_forged_or_model_receipt_refuses_production(name, path, value):
-    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts" / name).read_text())
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/overlay" / name).read_text())
     node = receipt
     for key in path[:-1]:
         node = node[key]
     node[path[-1]] = value
     with pytest.raises(Refused, match="PHYSICAL proof refused"):
-        production(files={f"/receipts/{name}": json.dumps(receipt)})
+        production(files={f"/receipts/overlay/{name}": json.dumps(receipt)})
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_clean_gen2_cartridge_composes_no_client_and_says_why_it_needs_the_companion(title):
+    """Patch-first (owner 2026-10-02): the companion overlay is REQUIRED for every Gen 2 title,
+    so lua/gen2/entry.lua refuses the shipped clean build BEFORE it composes anything. This is the
+    replacement for the production tests above, which used to run on exactly this cartridge: the
+    rule they can no longer exercise is stated here, and they wait (NEEDS_OVERLAY) for a legal
+    overlay row rather than pinning the clean one."""
+    with pytest.raises(Refused) as caught:
+        World(title, production=True, clean=True)
+    reason = str(caught.value)
+    assert f"this {title} cartridge needs the SLink companion patch" in reason
+    assert "Manager or /patcher" in reason
 
 
 RUN_HOST = r"""
@@ -1493,7 +1548,9 @@ end
                                             ("crystal", "pokecrystal11")])
 def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(title, artifact):
     """The H1 duo driver's contract: SLINK_GEN2_CLIENT / SLINK_GEN2_PARTS (production_admitted),
-    the client's own onframeend tick; nil for a refused cartridge (Crystal 1.1 is BUILD_ONLY)."""
+    the client's own onframeend tick; nil for a refused cartridge. Patch-first (owner 2026-10-02)
+    moved BOTH refusals onto the launcher: a clean cartridge (the release build, `artifact` None)
+    now needs the SLink companion, and Crystal 1.1 stays refused as BUILD_ONLY."""
     profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
     repo = "pokecrystal" if title == "crystal" else "pokegold"
     rom = (ROOT / f".cache/gen2-build/{repo}/{artifact or profile['artifact']}.gbc").read_bytes()
@@ -1501,15 +1558,14 @@ def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(ti
     logs = lua.table()
     frames, callbacks = lua.execute(RUN_HOST)(rom, ROOT.as_posix(), logs)
     g = lua.globals()
+    assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
+    refusals = [line for line in logs.values() if "refused" in line]
+    assert refusals, dict(logs)
     if artifact is None:
-        assert g.SLINK_GEN2_PARTS.production_admitted is True
-        assert g.SLINK_GEN2_PARTS.qualification == "PHYSICAL_RECEIPTED" and g.SLINK_GEN2_PARTS.title == title
-        assert lua.eval("rawequal")(g.SLINK_GEN2_PARTS.client, g.SLINK_GEN2_CLIENT) and len(frames) == 1
-        assert callbacks["SLink-gen2-checkpoint"] == CHECKPOINT[title]["primary"]["execution_before"]["pc"]
-        assert any("PRODUCTION" in line for line in logs.values())
+        # the clean release build: refused for want of the companion, by name
+        assert f"this {title} cartridge" in refusals[0] and "needs the SLink companion patch" in refusals[0]
     else:
-        assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
-        assert any("refused" in line and "BUILD_ONLY" in line for line in logs.values())
+        assert "BUILD_ONLY" in refusals[0]
 
 
 # ── card BOX: box_mon / party_mon / memorialize through the composed executor (MODEL candidate) ───────
@@ -1576,6 +1632,106 @@ def test_memorialize_moves_the_mon_into_box_14_and_acks_with_the_box():
     (done,) = world.sent("memorialize_done")
     assert done["key"] == codec_key(dead) and done["box"] == 13
     assert storage(world, 13)[0:3] == [1, 19, 255] and party_count(world) == 1
+
+
+def test_a_repeated_memorialize_while_the_burial_waits_for_the_save_never_acks_early():
+    """Final sweep ffd54b44 (gen2_pc_ops, both pairs): the dead partner sat in the ACTIVE box, so its removal is
+    volatile until a native save (BOX-MEMORIAL-2) and the first memorialize parks a settle. The server RE-SENT the
+    command while the player had not saved yet; the duplicate found the memorial copy and no source, which the box
+    executor reports as a plain done, so the client acked memorialize_done three times BEFORE the save. The ack must
+    wait for the save and be sent exactly once."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [dead])                          # the dead mon is in the active (current) box
+    world.checkpoint_ok = True
+    for _ in range(4):                                         # the server's retries before the player saves
+        world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+        world.frames(3)
+    assert world.sent("memorialize_done") == [], "acked before the native save made the removal durable"
+    assert world.sent("memorialize_failed") == []
+    world.fire("save_completed")
+    world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and done["box"] == 13
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})  # a retry AFTER the settle is harmless and idempotent
+    world.frames(3)
+    assert len(world.sent("memorialize_done")) == 2   # re-acked on request (the lone durable copy is done)
+
+
+def test_a_repeated_memorialize_also_matches_its_waiting_burial_by_the_servers_own_key():
+    """Review M1 of c8db5a92: `phys` is re-derived per command (retired_alias), the waiting settle is parked under the
+    physical key. If the alias is reset while the burial waits (a boundary resets it), the duplicate resolves to the
+    server's OLD key, misses a phys-only guard, and the box executor refuses it ('key not in party or boxes'):
+    memorialize_failed, which the server treats as done, so the same non-durable finalization returns through the
+    failure branch."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    old = "BEEF:0001:07"                                           # the key the server tracks (stale)
+    world = box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.client.retired_alias[old] = codec_key(dead)
+    world.reply({"cmd": "memorialize", "key": old})
+    world.frames(3)
+    world.client.retired_alias[old] = None                         # the alias is gone, the settle still waits
+    world.reply({"cmd": "memorialize", "key": old})
+    world.frames(3)
+    assert world.sent("memorialize_failed") == [] and world.sent("memorialize_done") == []
+    world.fire("save_completed")
+    world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == old and done["box"] == 13
+
+
+def test_a_repeated_party_mon_inside_the_deferred_backing_window_never_deletes_the_durable_box_copy():
+    """Review M2 of c8db5a92: a duplicate party_mon while the withdraw's backing removal waits for the save passed the
+    box executor's same() check and committed plan_withdraw, deleting the DURABLE box copy before the save persisted the
+    party; a reset in that window loses the mon. Every command is still acked (the mon IS in the party)."""
+    lead, boxed = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead])
+    flat = world.profile["storage_boxes"][4]["flat"]
+    world.emu.poke("CartRAM", flat, world.lua.table_from(list(collection([boxed], 20, 32))))
+    world.checkpoint_ok = True
+    for _ in range(3):
+        world.reply({"cmd": "party_mon", "key": codec_key(boxed)})
+        world.frames(3)
+    assert storage(world, 4)[0] == 1, "the durable box copy must stay until the native save"
+    assert party_count(world) == 2
+    assert [m["key"] for m in world.sent("sync_retrieve_done")] == [codec_key(boxed)] * 3
+    world.fire("save_completed")
+    world.frames(3)
+    assert storage(world, 4)[0] == 0 and party_count(world) == 2
+
+
+def test_a_parked_burial_with_no_save_stays_visible_and_never_acks_however_long_it_waits():
+    """Review m2: the policy is pinned: MAX_PENDING_FRAMES bounds faint latches, not a burial; it waits for the save."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(3)
+    world.frames(1300)                                             # more than 2 x Client.MAX_PENDING_FRAMES (600)
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    assert world.sent("tick")[-1].get("awaiting_save") is True
+
+
+def test_a_repeated_memorialize_with_the_memorial_box_active_also_acks_exactly_once_after_the_save():
+    """Review m3: the other half of BOX-MEMORIAL-2: the memorial copy lands in the ACTIVE box 14 (current box 13), so
+    its durable source waits for the save; duplicates before the save must stay silent and one ack follows."""
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead])
+    flat = world.profile["storage_boxes"][4]["flat"]
+    world.emu.poke("CartRAM", flat, world.lua.table_from(list(collection([dead], 20, 32))))
+    world.field("wCurBox", 13)
+    world.checkpoint_ok = True
+    for _ in range(4):
+        world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+        world.frames(3)
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    world.fire("save_completed")
+    world.frames(6)
+    if not world.sent("memorialize_done"):                         # a second witness if the removal also waited
+        world.fire("save_completed")
+        world.frames(6)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and done["box"] == 13
 
 
 def test_memorialize_follows_the_dead_mon_through_its_evolution():
@@ -2306,3 +2462,23 @@ def test_a_refused_change_is_resent_after_a_newer_census_and_a_failed_scan_retri
     falsify(check, mutant("lua/gen2/client.lua", (
         "        if self.pending_rescan or (not self.box_complete and self.frame % Client.TICK_INTERVAL == 0) then\n",
         "        if self.pending_rescan then\n")))
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_real_gen2_binder_refusal_and_clobber_keep_pre_diff_result(title):
+    cart = TradeCart(title)
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    trade = cart.w.client.trade
+    assert trade.phase == "armed"
+    # Refusal before the native pickup label: no callback/ACK for these polls.
+    cart.w.frames(3)
+    assert trade.phase == "armed" and trade.poll_done(trade) is None
+    frame = cart.frame()
+    frame[0] = 0
+    cart.poke(cart.lease, frame)
+    assert trade.clobbered(trade) is True and trade.pickup_error is None
+    cart.w.frames(1)
+    assert nothing_changed(cart.w)
+    assert cart.w.client.trade_state is None

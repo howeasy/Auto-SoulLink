@@ -28,7 +28,8 @@ STRIDES = {"gTrainers": 40, "gWildMonHeaders": 20, "gEvolutionTable": 40,
            "gSpeciesInfo": 28, "gTrainerClassNames": 13}
 # the UPR-randomized FireRed/LeafGreen "_allowed" ROMs (made by the Manager/UPR pipeline); a stable,
 # session-independent location -- this used to be one Claude session's scratchpad path
-SCRATCH = Path(os.environ.get("SLINK_GEN3_UPR_SCRATCH", "C:/slink-wt/upr_scratch"))
+SCRATCH = Path(os.environ.get("SLINK_GEN3_UPR_SCRATCH")
+               or os.path.join(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work"), "cache", "rand_roms"))
 
 
 def symbols(title, rom_size):

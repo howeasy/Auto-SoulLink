@@ -1,0 +1,14 @@
+# G4 final cut f255136395a6b4613937e4f061e1bda901cc4615 -- tools/gen3_final_cut.py summary (written 2026-10-02T13:14:01Z)
+# RUN 7 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_static_gen3_exp_as_a_f2551363.txt |
+| 2 | exp_static_grass_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_grass_gen3_exp_as_a_f2551363.txt |
+| 3 | exp_static_fish_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_fish_gen3_exp_as_a_f2551363.txt |
+| 4 | gift_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_gift_gen3_exp_as_a_f2551363.txt |
+| 5 | gift_box_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_gift_box_gen3_exp_as_a_f2551363.txt |
+| 6 | linked_faint_active_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_linked_faint_active_gen3_exp_as_a_f2551363.txt |
+| 7 | release_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_release_gen3_exp_as_a_f2551363.txt |
+
+OVERALL: PASS (7/7 rows)

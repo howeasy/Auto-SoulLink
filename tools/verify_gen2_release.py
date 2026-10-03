@@ -5,6 +5,10 @@
 source/MODEL frontier; --lane runs only the named obligations. Neither is a release
 verdict.
 
+Owner 2026-10-02: the Gen 2 release is OVERLAY ONLY. Clean manifest rows/receipts
+remain history; no fresh clean gameplay proof or code stamp is required. Source
+builds and shared fixture/O-33 byte checks remain prerequisites.
+
 --fixtures (the fixtures lane, BINDING P3b.2) judges every Gen 2 fixture the release lanes reference,
 with no emulator. Each SaveRAM must pass the strict checksum witness and be either PLAYED or SYNTH.
 PLAYED means a sha256-pinned full-chain qualification receipt (GAME/PYDEC boot, re-save and reload
@@ -25,7 +29,7 @@ A missing pair, scenario, oracle or receipt is RED, never green. Enabling them r
 implementation and prerequisite/receipt contracts, not removing a missing-input check.
 
 --new-gates (a live-new-gates precondition) checks the committed U1 engine-site, U2 write-window
-(Silver via O-23) and fixture-qualification receipts of tests/gen2_live_gate_requirements.json against
+(each overlay has its own proof) and overlay fixture-qualification receipts against
 their pinned sha256 and their production Lua validators (reusing tests/unit/test_gen2_physical_receipts.py's
 `validate()`, never re-deriving PASS). It runs with no emulator; a gap there fails live-new-gates before
 the lane spawns EmuHawk. R-1/R-2/R-3/R-4/R-5g still need a fresh SLINK_LIVE=1 run of the live inspect
@@ -55,6 +59,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 _PY = sys.executable
 TITLES = ("crystal", "gold", "silver")
+# Owner 2026-10-02: these played fixtures underpin the overlay gates/duos.
+# Pin the census independently of the manifest so deleting a row cannot waive it.
+OVERLAY_QUALIFICATIONS = (
+    "crystal_town", "crystal_battle", "crystal_town_ot2", "crystal_battle_ot2",
+    "crystal_battle_errand", "crystal_battle_ot2_errand", "gold_town", "gold_battle",
+    "gold_battle_ot2", "gold_battle_errand", "silver_town", "silver_battle", "silver_battle_errand",
+)
 REQUIREMENT_IDS = (
     "F-1", "F-2", "F-3", "F-4", "F-5", "F-6", "F-7g",
     "R-1", "R-2", "R-3", "R-4", "R-5g",
@@ -164,8 +175,8 @@ LANES = [
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
          # a lane run re-proves; only the final sweep's gate/inspect_run cell writes the pinned attestation
          # (tests/live/conftest.py), else every lane run would unpin it
-         env={"SLINK_LIVE": "1", "SLINK_GEN2_NO_ATTEST": "1"},
-         why="PHYSICAL receipts: the U1 engine-site, U2 write-window (Silver via O-23) and fixture"
+         env={"SLINK_LIVE": "1", "SLINK_GEN2_NO_ATTEST": "1", "SLINK_GEN2_ARTIFACT": "overlay"},
+         why="PHYSICAL overlay receipts: U1 engine-site, per-title U2 write-window and fixture"
              " qualification rows of tests/gen2_live_gate_requirements.json are bound and pinned by"
              " sha256 (new_gates_errors, no emulator); a gap there fails the lane before it spawns"
              " EmuHawk. R-1/R-2/R-3/R-4/R-5g have no committed receipt and still need a fresh"
@@ -175,7 +186,7 @@ LANES = [
          why="PHYSICAL receipts (BINDING P4.3; T-1..T-4): every native trade case of TRADE_END_STATUS"
              " declared and receipted on C-C, G-S and C-G (owner O-34)"
              " in the release duo matrix, judged by the"
-             " HARNESS_ONLY_OVERLAY trade oracle against the published overlay; runner is"
+             " production overlay trade oracle against the published overlay; runner is"
              " tools/e2e_duo.py's gen2_trade_* cases (tests/e2e/test_duo_gen2_new.py)"),
     Lane("duo-link", [_PY, "tools/verify_gen2_release.py", "--duo-matrix"],
          why="PHYSICAL receipts: the C-C, G-S and C-G link matrix of tests/gen2_release_requirements.json;"
@@ -273,6 +284,37 @@ DUO_MATRIX = "tests/gen2_release_requirements.json"
 # from the JSON cannot shrink the matrix silently.
 DUO_PAIRS = (("crystal", "crystal"), ("crystal", "gold"), ("gold", "silver"))
 DUO_REQUIRED_SCENARIOS = frozenset({"link"})
+
+
+def _execution_identity(root, title, artifact="clean"):
+    if artifact not in ("clean", "overlay"):
+        raise ValueError("unknown Gen 2 artifact kind")
+    if artifact == "clean":
+        lock = json.loads((root / "data/gen2_sources.lock.json").read_text())["outputs"]
+        return {"kind": "clean", "rom_sha1": lock["poke" + title]["sha1"], "binding_sha256": None}
+    publication = json.loads((root / "data/gen2/overlay_provenance.json").read_text())
+    raw = (root / f"data/games/gen2_{title}/overlay/binding.json").read_bytes().replace(b"\r\n", b"\n")
+    binding = json.loads(raw)
+    sha = publication["outputs"]["poke" + title]["sha1"]
+    if binding.get("rom_sha1") != sha or binding.get("title") != title or binding.get("kind") != "overlay":
+        raise ValueError("overlay binding identity differs from publication")
+    return {"kind": "overlay", "rom_sha1": sha, "base_sha1": binding.get("base_sha1"),
+            "binding_sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def _overlay_startup_errors(lines, identity, title):
+    markers = [line.partition(" ")[2] for line in lines if line.startswith("CLIENT ")]
+    try:
+        client = json.loads(markers[0]) if len(markers) == 1 else {}
+        want = {"production_admitted": True, "qualification": "PHYSICAL_RECEIPTED",
+                "artifact_kind": "overlay", "rom_sha1": identity["rom_sha1"],
+                "binding_sha256": identity["binding_sha256"], "title": title}
+        if any(type(client.get(key)) is not type(value) or client.get(key) != value for key, value in want.items()):
+            return ["overlay production startup does not bind the executed artifact"]
+    except (ValueError, AttributeError):
+        return ["overlay production startup is missing or malformed"]
+    return []
+
 
 
 # Codex's H5 PYDEC format (review O16 F1): "PYDEC: PASS a=<key> b=<key> area=<id>
@@ -456,7 +498,11 @@ def _reconnect_receipt_errors(root: Path, proof: dict, axes: dict, lock: dict) -
                            else hashlib.sha256(seeds[phase]).hexdigest())
             head = one(lines, "DUO_GEN2")
             want = {"player": player, "scenario": "gen2_reconnect", "title": title, "case": case,
-                    "rom_sha1": lock[f"poke{title}"]["sha1"], "fixture_sha256": fingerprint}
+                    "rom_sha1": (_execution_identity(root, title, "overlay")["rom_sha1"] if axes.get("artifact_kind", "clean") == "overlay" else lock[f"poke{title}"]["sha1"]), "fixture_sha256": fingerprint}
+            if axes.get("artifact_kind", "clean") == "overlay":
+                identity = _execution_identity(root, title, "overlay")
+                want.update(artifact_kind="overlay", binding_sha256=identity["binding_sha256"])
+                need(not _overlay_startup_errors(lines, identity, title), f"{side}: overlay production startup differs")
             need(fingerprint and all(head.get(key) == value for key, value in want.items()),
                  f"{side}: header does not bind its fixture and ROM")
             verdicts = [line for line in lines if line.startswith("RESULT:")]
@@ -890,6 +936,8 @@ TRADE_MODEL_ONLY = {
         "tests/unit/test_gen2_trade_service.py::test_compiled_never_saved_responder_is_saved_then_trades",
     ),
 }
+# O-33 SYNTH poisoned-lead setups a U1 leg may disclose: (title, base fixture) -> tools/gen2_synth_fixtures.PSN_RECIPES key
+POISON_SETUP_RECIPE = {("gold", "gold_battle_errand"): "psn", ("crystal", "crystal_battle"): "psn_u1"}
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
 # O-33 (post-RC card TRADE-EVOLVE-CATCH): the only synthetic trade boot seed, gen2_trade_evolve's a (its errand base
 # with Master Balls, tools/gen2_synth_fixtures.TRADE_RECIPES; gen2_trade_oracles.SEEDED). axes.scenario_fixtures names it.
@@ -900,7 +948,7 @@ TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crys
 
 
 def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) -> list[str]:
-    """A HARNESS_ONLY_OVERLAY trade proof: the driver RECEIPTs and the PYDEC name this cell, its
+    """A production overlay trade proof: the driver RECEIPTs and the PYDEC name this cell, its
     errand fixtures, the CURRENT published overlay pins and the O-31 disclosure; never a clean-ROM PASS."""
     errors = []
     want_status = TRADE_END_STATUS[scenario]
@@ -950,16 +998,27 @@ def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) ->
         except ValueError:
             receipt = None
         pin = next((row for row in outputs.values() if row.get("slink_title") == titles[side]), {})
+        clients = [line[len("CLIENT "):] for line in lines if line.startswith("CLIENT ")]
+        try:
+            client = json.loads(clients[0]) if len(clients) == 1 else {}
+            identity = _execution_identity(root, titles[side], "overlay")
+            if (client.get("qualification") != "PHYSICAL_RECEIPTED" or client.get("production_admitted") is not True
+                    or client.get("artifact_kind") != "overlay" or client.get("rom_sha1") != identity["rom_sha1"]
+                    or client.get("binding_sha256") != identity["binding_sha256"]):
+                errors.append(f"{side}: trade has no unmodified production overlay startup")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"{side}: trade startup binding unavailable: {exc}")
         want = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
                 "variant": TRADE_VARIANTS.get((titles["a"], titles["b"])), "outcome": want_status,
-                "admission_scope": "HARNESS_ONLY_OVERLAY", "rom_sha1": pin.get("sha1"),
+                "admission_scope": "PHYSICAL_RECEIPTED",
                 "fixture_sha256": _fixture_sha256(root, fixtures.get(side, "")),
                 "harness_exception": "O-31" if scenario in TRADE_PLANTED and side == "a" else None}
+        accepted = _accepted_overlay_shas(pin)
         if (not isinstance(receipt, dict) or any(receipt.get(key) != value for key, value in want.items())
-                or want["rom_sha1"] is None or want["fixture_sha256"] is None):
-            errors.append(f"{side} trade RECEIPT does not name {want}")
+                or not accepted or receipt.get("rom_sha1") not in accepted or want["fixture_sha256"] is None):
+            errors.append(f"{side} trade RECEIPT does not name {want} with rom_sha1 in {sorted(accepted)}")
     tokens = _pydec_tokens(legs.get("pydec", [])) or {}
-    want = {"scenario": scenario, "admission_scope": "HARNESS_ONLY_OVERLAY",
+    want = {"scenario": scenario, "admission_scope": "PHYSICAL_RECEIPTED",
             "titles": f"{titles['a']}/{titles['b']}", "status": want_status}
     errors.extend(f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
                   for key, value in want.items() if tokens.get(key) != value)
@@ -1051,7 +1110,11 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             continue
         fixture, case, synth = _cell_fixture(root, axes, scenario, side)
         want = {"player": side, "scenario": scenario, "case": case, "title": title,
-                "rom_sha1": lock[lock_key].get("sha1"), "fixture_sha256": _fixture_sha256(root, fixture)}
+                "rom_sha1": (_execution_identity(root, title, "overlay")["rom_sha1"] if not refused and axes.get("artifact_kind", "clean") == "overlay" else lock[lock_key].get("sha1")), "fixture_sha256": _fixture_sha256(root, fixture)}
+        if not refused and axes.get("artifact_kind", "clean") == "overlay":
+            identity = _execution_identity(root, title, "overlay")
+            want.update(artifact_kind="overlay", binding_sha256=identity["binding_sha256"])
+            errors.extend(f"{side}: {error}" for error in _overlay_startup_errors(lines, identity, title))
         if refused:
             want = {"player": side, "scenario": scenario, "title": title,
                     "rom_sha1": lock[lock_key].get("sha1"), "expect_admission": "refused"}
@@ -1091,8 +1154,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
 
 
 def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | None = None,
-                      only: frozenset | None = None) -> list[str]:
-    """Every gap in the release duo matrix, one message per gap; [] only when fully receipted.
+                      only: frozenset | None = None, artifact_kind="overlay") -> list[str]:
+    """Every gap in the overlay release matrix; artifact_kind=None explicitly audits both histories.
 
     Registry side (tools/e2e_duo.py): every Gen 2 pairing is declared, every scenario it
     registers is in the matrix, and each has a post-result oracle under a require_oracle
@@ -1106,14 +1169,17 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
         import e2e_duo as duo
     doc = json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))
     lock = json.loads((root / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
-    rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"]
+    rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"
+            and (artifact_kind is None or (row.get("axes") or {}).get("artifact_kind", "clean") == artifact_kind)]
     errors = []
     # .get(): a malformed row (missing "axes"/"initiator"/etc.) surfaces as a pairs mismatch here,
     # never a crash -- the per-row loop below gives it its own dedicated "malformed row" message too.
-    pairs = sorted((((row.get("axes") or {}).get("initiator"), (row.get("axes") or {}).get("partner"))
+    pairs = sorted((((row.get("axes") or {}).get("artifact_kind", "clean"), (row.get("axes") or {}).get("initiator"), (row.get("axes") or {}).get("partner"))
                    for row in rows), key=str)  # str key: a malformed row's None must not crash the sort
-    if pairs != sorted(DUO_PAIRS):
-        errors.append(f"release matrix pairs {pairs} != required {sorted(DUO_PAIRS)}")
+    expected_pairs = sorted((kind, *pair) for kind in ((artifact_kind,) if artifact_kind else ("clean", "overlay"))
+                            for pair in DUO_PAIRS)
+    if pairs != expected_pairs:
+        errors.append(f"release matrix pairs {pairs} != required {expected_pairs}")
     declared = {row.get("axes", {}).get("pairing") for row in rows}
     errors.extend(f"{game}: Gen 2 duo pairing in tools/e2e_duo.py is not in the release matrix"
                   for game in duo.GAMES
@@ -1123,7 +1189,10 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
             rid, axes = row["id"], row["axes"]
             game, scenarios = axes["pairing"], axes.get("scenarios") or []
             pair = (axes.get("initiator"), axes.get("partner"))
-            need = DUO_REQUIRED_SCENARIOS | required.get(pair, frozenset())
+            artifact = axes.get("artifact_kind", "clean")
+            if artifact not in ("clean", "overlay"):
+                raise ValueError("unknown matrix artifact")
+            need = DUO_REQUIRED_SCENARIOS | required.get((artifact, *pair), required.get(pair, frozenset()) if artifact == "clean" else frozenset())
             missing_required = need - set(scenarios)
             model_only = sorted(set(scenarios) & set(TRADE_MODEL_ONLY))
             if model_only:
@@ -1135,6 +1204,10 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
                 errors.append(f"{rid}: pairing {game} is not a gen2_new row in tools/e2e_duo.py")
             else:
                 registered = duo.scenarios_for(game)
+                if artifact == "clean":
+                    registered = [name for name in registered if name not in TRADE_END_STATUS]
+                elif pair == ("crystal", "gold"):
+                    registered = [name for name in registered if name == "link" or name in TRADE_END_STATUS]
                 if duo.GAMES[game].get("fixture") != axes["fixtures"]:
                     errors.append(f"{rid}: tools/e2e_duo.py {game} fixtures "
                                   f"{duo.GAMES[game].get('fixture')} != matrix {axes['fixtures']}")
@@ -1184,7 +1257,7 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
                     continue
                 errors.extend(f"{cell}: {problem}"
                               for problem in _receipt_errors(root, proofs[name], name, axes, lock))
-        except (KeyError, TypeError, AttributeError) as exc:
+        except (KeyError, TypeError, AttributeError, ValueError, OSError) as exc:
             # F5 (review O16): a malformed row is its own red gap, never an uncaught crash that
             # takes the whole matrix (and every other row's real gaps) down with it.
             cell = row.get("id", "<row without id>") if isinstance(row, dict) else "<malformed row>"
@@ -1218,7 +1291,7 @@ def _new_gate_receipt(root: Path, entry: dict) -> tuple[dict | None, str | None]
     return json.loads(raw.decode("utf-8")), None
 
 
-def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[str]:
+def _qualification_row_errors(root: Path, fixture: str, receipt: dict, artifact_kind="clean") -> list[str]:
     """A committed *.qualification.json report: passed, and still binding the staged fixture's bytes.
 
     `physical_qualification` is never true on ANY qualification report by design (tools/gen2_fixtures.py
@@ -1231,6 +1304,15 @@ def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[s
     if not rows or rows[0].get("name") != fixture or not rows[0].get("passed"):
         errors.append(f"qualification report does not confirm {fixture} passed")
         return errors
+    if artifact_kind == "overlay":
+        provenance = rows[0].get("provenance") or {}
+        title = fixture.split("_")[0]
+        try:
+            identity = _execution_identity(root, title, artifact_kind)
+            if provenance.get("rom_sha1") != identity["rom_sha1"]:
+                errors.append("qualification belongs to another executed artifact")
+        except (OSError, ValueError, KeyError) as exc:
+            errors.append(f"overlay qualification binding unavailable: {exc}")
     saveram = root / "tests/fixtures/gen2" / f"{fixture}.SaveRAM"
     want = (rows[0].get("artifacts") or {}).get("fixture", {}).get("sha256")
     if not saveram.is_file():
@@ -1238,6 +1320,15 @@ def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[s
     elif want and hashlib.sha256(saveram.read_bytes()).hexdigest() != want:
         errors.append(f"{fixture}.SaveRAM does not match the bytes its qualification receipt covers")
     return errors
+
+
+def _accepted_overlay_shas(row: dict | None) -> set[str]:
+    """The exact overlay hashes a receipt may name for one published build: the published sha1 and every earlier exact hash
+    the builder proved version-equivalent (`equivalent_sha1s`: same canonical identity, patch/tools/rom_identity.py), so a
+    release stamp that only changes the version field does not strand receipts bound to the build that was qualified."""
+    if not row or not row.get("sha1"):
+        return set()
+    return {row["sha1"], *(row.get("equivalent_sha1s") or ())}
 
 
 def _overlay_gate_errors(root: Path, title: str, receipt: dict, schema: str, what: str) -> list[str]:
@@ -1249,9 +1340,17 @@ def _overlay_gate_errors(root: Path, title: str, receipt: dict, schema: str, wha
         errors.append(f"{what} receipt is not a PHYSICAL PASS for {title}")
     provenance = root / "data/gen2/overlay_provenance.json"
     outputs = json.loads(provenance.read_text(encoding="utf-8"))["outputs"] if provenance.is_file() else {}
-    published = next((row.get("sha1") for row in outputs.values() if row.get("slink_title") == title), None)
-    if published is None or receipt.get("overlay_sha1") != published:
+    published = _accepted_overlay_shas(next((row for row in outputs.values() if row.get("slink_title") == title), None))
+    if not published or receipt.get("overlay_sha1") not in published:
         errors.append(f"{what} receipt proves another overlay build than the published one")
+    try:
+        identity = _execution_identity(root, title, "overlay")
+        want_identity = {"artifact_kind": "overlay", "rom_sha1": identity["rom_sha1"],
+                         "base_sha1": identity["base_sha1"], "binding_sha256": identity["binding_sha256"]}
+        if identity["base_sha1"] is None or any(receipt.get(key) != value for key, value in want_identity.items()):
+            errors.append(f"{what} receipt lacks the executed overlay artifact identity/binding")
+    except (OSError, KeyError, ValueError, TypeError) as exc:
+        errors.append(f"{what} published overlay binding unavailable: {exc}")
     fixture, want = receipt.get("fixture"), receipt.get("fixture_sha256")
     # Both present first: a missing fixture and a missing hash must not compare None == None.
     if (not isinstance(fixture, str) or not fixture or not isinstance(want, str) or not want
@@ -1298,19 +1397,53 @@ def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
 
 # card gen2-p4-w6 (tests/live/test_gen2_w6_gate.py): the live mailbox write-watch over the whole scripted corpus.
 W6_GATE_LEGS = ("panel", "sfx", "u1")
-# Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day).
-W6_CLOCK_LEGS = {("silver", "u1")}
+# Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day; Gold boots the SYNTH psn lead).
+# U1 legs run on the CURRENT drivers (tests/live/test_gen2_w6_gate.py U1_CHAINS["head"]) and a disclosed SYNTH poisoned
+# lead: their receipt must bind each driver file to the released tree and carry the synth/start_phase disclosure.
+W6_HEAD_DRIVER_LEGS = {("gold", "u1")}
+W6_CLOCK_LEGS = {("silver", "u1"), ("gold", "u1")}   # Gold: the SYNTH poisoned lead + the pinned clock (O-33)
 
 
 def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
     """clock-setup-v1: the disclosure re-derives exactly from the committed fixture through
-    tools/gen2_synth_fixtures.day_clock (same hour and host time). That binds the base bytes, the start time,
+    tools/gen2_synth_fixtures.day_clock (same hour/minute/second and host time). That binds the base bytes, the start time,
     both hashes and the trailer, and it proves that only bytes 32768..32790 (the RTC trailer) differ."""
     import gen2_synth_fixtures as synth
     setup = leg.get("clock_setup")
     try:
+        if not isinstance(setup, dict):
+            raise ValueError("clock setup must be an object")
+        minute, second = setup.get("game_minute", 0), setup.get("game_second", 0)
+        for name, value, maximum in (("hour", setup["game_hour"], 23), ("minute", minute, 59), ("second", second, 59)):
+            if type(value) is not int or not 0 <= value <= maximum:
+                raise ValueError(f"invalid clock {name}")
+        if type(setup["host_time"]) is not int or setup["host_time"] < 0:
+            raise ValueError("invalid clock host time")
+        if "u1_attempt" in leg:
+            attempt = leg["u1_attempt"]
+            if (type(attempt) is not int or attempt not in (1, 2, 3) or "game_minute" not in setup
+                    or (setup["game_hour"], minute, second) != (11, (0, 23, 46)[attempt - 1], 0)):
+                raise ValueError("u1_attempt differs from the disclosed clock schedule")
         raw = (root / "tests/fixtures/gen2" / f"{leg['fixture']}.SaveRAM").read_bytes()
-        out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title)
+        if "poison_setup" in leg:
+            recipe = POISON_SETUP_RECIPE.get((title, leg["fixture"]))
+            if recipe is None:
+                raise ValueError("poison setup is only the Gold errand / Crystal battle recipe")
+            # Rebuild from THIS root's base bytes using the pinned synthesis rules,
+            # as day_clock does for its source layout; never trust disclosed edits.
+            raw, poison = synth.build(title, raw, synth.PSN_RECIPES[recipe][1], base_name=leg["fixture"])
+            if leg["poison_setup"] != poison:
+                raise ValueError("poison setup differs from its named recipe re-derivation")
+        out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title,
+                                    minute=minute, second=second)
+        # Historical zero-minute disclosures omit these keys. New U1 captures
+        # spell them out; both must describe exactly the same rebuilt bytes.
+        # This loop only normalizes key presence: the minute is bound by new_hex/sha256,
+        # which day_clock computed WITH it, so never compare just the two clock fields.
+        # ponytail: u1_attempt stays optional because round-1 Crystal (11:23) predates it.
+        for key, value in (("game_minute", minute), ("game_second", second)):
+            if key in setup:
+                again[key] = value
     except (OSError, KeyError, TypeError, ValueError, AttributeError) as exc:
         return [f"clock setup does not re-derive from the committed fixture: {exc!r}"]
     if setup != again:
@@ -1319,6 +1452,27 @@ def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
     if out[:synth.CART] != raw[:synth.CART] or len(out) != synth.SAVERAM:
         return ["clock setup changes CartRAM (only the RTC trailer may differ)"]
     return []
+
+
+def _w6_head_driver_errors(root: Path, leg: dict) -> list[str]:
+    """The current-drivers U1 chain ("head") is bound to the RELEASED tree: every driver file the leg ran has the sha256
+    of the same file here (a driver edited after the receipt, or a receipt from other drivers, is refused), and the leg
+    discloses the SYNTH poisoned lead it booted (poison_setup is re-derived by the clock check)."""
+    errors = []
+    driver = leg.get("driver")
+    files = driver.get("files") if isinstance(driver, dict) else None
+    if not isinstance(files, dict) or not files or driver.get("ref") != "head":
+        return ["driver chain is not the pinned current-drivers ('head') chain"]
+    for rel, entry in sorted(files.items()):
+        ref, want = (entry or {}).get("ref"), (entry or {}).get("sha256")
+        if not isinstance(ref, str) or not re.fullmatch(r"[0-9a-f]{40}", ref):
+            errors.append(f"driver {rel} is not pinned to an exact commit")
+        elif _lf_sha256(root / rel) != want:
+            errors.append(f"driver {rel} differs from the released tree's file")
+    if (not isinstance(leg.get("poison_setup"), dict) or leg.get("synth_psn") is not True
+            or leg.get("poison_start_phase") != "tick"):
+        errors.append("the SYNTH poisoned-lead disclosure (poison_setup, synth_psn, start_phase tick) is missing")
+    return errors
 
 
 def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
@@ -1349,6 +1503,8 @@ def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
             errors.extend(f"w6 gate leg {name}: {e}" for e in _clock_setup_errors(root, title, leg))
         elif (title, name) in W6_CLOCK_LEGS:
             errors.append(f"w6 gate leg {name} has no clock setup disclosure (it hunts by day)")
+        if (title, name) in W6_HEAD_DRIVER_LEGS:
+            errors.extend(f"w6 gate leg {name}: {e}" for e in _w6_head_driver_errors(root, leg))
     if receipt.get("violation_count") != 0:
         errors.append("w6 gate receipt records mailbox violations")
     return errors
@@ -1531,9 +1687,9 @@ def _stack_bounds(root: Path, title: str) -> tuple[tuple[int, int] | None, str |
     return (found["wStackBottom"], found["wStackTop"]), None
 
 
-def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None) -> list[str]:
-    """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
-    (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
+def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None, artifact_kind="overlay") -> list[str]:
+    """Overlay U1/U2 and fixture-qualification receipts, each pinned by sha256.
+    Explicit artifact_kind="clean"/None retains historical diagnostic checks. An empty proof is a
     release blocker. R-1/R-2/R-3/R-4/R-5g are NOT covered here -- they have no committed receipt and
     still need a fresh live run (see tests/gen2_live_gate_requirements.json's scope=).
 
@@ -1551,8 +1707,31 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
         from tests.unit.test_gen2_physical_receipts import validate as receipt_validate
     doc = json.loads(path.read_text(encoding="utf-8"))
     errors = []
+    declared = {(row.get("axes", {}).get("artifact_kind", "clean"),
+                 row.get("axes", {}).get("kind"), row.get("axes", {}).get("title"))
+                for row in doc.get("requirements", [])}
+    required = {(artifact, kind, title) for artifact in ((artifact_kind,) if artifact_kind else ("clean", "overlay")) for title in TITLES
+                for kind in ("engine_sites", "write_window")}
+    required |= {("overlay", kind, title) for title in TITLES
+                 for kind in ("panel_gate", "sfx_gate", "w6_gate", "phone_gate", "sp_lowwater_gate")}
+    for artifact, kind, title in sorted(required):
+        if ((kinds is None or kind in kinds) and (artifact_kind is None or artifact == artifact_kind)
+                and (artifact, kind, title) not in declared):
+            errors.append(f"missing required {artifact}/{kind}/{title} receipt row")
+    if artifact_kind in (None, "overlay") and (kinds is None or "qualification" in kinds):
+        fixtures = {row.get("axes", {}).get("fixture") for row in doc.get("requirements", [])
+                    if row.get("axes", {}).get("artifact_kind") == "overlay"
+                    and row.get("axes", {}).get("kind") == "qualification"}
+        errors.extend(f"missing required overlay qualification {name} receipt row"
+                      for name in OVERLAY_QUALIFICATIONS if name not in fixtures)
     for row in doc.get("requirements", []):
+        artifact = (row.get("axes") or {}).get("artifact_kind", "clean")
+        if artifact_kind is not None and artifact != artifact_kind:
+            continue
         rid, axes, kind = row["id"], row["axes"], row["axes"]["kind"]
+        if artifact not in ("clean", "overlay"):
+            errors.append(f"{rid}: unknown artifact kind")
+            continue
         if kinds is not None and kind not in kinds:
             continue
         proofs = row.get("proofs") or []
@@ -1564,15 +1743,28 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
             if not entry:
                 errors.append(f"{rid}: receipt not registered")
                 continue
+            if kind in ("panel_gate", "sfx_gate", "w6_gate", "phone_gate", "sp_lowwater_gate"):
+                expected = f"tests/fixtures/gen2/receipts/overlay/{axes['title']}.{kind}.json"
+                if artifact != "overlay" or entry.get("path") != expected:
+                    errors.append(f"{rid}: feature gate requires explicit overlay kind and current receipt path {expected}")
+                    continue
             receipt, why = _new_gate_receipt(root, entry)
             if receipt is None:
                 errors.append(f"{rid}: {why}")
             elif kind in ("engine_sites", "write_window"):
-                proven, why = receipt_validate(kind, axes["title"], receipt)
+                proven, why = (receipt_validate(kind, axes["title"], receipt, artifact) if artifact == "overlay"
+                               else receipt_validate(kind, axes["title"], receipt))
                 if proven is None:
                     errors.append(f"{rid}: {why}")
+                if kind == "engine_sites":
+                    runs = receipt.get("runs", [receipt])
+                    runs = list(runs.values()) if isinstance(runs, dict) else runs
+                    for index, run in enumerate(runs):
+                        if "clock_setup" in run or "u1_attempt" in run:
+                            errors.extend(f"{rid}: run {index} clock setup: {error}"
+                                          for error in _clock_setup_errors(root, axes["title"], run))
             elif kind == "qualification":
-                errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt))
+                errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt, artifact))
             elif kind == "panel_gate":
                 errors.extend(f"{rid}: {e}" for e in _panel_gate_row_errors(root, axes["title"], receipt))
             elif kind == "sfx_gate":
@@ -1584,7 +1776,7 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
             elif kind == "sp_lowwater_gate":
                 errors.extend(f"{rid}: {e}" for e in _sp_lowwater_gate_row_errors(root, axes["title"], receipt))
             elif kind == "inspect_run":
-                errors.extend(f"{rid}: {e}" for e in _inspect_run_row_errors(receipt))
+                errors.extend(f"{rid}: {e}" for e in _inspect_run_row_errors(receipt, artifact, root))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors
@@ -1611,18 +1803,19 @@ def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[s
     root = ROOT if root is None else root
     try:
         rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
-        have = {(row["axes"]["kind"], row["axes"].get("title")) for row in rows}
+        have = {(row["axes"].get("artifact_kind", "clean"), row["axes"]["kind"], row["axes"].get("title"))
+                for row in rows if (row.get("axes") or {}).get("artifact_kind", "clean") == "overlay"}
     except (OSError, ValueError, KeyError, TypeError):
         return [f"{NEW_GATES} missing or malformed"]
-    errors = [f"{kind} {title}: no row in {NEW_GATES}"
-              for kind in LIVE_GATE_KINDS for title in TITLES if (kind, title) not in have]
+    errors = [f"{kind} {title}: no overlay row in {NEW_GATES}"
+              for kind in LIVE_GATE_KINDS for title in TITLES if ("overlay", kind, title) not in have]
     return errors + new_gates_errors(root, receipt_validate, kinds=LIVE_GATE_KINDS)
 
 
 def trade_gates_errors(root: Path | None = None, duo=None) -> list[str]:
     """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case receipted on C-C, G-S and C-G (O-34)."""
     cases = frozenset(TRADE_END_STATUS)
-    return duo_matrix_errors(root, duo, required=dict.fromkeys(DUO_PAIRS, cases), only=cases)
+    return duo_matrix_errors(root, duo, required=dict.fromkeys((("overlay", *pair) for pair in DUO_PAIRS), cases), only=cases)
 
 
 # BINDING P3b.7's C-C / G-S scenario list, named as tools/e2e_duo.py registers Gen 2 cells (gen2_<name>;
@@ -1640,8 +1833,9 @@ DUO_PAIRS_SCENARIOS = frozenset({
 def duo_pairs_errors(root: Path | None = None, duo=None) -> list[str]:
     """duo-pairs: the whole matrix, every P3b.7 scenario on C-C and G-S, every trade case on all three (O-34)."""
     trades = frozenset(TRADE_END_STATUS)
-    required = dict.fromkeys(DUO_PAIRS, trades)
-    required.update(dict.fromkeys((("crystal", "crystal"), ("gold", "silver")), DUO_PAIRS_SCENARIOS | trades))
+    required = dict.fromkeys((("overlay", *pair) for pair in DUO_PAIRS), trades)
+    for kind in ("overlay",):
+        required.update(dict.fromkeys(((kind, "crystal", "crystal"), (kind, "gold", "silver")), DUO_PAIRS_SCENARIOS | (trades if kind == "overlay" else frozenset())))
     return duo_matrix_errors(root, duo, required=required)
 
 
@@ -1650,6 +1844,26 @@ def _lf_sha256(path: Path) -> str | None:
         return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     except OSError:
         return None
+
+
+def _published_grant(root, provenance):
+    components = [("lock", (root / "data/gen2_sources.lock.json").read_bytes()),
+                  ("build-provenance", (root / "data/gen2/build_provenance.json").read_bytes()),
+                  ("overlay-provenance", (root / "data/gen2/overlay_provenance.json").read_bytes())]
+    for title in TITLES:
+        pin = provenance["outputs"]["poke" + title]["ups"]
+        raw = (root / pin["file"]).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != pin["sha256"]:
+            raise ValueError("published UPS differs while checking grant")
+        components.append(("ups:" + title, raw))
+    digest = hashlib.sha256()
+    for label, raw in components:
+        encoded = label.encode("ascii")
+        digest.update(len(encoded).to_bytes(2, "big"))
+        digest.update(encoded)
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(raw)
+    return digest.hexdigest()
 
 
 def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitted: bool = True) -> list[str]:
@@ -1664,7 +1878,9 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
         return [f"{_OVERLAY_PROVENANCE} missing or malformed"]
     if release_ups is None:
         import make_release
-        release_ups = make_release._GB_COMPANION_UPS
+        # The release's companion set, computed from the SAME catalog test make_release packages with, so
+        # this check and the ZIP can never disagree about which titles are activated.
+        release_ups = make_release.gb_companion_ups(root)
     errors = []
     symbols = provenance.get("symbols") or {}
     for title in TITLES:
@@ -1690,11 +1906,33 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
             row = {}
         # require_admitted=False is the P4.4 promotion's own precondition (tools/gen_gen2_admission.py
         # --promote-overlays): every other packet item, before the rows it is about to write.
-        if require_admitted and (row.get("status") != "ADMITTED" or row.get("sha1") != out.get("sha1")
+        if require_admitted and (row.get("selection") != "SELECTED" or row.get("status") != "ADMITTED" or row.get("sha1") != out.get("sha1")
                                  or (row.get("ups") or {}).get("sha256") != ups.get("sha256")):
             errors.append(f"{title}_overlay: admitted-artifact row is not ADMITTED at the published overlay "
                           f"hashes (P4.4 promotion; today status={row.get('status')!r})")
-        if Path(ups.get("file") or "?").name not in release_ups:
+        try:
+            # The SIDECAR-vs-PUBLISHED identity holds in BOTH modes: the binding must name this title's
+            # published overlay sha1 and be a well-formed overlay binding. That is a property of the
+            # artifact, not of the catalog row.
+            identity = _execution_identity(root, title, "overlay")
+            # The ROW's binding pin and its runtime grant are written BY the promotion, so they are
+            # release-only: with require_admitted=False this is the precondition -- the precondition
+            # checks every other packet item BEFORE the rows it is about to write, and demanding them
+            # here made --promote-overlays unable to ever run.
+            if require_admitted:
+                if row.get("binding_sha256") != identity["binding_sha256"]:
+                    errors.append(f"{title}_overlay: binding pin differs")
+                gate = row.get("runtime_gate") or {}
+                grant = _published_grant(root, provenance)
+                if (gate.get("id") != "G4" or gate.get("state") != "ADMITTED"
+                        or gate.get("grant_fingerprint") != grant):  # the grant lives only in runtime_gate (gen_gen2_admission.overlay_row)
+                    errors.append(f"{title}_overlay: runtime G4 grant invalid")
+        except (OSError, KeyError, ValueError, TypeError) as exc:
+            errors.append(f"{title}_overlay: binding/grant unavailable: {exc}")
+        # A release must carry the UPS of a title it admits, and must not be blocked by one it does not:
+        # make_release.gb_companion_ups ships the Gen 2 UPS exactly for ADMITTED overlays, so membership is
+        # only a meaningful question once admission is required.
+        if require_admitted and Path(ups.get("file") or "?").name not in release_ups:
             errors.append(f"{title}: tools/make_release.py does not ship {ups.get('file')}")
     try:
         plan = (root / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
@@ -1743,7 +1981,7 @@ INSPECT_RUN_SCHEMA = "gen2-live-new-gates-attestation-v1"
 INSPECT_RUN_IDS = ("R-1", "R-2", "R-3", "R-4", "R-5g")
 
 
-def _inspect_run_row_errors(receipt: dict) -> list[str]:
+def _inspect_run_row_errors(receipt: dict, artifact_kind="clean", root=None) -> list[str]:
     errors = []
     if (receipt.get("schema") != INSPECT_RUN_SCHEMA or receipt.get("result") != "PASS"
             or receipt.get("evidence_level") != "PHYSICAL" or receipt.get("test") != "tests/live/test_gen2_new_gates.py"):
@@ -1753,6 +1991,16 @@ def _inspect_run_row_errors(receipt: dict) -> list[str]:
     titles = receipt.get("titles") or {}
     if any(titles.get(title) != "PASS" for title in TITLES):
         errors.append("inspect run attestation lacks a PASS for every title (crystal, gold, silver)")
+    if artifact_kind == "overlay":
+        for title in TITLES:
+            try:
+                identity = _execution_identity(ROOT if root is None else root, title, artifact_kind)
+                # the attestation records the identity triple; base_sha1 is bound through binding_sha256
+                want = {key: identity[key] for key in ("kind", "rom_sha1", "binding_sha256")}
+                if (receipt.get("artifacts") or {}).get(title) != want:
+                    errors.append(f"inspect run {title}: wrong executed overlay identity")
+            except (OSError, ValueError, KeyError) as exc:
+                errors.append(f"inspect run {title}: binding unavailable: {exc}")
     counts = receipt.get("pytest") or {}
     if (type(counts.get("passed")) is not int or counts["passed"] <= 0
             or any(counts.get(key) != 0 for key in ("failed", "skipped", "errors", "xfailed", "xpassed", "deselected"))):
@@ -1767,11 +2015,14 @@ def inspect_run_errors(root: Path | None = None) -> list[str]:
         rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
     except (OSError, ValueError, KeyError, TypeError):
         return [f"{NEW_GATES} missing or malformed"]
-    found = [row for row in rows if (row.get("axes") or {}).get("kind") == "inspect_run"]
-    if len(found) != 1 or not found[0].get("proofs"):
-        return [f"no committed live-new-gates run attestation ({'/'.join(INSPECT_RUN_IDS)}): {NEW_GATES} needs "
-                f"exactly one kind inspect_run row with a pinned {INSPECT_RUN_SCHEMA} receipt"]
-    return []
+    errors = []
+    for kind in ("overlay",):
+        found = [row for row in rows if (row.get("axes") or {}).get("kind") == "inspect_run"
+                 and (row.get("axes") or {}).get("artifact_kind", "clean") == kind]
+        if len(found) != 1 or not found[0].get("proofs"):
+            errors.append(f"no committed {kind} live-new-gates run attestation ({'/'.join(INSPECT_RUN_IDS)}): "
+                          f"{NEW_GATES} needs exactly one {kind} inspect_run row with a pinned {INSPECT_RUN_SCHEMA} receipt")
+    return errors
 
 
 # CODE-DIGEST: gate receipt kinds whose verdict runs through the shipped client or server code. Fixture
@@ -1780,8 +2031,9 @@ CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gat
                           "sp_lowwater_gate", "inspect_run")
 
 
-def code_staleness(root: Path | None = None, head: str | None = None) -> list[tuple[str, str]]:
-    """(cell, verdict) for each registered duo proof (the pydec receipt's CODE_DIGEST line) and each
+def code_staleness(root: Path | None = None, head: str | None = None, *, artifact_kind=None) -> list[tuple[str, str]]:
+    """Diagnostic (cell, verdict) for registered proofs; release callers select artifact_kind="overlay".
+    Inspect each duo proof (the pydec receipt's CODE_DIGEST line) and each
     client-path gate receipt (its "code_digest" object) that does not bind HEAD's production code.
     STALE: earned on other code or on a dirty tree. STALE-UNKNOWN: no stamp."""
     root = ROOT if root is None else root
@@ -1793,6 +2045,8 @@ def code_staleness(root: Path | None = None, head: str | None = None) -> list[tu
         except (OSError, ValueError):
             continue
         for row in rows:
+            if artifact_kind is not None and (row.get("axes") or {}).get("artifact_kind", "clean") != artifact_kind:
+                continue
             if kinds is not None and (row.get("axes") or {}).get("kind") not in kinds:
                 continue
             for proof in row.get("proofs") or []:
@@ -1817,7 +2071,7 @@ def code_staleness(root: Path | None = None, head: str | None = None) -> list[tu
 
 def stale_errors(root: Path | None = None, head: str | None = None) -> list[str]:
     try:
-        return [f"{cell}: {verdict}" for cell, verdict in code_staleness(root, head)]
+        return [f"{cell}: {verdict}" for cell, verdict in code_staleness(root, head, artifact_kind="overlay")]
     except (OSError, subprocess.CalledProcessError) as exc:
         return [f"cannot compute the HEAD production code digest: {exc}"]
 
@@ -1835,7 +2089,7 @@ def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate
     A receipt that does not bind HEAD's production code (STALE / STALE-UNKNOWN) is RED here."""
     parts = (("packet", g4_packet_errors(root, release_ups, require_admitted)),
              ("code", stale_errors(root, head)),
-             ("fixtures", fixtures_errors(root)),
+             ("fixtures", fixtures_errors(root, artifact_kind="overlay")),
              ("live-new-gates-run", inspect_run_errors(root)),
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
@@ -1862,6 +2116,8 @@ def _fixture_names(root: Path) -> tuple[set[str], list[str]]:
     names |= {path.stem for path in (root / FIXTURES_DIR).glob("*.SaveRAM")}
     try:
         for row in json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]:
+            if (row.get("axes") or {}).get("artifact_kind", "clean") != "overlay":
+                continue
             for key in ("fixtures", "trade_fixtures"):
                 names |= set((row["axes"].get(key) or {}).values())
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
@@ -1869,20 +2125,22 @@ def _fixture_names(root: Path) -> tuple[set[str], list[str]]:
     return names, []
 
 
-def _played_pins(root: Path) -> dict:
+def _played_pins(root: Path, artifact_kind="clean") -> dict:
     try:
         rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
         return {row["axes"]["fixture"]: ((row.get("proofs") or [{}])[0].get("receipts") or {}).get("receipt")
-                for row in rows if row["axes"]["kind"] == "qualification"}
+                for row in rows if (row.get("axes") or {}).get("artifact_kind", "clean") == artifact_kind
+                and row["axes"]["kind"] == "qualification"}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return {}
 
 
-def _played_errors(root: Path, name: str, raw: bytes, pins: dict, identity) -> list[str]:
+def _played_errors(root: Path, name: str, raw: bytes, pins: dict, identity, artifact_kind="clean") -> list[str]:
     """The pinned receipt, then tests/live/test_gen2_new_gates.py's qualified_identity(): a passed full chain
     (PYDEC qualify, GAME CONTINUE boot, native re-save + reload, post oracle) whose fixture sha256 is THESE bytes."""
     entry = pins.get(name)
-    if not entry or entry.get("path") != f"{FIXTURES_DIR}/receipts/{name}.qualification.json":
+    namespace = "/overlay" if artifact_kind == "overlay" else ""
+    if not entry or entry.get("path") != f"{FIXTURES_DIR}/receipts{namespace}/{name}.qualification.json":
         return [f"no sha256-pinned qualification receipt in {NEW_GATES}"]
     _receipt, why = _new_gate_receipt(root, entry)
     if why:
@@ -1948,8 +2206,10 @@ def _checksum_witness(root: Path, title: str, raw: bytes) -> str | None:
 
 
 def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witness=None,
-                    rebuild=None) -> list[str]:
-    """Every gap in the fixtures lane. Each referenced fixture exists, passes the checksum witness and is
+                    rebuild=None, artifact_kind="clean") -> list[str]:
+    """Validate fixture bytes with qualifications for artifact_kind.
+    Release/CLI callers explicitly select overlay; the clean default preserves historical diagnostics.
+    Each referenced fixture exists, passes the checksum witness and is
     PLAYED (a pinned, passed full-chain receipt binding these bytes) or SYNTH (a valid O-33 disclosure over a
     PLAYED base). There is no third way in: a missing, stale or undisclosed fixture is RED."""
     root = ROOT if root is None else root
@@ -1961,11 +2221,13 @@ def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witn
     if identity is None:
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
-        from tests.live.test_gen2_new_gates import qualified_identity as identity
+        from tests.live.test_gen2_new_gates import qualified_identity
+        def identity(name, raw, *, repo):
+            return qualified_identity(name, raw, repo=repo, kind=artifact_kind)
     if rebuild is None:
         from tools.gen2_synth_fixtures import build as rebuild
     witness = witness or _checksum_witness
-    pins = _played_pins(root)
+    pins = _played_pins(root, artifact_kind)
     verdicts: dict[str, list[str]] = {}
 
     def played(name: str) -> list[str]:
@@ -1975,7 +2237,7 @@ def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witn
             except OSError:
                 verdicts[name] = ["SaveRAM missing"]
             else:
-                verdicts[name] = _played_errors(root, name, raw, pins, identity)
+                verdicts[name] = _played_errors(root, name, raw, pins, identity, artifact_kind)
         return verdicts[name]
 
     for name in sorted(names):
@@ -2014,7 +2276,7 @@ _RECEIPT_CLIS = {
 
 def _receipt_cli(flag: str) -> int:
     label, check = _RECEIPT_CLIS[flag]
-    errors = globals()[check]()
+    errors = globals()[check](**({"artifact_kind": "overlay"} if flag == "--fixtures" else {}))
     for error in errors:
         print(f"RED  {error}")
     prefix = {"--live-gates": "new-gates.", "--trade-gates": "duo.", "--duo-pairs": "duo."}.get(flag)

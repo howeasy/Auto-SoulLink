@@ -497,3 +497,43 @@ The pins remain pokered `405b6246372d7e5a2cb029cbb65219b13286b8c9` and pokeyello
 - Section 3.i: the complete bag-return sequence is R `engine/items/inventory.asm:86-93`, not 86-91: restore is 92, ret is 93. Section 3.k: post-save R `save.asm:167` is `hlcoord 1,13`, but Y `:159` is `ld hl, SavingText`; CONTINUE `.pressedA` is R `main_menu.asm:107`, Y `:105`.
 - Section 3.e cancelled-evolution pop/call is R `engine/pokemon/evos_moves.asm:297-298`, Y `:299-300`. Section 3.m DelayFrame is R `home/vblank.asm:92`, Y `:85`. These are citation/description corrections, not hook-address changes.
 - Evolution publication and capture-to-box remain MODEL by recorded limit. Species/type clause receipts do not fill poison/blackout/NPC/PC-release gaps; `species_clause_new_b_result.txt:60-61` explicitly records `reroll_unobserved` with zero rerolls.
+
+
+## Companion trade consumption (2026-10-03)
+
+These runtime companion sites supplement the generated pret site table. They
+are enabled only when the companion dispatch and the unique native restore
+anchor validate against the loaded ROM. They are SOURCE/MODEL evidence; native
+trade and cancellation reruns remain required for the current cut.
+
+| Kind | Red/Blue | pureRGB overlays | Meaning |
+|---|---|---|---|
+| `trade_service` | `3F:4500` (`SlinkForeground`) | `3F:41CB` (`SlinkTradeService`) | Poll only; may precede caller, movement, publication and generation refusals. |
+| `trade_request` | `3F:4566` | `3F:41EE` | Reached the stack-save boundary after generation comparison; native handling has been selected, but no physical trade success is claimed. |
+| `trade_consumed` | `3F:459D` | `3F:4225` | Instruction after the native first CopyData restore; next bytes `F80A7EFE0320`. |
+
+The locator in `lua/gen1/trade_overlay.lua` recognizes the bounded straight-line
+save-overlay-on-stack/CopyData sequence and its generation-check predecessor,
+rejecting missing or ambiguous matches. The entry bytes are `2108C52A572A`;
+the predecessor is `FA0EC547FA0FC5B8C8FA11C5EA3DCD` on all five shipped builds.
+All three slot-store bytes (`EA lo hi`) are pinned to the generated
+`wTradingWhichPlayerMon` profile symbol; a WRAM-range approximation is insufficient.
+The post-restore hook checks the reversed retained request at SP and the restored
+backup. A dropped consumption hit cannot authorize re-staging: if a previously
+observed armed request now reads clobbered, the lease enters a conservative
+`picked_up` hold with `pickup_error`. Client-phase gating suppresses inert tokens
+during pickup/completion holds. Gen 2's owned-mailbox entry contract is unchanged.
+
+A missing/ambiguous trade anchor disables trading only and is reported to the
+console. Other engine signals remain active. Pickup-delay and persistent-hold
+diagnostics are console-only; neither condition invents a successful commit.
+
+A missing-consumption hold expires after 1800 held frames with no union writes:
+APPLY owes one uncertain trade_done; PROMPT owes one menu_result with choice=0
+and uncertain=true. Both show TRADE UNCERTAIN - CHECK PARTY. The server records
+the PROMPT uncertainty and tells both players "Trade canceled - no response.",
+rather than claiming a deliberate decline. The terminal also schedules the normal
+pending rescan/settlement path. Local state
+stays held until reset to prevent re-staging, even after the server sees its terminal. Withdrawal after real
+request entry is acknowledgement-only. These actionable uncertainty outcomes
+show the check-party notice; diagnostic counters remain console-only.

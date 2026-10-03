@@ -48,15 +48,13 @@ CHAINS = {"town": "lab,save", "battle": "lab,parcel,route1,save", "town_ot2": "l
 # both carry it, and the A1 wrong-save leg needs a Red save that does NOT (tools/e2e_duo.py
 # refuses a second-OT save whose id equals the original's).
 DEFAULT_OT = 0x4190
-SAVERAM_NAME = {"red": "Pokemon - Red Version (USA, Europe).SaveRAM",
-                "blue": "Pokemon - Blue Version (USA, Europe).SaveRAM",
-                "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM",
-                # pureRGB (P3b-e): unknown to BizHawk's gamedb, so the emulator names the file after
-                # the staged ROM (see g1.save_name_for). The build is the pinned lock output, staged
-                # by g1.staged_rom; a pure fixture is built by the SAME chains through the same gate
-                # (the driver facts follow the admitted title, so no chain changes).
-                "purered": "gen1 purered.SaveRAM", "pureblue": "gen1 pureblue.SaveRAM",
-                "puregreen": "gen1 puregreen.SaveRAM"}
+# The run_gb_gate cold key each title's fixture is built on. The companion is REQUIRED for
+# Red/Blue/pureRGB (owner 2026-10-02) and the harness refuses a clean one, so those titles boot
+# their companion cartridge; Yellow has none and boots clean. The key's PATCHED row names the
+# ROM and the SaveRAM file the emulator writes; the fixture keeps its title name.
+COLD_KEY = {"red": "red_patched_cold", "blue": "blue_patched_cold", "yellow": "yellow_cold",
+            "purered": "purered_overlay_cold", "pureblue": "pureblue_overlay_cold",
+            "puregreen": "puregreen_overlay_cold"}
 DUMP = {"red": "patch/build/gen1_red.gb", "blue": "patch/build/gen1_blue.gb",
         "yellow": "patch/build/gen1_yellow.gbc",
         "purered": "patch/build/gen1_purered.gbc", "pureblue": "patch/build/gen1_pureblue.gbc",
@@ -264,7 +262,7 @@ def qualify_all() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("rom", nargs="?", choices=sorted(SAVERAM_NAME))
+    ap.add_argument("rom", nargs="?", choices=sorted(COLD_KEY))
     ap.add_argument("target", nargs="?", choices=sorted(CHAINS))
     ap.add_argument("--qualify", action="store_true",
                     help="check tests/fixtures/gen1/*.SaveRAM against the dumps and exit "
@@ -284,22 +282,26 @@ def main() -> int:
     player = args.player or ("a" if args.rom in ("red", "purered") else "b")
 
     import gen1_playthrough as play
-    from run_gb_gate import run_gate
+    from run_gb_gate import PATCHED, run_gate
     env = dict(os.environ, SLINK_SCRIPT_CHAIN=CHAINS[args.target], SLINK_SCRIPT_PLAYER=player,
                SLINK_SCRIPT_FLUSH="1", SLINK_SCRIPT_TITLE_IDLE=str(args.title_idle))
     os.environ.update(env)
-    passed, path, text = run_gate(GATE, rom_key=f"{args.rom}_cold", target="town", timeout=args.timeout)
+    cold_key = COLD_KEY[args.rom]
+    passed, path, text = run_gate(GATE, rom_key=cold_key, target="town", timeout=args.timeout)
     print(text[-2500:])
     if not passed:
         print("scripted play did not reach its terminals; no fixture written", file=sys.stderr)
         return 1
-    src = os.path.join(play.SAVERAM_DIR, SAVERAM_NAME[args.rom])
+    _, rom_rel, save_name = PATCHED[cold_key]
+    src = os.path.join(play.SAVERAM_DIR, save_name)
     if not os.path.exists(src):
         print(f"EmuHawk left no SaveRAM at {src}", file=sys.stderr)
         return 1
     with open(src, "rb") as f:
         sram = f.read()
-    with open(os.path.join(REPO, DUMP[args.rom]), "rb") as f:
+    # Qualified against the cartridge that wrote it (run_gb_gate resolves a None ROM the same way).
+    rom_rel = rom_rel or play.staged_rom(cold_key.removesuffix("_cold"))
+    with open(os.path.join(REPO, rom_rel), "rb") as f:
         rom = f.read()
     problems = qualify(sram, rom)
     if problems:

@@ -1,0 +1,15 @@
+# G4 final cut 43e534ba35916b2648cf720a092fbf08c7cbf969 -- tools/gen3_final_cut.py summary (written 2026-10-02T14:28:02Z)
+# RUN 7 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | profile_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_profile_generated_check_exp_43e534ba.txt |
+| 2 | write_checkpoint_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_write_checkpoint_generated_check_exp_43e534ba.txt |
+| 3 | engine_signals_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_engine_signals_generated_check_exp_43e534ba.txt |
+| 4 | area_map_generated_check_exp | XG3 SOURCE | PASS | 1 | fc_area_map_generated_check_exp_43e534ba.txt |
+| 5 | gift_census_check_exp | XG3 SOURCE | PASS | 1 | fc_gift_census_check_exp_43e534ba.txt |
+| 6 | wild_rom_check_exp | XG3 SOURCE | PASS | 1 | fc_wild_rom_check_exp_43e534ba.txt |
+| 7 | shadow_negatives_exp | XG3 SOURCE | PASS | 1 | fc_shadow_negatives_exp_43e534ba.txt |
+| 8 | unit_exp | XG3 MODEL | FAIL skipped, and ALLOWED_SKIPS does not excuse it | 1 | fc_unit_exp_43e534ba.txt |
+
+OVERALL: FAIL (7/8 rows)

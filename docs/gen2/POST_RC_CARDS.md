@@ -23,7 +23,7 @@ G4 signature and the three overlay rows, which stay BUILT until G4 + `tools/gen_
 | REVIEW-P4-HASH | DONE in the doc sweep | `docs/gen2/reviews/` historical headers |
 | PHONE-NAMES | DONE | `e6d7761d` `0857cbe7`; Opus regression review clean |
 | TITLE-VERSION A (version text) | DONE | `SLINK v0.0.0-dev` on the main menu (`patch/gen2/src/version.asm`) |
-| TITLE-VERSION B (logo) | PARKED | owner 2026-09-25 "Logo can wait" |
+| TITLE-VERSION B (logo) | BUILT IN SOURCE, NOT PROMOTED | owner 2026-10-01 asked for it on every title; 2026-10-02 added that a title that animates must animate the band too, and that Gold/Silver should match Crystal. `patch/gen2/src/title.asm` (+ art from `tools/gen_gen1_title.py`) puts a SoulLink wordmark under the vanilla subtitle on the real Crystal / Gold / Silver title; the version is not on the title (owner 2026-10-02: it lives on the main menu, part A). Crystal: the wordmark on rows 10-11 under CRYSTAL VERSION, centred on the subtitle (cols 6-14). The logo's interlaced entrance (`TitleScreenEntrance`) now covers those rows too: the BG is scrolled up 8 pixels, so the old 80 sheared lines were map rows 1-10 and the band tore (top half sheared, bottom half still); five immediate operands in `_TitleScreen` / `TitleScreenEntrance` widen it to 88 lines (`tools/build_gen2_companion.py` TITLE_SHEAR_EDITS, byte-verified by `verify_title_hook` / `verify_title_entrance`). Gold/Silver: the same wordmark, 8 tiles wide (the 16 free ids $70-$7F), on rows 7-8 directly under the subtitle; nothing on that title animates but the bird, which flies in front of the band like any sprite. Built and booted live on all three, entrance filmed. The committed UPS / sym / map / provenance are still the previous overlay: regenerating them (`tools/build_gen2_companion.py --version vX.Y.Z`) changes every overlay sha1, so it needs the owner `--promote-overlays` step with G4. Measured ids: `tests/fixtures/gen2/title_*.json` |
 | POISON-DUO-CAP | DECIDED | duo keeps the native Wade fight; the gate's Gold poison leg boots the O-33 `gold_synth_psn` fixture (`75888449`, scoped to the gate by `0f64dd93`) |
 | TRAINER-SEED-A, TRADE-EVOLVE-CATCH | NOT NEEDED | both cells passed in the post-RC and Gen 3-merge sweeps; the fallbacks stay described below |
 | TRAINER-FAINT-LIVE-TURN | DONE | `822d4352` |
@@ -339,7 +339,7 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 - An invalid or absent `phone_data` stages all zeros, which clears any stale cookie.
 - The queue holds `{id, record}` atomically.
 - Under one permit (the predicate widened to `stage/24` or `mailbox+32/1`), write the record first, then the request byte. A failed stage write blocks the request.
-- While ARMED equals the in-flight id, check the cookie/event each frame (`phone:service()`) and re-stage ONCE if a map change wiped it (`HandleNewMap` → `ClearUnusedMapBuffer`, `home/map.asm:3-8`). No ROM hook on HandleNewMap.
+- While ARMED equals the in-flight id, check the cookie/event each frame (`phone:service()`) and keep the record intact if a map change wiped it (`HandleNewMap` → `ClearUnusedMapBuffer`, `home/map.asm:3-8`): re-stage while the cookie or id is gone, at most `RESTAGE_MAX` (8) times, then fail closed to the fixed text (updated 2026-10-03: a once-only re-stage lost a race with the same wipe on Gold's titled ROM, sweep gen2-fsw-1003-0029). A record with its id and nonce intact and only the cookie zeroed is the ROM's own `SlinkPhonePrepareCall` consuming it, never put back. No ROM hook on HandleNewMap. **Stale comment:** `patch/gen2/src/phone.asm:14` still says the host re-stages "once"; it is left as is on purpose (its source sha256 is pinned in `data/gen2/overlay_provenance.json`, so a comment edit would stale the binding chain). Do not reason from it; fix it the next time phone.asm changes for a functional reason.
 
 **ROM:**
 - `SlinkPhonePrepareCall` (a `callasm` in `SlinkPhoneCallScript`) validates the whole record (cookie, reserved, event == ARMED, terminators, species 1..251) before touching any buffer.
@@ -360,7 +360,7 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 **Tests:**
 - server direction and fallback;
 - the nested protocol schema;
-- Lua staging, order and re-stage-once;
+- Lua staging, order and the bounded re-stage;
 - ABI linked bytes, buffers, text widths and mutations;
 - the builder hook;
 - profile stage addresses;

@@ -1,0 +1,85 @@
+DEV SOURCE=5765395b22c2f8f9a16a874bc4d1ab40054abe46; native expansion row, test-only route; no final-cut claim
+
+========== scenario: exp_static_static_gen3 ==========
+[duo] exp_static_static_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=3ea2e4b98c4ca4afcf9c78197d7e22e0115f319f31d9be5fbf3c1a72ab1c5979 b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=d995301aee0629e7f18e25e42431a86f3b03fd0a4c166cde3ab4f1dc9934439a write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=5765395b22c2f8f9a16a874bc4d1ab40054abe46
+[duo] server up: tcp=52164 http=52165 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 17:44:00,193 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 17:44:00,193 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for exp_static_static_gen3: e2e_exp_static_static_gen3_a_1_witness.bin, e2e_exp_static_static_gen3_a_attempt1_result.txt, e2e_exp_static_static_gen3_a_result.txt, e2e_exp_static_static_gen3_b_1_witness.bin, e2e_exp_static_static_gen3_b_attempt1_result.txt, e2e_exp_static_static_gen3_b_result.txt, e2e_exp_static_static_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.2s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 9.8s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (native catch failed: the battle ended with outcome 1 (ctrl0=0x08059DB1 action_cursor=1))
+[duo] PYDEC: FAIL client RESULT before a: native encounter settled
+[duo] exp_static_static_gen3: a client finished before 'a: native encounter settled' (a: no RESULT; b: RESULT: FAIL (native catch failed: the battle ended with outcome 1 (ctrl0=0x08059DB1 action_cursor=1)))
+--- exp_static_static_gen3 a result (last 25 lines) ---
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=261 level=3 hp=15/15
+booted frame=611 map=map=6168 at=(17,9) balls=20
+JITTER requested=0 applied=0 attempt=1
+STATIC_WILD_BEFORE {"balls":20,"captures":0,"no_catch":0}
+STATIC_METHOD_PROBE {"address":168511392,"frame":757,"name":"BattleSetup_StartScriptedWildBattle","r0":50337480}
+STATIC_WILD_BATTLE {"field_probe":true,"level":30,"method":"static","scope":"set0; nonzero is selection-characterization only","selector":0,"species":101}
+[client] [gen3] phase ball-thrown frame=1446 gLastUsedItem 0 -> 0, balls 20 -> 19
+THREW 1
+[client] [gen3] phase ball-thrown frame=2467 gLastUsedItem 1 -> 1, balls 19 -> 18
+THREW 2
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 2672
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 2672
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 2672
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 2672
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 2672
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 2672
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 2672
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 2672
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 2672
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 2672
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 2672
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 2672
+RX msgbox text=Aqua Hideout is a dead zone!
+--- exp_static_static_gen3 b result (last 25 lines) ---
+STATIC_METHOD_PROBE {"address":168511392,"frame":754,"name":"BattleSetup_StartScriptedWildBattle","r0":50337480}
+STATIC_WILD_BATTLE {"field_probe":true,"level":30,"method":"static","scope":"set0; nonzero is selection-characterization only","selector":0,"species":101}
+[client] [gen3] phase ball-thrown frame=1443 gLastUsedItem 0 -> 0, balls 20 -> 19
+THREW 1
+XG3_FAINT_HOOK frame=2357 r4=1 counter=0 pending=1->2 result=accepted
+ENGINE_FAINT_SITE frame=2357 active=1 battler0_slot=0 battle_hp=207 party_hp=207 counter=0
+TX no_catch - {"area_id":"aqua_hideout","event":"no_catch","level":30,"player":"b","seq":72,"species_id":101}
+TX safe - {"event":"safe","player":"b","seq":73}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 2655
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 2655
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 2655
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 2655
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 2655
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 2655
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 2655
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 2655
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 2655
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 2655
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 2655
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 2655
+RX msgbox text=Aqua Hideout is a dead zone!
+the battle ended with outcome 1 (ctrl0=0x08059DB1 action_cursor=1)
+WRITES 12
+RESULT: FAIL (native catch failed: the battle ended with outcome 1 (ctrl0=0x08059DB1 action_cursor=1))
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_gen3_ij9k15az
+
+========== summary ==========
+  exp_static_static_gen3: FAIL (attempt 1 of 1)
+
+EXIT 1

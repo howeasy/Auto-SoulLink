@@ -29,10 +29,14 @@ import argparse
 import bisect
 import hashlib
 import pathlib
+import sys
 
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from tools import rr_companion  # noqa: E402
+
 BASE = 0x08000000
 ROMS = {  # same pins as tools/gen_gen3_write_checkpoint.py ROMS
     "fr": (pathlib.Path("E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"),
@@ -40,7 +44,7 @@ ROMS = {  # same pins as tools/gen_gen3_write_checkpoint.py ROMS
     "clean": (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
               "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     "companion": (ROOT / "patch" / "build" / "slink_RR.gba",
-                  "da579690db7d6933a0952a1f490312842793f71a"),
+                  rr_companion.rom_sha1()),
 }
 SYM = ROOT / "data" / "gen3" / "pret" / "pokefirered.sym"
 FR_RODATA = 0x081E9F10  # pokefirered.map: .rodata start

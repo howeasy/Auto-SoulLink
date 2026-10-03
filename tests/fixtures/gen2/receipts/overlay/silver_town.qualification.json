@@ -1,0 +1,153 @@
+{
+  "schema": "fixture-qualification-v1",
+  "scope": "full",
+  "required_stages": [
+    "qualify",
+    "boot",
+    "resave",
+    "post_oracle"
+  ],
+  "attempt_id": "r2q7",
+  "fixtures": [
+    {
+      "name": "silver_town",
+      "passed": true,
+      "artifacts": {
+        "fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\tests\\fixtures\\gen2\\silver_town.SaveRAM",
+          "size": 32790,
+          "sha256": "74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5"
+        },
+        "profile": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\data\\games\\gen2_silver\\profile.json",
+          "size": 74913,
+          "sha256": "c6061f6437f979abe4003f44e3ddf0bc22b02bfe834cac2c269e3fe66d70909e"
+        },
+        "rom": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_overlay.gbc",
+          "size": 2097152,
+          "sha256": "e50f8542344fbfddae046cc4344019f793879cfc906b176efab5f0a604697ef5"
+        },
+        "route_facts": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_route_facts.json",
+          "size": 13576,
+          "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d"
+        },
+        "played_receipt": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\silver_town.clean_qualification_ref.json",
+          "size": 394,
+          "sha256": "dca233831d0ca72d6d5465827057bbd76c1012f497487e9d97f87c6e805a82cd"
+        },
+        "boot:game_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\boot-e39636bc1ec1a5ee\\silver_town.boot.witness.json",
+          "size": 1943,
+          "sha256": "fe1947655561cecc8f148494f468d60a5a91ba623b79961dfaf3004e266b04b6"
+        },
+        "resave:fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resaved.SaveRAM",
+          "size": 32790,
+          "sha256": "3a7d800e4fc7569b5217e1df462d505150060cb26ccaac26d9abe7a113f9dc59"
+        },
+        "resave:save_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resave.witness.json",
+          "size": 2067,
+          "sha256": "48bfcedf31935fd80d75743789ab94d06899b1fa3e9b6d5a48c1a2e4c602e3a9"
+        },
+        "resave:reload_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\reload-bba5692f64c959ee\\silver_town.reload.witness.json",
+          "size": 1945,
+          "sha256": "26f61df1ebb9c39eab9f2202ccc57e3c0ad8a78aee103dc274ce6162794eefbf"
+        }
+      },
+      "provenance": {
+        "title": "silver",
+        "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+        "scope": "candidate fixture",
+        "route_facts_sha256": "89c8cdaf7e57fa9ccc700e0e32a99ebb17d439d3bbc41f25ed09f75e0b60324a"
+      },
+      "stages": [
+        {
+          "stage": "qualify",
+          "fingerprint": "96267531888d3791dee821bc23941a2d6214a433f06b37fe31c7ce7ff5196ec7",
+          "status": "PASS",
+          "problems": [],
+          "notes": [
+            "Static bytes do not prove played origin, RTC or GAME qualification."
+          ],
+          "evidence": {
+            "oracle": "independent Gen2 PYDEC",
+            "player_id": "51084",
+            "ball_origin": "none",
+            "natural_ball_acquisition": "false"
+          }
+        },
+        {
+          "stage": "boot",
+          "fingerprint": "e39636bc1ec1a5eedcf278124b11475479520daf0d850060cd43e4aadca50eb6",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME CONTINUE",
+            "location": "[24, 5]",
+            "position": "[5, 3]",
+            "cartram_sha256": "9ee772c03d227b58da768b8a45fed54823f87fb0bf2ebcb2939bd9c3fe93f774"
+          },
+          "outputs": {
+            "boot:game_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\boot-e39636bc1ec1a5ee\\silver_town.boot.witness.json",
+              "size": 1943,
+              "sha256": "fe1947655561cecc8f148494f468d60a5a91ba623b79961dfaf3004e266b04b6"
+            }
+          }
+        },
+        {
+          "stage": "resave",
+          "fingerprint": "bba5692f64c959eebfb104e55dc55029995db056a43774cf7d9f7eb1d724a656",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME re-save + reload",
+            "resave_cartram_sha256": "65287fea47adaad2cd7f1ae950b11e5f2ab545db93e11c50c8b9ff07d7679f70"
+          },
+          "outputs": {
+            "resave:fixture": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resaved.SaveRAM",
+              "size": 32790,
+              "sha256": "3a7d800e4fc7569b5217e1df462d505150060cb26ccaac26d9abe7a113f9dc59"
+            },
+            "resave:save_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\resave-bba5692f64c959ee\\silver_town.resave.witness.json",
+              "size": 2067,
+              "sha256": "48bfcedf31935fd80d75743789ab94d06899b1fa3e9b6d5a48c1a2e4c602e3a9"
+            },
+            "resave:reload_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q7\\silver_town\\qualify-overlay\\reload-bba5692f64c959ee\\silver_town.reload.witness.json",
+              "size": 1945,
+              "sha256": "26f61df1ebb9c39eab9f2202ccc57e3c0ad8a78aee103dc274ce6162794eefbf"
+            }
+          }
+        },
+        {
+          "stage": "post_oracle",
+          "fingerprint": "b34c27429dd07048975bcdd1efc8a0a35d659b4057cffae0740f90f7a40accfb",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "oracle": "independent re-save PYDEC + GAME raw-party witness"
+          }
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "physical_qualification": false,
+  "open_obligations": [
+    "coordinator GAME/RTC/played-origin review",
+    "recorded source/physical gate sign-off"
+  ]
+}

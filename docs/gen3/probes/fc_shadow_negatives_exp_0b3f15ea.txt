@@ -1,0 +1,38 @@
+# gen3_final_cut row=shadow_negatives_exp item=XG3_SOURCE cut=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+# lane=C:/slink-wt/exp-fc-0b3f15ea-s1
+# command: python tools/gen3_shadow_negatives.py docs/gen3_exp/negatives_manifest.json   (cwd=C:/slink-wt/exp-fc-0b3f15ea-s1)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-0b3f15ea-s1\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-0b3f15ea-s1\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-0b3f15ea-s1\.cache\x1-probe\probe.o
+# verdict: PASS
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T10:31:45 cpu=96% emuhawk=1 python=25
+start_utc=2026-10-02T14:31:44Z tracked_clean_before=True
+EXPANSION_CUT requested=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3 before=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+source_head: ccfa94e0021d8f9f11180866cf1c8d666bedc6dc
+PRESENT docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] map_load count=1
+PRESENT docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] pc_move count=8
+PRESENT docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] save count=1
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] faint count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_bypass_observer.shadow.log [pc_release_bypass; observer] trade_done count=0
+PRESENT docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] map_load count=1
+PRESENT docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] pc_move count=8
+PRESENT docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] save count=1
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] faint count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_release_cancel_observer.shadow.log [pc_release_cancel; observer] trade_done count=0
+PRESENT docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] pc_move count=2
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] faint count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_exp/probes/pc_full_box_observer.shadow.log [pc_full_box; observer] trade_done count=0
+SUMMARY PASS receipts=3 checks=15 passed=15 failed=0
+Scope: normalized receipt counts; excerpts and log-format checks do not qualify hooks.
+
+EXPANSION_CUT after=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+exit=0 end_utc=2026-10-02T14:31:46Z tracked_clean_after=True classification=pass

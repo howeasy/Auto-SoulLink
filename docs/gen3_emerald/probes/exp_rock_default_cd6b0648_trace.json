@@ -1,0 +1,104 @@
+{
+  "source_head": "cd6b0648d92fe3c70b48fb4e602ebfd8106f9435",
+  "scope": "PHYSICAL DEFAULT-ROW DEV, TEST-ONLY route; no final-cut qualification",
+  "diagnostic_flag": "ABSENT",
+  "recovery_semantics": "The NPC's ScriptContext_SetupScript replaces the parked Rock script: WAITING1 -> RUNNING0 -> SHUTDOWN2. It does not resume EventScript_SmashRock's pending releaseall/end. This row's PASS depends on the verified NPC interaction; without it the retained901e888d A-only run timed out while WAITING persisted for over21500 observed frames.",
+  "sides": {
+    "a": {
+      "stages": [
+        {
+          "stage": "before",
+          "frame": 5000,
+          "status": 1,
+          "stall_frames": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "one-step",
+          "frame": 5050,
+          "status": 1,
+          "stall_frames": 50,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-facing",
+          "frame": 5072,
+          "status": 1,
+          "stall_frames": 72,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-interact",
+          "frame": 5105,
+          "status": 0,
+          "stall_frames": 105,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "after",
+          "frame": 5745,
+          "status": 2,
+          "stall_frames": 745,
+          "x": 18,
+          "y": 101
+        }
+      ],
+      "result": [
+        "RESULT: PASS"
+      ],
+      "no_extra_probe_stages": true
+    },
+    "b": {
+      "stages": [
+        {
+          "stage": "before",
+          "frame": 3670,
+          "status": 1,
+          "stall_frames": 0,
+          "x": 18,
+          "y": 102
+        },
+        {
+          "stage": "one-step",
+          "frame": 3720,
+          "status": 1,
+          "stall_frames": 50,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-facing",
+          "frame": 3742,
+          "status": 1,
+          "stall_frames": 72,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "object-interact",
+          "frame": 3775,
+          "status": 0,
+          "stall_frames": 105,
+          "x": 18,
+          "y": 101
+        },
+        {
+          "stage": "after",
+          "frame": 4415,
+          "status": 2,
+          "stall_frames": 745,
+          "x": 18,
+          "y": 101
+        }
+      ],
+      "result": [
+        "RESULT: PASS"
+      ],
+      "no_extra_probe_stages": true
+    }
+  }
+}

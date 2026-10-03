@@ -104,7 +104,8 @@ function client:frame_end()
 end
 SLINK_GEN2_CLIENT = client
 local title = SLINK_TEST_CLIENT_TITLE or os.getenv("SLINK_GEN2_TITLE")
-SLINK_GEN2_PARTS = {client = client, production_admitted = SLINK_TEST_ADMITTED, qualification = "TEST_STANDIN",
+SLINK_GEN2_PARTS = {client = client, production_admitted = SLINK_TEST_ADMITTED, qualification = "PHYSICAL_RECEIPTED",
+    artifact_kind="clean", runtime_rom_sha1=os.getenv("SLINK_GEN2_EXEC_SHA1") or os.getenv("SLINK_GEN2_ROM_SHA1"),
                     pack = "gen2_" .. title, title = title, profile = {rom_sha1 = "test"}, writes = {log = {}}}
 event.onframeend(function() client:frame_end() end)
 """
@@ -328,6 +329,7 @@ def test_link_happy_path_catches_reports_saves_and_passes(tmp_path, title):
     assert save["saveram_bytes"] == len(flushed) == 0x8000 + 22 and save["gate_saves"] >= 1 and save["client_saves"] >= 1
     receipt = tag_json(lines, "RECEIPT")
     assert receipt["schema"] == "gen2-duo-link-v1" and receipt["key"] == KEY and receipt["player"] == "a"
+    assert receipt["artifact_kind"] == "clean"
     assert receipt["case"] == f"{title}_battle" and receipt["title"] == title == receipt["client"]["title"]
     assert receipt["capture"]["site_id"] == "capture_party_finalized"
     assert receipt["harness_write_scopes"] == [] and sim.writes == []
@@ -1746,10 +1748,10 @@ def test_trade_scenarios_name_their_case_and_share_one_harness():
     lua = LuaRuntime(unpack_returned_tuples=True)
     for case in TRADE_CASES:
         S = lua.eval("dofile")((ROOT / f"lua/tests/duo/scenario_gen2_trade_{case}.lua").as_posix())
-        assert S.TRADE is True and S.CASE == case and S.RECEIPT_SCHEMA == "gen2-duo-trade-v1" and S.T.SCOPE == "HARNESS_ONLY_OVERLAY"
+        assert S.TRADE is True and S.CASE == case and S.RECEIPT_SCHEMA == "gen2-duo-trade-v1" and S.T.SCOPE == "PHYSICAL_RECEIPTED"
 
 
-# ── the HARNESS_ONLY_OVERLAY composition override ──
+# ── the PHYSICAL_RECEIPTED composition override ──
 def overlay_image(title):
     from patch.tools.make_ups import ups_apply
     prov = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())["outputs"]["poke" + title]
@@ -1758,85 +1760,13 @@ def overlay_image(title):
     return clean, ups_apply(clean, (ROOT / prov["ups"]["file"]).read_bytes())
 
 
-def test_override_patches_each_entry_fragment_exactly_once_and_pins_the_published_overlays():
+def test_trade_production_driver_never_exposes_an_entry_patch_or_catalog_override():
     lua, T, _ = trade_lua()
-    text = (ROOT / "lua/gen2/entry.lua").read_text(encoding="utf-8")
-    patched = T.patch_entry(text)
-    assert isinstance(patched, str) and patched.startswith(T.PREFIX)
-    for p in T.PATCHES.values():
-        assert text.count(p["from"]) == 1 and patched.count(p["to"]) == 1 and p["from"] not in patched
-    assert patched.count("\n") == text.count("\n")   # the prefix shares line 1: tracebacks keep their line numbers
+    assert T.PATCHES is None and T.patch_entry is None and T.harness is None
+    assert T.SCOPE == "PHYSICAL_RECEIPTED"
     prov = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())["outputs"]
     pins = T.load_pins(ROOT.as_posix(), lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix()))
     assert dict(pins.items()) == {prov[a]["slink_title"]: prov[a]["sha1"] for a in ("pokecrystal", "pokegold", "pokesilver")}
-    # the mail ids the verdict treats as plant-only are exactly every pack's mail_ids
-    for title in ("crystal", "gold", "silver"):
-        mail = json.loads((ROOT / f"data/games/gen2_{title}/items.json").read_text())["mail_ids"]
-        assert sorted(k for k, _ in T.MAIL.items()) == sorted(mail)
-    # red: a fragment that moved (production edited) refuses, never patches blindly
-    broken, why = T.patch_entry(text.replace('candidate.row.kind == "clean"', 'candidate.row.kind=="clean"'))
-    assert broken is None and "kind" in why
-    doubled, why = T.patch_entry(text + "\n-- " + T.PATCHES[5]["from"])
-    assert doubled is None and "twice" in why
-
-
-class OverlayWorld(World):
-    """World (test_gen2_entry.py) over the published overlay bytes, composing through the patched entry."""
-
-    def __init__(self, title, image=None, patched=True):
-        super().__init__(title)
-        clean, overlay = overlay_image(title)
-        self.image = overlay if image is None else image(clean, overlay)
-        lua = self.lua
-        T = lua.eval("dofile")(TRADE_LUA.as_posix())
-        T.load_pins(ROOT.as_posix(), lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix()))
-        self.T = T
-        if patched:
-            text = (ROOT / "lua/gen2/entry.lua").read_text(encoding="utf-8")
-            chunk = lua.eval("function(t, n) return assert(load(t, n, 't', _G)) end")(T.patch_entry(text), "@entry")
-            self.entry = chunk(T.harness())
-
-
-@pytest.mark.parametrize("title", ["gold", "crystal"])
-def test_patched_entry_admits_only_the_pinned_overlay_as_kind_overlay(title):
-    world = OverlayWorld(title)
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.title, decision.kind, decision.rom_sha1) == (title, "overlay", world.T.OVERLAY_SHA1[title])
-    # red: the unpatched production entry refuses the same bytes: its catalog row is FUTURE (production unchanged)
-    plain = OverlayWorld(title, patched=False)
-    decision, reason = plain.entry.admit(plain.args())
-    assert decision is None and "selection FUTURE is not admitted" in reason
-    # red: the clean cartridge is not admitted by the harness catalog, and one flipped overlay byte is refused
-    clean = OverlayWorld(title, image=lambda c, o: c)
-    decision, reason = clean.entry.admit(clean.args())
-    assert decision is None and "unknown artifact SHA-1" in reason
-    tampered = OverlayWorld(title, image=lambda c, o: o[:-1] + bytes([o[-1] ^ 1]))
-    decision, reason = tampered.entry.admit(tampered.args())
-    assert decision is None and "unknown artifact SHA-1" in reason
-
-
-def test_patched_production_graph_is_disclosed_overlay_kind_with_the_overlay_sha1():
-    world = OverlayWorld("gold")
-    lua = world.lua
-    io = lua.eval("""function(base, frame)
-        base.framecount = function() return frame end
-        base.register = function() return 0 end
-        base.on_bus_exec = function() return "h" end
-        base.unregister = function() end
-        return base end""")(world.io, 1)
-    args = world.args()
-    args.io = io
-    args.net = lua.eval("{init=function() end, send=function() return true end, connected=function() return true end, pump=function() end}")
-    args.hud = lua.eval("{show=function() end, render=function() end, sanitize=function(s) return s end}")
-    args.player = "a"
-    args.log = lua.eval("function() end")
-    parts = world.entry.build(args)
-    assert not isinstance(parts, tuple), parts
-    client = parts.client
-    assert parts.production_admitted is True and parts.qualification == "HARNESS_ONLY_OVERLAY"
-    assert client.artifact_kind == "overlay" and client.rom_sha1 == world.T.OVERLAY_SHA1["gold"]
-    assert client.trade is not None and parts.profile.rom_sha1 == world.profile["rom_sha1"]
 
 
 # ── the saved-image reads the baseline prints, against the codec the oracle decodes with ──
@@ -2087,12 +2017,12 @@ def trade_stream(case, player, item=0):
         out.append(tag + " " + json.dumps(value))
     j("DUO_GEN2", {"player": player, "scenario": "gen2_trade_" + case, "attempt": 1, "case": "gold_battle_errand",
                    "title": "gold", "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "fixture_sha256": "f" * 64})
-    j("CLIENT", {"qualification": "HARNESS_ONLY_OVERLAY", "production_admitted": True, "pack": "gen2_gold", "title": "gold",
+    j("CLIENT", {"qualification": "PHYSICAL_RECEIPTED", "production_admitted": True, "pack": "gen2_gold", "title": "gold",
                  "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "registered_sites": []})
-    out.append('TRADE_OVERRIDE {"schema":"gen2-duo-overlay-override-v1"}')
-    j("TRADE_ADMISSION", {"admission_scope": "HARNESS_ONLY_OVERLAY", "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+    out.append('TRADE_SOURCE {"schema":"gen2-duo-production-entry-v1"}')
+    j("TRADE_ADMISSION", {"admission_scope": "PHYSICAL_RECEIPTED", "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
                           "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "title": "gold",
-                          "override_manifest_sha256": "a" * 64, "trade_manifest_sha256": "b" * 64, "run_id": "g2trade_x"})
+                          "source_manifest_sha256": "a" * 64, "trade_manifest_sha256": "b" * 64, "run_id": "g2trade_x"})
     j("BOOTED", {"frame": 10, "map_group": 24, "map_number": 3, "x": 1, "y": 1, "party_count": 1})
     j("HELLO", {"frame": 20, "ot_id": 1})
     if case == "evolve" and player == "a":
@@ -2253,7 +2183,7 @@ def trade_verdict(lines, case, player):
 def test_trade_verdict_passes_each_case_stream(case, player):
     problems, facts = trade_verdict(trade_stream(case, player), case, player)
     assert problems == []
-    assert facts.admission.admission_scope == "HARNESS_ONLY_OVERLAY"
+    assert facts.admission.admission_scope == "PHYSICAL_RECEIPTED"
 
 
 def drop(lines, tag, nth=0):
@@ -2295,7 +2225,7 @@ def test_trade_verdict_red_controls_for_the_committed_side():
     red(edit(s, "TRADE_STACK", lambda v: v["phases"][0]["samples"][0].update(stack_addr=STACK[0] + 4, sp=STACK[0] + 5)),
         "new", "a", "margin")
     red(edit(s, "TRADE_STACK", lambda v: v.update(hook_failures=1)), "new", "a", "coverage incomplete")
-    red(edit(s, "CLIENT", lambda v: v.update(qualification="PHYSICAL_RECEIPTED")), "new", "a", "HARNESS_ONLY_OVERLAY")
+    red(edit(s, "CLIENT", lambda v: v.update(qualification="HARNESS_ONLY_OVERLAY")), "new", "a", "PHYSICAL_RECEIPTED")
     # ordering: the baseline/ready/go handshake and nothing of the visit before the go
     go = [i for i, line in enumerate(s) if line.startswith("TRADE_GO ")][0]
     swapped = s[:go - 1] + [s[go], s[go - 1]] + s[go + 1:]
@@ -2439,9 +2369,9 @@ local function log(s) sim.lines[#sim.lines + 1] = s end
 local h = {root=".", rec={client_saves=1}, slot_of=function() return 1 end, lines=sim.lines}
 local e = {h=h, ctx=ctx, SG=SG, F={}, api=api, D={player="a", result=dir .. "/sim_result.txt", trade_evidence_dir=dir,
                                               scenario="gen2_trade_new", trade_case="gen2_trade_new"}, host={}, case="new",
-           gen2={handle_command=function() end}, parts={qualification="HARNESS_ONLY_OVERLAY"}, log=log, jlog=jlog, json=json}
+           gen2={handle_command=function() end}, parts={qualification="PHYSICAL_RECEIPTED"}, log=log, jlog=jlog, json=json}
 T.running = {title="gold", overlay_sha1=facts.overlay_sha1, base_sha1=profile.rom_sha1}
-T.manifest_text, T.manifest_sha256 = '{"schema":"gen2-duo-overlay-override-v1"}', string.rep("a", 64)
+T.manifest_text, T.manifest_sha256 = '{"schema":"gen2-duo-production-entry-v1"}', string.rep("a", 64)
 function sim.attach(player) e.D.player = player return T.attach(e) end
 function sim.put(addr, bytes) for i, b in ipairs(bytes) do sim.bus[addr + i - 1] = b end end
 function sim.fire(name)
@@ -2477,7 +2407,7 @@ class TradeSim:
         _, overlay = overlay_image("gold")
         self.lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
         SG = self.lua.eval("dofile")((ROOT / "lua/tests/test_gen2_scripted_gate.lua").as_posix())
-        manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_sim", "evidence_class": "HARNESS_ONLY_OVERLAY",
+        manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_sim", "evidence_class": "PHYSICAL_RECEIPTED",
                     "players": {p: {"title": "gold", "artifact_kind": "overlay", "rom_sha1": self.facts["overlay_sha1"]}
                                 for p in ("a", "b")}}
         path = tmp_path / "manifest.json"

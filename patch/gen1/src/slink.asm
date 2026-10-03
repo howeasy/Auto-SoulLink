@@ -63,6 +63,7 @@ DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
 DEF SLINK_CAP_SFX_NOTIFY EQU 1 << 2   ; knows SFX code 4 (an older build drops it unplayed)
+DEF SLINK_CAP_TRADE  EQU 1 << 4   ; patch/gb/slink_abi.inc; set only when trade.asm is linked
 
 ; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
 DEF SLINK_PANEL_CLOSED EQU 0
@@ -158,9 +159,15 @@ SlinkHook::
 	ld [SLINK_MAILBOX + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [SLINK_MAILBOX + 4], a
-	; Panel and SFX. A client reads this byte rather than inferring features from the ABI
-	; number, which is why adding SFX back (ABI 3 shipped panel-only) needs no ABI bump.
-	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+	; Panel and SFX, plus trade when build.py links trade.asm (-D SLINK_TRADE_ENABLED, the
+	; patch/gen2/src/slink.asm pattern). A client reads this byte rather than inferring
+	; features from the ABI number, which is why adding SFX back (ABI 3 shipped panel-only)
+	; needs no ABI bump.
+DEF SLINK_BUILD_CAPS EQU SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+IF DEF(SLINK_TRADE_ENABLED)
+REDEF SLINK_BUILD_CAPS EQU SLINK_BUILD_CAPS | SLINK_CAP_TRADE
+ENDC
+	ld a, SLINK_BUILD_CAPS
 	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into

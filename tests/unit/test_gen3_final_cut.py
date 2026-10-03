@@ -15,6 +15,14 @@ import gen3_final_cut as fc  # noqa: E402
 import gen3_probe_receipt as receipts  # noqa: E402
 
 LANE, MASTER = "L:/lane", "L:/master"
+REAL_CLEAN_PLAN_TITLES = dict(fc.CLEAN_PLAN_TITLES)
+
+
+@pytest.fixture(autouse=True)
+def _clean_plans_run_as_machinery(monkeypatch):
+    """The runner-mechanism tests (resume, carry, shard, cache) drive the default clean frlg plan with run_row
+    mocked; the F1 up-front refusal of the clean titles is exercised by its own tests (REAL_CLEAN_PLAN_TITLES)."""
+    monkeypatch.setattr(fc, "CLEAN_PLAN_TITLES", {})
 
 # Runbook §1-§11 in order (G4_final_cut_runbook.md); §5 is mechanism P+H on both orientations.
 EXPECTED_ROWS = [
@@ -34,7 +42,7 @@ EXPECTED_ROWS = [
     "bootcheck_firered_party_battle", "bootcheck_firered_party_battle_b",
     "bootcheck_leafgreen_party_town", "bootcheck_leafgreen_party_town_b",
     "bootcheck_leafgreen_party_battle", "bootcheck_leafgreen_party_battle_b",
-    "zip_build", "zip_check", "zip_boot_firered",
+    "zip_build", "zip_check", "zip_boot_firered_refused",
     "item6_route_diff",
     "release_gate_quick", "probe_gates",
 ]
@@ -90,7 +98,7 @@ def test_dry_run_launches_nothing(monkeypatch):
 def test_rows_selects_by_glob_or_item_keeping_order():
     rows = fc.build_plan("c" * 40, LANE, MASTER)
     got = [r.id for r in fc.select_rows(rows, "zip_*,item2b")]
-    assert got == EXPECTED_ROWS[17:25] + ["zip_build", "zip_check", "zip_boot_firered"]
+    assert got == EXPECTED_ROWS[17:25] + ["zip_build", "zip_check", "zip_boot_firered_refused"]
     with pytest.raises(SystemExit):
         fc.select_rows(rows, "no_such_row")
 
@@ -227,7 +235,7 @@ def test_the_fr_zip_rows_are_unchanged_and_disjoint_from_rr():
                                    f"{LANE}/dist", "--skip-generators"], LANE, 600, False, False, {}),
         "zip_check": ("§9 item5", [fc.PY, "tools/check_release_zip.py", z, "--rev", "c" * 40], LANE, 300,
                       False, False, {}),
-        "zip_boot_firered": ("§9 item5", [fc.PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", z,
+        "zip_boot_firered_refused": ("§9 item5", [fc.PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", z,
                                           "--lane", LANE], fc.REPO, 600, True, False, {})}
     rr = {r.id for r in fc.build_plan_rr("c" * 40, LANE, MASTER)}
     assert not (set(fr) & rr)   # receipts fc_<row>_<cut8>.txt never collide (OMP cx-f570e611)
@@ -285,7 +293,7 @@ EMERALD_EXPECTED_ROWS = [
     "bootcheck_emerald_town", "bootcheck_emerald_town_b",
     "bootcheck_emerald_battle", "bootcheck_emerald_battle_b",
     "probe_gates_emerald", "shadow_negatives_emerald",
-    "emerald_zip_build", "emerald_zip_check", "zip_boot_emerald",
+    "emerald_zip_build", "emerald_zip_check", "zip_boot_emerald_refused",
 ]
 
 
@@ -361,12 +369,15 @@ def test_build_plan_emerald_bootcheck_rows_reference_their_own_fixtures():
 
 def test_build_plan_emerald_boots_the_zip_on_emerald():
     rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
-    boot = next(r for r in rows if r.id == "zip_boot_emerald")
+    boot = next(r for r in rows if r.id == "zip_boot_emerald_refused")
     assert boot.argv[-2:] == ["--title", "emerald"]
     rom, name, fixture, saveram, client, hello = fc.ZIP_BOOT["emerald"]
     assert (rom, fixture) == (fc.STAGED["emerald"], "emerald_town.sav")
-    line = "[SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:1 (rom ea5352f8)"
-    assert re.search(client, line) and hello == "hello rom=emerald "
+    # patch-first: the shipped client REFUSES a clean Emerald, so this row proves the refusal (no hello)
+    line = ("Unsupported Gen 3 cartridge: this emerald cartridge needs the SLink companion patch; "
+            "prepare it through the Manager or /patcher. Supported: FireRed, LeafGreen, Radical Red and Emerald.")
+    assert re.search(client, line) and hello is None
+    assert not re.search(client, "[SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:1 (rom ea5352f8)")
 
 
 def test_the_fr_and_rr_zip_rows_stay_disjoint_from_emeralds():
@@ -428,7 +439,7 @@ def test_checkpoint_emerald_row_never_names_bw_rows():
 
 
 # ---------------------------------------------------------------------------
-# zip_boot_emerald's EG4 precondition (ruling 24): BLOCKED-EG4, not PASS, not a silent skip
+# zip_boot_emerald_refused's EG4 precondition (ruling 24): BLOCKED-EG4, not PASS, not a silent skip
 # ---------------------------------------------------------------------------
 
 def _write_entry_lua(tmp_path, routed_emerald):
@@ -481,12 +492,12 @@ def test_zip_boot_emerald_skips_blocked_before_launching_anything(tmp_path, monk
 
 def test_the_zip_boot_emerald_skip_is_no_longer_allowed_now_that_eg4_has_landed():
     """EG4 (ruling 24) landed on this branch (lua/gen3/entry.lua:108's Entry.ROUTED already admits
-    gen3_emerald), so the ("zip_boot_emerald", "BLOCKED-EG4:") ALLOWED_SKIPS entry was retired: a
+    gen3_emerald), so the ("zip_boot_emerald_refused", "BLOCKED-EG4:") ALLOWED_SKIPS entry was retired: a
     zip reaching BLOCKED-EG4 now means a stale/pre-EG4 zip, a real FAIL, not an excused SKIP."""
-    out = ("  zip_boot_emerald: SKIP (not allowed: EG4 has landed) — BLOCKED-EG4: lua/gen3/"
+    out = ("  zip_boot_emerald_refused: SKIP (not allowed: EG4 has landed) — BLOCKED-EG4: lua/gen3/"
            "entry.lua Entry.ROUTED has no gen3_emerald entry in this zip (ruling 24: it flips "
            "only at EG4)")
-    verdict, ok = fc.judge("zip_boot_emerald", 3, out)
+    verdict, ok = fc.judge("zip_boot_emerald_refused", 3, out)
     assert not ok and verdict == "FAIL skipped, and ALLOWED_SKIPS does not excuse it"
 
 
@@ -500,7 +511,7 @@ def test_an_unrelated_row_named_zip_boot_emerald_like_is_not_confused():
 # card E4b-CKPT review (OMP cx-6b619663, coordinator-verified F2/F7): build_kind/row_inputs/
 # chain_of only knew firered/leafgreen, so predicted_checkpoint_inputs (the --carry path)
 # crashed for checkpoint_emerald; the zip chain and the states/checkpoint chain must group as one
-# shard unit; zip_boot_emerald must not confuse a malformed zip with the EG4 precondition.
+# shard unit; zip_boot_emerald_refused must not confuse a malformed zip with the EG4 precondition.
 # ---------------------------------------------------------------------------
 
 def test_build_kind_accepts_emerald_states_rows_falsifier():
@@ -573,13 +584,13 @@ def test_chain_of_frlg_states_are_unchanged():
 def test_chain_of_groups_the_emerald_zip_rows_falsifier():
     """F2: the old startswith(("zip_", "rr_zip_")) test missed emerald_zip_build/
     emerald_zip_check entirely (they returned their OWN id, i.e. a singleton chain each),
-    scattering them from zip_boot_emerald across shards."""
+    scattering them from zip_boot_emerald_refused across shards."""
     assert fc.chain_of("emerald_zip_build") == fc.chain_of("emerald_zip_check") == \
-        fc.chain_of("zip_boot_emerald")
+        fc.chain_of("zip_boot_emerald_refused")
 
 
 def test_chain_of_fr_and_rr_zip_rows_are_unchanged():
-    assert fc.chain_of("zip_build") == fc.chain_of("zip_check") == fc.chain_of("zip_boot_firered")
+    assert fc.chain_of("zip_build") == fc.chain_of("zip_check") == fc.chain_of("zip_boot_firered_refused")
     assert fc.chain_of("rr_zip_build") == fc.chain_of("rr_zip_check") == \
         fc.chain_of("zip_boot_radicalred")
 
@@ -601,7 +612,7 @@ def test_shard_rows_keeps_the_emerald_zip_chain_together_falsifier(n):
     est = {r.id: r.budget for r in rows}
     shards = fc.shard_rows(rows, n, est)
     homes = {r.id: i for i, shard in enumerate(shards) for r in shard}
-    zips = ["emerald_zip_build", "emerald_zip_check", "zip_boot_emerald"]
+    zips = ["emerald_zip_build", "emerald_zip_check", "zip_boot_emerald_refused"]
     assert len({homes[z] for z in zips}) == 1
 
 
@@ -661,7 +672,7 @@ def test_admission_blocker_anchors_on_the_routed_assignment_not_any_brace_falsif
 def test_judge_on_a_zip_defect_is_a_plain_fail_falsifier():
     """F3: a malformed zip must FAIL, never read as the (allowed) EG4 skip."""
     out = "RESULT: FAIL ZIP-DEFECT: the extracted zip has no lua/gen3/entry.lua"
-    verdict, ok = fc.judge("zip_boot_emerald", 1, out)
+    verdict, ok = fc.judge("zip_boot_emerald_refused", 1, out)
     assert not ok
     assert not verdict.startswith("SKIP")
 
@@ -820,14 +831,22 @@ def test_pass_and_plain_failure():
 # --resume receipt matching, and the never-re-run-a-failed-row rule across invocations
 # ---------------------------------------------------------------------------
 
-def _receipt(tmp_path, row, cut, verdict):
-    """A well-formed runner receipt: one attempt block that supports the verdict."""
+def _plan_row(row_id):
+    return next((r for r in fc.build_plan("c" * 40, LANE, MASTER) if r.id == row_id), None)
+
+
+def _receipt(tmp_path, row, cut, verdict, inputs=None):
+    """A well-formed runner receipt: one attempt block that supports the verdict. Its `# inputs:` note is the
+    lane's CURRENT non-git input hashes of the row (what a real run records), unless `inputs` overrides it."""
+    plan_row = _plan_row(row)
+    note = fc.inputs_note(inputs if inputs is not None else
+                          fc.hash_inputs(fc.row_inputs(plan_row, LANE)) if plan_row else {})
     ok = verdict.startswith(("PASS", "SKIP-ALLOWED"))
     attempt = {"load": "cpu=1%", "start_utc": "2026-09-24T12:00:00Z",
                "end_utc": "2026-09-24T12:01:00Z", "rc": 0 if ok else 1, "tracked_before": True,
                "tracked_after": True, "classification": "pass" if ok else "real", "output": "out"}
     text = receipts.run_receipt_text(row=row, item="§x", cut=cut, lane=LANE, command="c",
-                                     cwd=".", env={}, attempts=[attempt], verdict=verdict)
+                                     cwd=".", env={}, attempts=[attempt], verdict=verdict, note=note)
     (tmp_path / f"fc_{row}_{cut[:8]}.txt").write_text(text, encoding="utf-8")
 
 
@@ -1181,7 +1200,7 @@ def test_non_git_inputs_must_match_the_lane(recorded, current):
 
 
 def test_builds_zip_and_the_source_gate_are_never_carried():
-    for rid in ("states_firered_town", "tutorials_leafgreen", "zip_boot_firered",
+    for rid in ("states_firered_town", "tutorials_leafgreen", "zip_boot_firered_refused",
                 "release_gate_quick"):
         assert _decide(_row(rid), [_ev(rid)]).kind == "RUN"
 
@@ -1374,7 +1393,7 @@ EDGES = [("states_firered_town", "checkpoint_firered"), ("states_firered_battle"
          ("tutorials_firered", "checkpoint_firered"), ("states_leafgreen_town", "checkpoint_leafgreen"),
          ("states_leafgreen_battle", "checkpoint_leafgreen"),
          ("tutorials_leafgreen", "checkpoint_leafgreen"),
-         ("zip_build", "zip_check"), ("zip_build", "zip_boot_firered")]
+         ("zip_build", "zip_check"), ("zip_build", "zip_boot_firered_refused")]
 
 
 @pytest.mark.parametrize("n", [2, 3, 4, 8])
@@ -1672,3 +1691,386 @@ def test_no_emerald_row_is_carried_on_frlg_shaped_deps():
     for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
         deps = fc.row_deps(r)
         assert deps is None or any("gen3_emerald" in d or "emerald" in d for d in deps), r.id
+
+
+def test_default_lanes_follow_slink_work_root(tmp_path):
+    """Owner space rule: with SLINK_WORK_ROOT set the lane/master defaults live under
+    <root>/lanes/gen3 (not on the Drive or C:); without it the old default is unchanged."""
+    import os
+    import subprocess
+    import sys
+
+    def dry(env_extra, drop=()):
+        env = {k: v for k, v in os.environ.items() if k not in drop}
+        env.update(env_extra)
+        out = subprocess.run([sys.executable, "tools/gen3_final_cut.py", "--cut", "HEAD", "--title", "exp",
+                              "--dry-run"], cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), env=env, capture_output=True, text=True, timeout=120)
+        return out.stdout.splitlines()[0]
+    root = tmp_path.as_posix()
+    assert f"lane={root}/lanes/gen3/gen3-lane-clean" in dry({"SLINK_WORK_ROOT": root})
+    assert ".claude/worktrees/gen3-lane-clean" in dry({}, drop=("SLINK_WORK_ROOT",))
+
+
+# ---- R1: the FR/LG/Emerald companion pins (patch/dist/gen3_companions.json), kept out of the default plans' need set ----
+
+COMPANION_KEYS = {f"{t}_companion{s}" for t in ("firered", "leafgreen", "emerald") for s in ("", ":md5", ":canonical")}
+
+
+def test_default_rom_pins_carry_the_gen3_companions_from_their_own_file_only():
+    pins = fc.rom_pins(fc.REPO)
+    row = json.loads(open(os.path.join(fc.REPO, "patch/dist/gen3_companions.json")).read())["titles"]["firered"]
+    assert COMPANION_KEYS <= set(pins)
+    assert pins["firered_companion"] == row["rom_sha1"] and pins["firered_companion:md5"] == row["rom_md5"]
+    assert pins["firered_companion:canonical"] == row["canonical_sha1"]
+    assert pins["firered"] == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"          # the clean pin is unchanged
+    assert pins["firered_companion"] != pins["firered"]                          # companion never aliases clean
+    rr = {k for k in pins if k.startswith("radical_red_companion")}              # RR still owned by companion_pins.json
+    assert rr == {"radical_red_companion", "radical_red_companion:md5", "radical_red_companion:canonical",
+                  "radical_red_companion:equivalent_sha1s"}
+
+
+def _tree_without_gen3_companions(tmp_path, with_file=None):
+    import shutil
+    tree = tmp_path / "tree"
+    (tree / "tools").mkdir(parents=True)
+    (tree / "patch/dist").mkdir(parents=True)
+    shutil.copyfile(os.path.join(fc.REPO, "tools/gen_gen3_write_checkpoint.py"), tree / "tools/gen_gen3_write_checkpoint.py")
+    shutil.copyfile(os.path.join(fc.REPO, "patch/dist/companion_pins.json"), tree / "patch/dist/companion_pins.json")
+    if with_file is not None:
+        (tree / "patch/dist/gen3_companions.json").write_text(json.dumps(with_file))
+    return tree
+
+
+def test_default_rom_pins_work_without_gen3_companions_and_strict_refuses(tmp_path):
+    tree = _tree_without_gen3_companions(tmp_path)
+    pins = fc.rom_pins(str(tree))                                                # default path: absent file is fine
+    assert not [k for k in pins if k.startswith(("firered_companion", "leafgreen_companion", "emerald_companion"))]
+    with pytest.raises(fc.LaneError, match="gen3_companions"):
+        fc.rom_pins(str(tree), require_companions=True)                          # a --title frlgc plan fails closed
+
+
+def test_strict_companion_pins_refuse_a_missing_or_malformed_title(tmp_path):
+    real = json.loads(open(os.path.join(fc.REPO, "patch/dist/gen3_companions.json")).read())
+    ok = fc.rom_pins(fc.REPO, require_companions=True)
+    assert COMPANION_KEYS <= set(ok)
+    for title, field in (("leafgreen", None), ("firered", "rom_sha1"), ("emerald", "rom_md5")):
+        bad = json.loads(json.dumps(real))
+        if field is None:
+            del bad["titles"][title]
+        else:
+            bad["titles"][title][field] = "zz"
+        tree = _tree_without_gen3_companions(tmp_path / title, bad)
+        fc.rom_pins(str(tree))                                                   # the default path is unaffected
+        with pytest.raises(fc.LaneError, match=title):
+            fc.rom_pins(str(tree), require_companions=True)
+
+
+# ---- R3: RR receipts record the companion hash; companion (patched FR/LG/E) rows never share a clean row's carry/cache identity ----
+
+def test_every_rr_duo_row_records_the_companion_rom_hash(tmp_path):
+    rows = [r for r in fc.build_plan_rr(CUT, str(tmp_path), MASTER) if r.id.endswith("_rr_as_a")]
+    assert rows
+    for r in rows:
+        assert fc.row_inputs(r, str(tmp_path)) == {"rom:slink_RR": os.path.join(str(tmp_path), "patch/build/slink_RR.gba")}, r.id
+        assert r.deps is None                                       # still always RUN (NEVER_CARRIED)
+    (tmp_path / "patch/build").mkdir(parents=True)
+    (tmp_path / "patch/build/slink_RR.gba").write_bytes(b"rr companion")
+    assert fc.hash_inputs(fc.row_inputs(rows[0], str(tmp_path)))["rom:slink_RR"] != "MISSING"
+
+
+def test_companion_rows_have_their_own_ids_inputs_and_are_never_carried_or_cached(tmp_path):
+    lane = str(tmp_path)
+    clean = {r.id: r for r in fc.build_plan(CUT, LANE, MASTER)}
+    for base in ("whiteout_gen3_fr_as_a", "whiteout_gen3_lg_as_a", "checkpoint_firered", "states_firered_town",
+                 "bootcheck_firered_party_town"):
+        cid = fc.companion_row_id(base)
+        assert cid != base and cid.startswith(fc.COMPANION_ROW_PREFIX) and fc.is_companion_row(cid)
+        assert not fc.is_companion_row(base)
+        assert not cid.endswith(("_fr_as_a", "_lg_as_a", "_em_as_a"))
+        row = fc.Row(cid, "companion", [], lane, 0)
+        assert fc.row_deps(row) is None                              # always RUN: no clean receipt can be carried in
+        assert fc.build_kind(cid) is None                            # not a cacheable build row
+        got = fc.row_inputs(row, lane)
+        assert got and set(got) <= {f"rom:{t}_companion" for t in ("firered", "leafgreen", "emerald")}
+        assert not set(got) & set(fc.row_inputs(clean[base], lane))  # keys never collide with the clean row's
+    hand_made = fc.Row("frlgc_whiteout_gen3_fr_as_a", "companion", [], lane, 0)       # a suffix that WOULD match a clean row
+    assert fc.row_deps(hand_made) is None and set(fc.row_inputs(hand_made, lane)) <= {f"rom:{t}_companion" for t in ("firered", "leafgreen", "emerald")}
+    assert fc.companion_row_inputs(("firered",), lane) == {"rom:firered_companion": os.path.join(lane, "patch/build/slink_FireRed.gba")}
+    assert fc.companion_row_inputs(("emerald",), lane) == {"rom:emerald_companion": os.path.join(lane, "patch/build/slink_Emerald.gba")}
+    with pytest.raises(KeyError):
+        fc.companion_row_inputs(("radical_red",), lane)
+
+
+def test_the_state_cache_never_serves_a_companion_row_and_keys_follow_the_rom_bytes(tmp_path):
+    (tmp_path / fc.STAGED["firered"]).parent.mkdir(parents=True)
+    (tmp_path / fc.STAGED["firered"]).write_bytes(b"clean")
+    blobs, biz = dict(BLOBS), dict(BIZ)
+    k1 = fc.build_key(_row("states_firered_town"), CUT, str(tmp_path), blobs=blobs, bizhawk=biz)[0]
+    (tmp_path / fc.STAGED["firered"]).write_bytes(b"patched")
+    k2 = fc.build_key(_row("states_firered_town"), CUT, str(tmp_path), blobs=blobs, bizhawk=biz)[0]
+    assert k1 and k2 and k1 != k2                                    # a different ROM is a different key
+    crow = fc.Row(fc.companion_row_id("states_firered_town"), "companion", [], str(tmp_path), 0)
+    key, why = fc.build_key(crow, CUT, str(tmp_path), blobs=blobs, bizhawk=biz)
+    assert key is None and "companion" in why                       # refused, not keyed on the clean STAGED path
+    crow = fc.Row(fc.companion_row_id("checkpoint_firered"), "companion", [], str(tmp_path), 0)
+    assert fc.predicted_checkpoint_inputs(crow, CUT, str(tmp_path)) is None
+
+
+# ---------------------------------------------------------------------------
+# patch-first: a clean FireRed / Emerald zip-boot is a REFUSAL proof, with its own row id
+# ---------------------------------------------------------------------------
+
+def test_the_clean_zip_boot_rows_are_refusal_proofs_with_new_ids():
+    assert fc.ZIP_BOOT_REFUSED == ("firered", "emerald")
+    fr = {r.id for r in fc.build_plan("c" * 40, LANE, MASTER)}
+    em = {r.id for r in fc.build_plan_emerald("c" * 40, LANE, MASTER)}
+    assert "zip_boot_firered_refused" in fr and "zip_boot_firered" not in fr
+    assert "zip_boot_emerald_refused" in em and "zip_boot_emerald" not in em
+    # RR boots its companion: unchanged
+    assert "zip_boot_radicalred" in {r.id for r in fc.build_plan_rr("c" * 40, LANE, MASTER)}
+    assert fc.ZIP_BOOT["firered"][5] is None and fc.ZIP_BOOT["radical_red"][5]
+
+
+def test_zip_boot_refusal_needs_the_clients_own_refusal_and_no_connect_and_no_hello():
+    client_re = re.compile(fc.ZIP_BOOT["firered"][4])
+    refused = ("Unsupported Gen 3 cartridge: this firered cartridge needs the SLink companion patch; "
+               "prepare it through the Manager or /patcher")
+    ok = fc.zip_boot_refusal_ok
+    assert ok(client_re, "[zip-boot] entry raised: [SLink] " + refused, "")
+    assert not ok(client_re, "", "")                                                    # nothing logged
+    assert not ok(client_re, refused.replace("firered", "leafgreen"), "")               # another title
+    assert not ok(client_re, refused + "\nTCP connected", "")                           # it connected anyway
+    assert not ok(client_re, refused, "hello rom=firered ")                             # the server saw it
+    assert "pcall(dofile" in fc._BOOT_LUA_REFUSED and "pcall(dofile" not in fc._BOOT_LUA
+
+
+def test_resume_at_a_cut_never_adopts_the_old_row_names_receipt(monkeypatch, tmp_path):
+    """Row-id reuse: the renamed refusal proofs must not resume from the old clean-client PASS receipts."""
+    import e2e_duo
+
+    new = "clean_rr_refused_gen3_rr_as_a"
+    assert "native_absent_gen3" not in e2e_duo.SCENARIOS and "clean_rr_refused_gen3" in e2e_duo.SCENARIOS
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    ids = [r.id for r in fc.build_plan_rr(cut, LANE, MASTER)]
+    assert new in ids and not any(i.startswith(("native_absent_gen3", "linked_faint_active_clean_gen3",
+                                                "faint_cmd_clean_gen3")) for i in ids)
+    monkeypatch.setattr(fc, "PROBES", str(tmp_path))
+    for old in ("native_absent_gen3_rr_as_a", "linked_faint_active_clean_gen3_rr_as_a",
+                "faint_cmd_clean_gen3_rr_as_a"):
+        _receipt(tmp_path, old, cut, "PASS")
+        assert fc.prior_verdict(old, cut) == "PASS"        # a valid old receipt exists at this very cut ...
+    assert fc.prior_verdict(new, cut) is None              # ... and is not the new row's
+    # even the old receipt copied under the new name is rejected: its header names the old row
+    (tmp_path / f"fc_{new}_{cut[:8]}.txt").write_text(
+        (tmp_path / f"fc_native_absent_gen3_rr_as_a_{cut[:8]}.txt").read_text(encoding="utf-8"), encoding="utf-8")
+    assert fc.prior_verdict(new, cut) is None
+
+
+# ---------------------------------------------------------------------------
+# F1: the clean plans stage clean dumps the launcher refuses -- refuse them BY NAME up front
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("title", ["frlg", "emerald"])
+def test_the_clean_plans_are_refused_by_name_before_anything_runs(title, monkeypatch, capsys):
+    monkeypatch.setattr(fc, "CLEAN_PLAN_TITLES", REAL_CLEAN_PLAN_TITLES)
+    def boom(*a, **k):
+        raise AssertionError("a refused plan launched or provisioned something")
+    for name in ("run_row", "run_once", "provision", "copy_inputs"):
+        monkeypatch.setattr(fc, name, boom)
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    assert fc.main(["--cut", cut, "--title", title, "--lane", LANE, "--master", MASTER]) == 2
+    err = capsys.readouterr().err
+    assert "needs the SLink companion patch" in err and "--title frlgc" in err and f"--title {title}" in err
+    # the default title is frlg: no --title at all is the same refusal
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER]) == 2
+    # inspection still works
+    assert fc.main(["--cut", cut, "--title", title, "--lane", LANE, "--master", MASTER, "--list"]) == 0
+
+
+def test_the_companion_exp_and_rr_titles_are_not_refused(monkeypatch):
+    monkeypatch.setattr(fc, "CLEAN_PLAN_TITLES", REAL_CLEAN_PLAN_TITLES)
+    assert set(fc.CLEAN_PLAN_TITLES) == {"frlg", "emerald"}
+    for title in ("rr", "exp", "frlgc"):
+        assert fc.clean_plan_refusal(title) is None, title
+    # exp really has no companion_required (the launcher would refuse it too otherwise)
+    entry = (os.path.join(fc.REPO, "lua", "gen3", "entry.lua"))
+    text = open(entry, encoding="utf-8").read()
+    exp_block = text[text.index("gen3_exp = {"):]
+    assert "companion_required" not in exp_block[:exp_block.index("}")]
+
+
+# ---------------------------------------------------------------------------
+# F4: --resume adopts a prior receipt only when its recorded inputs are this lane's current ones
+# ---------------------------------------------------------------------------
+
+def test_resume_reruns_a_row_whose_recorded_inputs_differ(pass_env):
+    cut, ran, probes = pass_env
+    row = _plan_row("states_firered_town")
+    assert fc.row_inputs(row, LANE)                      # this row really has non-git inputs
+    now = fc.hash_inputs(fc.row_inputs(row, LANE))
+    _receipt(probes, "states_firered_town", cut, "PASS", inputs={k: "f" * 64 for k in now})   # another ROM's hashes
+    _receipt(probes, "states_firered_battle", cut, "PASS")                                     # current inputs
+    assert _run(cut, "--resume") == 0
+    assert ran == ["states_firered_town"]                # re-run, never adopted; the unchanged row resumed
+
+
+def test_resume_reruns_a_receipt_with_no_recorded_inputs(pass_env):
+    cut, ran, probes = pass_env
+    _receipt(probes, "states_firered_town", cut, "PASS", inputs={})                # an old receipt: unrecorded
+    _receipt(probes, "states_firered_battle", cut, "PASS")
+    assert _run(cut, "--resume") == 0 and ran == ["states_firered_town"]
+
+
+def test_resume_inputs_problem_names_what_differs():
+    row = _plan_row("states_firered_town")
+    now = fc.hash_inputs(fc.row_inputs(row, LANE))
+    same = "# " + fc.inputs_note(now)
+    assert fc.resume_inputs_problem(row, same, LANE) is None
+    problem = fc.resume_inputs_problem(row, "# " + fc.inputs_note({**now, "rom:extra": "1"}), LANE)
+    assert problem and "rom:extra" in problem
+    assert "unrecorded" in fc.resume_inputs_problem(row, "no inputs line", LANE)
+
+
+# ---------------------------------------------------------------------------
+# row-scoped, KEPT e2e result files (the shared e2e_<scenario>_* names are overwritten by the next row of the scenario)
+# ---------------------------------------------------------------------------
+
+def _duo_rows(lane, *ids):
+    plan = {r.id: r for r in fc.build_plan("c" * 40, lane, MASTER)}
+    return [plan[i] for i in ids]
+
+
+def _writing_run_once(lane, results):
+    """A fake e2e_duo: it writes the scenario-named result files the real harness writes, with the row's verdict inside."""
+    def fake(row, deadline):
+        scenario = row.argv[row.argv.index("--scenario") + 1]
+        build = os.path.join(lane, "patch", "build")
+        os.makedirs(build, exist_ok=True)
+        rc, tag = results[row.id]
+        for name in (f"e2e_{scenario}_a_result.txt", f"e2e_{scenario}_b_result.txt", f"e2e_{scenario}_pydec_result.txt",
+                     f"e2e_{scenario}_a_attempt1_result.txt", f"e2e_{scenario}_a_1_witness.bin"):
+            with open(os.path.join(build, name), "w", encoding="utf-8") as handle:
+                handle.write(f"{tag}: {name}")
+        return rc, f"[duo] {tag}", False, False
+    return fake
+
+
+def test_two_rows_of_one_scenario_keep_distinct_result_files_and_a_failing_row_keeps_its_own(monkeypatch, tmp_path):
+    lane = str(tmp_path / "lane")
+    fr, lg = _duo_rows(lane, "active_end_gen3_fr_as_a", "active_end_gen3_lg_as_a")
+    _stub_row_env(monkeypatch, tmp_path / "probes", [])
+    (tmp_path / "probes").mkdir()
+    monkeypatch.setattr(fc, "run_once", _writing_run_once(lane, {fr.id: (1, "FR-FAILED b: missing WRITES 0"), lg.id: (0, "LG-PASSED")}))
+    assert fc.run_row(fr, "c" * 40, lane, None)[0] == "FAIL exit=1"
+    assert fc.run_row(lg, "c" * 40, lane, None)[0] == "PASS"
+    shared = os.path.join(lane, "patch", "build", "e2e_active_end_gen3_b_result.txt")
+    assert "LG-PASSED" in open(shared, encoding="utf-8").read()            # the shared name WAS overwritten by the later row ...
+    kept = {r.id: os.path.join(lane, "patch", "build", "fc_rows", r.id) for r in (fr, lg)}
+    assert kept[fr.id] != kept[lg.id]
+    assert "FR-FAILED b: missing WRITES 0" in open(os.path.join(kept[fr.id], "e2e_active_end_gen3_b_result.txt"), encoding="utf-8").read()
+    assert "LG-PASSED" in open(os.path.join(kept[lg.id], "e2e_active_end_gen3_b_result.txt"), encoding="utf-8").read()
+    for r in (fr, lg):                                                      # every artifact kind is kept, per row
+        assert sorted(os.listdir(kept[r.id])) == [
+            "e2e_active_end_gen3_a_1_witness.bin", "e2e_active_end_gen3_a_attempt1_result.txt",
+            "e2e_active_end_gen3_a_result.txt", "e2e_active_end_gen3_b_result.txt", "e2e_active_end_gen3_pydec_result.txt"]
+        text = open(fc.receipt_path(r.id, "c" * 40), encoding="utf-8").read()
+        assert f"# kept: {kept[r.id].replace(os.sep, '/')}" in text         # and the receipt header names where
+
+
+def test_keeping_the_files_changes_neither_the_inputs_note_nor_the_verdict(monkeypatch, tmp_path):
+    lane = str(tmp_path / "lane")
+    (row,) = _duo_rows(lane, "faint_cmd_gen3_fr_as_a")
+    (tmp_path / "probes").mkdir()
+    _stub_row_env(monkeypatch, tmp_path / "probes", [])
+    monkeypatch.setattr(fc, "run_once", _writing_run_once(lane, {row.id: (0, "ok")}))
+    assert fc.run_row(row, "c" * 40, lane, None)[:2] == ("PASS", 1)
+    text = open(fc.receipt_path(row.id, "c" * 40), encoding="utf-8").read()
+    assert fc.parse_inputs(text) == fc.hash_inputs(fc.row_inputs(row, lane))      # the same inputs line as before
+    assert fc.prior_verdict(row.id, "c" * 40, lane) == "PASS"                      # the receipt is still a valid, resumable one
+    assert fc.resume_inputs_problem(row, text, lane) is None
+
+
+def test_a_row_that_is_not_an_e2e_duo_run_or_left_nothing_keeps_nothing(tmp_path):
+    lane = str(tmp_path / "lane")
+    build = tmp_path / "lane" / "patch" / "build"
+    build.mkdir(parents=True)
+    (build / "e2e_faint_cmd_gen3_a_result.txt").write_text("x", encoding="utf-8")
+    plan = {r.id: r for r in fc.build_plan("c" * 40, lane, MASTER)}
+    assert fc.keep_row_artifacts(plan["states_firered_town"], lane) is None          # not a duo row
+    assert fc.keep_row_artifacts(plan["whiteout_gen3_fr_as_a"], lane) is None        # a duo row that left no file
+    assert fc.keep_row_artifacts(plan["faint_cmd_gen3_fr_as_a"], lane).endswith("/fc_rows/faint_cmd_gen3_fr_as_a")
+    # a re-run of the SAME row replaces only its own copy
+    (build / "e2e_faint_cmd_gen3_a_result.txt").write_text("second run", encoding="utf-8")
+    fc.keep_row_artifacts(plan["faint_cmd_gen3_fr_as_a"], lane)
+    assert (build / "fc_rows" / "faint_cmd_gen3_fr_as_a" / "e2e_faint_cmd_gen3_a_result.txt").read_text(encoding="utf-8") == "second run"
+
+
+def test_the_kept_directory_is_gitignored_so_the_lane_stays_tracked_clean():
+    ignored = subprocess.run(["git", "-C", fc.REPO, "check-ignore", "-q", "patch/build/fc_rows/some_row/e2e_x_a_result.txt"])
+    assert ignored.returncode == 0, "patch/build/fc_rows must be ignored (patch/.gitignore build/)"
+
+
+# ---------------------------------------------------------------------------
+# per-invocation summaries never clobber an earlier pass's
+# ---------------------------------------------------------------------------
+
+def _run_files(probes, cut):
+    return sorted(p.name for p in probes.glob(f"fc_SUMMARY_{cut[:8]}_run*.txt"))
+
+
+def test_a_later_invocation_never_overwrites_an_earlier_invocations_summary(pass_env, monkeypatch):
+    cut, ran, probes = pass_env
+    monkeypatch.setattr(fc, "utcnow", lambda: __import__("datetime").datetime(2026, 10, 3, 12, 0, 0, tzinfo=__import__("datetime").UTC))
+    assert _run(cut) == 0                                              # pass 1: both rows
+    first = _run_files(probes, cut)
+    assert len(first) == 1
+    text1 = (probes / first[0]).read_text(encoding="utf-8")
+    assert "states_firered_town" in text1 and "states_firered_battle" in text1 and "OVERALL: PASS (2/2 rows)" in text1
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--rows", "states_firered_town"]) == 0   # pass 2: a subset
+    runs = _run_files(probes, cut)
+    assert len(runs) == 2 and len(set(runs)) == 2                      # even within the same UTC second: distinct names
+    assert (probes / first[0]).read_text(encoding="utf-8") == text1    # the first pass's summary is byte-for-byte untouched
+    plain = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+    assert "states_firered_battle" not in plain and "OVERALL: PASS (1/1 rows)" in plain     # the plain name = the latest pass
+    second = next(r for r in runs if r != first[0])
+    assert (probes / second).read_text(encoding="utf-8") == plain
+
+
+def test_one_invocation_keeps_one_run_file_updated_after_every_row(pass_env):
+    cut, ran, probes = pass_env
+    assert _run(cut) == 0
+    (name,) = _run_files(probes, cut)
+    assert name.startswith(f"fc_SUMMARY_{cut[:8]}_run") and (probes / name).read_text(encoding="utf-8") ==         (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+
+
+def test_a_title_summary_keeps_its_suffix_in_both_names(pass_env):
+    cut, _ran, probes = pass_env
+    fc.write_summary(cut, [], "_frlgc", "20261003T120000Z")
+    assert (probes / f"fc_SUMMARY_{cut[:8]}_frlgc.txt").is_file()
+    assert (probes / f"fc_SUMMARY_{cut[:8]}_frlgc_run20261003T120000Z.txt").is_file()
+
+
+def test_merge_summary_also_keeps_its_own_copy_and_the_readers_ignore_run_files(pass_env):
+    cut, _ran, probes = pass_env
+    assert _run(cut) == 0
+    (first,) = _run_files(probes, cut)
+    before = (probes / first).read_text(encoding="utf-8")
+    _receipt(probes, "states_firered_town", cut, "PASS")
+    _receipt(probes, "states_firered_battle", cut, "PASS")
+    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--merge-summary",
+                    "--rows", "states_firered_town,states_firered_battle"]) == 0
+    runs = _run_files(probes, cut)
+    assert len(runs) == 2 and (probes / first).read_text(encoding="utf-8") == before
+    # summaries are never evidence: no reader treats a run file as a receipt
+    for name in runs:
+        assert fc.receipt_evidence(name, (probes / name).read_text(encoding="utf-8"), str(probes)) is None
+    assert set(fc.collect_evidence(str(probes))) == {"states_firered_town", "states_firered_battle"}
+    assert fc.prior_verdict("states_firered_town", cut) == "PASS"
+
+
+def test_an_aborted_invocation_leaves_no_empty_summary_file(pass_env):
+    cut, _ran, probes = pass_env
+    stamp = fc.new_run_stamp(cut, "")
+    assert not list(probes.glob(f"fc_SUMMARY_{cut[:8]}_run*.txt"))          # reserving a stamp creates nothing
+    fc.write_summary(cut, [], "", stamp)
+    assert fc.new_run_stamp(cut, "") != stamp                               # but a written one is never reused

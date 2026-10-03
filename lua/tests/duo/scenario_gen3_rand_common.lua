@@ -3,7 +3,7 @@
 local M = {}
 function M.observe(ctx)
     local hello = ctx.last_sent("hello")
-    local want = (ctx.phase == "mixed_kind" or ctx.phase == "clean_partner") and "clean" or "rand"
+    local want = (ctx.phase == "mixed_kind" or ctx.phase == "companion_partner") and "companion" or "rand"
     if not hello or hello.artifact_kind ~= want then
         return false, "randomized hello kind: wanted " .. want
     end

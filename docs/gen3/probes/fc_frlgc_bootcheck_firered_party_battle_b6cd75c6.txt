@@ -1,0 +1,24 @@
+# gen3_final_cut row=frlgc_bootcheck_firered_party_battle item=FRLGC-BOOT cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_fixtures.py boot-check --rom patch/build/slink_FireRed.gba --fixture tests/fixtures/gen3/firered_party_battle.sav --title firered --companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:46:43 cpu=71% emuhawk=1 python=8
+start_utc=2026-10-03T07:46:42Z tracked_clean_before=True
+seeded F:\slink-work\lanes\gen3\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_battle\gen3 slink FireRed.SaveRAM from tests\fixtures\gen3\firered_party_battle.sav (counter=7)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_slink_FireRed.gba
+[gate] gen3_boot_check: RESULT: PASS counter 7 -> 8  (5s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=7
+phase field frame=778 map=(3,19)
+phase save-menu frame=778 counter=7
+phase save-dialog frame=990 row=4
+phase saved frame=1517 counter=7->8
+phase slot-complete frame=1777 sectors=14/14
+phase flushed frame=1966
+RESULT: PASS counter 7 -> 8
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_battle.sav counter=7->8 party=[{'key': '2D356A90:99DE0D8A', 'species': 7, 'level': 9}, {'key': '263620B6:99DE0D8A', 'species': 16, 'level': 4}]
+exit=0 end_utc=2026-10-03T07:46:49Z tracked_clean_after=True classification=pass

@@ -17,15 +17,16 @@ this to give each run its own isolated data directory.
 """
 
 import json
-import time
 import logging
 import os
+import time
 from collections import Counter, deque
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
+from server import json_files
 from server.adapters.base import GameRulesAdapter, humanize_area_id
 from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
 
@@ -182,7 +183,7 @@ def _valid_battle_identity(session, battle_id) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -231,6 +232,7 @@ class SoulLinkState:
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
+        self.load_failed: str = ""
         # set of monKeys known to be in each player's party right now
         self.party_keys: dict[str, set[str]] = {"a": set(), "b": set()}
         # cached party stats per monKey (populated by party_to_box events, echoed in party_mon)
@@ -383,6 +385,9 @@ class SoulLinkState:
         self.native_sounds: bool = native_sounds
         self.battle_calc: bool = battle_calc
         self.pc_trade_npc: bool = pc_trade_npc
+        # phone_calls (default ON, owner 2026-10-02): Gen 2's companion rings a Pokégear call for
+        # first link / dead zone / fallen. Its own switch, NOT native_messages (default off).
+        self.phone_calls: bool = phone_calls
         # Talk-to-partner: each player's latest in-game progress (badge count), reported via the
         # `status` event; surfaced to the partner in the talk-to-partner box (the nuzlocke helper).
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
@@ -477,12 +482,43 @@ class SoulLinkState:
             return [{"cmd": "noop", "refused": "party_hidden"}]
         return None
 
+    def normalize_party_snapshot(self, player_id: str, msg: dict):
+        """Keep keyed records; refuse unknowable nonempty snapshots before adoption."""
+        event = msg.get("event")
+        if event not in ("hello", "tick", "safe") or "party" not in msg:
+            return None
+        if self.party_snapshot_withheld(player_id, msg):
+            return None
+        raw = msg["party"]
+        if raw is None:
+            if event == "hello":
+                msg["party"] = []
+            else:
+                msg.pop("party")  # no snapshot, not an empty party
+            return None
+        party = [m for m in raw if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]] if isinstance(raw, list) else []
+        dropped = len(raw) - len(party) if isinstance(raw, list) else 1
+        if dropped:
+            log.warning("[%s] dropped %s malformed or unkeyed party entries", player_id, dropped)
+        if not isinstance(raw, list) or (raw and not party):
+            if event == "hello":
+                self.identity_error[player_id] = "Party snapshot contains no keyed entries"
+                msg["_rejected"] = True
+            return [{"cmd": "noop", "refused": "party_snapshot"}]
+        msg["party"] = party
+        return None
+
     def handle_event(self, player_id: str, msg: dict) -> list[dict]:
         """
         Process one event from player_id.
         Returns commands to send back to player_id (including any queued cross-player commands).
         Cross-player commands are queued and delivered on the partner's next call.
         """
+        if self.load_failed:
+            return [{"cmd": "noop", "refused": "load_failed"}]
+        malformed = self.normalize_party_snapshot(player_id, msg)
+        if malformed is not None:
+            return malformed
         event = msg.get("event", "unknown")
         refused = self.refuse_hidden_event(player_id, msg)
         if refused is not None:
@@ -1147,10 +1183,17 @@ class SoulLinkState:
                     self._execute_trade(pt)
             else:
                 self.pending_trade = None
-                self.queued_commands[pt["initiator"]].append({
-                    "cmd": "msgbox", "text": "Your partner declined the trade.", "fb": "prompt"})
-                self.queued_commands[player_id].append({
-                    "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
+                if msg.get("uncertain") is True:
+                    pt["problem"] = "Trade canceled - no response."
+                    self._record_trade(pt, "uncertain")
+                    for pid in ("a", "b"):
+                        self.queued_commands[pid].append({
+                            "cmd": "msgbox", "text": "Trade canceled - no response.", "fb": "prompt"})
+                else:
+                    self.queued_commands[pt["initiator"]].append({
+                        "cmd": "msgbox", "text": "Your partner declined the trade.", "fb": "prompt"})
+                    self.queued_commands[player_id].append({
+                        "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
 
     def _cancel_trade(self, text: str):
         """Clear a trade nothing was applied for, telling both players."""
@@ -1748,14 +1791,18 @@ class SoulLinkState:
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, phone_calls: bool = True) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc, phone_calls=phone_calls)
         if not os.path.exists(state._links_path):
             return state
         try:
             with open(state._links_path) as f:
                 data = json.load(f)
+        except (OSError, ValueError) as exc:
+            log.error(f"Failed to read {state._links_path}: {exc}")
+            return state
+        try:
             for ed in data.get("links", []):
                 a = MonInfo(**ed["a"]) if ed.get("a") else None
                 b = MonInfo(**ed["b"]) if ed.get("b") else None
@@ -1809,6 +1856,7 @@ class SoulLinkState:
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
                 state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))
+                state.phone_calls = bool(saved_rules.get("phone_calls", phone_calls))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -1922,7 +1970,8 @@ class SoulLinkState:
             # resume it under the stale adapter, exactly what this refusal prevents.
             raise
         except Exception as e:
-            log.error(f"Failed to load {state._links_path}: {e}")
+            state.load_failed = f"{type(e).__name__}: {e}"
+            log.error(f"Failed to load {state._links_path}: {state.load_failed}")
         return state
 
     # ── event handlers ───────────────────────────────────────────────────────
@@ -2085,7 +2134,7 @@ class SoulLinkState:
             # This prevents stale party_keys from the previous session blocking sync commands.
             self._has_helld.discard(_partner(player_id))
             self.party_keys[player_id] = {
-                m["key"] for m in party if m.get("maxHP", 0) > 0
+                m["key"] for m in party if m.get("key") and m.get("maxHP", 0) > 0
             }
             # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
             # slot when a reconnect happens before the Lua sends the faint event back).
@@ -2098,7 +2147,7 @@ class SoulLinkState:
             # Re-quarantine: if any pending (unlinked) captures are in the party,
             # remove from party_keys and re-queue box_mon so they go back to the box.
             # Safety: never quarantine if it would leave the player with no alive mons.
-            alive_keys = {m["key"] for m in party if m.get("hp", 0) > 0}
+            alive_keys = {m["key"] for m in party if m.get("key") and m.get("hp", 0) > 0}
             quarantined = set()
             for area_id, players in self.pending_captures.items():
                 cap = players.get(player_id)
@@ -2250,6 +2299,7 @@ class SoulLinkState:
             "native_sounds": bool(self.native_sounds),
             "battle_calc": bool(self.battle_calc),
             "pc_trade_npc": bool(self.pc_trade_npc),
+            "phone_calls": bool(self.phone_calls),
         })
 
         self.awaiting_save[player_id] = False   # BURIAL-VISIBLE: a waiting client re-asserts it on its ticks
@@ -2304,9 +2354,17 @@ class SoulLinkState:
         area_id = msg.get("area_id", "")
         if not area_id:
             return
+        old_retry = self.retry_areas[player_id]
+        self.retry_areas[player_id] = {a for a in old_retry if a == area_id}
+        retry_changed = old_retry != self.retry_areas[player_id]
+        if retry_changed:
+            log.info("[%s] cleared retry areas %s on entering %s", player_id,
+                     sorted(old_retry - self.retry_areas[player_id], key=str), area_id)
         # Gift areas (oaks_lab, intro, etc.) are not encounter areas — their captures
         # are handled directly via _handle_capture.  Don't create pending area state.
         if self._adapter_for(player_id).is_gift_area(area_id):
+            if retry_changed:
+                self._save()
             return
         # Always track area state — Lua only sends area_enter events once it has confirmed
         # Pokéballs are available (M.hasPokeballs() gate on the client side).
@@ -4622,29 +4680,8 @@ class SoulLinkState:
             self.queued_commands[pid].append({"cmd": "game_over"})
 
     def _atomic_write_json(self, path: str, payload):
-        """Write JSON atomically: write to .tmp, fsync, rename over target.
-
-        On crash mid-write, the original file at `path` is untouched.
-        `os.replace` is atomic on both Windows and POSIX.
-
-        On Windows, file sync software (e.g. Google Drive) can briefly hold
-        a lock on the target file, making `os.replace` raise PermissionError.
-        We retry up to 5 times with a short sleep before giving up.
-        """
-        import time
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w") as f:
-            json.dump(payload, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        for attempt in range(5):
-            try:
-                os.replace(tmp_path, path)
-                return
-            except PermissionError:
-                if attempt == 4:
-                    raise
-                time.sleep(0.2 * (attempt + 1))
+        """Preserve the state monkeypatch seam; publication/retries live in json_files."""
+        return json_files.atomic_write_json(path, payload)
 
     def _save(self):
         os.makedirs(self._data_dir, exist_ok=True)
@@ -4661,6 +4698,7 @@ class SoulLinkState:
                 "native_sounds": self.native_sounds,
                 "battle_calc": self.battle_calc,
                 "pc_trade_npc": self.pc_trade_npc,
+                "phone_calls": self.phone_calls,
             },
             "links": [
                 {

@@ -13,6 +13,7 @@ import pathlib
 import pytest
 
 from tests.unit.test_gb_panel import _abi
+from tests.unit.test_gen2_client import NEEDS_OVERLAY, Refused
 from tests.unit.test_gen2_panel import CAP_PANEL, PERMIT, Cart
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -35,6 +36,7 @@ class PhoneCart(Cart):
         self.phone = self.lua.eval(f'dofile("{PHONE}")').new(self.panel, io, self.pw,
                                                              lambda s: self.logs.append(str(s)))
         self.min_gap = int(self.lua.eval(f'dofile("{PHONE}")').MIN_GAP)
+        self.restage_max = int(self.lua.eval(f'dofile("{PHONE}")').RESTAGE_MAX)
 
     def service_rom(self):
         super().service_rom()
@@ -229,11 +231,37 @@ def _production(caps):
 
 @pytest.mark.parametrize("caps, posted", [(CAP_PANEL | CAP_PHONE, [(FALLEN, "System Bus")]),
                                           (CAP_PANEL, []), (None, [])])
+@NEEDS_OVERLAY
 def test_the_client_forwards_a_tagged_command_only_to_a_phone_build(caps, posted):
     world, mb = _production(caps)
     world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
     world.frames(5)
     assert [(v, d) for a, v, d in world.written() if a == mb + REQ] == posted
+
+
+@pytest.mark.parametrize("config, rings", [(None, True), ({"phone_calls": True}, True),
+                                           ({"phone_calls": False}, False), ({"native_messages": False}, True)])
+@NEEDS_OVERLAY
+def test_phone_calls_are_their_own_switch_default_on(config, rings):
+    """Owner 2026-10-02: phone calls are a run checkbox, default ON, separate from native_messages
+    (default off). Only an explicit phone_calls=false silences the ring."""
+    world, mb = _production(CAP_PANEL | CAP_PHONE)
+    if config is not None:
+        world.reply({"cmd": "config", **config})
+    world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
+    world.frames(5)
+    assert bool([v for a, v, d in world.written() if a == mb + REQ]) is rings
+    assert "prompt:A and B linked!" in world.shown()   # the BizHawk HUD pop-up always shows (owner ruling)
+
+
+def test_a_clean_cartridge_never_reaches_the_phone_binder():
+    """Patch-first (owner 2026-10-02): the phone service ships in the SLink companion overlay, and
+    the launcher refuses a clean Gen 2 cartridge before a client exists, so no tagged command can
+    be posted. Stated here because the two tests above can no longer run on this cartridge."""
+    from tests.unit.test_gen2_client import World
+    with pytest.raises(Refused) as caught:
+        World("crystal", production=True, clean=True)
+    assert "this crystal cartridge needs the SLink companion patch" in str(caught.value)
 
 
 # -- PHONE-NAMES: the staged record (docs/gen2/POST_RC_CARDS.md) --------------------------------
@@ -260,6 +288,10 @@ class NamedCart(PhoneCart):
 
     def staged(self):
         return bytes(self.mem[self.stage:self.stage + 24])
+
+    def prepare(self):
+        """SlinkPhonePrepareCall: the cookie is zeroed (single use) and ARMED stays set until the next script op."""
+        self.mem[self.stage + 23] = 0
 
 
 def named(**kw):
@@ -351,7 +383,7 @@ def test_the_higher_priority_call_keeps_its_own_record():
     assert c.staged()[:1] == bytes([FALLEN]) and c.staged()[3:6] == encode(c, "BOB")
 
 
-def test_a_map_change_while_armed_is_restaged_exactly_once():
+def test_a_map_change_while_armed_is_restaged():
     c = named()
     c.request("fallen", DATA)
     c.step(2)
@@ -360,10 +392,74 @@ def test_a_map_change_while_armed_is_restaged_exactly_once():
     c.mem[c.stage:c.stage + 24] = bytes(24)          # HandleNewMap -> ClearUnusedMapBuffer
     c.step()
     assert c.staged() == record and any("re-staged" in line for line in c.logs)
-    c.mem[c.stage:c.stage + 24] = bytes(24)          # a second map change: no second re-stage
+
+
+def test_a_wipe_that_lands_again_right_after_the_restage_still_ends_intact():
+    """Sweep gen2-fsw-1003-0029, Gold on the titled ROM: the binder re-staged all 24 bytes at f13040 and the ROM's
+    ClearUnusedMapBuffer zeroed bytes 17-24 again at f13041, so a re-stage that happens ONCE rang a cookie-less record
+    (the fixed fallback caller). The call is still ARMED, so the binder keeps the record intact (bounded)."""
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # f13040: the wipe
+    c.step()
+    assert c.staged() == record
+    c.mem[c.stage + 16:c.stage + 24] = bytes(8)      # f13041: the same wipe zeroes the tail again
+    c.step()
+    assert c.staged() == record, "the ring must read the whole record, cookie included"
+
+
+def test_a_record_wiped_every_frame_stops_at_the_cap_and_fails_closed():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    for _ in range(40):
+        c.mem[c.stage:c.stage + 24] = bytes(24)
+        c.step()
+    restages = sum("re-staged" in line for line in c.logs)
+    assert restages == c.restage_max, restages
+    assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
     c.writes.clear()
+    c.mem[c.stage:c.stage + 24] = bytes(24)
+    c.step(5)
+    assert c.writes == [], "nothing is written once the binder has failed closed"
+
+
+def test_the_roms_own_prepare_zeroing_the_cookie_is_consumption_not_a_wipe():
+    """Review F1/F2 of 6dd876ef: SlinkPhonePrepareCall zeroes only the cookie and ARMED stays set until its next script
+    op; the frame callback can land in between. Putting the record back there would undo the single-use cookie."""
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.writes.clear()
+    c.prepare()
+    c.step(5)                                        # ARMED still set for several frames: nothing may be written
+    assert c.writes == [] and c.staged() == record[:23] + b"\x00"
+    assert not any("re-staged" in line for line in c.logs)
+    c.deliver()
     c.step(3)
-    assert c.staged() == bytes(24) and c.writes == []
+    assert c.writes == []
+
+
+def test_a_wipe_that_leaves_the_id_but_not_the_nonce_is_not_mistaken_for_consumption():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.mem[c.stage + 22:c.stage + 24] = bytes(2)      # nonce and cookie wiped, the id still there
+    c.step()
+    assert c.staged() == record
+
+
+def test_an_intact_record_is_never_rewritten_while_armed():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    c.writes.clear()
+    c.step(20)
+    assert c.writes == [] and not any("re-staged" in line for line in c.logs)
 
 
 def test_no_restage_for_a_fixed_text_call_or_after_delivery():
@@ -381,7 +477,7 @@ def test_no_restage_for_a_fixed_text_call_or_after_delivery():
 
 @pytest.mark.parametrize("failures, restored", [(1, True), (2, True), (3, False), (10, False)])
 def test_a_failed_restage_retries_then_fails_closed(failures, restored):
-    """F3: `restaged` only after a whole successful stage; at most 3 attempts, then the cookie is zeroed."""
+    """F3: a failed stage write is retried at most RESTAGE_TRIES times, then the cookie is zeroed and nothing more is written."""
     c = named()
     c.request("fallen", DATA)
     c.step(2)
@@ -400,10 +496,13 @@ def test_a_failed_restage_retries_then_fails_closed(failures, restored):
         assert c.staged() == record
     else:
         assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
-    c.mem[c.stage:c.stage + 24] = bytes(24)          # later wipes are never re-staged again
     c.writes.clear()
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # a later wipe: re-staged while armed, never after failing closed
     c.step(3)
-    assert c.writes == []
+    if restored:
+        assert c.staged() == record
+    else:
+        assert c.writes == [] and c.staged()[23] == 0
 
 
 def test_a_failed_stage_write_never_posts_the_request():

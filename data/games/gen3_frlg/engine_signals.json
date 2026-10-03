@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_frlg",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "0b04d64aa4e7af57986c7a2c638f0e95b4a9272097d67e59e3505bba5cdde6e6",
+  "sha256": "13b53270278fed0735fbb2cb03c51fbd2c84827ab66ffa928edfeb8eb171603c",
   "titles": {
     "firered": {
       "artifacts": {
@@ -642,8 +642,8 @@
         },
         "companion": {
           "production": true,
-          "rom_md5": "f3989b7545a622b808cafedd5a03822c",
-          "rom_sha1": "10109d33a937af6182827a5b0b36abccfaabd1c9",
+          "rom_md5": "680f3b607ca7926ac747b43f6333ed42",
+          "rom_sha1": "96df1dd019b7ec5515b65ab26c82a251f47eb06d",
           "sites": {
             "battle_begin": {
               "address": 134282652,
@@ -794,10 +794,10 @@
               "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
               "capture_offset": 0,
               "context": {
-                "expected_hex": "004B18479D26EB080FD13BF1A9F90006",
+                "expected_hex": "004B1847E527EB080FD13BF1A9F90006",
                 "rom_offset": 1296
               },
-              "expected_hex": "004B18479D26EB080FD13BF1A9F90006",
+              "expected_hex": "004B1847E527EB080FD13BF1A9F90006",
               "function": {
                 "address": 134219024,
                 "anchor_offset": 0,
@@ -1913,8 +1913,8 @@
         },
         "companion": {
           "production": true,
-          "rom_md5": "212450676d820bc85fbd6274868f5fed",
-          "rom_sha1": "e651983a7e0d3cbd8810c76252755d2f09bd9bf0",
+          "rom_md5": "9170ba0b85fe5d054346c0d225e11218",
+          "rom_sha1": "55fb6e9bfa79d562d727b65077fa85064f342b60",
           "sites": {
             "battle_begin": {
               "address": 134282652,
@@ -2065,10 +2065,10 @@
               "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
               "capture_offset": 0,
               "context": {
-                "expected_hex": "004B18479129EB080FD13BF195F90006",
+                "expected_hex": "004B1847D92AEB080FD13BF195F90006",
                 "rom_offset": 1296
               },
-              "expected_hex": "004B18479129EB080FD13BF195F90006",
+              "expected_hex": "004B1847D92AEB080FD13BF195F90006",
               "function": {
                 "address": 134219024,
                 "anchor_offset": 0,

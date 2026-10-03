@@ -105,12 +105,12 @@ def _run_duo(game, scenario):
 # not exist yet (only rr_town.sav/rr_town_b.sav are built) -- required_fixtures_rr below fails
 # them loudly with the missing fixture's name, the same policy the module docstring states for
 # gen3_frlg, rather than silently skipping. Only faint_cmd_gen3, reconnect_gen3 and
-# native_absent_gen3 (all "town") can actually run today.
+# clean_rr_refused_gen3 (all "town") can actually run today.
 GAME_RR = "gen3_rr"
 SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
                 "link_gen3", "deadzone_gen3", "reconnect_gen3",
-                "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
-                "linked_faint_active_whiteout_gen3", "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
+                "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "clean_rr_refused_gen3",
+                "linked_faint_active_whiteout_gen3",
                 "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3",
                 "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3",
                 "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "release_gen3", "ball_gate_gen3")

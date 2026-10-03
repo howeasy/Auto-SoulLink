@@ -41,9 +41,7 @@ function randomizerFields(form) {
     rdraft: {
       jar: form.jar || '', rom_a: '', rom_b: '',
       // Start from what the run last made, so "prepare again" means the same unless
-      // changed: the companion as before (on by default where one exists — the panel and
-      // the native trade are what the companion is for), randomized as before.
-      companion: form.cartridges ? !!form.cartridges.companion : true,
+      // changed. The companion is not a draft field: it goes in wherever one exists.
       randomize: !!(form.current),
       spec: Object.assign(defaultSpec(form), (form.current && form.current.spec) || {}),
     },
@@ -263,7 +261,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : f === 'gen3_exp' ? 'Emerald Expansion' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -285,6 +283,7 @@ function randomizerFields(form) {
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
         add('FireRed · LeafGreen', function (r) { return r.clean && r.family === 'gen3_frlg'; });
         add('Emerald', function (r) { return r.clean && r.family === 'gen3_emerald'; });
+        add('Emerald Expansion', function (r) { return r.clean && r.family === 'gen3_exp'; });
         add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
       }
       add('not usable', function (r) { return !r.clean; });
@@ -336,15 +335,16 @@ function randomizerFields(form) {
       finally { this.uploading = ''; }
     },
     pick(pid) { var p = this.rdraft['rom_' + pid]; return this.roms.find(function (r) { return r.path === p; }) || null; },
-    // The SLink companion exists for some titles only (rform.companion_titles): a pick
-    // outside them greys the checkbox with the reason, as the run options do.
+    // The SLink companion exists for some titles only (rform.companion_titles): it is
+    // patched into every pick that has one; a pick outside them is handed out as picked.
     companionOk() {
       var titles = this.rform.companion_titles || [];
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
+          if (r.family === 'gen3_exp') return { ok: false, why: 'The Emerald Expansion has no companion patch. Use the standard cartridge.' };
           if (r.family === 'gen3_emerald') return { ok: false, why: 'No Emerald companion build is available yet. Use the standard cartridge.' };
-          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
+          return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. The cartridge is handed out as picked: the Soul Link rules are the same, without the panel, native trade or native sounds.' };
         }
       }
       return { ok: true, why: '' };
@@ -358,6 +358,7 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
+      if (this.rdraft.randomize && [ra, rb].some(function (r) { return r && r.family === 'gen3_exp'; })) return 'The Emerald Expansion has no randomizer; turn Randomize off.';
       if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {
@@ -372,13 +373,14 @@ function randomizerFields(form) {
           && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
       }
-      if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
+      if (this.rdraft.randomize && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
         // pure + companion + randomize is the overlay path: UPR needs an entry for the
         // overlay build of each pick ("PureRed overlay (U)"; the fork's naming).
         var entries = this.pre.jar_entries, missing = [];
-        [ra, rb].forEach(function (r) { if (r && r.variant && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
-        if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, randomize with the companion off, or keep the companion without randomizing.';
+        var titles = this.rform.companion_titles || [];
+        [ra, rb].forEach(function (r) { if (r && r.variant && titles.indexOf(r.variant) >= 0 && entries.indexOf(r.variant + ' overlay (U)') < 0) missing.push(r.variant); });
+        if (missing.length) return 'This jar has no entry for the companion overlay of ' + missing.join(' / ') + ': rebuild the SLink fork, or turn Randomize off.';
       }
       return '';
     },
@@ -389,7 +391,10 @@ function randomizerFields(form) {
     },
     cartridgesBody() {
       var body = { rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b,
-                   companion: !!this.rdraft.companion && this.companionOk().ok, randomize: !!this.rdraft.randomize };
+                   // patch-first: the server decides per player (server/cartridges.py); a pick
+                   // whose title has no companion (Yellow) goes out as picked, its partner still
+                   // patched, and a title that requires one it cannot get is refused
+                   companion: true, randomize: !!this.rdraft.randomize };
       if (this.rdraft.randomize) { body.jar = this.rdraft.jar; body.spec = this.rdraft.spec; }
       return body;
     },

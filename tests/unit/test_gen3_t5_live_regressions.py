@@ -240,6 +240,7 @@ def test_captured_b_ready_scene_waits_for_a_safe_frame_without_losing_its_deadli
 def test_captured_hidden_tick_explains_server_refusal_but_visible_hello_releases_it(tmp_path):
     from server.server import SLinkServer
     from server.state import LinkEntry, LinkStatus, MonInfo
+    from tests.unit.companion_evidence import patched
 
     data = trace()
 
@@ -252,6 +253,7 @@ def test_captured_hidden_tick_explains_server_refusal_but_visible_hello_releases
             for side in "ab"
         }
         for side in "ab":
+            hellos[side] = patched(hellos[side])
             server._dispatch(side, hellos[side])
         halves = {side: hellos[side]["party"][1] for side in "ab"}
         link = LinkEntry(

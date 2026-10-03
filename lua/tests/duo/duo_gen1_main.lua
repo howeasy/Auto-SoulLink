@@ -96,6 +96,16 @@ elseif family then
 else
     finish(false, "not a Gen 1 cartridge (header " .. tostring(header) .. ")")
 end
+-- Companion required (owner 2026-10-02): whether admitted by sha1 or named by the header family
+-- above, a Red/Blue/pureRGB cartridge runs only with the companion in it (gen1_gate.lua
+-- companion_refusal: the production beacon detector and, for pureRGB, an overlay admission row).
+local refused = dofile(ROOT .. "/lua/tests/gen1_gate.lua").companion_refusal(ROOT, json, {
+    pack = pack, title = title, kind = kind,
+    rom_sha1 = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
+}, rom_u8, memory.getmemorydomainsize("ROM"), Entry)
+if refused then
+    finish(false, refused .. " refused: the SLink companion is required")
+end
 -- The lane's driver-facts table (P3b-e): every route/battle module reads its game facts from it,
 -- and a module's `new(expected)` falls back to the VANILLA table when `expected.facts` is nil --
 -- so the pure pack hands the pure table to every module here, at file scope and per instance.
@@ -403,6 +413,7 @@ local function hunt(mode, options)
                       wActionResultOrTookBattleTurn = symbols.wActionResultOrTookBattleTurn,
                       hLoadedROMBank = symbols.hLoadedROMBank, wListScrollOffset = symbols.wListScrollOffset,
                       wPlayerMonNumber = symbols.wPlayerMonNumber, wPartyCount = symbols.wPartyCount,
+                      wNumBagItems = symbols.wNumBagItems, wBagItems = symbols.wBagItems,
                       wBattleMonMoves = symbols.wBattleMonMoves, wBattleMonPP = symbols.wBattleMonPP,
                       wBattleMonHP = symbols.wBattleMonHP, wEnemyMonHP = symbols.wEnemyMonHP,
                       wEnemySelectedMove = symbols.wEnemySelectedMove, wCurItem = symbols.wCurItem,

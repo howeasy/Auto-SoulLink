@@ -1,0 +1,12 @@
+SOURCE=5d5c3b09067cbaf21a6ff844d0246a55b8e2720e; SYNTH item add:own ITEM_MASTER_BALL4 quantity1 replaces bagrow0; staticpositiveonly; pendingCONTINUE/SAVE noencounter
+RAW_SHA256=b243ca2defc955dcbd80cb16499d99bcc1c26921b76032764867da9ff2cf9b6f
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=3
+phase overworld-cb2 frame=515 map=24.24 pos=(17,9)
+phase field frame=598 map=24.24 pos=(17,9) saveFileStatus=1
+phase save-menu frame=598 counter=3
+phase save-dialog frame=658 row=3/6
+phase saved frame=1185 counter=3->4
+phase flushed frame=1605 map=24.24 pos=(17,9)
+RESULT: PASS counter 3 -> 4 map=24.24 pos=(17,9)
+MASTER_PENDING_NATIVE_SAVE_PASS item4=1,Dampability_num2 unchanged raw=b243ca2defc955dcbd80cb16499d99bcc1c26921b76032764867da9ff2cf9b6f saved=ebcac1aee7e7458a6cb65f37af7a3b96b2e3bad9ffe0475945d3dbd9f3bc5073

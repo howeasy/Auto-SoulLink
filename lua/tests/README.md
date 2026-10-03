@@ -83,7 +83,7 @@ fresh probe per the patterns below if new discovery is needed.
 | Test | Gates |
 |---|---|
 | `test_mailbox_ping.lua` | beacon + ABI + mailbox seq/ack round-trip (opcode 1) |
-| `test_mailbox_absent.lua` | clean fallback on an UNPATCHED ROM (no beacon → MB.present()=false) |
+| `test_mailbox_absent.lua` | UNPATCHED ROM: no beacon, native refuses every op as absent, and the launcher (`Entry.admit_routed`) refuses the cartridge ("needs the SLink companion patch") |
 | `test_mailbox_battle.lua` | mailbox liveness inside battle |
 | `test_live_boxsync.lua` | OP_DEPOSIT_MON/OP_WITHDRAW_MON (24/25) round-trip faithfulness |
 | `test_live_memorialize.lua` | OP_MEMORIALIZE (26): compress + zero + swap-with-last + bounds rejects |

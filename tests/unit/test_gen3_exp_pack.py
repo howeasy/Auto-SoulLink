@@ -1,4 +1,4 @@
-"""Unadmitted expansion pack: exact build facts, bytes, and additive generation."""
+"""Admitted reference expansion pack: exact build facts and retained battle limits."""
 
 import copy
 import hashlib
@@ -38,9 +38,10 @@ def context():
     return profile.expansion_inputs(artifacts=path)
 
 
-def test_expansion_is_not_admitted_and_removed_fields_are_absent():
+def test_expansion_is_admitted_and_removed_fields_are_absent():
     p = read("profile.json")["titles"][TITLE]
-    assert p["admitted"] is False
+    assert p["admitted"] is True
+    assert read("write_checkpoint.json")[TITLE]["admitted"] is True
     assert p["rom_sha1"] == profile.EXPANSION_SHA1
     forbidden = {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR", "TRAINER_OPPONENT_ADDR", "BATTLE_INTRO_GET_MONS_DATA_ADDR",
                  "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF"}
@@ -92,7 +93,7 @@ def test_every_engine_and_checkpoint_pin_matches_rom(context):
     pack = read("engine_signals.json")
     assert pack["live_verified"] is False
     sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
-    assert len(sites) == 21
+    assert len(sites) == 22
     assert {kind for kind, row in pack["inventory"].items() if row["status"] == "OPEN"} == set()
     for kind, row in sites.items():
         data = bytes.fromhex(row["expected_hex"])
@@ -417,7 +418,7 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
     for name in ("area_map.json", "gen3_exp_areas.lua", "gen3_exp_locations.lua"):
         assert (tmp_path / name).read_text(encoding="utf-8") == (PACK / name).read_text(encoding="utf-8")
     mapping = read("area_map.json")
-    assert len(mapping) == 240
+    assert len(mapping) == 240 + 13 + 7  # + EXP-GIFT-AREAS: 5 gift + 8 static maps; + EXP-TOWNS: 7 wild-less towns
     assert {"altering_cave", "altering_cave_frlg", "victory_road", "kanto_victory_road"} <= set(mapping.values())
     for name in ("gen3_exp_areas.lua", "gen3_exp_locations.lua"):
         text = (PACK / name).read_text(encoding="utf-8")
@@ -425,24 +426,140 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
     assert len(re.findall(r'^  \["', (PACK / "gen3_exp_locations.lua").read_text(), re.M)) == 935
 
 
-# ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
-def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
-    """The pack is deliberately UNADMITTED (module docstring). X3 (the E2-ENTRY precedent) registers
-    it in lua/gen3/entry.lua's Entry.PACKS so its hash names its OWN pack (never gen3_emerald's) and
-    the launcher refuses it as unrouted (test_gen3_exp_entry.py); it must stay out of Entry.ROUTED,
-    carry no header_code (no by-name admission), keep its profile unadmitted, and server/manager.py
-    must not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+# ── EXP-GIFT-AREAS: gift_areas is the five interior gift maps, never a wild route ────────────
+GIFT_IDS = ["lavaridge_town", "littleroot_town_professor_birchs_lab", "mossdeep_city_stevens_house",
+            "route119_weather_institute_2f", "rustboro_city_devon_corp_2f"]
+GIFT_KEYS = {"0:12": "lavaridge_town", "1:4": "littleroot_town_professor_birchs_lab",
+             "11:1": "rustboro_city_devon_corp_2f", "14:7": "mossdeep_city_stevens_house",
+             "32:1": "route119_weather_institute_2f"}
+
+
+def test_exp_gift_areas_are_exactly_the_five_interior_gift_maps():
+    gift = read("write_checkpoint.json")[TITLE]["gift_areas"]
+    assert isinstance(gift, dict) and gift["ids"] == GIFT_IDS and gift["source"]
+    assert "gift_areas" not in read("write_checkpoint.json")[TITLE]["open"]
+    mapping = read("area_map.json")
+    assert {k: mapping.get(k) for k in GIFT_KEYS} == GIFT_KEYS
+
+
+def test_exp_gift_areas_hold_no_wild_route_and_match_the_census():
+    wild = set(read("expansion_encounters.json")["encounters"])
+    assert not set(GIFT_IDS) & wild
+    mapping = read("area_map.json")
+    gifts = set()
+    for r in read("expansion_gifts.json")["declarations"]:
+        if r["status"] != "active" or not r["map_group_num"]:
+            continue
+        assert r["area_id"] == mapping[r["map_group_num"]], r["source"]
+        if r["kind"] in ("gift", "egg"):
+            assert r["gift_area"] == r["area_id"]
+            gifts.add(r["area_id"])
+        else:
+            assert r["kind"] == "static" and r["gift_area"] is None
+    assert gifts == set(GIFT_IDS)
+
+
+def test_exp_gift_areas_fail_closed_when_a_wild_route_leaks_in(tmp_path, monkeypatch):
+    base = tmp_path / "data/games/gen3_exp/28877d73"
+    base.mkdir(parents=True)
+    for name in ("area_map.json", "expansion_gifts.json", "expansion_encounters.json"):
+        (base / name).write_bytes((PACK / name).read_bytes())
+    monkeypatch.setattr(checkpoint, "ROOT", tmp_path)
+    assert checkpoint.gift_areas("gen3_exp", TITLE)["ids"] == GIFT_IDS
+    mapping = json.loads((base / "area_map.json").read_text())
+    mapping["1:4"] = "route_101"
+    (base / "area_map.json").write_text(json.dumps(mapping))
+    with pytest.raises(SystemExit, match="route_101"):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+    del mapping["1:4"]
+    (base / "area_map.json").write_text(json.dumps(mapping))
+    with pytest.raises(SystemExit, match="1:4"):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+
+
+def _census_copy(tmp_path, monkeypatch):
+    base = tmp_path / "data/games/gen3_exp/28877d73"
+    base.mkdir(parents=True)
+    for name in ("area_map.json", "expansion_gifts.json", "expansion_encounters.json"):
+        (base / name).write_bytes((PACK / name).read_bytes())
+    monkeypatch.setattr(checkpoint, "ROOT", tmp_path)
+    return base
+
+
+@pytest.mark.parametrize("kind", ["choice_gift", "fixed_gift", "mystery_kind"])
+def test_exp_gift_areas_refuse_an_active_row_the_generator_does_not_account_for(tmp_path, monkeypatch, kind):
+    base = _census_copy(tmp_path, monkeypatch)
+    assert checkpoint.gift_areas("gen3_exp", TITLE)["ids"] == GIFT_IDS  # the real census passes
+    census = json.loads((base / "expansion_gifts.json").read_text())
+    row = next(r for r in census["declarations"] if r["status"] == "active" and r["kind"] == "gift")
+    census["declarations"].append({**row, "kind": kind})
+    (base / "expansion_gifts.json").write_text(json.dumps(census))
+    with pytest.raises(SystemExit, match=kind):
+        checkpoint.gift_areas("gen3_exp", TITLE)
+
+
+# M3: a static shares its MAPSEC area with the wild table when one exists (Emerald's precedent).
+# Pinned so a new coincidence is a conscious decision; it does not fail the build.
+STATIC_AREAS_SHARING_A_WILD_AREA = {"new_mauville", "route_120", "sky_pillar"}
+
+
+def test_exp_statics_that_share_a_wild_area_are_pinned():
+    wild = set(read("expansion_encounters.json")["encounters"])
+    statics = {r["area_id"] for r in read("expansion_gifts.json")["declarations"]
+               if r["status"] == "active" and r["kind"] == "static" and r["area_id"]}
+    assert statics & wild == STATIC_AREAS_SHARING_A_WILD_AREA
+
+
+def test_other_packs_gift_areas_are_byte_identical_to_their_committed_checkpoints():
+    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        committed = json.loads((ROOT / "data/games" / pack / "write_checkpoint.json").read_text("utf-8"))
+        for title, row in committed.items():
+            assert checkpoint.gift_areas(pack, title) == row["gift_areas"], (pack, title)
+
+
+def test_exp_battle_handoff_open_text_states_the_faint_evidence_honestly():
+    text = read("write_checkpoint.json")[TITLE]["open"]["battle_handoff"]
+    assert "pending" not in text
+    for needle in ("linked_faint_active_gen3", "c9c215f7", "SetValuesOnFaint", "trainer", "doubles",
+                   "whiteout", "Explode", "predate"):
+        assert needle in text, needle
+
+
+# ── Reference production route remains separate from Manager provisioning ─────────────────
+def test_gen3_exp_is_routed_by_exact_hash_only():
+    """The exact reference pack routes; header-only admission stays excluded."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
     Entry = lua.eval(f'dofile("{entry_path}")')
     assert "gen3_exp" in {key for key, _ in Entry.PACKS.items()}
     assert Entry.PACKS.gen3_exp.header_code is None
-    assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
-    assert read("profile.json")["titles"][TITLE]["admitted"] is False
+    assert "gen3_exp" in {key for key, _ in Entry.ROUTED.items()}
+    assert read("profile.json")["titles"][TITLE]["admitted"] is True
 
-    from server.manager import GAMES, UNADMITTED_GAMES
-    assert "gen3_exp" not in {key for key, _, _ in GAMES}
+
+def test_gen3_exp_is_offered_by_the_manager_as_an_admitted_game():
+    """Owner 2026-10-02: the Emerald Expansion is an RC game in the Manager (no randomizer, no companion)."""
+    from server.manager import GAMES, NON_RANDOMIZABLE_GAMES, UNADMITTED_GAMES
+    assert "gen3_exp" in {key for key, _, _ in GAMES}
     assert "gen3_exp" not in UNADMITTED_GAMES
+    assert "gen3_exp" in NON_RANDOMIZABLE_GAMES
+
+
+@pytest.mark.parametrize("generator,filename", [(profile, "profile.json"), (checkpoint, "write_checkpoint.json")])
+def test_in_memory_generator_admission_revert_stales_the_own_pack(generator, filename, context):
+    import inspect
+
+    source = inspect.getsource(generator.build_expansion)
+    reverted = source.replace('"admitted": True', '"admitted": False', 1)
+    assert reverted != source
+    namespace = dict(vars(generator))
+    exec(compile(reverted, str(generator.__file__), "exec"), namespace)
+    old = namespace["build_expansion"](context)
+    committed = read(filename)
+    assert old != committed
+    row = old["titles"][TITLE] if filename == "profile.json" else old[TITLE]
+    assert row["admitted"] is False
+    assert generator.build_expansion(context) == committed  # Restore the original callable, without file edits.
 
 
 # ── F3/F4: a ROM-value oracle independent of the generator's own decode path ────────────────

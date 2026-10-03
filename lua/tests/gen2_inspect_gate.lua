@@ -334,6 +334,9 @@ G.STATS_JOYPAD = {crystal = "MonStatsJoypad", gold = "StatsScreen_LoadPage.joypa
                   silver = "StatsScreen_LoadPage.joypad_loop"}
 function G.sym_site(ctx, label)
     local artifact = assert(G.SYM_ARTIFACT[ctx.env.title], "unsupported title " .. tostring(ctx.env.title))
+    -- An overlay executes its own symbol table (data/gen2/<title>_slink.sym, sha256-pinned by the execution binding):
+    -- bank 4 labels may have moved, so the clean table is never read for it.
+    if ctx.artifact and ctx.artifact.kind == "overlay" then artifact = ctx.env.title .. "_slink" end
     local path = ctx.root .. "/data/gen2/" .. artifact .. ".sym"
     local f = assert(io.open(path, "rb"), "cannot open " .. path)
     local text = f:read("a")

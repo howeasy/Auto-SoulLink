@@ -44,6 +44,58 @@ function Admission.sha1(read_u8, n)
     return string.format("%08x%08x%08x%08x%08x", h0, h1, h2, h3, h4)
 end
 
+-- FIPS 180-4 SHA-256 over a flat byte reader, without emulator or game assumptions.
+local K = {
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}
+function Admission.sha256(byte_at, n)
+    assert(integer(n) and n >= 0 and n <= 2^40, "SHA-256 byte length required")
+    local M = 0xFFFFFFFF
+    local function ror(x, k) return ((x >> k) | (x << (32 - k))) & M end
+    local H = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19}
+    local total = n + 1
+    while total % 64 ~= 56 do total = total + 1 end
+    total = total + 8
+    local bits = n * 8
+    local function b(i)
+        if i < n then
+            local value = byte_at(i)
+            assert(byte(value), "unavailable or invalid hashed byte")
+            return value
+        end
+        if i == n then return 0x80 end
+        if i < total - 8 then return 0 end
+        return (bits >> (8 * (total - 1 - i))) & 0xFF
+    end
+    local w = {}
+    for chunk = 0, total - 1, 64 do
+        for t = 0, 15 do
+            local p = chunk + t * 4
+            w[t] = (b(p) << 24) | (b(p + 1) << 16) | (b(p + 2) << 8) | b(p + 3)
+        end
+        for t = 16, 63 do
+            local s0 = ror(w[t-15], 7) ~ ror(w[t-15], 18) ~ (w[t-15] >> 3)
+            local s1 = ror(w[t-2], 17) ~ ror(w[t-2], 19) ~ (w[t-2] >> 10)
+            w[t] = (w[t-16] + s0 + w[t-7] + s1) & M
+        end
+        local a, bb, c, d, e, f, g, h = H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]
+        for t = 0, 63 do
+            local t1 = (h + (ror(e, 6) ~ ror(e, 11) ~ ror(e, 25)) + ((e & f) ~ ((~e) & g)) + K[t+1] + w[t]) & M
+            local t2 = ((ror(a, 2) ~ ror(a, 13) ~ ror(a, 22)) + ((a & bb) ~ (a & c) ~ (bb & c))) & M
+            h, g, f, e, d, c, bb, a = g, f, e, (d + t1) & M, c, bb, a, (t1 + t2) & M
+        end
+        for i, v in ipairs({a, bb, c, d, e, f, g, h}) do H[i] = (H[i] + v) & M end
+    end
+    return string.format("%08x%08x%08x%08x%08x%08x%08x%08x", H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8])
+end
+
+
 local function array_length(value, label)
     assert(type(value) == "table" and getmetatable(value) == nil, label .. ": plain array required")
     local count, maximum = 0, 0

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -76,14 +77,21 @@ _U1 = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lu
 _U1F = _U1 + ("lua/tests/gen2_pc_inputs.lua",)
 U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3"},
              "a882a763": dict.fromkeys(_U1F, "a882a763"),
-             "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6")}
-U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "a882a763", "silver": "a7bf1773"}
+             "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6"),
+             # the CURRENT drivers, pinned to the checkout's own commit: Gold's U1 leg needs the disclosed SYNTH poisoned
+             # lead (start_phase "tick", O-33), which the 09-24 chains predate. Its Wade-route natural poison setup is a
+             # deterministic loss (sweep ffd54b44: 'a party mon fainted in battle before the poison', both attempts).
+             "head": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "HEAD")}
+U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "head", "silver": "a7bf1773"}
+SYNTH_PSN_U1 = {"gold": "gold_synth_psn"}   # titles whose U1 leg boots the disclosed SYNTH poisoned lead
 # O-33 clock setup for the U1 leg (tools/gen2_synth_fixtures.day_clock, disclosed in the leg as clock_setup): the
 # fixture RTC runs on with the host clock (game = the save's wStart time + RTC), and Silver Route 30 holds Weedle only by morning/day
 # (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite: Hoothoot/Rattata), so a night launch never meets a
-# POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) and Gold (trainer Wade) hunt
-# at any hour. Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
-U1_CLOCK = {"silver": 11}
+# POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) hunts at any hour. Gold boots
+# the SYNTH poisoned lead (SYNTH_PSN_U1), so it needs no hunter, but it is still pinned to 11:00: the RTC otherwise runs
+# on from the host clock (EVO-U1), so the pin keeps the route a pure function of the committed fixture + the disclosed
+# clock_setup, which the verifier re-derives. Only the emulator RTC trailer changes; the CartRAM is the fixture's.
+U1_CLOCK = {"silver": 11, "gold": 11}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -141,7 +149,12 @@ def frozen_u1(chain: str):
     place of the worktree files), {path: {ref, sha256}}, and the frozen test module (u1_facts, verify, U1_FIXTURE)."""
     base = REPO / ".cache/gen2-w6-frozen" / chain
     files = {}
+    # the receipt names the exact commit, never the moving ref: resolved ONCE, before the file loop
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True,
+                          text=True).stdout.strip()
     for rel, ref in U1_CHAINS[chain].items():
+        if ref == "HEAD":
+            ref = head
         data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_bytes(data)
@@ -155,6 +168,15 @@ def frozen_u1(chain: str):
     return base, files, module
 
 
+def verify_u1(u1, text: str, pack: dict, title: str):
+    """The frozen 09-24 chains verify against the clean pack (no `identity`); the current-drivers chain verifies the
+    overlay run against its own overlay identity, exactly as test_gen2_frame_align does (sweep wave3: the head module's
+    verify() without an identity took the clean-ROM branch and failed a PASSING overlay run on rom_sha1)."""
+    if "identity" in inspect.signature(u1.verify).parameters:
+        return u1.verify(text, pack, title, live.identity(title, "overlay"))
+    return u1.verify(text, pack, title)
+
+
 def _legs(title: str, u1) -> dict:
     """leg -> (inner gate, its result file, fixture name, env builder, verify, timeout); u1 = the frozen U1 module."""
     def panel_env(spec, qual):
@@ -164,8 +186,12 @@ def _legs(title: str, u1) -> dict:
         return {"SLINK_GEN2_SFX_FACTS": json.dumps(sfx.sfx_facts(title))}
 
     def u1_env(spec, qual):
-        ctx = gen2_source_data.load_context(spec.title, root=REPO)
-        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO), qual))}
+        # the leg boots the overlay: its facts resolve on the overlay symbols/bytes (D4), never the clean ones
+        ctx = gen2_fixtures.exec_context(spec.title, "overlay", REPO)
+        facts = gen2_fixtures.spec_route_facts(spec, REPO, kind="overlay")
+        if title in SYNTH_PSN_U1:   # the leg boots the SYNTH poisoned lead: skip the hunt (start_phase "tick")
+            return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, facts, qual, synth_psn=True))}
+        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, facts, qual))}
 
     pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
     return {
@@ -174,7 +200,7 @@ def _legs(title: str, u1) -> dict:
         "sfx": (sfx.GATE, "patch/build/gen2_sfx_gate_result.txt", f"{title}_battle", sfx_env,
                 lambda text, staged: sfx.verify(text, sfx.sfx_facts(title), title, staged), 1800),
         "u1": (u1.GATE, "patch/build/gen2_frame_align_result.txt", u1.U1_FIXTURE[title], u1_env,
-               lambda text, staged: u1.verify(text, pack, title), 3600),   # the U1f gate's own bound
+               lambda text, staged: verify_u1(u1, text, pack, title), 3600),   # the U1f gate's own bound
     }
 
 
@@ -203,28 +229,31 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
     for leg, (gate, inner_result, fixture_name, extra_env, check, timeout) in _legs(title, u1).items():
         spec = gen2_fixtures.BY_NAME[fixture_name]
         reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
-                  or live.receipt_missing_reason(spec.name))
+                  or live.receipt_missing_reason(spec.name, kind="overlay"))
         if reason:
             pytest.skip(reason)
         fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
         staged = fixture.read_bytes()
-        live.qualified_identity(spec.name, staged)
-        qual = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-        env = live.inspect_env(spec, staged)
+        live.qualified_identity(spec.name, staged, kind="overlay")
+        qual = json.loads(live.receipt_file(f"{spec.name}.qualification.json", "overlay").read_text(encoding="utf-8"))
+        env = live.inspect_env(spec, staged, kind="overlay")
         env.update(extra_env(spec, qual["attempt_id"]))
         env["SLINK_GEN2_QUALIFICATION_ATTEMPT"] = qual["attempt_id"]
         source = gen2_source_data.load_context(title, root=REPO).source_record()
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
-                                           "clean_view": leg == "u1", "lua_control_offset": 20,
+                                           "lua_control_offset": 20,
                                            "frozen": {rel: str(frozen_dir / rel) for rel in U1_CHAINS[chain]
                                                       if rel.endswith(".lua")} if leg == "u1" else None})
         if launched:
             time.sleep(STAGGER)
         launched = True
-        source_path, clock = fixture, None
+        source_path, clock, poison = fixture, None, None
+        boot = staged
+        if leg == "u1" and title in SYNTH_PSN_U1:   # O-33: the disclosed SYNTH poisoned lead (setup, not the subject)
+            boot, poison = gen2_synth_fixtures.build_named(SYNTH_PSN_U1[title], root=REPO)
         if leg == "u1" and title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-            raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()),
+            raw, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()),
                                                       title=title)
             source_path = REPO / ".cache/gen2-fixtures/w6" / f"{title}-{leg}-clock.SaveRAM"
             source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -241,6 +270,9 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
                      "qualification_attempt_id": qual["attempt_id"], "clock_setup": clock,
+                     **({"poison_setup": poison, "synth_psn": True,
+                         "poison_start_phase": json.loads(env["SLINK_GEN2_U1_FACTS"])["poison"]["start_phase"]}
+                        if poison is not None else {}),
                      "driver": {"ref": chain, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
@@ -255,11 +287,21 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         for key, count in record["writers"].items():
             writers[key] = writers.get(key, 0) + count
     first = legs["panel"]
+    # B2: the executed identity, OBSERVED in the emulator (gameinfo.getromhash) in EVERY leg and
+    # cross-checked against the independently hashed staged bytes.
+    identity = live.identity(title, "overlay")
+    for leg, record in legs.items():
+        assert record["observed_rom_sha1"] == identity["rom_sha1"], \
+            f"{leg}: the gate ran other bytes than the staged overlay"
     receipt = {"schema": SCHEMA, "title": title, "evidence_level": "PHYSICAL", "result": "PASS",
-               "overlay_sha1": facts["overlay_sha1"], "fixture": first["fixture"], "fixture_sha256": first["fixture_sha256"],
+               "overlay_sha1": facts["overlay_sha1"], "observed_rom_sha1": first["observed_rom_sha1"],
+               "artifact_kind": identity["kind"], "rom_sha1": identity["rom_sha1"],
+               "base_sha1": identity["base_sha1"], "binding_sha256": identity["binding_sha256"],
+               "fixture": first["fixture"], "fixture_sha256": first["fixture_sha256"],
                "facts": facts, "legs": legs, "corpus_frames": sum(r["corpus_frames"] for r in legs.values()),
                "writers": dict(sorted(writers.items())), "violation_count": 0,
                "input_mode": "normal_buttons", "harness_write_scopes": []}
-    (REPO / live.RECEIPTS / f"{title}_overlay.w6_gate.json").write_text(
+    # B1: overlay evidence lands in the overlay namespace, never beside the clean receipts.
+    live.receipt_file(f"{title}.w6_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
 

@@ -84,17 +84,18 @@ document alone would have clobbered live state.
 | `0x0203FEA0` | 80 | RR-DURABLE `SlinkTradeWitnessV2` (`RT_BASE + SLINK_WITNESS_OFFSET`) |
 | `0x0203FEF0` | 112 | RR-DURABLE `SlinkTradeProducer` (phase, sequences, 100-byte incoming copy) |
 | `0x0203FF60` | 1 | RR-DURABLE `RT_PRESAVE` (our save dialog is running) |
-| `0x0203FF61` | *159* | — **free tail, the last contiguous run to `0x0203FFFF`** |
+| `0x0203FF61` | 1 | RR main-menu version line state (`handlers.c` `SLM_STATE`, `native_menu.h`) |
+| `0x0203FF62` | *158* | — **free tail, the last contiguous run to `0x0203FFFF`** |
 
-**159 contiguous bytes remain**, plus 115 across eight interior gaps (largest 68 B). When the tail
+**158 contiguous bytes remain**, plus 115 across eight interior gaps (largest 68 B). When the tail
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
 discovered the expensive way.
 
 **The tail was runtime-proven free before allocation, not inferred.** The original
 `lua/tests/test_live_ewramtail.lua` painted all 700 bytes of `0x0203FD44..0x0203FFFF` and
 watched them across seven savestates and 5,100 frames of mashed input. It found zero changes.
-After SlinkInfo and RR-DURABLE claimed their blocks, the gate watches the remaining 159 bytes
-at `0x0203FF61..0x0203FFFF`. Its detector self-check clobbers the mailbox beacon and requires
+After SlinkInfo and RR-DURABLE claimed their blocks, the gate watches the remaining 158 bytes
+at `0x0203FF62..0x0203FFFF`. Its detector self-check clobbers the mailbox beacon and requires
 the frame hook to restore it, so the watch cannot silently pass while blind. This matters because
 the *static* argument for the region was wrong twice: "above CFRU's
 highest known symbol" is an incomplete list, and a ROM literal-pool scan offered as backup turned

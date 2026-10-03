@@ -1,0 +1,46 @@
+# gen3_final_cut row=exp_static_grass_gen3_exp_as_a item=XG3_TEST-ONLY_duo cut=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+# lane=C:/slink-wt/exp-fc-0b3f15ea-s2
+# command: python tools/e2e_duo.py --game gen3_exp --scenario exp_static_grass_gen3   (cwd=C:/slink-wt/exp-fc-0b3f15ea-s2)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-0b3f15ea-s2\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-0b3f15ea-s2\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-0b3f15ea-s2\.cache\x1-probe\probe.o
+# verdict: PASS
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T10:40:45 cpu=100% emuhawk=4 python=29
+start_utc=2026-10-02T14:40:43Z tracked_clean_before=True
+EXPANSION_CUT requested=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3 before=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+
+========== scenario: exp_static_grass_gen3 ==========
+[duo] exp_static_grass_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=75ccd425860914b1a477070e4ffa792396ae60bc06b34200478281e1da44822a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=11463c4daae3782458ffa345b87f9a3f7218fc51d981b5b1c52b0d82d373b99f write_checkpoint.json=3696a0573e6099493895278636edaf95b0ee742e746e3495056d737915f0be79 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+[duo] server up: tcp=65269 http=65270 data=C:\slink-wt\exp-fc-0b3f15ea-state\s2\slink_duo_exp_static_grass_gen3_c_0opawc
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:40:47,669 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:40:47,669 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.7s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\slink-wt\exp-fc-0b3f15ea-state\s2\slink_duo_exp_static_grass_gen3_c_0opawc path=C:\slink-wt\exp-fc-0b3f15ea-state\s2\slink_duo_exp_static_grass_gen3_c_0opawc\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 3.9s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\slink-wt\exp-fc-0b3f15ea-state\s2\slink_duo_exp_static_grass_gen3_c_0opawc path=C:\slink-wt\exp-fc-0b3f15ea-state\s2\slink_duo_exp_static_grass_gen3_c_0opawc\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 3.8s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 23.8s
+[duo] timing results 3.7s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=90b93b3107ed37c2404d08f425974287520ae46f0e01c99db23a8c1238815c70 file=90b93b3107ed37c2404d08f425974287520ae46f0e01c99db23a8c1238815c70 match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=cedd4eab1785da578520271dbdf87ab6eab38dfb516a0d697572016bd2b4451f file=cedd4eab1785da578520271dbdf87ab6eab38dfb516a0d697572016bd2b4451f match=true saves=1 counter=4->5 rtc=normalized
+[duo] exp static/wild: native battle, ordinary capture, independent saved keys and controls
+[duo] timing oracle 1.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] exp_static_grass_gen3: a=PASS b=PASS
+
+========== summary ==========
+  exp_static_grass_gen3: PASS (attempt 1 of 1)
+
+EXPANSION_CUT after=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+exit=0 end_utc=2026-10-02T14:41:25Z tracked_clean_after=True classification=pass

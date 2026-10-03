@@ -10,14 +10,19 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
+sys.path.insert(0, str(REPO))
+from patch.tools import rom_identity  # noqa: E402
+
 BIZHAWK_HOME = Path("E:/Howard/Bizhawk")
 RR_BASE_PATHS = [
     Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
 ]
 PATCHED_RR = REPO / "patch" / "build" / "slink_RR.gba"
+COMPANION_PINS = REPO / "patch" / "dist" / "companion_pins.json"
 UPS_PATCH = REPO / "patch" / "dist" / "SLink-RR.ups"
 # Likely FR/LG locations (not exhaustive; no recursive search to avoid timeouts)
 FR_SEARCH_PATHS = [
@@ -123,10 +128,15 @@ def main():
             "paths_checked": [str(p) for p in RR_BASE_PATHS],
         }
 
-    # Patched RR build
+    # Patched RR build. Its canonical sha1 is the ROM with the fixed-width version field zeroed (patch/tools/rom_identity.py): the
+    # identity qualification keys on, which a release version stamp does not move. The pinned row is patch/dist/companion_pins.json.
     if PATCHED_RR.exists():
         h = hash_file(PATCHED_RR, ["md5", "sha1"])
         pins["slink_RR.gba"] = h if h else {"md5": "MISSING", "sha1": "MISSING"}
+        pinned = json.loads(COMPANION_PINS.read_text(encoding="utf-8"))["pins"].get("rr", {}) if COMPANION_PINS.exists() else {}
+        if h and pinned.get("version_slot"):
+            h["canonical_sha1"] = rom_identity.canonical_sha1(PATCHED_RR.read_bytes(), [pinned["version_slot"]])
+            h["note"] = f"canonical sha1 = version field zeroed; companion_pins.json rr pins {pinned.get('canonical_sha1')}"
     else:
         pins["slink_RR.gba"] = {
             "md5": "MISSING",
@@ -179,7 +189,7 @@ def print_markdown(pins):
     print("|---|---|---|---|")
     for name, hashes in pins.items():
         if isinstance(hashes, dict):
-            for alg in ["sha256", "md5", "sha1", "version"]:
+            for alg in ["sha256", "md5", "sha1", "canonical_sha1", "version"]:
                 if alg in hashes:
                     value = hashes[alg]
                     notes = ""

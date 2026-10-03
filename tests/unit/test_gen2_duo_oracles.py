@@ -37,6 +37,81 @@ def _replace_tag_in_place(text, tag, value):
     return "\n".join(f"{tag} {json.dumps(value)}" if line.startswith(tag + " ") else line for line in text.splitlines())
 
 
+def test_client_cannot_change_artifact_kind_without_its_duo_identity(good_case):
+    results, _directory, _decoded = good_case
+    client = oracles._last_tagged(results["a"], "CLIENT")
+    client["artifact_kind"] = "overlay"
+    text = _replace_tag(results["a"], "CLIENT", client)
+    with pytest.raises(RuntimeError, match="artifact"):
+        oracles._boot_marker("a", text)
+
+
+def _overlay_markers(results):
+    """MODEL replay: retain saved bytes and RAM facts, change the executed identity only."""
+    pins = {title: oracles._executed_identity(title) for title in ("crystal", "gold", "silver")}
+    overlays = {title: oracles._executed_identity(title, "overlay") for title in pins}
+
+    def visit(value):
+        if isinstance(value, list):
+            return [visit(row) for row in value]
+        if not isinstance(value, dict):
+            return value
+        value = {key: visit(row) for key, row in value.items()}
+        title = value.get("title")
+        if title in pins and value.get("rom_sha1") == pins[title][0] and "domain" not in value:
+            value.update(rom_sha1=overlays[title][0], artifact_kind="overlay", binding_sha256=overlays[title][1])
+            if value.get("production_admitted") is True:
+                value["qualification"] = "PHYSICAL_RECEIPTED"
+        return value
+
+    for side, text in results.items():
+        lines = []
+        for line in text.splitlines():
+            tag, _, raw = line.partition(" ")
+            if raw.startswith("{"):
+                line = tag + " " + json.dumps(visit(json.loads(raw)))
+            lines.append(line)
+        results[side] = "\n".join(lines)
+
+
+def test_overlay_clause_uses_executed_identity_and_shared_ram_facts(clause_case):
+    results, kwargs = clause_case
+    _overlay_markers(results)
+    oracles.clause_oracle(results, **kwargs)
+
+
+def test_overlay_wrong_rom_admission_keeps_refused_half(admission_case):
+    results, kwargs = admission_case
+    _overlay_markers(results)
+    oracles.admit_wrong_rom_oracle(results, **kwargs)
+
+
+def test_overlay_soft_reset_uses_executed_identity(soft_reset_case):
+    results, kwargs = soft_reset_case
+    _overlay_markers(results)
+    oracles.soft_reset_oracle(results, **kwargs)
+
+
+def test_overlay_reconnect_relaunch_qualifies_its_own_artifact(reconnect_case, monkeypatch):
+    from tests.live import test_gen2_new_gates
+    results, kwargs = reconnect_case
+    for texts in (results, kwargs["initial_results"], kwargs["relaunch_results"]):
+        _overlay_markers(texts)
+    path = Path(kwargs["data_dir"]) / "links.json"
+    doc = json.loads(path.read_text())
+    doc["artifact_kind"] = "overlay"
+    path.write_text(json.dumps(doc))
+    for snapshot in kwargs["snapshots"].values():
+        snapshot["links"]["artifact_kind"] = "overlay"
+    original = test_gen2_new_gates.qualified_identity
+    def qualified(name, raw, *, repo, kind):
+        assert kind == "overlay"
+        # The MODEL fixture has clean physical reports only; production must request overlay.
+        return original(name, raw, repo=repo, kind="clean")
+    monkeypatch.setattr(test_gen2_new_gates, "qualified_identity", qualified)
+    oracles.reconnect_oracle(results, **kwargs)
+
+
 def _edit_saved_record(path, layout, slot, offset, payload):
     raw = bytearray(path.read_bytes())
     region, start = _region_and_offset(layout, "wPartyMon1")
@@ -842,8 +917,10 @@ def build_capture(layout, fixture_path, *, ot_id, species=16, dv_word=None, ball
 def _marker_text(*, saveram_path, cartram, key, species, level, hello_ot_id, title="crystal",
                   case="crystal_battle", area_id="route_29", gate_saves=1, client_saves=1,
                   flushed_matches=True, sha256=None, site_id="capture_party_finalized",
-                  acquisition="wild", destination="party", result="PASS", rom_sha1="deadbeef" * 5,
+                  acquisition="wild", destination="party", result="PASS", rom_sha1=None,
                   receipt=False):
+    if rom_sha1 is None:
+        rom_sha1 = oracles._executed_identity(title)[0]
     duo = {"player": "a", "scenario": "link", "attempt": 1, "case": case, "title": title,
           "rom_sha1": rom_sha1, "fixture_sha256": hashlib.sha256(
               (ROOT / "tests/fixtures/gen2" / f"{case}.SaveRAM").read_bytes()).hexdigest()}

@@ -29,7 +29,7 @@ def party(*pids, hp=20):
     return [mon_record(p, OT, species=4 + i, nickname=f"MON{i}", hp=hp) for i, p in enumerate(pids)]
 
 
-def live(pack="gen3_frlg", title="firered", kind="clean", pids=(A, B), frames=60):
+def live(pack="gen3_frlg", title="firered", kind=None, pids=(A, B), frames=60):
     """A connected client past its first validation: hello sent, writes enabled."""
     w = World(pack, title, kind)
     w.set_party(party(*pids))
@@ -514,9 +514,7 @@ def test_rr_nature_change_refuses_unpaired_or_invalid_pid_store(failure):
 @pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
 def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):
     from tests.unit import gen3_world as gw
-
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     bystander = mon_record(0x4D55444B, 0x20250925, species=283)
     outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
     received = mon_record(0x84, 0x9746, species=298)
@@ -580,9 +578,7 @@ def test_save_cleared_reset_discards_queued_npc_trade_preimage():
 @pytest.mark.parametrize("size,slot", [(size, slot) for size in range(1, 7) for slot in range(size)])
 def test_emerald_npc_trade_maps_each_slot_and_party_size(monkeypatch, size, slot):
     from tests.unit import gen3_world as gw
-
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     mons = [mon_record(A + i, OT, species=283) for i in range(size)]
     w.set_party(mons)
     w.step_to(60)
@@ -655,7 +651,7 @@ def test_shared_client_forwards_existing_server_phone_content_without_consuming_
 
 def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
     calls = []
-    w = World(native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
+    w = World(kind="clean", native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
     w.set_party(party(A, B))
     w.step_to(60)
     w.command(cmd="msgbox", text="same message", phone="first_link")
@@ -1363,8 +1359,11 @@ def test_prompts_without_a_native_part_get_the_cancel_sentinels(name, extra, eve
     assert reply["token"] == "tk" and reply[field] == value
 
 
-def test_rival_swap_without_the_companion_refuses_like_the_old_client():
-    w = live("gen3_rr", "radical_red")
+@pytest.mark.parametrize("kind,error", [("clean", "patch_required"), ("companion", "native absent")])
+def test_rival_swap_without_the_companion_refuses_like_the_old_client(kind, error):
+    # clean: no native part at all (the old client); companion: the native part is armed but the
+    # fake ROM answers no mailbox, so the final refusal is native.lua's "native absent".
+    w = live("gen3_rr", "radical_red", kind)
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w))
     w.step()
     assert w.events("rival_team_replaced")[-1]["error"] == "not_in_battle"
@@ -1373,7 +1372,7 @@ def test_rival_swap_without_the_companion_refuses_like_the_old_client():
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == error
     assert w.writes == []
 
 
@@ -2019,12 +2018,16 @@ def test_a_stale_opponent_after_a_battle_is_not_announced_again():
     assert [e["trainer_id"] for e in w.events("trainer_battle_start")] == [331]
 
 
-def test_frlg_keeps_the_in_battle_announcement():
-    w = live()
+@pytest.mark.parametrize("kind,announced", [("clean", 0), ("companion", 1)])
+def test_frlg_keeps_the_in_battle_announcement(kind, announced):
+    """Clean FR announces in battle only. The companion FR builds a native part, and client.lua's
+    pre_announce hook keys on native.rival_window_open EXISTING (not on the pack), so a
+    FR/LG/Emerald companion announces on the opponent edge too (found by the slice-2 migration)."""
+    w = live(kind=kind)
     w.step(3)
     w.poke_int(w.ram["TRAINER_OPPONENT_ADDR"], 5, 2)
     w.step(10)
-    assert w.events("trainer_battle_start") == []
+    assert len(w.events("trainer_battle_start")) == announced
 
 
 def test_a_pre_announced_swap_is_staged_and_posts_in_the_w1_window():
@@ -2409,11 +2412,11 @@ def test_c510b_two_client_sessions_get_distinct_nonces_and_the_old_id_is_refused
     b.step()
     assert b.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
     assert b.writes == before, "the other session's command must write nothing"
-    # ... while B's own identity is not itself a refusal (no companion here: patch_required)
+    # ... while B's own identity is not itself a refusal (no mailbox answers here: native absent)
     b.command(cmd="replace_rival_team", trainer_id=42, n=1, blobs_hex=viable_blobs(b),
               session=start_b["session"], battle_id=start_b["battle_id"])
     b.step()
-    assert b.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert b.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 def test_c510b_the_hello_declares_the_battle_identity_capability():
@@ -2445,15 +2448,16 @@ def test_c510b_a_missing_or_malformed_seed_fails_closed(monkeypatch):
 
 
 def test_c510_the_happy_path_passes_the_guard():
-    """A valid identity is not itself a refusal: with no companion the reply is the existing
-    patch_required, i.e. the command got past the guard and into the later checks."""
+    """A valid identity is not itself a refusal: the reply is the final refusal
+    (native absent: the companion's mailbox does not answer in the fake ROM), i.e. the command
+    got past the guard and into the later checks."""
     w = live("gen3_rr", "radical_red")
     ready_battle(w, 5)
     session, bid = battle_identity(w)
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 # ── C5-11a: the rival opcode, the window refusal and the pre-filters ─────────────────────────
@@ -2538,7 +2542,7 @@ def test_c511a_the_selectable_team_rule_needs_two_distinct_mons_in_doubles():
     w.command(cmd="replace_rival_team", trainer_id=5, n=2, blobs_hex=viable_blobs(w, 2),
               session=session, battle_id=bid)
     w.step()
-    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+    assert w.events("rival_team_replaced")[-1]["error"] == "native absent"
 
 
 def test_c511a_the_selectable_team_rule_follows_the_engine_getter_on_bad_eggs():
@@ -2937,3 +2941,111 @@ def test_every_pack_maps_every_sound_id_the_server_and_session_send():
             if isinstance(block, dict) and "sound" in block:
                 mapped = {int(k) for k in block["sound"]["se_ids"]}
                 assert wire <= mapped, (pack, title, sorted(wire - mapped))
+
+
+# ── ACQ diagnostics: log-only lines naming each acquisition's signal, its path and its outcome ───────────────────────────
+def acq(w, *needles):
+    return [line for line in w.logs if "[SLink-gen3] ACQ " in line and all(n in line for n in needles)]
+
+
+def caught_world():
+    w = live()
+    w.set_balls(5)
+    w.step(30)                                            # the tick latches has_pokeballs
+    w.logs.clear()                                        # the connect-time baseline line is not what these tests count
+    return w
+
+
+def test_acq_a_party_capture_logs_its_signals_and_the_capture_exactly_once():
+    w = caught_world()
+    w.enter_battle([FOE])
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.fire("mon_given")
+    w.step()
+    w.step(40)                                            # more frames: nothing repeats
+    (cap,) = w.events("capture")
+    assert len(acq(w, "signal kind=capture_wild", "in_battle=true")) == 1 and len(acq(w, "signal kind=mon_given")) == 1
+    (line,) = acq(w, "capture via=settle:party")
+    assert f"key={KC} " in line and "species=6 " in line and "gift=false" in line and "sent=true" in line
+    assert acq(w, "none") == [] and acq(w, "skipped") == [] and acq(w, "held") == []
+    assert len(acq(w)) == 3
+
+
+def test_acq_a_gift_and_a_box_capture_name_their_own_path():
+    w = caught_world()
+    w.set_party(party(A, B, C))
+    w.fire("mon_given")
+    w.step()
+    (gift,) = acq(w, "capture via=settle:party")
+    assert "gift=true" in gift and "sent=true" in gift
+    w = live(pids=(A, B))
+    w.logs.clear()
+    w.enter_battle([mon_record(C, OT, species=19)])
+    w.set_box(1, 0, mon_record(C, OT, species=19))
+    w.fire("capture_wild")
+    w.fire("pc_move")
+    w.step()
+    (boxed,) = acq(w, "capture via=settle:box")
+    assert f"key={KC} " in boxed and "species=19" in boxed and "sent=true" in boxed
+
+
+def test_acq_nothing_acquired_logs_nothing():
+    w = caught_world()
+    w.step(200)
+    w.fire("faint")
+    w.step(5)
+    assert acq(w) == []
+
+
+def test_acq_an_acquisition_signal_with_no_unknown_key_says_so_once():
+    w = caught_world()
+    w.fire("capture_wild")                                 # caught, but nothing new is in the party or boxes
+    w.step(30)
+    assert w.events("capture") == []
+    (line,) = acq(w, "none via=settle")
+    assert "caught=true" in line and "known_already=all" in line and "no capture sent" in line
+    assert len(acq(w, "signal kind=capture_wild")) == 1
+
+
+def test_acq_a_mon_the_quiet_observer_absorbs_is_logged_with_that_path():
+    """The silent route: a mon appears with NO acquisition signal and observe_known marks it known (so it is never a capture)."""
+    w = caught_world()
+    w.set_party(party(A, B, C))
+    w.step(120)
+    assert w.events("capture") == []
+    (line,) = acq(w, "known via=seed:observe")
+    assert "new=1" in line and f"keys={KC}" in line
+    w.step(120)
+    assert len(acq(w, "known via=")) == 1                    # and only once
+
+
+def test_acq_a_signal_dropped_while_a_trade_settles_is_logged_once():
+    w = caught_world()
+    w.client.state.trade_settle_until = 10 ** 9              # io.framecount() < trade_settle_until: "trading"
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.step(20)
+    assert w.events("capture") == []
+    (line,) = acq(w, "skipped")
+    assert "reason=trading" in line and "dropped=true" in line and "caught=true" in line
+
+
+def test_acq_the_connect_baseline_names_its_path_and_adds_no_behaviour():
+    w = World()
+    w.set_party(party(A, B))
+    w.step_to(60)
+    (line,) = acq(w, "known via=seed:hello")
+    assert "new=2" in line and KA in line and KB in line
+    assert len(w.events("hello")) == 1 and w.events("capture") == []
+
+
+def test_acq_the_client_does_not_seed_known_from_the_server_or_a_partner():
+    """Report, pinned: every st.known write in lua/gen3/client.lua is a local-RAM path (seed_known from the party and box cache, a
+    capture/hatch/pc/identity settle, a link-trade completion). Nothing reads a server message, a partner event or the HUD notice
+    (server/state.py 'Partner caught ...' is a hud_show text the client only displays)."""
+    src = (REPO / "lua" / "gen3" / "client.lua").read_text(encoding="utf-8")
+    writes = [line.strip() for line in src.splitlines() if re.search(r"st\.known\[[^\]]+\]\s*(,[^=]*)?=\s*true", line)]
+    assert writes, "no st.known writes found"
+    assert not re.search(r"st\.known\[[^\]]+\]\s*=\s*(msg|cmd|payload)", src)
+    assert "Partner caught" not in src and "partner" not in "".join(w for w in writes)

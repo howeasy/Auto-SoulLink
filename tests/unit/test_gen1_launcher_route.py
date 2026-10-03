@@ -157,7 +157,11 @@ def test_the_production_entry_boots_an_unadmitted_vanilla_header_as_the_named_fa
     no admission table, so run.lua must keep booting a recognised vanilla header as the named
     vanilla family — exactly what lua/tests/duo/duo_gen1_main.lua does — and must never take
     that path for a PureRed/PureBlue header (the pure builds are admitted by sha1)."""
+    # The fallback lives in Entry.admit_routed (lua/gen1/entry.lua) since patch-first (2026-10-02): the
+    # launcher's one gate, which also refuses clean companion titles; run.lua must ask it.
     with open(os.path.join(_REPO, "lua", "gen1", "run.lua"), encoding="utf-8") as handle:
+        assert "Entry.admit_routed(" in handle.read()
+    with open(os.path.join(_REPO, "lua", "gen1", "entry.lua"), encoding="utf-8") as handle:
         src = handle.read()
     assert 'family == "red" or family == "blue" or family == "yellow"' in src
     assert 'pack = "gen1_rby", kind = "named"' in src

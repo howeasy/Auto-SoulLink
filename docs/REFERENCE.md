@@ -3,7 +3,7 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, companion-patched; a clean cartridge is refused)
   — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
   frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
   `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
@@ -42,9 +42,12 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     before the probe was retired) — and the fly warp reaches thirteen destinations of which
     two carry encounters.
   Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
-  The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
-  VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
-  non-reentrant audio routine, so ABI 3 ships panel-only and says so in its capability bits.
+  The Red/Blue companion patch (required; Yellow and Archipelago are exempt and have none) adds
+  the in-game SLINK panel and native sound. The VBlank `PlaySound` path ABI 2 used was swallowed
+  during music fades and re-entered a non-reentrant audio routine, so sound now runs on the main
+  thread: `SlinkSfxService` (`patch/gen1/src/slink.asm`, `SLINK_CAP_SFX`) plays the semantic
+  code the client posts at mailbox `+7` (`request_sfx_local` in `lua/gen1/client.lua`, gated on
+  `panel:sfx_present()` and `native_sounds`).
 - **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) —
   🟡 **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
   `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec
@@ -322,6 +325,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 |---|---|---|
 | `/` | GET | The pair board (also `/runs/{id}` on the Manager) |
 | `/memorial` | GET | Memorial wall — dead pairs |
+| `/timeline` | GET | The run's story, oldest first: pairs formed, deaths, dead zones, burials, open areas (`server.board.timeline`); a managed run redirects to `/runs/{id}/timeline` |
 | `/obs` | GET | OBS scene trigger configuration |
 | `/debug` | GET | Debug console |
 | `/twitch` | GET | Twitch bot configuration and activity log |
@@ -461,6 +465,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
 | `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
 | `/runs/{run_id}/cartridges` (also `/randomizer`) | GET | Gen 1 runs: the cartridges page — what each player plays (the picks, the SLink companion, Randomize and its options), the downloads, the `.rnqs` a randomized pair was built with. Preparing cartridges is normally part of `/new` |
+| `/runs/{run_id}/timeline` | GET | The run's timeline in the Manager's chrome, from its live status or, for a stopped run, what it persisted |
 | `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
 | `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
 | `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
@@ -470,7 +475,7 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/tools` | GET | The patcher and the randomized-pair builders |
 | `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
 | `/api/runs` | GET | The registry |
-| `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES`. Ports are the first pair unused by the registry **and bindable on this machine**; a server that dies on startup is reported in `start_error` (the run exists, stopped) rather than recorded as running |
+| `/api/runs/new` | POST | `{name, game, ...options}` — creates and auto-starts; `game` is a required family key from `manager.GAMES` (no detect-on-connect since 2026-10-01; older runs may still carry `""`). Ports are the first pair unused by the registry **and bindable on this machine**; a server that dies on startup is reported in `start_error` (the run exists, stopped) rather than recorded as running |
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
 | `/api/runs/{id}/player-pack/{player}` | GET | The player's whole setup: the release ZIP (`tools/make_release.py`) with the run's launcher at its root and the run's host, game TCP port and slot baked into every launcher inside |
@@ -925,7 +930,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
 | OBS scene trigger integration (simpleobsws v5 async) | ✅ Working |
 | OBS priority-based trigger resolution (draggable rules list) | ✅ Working |
-| **Radical Red Companion Patch** (optional native layer — [patch/README.md](../patch/README.md)) | |
+| **Radical Red Companion Patch** (required native layer — [patch/README.md](../patch/README.md)) | |
 | Companion patch build + distribution (`patch/tools/build.py`, UPS at `/companion/`, in-browser patcher) | ✅ Working |
 | Build reproducibility gate (`build.py --check` asserts the committed UPS rebuilds byte-identically) | ✅ Working |
 | Mailbox ABI v1 (`0x0203F800`) — opcode dispatch + seq/ack protocol | ✅ Working |
@@ -1053,7 +1058,7 @@ SLINK_E2E=1  pytest tests/e2e/test_duo_gen2_new.py -q  # two-instance link scena
 > unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2_new --scenario link`
 > (likewise `gen2_faint`).
 
-`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the companion-patched builds (`patch/build/gen1_red.gb` / `gen1_blue.gb`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` additionally override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
+`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the clean dumps staged as `patch/build/gen1_red.gb` / `gen1_blue.gb` (`tools/gen1_playthrough.py` `staged_rom`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
 
 The Gen 2 gates (`gen2_inspect_gate.lua`, `gen2_frame_align.lua`, `gen2_write_windows.lua`, and on the overlay `gen2_{panel,sfx,phone,w6,sp_lowwater}_gate.lua`) run per title; engine sites on all three, write windows on Crystal and Gold (Silver shares Gold's, O-23) — see the Supported Games caveat above. Its duo link scenarios run **two instances of the same cartridge dump** for the same-title pairings. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
@@ -1223,9 +1228,9 @@ SLink auto-detects AP-patched ROMs and adjusts all memory addresses automaticall
 
 > **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
 
-SLink fully supports **Pokémon Radical Red 4.1** and other [CFRU-based](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) ROM hacks via the `radical_red` profile in `memory_gba.lua`. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla and AP.
+SLink supports **Pokémon Radical Red 4.1** ([CFRU](https://github.com/Skeli789/Complete-Fire-Red-Upgrade)) through the `gen3_rr` pack (`data/games/gen3_rr/`: `profile.json`, `engine_signals.json`, `write_checkpoint.json`), companion-patched only. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla.
 
-**Auto-detection:** The ROM is identified by scanning for CFRU signature bytes in the ROM binary. `memory_gba.lua` calls `M._detectCFRU()` during `initProfile()`, which checks for known CFRU function signatures. If detected, the `radical_red` profile is applied automatically — no manual configuration needed. The status page shows "FireRed (Radical Red)" for RR clients.
+**Admission:** There is no CFRU signature scan any more. `lua/gen3/entry.lua` `Entry.admit` matches the cartridge hash against the pinned `rom_sha1`/`rom_md5` rows in `engine_signals.json`; a hash in no table is admitted by anchors (every engine site of exactly one pack/title/kind still reads as pinned in ROM), and a header-only match is refused (`admit_routed`). A clean or randomized-clean RR is refused too: the `gen3_rr` pack sets `companion_required`, and the server refuses it at the hello (`companion_refusal` in `server/adapters/gen3_frlge.py`).
 
 ### Key architectural differences from vanilla/AP
 

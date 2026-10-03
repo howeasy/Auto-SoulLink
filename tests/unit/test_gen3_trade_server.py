@@ -1,14 +1,14 @@
 """T4 protocol/model controls. Snapshots cannot prove a native save completed."""
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from server.server import SLinkServer, build_app
 from server.state import LinkEntry, LinkStatus, MonInfo
-
+from tests.unit.companion_evidence import companion
 
 KEYS = {"a": "00000001:00000011", "b": "00000002:00000022"}
 TITLES = {"a": "firered", "b": "leafgreen"}
@@ -21,25 +21,21 @@ def _mon(pid, **extra):
 
 
 def _hello(pid, **extra):
+    rom_type = extra.get("rom_type", TITLES[pid])
     return {"event": "hello", "player": pid, "rom_type": TITLES[pid],
-            "artifact_kind": "companion", "trainer_name": pid.upper(),
+            **companion(rom_type), "trainer_name": pid.upper(),
             "ot_id": "00000011" if pid == "a" else "00000022",
             "party": [_mon(pid)], "pc_boxes": [], "pc_boxes_generation": 1,
             "trade_prepare": True, **extra}
 
 
-# The expansion is REFUSED in production (ruling 39), so the two cases below -- which are
-# about the adapter's trade-recovery surface, not about admission -- can only reach it
-# through the logged TEST-ONLY route the gen3_exp duo lane opens. The refusal itself, and
-# that route, are pinned in test_gen3_expansion_refusal.py, which owns the fixture.
-from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
 
 
 @pytest.mark.parametrize("title,opted_in", [("firered", True), ("emerald", True),
                                             ("firered_rr", True), ("Red", False), ("Crystal", False)])
 def test_config_exposes_existing_run_id_only_to_recovery_clients(tmp_path, title, opted_in):
     srv = SLinkServer(data_dir=str(tmp_path), run_id="run_journal_42")
-    commands = srv._dispatch("a", _hello("a", rom_type=title, artifact_kind="clean", party=[]))
+    commands = srv._dispatch("a", _hello("a", rom_type=title, party=[]))
     config = next(c for c in commands if c["cmd"] == "config")
     if opted_in:
         assert config["run_id"] == "run_journal_42"
@@ -557,7 +553,6 @@ def test_ap_adapter_consumes_recovery_extension(tmp_path, title):
     assert not srv.party_details["a"]
 
 
-@pytest.mark.usefixtures("expansion_routed")
 def test_expansion_adapter_refuses_unsupported_recovery_extension_by_name(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     msg = _hello("a", rom_type="emerald_expansion_28877d73", party_hidden=True)
@@ -910,7 +905,6 @@ def test_emerald_hidden_empty_hello_is_not_an_empty_party_or_ball_gate_signal(tm
     assert not state.pokeballs_obtained["a"] and state.party_size["a"] == 1
 
 
-@pytest.mark.usefixtures("expansion_routed")
 def test_recovery_capability_refusal_is_not_reported_as_wrong_save(tmp_path):
     from server.board import connection_state
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -936,7 +930,8 @@ async def test_recovery_banner_displays_and_escapes_the_actual_problem(tmp_path)
 def _legacy_trace(path, title, decorated, rejected=False):
     """Protocol replies + persisted state bytes for the accepted GB trade flow."""
     srv = SLinkServer(data_dir=str(path))
-    kind = "overlay" if title in ("Crystal", "Gold", "Silver") else "companion"
+    # the patched cartridge each title requires (2026-10-02); Gen 2 is exercised on its overlay, as it always was
+    evidence = companion(title) or ({"artifact_kind": "overlay"} if title in ("Crystal", "Gold", "Silver") else {})
     keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:04"}
     replies = []
 
@@ -949,14 +944,14 @@ def _legacy_trace(path, title, decorated, rejected=False):
     def hello(pid, partner=None):
         donor = partner or pid
         blob_size = srv.adapter.party_blob_size()
-        return {"event": "hello", "rom_type": title, "artifact_kind": kind,
+        return {"event": "hello", "rom_type": title, **evidence,
                 "ot_id": "1111" if pid == "a" else "2222", "trainer_name": pid.upper(),
                 "trade_prepare": True, "party": [{"key": keys[donor], "slot": 0,
                     "hp": 20, "maxHP": 20, "level": 12, "species_id": 1 if donor == "a" else 4,
                     "blob_hex": (bytes([1 if donor == "a" else 4]) * blob_size).hex()}]}
 
     # Establish the adapter before choosing its record size.
-    send("a", event="hello", rom_type=title, artifact_kind=kind, ot_id="1111", party=[])
+    send("a", event="hello", rom_type=title, **evidence, ot_id="1111", party=[])
     for pid in ("a", "b"):
         send(pid, **hello(pid))
     if rejected:

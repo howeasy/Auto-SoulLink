@@ -1,6 +1,6 @@
 {
   "schema": "purergb-overlay-provenance-v1",
-  "generated": "2026-09-29T23:21:12Z",
+  "generated": "2026-10-02T21:22:34Z",
   "source": {
     "url": "https://github.com/Vortyne/pureRGB",
     "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
@@ -9,20 +9,27 @@
   },
   "overlay": {
     "apply_script": "tools/apply_purergb_overlay.py",
-    "edits": 16,
+    "edits": 23,
     "bank": 63,
     "sources": {
       "apex_guard.asm": "d22cfcc3100aa5ab8acf6f9f56bf499e1afdff91d2eca997a2542aa594826228",
+      "main_menu_version.asm": "ac0a851c9319b3e2fca7cdcb98bd0d45ead02e154760720c52baf7edbd6a7bae",
       "native_trade.asm": "8bf684bcb351eaf8789777c1b39e7423c32238d0cb115879bf2536baeb066d10",
-      "slink.asm": "1d6b0eab6f563007c94d0e56784f654c66060ff68a7c19b4b01ebe093375ca69",
+      "slink.asm": "f88705dade1bb684c52b904db898c84a8bedd2eb9e8b83470c1a2dc3833f6260",
       "slink_home.asm": "755caec77c975c45ff4451256cbb95916bc8141d86d9f27b6be62d0ca4482944",
-      "slink_overlay.asm": "239a0f15c4ba14a62cf5e604079749c835c76179219373741ecb5d096a9229e7",
+      "slink_overlay.asm": "6ad56a7f01463169ad7f9b7b9235ac97f7e9447ec3b1a10dc3e12e478a097cf7",
       "species_table.inc": "fdfa120e6ac32d70946585607fccff9f8b34d3822fa75ddacb795182a7670af7",
+      "title_band.asm": "3b3e0e031e0d3dee5e982fe9b0b8632f21efa4a59ab4f8fc33944f5b80175b0d",
+      "title_band_rows.inc": "037430fc93c5120f3b3e6654a9d7f45b786f7e10b5c459f87642e92f6e75b6c5",
+      "title_line.2bpp": "6bc3c5a71925d396d1f94cc18ef613065bea955f55f2fab87fe9f821184698a3",
+      "title_logo.2bpp": "505769aa5db289ebedc2571fec8f1c959018db8847396ae2d66d83ea64e50ab2",
       "trade_prompt.asm": "26fba1961d2b4df9e38467ed5ecc8b106d67b3aaa953e91663076305680dc014",
       "trade_receptionist.asm": "b56d51e3bd725372ff8051786e42e1a9f6376168d7dce04d10f905dd4310fcdd",
       "trade_service.asm": "8b1ce6e87f10f5f7264e6897132ab75420dae514c92a19b31d7be1e6879696da",
       "trade_ui.asm": "3fcf258c67a6e713163cce2187b6a2c52c0ca171b97605596a806ca956f9034b"
-    }
+    },
+    "version": "dev",
+    "version_sha256": "9a285a24777260daa8688ef5909370573277c39317f17a91b6ec6d1b732ead66"
   },
   "toolchain": {
     "rgbds": {
@@ -48,57 +55,75 @@
       "filename": "pokered.gbc",
       "slink_title": "purered",
       "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-      "sha1": "43642f1248197ecbc8247ad6038b56c72264cbbc",
-      "md5": "0fa601cb661f3ca8a4a305b8817baabc",
-      "header_crc": "ABD1",
-      "crc32": "9A8FB219",
+      "sha1": "af199b7cc168853cfed6ab1950525b0a434d569a",
+      "md5": "fdf96ea4c25b9d4f7320394215c538a7",
+      "header_crc": "7036",
+      "crc32": "2354BCD2",
       "title": "POKEMON RED",
       "size": 1048576,
+      "version_slot": {
+        "offset": 1036545,
+        "length": 20
+      },
+      "canonical_sha1": "e913bef00cc5d05dcfda1ca26af32defe42093f7",
       "ups": {
         "file": "patch/dist/SLink-PureRed.ups",
-        "size": 49685,
-        "sha256": "4c3d983db7d20bc11ec2a75a188ed2b6f88dbf68420438122d5f6343ff26451b"
-      }
+        "size": 57718,
+        "sha256": "1abe739f53f4cb097c7151629128d40ca935acfd9622270c6d8cbe6a84851085"
+      },
+      "equivalent_sha1s": []
     },
     "pokeblue": {
       "filename": "pokeblue.gbc",
       "slink_title": "pureblue",
       "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-      "sha1": "237cf7cf80376b6ab0e18969266a38fe4e0e5f6d",
-      "md5": "d3175198979390d9e8e7e1023d74d09b",
-      "header_crc": "E593",
-      "crc32": "17D5F919",
+      "sha1": "a297c93bb26d54105cfc540cd3554ac232c3d00b",
+      "md5": "c07e45c4f4e9598f8c8f2e19fd83bbb6",
+      "header_crc": "A780",
+      "crc32": "23CECE92",
       "title": "POKEMON BLUE",
       "size": 1048576,
+      "version_slot": {
+        "offset": 1036545,
+        "length": 20
+      },
+      "canonical_sha1": "11138e23a8d3d7339a9200becba920e6b5d143bf",
       "ups": {
         "file": "patch/dist/SLink-PureBlue.ups",
-        "size": 49685,
-        "sha256": "af20de40f83ef973d5799f331b69da678e6c1261976139b620e78f72043432ce"
-      }
+        "size": 57922,
+        "sha256": "ace896390dcf8c62d7c70ffde3497391b896dc29d602f89ab52648b9647eb926"
+      },
+      "equivalent_sha1s": []
     },
     "pokegreen": {
       "filename": "pokegreen.gbc",
       "slink_title": "puregreen",
       "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-      "sha1": "df71763fd52eff57bc2c4492add85d4bd0d82070",
-      "md5": "2bfd5aef266ec320a3b215bde43a5203",
-      "header_crc": "E3B1",
-      "crc32": "D7506612",
+      "sha1": "49497bdacb2543d9c2689c450ae50b9026e51dba",
+      "md5": "e9ffaffba8785143b20829767636168b",
+      "header_crc": "9E24",
+      "crc32": "F7B5A293",
       "title": "POKEMON GREEN",
       "size": 1048576,
+      "version_slot": {
+        "offset": 1036545,
+        "length": 20
+      },
+      "canonical_sha1": "9e48b487b30b90473e322ee3050becd7bbd4479b",
       "ups": {
         "file": "patch/dist/SLink-PureGreen.ups",
-        "size": 49688,
-        "sha256": "3f34743a486f28830e78e0a84872442082b59fc566bdcc4e4f34d0e47eaf2283"
-      }
+        "size": 57835,
+        "sha256": "92e02d8008f6741916f29840d064810165e5b250ba0fa14aa4000ebc0f93249c"
+      },
+      "equivalent_sha1s": []
     }
   },
   "symbols": {
-    "purered_slink.sym": "d049d08e9e25d166fe36651f54457204b694ca1a3a4568af3fa39e516dd204d9",
-    "purered_slink.map": "3af9241ae9fc0582ed5dba7de68a315e8f759ee404bab329f9ff7223e2ca9282",
-    "pureblue_slink.sym": "d85b256fe0133bbee8c21c33dff9694483e2f40fe666c12297095dda9c1d35b0",
-    "pureblue_slink.map": "fe64e6b54ed35787ac80c5520d47ca60ed909df1612f6ad3cd78155d6674cf10",
-    "puregreen_slink.sym": "e03094c6c71dead76686bb7db5cac8d54c6f6ea259ca2b8b35af6441f4297fc9",
-    "puregreen_slink.map": "866afd30a6256ab5680f384cfd0a7ddb254adadeafd3655fe5e12c0b6f6f0b3a"
+    "purered_slink.sym": "59d4a05e055d650bcaa4a1a0b5fa2070d4b7f44831d7d2932b9c1a466448312c",
+    "purered_slink.map": "14595159c69f09237ceb059f81f3cfd9f471e10ecd019bfcdb88b2d9701d2978",
+    "pureblue_slink.sym": "b7a224a7fb84f0ae859063479cb19fb9a51f298f1e5f9e64848424b0a5717d08",
+    "pureblue_slink.map": "0e80cd068f41812088731f1e7701803c1e8bd21d6a8eb80076e4d9a2d022e327",
+    "puregreen_slink.sym": "9aed6b717234f864d34ea62c21cc3d3afa247a3c5c4a79e41cca6ea3bedf2e08",
+    "puregreen_slink.map": "d2ec3b49fcf0e9675da26427eac7aaef6bf6fd81cda2f1c41c2373c22ffe9eab"
   }
 }

@@ -1,0 +1,56 @@
+# gen3_final_cut row=frlgc_active_end_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario active_end_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:06:51 cpu=68% emuhawk=2 python=8
+start_utc=2026-10-03T08:06:49Z tracked_clean_before=True
+
+========== scenario: active_end_gen3 ==========
+[duo] active_end_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=63506 http=63507 data=F:\slink-work\tmp\duo_z13tibha
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_z13tibha path=F:\slink-work\tmp\duo_z13tibha\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_z13tibha path=F:\slink-work\tmp\duo_z13tibha\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': '2D356A90:99DE0D8A'}
+[duo] timing orchestrate 7.9s
+[duo] timing results 9.2s
+[duo] RESULT_LINE a: RESULT: PASS (P+H: engine Perish KO in battle with no input (command))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); the subject passed)
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:63506 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:63506 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f9c5c982e1d5580de224e490a5bce1a7e09754bab5b317dc48218ec1a8a315ce file=f9c5c982e1d5580de224e490a5bce1a7e09754bab5b317dc48218ec1a8a315ce match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] MARKER a: READY_ACTIVE 2D356A90:99DE0D8A case=command
+[duo] MARKER a: RX force_faint key=2D356A90:99DE0D8A
+[duo] MARKER a: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 2D356A90:99DE0D8A
+[duo] MARKER a: ACTIVE_COMMIT 2D356A90:99DE0D8A frame=1652 writes=5 attempted=11 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/30/0 why="active faint committed" case=command
+[duo] MARKER a: HANDOFF 2D356A90:99DE0D8A from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER a: ACTIVE_KO 2D356A90:99DE0D8A frame=2234 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/30/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=11 case=command
+[duo] MARKER a: ACTIVE_FAINT_SITE 2D356A90:99DE0D8A frame=2234 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER a: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER a: ACTIVE_OUTCOME 2D356A90:99DE0D8A outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_active_end_gen3_a_1_witness.bin bytes=131072 saves=1 frame=3994 counter=8
+[duo] MARKER a: FORCED_HP0 2D356A90:99DE0D8A frame=2234 in_battle=1 battler=1
+[duo] timing oracle 0.5s
+[duo] PYDEC: FAIL b: missing /(?m)^WRITES 0$/
+[duo] data dir kept: F:\slink-work\tmp\duo_z13tibha
+[duo] active_end_gen3: attempt 1 aborted — RuntimeError: b: missing /(?m)^WRITES 0$/
+
+========== summary ==========
+  active_end_gen3: FAIL (attempt 1 of 1) — RuntimeError: b: missing /(?m)^WRITES 0$/
+exit=1 end_utc=2026-10-03T08:07:11Z tracked_clean_after=True classification=real
