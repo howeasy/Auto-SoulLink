@@ -59,16 +59,46 @@ def _norm(p) -> str:
     return os.path.normcase(os.path.abspath(str(p))).replace("\\", "/").rstrip("/")
 
 
-def _entry_is_link(entry: os.DirEntry) -> bool:
+def link_detection_available() -> bool:
+    """Windows link detection reads reparse attributes straight off lstat (any Python
+    version); without them a junction would look like a plain dir, so deleters refuse."""
+    return not _IS_WIN or hasattr(os.lstat("."), "st_reparse_tag")
+
+
+def _require_link_detection() -> None:
+    if not link_detection_available():
+        raise RuntimeError("link detection unavailable on this Python; refusing to delete or copy")
+
+
+def _st_link_kind(st) -> str | None:
+    """'symlink', 'junction' or None.  Any other reparse point counts as a symlink: never
+    entered."""
+    if stat.S_ISLNK(st.st_mode):
+        return "symlink"
+    attrs = getattr(st, "st_file_attributes", 0)
+    if attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
+        tag = getattr(st, "st_reparse_tag", None)
+        return "junction" if tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003) \
+            else "symlink"
+    return None
+
+
+def _entry_link_kind(entry: os.DirEntry) -> str | None:
     try:
-        return entry.is_symlink() or getattr(entry, "is_junction", lambda: False)()
+        return _st_link_kind(entry.stat(follow_symlinks=False))
     except OSError:
-        return True
+        return "symlink"  # unreadable: fail closed, never enter it
+
+
+def _entry_is_link(entry: os.DirEntry) -> bool:
+    return _entry_link_kind(entry) is not None
 
 
 def _path_is_link(p) -> bool:
-    p = str(p)
-    return os.path.islink(p) or getattr(os.path, "isjunction", lambda _p: False)(p)
+    try:
+        return _st_link_kind(os.lstat(str(p))) is not None
+    except OSError:
+        return False
 
 
 def _link_target(p: str) -> str:
@@ -100,9 +130,9 @@ def tree_stats(path) -> dict:
         except OSError:
             continue
         for e in entries:
-            if _entry_is_link(e):
+            kind = _entry_link_kind(e)
+            if kind:
                 with contextlib.suppress(OSError):
-                    kind = "junction" if getattr(e, "is_junction", lambda: False)() else "symlink"
                     out["links"].append([os.path.relpath(e.path, p), _link_target(e.path),
                                          kind, os.path.isdir(e.path)])
                 continue
@@ -131,6 +161,7 @@ def _rmtree(path) -> None:
     """Delete a tree, clearing read-only bits.  A symlink or junction is unlinked, never
     entered.  ponytail: own walker instead of shutil.rmtree(onerror=chmod) so link safety
     doesn't hang on how a given Python version classifies junctions."""
+    _require_link_detection()
     p = str(path)
     if _path_is_link(p):
         try:
@@ -669,6 +700,7 @@ def _remove_path(_repo, a):
 
 def _copy_tree(src, dst, move=False):
     """Copy (or move) a tree without following or copying links; links are recreated after."""
+    _require_link_detection()
     if _IS_WIN:
         flags = ["/E", "/XJ", "/COPY:DAT", "/DCOPY:T", "/R:1", "/W:1", "/NFL", "/NDL", "/NP",
                  "/NJH", "/NJS"] + (["/MOVE"] if move else [])

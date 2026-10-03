@@ -427,6 +427,53 @@ def test_prune_never_follows_a_junction(W, shared_cache):
     assert (shared_cache / "rom.bin").stat().st_size == 4096
 
 
+@pytest.fixture
+def pre312(monkeypatch):
+    """Python < 3.12 has no os.path.isjunction / DirEntry.is_junction."""
+    monkeypatch.delattr(os.path, "isjunction", raising=False)
+
+
+def _plain_link(W, shared_cache, name):
+    link = W.tmp / name
+    try:
+        _link(shared_cache, link)
+    except OSError as e:
+        pytest.skip(f"cannot create a junction/symlink here: {e}")
+    return link
+
+
+def test_rmtree_on_a_top_level_junction_unlinks_it_only(W, shared_cache, pre312):
+    link = _plain_link(W, shared_cache, "top-link")
+    ss._rmtree(link)
+    assert not os.path.lexists(link)
+    assert (shared_cache / "rom.bin").is_file()
+
+
+def test_tree_stats_lists_links_without_their_bytes(W, shared_cache, pre312):
+    d = W.tmp / "holder"
+    d.mkdir()
+    (d / "own.txt").write_bytes(b"o" * 10)
+    _link(shared_cache, d / "inner")
+    st = ss.tree_stats(d)
+    assert st["size"] == 10 and st["files"] == 1
+    assert [x[0] for x in st["links"]] == ["inner"]
+    assert st["links"][0][2] == ("junction" if os.name == "nt" else "symlink")
+    top = ss.tree_stats(_plain_link(W, shared_cache, "top2"))
+    assert top["size"] == 0 and top["files"] == 0
+
+
+def test_deleters_refuse_when_link_detection_is_unavailable(W, monkeypatch):
+    d = W.tmp / "victim"
+    d.mkdir()
+    (d / "f").write_text("f")
+    monkeypatch.setattr(ss, "link_detection_available", lambda: False)
+    with pytest.raises(RuntimeError, match="link detection"):
+        ss._rmtree(d)
+    with pytest.raises(RuntimeError, match="link detection"):
+        ss._copy_tree(str(d), str(W.tmp / "copy"))
+    assert (d / "f").exists() and not (W.tmp / "copy").exists()
+
+
 # ---------------------------------------------------------------- move-to-work-root
 
 def test_move_refuses_live_lock_and_in_use(W, real_processes):
