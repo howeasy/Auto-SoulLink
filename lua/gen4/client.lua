@@ -159,6 +159,22 @@ function Client.new(p)
         fatal = nil,              -- a storage write that failed its readback: no further checkpoint writes
     }
     local session, pe, signals
+
+    -- Accepted Gen 3 flow (client.lua:405-410,1182): first valid bag observation silently
+    -- seeds the run. Only a later acquisition announces; unreadable is not an empty bag.
+    -- Keep this latch across re-hello, so reconnecting a stocked save is never a new run.
+    local function has_pokeballs(announce)
+        local have = p.has_pokeballs and p.has_pokeballs()
+        if type(have) == "boolean" then
+            if st.has_pokeballs == nil then
+                st.has_pokeballs = have
+            elseif have and not st.has_pokeballs then
+                st.has_pokeballs = true
+                if announce then p.hud.nuzlocke_start("Nuzlocke Start!") end
+            end
+        end
+        return st.has_pokeballs == true
+    end
     local parts = Entry.build({
         root = root, pack = admitted.pack, title = admitted.title, mem = mem, title_profile = p.title_profile,
         encounter_active = function() return st.battle ~= nil end })
@@ -545,7 +561,7 @@ function Client.new(p)
         local party = party_read() or {}
         if not st.boxes.ok then scan_boxes(true) end
         local f = { rom_type = admitted.rom_type, party = party_wire(party),
-                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false, rom_sha1 = profile.rom.sha1 }
+                    has_pokeballs = has_pokeballs(false), rom_sha1 = profile.rom.sha1 }
         trainer_fields(f, true)
         f.area_id, f.loc_name = area_now()
         local gen, ok = box_generation()
@@ -557,7 +573,7 @@ function Client.new(p)
         if not party then return nil end
         local b = st.battle
         local f = { party = party_wire(party), in_battle = b ~= nil, enemy_party = enemy_wire(),
-                    has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false,
+                    has_pokeballs = has_pokeballs(true),
                     is_trainer_battle = b ~= nil and (b.btype & be.trainer_mask) ~= 0,
                     is_doubles = b ~= nil and doubles_bit ~= nil and (b.btype & doubles_bit) ~= 0 }
         trainer_fields(f)
@@ -567,6 +583,7 @@ function Client.new(p)
         return f
     end
     function drv.on_reset()
+        st.has_pokeballs = nil
         pe:reset()
         if signals then signals:disarm(Client.PHASE,true) end   -- save/reset ends the old battle context
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
@@ -591,7 +608,19 @@ function Client.new(p)
         local lease = st.d7
         st.d7 = nil                          -- the one-shot hook is gone (the drain removed it)
         if sig.result == "written" then
-            if lease then st.d7_done[lease.entry] = { frame = sig.frame } end
+            if lease then
+                st.d7_done[lease.entry] = { frame = sig.frame }
+                -- Accepted linked-faint notice, after verified writes only. The one-shot lease
+                -- prevents refires; noop/refusal/hold and the commanded reducer echo show nothing.
+                local name = lease.entry.nickname
+                if type(name) ~= "string" or not name:find("%S") then
+                    for _, mon in ipairs(party_read() or {}) do
+                        if mon.key == lease.key then name = mon.nickname; break end
+                    end
+                end
+                if type(name) ~= "string" or not name:find("%S") then name = "Your Pokemon" end
+                p.hud.show("!! " .. name .. " KO'd", 255, 80, 80, 360)
+            end
             log("D7 faint written " .. tostring(sig.key) .. " at frame " .. sig.frame)
         elseif sig.result == "noop" then
             if lease then st.d7_done[lease.entry] = { frame = sig.frame, noop = true } end
@@ -731,12 +760,26 @@ function Client.new(p)
         st.prev_battle, st.app_active, st.prev_idle = battle ~= nil, app, idle
         local snap = { frame = frame, party = party, battle = battle, idle = idle, pc_active = app,
                        boxes = st.boxes.ok and { gen = st.boxes.gen, mons = st.boxes.mons } or nil,
-                       has_pokeballs = p.has_pokeballs and p.has_pokeballs() or false }
+                       has_pokeballs = has_pokeballs(true) }
         snap.area, snap.loc = area_now()
         snap.player_otid = party and player_otid() or nil
         -- 4. the reducer
         local events, notes = pe:step(snap)
-        for _, e in ipairs(events) do session.send(e.name, e.data) end
+        for _, e in ipairs(events) do
+            session.send(e.name, e.data)
+            -- Accepted G3 area-entry flow: the reducer already debounced the change. The
+            -- SAME title-owned gift predicate exempts no_catch and suppresses this banner.
+            -- unresolve_area rearms eligibility, not an immediate popup or a shown-once latch.
+            if e.name == "area_enter" and st.has_pokeballs and session.seeded
+               and type(e.data.area_id) == "string" and e.data.area_id ~= ""
+               and not (p.gift_area and p.gift_area(e.data.area_id))
+               and not session.resolved_areas[e.data.area_id] and not battle then
+                p.hud.show("** NEW ENCOUNTER **  " .. (e.data.loc_name or ""), 255, 220, 60, 240)
+            elseif e.name == "whiteout" then
+                -- The reducer owns exact-once whiteout; game_over/rebuild only use core banners.
+                p.hud.show("WHITED OUT", 255, 60, 60, 300)
+            end
+        end
         local joined = table.concat(notes, ",")
         if joined ~= st.last_notes then
             st.last_notes = joined
