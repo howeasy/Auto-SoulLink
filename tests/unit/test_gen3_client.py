@@ -514,7 +514,7 @@ def test_rr_nature_change_refuses_unpaired_or_invalid_pid_store(failure):
 @pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
 def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):
     from tests.unit import gen3_world as gw
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     bystander = mon_record(0x4D55444B, 0x20250925, species=283)
     outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
     received = mon_record(0x84, 0x9746, species=298)
@@ -578,7 +578,7 @@ def test_save_cleared_reset_discards_queued_npc_trade_preimage():
 @pytest.mark.parametrize("size,slot", [(size, slot) for size in range(1, 7) for slot in range(size)])
 def test_emerald_npc_trade_maps_each_slot_and_party_size(monkeypatch, size, slot):
     from tests.unit import gen3_world as gw
-    w = World("gen3_emerald", "emerald", "clean")
+    w = World("gen3_emerald", "emerald", "companion")
     mons = [mon_record(A + i, OT, species=283) for i in range(size)]
     w.set_party(mons)
     w.step_to(60)

@@ -31,7 +31,7 @@ def boxed(pid):
     return mon_record(pid, OT, species=19, nickname="BOXED")
 
 
-def world(monkeypatch, pack, title, pre=None, kind="clean"):
+def world(monkeypatch, pack, title, pre=None, kind=None):
     """A bare World; `pre(w)` runs BEFORE the first step (a complete first census)."""
     w = World(pack, title, kind)
     if pre:

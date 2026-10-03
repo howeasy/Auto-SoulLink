@@ -1254,7 +1254,7 @@ def _emerald_admitted(tmp_path, monkeypatch):
     monkeypatch.setattr(gw, "REPO", tmp_path)
     monkeypatch.setattr(gw, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
     monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", pack_dir)
-    monkeypatch.setitem(globals(), "ARTIFACTS", [("gen3_emerald", "emerald", "clean")])
+    monkeypatch.setitem(globals(), "ARTIFACTS", [("gen3_emerald", "emerald", "companion")])
 
 
 @pytest.mark.parametrize("body", [test_world_hello_carries_the_required_fields_on_every_artifact,
