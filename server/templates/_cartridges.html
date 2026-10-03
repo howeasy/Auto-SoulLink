@@ -36,13 +36,16 @@
 <p class="mk-cap">The run starts only from a cartridge it can vouch for byte for byte: a <b>clean dump</b> of Red / Blue / Yellow, or for pureRGB the <b>pinned v2.7.6 build</b> — or its <b>SLink companion overlay</b>, the same cartridge with the companion already linked in. Anything already modified is listed but greyed. Each player then downloads the cartridge the run made from the board or the Launchers menu.</p>
 
 <div class="mk-optgrid">
-  <label class="mk-opt described" :class="!companionOk().ok ? 'off-unavailable' : (rdraft.companion ? 'on' : '')">
-    <input type="checkbox" x-model="rdraft.companion" :disabled="!companionOk().ok || companionRequired()">
+  {# unavailable (exempt pick): disabled + unchecked. required: checked, locked with aria-disabled
+     (stays focusable) and the click cancelled, so it never changes. #}
+  <label class="mk-opt described" :class="!companionOk().ok ? 'off-unavailable' : 'on'">
+    <input type="checkbox" x-model="rdraft.companion" aria-describedby="companion-why"
+           :disabled="!companionOk().ok" :aria-disabled="companionRequired() ? 'true' : null"
+           @click="if (companionRequired()) $event.preventDefault()">
     <span class="mk-opt-txt">
       <span class="mk-opt-name">SLink companion</span>
       <span class="mk-opt-desc">The native Cable Club trade, the START-menu SLINK panel and the native notification sounds, patched into each cartridge (a pureRGB pick becomes its companion overlay). Required for every game except Yellow, Archipelago and the Emerald Expansion: a clean cartridge is refused at launch.</span>
-      <span class="mk-opt-why" x-show="!companionOk().ok" x-text="companionOk().why"></span>
-      <span class="mk-opt-why" x-show="companionRequired()">Required for these cartridges, so it stays on.</span>
+      <span class="mk-opt-why" id="companion-why" x-text="companionRequired() ? 'Required for these cartridges, so it stays on.' : companionOk().why"></span>
     </span>
   </label>
 </div>

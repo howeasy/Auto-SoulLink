@@ -233,9 +233,14 @@ function randomizerFields(form) {
     watchRandomizer() {
       var self = this;
       this.autoPick();
+      this.syncCompanion();
       this.preflight();
       ['rdraft.jar', 'rdraft.rom_a', 'rdraft.rom_b'].forEach(function (k) {
         self.$watch(k, function () { self.preflight(); });
+      });
+      // The companion follows the picks: on (locked) when they can take it, off when one is exempt.
+      ['rdraft.rom_a', 'rdraft.rom_b'].forEach(function (k) {
+        self.$watch(k, function () { self.syncCompanion(); });
       });
       // A different jar changes which pure ROMs are usable.
       this.$watch('rdraft.jar', function () { self.scanRoms(); });
@@ -342,6 +347,7 @@ function randomizerFields(form) {
     // checkbox is then locked on. Exempt picks (Yellow, Archipelago, the Expansion) keep
     // companionOk()'s greyed reason instead.
     companionRequired() { return this.companionOk().ok; },
+    syncCompanion() { this.rdraft.companion = this.companionOk().ok; },
     // The SLink companion exists for some titles only (rform.companion_titles): a pick
     // outside them greys the checkbox with the reason, as the run options do.
     companionOk() {
