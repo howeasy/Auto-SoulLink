@@ -36,6 +36,7 @@ class PhoneCart(Cart):
         self.phone = self.lua.eval(f'dofile("{PHONE}")').new(self.panel, io, self.pw,
                                                              lambda s: self.logs.append(str(s)))
         self.min_gap = int(self.lua.eval(f'dofile("{PHONE}")').MIN_GAP)
+        self.restage_max = int(self.lua.eval(f'dofile("{PHONE}")').RESTAGE_MAX)
 
     def service_rom(self):
         super().service_rom()
@@ -288,6 +289,10 @@ class NamedCart(PhoneCart):
     def staged(self):
         return bytes(self.mem[self.stage:self.stage + 24])
 
+    def prepare(self):
+        """SlinkPhonePrepareCall: the cookie is zeroed (single use) and ARMED stays set until the next script op."""
+        self.mem[self.stage + 23] = 0
+
 
 def named(**kw):
     c = NamedCart(**kw)
@@ -409,18 +414,43 @@ def test_a_record_wiped_every_frame_stops_at_the_cap_and_fails_closed():
     c = named()
     c.request("fallen", DATA)
     c.step(2)
-    wipes = 0
     for _ in range(40):
         c.mem[c.stage:c.stage + 24] = bytes(24)
-        wipes += 1
         c.step()
     restages = sum("re-staged" in line for line in c.logs)
-    assert 1 <= restages <= 8, restages
+    assert restages == c.restage_max, restages
     assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
     c.writes.clear()
     c.mem[c.stage:c.stage + 24] = bytes(24)
     c.step(5)
     assert c.writes == [], "nothing is written once the binder has failed closed"
+
+
+def test_the_roms_own_prepare_zeroing_the_cookie_is_consumption_not_a_wipe():
+    """Review F1/F2 of 6dd876ef: SlinkPhonePrepareCall zeroes only the cookie and ARMED stays set until its next script
+    op; the frame callback can land in between. Putting the record back there would undo the single-use cookie."""
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.writes.clear()
+    c.prepare()
+    c.step(5)                                        # ARMED still set for several frames: nothing may be written
+    assert c.writes == [] and c.staged() == record[:23] + b"\x00"
+    assert not any("re-staged" in line for line in c.logs)
+    c.deliver()
+    c.step(3)
+    assert c.writes == []
+
+
+def test_a_wipe_that_leaves_the_id_but_not_the_nonce_is_not_mistaken_for_consumption():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.mem[c.stage + 22:c.stage + 24] = bytes(2)      # nonce and cookie wiped, the id still there
+    c.step()
+    assert c.staged() == record
 
 
 def test_an_intact_record_is_never_rewritten_while_armed():

@@ -339,7 +339,7 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 - An invalid or absent `phone_data` stages all zeros, which clears any stale cookie.
 - The queue holds `{id, record}` atomically.
 - Under one permit (the predicate widened to `stage/24` or `mailbox+32/1`), write the record first, then the request byte. A failed stage write blocks the request.
-- While ARMED equals the in-flight id, check the cookie/event each frame (`phone:service()`) and re-stage ONCE if a map change wiped it (`HandleNewMap` → `ClearUnusedMapBuffer`, `home/map.asm:3-8`). No ROM hook on HandleNewMap.
+- While ARMED equals the in-flight id, check the cookie/event each frame (`phone:service()`) and keep the record intact if a map change wiped it (`HandleNewMap` → `ClearUnusedMapBuffer`, `home/map.asm:3-8`): re-stage while the cookie or id is gone, at most `RESTAGE_MAX` (8) times, then fail closed to the fixed text (updated 2026-10-03: a once-only re-stage lost a race with the same wipe on Gold's titled ROM, sweep gen2-fsw-1003-0029). A record with its id and nonce intact and only the cookie zeroed is the ROM's own `SlinkPhonePrepareCall` consuming it, never put back. No ROM hook on HandleNewMap.
 
 **ROM:**
 - `SlinkPhonePrepareCall` (a `callasm` in `SlinkPhoneCallScript`) validates the whole record (cookie, reserved, event == ARMED, terminators, species 1..251) before touching any buffer.
@@ -360,7 +360,7 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 **Tests:**
 - server direction and fallback;
 - the nested protocol schema;
-- Lua staging, order and re-stage-once;
+- Lua staging, order and the bounded re-stage;
 - ABI linked bytes, buffers, text widths and mutations;
 - the builder hook;
 - profile stage addresses;

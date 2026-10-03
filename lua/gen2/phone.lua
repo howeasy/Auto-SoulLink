@@ -71,6 +71,13 @@ function Phone.new(panel, io, writes, log, names)
         local v = io.read_u8(addr)
         return type(v) == "number" and math.floor(v) % 256 or nil
     end
+    -- SlinkPhonePrepareCall zeroes ONLY the cookie (single use) and leaves ARMED set until its next script op, and
+    -- the Lua frame callback can land between the two: id and nonce still intact with the cookie 0 is the ROM having
+    -- consumed the record, not a map wipe (which also clears the nonce and the id), so it must not be put back.
+    local function consumed()
+        return u8(STAGE + Phone.OFF_COOKIE) == 0 and u8(STAGE) == inflight
+               and u8(STAGE + Phone.OFF_NONCE) == inflight_rec[Phone.OFF_NONCE + 1]
+    end
     local function allow(addr, n)
         return n == 1 and (addr == REQ or STAGE ~= nil and (addr == NONCE
                                                            or addr >= STAGE and addr < STAGE + Phone.STAGE_SIZE))
@@ -97,6 +104,7 @@ function Phone.new(panel, io, writes, log, names)
         if not live() then
             -- a reset (or no phone build): the call is lost, never replayed, and no gap starts
             queued, inflight, seen, queued_rec, inflight_rec = nil, nil, false, nil, nil
+            closed, restage_tries, restages = false, 0, 0
             return
         end
         local req, armed, now = u8(REQ), u8(ARMED), io.framecount()
@@ -106,7 +114,8 @@ function Phone.new(panel, io, writes, log, names)
                 seen = true
                 -- a map change (ClearUnusedMapBuffer) wiped a named record: put it back, bounded
                 if inflight_rec and inflight_rec[Phone.OFF_COOKIE + 1] == Phone.COOKIE and not closed
-                        and (u8(STAGE + Phone.OFF_COOKIE) ~= Phone.COOKIE or u8(STAGE) ~= inflight) then
+                        and (u8(STAGE + Phone.OFF_COOKIE) ~= Phone.COOKIE or u8(STAGE) ~= inflight)
+                        and not consumed() then
                     writes:arm("phone", allow)
                     if restages >= Phone.RESTAGE_MAX then
                         -- the buffer keeps getting wiped: fail closed, no cookie, so the ROM rings the fixed text
