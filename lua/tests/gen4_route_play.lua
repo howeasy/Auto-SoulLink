@@ -55,7 +55,12 @@ local function flush()
   if f then f:write(table.concat(lines, "\n"), "\n"); f:close() end
 end
 local shot -- defined below; a FAIL leaves a screenshot of the runtime state
+local terminal_witness -- withdraw-only, read-only; invoked before any terminal cleanup
 local function finish(status, ...)
+  if terminal_witness then
+    local ok,why=pcall(terminal_witness,status)
+    if not ok then say("PC_WITNESS_GAP", "terminal_read_failed", tostring(why)) end
+  end
   joypad.set({}) -- never leave a button held in the result state or in a savestate
   if status == "FAIL" and shot then shot("fail") end
   say("RESULT", status, ...)
@@ -474,6 +479,48 @@ local function watch()
   return a
 end
 local function trace() return table.concat(trans, " ") end
+local function pc_witness(spec)
+  local w={frame=emu.framecount(),gaps={}}
+  local function gap(name) w.gaps[#w.gaps+1]=name end
+  local function valid(p,n) return p and inram(p) and (p&3)==0 and p+n<=0x02400000 end
+  if not spec then gap("pc_witness_plan_absent"); return w end
+  w.schema=spec.schema; w.special_var_id=spec.special_var_id
+  local f=r32(RAM.fieldsys)
+  if not valid(f,0x20) then gap("fieldsys_absent"); return w end
+  w.fieldsys=f
+  local task=r32(f+spec.fs_task_off); local seen={}; local env
+  -- FieldSysGetAttrAddr takes the script task's environment. A nested task
+  -- may be current: follow TaskManager.prev, but require its magic every time.
+  for depth=0,7 do
+    if not valid(task,0x10) or seen[task] then break end
+    seen[task]=true
+    local candidate=r32(task+spec.task_env_off)
+    if valid(candidate,spec.env_app_args_off+4) and r32(candidate)==spec.env_magic then
+      env=candidate; w.script_task=task; w.task_depth=depth; break
+    end
+    task=r32(task+spec.task_prev_off)
+  end
+  if env then
+    w.environment=env; w.menu_result_address=env+spec.env_result_off
+    w.menu_result=r16(w.menu_result_address)
+    w.script_args=r32(env+spec.env_app_args_off)
+  else gap("script_environment_absent_or_bad_magic") end
+  local sub=r32(f+spec.fs_sub_off)
+  local man=valid(sub,spec.sub_manager_off+4) and r32(sub+spec.sub_manager_off) or nil
+  if not valid(man,0x20) or r32(man+spec.manager_overlay_off)~=APP_OVY then
+    gap("storage_app_not_live"); return w
+  end
+  w.manager=man
+  local args=r32(man+spec.manager_args_off)
+  if not valid(args,spec.args_mode_off+4) then gap("storage_args_absent"); return w end
+  w.args=args; w.launch_mode_address=args+spec.args_mode_off
+  w.launch_mode=r32(w.launch_mode_address)
+  if env then
+    w.script_args_match=w.script_args==args
+    if not w.script_args_match then gap("script_and_manager_args_differ") end
+  end
+  return w
+end
 local function frames(n, pred)
   for _ = 1, n do
     local a = watch()
@@ -625,7 +672,7 @@ end
 
 -- ----- the PC withdraw (route.kind == "pc", route.phase == "withdraw") -----------------------------------
 -- Sibling of pc_deposit; every input is cited in route.pc.withdraw.steps (tools/gen4_routes.py WITHDRAW_STEPS,
--- pokeheartgold@ad7a3afa, docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"). Top menu: Down x1 then A = WITHDRAW
+-- pokeheartgold@ad7a3afa, docs/gen4/G2_PRODUCER_PLAN.md "6b CORRECTION 2"). Top menu: Right x1 then A = WITHDRAW
 -- POKEMON -> ScrCmd_158 1 (scr_seq_0003.s:821-856, OVY_14 mode 1). Mode 1 starts at state 0x51 with the cursor on
 -- box cell 0 (asm/overlay_14.s:11822-11831; mode 0 = the deposit leg starts at 0x5B). A on a box mon = grab + ONE
 -- msg_0025 prompt (ov14_021F0418), then state 0x57 commits with NO input (ov14_021EDF28 -> ov14_021E6184 ->
@@ -653,15 +700,24 @@ local function withdrawn_ok(p0, b0, pid, home, label)
 end
 local function pc_withdraw()
   local wd = route.pc.withdraw
+  local last_launch
+  local function witness(when,status,attempt)
+    local w=pc_witness(wd.witness); w.when=when; w.status=status; w.attempt=attempt
+    if when=="terminal" then w.last_launch=last_launch end
+    say("PC_WITNESS",assert(J.encode(w)))
+    if when=="launch" then last_launch=w end
+  end
+  terminal_witness=function(status) witness("terminal",status) end
   -- one diagnostic line per script press (never per frame): the live trace that settles the press count
   local npress = 0
   local function pressed(label)
     npress = npress + 1
     local ai = app_info()
+    witness("press",label)
     say("press", npress, label, "taskman", hex(taskman() or 0), "ovy", ai and ai.ovy or "-", "state",
       ai and ai.state and hx(ai.state) or "-")
   end
-  -- never press into an app that came up late: a Down would move the box cursor, an A would grab
+  -- never press into an app that came up late: a direction would move the box cursor, an A would grab
   local function no_app(where)
     if not app_gone(watch()) then finish("FAIL", "pc_late_launch", where, trace()) end
   end
@@ -696,14 +752,14 @@ local function pc_withdraw()
   -- Three semantic A: msg33 \r -> storage-PC row0 -> msg35 \r. A during
   -- printing is NOT also a menu press (render_text.c:95-105). Waits the existing
   -- 900-frame bound before each semantic A; do not add A-mash that could
-  -- launch DEPOSIT before the Down. Count/recovery remain plan parameters.
+  -- launch DEPOSIT before the menu direction. Count/recovery remain plan parameters.
   for i = 1, wd.script_a do
     frames(wd.script_wait)
     tap("A", 3, wd.a_period); pressed("A script " .. i)
   end
-  -- 2. the sub-menu: Down x menu_down (DEPOSIT -> WITHDRAW POKEMON, scr_seq_0003.s:821-846) then A (-> ScrCmd_158 1,
+  -- 2. the sub-menu: Right x menu_steps (DEPOSIT -> WITHDRAW POKEMON, scr_seq_0003.s:821-846) then A (-> ScrCmd_158 1,
   --    :851-856). The launch MODE is the RAM signal that it landed: state 0x51 = withdraw, 0x5B = the DEPOSIT row;
-  --    nothing launched = the script was one press behind. Either way retry Down+A from the sub-menu (INFERRED
+  --    nothing launched = the script was one press behind. Either way retry Right+A from the sub-menu (INFERRED
   --    that the script re-offers its sub-menu after the app closes, as the deposit leg's exit relies on).
   local a
   local why = "pc_menu_not_attempted" -- never nil in finish(): set before the loop, overwritten per failure
@@ -712,13 +768,10 @@ local function pc_withdraw()
       say("withdraw menu attempt", attempt, "after", why, trace())
       frames(wd.a_period) -- a late launch from the last attempt shows up here, before any press
     end
-    no_app("before the Down")
-    -- One new-key pulse. The PC script calls Handle2dMenuInput (scrcmd_c.c:1030;
-    -- overlay_01_021EDAFC.s:518), which uses newKeys (list_menu_2d.c:60-82),
-    -- not the system's 8/4-poll repeats. wd-hg-1003055138's 0xB/0x2/0xC
-    -- trace confirmed MOVE with the old hold; its input-delivery cause is OPEN.
-    assert(wd.menu_hold==1,"withdraw menu requires a one-frame Down pulse")
-    for _ = 1, wd.menu_down do tap("Down", wd.menu_hold, 30); pressed("Down") end
+    no_app("before the menu direction")
+    -- Opcode752's ov27 grid: index0 Right=1 WITHDRAW; Down=2 MOVE.
+    -- overlay_27.s ov27_0225CA68 and ov27_0225D174/D1B4 neighbor tables.
+    for _ = 1, wd.menu_steps do tap(wd.menu_key, wd.menu_hold, 30); pressed(wd.menu_key) end
     shot("pc_menu_withdraw" .. attempt)
     no_app("before the sub-menu A")
     tap("A", 3, 10)
@@ -733,6 +786,7 @@ local function pc_withdraw()
       why = "pc_not_launched"
     else
       say("PC app up at frame", emu.framecount(), "attempt", attempt)
+      witness("launch",nil,attempt)
       -- 3. the box grid: mode 1 = state 0x51, cursor on cell 0
       if not frames(1200, app_input_state) then finish("FAIL", "pc_input_state_not_reached", trace()) end
       frames(30)

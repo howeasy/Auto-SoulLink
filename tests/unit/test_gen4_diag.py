@@ -8,6 +8,30 @@ import pytest
 from tools import gen4_diag as d
 
 
+def verified_bridge_response(fixture):
+    import hashlib
+    import json
+
+    # service_bridge writes json.dumps(answer), preserving dict insertion order.
+    encoded = json.dumps(fixture["bridge_response"]).encode()
+    assert hashlib.sha256(encoded).hexdigest() == fixture["bridge_response_sha256"]
+    return fixture["bridge_response"]
+
+
+def test_scale_response_hash_control_red_revert():
+    import copy
+    import json
+
+    runs = json.loads((d.REPO / "tests/fixtures/gen4/diag_live_scale.json").read_text())["runs"]
+    for fixture in runs.values():
+        verified_bridge_response(fixture)
+        bad = copy.deepcopy(fixture)
+        bad["bridge_response"]["route"]["start"]["x"] += 1
+        with pytest.raises(AssertionError):
+            verified_bridge_response(bad)
+        verified_bridge_response(fixture)
+
+
 def publish_runtime_to_host(lane, monkeypatch, title, command):
     """Generated Lua output -> real collect() -> diagnostic.json; no emulator."""
     import json
@@ -156,7 +180,7 @@ def test_dead_process_invalid_result_fails_immediately(tmp_path, monkeypatch, co
     assert not sleeps and doc["ownership"]["exited"]
 
 
-def test_killed_emulator_unflushed_rate_uses_lua_witness(tmp_path):
+def test_killed_emulator_unflushed_settings_are_unverified(tmp_path):
     import json
 
     before = json.loads(
@@ -174,19 +198,11 @@ def test_killed_emulator_unflushed_rate_uses_lua_witness(tmp_path):
         "observed_applied_rate": 300,
     }
     audit = d.emulator_config_audit(cfg)
-    assert (
-        audit["flush_status"] == "UNFLUSHED"
-        and audit["settings_valid"]
-        and audit["rate_source"] == "Lua applied_rate"
-    )
+    assert audit["settings_valid"] is None and audit["settings_status"] == "UNVERIFIED"
+    assert audit["flush_status"] == "UNFLUSHED" and audit["applied_rate"] is None
+    assert audit["rate_source"] == "UNVERIFIED"
     cfg["observed_applied_rate"] = 100
-    assert not d.emulator_config_audit(cfg)["settings_valid"]
-    cfg["observed_applied_rate"] = 300
-    assert d.emulator_config_audit(cfg)["settings_valid"]
-    path.write_text(json.dumps({**before, "Unthrottled": not before["Unthrottled"]}))
-    assert not d.emulator_config_audit(cfg)["settings_valid"]
-    path.write_text(json.dumps(before))
-    assert d.emulator_config_audit(cfg)["settings_valid"]
+    assert d.emulator_config_audit(cfg)["settings_valid"] is None
 
 
 def test_collect_audits_unflushed_settings_with_terminal_lua_rate(tmp_path, monkeypatch):
@@ -241,17 +257,17 @@ def test_collect_audits_unflushed_settings_with_terminal_lua_rate(tmp_path, monk
     monkeypatch.setattr(d.evidence, "bind", lambda *a, **kw: None)
     monkeypatch.setattr(d.g4, "kill_our_emuhawk", lambda lane: None)
     monkeypatch.setattr(d, "service_bridge", lambda *a: None)
-    assert d.collect(cfg, tmp_path, ["MODEL-owned"], planner=None, timeout=600) == 0
+    assert d.collect(cfg, tmp_path, ["MODEL-owned"], planner=None, timeout=600) == 2
     doc = json.loads((tmp_path / "diagnostic.json").read_text())
-    assert doc["inputs_unchanged"] and doc["emulator_config_audit"]["settings_valid"]
+    assert doc["inputs_unchanged"] and doc["emulator_config_audit"]["settings_valid"] is None
     assert doc["emulator_config_audit"]["flush_status"] == "UNFLUSHED"
-    assert doc["emulator_config_audit"]["applied_rate"] == 300
+    assert doc["emulator_config_audit"]["applied_rate"] is None
     path.write_text(json.dumps({**before, "Unthrottled": not before["Unthrottled"]}))
     assert not d.emulator_config_audit(cfg)["settings_valid"]
     assert d.collect(cfg, tmp_path, ["MODEL-owned"], planner=None, timeout=600) == 1
     path.write_text(json.dumps(before))
-    assert d.emulator_config_audit(cfg)["settings_valid"]
-    assert d.collect(cfg, tmp_path, ["MODEL-owned"], planner=None, timeout=600) == 0
+    assert d.emulator_config_audit(cfg)["settings_valid"] is None
+    assert d.collect(cfg, tmp_path, ["MODEL-owned"], planner=None, timeout=600) == 2
 
 
 @pytest.mark.parametrize("title_name", ["heartgold_hge", "soulsilver"])
@@ -275,7 +291,7 @@ def test_generated_settle_physical_scale_uses_native_executor_and_publishes(
         title_name
     ]
     sites = [{**title["sites"][i], "id": i} for i in fixture["site_ids"]]
-    route = fixture["bridge_response"]["route"]
+    route = verified_bridge_response(fixture)["route"]
     route["title"] = title_name
     config = tmp_path / "config.json"
     response = tmp_path / "response.json"
@@ -366,7 +382,11 @@ def test_generated_settle_physical_scale_uses_native_executor_and_publishes(
             w(mon + b["hp_off"], 13)
             w(mon + b["max_hp_off"], 13)
 
+    table_reads = [0]
+
     def read(a, bus=None):
+        if table["address"] <= a < table["address"] + 3 * 8 * 8:
+            table_reads[0] += 1
         return struct.unpack_from("<I", ram, a - base)[0]
 
     def raw(a, n, bus=None):
@@ -377,7 +397,7 @@ def test_generated_settle_physical_scale_uses_native_executor_and_publishes(
         # MODEL: reused overlay RAM/BSS may change every frame while still
         # failing the FULL pin. Policy needs every match decision, not an
         # unbounded dump of unrelated mismatched byte values.
-        value = pin if frame >= landed else bytes((frame+i) & 255 for i in range(n))
+        value = pin if frame >= landed else bytes((frame + i) & 255 for i in range(n))
         if frame < landed and value == pin:
             value = value[:-1] + bytes([value[-1] ^ 1])
         return r.table_from(list(value))
@@ -414,11 +434,13 @@ def test_generated_settle_physical_scale_uses_native_executor_and_publishes(
     assert sum(s["frames"] for s in trace["samples"]) == total * len(sites)
     assert len(trace["samples"]) < 40 and len((tmp_path / "observation.json").read_bytes()) < 30000
     assert all(s["locations"] for s in trace["samples"] if s["resident"])
-    assert any(s['pin_bytes_varied'] and s['frames']>1000 for s in trace['samples'])
+    assert any(s["pin_bytes_varied"] and s["frames"] > 1000 for s in trace["samples"])
     assert sorted(e["delta"] for e in trace["epochs"]) == sorted(
         12 if s["overlay_id"] == 129 else 20 for s in sites
     )
     assert doc["outputs"] and doc["ownership"]["exited"]
+    assert table_reads[0] == total * 48  # one 24-entry/two-word census per frame, ALL sites
+    assert all("location_key" not in s for s in trace["samples"])
 
 
 def test_publication_encode_failure_is_named_atomic_fail(tmp_path):
@@ -515,21 +537,138 @@ def test_unflushed_config_control_red_revert(tmp_path, monkeypatch):
         ),
         namespace,
     )
-    test_killed_emulator_unflushed_rate_uses_lua_witness(tmp_path)
+    test_killed_emulator_unflushed_settings_are_unverified(tmp_path)
     monkeypatch.setattr(d, "emulator_config_audit", namespace["emulator_config_audit"])
     with pytest.raises(AssertionError):
-        test_killed_emulator_unflushed_rate_uses_lua_witness(tmp_path)
+        test_killed_emulator_unflushed_settings_are_unverified(tmp_path)
     monkeypatch.setattr(d, "emulator_config_audit", original)
-    test_killed_emulator_unflushed_rate_uses_lua_witness(tmp_path)
+    test_killed_emulator_unflushed_settings_are_unverified(tmp_path)
+
+
 def api():
     runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
     runtime.globals().G4_DIAG_TEST = True
     runtime.globals().SLINK_GEN4_PROBE_TEST = True
-    runtime.globals().PROBE = runtime.execute((d.REPO / "lua/tests/probe_gen4_hooks.lua").read_text())
+    runtime.globals().PROBE = runtime.execute(
+        (d.REPO / "lua/tests/probe_gen4_hooks.lua").read_text()
+    )
     runtime.globals().DIAG = runtime.execute(d.LUA)
     return runtime
 
 
+@pytest.mark.parametrize("failure", ["write", "rename", "existing"])
+def test_publication_failure_reaches_host_and_preserves_target(tmp_path, monkeypatch, failure):
+
+    r = api()
+    path = tmp_path / "observation.json"
+    r.globals().OUT = path.as_posix()
+    r.globals().ROOT = d.REPO.as_posix()
+    r.globals().KIND = failure
+    if failure == "existing":
+        path.write_text("PREEXISTING")
+    r.execute("""
+      local json=dofile(ROOT.."/lua/json_codec.lua")
+      if KIND=="write" then
+        local open=io.open; io.open=function(path,mode) if path==OUT..".tmp" then return nil,"MODEL write denied" end; return open(path,mode) end
+      elseif KIND=="rename" then os.rename=function() return nil,"MODEL rename denied" end end
+      local ok,why=pcall(DIAG.publish,json,{terminal=true,qualified=false,status="OBSERVED",applied_rate=300},OUT)
+      assert(not ok)
+    """)
+    error = Path(str(path) + ".error")
+    assert error.is_file() and "diagnostic publication failed" in error.read_text()
+    if failure == "existing":
+        assert path.read_text() == "PREEXISTING"
+        assert "target already exists" in error.read_text()
+    else:
+        assert not path.exists()
+    code, doc = publish_runtime_to_host(tmp_path, monkeypatch, "heartgold", "settle")
+    assert code == 1 and error.read_text().strip() in doc["reason"]
+
+
+@pytest.mark.parametrize("kind", ["span", "epoch"])
+def test_settle_per_site_churn_caps_publish_named_fail(tmp_path, kind):
+    (tmp_path / "observation.json").unlink(missing_ok=True)
+    r = api()
+    r.globals().KIND = kind
+    r.globals().ROOT = d.REPO.as_posix()
+    r.globals().OUT = (tmp_path / "observation.json").as_posix()
+    r.execute("""
+      local json=dofile(ROOT.."/lua/json_codec.lua")
+      local sites={{id="churn",overlay_id=12,address=20,extent=2,register_hex="aabb"}}
+      local trace=DIAG.settle_trace(sites)
+      local ok,why=pcall(function()
+        for frame=1,300 do
+          DIAG.settle_sample(trace,sites,function() return KIND=="span" or frame%2==1 end,
+            function() return frame%2==1 and "aabb" or "0000" end,frame)
+        end
+      end)
+      assert(not ok and tostring(why):match(KIND) and tostring(why):match("churn"))
+      local result={terminal=true,qualified=false,status="FAIL",reason=tostring(why),settle=trace,applied_rate=300}
+      DIAG.publish(json,result,OUT)
+      local f=assert(io.open(OUT,"rb")); local out=assert(json.decode(f:read("a"))); f:close()
+      assert(out.status=="FAIL" and out.reason:match("churn"))
+      assert(trace.counts.churn.spans<=256 and trace.counts.churn.epochs<=128)
+    """)
+
+
+@pytest.mark.parametrize("kind", ["span", "epoch"])
+def test_churn_cap_control_red_revert(tmp_path, monkeypatch, kind):
+    source = d.LUA
+    test_settle_per_site_churn_caps_publish_named_fail(tmp_path, kind)
+    needle = "trace.counts[s.id]." + ("spans<256" if kind == "span" else "epochs<128")
+    assert source.count(needle) == 1
+    monkeypatch.setattr(d, "LUA", source.replace(needle, "true"))
+    with pytest.raises((AssertionError, lupa.LuaError)):
+        test_settle_per_site_churn_caps_publish_named_fail(tmp_path, kind)
+    monkeypatch.setattr(d, "LUA", source)
+    test_settle_per_site_churn_caps_publish_named_fail(tmp_path, kind)
+
+
+@pytest.mark.parametrize("failure", ["write", "rename", "existing"])
+def test_publication_error_transport_control_red_revert(tmp_path, monkeypatch, failure):
+    source = d.LUA
+
+    def clean():
+        for name in ["observation.json", "observation.json.tmp", "observation.json.error"]:
+            (tmp_path / name).unlink(missing_ok=True)
+
+    clean()
+    test_publication_failure_reaches_host_and_preserves_target(tmp_path, monkeypatch, failure)
+    clean()
+    if failure == "existing":
+        bad = source.replace(
+            'if existing then existing:close(); error("diagnostic publication target already exists",0) end',
+            "if existing then existing:close() end",
+        )
+    else:
+        bad = source.replace('local marker=io.open(path..".error","wb")', "local marker=nil")
+    assert source != bad
+    monkeypatch.setattr(d, "LUA", bad)
+    with pytest.raises((AssertionError, lupa.LuaError)):
+        test_publication_failure_reaches_host_and_preserves_target(tmp_path, monkeypatch, failure)
+    monkeypatch.setattr(d, "LUA", source)
+    clean()
+    test_publication_failure_reaches_host_and_preserves_target(tmp_path, monkeypatch, failure)
+
+
+def test_single_census_control_red_revert(tmp_path, monkeypatch):
+    source = d.LUA
+    needle = "local census=D.overlay_census(title.overlay_table,read)"
+    assert source.count(needle) == 1
+    test_generated_settle_physical_scale_uses_native_executor_and_publishes(
+        tmp_path, monkeypatch, "soulsilver"
+    )
+    monkeypatch.setattr(
+        d, "LUA", source.replace(needle, "D.overlay_census(title.overlay_table,read); " + needle)
+    )
+    with pytest.raises(AssertionError):
+        test_generated_settle_physical_scale_uses_native_executor_and_publishes(
+            tmp_path, monkeypatch, "soulsilver"
+        )
+    monkeypatch.setattr(d, "LUA", source)
+    test_generated_settle_physical_scale_uses_native_executor_and_publishes(
+        tmp_path, monkeypatch, "soulsilver"
+    )
 def test_fight_uses_exact_frozen_recipe_and_does_not_invent_turns():
     r = api()
     r.execute('''
@@ -776,11 +915,9 @@ def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tm
         unregisterbyid=function(h) callbacks[h]=nil; return true end}
       emu={limitframerate=function(on) assert(on) end,framecount=function() return frame end,getregister=function() return PC end,
         frameadvance=function()
-          if frame==7616+197 then
-            local names={}; for name in pairs(callbacks) do names[#names+1]=name end; table.sort(names)
-            for n=1,#names do local i=REVERSE and #names+1-n or n; order[#order+1]=names[i]; callbacks[names[i]](SITE,WORD,0) end
-            FALL()
-          end
+          local names={}; for name in pairs(callbacks) do names[#names+1]=name end; table.sort(names)
+          for n=1,#names do local i=REVERSE and #names+1-n or n; order[#order+1]=names[i]; callbacks[names[i]](SITE,WORD,0) end
+          if frame==7616+197 then FALL() end
           frame=frame+1
         end}
       joypad={set=function() end}; savestate={load=function() end}; client={exit=function() end,speedmode=function(v) APPLIED=v end}
@@ -795,7 +932,7 @@ def test_generated_boundary_script_runs_real_monitor_with_frame_end_increment(tm
     assert r.globals().order[1].startswith("g4probe" if reverse else "g4diag")
     code,doc=publish_runtime_to_host(tmp_path,monkeypatch,"heartgold","boundary")
     assert code==0 and doc['observation']['frame_parity']['advance_token']==198
-    assert doc['observation']['state']['seen_steps']==[198]
+    assert doc['observation']['state']['seen_steps']==list(range(1,199))
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -1153,8 +1290,8 @@ def test_region_one_at_attach_then_main_region_stays_censored(region_id):
 @pytest.mark.parametrize("region_id",[1,2])
 def test_any_region_censoring_control_red_revert(monkeypatch,region_id):
     source=d.LUA
-    start=source.index('function D.any_region_resident(')
-    end=source.index('function D.begin_settle(',start)
+    start=source.index('function D.overlay_census(')
+    end=source.index('function D.any_region_resident(',start)
     old=source[start:end]
     assert source.count(old)==1
     test_region_one_at_attach_then_main_region_stays_censored(region_id)

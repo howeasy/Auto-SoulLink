@@ -677,11 +677,12 @@ class FakeDS:
     )
     MAN, APPD, SAVE = 0x02304000, 0x02305000, 0x02310000
     AV, MO = 0x02304800, 0x02304900
+    SCRIPT_ENV, PC_ARGS, SCRIPT_TASK = 0x02306000, 0x02306800, 0x02307000
     PARTY_OFF, PC_OFF = 0x90, 0x10000
 
     def __init__(
         self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None,
-        extra_a=0, recover_msg=False, launch_delay=0, print_frames=0,
+        extra_a=0, recover_msg=False, launch_delay=0, print_frames=0, witness_mode_override=None,
     ):
         self.ram = bytearray(0x400000)
         self.R = ram_layout
@@ -697,6 +698,7 @@ class FakeDS:
         self.recover_msg, self.launch_delay = recover_msg, launch_delay
         self.print_frames=print_frames
         self.pc_choice=0
+        self.witness_mode_override=witness_mode_override
         self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
         self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
         self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
@@ -708,6 +710,11 @@ class FakeDS:
         w(self.FS + 0x20, self.LOC)
         w(self.FS + 0x40, self.AV)  # PlayerAvatar -> LocalMapObject -> currentFacing
         w(self.AV + 0x30, self.MO)
+        # Independently fixed SOURCE layout, not read back from the mutated plan.
+        w(self.SCRIPT_TASK+0xC,self.SCRIPT_ENV)
+        w(self.SCRIPT_ENV,222271)
+        w(self.SCRIPT_ENV+0xA4,0xBEEFEEEE)  # result u16 plus a neighbouring canary
+        w(self.PC_ARGS+4,0xFADE)
         w(self.FS + 216, self.DRV)
         w(self.DRV + 16, self.DATA)
         w(self.DATA + 4, self.P3)
@@ -749,7 +756,7 @@ class FakeDS:
         self.w32(self.MO + 0x28, self.dir)
 
     def task(self, v):
-        self.w32(self.FS + 16, v)
+        self.w32(self.FS + 16, self.SCRIPT_TASK if v else 0)
 
     def app_state(self, s):
         self.st, self.t = s, 0
@@ -795,11 +802,11 @@ class FakeDS:
             return
         if "Down" in new and self.sub == "menu_pc":
             self.pc_choice=1  # scr_seq_0003_010: row1 PLAYER'S PC, not storage
-        elif "Down" in new and self.sub == "menu_sub":
+        elif ("Down" in new or "Right" in new) and self.sub == "menu_sub":
             if self.fault == "swallow_down" and not self.swallowed:
                 self.swallowed = True  # a press the menu did not take
             else:
-                self.mcur = min(self.mcur + 1, 4)
+                self.mcur = min(self.mcur + (2 if "Down" in new else 1), 4)
         elif "A" in new and self.sub in order[:-1]:
             if self.sub=="menu_pc" and self.pc_choice!=0:
                 self.sub="wrong_pc"
@@ -810,6 +817,9 @@ class FakeDS:
                 self.sub, self.t, self.pre_a = order[order.index(self.sub) + 1], 0, self.pre_a + 1
         elif "A" in new and self.sub == "menu_sub":  # the highlighted row -> the PC application
             self.mode, self.t, self.app_mode = "launching", 0, self.mcur
+            struct.pack_into('<H',self.ram,self.SCRIPT_ENV+0xA4-self.BASE,self.mcur)
+            self.w32(self.SCRIPT_ENV+0xAC,self.PC_ARGS)
+            self.w32(self.PC_ARGS+8,self.mcur if self.witness_mode_override is None else self.witness_mode_override)
         elif "B" in new and self.sub == "menu_sub":
             self.sub, self.t = "menu_pc2", 0
         elif "B" in new and self.sub == "menu_pc2":
@@ -821,6 +831,9 @@ class FakeDS:
             self.w32(self.SUB0 + 4, self.MAN)
             self.w32(self.MAN + 0x0C, 14)
             self.w32(self.MAN + 0x1C, self.APPD)
+            self.w32(self.MAN + 0x18, self.PC_ARGS)
+            if self.witness_mode_override is not None:
+                self.app_mode=self.witness_mode_override
             self.ram[self.APPD - self.BASE + 0x21] = 0 if self.withdraw and self.app_mode == 1 else 0xFF
             self.mode, self.cursor, self.toolbar = "app", 0, False
             self.app_state(0xB)
@@ -828,7 +841,9 @@ class FakeDS:
     def _app(self, held, new):
         st, t = self.st, self.t
         if st == 0xB and t >= 30:
-            self.app_state(0x51 if self.withdraw and self.app_mode == 1 else 0x5B)  # overlay_14.s:11822-11831
+            self.app_state(2 if self.withdraw and self.app_mode == 2 else 0x51 if self.withdraw and self.app_mode == 1 else 0x5B)
+        elif st == 2 and t >= 7:
+            self.app_state(0xC)  # replay PHYSICAL wrong-mode 0xB -> 0x2 -> 0xC
         elif st == 0x5B and t >= 10:
             if "Right" in new:
                 if self.wake_first and not self.woke:
@@ -856,6 +871,7 @@ class FakeDS:
             self.app_state(0xB3)
         elif st == 0xB3 and t >= 30:
             self.w32(self.SUB0 + 4, 0)
+            self.w32(self.SCRIPT_ENV+0xAC,0)  # source frees args when the app ends
             self.mode, self.sub, self.t, self.mcur = "script", "msg_back" if self.recover_msg else "menu_sub", 0, 0
         elif st == 0x5C and t >= 40:
             self.app_state(0x61)
@@ -1604,7 +1620,7 @@ def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monk
 
 # --- the PC WITHDRAW leg (box -> party), sibling of the deposit -----------------------------------------
 WD_ORDER = [
-    "interact", "script_a", "menu_down", "menu_withdraw", "app_state_0x51", "cursor_on_cell", "grab",
+    "interact", "script_a", "menu_move", "menu_withdraw", "app_state_0x51", "cursor_on_cell", "grab",
     "commit", "grid_restored", "exit_app", "save",
 ]
 
@@ -1619,13 +1635,13 @@ def test_withdraw_plan_carries_the_source_cited_steps_in_order():
     wd = r["pc"]["withdraw"]
     assert r["kind"] == "pc" and r["phase"] == "withdraw"
     assert [s["step"] for s in wd["steps"]] == WD_ORDER
-    assert (wd["menu_down"], wd["box_cell"], wd["party_max"]) == (1, 0, 5)
+    assert (wd["menu_steps"], wd["box_cell"], wd["party_max"]) == (1, 0, 5)
     # the press counts are PLAN parameters (a live finding is a one-line plan change); 3 vs 4 is INFERRED
     assert wd["script_a"] == gr.WITHDRAW_SCRIPT_A == 3 and wd["menu_attempts"] >= 2
     assert wd["recover_a"] == gr.WITHDRAW_RECOVER_A == 0
     assert all(s["source"] for s in wd["steps"]), "every input step cites its SOURCE"
     # the input steps in press order: A (interact), A (menu 1), Down, A (WITHDRAW), A (grab), B (exit)
-    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Down", "A", "A", "B"]
+    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Right", "A", "A", "B"]
     # the box app is entered at state 0x51 (mode 1), the commit is state 0x57
     by = {s["step"]: s for s in wd["steps"]}
     assert by["app_state_0x51"]["wait_state"] == 0x51 and by["commit"]["state"] == 0x57
@@ -1647,7 +1663,7 @@ def test_withdraw_inputs_match_the_decomp():
     scr = (PRET / "files/fielddata/script/scr_seq/scr_seq_0003.s").read_text(encoding="utf-8")
     menu = scr[scr.index("_0B17:") :][:400]
     assert menu.index("msg_0191_00067, 76, 0") < menu.index("msg_0191_00068, 77, 1")  # DEPOSIT 0, WITHDRAW 1
-    assert gr.WITHDRAW_MENU_DOWN == 1
+    assert gr.WITHDRAW_MENU_STEPS == 1
     assert re.search(r"_0BB5:\s+CloseMsg\s+Call _0E16\s+ScrCmd_158 1\b", scr)  # WITHDRAW = box app mode 1
     asm = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8")
     table = asm[asm.index("ov14_021F7D9C: ;") :].split("\n")
@@ -1709,7 +1725,7 @@ def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(
     last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
     rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
     assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 6, rows
-    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Down", "A submenu"]
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right", "A submenu"]
     assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
     assert "RESULT PC_WITHDRAW" in last
 
@@ -1717,7 +1733,7 @@ def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(
 def test_the_withdraw_leg_never_presses_into_a_late_launch(tmp_path, monkeypatch):
     # the app comes up after launch_wait: a Down/A then would move the box cursor / grab. It must stop first.
     # the delay picks which guard sees the app: 950 = up before the retry's Down, 1030 = up during the Down
-    for delay, where in ((950, "before the Down"), (1030, "before the sub-menu A")):
+    for delay, where in ((950, "before the menu direction"), (1030, "before the sub-menu A")):
         last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"launch_delay": delay})
         assert f"RESULT FAIL pc_late_launch {where}" in last, last
         assert ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1 and ds.r(ds.pc, 4) == 0xCAFEBABE  # untouched
@@ -1918,6 +1934,7 @@ def test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp
     last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
     assert "RESULT PC_WITHDRAW party_before=1 party_after=2 box=0/0 slot_after=empty pid=0xcafebabe" in last, log
     assert "mod_before=0 mod_after=0x1 mod_saved=0 save_driver=idle" in last
+
     gr.check_withdraw_ram(last.split("PC_WITHDRAW", 1)[1])  # the host oracle accepts what the Lua reported
     R = ds.R
     assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
@@ -1928,6 +1945,231 @@ def test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp
     assert "select try" not in log  # none of the deposit's party-slot selection
 
 
+def test_pc_menu_and_launch_mode_witness_reaches_log_and_receipt(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last
+    parsed = gr.parse_result(log)
+    witnesses = parsed["pc_witnesses"]
+    launches = [w for w in witnesses if w["when"] == "launch"]
+    assert len(launches) == 1
+    launch = launches[0]
+    assert launch["menu_result"] == launch["launch_mode"] == 1
+    assert launch["menu_result_address"] == ds.SCRIPT_ENV + 0xA4
+    assert launch["launch_mode_address"] == ds.PC_ARGS + 8
+    assert launch["script_args_match"] is True
+    terminal = witnesses[-1]
+    assert terminal["when"] == "terminal"
+    assert terminal["last_launch"]["menu_result"] == terminal["last_launch"]["launch_mode"] == 1
+    assert "launch_mode" not in terminal  # app/args have been freed; never read cached pointers
+    assert "storage_app_not_live" in terminal["gaps"]
+    rec = gr.build_receipt(
+        "HG",
+        "MODEL.SaveRAM",
+        {"setup": "SYNTH", "sidecar": "MODEL", "sidecar_sha256": "0", "out_sha1": "0"},
+        [{**parsed, "leg": 1, "kind": "pc", "phase": "withdraw"}],
+        parsed,
+    )
+    assert rec["legs"][0]["pc_witnesses"] == witnesses
+
+
+def test_real_menu_exec_grid_schedule_from_pinned_source(tmp_path, monkeypatch):
+    # Opcode 752 (NOT opcode 67's legacy Create2dMenu): touchscreen ov27 grid.
+    table = (PRET / "src/data/fieldmap/script_cmd_table.h").read_text()
+    commands = table[table.index("gScriptCmdTable") :]
+    assert "ScrCmd_MenuInitStdGmm" in commands and "ScrCmd_MenuExec" in commands
+    c = (PRET / "src/scrcmd_c.c").read_text()
+    body = c[
+        c.index("BOOL ScrCmd_MenuExec(ScriptContext *ctx) {") : c.index(
+            "BOOL sub_020478D0(ScriptContext *ctx) {"
+        )
+    ]
+    assert "ov01_021F6ABC(fieldSystem, 3, 7, p_ret);" in body
+    asm = (PRET / "asm/overlay_27.s").read_text()
+
+    def data(label):
+        block = asm[asm.index(label + ":") :]
+        block = block[: block.index("\n\n")]
+        return bytes(
+            int(x, 16)
+            for line in block.splitlines()
+            if ".byte" in line
+            for x in re.findall(r"0x([0-9A-Fa-f]{2})", line)
+        )
+
+    # Navigation tables select by item count-2; five and six items BOTH give
+    # index0 Down=2 (MOVE), Right=1 (WITHDRAW). Order: Up/Down/Left/Right.
+    for label in ["ov27_0225D174", "ov27_0225D1B4"]:
+        neighbors = data(label)
+        assert list(neighbors[:4]) == [0, 2, 0, 1]
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert gr.withdraw_plan()["menu_key"] == "Right" and gr.withdraw_plan()["menu_hold"] == 3
+    last, _, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_key": "Down"}
+    )
+    assert "RESULT FAIL pc_input_state_not_reached" in last, log
+    snap = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+    assert snap["menu_result"] == snap["launch_mode"] == 2
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_pc_witness_wrong_mode_fail_and_offset_controls(tmp_path, monkeypatch):
+    kw = {"withdraw": True, "party": 1, "fake": {"witness_mode_override": 2}}
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, **kw)
+    assert "RESULT FAIL pc_input_state_not_reached" in last
+    parsed = gr.parse_result(log)
+    assert [
+        (w["menu_result"], w["launch_mode"])
+        for w in parsed["pc_witnesses"]
+        if w["when"] in ("launch", "terminal")
+    ] == [
+        (1, 2),
+        (1, 2),
+    ]
+    last, _, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_key": "Down"}
+    )
+    assert "RESULT FAIL pc_input_state_not_reached" in last
+    assert [
+        (w["menu_result"], w["launch_mode"])
+        for w in gr.parse_result(log)["pc_witnesses"]
+        if w["when"] in ("launch", "terminal")
+    ] == [
+        (2, 2),
+        (2, 2),
+    ]
+    _, _, log = _run_lua_leg(
+        tmp_path,
+        monkeypatch,
+        withdraw=True,
+        party=1,
+        plan={"witness": {**gr.withdraw_plan()["witness"], "env_magic": 222272}},
+    )
+    first = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+    assert "menu_result" not in first and first["launch_mode"] == 1
+    assert "script_environment_absent_or_bad_magic" in first["gaps"]
+    # SOURCE/MODEL separation: a mismapped launch arg is not relabelled as a menu choice.
+    source = gr.withdraw_plan()["witness"]
+    for key in ["env_result_off", "args_mode_off"]:
+        bad = {**source, key: source[key] + 4}
+        _, _, log = _run_lua_leg(
+            tmp_path, monkeypatch, withdraw=True, party=1, plan={"witness": bad}
+        )
+        with pytest.raises(AssertionError):
+            w = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+            assert w["menu_result"] == w["launch_mode"] == 1
+        _, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+        w = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+        assert w["menu_result"] == w["launch_mode"] == 1
+
+
+@pytest.mark.parametrize("title", ["heartgold", "soulsilver", "heartgold_hge"])
+def test_pc_witness_offsets_against_pinned_source_xmap_and_rom(title):
+    """FILE proof of every new memory-layout offset; no emulator or guessed address."""
+    from capstone import CS_ARCH_ARM, CS_MODE_THUMB, Cs
+
+    from tools import gen4_pins, gen_gen4_pack as p
+
+    locations = gen4_pins.default_locations()
+    rom = locations.roms[title]
+    if not rom.is_file():
+        pytest.skip(f"PC witness FILE input absent: {rom}")
+    assert gr.sha1_of(rom) == gen4_pins.ROM_SPECS[title][0]
+    map_key = "soulsilver_xmap" if title == "soulsilver" else "heartgold_xmap"
+    map_path = locations.assets[map_key]
+    if not map_path.is_file():
+        pytest.skip(f"PC witness FILE xMAP absent: {map_path}")
+    assert gen4_pins.digest_file(map_path, ("sha256",))["sha256"] == gen4_pins.MAP_SPECS[map_key][0]
+    xm = p.load_xmap(map_path)
+    images = p.load_images(rom, raw_arm9=title == "heartgold_hge")
+    cs = Cs(CS_ARCH_ARM, CS_MODE_THUMB)
+
+    def function(name):
+        sym = xm.lookup(name)
+        assert sym.image == "arm9" and xm.mode(sym) == "thumb"
+        raw = images.arm9[
+            sym.address - images.arm9_base : sym.address - images.arm9_base + sym.size
+        ]
+        return sym, raw, list(cs.disasm(raw, sym.address))
+
+    _, _, task = function("TaskManager_GetEnvironment")
+    _, _, args = function("OverlayManager_GetArgs")
+    _, _, scr = function("ScrCmd_158")
+    _, attr_raw, attr = function("FieldSysGetAttrAddr")
+    facts = gr.withdraw_plan()["witness"]
+    assert (task[0].mnemonic, task[0].op_str) == ("ldr", "r0, [r0, #0xc]")
+    assert facts["task_env_off"] == 0xC and facts["task_prev_off"] == 0
+    assert (attr[1].mnemonic, attr[1].op_str) == ("ldr", "r0, [r0, #0x10]")
+    assert struct.unpack_from("<I", attr_raw, len(attr_raw) - 4)[0] == facts["env_magic"]
+    assert (args[0].mnemonic, args[0].op_str) == ("ldr", "r0, [r0, #0x18]")
+    assert facts["manager_args_off"] == 0x18 and facts["args_mode_off"] == 8
+    assert ("ldrb", "r1, [r2]") in [(i.mnemonic, i.op_str) for i in scr]
+    assert ("str", "r1, [r0, #8]") in [(i.mnemonic, i.op_str) for i in scr]
+    header = (PRET / "include/script.h").read_text()
+    enum = header[header.index("typedef enum ScriptEnvField {") : header.index("} ScriptEnvField;")]
+    fields = re.findall(r"^\s+(SCRIPTENV_\w+)", enum, re.M)
+    sym, raw, ins = function("FieldSysGetAttrAddrInternal")
+    branch = next(i for i in ins if i.mnemonic == "add" and i.op_str == "pc, r2")
+
+    def field_code(name):
+        # Thumb jump-table entries immediately follow add pc,r2. Its PC is +4.
+        offset = branch.address + 2 - sym.address + 2 * fields.index(name)
+        target = branch.address + 4 + struct.unpack_from("<h", raw, offset)[0]
+        return list(cs.disasm(raw[target - sym.address :], target))[:5]
+
+    result = field_code("SCRIPTENV_SPECIAL_VAR_RESULT")
+    assert [(i.mnemonic, i.op_str) for i in result[:4]] == [
+        ("subs", "r1, #0x2a"),
+        ("adds", "r0, #0x8c"),
+        ("lsls", "r1, r1, #1"),
+        ("adds", "r0, r0, r1"),
+    ]
+    assert (
+        facts["env_result_off"]
+        == 0x8C + (fields.index("SCRIPTENV_SPECIAL_VAR_RESULT") - 42) * 2
+        == 0xA4
+    )
+    app = field_code("SCRIPTENV_RUNNING_APP_DATA")
+    assert (app[0].mnemonic, app[0].op_str) == ("adds", "r0, #0xac")
+    assert facts["env_app_args_off"] == 0xAC
+    # The real opcode752 path delegates to overlay27, NOT Create2dMenu.
+    # CA68's last literal points at count-indexed navigation tables; C618's
+    # penultimate literal points at WindowTemplate tables (8 bytes per item).
+    base, overlay, _ = images.overlays[27]
+
+    def ov(name):
+        sym = xm.lookup(name)
+        assert sym.image == "ov27"
+        return overlay[sym.address - base : sym.address - base + sym.size]
+
+    def word(addr):
+        return struct.unpack_from("<I", overlay, addr - base)[0]
+
+    nav_table = struct.unpack_from("<I", ov("ov27_0225CA68"), len(ov("ov27_0225CA68")) - 4)[0]
+    window_table = struct.unpack_from("<I", ov("ov27_0225C618"), len(ov("ov27_0225C618")) - 8)[0]
+    for count in [5, 6]:
+        nav = word(nav_table + (count - 2) * 4)
+        assert list(overlay[nav - base : nav - base + 4]) == [0, 2, 0, 1]
+        windows = word(window_table + (count - 2) * 4)
+        coords = [
+            tuple(overlay[windows - base + i * 8 + 1 : windows - base + i * 8 + 3])
+            for i in range(count)
+        ]
+        assert coords[:4] == [(2, 4), (18, 4), (2, 10), (18, 10)]
+    profile = gr._pack_title(
+        {"heartgold": "HG", "soulsilver": "SS", "heartgold_hge": "hge"}[title]
+    )["profile"]
+    assert facts["fs_task_off"] == profile["probe_field"]["task"] == 0x10
+    assert facts["fs_sub_off"] == profile["probe_field"]["sub"] == 0
+    assert facts["sub_manager_off"] == profile["probe_field"]["launched_app"] == 4
+    assert facts["env_magic"] == 222271 and facts["special_var_id"] == 0x800C
+    assert "#define Unk80_10_C_MAGIC (222271)" in header
+    assert (
+        "#define VAR_SPECIAL_RESULT      0x800C" in (PRET / "include/constants/vars.h").read_text()
+    )
+
+
 def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monkeypatch):
     for kw, want in (
         ({"party": 6}, "RESULT FAIL withdraw_party_full"),  # unverified 6/6 path: refused in the Lua too
@@ -1935,7 +2177,7 @@ def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monk
         ({"fault": "slot_kept"}, "RESULT FAIL withdraw_state_wrong"),  # party +1 but the box slot still full
         ({"fault": "no_dirty"}, "RESULT FAIL box_modified_flag_not_set"),
         ({"fault": "wrong_bit"}, "RESULT FAIL box_modified_flag_not_set"),  # non-zero mask, wrong bit
-        ({"plan": {"menu_down": 0}}, "RESULT FAIL pc_wrong_mode"),  # the DEPOSIT row: list state 0x5B, not 0x51
+        ({"plan": {"menu_steps": 0}}, "RESULT FAIL pc_wrong_mode"),  # the DEPOSIT row: list state 0x5B, not 0x51
         ({"plan": {"box_cell": 7}}, "RESULT FAIL setup_not_in_cell"),
         ({"fault": "dirty_before"}, "RESULT FAIL setup_dirty_bit_already_set"),  # F4: a set bit proves nothing
         ({"fault": "party_dup"}, "RESULT FAIL setup_duplicate_pid"),  # F8: party PID also boxed
@@ -1981,7 +2223,7 @@ def test_run_lane_withdraw_runs_one_leg_from_the_pc_then_reloads_and_judges_the_
             assert leg == 2 and route["op"] == "withdraw" and not route["steps"]
             return "[f2] RESULT RELOAD_OK party=2 clone_slot=2 boxed=0\n"
         assert leg == 1 and route["kind"] == "pc" and route["phase"] == "withdraw" and route["start"]["map"] == 69
-        assert route["steps"] == [] and route["pc"]["withdraw"]["menu_down"] == 1  # already at the PC: no door leg
+        assert route["steps"] == [] and route["pc"]["withdraw"]["menu_steps"] == 1  # already at the PC: no door leg
         return f"[f1] RESULT PC_WITHDRAW {detail}\n"
 
     calls = _fake_emuhawk(monkeypatch, tmp_path, pos, script)
@@ -2021,12 +2263,12 @@ def test_live_d4_printing_replay_selects_storage_pc_before_down(tmp_path, monkey
     assert ds.pre_a==3
 
 
-def test_short_printer_wait_control_replays_live_fail_then_reverts(tmp_path,monkeypatch):
+def test_short_printer_wait_delays_launch_then_reverts(tmp_path,monkeypatch):
     kw={"withdraw":True,"party":1,"fake":{"print_frames":180}}
     last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
     assert "RESULT PC_WITHDRAW" in last
     last,_,log=_run_lua_leg(tmp_path,monkeypatch,plan={"script_wait":0},**kw)
-    assert "RESULT FAIL pc_not_launched" in last and "press 5 Down" in log
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" in log and "press 5 Right" in log
     last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
     assert "RESULT PC_WITHDRAW" in last
 
@@ -2065,70 +2307,6 @@ def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     assert 'return IsPrintFinished(*textPrinterNumPtr);' in code
     nonnpc=code[code.index('BOOL ScrCmd_NonNPCMsg('):code.index('BOOL ScrCmd_NonNPCMsgExtern(')]
     assert 'SetupNativeScript' not in nonnpc and 'return FALSE;' in nonnpc
-
-
-def test_withdraw_down_is_one_pulse_in_repeat_aware_menu():
-    """Real PC input source plus a repeat-aware delivery-fault MODEL.
-
-    Repeat start=8/continue=4, but the PC uses NEW keys, ignoring repeats.
-    A release/re-press between held emulator frames is a fault injection,
-    not a physically measured root cause. It reproduces the extra row and
-    is prevented by one new-key pulse. No source claim about lag is invented.
-    """
-    system = (PRET / "src/system.c").read_text()
-    menu = (PRET / "src/list_menu_2d.c").read_text()
-    overlay = (PRET / "asm/overlay_01_021EDAFC.s").read_text()
-    scrcmd = (PRET / "src/scrcmd_c.c").read_text()
-    assert "gSystem.keyRepeatStartDelay = 8;" in system
-    assert "gSystem.keyRepeatContinueDelay = 4;" in system
-    assert "gSystem.keyRepeatCounter--;" in system and "gSystem.keyRepeatCounter == 0" in system
-    assert "ov01_021EDC84(*pp_menu);" in scrcmd
-    block = overlay[overlay.index("ov01_021EDE8C:"):overlay.index("thumb_func_end ov01_021EDE8C")]
-    assert "bl Handle2dMenuInput" in block
-    block = menu[menu.index("int Handle2dMenuInput("):menu.index("u8 Get2dMenuSelection(")]
-    assert "gSystem.newKeys & PAD_KEY_DOWN" in block and "newAndRepeatedKeys" not in block
-    assert "newPos = menu->selectedIndex + 1;" in menu
-    hold = gr.withdraw_plan()["menu_hold"]
-
-    def cursor(hold, dropout=False):
-        row, counter, held, repeats = 0, 0, False, 0
-        for frame, raw in enumerate([True] * hold + [False] * 30):
-            # Adversarial input delivery: a release at the second emulator frame.
-            if dropout and frame == 1:
-                raw = False
-            new = raw and not held
-            repeated = new
-            if raw and raw == held:
-                counter -= 1
-                if counter == 0:
-                    repeated = True
-                    counter = 4
-            else:
-                counter = 8
-            held = raw
-            if repeated:
-                repeats += 1
-            if new:  # Handle2dMenuInput consumes newKeys, not repeated keys.
-                row += 1
-        return row, repeats
-
-    assert cursor(3) == (1, 1)
-    assert cursor(20)[0] == 1 and cursor(20)[1] > 1
-    assert cursor(3, dropout=True)[0] == 2  # source does not prove this delivery fault
-    assert cursor(hold)[0] == cursor(hold, dropout=True)[0] == 1
-    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
-    assert 'tap("Down", wd.menu_hold, 30)' in src
-    assert "menu_hold" in src and hold == 1
-
-
-def test_old_withdraw_hold_repeat_control_red_revert(monkeypatch):
-    test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
-    original = gr.WITHDRAW_MENU_HOLD
-    monkeypatch.setattr(gr, "WITHDRAW_MENU_HOLD", 3)
-    with pytest.raises(AssertionError):
-        test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
-    monkeypatch.setattr(gr, "WITHDRAW_MENU_HOLD", original)
-    test_withdraw_down_is_one_pulse_in_repeat_aware_menu()
 
 
 @pytest.mark.parametrize("old,new",[

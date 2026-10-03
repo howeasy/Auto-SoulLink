@@ -106,10 +106,12 @@ flags/volume and Rewind; UI/history writes
 are allowed. Lua, diagnostic input config, copied state, staged ROM and surface
 remain byte-strict. Later audit errors append to the first/raw failure reason.
 If the emulator exits abnormally without rewriting bizhawk.ini (identical
-before/after hash), the audit labels it UNFLUSHED and requires the terminal
-Lua applied_rate witness. Every other frozen setting still compares exactly.
-An absent rate witness is unverified, not an inferred 300% rate. Empty/malformed
-results after process exit fail immediately rather than waiting the host bound.
+before/after hash), it is UNFLUSHED: settings_valid=null and settings_status=UNVERIFIED.
+The Lua applied_rate field records a call argument, not a settings getter or
+runtime witness. Immutable input checks still run; successful raw observations
+remain available but the host grades an unverified settings audit OPEN.
+Rewritten critical settings still compare exactly. Empty/malformed results
+after process exit fail immediately rather than waiting the host bound.
 
 D1 reports PP-use ordinals (frame/battler/slot/move/before/after), species/level
 and both HP traces. Ordinals are NOT measured turns. No pinned miss/critical/
@@ -137,9 +139,15 @@ with pin-land frames and censoring. Steady decisions are not discarded. Raw
 mismatched bytes can vary in reused BSS: spans retain first/last byte examples
 and pin_bytes_varied, rather than implying those unneeded bytes were constant
 or dumping them each frame. Every frame still receives a FULL pin read. Instrument
-bounds (256 spans / 128 epochs) fail explicitly on excessive churn, never truncate
+bounds (256 spans / 128 epochs PER SITE) fail explicitly on excessive churn, never truncate
 into a policy. Encoding precedes output opening; a named encoding FAIL is
-published via a closed temporary file and atomic rename.
+published via a closed temporary file and atomic rename. A fresh lane
+(mkdir exist_ok=False) guarantees an absent target, asserted before publication.
+Write/rename failures use observation.json.error so the host retains their
+named reason. The 24-entry table is scanned once per frame for all sites;
+locations need no redundant string key. Churn limits allow >10 changes and
+>5 load epochs per each of 12 bridge attempts; they are instrument capacity,
+not a measured loading policy, and a trip names the site.
 Keep every span/epoch, errand/re-arm trace and bridge-N_battle_settled.State/log/hash
 (the diagnostic outputs manifest). Estimate 2-6 minutes/title. First falsifier:
 censored load, pin never lands, wrong image, 12-attempt errand bound or no wild
@@ -156,24 +164,28 @@ exactly-once delivery, retained0 and second-drain0. No assumed equal counters.
 Estimate 1-3 minutes; first falsifier is missing boundary/lost event or cleanup.
 D4 uses boxed row-i hash/sidecar inventory and target-specific receipt consumer.
 Source gives three ACCEPTED As after interact: msg33 carriage wait, choose the
-storage PC at Which-PC row0, msg35 carriage wait, THEN Down on the storage menu.
+storage PC at Which-PC row0, msg35 carriage wait, THEN Right on the storage menu.
 {YESNO 0} is a focus indicator, not another YesNo prompt. The executor waits the existing
 900-frame bound before each semantic A; counts remain
 script_a=3/recover_a=0 (return via NonNPCMsg directly to the storage menu). See
 pinned pret scr_seq_0003.s:754-885, msg_0040.gmm:142-152, scrcmd_message.c:142-151
 and render_text.c:95-105,158-168,270-273,302-310. This input schedule still needs
 PHYSICAL validation; the observed screenshot confirms menu state only.
-Down now uses one frame followed by the existing 30-frame release window.
-Pinned pret system.c:219-220,260-268 initializes repeat start/continue to 8/4
-polls. However, scrcmd_c.c:1028-1031 and overlay_01_021EDAFC.s:518 connect this
-PC script to Handle2dMenuInput, which consumes **newKeys**, not repeats
-(list_menu_2d.c:60-82; downward selection +1 at :134).
-The wd-hg-1003055138 0xB/0x2/0xC trace and MOVE screenshot confirm an extra row
-with the old three-frame hold. Source with one poll/frame does **not** explain
-that extra row; input-delivery attribution remains OPEN. The
-repeat-aware MODEL rejects repeats as its cause, and injects a release/re-press
-between held emulator frames as a conservative control, not a physical timing
-claim. script_a/recover_a, recipe, criteria and all run budgets remain unchanged.
+Right now uses the original three-frame hold and 30-frame release window.
+The old single-column interpretation followed the WRONG opcode. Opcode752
+MenuExec (script_cmd_table.h:1606-1609; scrcmd_c.c:5025-5032) goes through
+ov01_021F6ABC(fs,3,7,p_ret) to overlay27's touchscreen grid. MoveTutorMenu_SetListItem_Internal
+appends entry values in order (overlay_01_021EDAFC.s:989-1082); ov27_0225C618
+builds windows from count-indexed templates in ov27_0225D4B8, and ov27_0225CA68
+uses neighbors in ov27_0225D480 indexed by count-2. For five/six entries,
+ov27_0225D174/D1B4 map index0 Up/Down/Left/Right to 0/2/0/1: Down reaches
+MOVE, Right reaches WITHDRAW. This geometry comes from source, not pixels.
+The legacy ov01_021EDC84/Handle2dMenuInput path is not used by these opcodes.
+Each press, launch and terminal logs PC_WITNESS: VAR_SPECIAL_RESULT (u16 from
+the magic-checked ScriptEnvironment) and the app argument (u32 man+0x18 -> args+8).
+After the app/args are freed, the terminal names the gap and preserves the
+launch snapshot instead of reading a cached pointer. Native script_a/recover_a,
+recipe, criteria and all run budgets remain unchanged.
 Estimate 2-5 minutes. First falsifier: named press blocks/wrong app, missing mon
 transition, SAVE or independent reload. Remains disclosed DIAGNOSTIC even if its
 consumer reports PASS.

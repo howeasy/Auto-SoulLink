@@ -56,11 +56,14 @@ def emulator_config_audit(config):
     # Compare the actual applied rate, not a projection that would replace it.
     after=sha256(path)
     unflushed=after==item['before_sha256']
-    rate=config.get('observed_applied_rate') if unflushed else settings.get('SpeedPercent')
-    valid=valid and rate==config['requested_rate']
+    # An unchanged before-file cannot witness runtime settings. The Lua rate
+    # echoes a call argument, not a getter; it cannot repair an unflushed audit.
+    rate=None if unflushed else settings.get('SpeedPercent')
+    valid=None if unflushed else valid and rate==config['requested_rate']
     return {'before_sha256':item['before_sha256'],'after_sha256':after,'settings_valid':valid,
             'flush_status':'UNFLUSHED' if unflushed else 'FLUSHED',
-            'rate_source':'Lua applied_rate' if unflushed else 'bizhawk.ini', 'applied_rate':rate}
+            'settings_status':'UNVERIFIED' if unflushed else 'VALID' if valid else 'FAIL',
+            'rate_source':'UNVERIFIED' if unflushed else 'bizhawk.ini', 'applied_rate':rate}
 
 
 def record_failure(out, message):
@@ -118,7 +121,7 @@ def verify_after(config):
     evidence.bind(config["frozen_surface"], evidence.snapshot("probe", config["title"]),
                   title=config["title"], rom_sha1=config["rom_sha1"])
     audit=emulator_config_audit(config)
-    assert audit is None or audit['settings_valid'], 'emulator settings changed'
+    assert audit is None or audit['settings_valid'] is not False, 'emulator settings changed'
     return audit
 
 
@@ -138,6 +141,10 @@ def collect(config, lane, command, *, planner, timeout):
         raw = lane / "observation.json"
         deadline, seen = time.monotonic() + timeout, None
         while time.monotonic() < deadline:
+            publication_error = lane / "observation.json.error"
+            if publication_error.is_file():
+                raise RuntimeError(publication_error.read_text(encoding="utf-8-sig")[:4096].strip()
+                                   or "diagnostic publication failed: empty error marker")
             seen = service_bridge(config, planner, seen)
             if raw.is_file():
                 try:
@@ -148,7 +155,6 @@ def collect(config, lane, command, *, planner, timeout):
                 else:
                     assert observed.get("terminal") is True, "non-terminal diagnostic"
                     assert observed.get("qualified") is False, "diagnostic claimed qualification"
-                    config['observed_applied_rate']=observed.get('applied_rate')
                     assert observed.get("applied_rate") == config["requested_rate"], "applied/recorded rate differs"
                     out.update(observation=observed, status=observed["status"], reason=observed.get("reason", ""))
                     break
@@ -180,6 +186,13 @@ def collect(config, lane, command, *, planner, timeout):
             out['emulator_config_audit']=emulator_config_audit(config)
             verify_after(config)
             out["inputs_unchanged"] = True
+            if out['emulator_config_audit'] and out['emulator_config_audit']['settings_valid'] is None:
+                gap='UNFLUSHED emulator settings UNVERIFIED'
+                out.setdefault('audit_gaps',[]).append(gap)
+                first=out.get('reason','')
+                out['reason']=(first+'; ' if first else '')+gap
+                if out['status'] in {'OBSERVED','OBSERVED_CENSORED'}:
+                    out['status']='OPEN'
         except Exception as exc:
             record_failure(out, f"post-run identity verification: {exc}")
             out['inputs_unchanged']=False
@@ -237,33 +250,36 @@ function D.pp_delta(result,previous,current,frame)
     end
 end
 function D.settle_trace(sites)
-    local trace={samples={},epochs={},current={},sites={},encoding="site-state-rle-v1"}
-    for _,s in ipairs(sites) do trace.sites[#trace.sites+1]=s.id end
+    -- Instrument capacity, not a loading policy: 256 changes/128 loads PER SITE
+    -- allow >10 changes and >5 loads per each of the 12 native bridge attempts.
+    -- Independent counters prevent another site's churn spending this site's cap.
+    local trace={samples={},epochs={},current={},sites={},counts={},encoding="site-state-rle-v1"}
+    for _,s in ipairs(sites) do trace.sites[#trace.sites+1]=s.id; trace.counts[s.id]={spans=0,epochs=0} end
     return trace
 end
-function D.locations(t,read,id)
+function D.overlay_census(t,read)
     assert(t.regions==3 and t.per_region==8 and t.entry_size==8,"overlay table geometry")
-    local locations={}; local keys={}
+    local census={resident={},locations={}}
     for region=0,t.regions-1 do
         for slot=0,t.per_region-1 do
             local p=t.address+(region*t.per_region+slot)*t.entry_size
-            if read(p+t.active_off)~=0 and read(p+t.id_off)==id then
-                locations[#locations+1]={region=region,slot=slot}
-                keys[#keys+1]=region..":"..slot
+            local id,active=read(p+t.id_off),read(p+t.active_off)
+            if active~=0 then
+                local list=census.locations[id] or {}; census.locations[id]=list
+                list[#list+1]={region=region,slot=slot}
+                if region==0 then census.resident[id]=true end
             end
         end
     end
-    return locations,table.concat(keys,",")
+    return census
 end
 function D.any_region_resident(t,read,id)
-    assert(t.regions==3 and t.per_region==8 and t.entry_size==8,"overlay table geometry")
-    for region=0,t.regions-1 do
-        for slot=0,t.per_region-1 do
-            local p=t.address+(region*t.per_region+slot)*t.entry_size
-            if read(p+t.active_off)~=0 and read(p+t.id_off)==id then return true end
-        end
-    end
-    return false
+    return D.overlay_census(t,read).locations[id]~=nil -- MODEL convenience; live uses one census
+end
+function D.same_locations(a,b)
+    if #a~=#b then return false end
+    for i=1,#a do if a[i].region~=b[i].region or a[i].slot~=b[i].slot then return false end end
+    return true
 end
 function D.begin_settle(sites,resident,bytes,frame,any_resident,locations)
     local trace=D.settle_trace(sites)
@@ -286,11 +302,12 @@ function D.settle_sample(trace,sites,resident,bytes,frame,locations)
         local matched=pin==s.register_hex
         local prior=trace.current[s.id]
         local attach_censored=prior and prior.attach_censored or (not prior and (active or matched))
-        local places,key={},""
-        if locations then places,key=locations(s.overlay_id) end
+        local places={}
+        if locations then places=locations(s.overlay_id) end
         if active and (not prior or not prior.active) then
             local censored=not prior or attach_censored
-            assert(#trace.epochs<128,"settle telemetry epoch bound; no samples discarded")
+            assert(trace.counts[s.id].epochs<128,"settle epoch bound exceeded for "..s.id.." (128 per site); no samples discarded")
+            trace.counts[s.id].epochs=trace.counts[s.id].epochs+1
             local epoch={site=s.id,id=#trace.epochs+1,active_frame=frame,status=censored and "LEFT_CENSORED" or "WAITING",
                 left_censored=censored}
             trace.epochs[#trace.epochs+1]=epoch
@@ -308,7 +325,7 @@ function D.settle_sample(trace,sites,resident,bytes,frame,locations)
         local epoch_id=prior.epoch and prior.epoch.id or 0
         local span=prior.span
         if span and span.last_frame+1==frame and span.resident==active and span.pin_matches==matched
-            and span.location_key==key and span.epoch_id==epoch_id then
+            and D.same_locations(span.locations,places) and span.epoch_id==epoch_id then
             span.last_frame=frame; span.frames=span.frames+1
             span.pin_bytes_varied=span.pin_bytes_varied or span.pin_last~=pin
             span.pin_last=pin
@@ -317,10 +334,11 @@ function D.settle_sample(trace,sites,resident,bytes,frame,locations)
             -- mismatched BSS bytes may change every frame; keep endpoint examples,
             -- mark that variation, and never imply their bytes were constant.
             -- Any policy-input change splits the span. Churn FAILs, never truncates.
-            assert(#trace.samples<256,"settle telemetry span bound; no samples discarded")
+            assert(trace.counts[s.id].spans<256,"settle span bound exceeded for "..s.id.." (256 per site); no samples discarded")
+            trace.counts[s.id].spans=trace.counts[s.id].spans+1
             span={site=s.id,frame=frame,last_frame=frame,frames=1,resident=active,
                 pin_first=pin,pin_last=pin,pin_bytes_varied=false,pin_matches=matched,
-                locations=places,location_key=key,epoch_id=epoch_id}
+                locations=places,epoch_id=epoch_id}
             trace.samples[#trace.samples+1]=span
         end
         prior.span=span
@@ -417,11 +435,26 @@ function D.publish(json,result,path)
             reason=(first.."diagnostic encode failed: "..tostring(encoded)):sub(1,2048)}
         encoded=assert(json.encode(failure))
     end
-    local temp=path..".tmp"
-    local f=assert(io.open(temp,"wb"))
-    local wrote,why=pcall(function() assert(f:write(encoded)); assert(f:close()) end)
-    if not wrote then pcall(f.close,f); error("diagnostic write failed: "..tostring(why),0) end
-    assert(os.rename(temp,path),"diagnostic atomic rename failed")
+    local wrote,why=pcall(function()
+        -- prepare() mkdir(exist_ok=False) grants one fresh lane. Never rely on
+        -- platform-dependent rename-over-existing behavior or truncate a target.
+        local existing=io.open(path,"rb")
+        if existing then existing:close(); error("diagnostic publication target already exists",0) end
+        local temp=path..".tmp"
+        local f=assert(io.open(temp,"wb"))
+        local closed,detail=pcall(function() assert(f:write(encoded)); assert(f:close()) end)
+        if not closed then pcall(f.close,f); error("diagnostic write failed: "..tostring(detail),0) end
+        local renamed,detail=os.rename(temp,path)
+        assert(renamed,"diagnostic atomic rename failed: "..tostring(detail))
+    end)
+    if not wrote then
+        local message=("diagnostic publication failed: "..tostring(why)):sub(1,4096)
+        -- Tiny independent error transport, including when rename is broken.
+        -- If the entire directory is unwritable, host exit detection still FAILs.
+        local marker=io.open(path..".error","wb")
+        if marker then marker:write(message); marker:close() end
+        error(message,0)
+    end
     return ok
 end
 if G4_DIAG_TEST then return D end
@@ -446,7 +479,12 @@ local function bytes(a,n)
     for i=1,n do t[i]=string.format("%02x",raw[i]) end; return table.concat(t)
 end
 local function resident(id) return M.resident(title,read,id) end
-local function locations(id) return D.locations(title.overlay_table,read,id) end
+local function settle_census()
+    local census=D.overlay_census(title.overlay_table,read)
+    return function(id) return census.resident[id]==true end,
+        function(id) return census.locations[id] or {} end,
+        function(id) return census.locations[id]~=nil end
+end
 local handles={}; local monitor,composite; local callback_error
 local function register(site,cb,name)
     M.validate_site(title,site,bytes,resident)
@@ -463,7 +501,10 @@ end
 local function step(buttons)
     if monitor then monitor.before() end
     joypad.set(buttons or {}); emu.frameadvance()
-    if cfg.command=="settle" then D.settle_sample(result.settle,cfg.sites,resident,bytes,emu.framecount(),locations) end
+    if cfg.command=="settle" then
+        local active,places=settle_census()
+        D.settle_sample(result.settle,cfg.sites,active,bytes,emu.framecount(),places)
+    end
     if monitor then monitor.after() end
     assert(not callback_error,callback_error)
 end
@@ -522,8 +563,8 @@ local function run()
         result.initial=ready.initial; result.readiness=ready; result.ready_sample=ready.last
     elseif cfg.command=="settle" then
         result.attach_frame=emu.framecount()
-        result.settle=D.begin_settle(cfg.sites,resident,bytes,result.attach_frame,
-            function(id) return D.any_region_resident(title.overlay_table,read,id) end,locations)
+        local active,places,any=settle_census()
+        result.settle=D.begin_settle(cfg.sites,active,bytes,result.attach_frame,any,places)
         result.boot=M.boot("bridge",3000,idle_field,function()
             local fs=read(title.symbols.sFieldSysPtr.address)
             return fs~=0 and read(fs+title.profile.probe_field.live)~=0
@@ -534,7 +575,8 @@ local function run()
         repeat
             local all=true
             for _,s in ipairs(cfg.sites) do
-                if not resident(s.overlay_id) or bytes(s.address,s.extent)~=s.register_hex then all=false end
+                local current=result.settle.current[s.id]
+                if not current or not current.active or not current.pin_matches then all=false end
             end
             if all then break end
             step({})

@@ -521,16 +521,36 @@ PC_BEHAVIOR = 0x83
 # Lua polls by a RAM signal instead of trusting. The party-full path ("Your party is full!",
 # ov14_021F0418) is UNVERIFIED, so a full party is a named precondition, not a run.
 WITHDRAW_CELL = 0  # box cell 0 = box slot 0 (cells 0x00-0x1D box grid, 0x1E-0x23 party; cursor cell = data+0x21)
-WITHDRAW_MENU_DOWN = 1  # PC top menu rows: DEPOSIT 0, WITHDRAW POKEMON 1 (scr_seq_0003.s:821-846)
-# Single-frame new-key pulse. scrcmd_c.c:1028-1031 -> overlay_01_021EDAFC.s:518
-# -> list_menu_2d.c:60-82 consumes newKeys, NOT newAndRepeatedKeys. system.c:219-220,
-# 260-268 initializes repeat start/continue to 8/4, but those repeats do not move
-# this menu. PHYSICAL wd-hg-1003055138 selected MOVE with a 3-frame hold; input
-# delivery/extra-row cause stays OPEN. A one-frame pulse removes repeated delivery.
-WITHDRAW_MENU_HOLD = 1
+# Opcode 752 MenuExec uses ov27's touchscreen grid (NOT opcode 67's 2D menu).
+# scrcmd_c.c:5025-5032 -> ov01_021F6ABC(fs,3,7,p_ret); overlay_27.s
+# ov27_0225CA68 indexes the neighbor tables by count-2. For 5/6 items, index0
+# Right=1 (WITHDRAW), Down=2 (MOVE): ov27_0225D174 / ov27_0225D1B4.
+WITHDRAW_MENU_KEY = "Right"
+WITHDRAW_MENU_STEPS = 1
+WITHDRAW_MENU_HOLD = 3  # restore original hold; the issue was grid navigation
+# Read-only PC diagnostic facts, pokeheartgold@ad7a3afa. The root pointer is
+# RAM.fieldsys from the title pack; these are structure offsets, never addresses.
+# src/fieldmap.c:327-331 and src/task.c:122-124 -> task.env, magic guard;
+# :351-361 and include/constants/vars.h -> special var 0x800C (u16).
+# xMAP FieldSysGetAttrAddrInternal returns env+0x8C+(field-42)*2;
+# VAR_SPECIAL_RESULT index 12 therefore lives at +0xA4. RUNNING_APP_DATA = +0xAC.
+# ScrCmd_158 (src/scrcmd_c.c:1986-1994), inline PCBoxAppData_New
+# (include/launch_application.h:97-103) stores ScriptReadByte into PCBoxArgs.unk8;
+# OverlayManager_GetArgs (src/overlay_manager.c:46-48) gives man+0x18 -> args+8.
+# FILE proofs check these xMAP functions against HG, SS and hge ARM9 bytes.
+WITHDRAW_WITNESS = {
+    "schema": "gen4-pc-witness-v1", "fs_task_off": 0x10,
+    "task_prev_off": 0, "task_env_off": 0xC, "env_magic": 222271,
+    "special_var_id": 0x800C, "env_result_off": 0xA4, "env_app_args_off": 0xAC,
+    "fs_sub_off": 0, "sub_manager_off": 4, "manager_overlay_off": 0xC,
+    "manager_args_off": 0x18, "args_mode_off": 8,
+    "source_symbols": ["FieldSysGetAttrAddrInternal", "FieldSysGetAttrAddr",
+                       "TaskManager_GetEnvironment", "GetVarPointer", "ScrCmd_158",
+                       "PCBox_LaunchApp", "OverlayManager_GetArgs"],
+}
 WITHDRAW_PARTY_MAX = 5  # a party of 6 has no room
 # SOURCE: THREE accepted A presses after interact: dismiss msg33's \r, select
-# Which-PC row0 (Someone/Bill), dismiss msg35's \r. Then Down selects WITHDRAW
+# Which-PC row0 (Someone/Bill), dismiss msg35's \r. Then Right selects WITHDRAW
 # in the DIFFERENT storage menu. scr_seq_0003.s:754-838; msg_0040.gmm:142-152;
 # scrcmd_message.c:142-151; render_text.c:270-273,302-310,512-519.
 # {YESNO 0} in msg34 draws a focus indicator, NOT a blocking YesNo question:
@@ -553,8 +573,9 @@ WITHDRAW_STEPS = (
      "source": "scr_seq_0003.s:754-838; msg_0040.gmm:142-152; render_text.c:95-105,270-273,302-310: "
                "three ACCEPTED A: msg33 carriage wait / choose storage row0 / msg35 carriage wait; "
                "existing launch_wait bounds each printer wait (timing unmeasured)"},
-    {"step": "menu_down", "press": "Down", "inferred": False,
-     "source": "scr_seq_0003.s:821-833 (_0B17 rows DEPOSIT 0 / WITHDRAW POKEMON 1), cursor starts on row 0"},
+    {"step": "menu_move", "press": WITHDRAW_MENU_KEY, "inferred": False,
+     "source": "scrcmd_c.c:5025-5032 (opcode752); overlay_27.s:5414-5445,5540-5648,6163-6175; "
+               "index0 Right=1 WITHDRAW, Down=2 MOVE; scr_seq_0003.s:821-827 item values"},
     {"step": "menu_withdraw", "press": "A", "inferred": False,
      "source": "scr_seq_0003.s:834-846 (_0B53 Case 1 -> _0BB5), :851-856 ScrCmd_158 1 -> PCBox_LaunchApp mode 1"},
     {"step": "app_state_0x51", "wait_state": 0x51, "inferred": False,
@@ -767,8 +788,10 @@ def withdraw_plan() -> dict:
     """The box-withdraw inputs the Lua leg follows: the ordered, source-cited steps plus the numbers
     it drives (menu rows to go down, the box cell to grab)."""
     return {
-        "menu_down": WITHDRAW_MENU_DOWN,
+        "menu_steps": WITHDRAW_MENU_STEPS,
+        "menu_key": WITHDRAW_MENU_KEY,
         "menu_hold": WITHDRAW_MENU_HOLD,
+        "witness": {**WITHDRAW_WITNESS, "source_symbols": list(WITHDRAW_WITNESS["source_symbols"])},
         "box_cell": WITHDRAW_CELL,
         "party_max": WITHDRAW_PARTY_MAX,
         "script_a": WITHDRAW_SCRIPT_A,
@@ -1355,7 +1378,7 @@ def build_receipt(
         "save_sha1": synth["out_sha1"],
         "game": game,
         "legs": [
-            {k: v for k, v in leg.items() if k in ("leg", "kind", "phase", "status", "detail")}
+            {k: v for k, v in leg.items() if k in ("leg", "kind", "phase", "status", "detail", "pc_witnesses")}
             for leg in legs
         ],
         "final_status": final["status"],
@@ -1391,6 +1414,9 @@ def parse_result(log: str) -> dict:
     """The last `RESULT <status> ...` line of a Lua log -> {status, detail, lines}."""
     res = {"status": "NO_RESULT", "detail": "", "lines": log.splitlines()}
     for ln in res["lines"]:
+        witness = re.search(r"PC_WITNESS (\{.*\})$", ln)
+        if witness:
+            res.setdefault("pc_witnesses", []).append(json.loads(witness.group(1)))
         m = re.search(r"RESULT (\w+)\s*(.*)$", ln)
         if m:
             res["status"], res["detail"] = m.group(1), m.group(2)
