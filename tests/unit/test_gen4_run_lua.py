@@ -64,7 +64,8 @@ def run_root(tmp: Path, text: str | None = None, *, rom_hash: str, header: str =
 
     `stub_src` replaces the client stub (mutants); `with_areas` plants the hgss area data files in
     every scratch pack and `with_bag` the balls-pocket fact (BAG), which are the only ways the
-    optional area / ball inputs can exist at all (no Gen 4 profile carries either fact yet).
+    optional area / synthetic ball inputs can be planted in the scratch tree. Copied real
+    profiles may already carry their generated bag fact.
     `bag_mem` is the array the stub's reader answers from, at the pack's own pocket offsets.
     """
     gen4 = tmp / "lua/gen4"
@@ -84,8 +85,8 @@ def run_root(tmp: Path, text: str | None = None, *, rom_hash: str, header: str =
             for name in ("area_map.json", "locations.json"):
                 shutil.copy(ROOT / f"data/games/gen4_hgss/{name}", d / name)
         if with_bag:
-            # no Gen 4 profile ships the balls-pocket fact yet, so the wiring test plants the same
-            # synthetic one the producer tests use, in the same place the generator would put it
+            # The mutation tests use a small synthetic pocket in place of the real profile's
+            # generated geometry; ordinary composition tests keep the real profile fact.
             doc = json.loads((d / "profile.json").read_text(encoding="utf-8"))
             for title in doc["titles"].values():
                 title.setdefault("profile", {})["bag"] = BAG
@@ -200,19 +201,25 @@ def test_a_platform_without_the_header_copy_is_refused_by_name(tmp_path):
 
 
 def test_run_lua_hands_the_client_the_producers_the_pack_can_supply(tmp_path):
-    """With the hgss area files present, area_of reaches Client.new and resolves a map id."""
-    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], with_areas=True)
+    """The root wires the available area and real-profile bag producers into Client.new."""
+    bag = HGE["profile"]["bag"]
+    pocket = bag["balls_pocket_off"]
+    memory = {pocket + bag["slot_fields"]["id"]["off"]: 4,
+              pocket + bag["slot_fields"]["quantity"]["off"]: 1}
+    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], with_areas=True,
+                                bag_mem=memory)
     p = calls.client_args
     assert callable(p.area_of), "run.lua must pass the pack-built area producer"
     assert list(p.area_of(9, {})) == ["route_1", "Route 1"]
     assert list(p.area_of(0, {})) == [None, "Mystery Zone"]     # unmapped: no area, still a label
     assert list(p.area_of(9999, {})) == [None, None]
-    # the pack ships no charmap.json and no bag fact: those seams stay ABSENT, never nil-or-guessed
-    assert p.charmap is None and p.has_pokeballs is None
-    for name in ("charmap", "has_pokeballs"):
-        assert any(f"input {name} unavailable" in line for line in logs), f"{name} gap must be visible"
-    # the bag gap must now name the PACK's missing fact, not the missing save seam
-    assert any("input has_pokeballs unavailable" in line and "profile.bag" in line for line in logs)
+    # This scratch tree deliberately omits charmap.json, but keeps the real profile.bag.
+    assert p.charmap is None
+    assert any("input charmap unavailable" in line for line in logs)
+    assert callable(p.has_pokeballs), "the generated bag fact must wire the ball producer"
+    assert p.has_pokeballs() is True
+    assert list(calls.save_array_ids.values()) == [bag["array_id"]]
+    assert not any("input has_pokeballs unavailable" in line for line in logs)
 
 
 def test_run_lua_without_the_area_pack_files_refuses_the_area_input(tmp_path):
