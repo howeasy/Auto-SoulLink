@@ -322,6 +322,13 @@ class World:
             self.frames(1)
         self.checkpoint_ok = True
         self.frames(2)
+        # a production client's first hello waits (bounded) for the cartridge's own service to be seen live
+        # (lua/gen2/client.lua PANEL_WAIT); a harness that never ticks that service waits the bound out
+        for _ in range(200):
+            if self.sent("hello") or not self.production:
+                break
+            self.hold()
+            self.frames(1)
         hellos = self.sent("hello")
         assert len(hellos) == 1, self.logs.values()
         return hellos[0]
@@ -1327,9 +1334,32 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     assert world.emu.callbacks["SLink-gen2-checkpoint"] is None
 
 
+def tick_service(world, caps=0x02):
+    """The overlay's own SLNK service as the ROM runs it: beacon, ABI 3, a moving frame counter, the init cookie.
+    The production client's first hello waits for this to be SEEN live (lua/gen2/client.lua PANEL_WAIT), so a test
+    about the checkpoint gating must run on a ticking cartridge or the service wait, not the gate, decides."""
+    mb = world.profile["overlay"]["ram"]["wSlinkMailbox"]
+    counter = {"c": 100}
+    step = world.frames
+
+    def tick():
+        counter["c"] = (counter["c"] + 1) & 0xFFFF
+        world.emu.poke("System Bus", mb, world.lua.table_from(
+            [0x53, 0x4C, 0x4E, 0x4B, 3, counter["c"] & 0xFF, counter["c"] >> 8, 0, caps]))
+        world.emu.poke("System Bus", mb + 31, world.lua.table_from([0xA5]))
+
+    def frames(n=1):
+        for _ in range(n):
+            tick()
+            step(1)
+    world.frames = frames
+    return world
+
+
 @NEEDS_OVERLAY
 def test_production_no_hello_before_an_accepted_checkpoint_hold():
     def check(world):
+        tick_service(world)
         world.frames(120)
         assert world.sent("hello") == []
         assert world.hold(wScriptRunning=1) == 1  # a script frame at the PC: the predicate refuses
