@@ -552,6 +552,7 @@ def build_plan(kind: str, repo=None, root=None, locations=None, lane_age=DEFAULT
     else:
         plan["actions"], plan["refused"] = _move_actions(params, items)
         plan["followups"] = _followups(params["repo"], plan["actions"])
+    plan["digest"] = _digest(plan)
     return plan
 
 
@@ -659,9 +660,25 @@ def _strip(actions) -> list:
     return json.loads(json.dumps(actions))
 
 
-def apply_plan(plan_file) -> list[str]:
+def _digest(plan) -> str:
+    body = {k: plan.get(k) for k in ("kind", "params", "actions")}
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def apply_plan(plan_file, repo=None, root=None, locations=None, lane_age=DEFAULT_LANE_AGE,
+               tmp_age=DEFAULT_TMP_AGE, kind=None) -> list[str]:
+    """Apply a dry-run plan.  Repo, root, locations and thresholds come from the caller
+    (the CLI: always the default locations), never from the file; the file must match."""
     saved = json.loads(Path(plan_file).read_text(encoding="utf-8"))
-    fresh = build_plan(saved["kind"], **saved["params"])
+    if kind and saved.get("kind") != kind:
+        raise PlanChanged(f"{plan_file} is a {saved.get('kind')} plan, not {kind}")
+    if saved.get("digest") != _digest(saved):
+        raise PlanChanged("plan file was edited after the dry run; nothing was done")
+    expected = _params(repo, root, locations, lane_age, tmp_age)
+    if _strip(saved["params"]) != _strip(expected):
+        raise PlanChanged("plan params (repo/root/locations/thresholds) differ from this "
+                          "command's; re-run the dry run with the same flags. Nothing was done.")
+    fresh = build_plan(saved["kind"], **expected)
     if _strip(fresh["actions"]) != _strip(saved["actions"]):
         old = {json.dumps(a, sort_keys=True) for a in saved["actions"]}
         new = {json.dumps(a, sort_keys=True) for a in fresh["actions"]}
@@ -922,7 +939,7 @@ def main(argv=None) -> int:
     plan_file = Path(args.plan or work_root("tmp") / f"slink-space-{kind}-plan.json")
     if args.apply:
         try:
-            for line in apply_plan(plan_file):
+            for line in apply_plan(plan_file, kind=kind, **kw):
                 print(f"done: {line}")
         except PlanChanged as e:
             print(f"ABORTED: {e}", file=sys.stderr)

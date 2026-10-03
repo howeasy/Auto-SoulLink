@@ -128,10 +128,14 @@ def item(p, path):
     return next(i for i in p["items"] if ss._norm(i["path"]) == n)
 
 
-def apply(w, p):
+def apply(w, p, **cli):
+    """Apply as the CLI would: repo/root/locations/thresholds come from the command, not
+    from the plan file."""
     f = w.tmp / f"{p['kind']}-plan.json"
     f.write_text(json.dumps(p), encoding="utf-8")
-    return ss.apply_plan(f)
+    kw = {"repo": w.repo, "root": w.root, "locations": w.locations, "lane_age": DAY,
+          "tmp_age": 2 * 3600, **cli}
+    return ss.apply_plan(f, **kw)
 
 
 def branches(w):
@@ -265,6 +269,32 @@ def test_apply_aborts_on_tampered_plan(W):
     with pytest.raises(ss.PlanChanged):
         apply(W, p)
     assert (outside / "keep.txt").exists()
+
+
+def test_apply_refuses_a_plan_built_with_other_params(W):
+    # Review vector: a plan whose own params widen the scan (and whose actions are
+    # self-consistent with them) must not be replayed.
+    precious = W.tmp / "precious-lane"
+    precious.mkdir()
+    (precious / "keep.txt").write_text("k")
+    _age(precious)
+    evil = ss.build_plan("prune", repo=W.repo, root=W.root, lane_age=DAY, tmp_age=2 * 3600,
+                         locations=[*W.locations, ["x", f"{W.tmp.as_posix()}/precious*", "tmp",
+                                                   False]])
+    assert any("precious" in a["path"] for a in evil["actions"])
+    with pytest.raises(ss.PlanChanged, match="params"):
+        apply(W, evil)
+    assert (precious / "keep.txt").exists()
+
+
+def test_apply_refuses_different_thresholds(W):
+    lane = W.c / "slink" / "old"
+    lane.mkdir()
+    _age(lane)
+    p = plan(W)
+    with pytest.raises(ss.PlanChanged, match="params"):
+        apply(W, p, lane_age=5 * DAY)
+    assert lane.exists()
 
 
 def test_branch_delete_is_lowercase_d_only():
