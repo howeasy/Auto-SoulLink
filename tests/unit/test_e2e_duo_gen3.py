@@ -4914,7 +4914,10 @@ RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLi
 
 # (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
 # calls RR's ChoosePartyMonByMenuType, which owns that reference)
-COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D84]}
+# 0x0802EA11's companion referrer moved 0x08379D84 -> 0x08379D88 when the title/menu-version payload (companion
+# sha1 e87a6a7e, patch/dist/companion_pins.json) grew the payload by 4 bytes ahead of it: a pure relocation (the
+# count 8 + 1 is unchanged and every other pinned referrer is where it was)
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D88]}
 
 
 def _pret_battle_berries():
