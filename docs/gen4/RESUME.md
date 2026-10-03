@@ -1,5 +1,7 @@
 # Gen 4 resume note
 
+> **Player launcher caveat (2026-10-03):** `lua/slink_gen4.lua` still runs the LEGACY Gen 4 client. Every G1/G2 cut so far proves the rewritten `lua/gen4/*` modules through test drivers, not the player launch path. G3a switches the launcher (first batched Gen 2 digest window after the current release); G4 sign-off requires a cut launched through `slink.lua`. Gen 4 is pre-release on this branch.
+
 ## Checkpoint 11 (2026-10-03) - committed-scenario run at FROZEN `108c025d`; row-n mechanisms landed; G1 still NOT qualified
 
 **Cut `108c025d`** = committed outdoor scenarios, no in-process harness overrides: the first run under the receipt rule from the evidence caveat below.
