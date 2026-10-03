@@ -167,3 +167,24 @@ Behaviour already observed on HG, SS and hge, but the receipts are NOT signable 
   2. Choose WITHDRAW. The item row is still unread: `ov14_021F6928` / `ov14_021F7D1C`; take it from the popup item table or one runtime screenshot of the popup (runtime state only).
   3. Assert `[[data+0x34]+0xC]+0xE4` == 0 and `+0xE8` >= 0x1E + party count, then box slot 0 empty, party +1, and the box dirty mask bit 0 (`pokemon_storage_system.c:341`; it is a MASK).
 - **Still unknown:** the PC top-menu script and launch mode (`args+8` in {0..3}, `:11475-11479`); the launcher is not in `src/`.
+
+## §6b CORRECTION 2 (2026-10-02, OMP cx-9897d01e, coordinator-verified at `ad7a3afa`). It supersedes the withdraw-entry lines of CORRECTION 1
+
+- **CORRECTION 1 was half wrong:** `ov14_021F0660` (`:21860`) is the PARTY-mon popup (cells 0x1E-0x23; items {0,2,6,7,8}; next state 0x6E = party->box / release). It is NOT the withdraw entry.
+- **Box-mon withdraw = no menu.**
+  1. State 0x51 calls `ov14_021F0418` (`:16618`, body `:21594-21677`): it grabs the box mon and prints ONE line from `msg_0025` (row 37 "You can add it to your party!", or "Your party is full!" at 6/6), then schedules state **0x57** (`:21670-21673`).
+  2. State 0x57 (`ov14_021EDF28`, `:17139-17187`) reads NO input: `PlaySE(0x5EA)` -> `ov14_021E637C` -> (src < 0x1E, dst == 0x1E + party count) -> `ov14_021E6184` (`:1390-1402`) -> `Party_AddMon` (`:1115`) -> back to 0x51.
+  - There is no destination pick. dst bit7 is a box-row auto-slot (box->box), not party auto-place.
+- **The PC launch is in src.**
+  - `scr_seq_0003.s:823-833` builds the PC menu: DEPOSIT / WITHDRAW POKéMON / MOVE POKéMON / MOVE ITEMS / SEE YA!.
+  - WITHDRAW = `_0BB5` -> `ScrCmd_158 1` (`:851-856`) -> `PCBox_LaunchApp` (`src/launch_application.c:406-409`); mode = `args+8` = **1**.
+  - The modes are {0..4}. `ov14_021F7D1C` is a tilemap, not an item table.
+- **Predicted withdraw leg** (SOURCE except where marked):
+  1. PC top menu: Down x1 then A (WITHDRAW, mode 1).
+  2. The box app enters list state 0x5B (INFERRED edge).
+  3. D-pad to box cell 0 (the cell is `data+0x21`).
+  4. A: the grab plus the msg_0025 row 37 prompt, state 0x57 (`data+0x22 == 2`).
+  5. The commit, back to 0x51.
+  - **Oracle:** party count +1; box 0 slot 0 empty; box dirty-mask bit 0 set; then SAVE + cold reload.
+  - **Precondition:** party count < 6 (the 6/6 path is unverified: whether the box slot is still deleted).
+- **Conflict to settle live:** `lua/tests/gen4_route_play.lua:447,451` reads the state at man+0x14 (the deposit leg is PHYSICAL on it), while the asm says sysdata+0 (`:11368-11385`). Trust the PHYSICAL deposit read until a live trace says otherwise.
