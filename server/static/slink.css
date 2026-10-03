@@ -68,6 +68,9 @@
 }
 
 :root {
+  /* Chip shape: the notched "game-menu" corner cut (see the chip rule below). */
+  --chip-notch: 6px;
+  --chip-pad-x: calc(var(--chip-notch) + 5px);   /* text clear of the cut corners */
   /* ── Semantic status palette (overlay defaults — also drives dashboard) ── */
   --c-alive:    #3de85a;
   --c-dead:     #f03838;
@@ -572,6 +575,20 @@ body.stream {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* ── Chips: one notched "game-menu" shape for the whole family ───────────────
+ * Top-left and bottom-right corners cut diagonally by --chip-notch; themes inherit it.
+ * The borders are cut on the diagonals by design. clip-path also clips anything drawn
+ * outside the box, so a chip's focus ring sits INSIDE it (negative offset). Round things
+ * (.mk-dot, badge pips, avatars) are not chips and keep their radius. */
+.badge-lock, .mk-pill, .mk-tab, .mk-gchip, .mk-tag, .patcher-game {
+  border-radius: 0;
+  clip-path: polygon(var(--chip-notch) 0, 100% 0, 100% calc(100% - var(--chip-notch)),
+                     calc(100% - var(--chip-notch)) 100%, 0 100%, 0 var(--chip-notch));
+}
+.mk-tab:focus-visible, .mk-gchip:focus-visible, .patcher-game:focus-visible {
+  outline: 2px solid var(--c-brand, currentColor); outline-offset: -4px;
+}
+
 /* conn-watch.js: the poll stopped getting answers. On stream, so quiet: the stale data
  * dims and a small corner tag says why; both clear on the next good poll. */
 body.stream.conn-lost #root { opacity: .45; filter: grayscale(.7); transition: opacity .4s, filter .4s; }

@@ -147,9 +147,8 @@
   margin: 0.75rem 0 0;
 }
 .patcher-game {
-  padding: 0.25rem 0.7rem;
+  padding: 0.25rem var(--chip-pad-x);
   border: 1px solid var(--border, #444);
-  border-radius: 999px;
   font-size: 0.9rem;
   text-decoration: none;
   color: inherit;
