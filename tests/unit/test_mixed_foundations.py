@@ -20,6 +20,7 @@ from server.adapters import (
     get_adapter,
 )
 from server.server import _KNOWN_ARTIFACT_KINDS, SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.protocol_schema import ARTIFACT_KINDS
 
 # Patch-first (owner 2026-10-02): a clean FR/LG/Emerald/RR hello is refused for lack of the companion, so
@@ -48,8 +49,11 @@ async def _session(srv):
     return send, close
 
 
-def _hello(player: str, cart: dict, **extra) -> dict:
-    return {"event": "hello", "player": player, "trainer_name": player.upper(),
+def _hello(player: str, cart: dict, *, with_companion=True, **extra) -> dict:
+    # Deliberate missing-patch controls opt out; ordinary fixtures reach the
+    # pairing/identity guard with their title's exact mailbox ABI.
+    evidence = companion(cart.get("rom_type", "")) if with_companion else {}
+    return {**evidence, "event": "hello", "player": player, "trainer_name": player.upper(),
             "ot_id": "30B8" if player == "a" else "7B0B", "has_pokeballs": True,
             "party": [], **cart, **extra}
 
@@ -158,7 +162,7 @@ async def test_a_clean_rr_is_refused_for_the_companion_and_firered_pairs_with_le
     send, close = await _session(srv)
     try:
         assert not _refused(await send(_hello("a", RR)))
-        reply = await send(_hello("b", RR_CLEAN))
+        reply = await send(_hello("b", RR_CLEAN, with_companion=False))
         assert not _refused(reply) and any("COMPANION" in c.get("text", "") for c in reply["commands"])
         assert "needs the SLink companion patch" in srv.state.identity_error["b"]
     finally:
@@ -325,7 +329,7 @@ async def test_a_present_artifact_kind_is_never_coerced_to_clean(tmp_path, bad):
         assert "Bad artifact_kind" in srv._mixed_games_error("a", "firered", bad)
         # And the run is still open: omitting the key is what defaults to clean, which a companion
         # title now refuses for the companion (not as a bad kind); declaring the companion connects.
-        reply = await send(_hello("a", {"rom_type": "firered"}))
+        reply = await send(_hello("a", {"rom_type": "firered"}, with_companion=False))
         assert not _refused(reply) and "needs the SLink companion patch" in srv.state.identity_error["a"]
         assert srv.state.artifact_kind == ""
         assert not _refused(await send(_hello("a", FR)))

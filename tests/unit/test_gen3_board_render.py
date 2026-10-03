@@ -67,6 +67,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from server.adapters import get_adapter
 from server.server import SLinkServer, build_app
+from tests.unit.companion_evidence import companion
 from tests.unit.test_dashboard_contract import parse
 
 # ── the two admitted Gen 3 cartridges ─────────────────────────────────────────────────────
@@ -136,9 +137,9 @@ def _events(rom_type: str) -> list[dict]:
     a_party = [_party(A_PIKA, 25, "Sparky", 12)]
     b_party = [_party(B_RATT, 19, "Ratty", 12, status=POISON, stages=STAGES)]
     return [
-        {"event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
+        {**companion(rom_type), "event": "hello", "player": "a", "rom_type": rom_type, "artifact_kind": kind,
          "trainer_name": "ALICE", "has_pokeballs": True, "party": []},
-        {"event": "hello", "player": "b", "rom_type": rom_type, "artifact_kind": kind,
+        {**companion(rom_type), "event": "hello", "player": "b", "rom_type": rom_type, "artifact_kind": kind,
          "trainer_name": "BOB", "has_pokeballs": True, "party": []},
         {"event": "tick", "player": "a", "has_pokeballs": True,
          "party": [_party(A_BOOT, 1, "Boot", 5, slot=0)]},

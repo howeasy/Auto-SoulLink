@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 
 
 def party():
@@ -17,7 +18,7 @@ def party():
 
 
 def legacy_hello(snapshot):
-    return {"event": "hello", "rom_type": "firered", "player": "a", "trainer_name": "ALICE",
+    return {**companion("firered"), "event": "hello", "rom_type": "firered", "player": "a", "trainer_name": "ALICE",
             "ot_id": "11111111", "party": snapshot, "in_battle": True,
             "artifact_kind": "companion"}   # a clean FireRed is refused (patch-first, owner 2026-10-02)
 

@@ -322,7 +322,7 @@ def test_pairing_kind_for_fails_closed_to_rand():
     assert Gen3Adapter.pairing_kind_for("companion", None) == "clean"   # unchanged mapping
 
 
-async def _pair(tmp_path, first, second):
+async def _pair(tmp_path, first, second, *, second_with_companion=True):
     """Two hellos on one real socket; returns (server, the second slot's mixed-kinds error)."""
     from tests.unit.test_gen3_rand_kind import _hello, _session
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -330,7 +330,7 @@ async def _pair(tmp_path, first, second):
     try:
         await send(_hello("a", first))
         assert not srv.state.identity_error.get("a"), srv.state.identity_error
-        await send(_hello("b", second))
+        await send(_hello("b", second, with_companion=second_with_companion))
     finally:
         await close()
     return srv, srv.state.identity_error.get("b") or ""
@@ -345,10 +345,13 @@ def _cart(title, kind, rom=None):
 
 @pytest.mark.asyncio
 async def test_clean_bytes_shipped_as_rand_no_longer_pair_with_a_clean_partner(tmp_path):
-    """Companion required (owner 2026-10-02): the clean partner is refused, so this pair no longer forms. The
-    `rand`-labelled hello itself cannot be refused on the wire (a randomized cartridge declares `rand` whether
-    or not it carries the companion); the launcher refuses randomized-clean (lua/gen3/entry.lua admit_routed)."""
-    srv, err = await _pair(tmp_path, _cart("firered", "rand", _clean("firered")), _cart("leafgreen", "clean"))
+    """A patched FR reporting canonical tables as rand still cannot admit an unpatched LG.
+
+    The first hello has the exact companion ABI; the second deliberately has no
+    evidence and must be refused before pairing. A rand label alone proves no patch.
+    """
+    srv, err = await _pair(tmp_path, _cart("firered", "rand", _clean("firered")), _cart("leafgreen", "clean"),
+                           second_with_companion=False)
     assert "needs the SLink companion patch" in err, err
 
 

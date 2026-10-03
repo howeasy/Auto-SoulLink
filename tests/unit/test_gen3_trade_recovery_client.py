@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from tests.unit.companion_evidence import patched
 from tests.unit.test_gen3_trade import durable_client, start_client_trade, swap_in_partner
 
 
@@ -470,6 +471,10 @@ def recovering_pair(tmp_path, monkeypatch, corrupt=False):
             messages = world.sent[cursor:]
             cursor = len(world.sent)
             for message in messages:
+                # Library-mode client MODEL: its mailbox is not booted. Supply
+                # the patched cartridge's exact ABI at the server hello seam.
+                if message["event"] == "hello":
+                    message = patched(message)
                 commands = server._dispatch("a", message)
                 world.replies.append(json.dumps({"commands": commands}))
     pump(65)
