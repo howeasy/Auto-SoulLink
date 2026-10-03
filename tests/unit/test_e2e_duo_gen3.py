@@ -925,6 +925,13 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
 
 
 def test_gen3_rom_prefers_the_dump_then_the_staged_copy(monkeypatch, tmp_path):
+    # Hermetic: _gen3_rom walks up EVERY parent of REPO for the dump, so a real FireRed dump anywhere above the pytest
+    # temp root (a checkout root, F:/slink-work, ...) would satisfy the search the test expects to fail. Only the dump this
+    # test creates under tmp_path may exist.
+    import pathlib
+    real_is_file = pathlib.Path.is_file
+    monkeypatch.setattr(pathlib.Path, "is_file", lambda self: real_is_file(self) and not (
+        self.name == "Pokemon - FireRed Version (USA).gba" and tmp_path not in self.parents))
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.gcfg, run.cfg = dict(duo.GAMES["gen3_frlg"]), dict(duo.SCENARIOS["link_gen3"])
     root = tmp_path / "main" / "wt"
