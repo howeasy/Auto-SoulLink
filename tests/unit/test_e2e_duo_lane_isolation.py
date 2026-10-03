@@ -54,8 +54,9 @@ def test_gen2_seeds_distinct_fixtures_under_the_same_name_in_separate_dirs(monke
 
 
 def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monkeypatch, tmp_path):
-    import tools.gen2_synth_fixtures as gen2_synth_fixtures
     import run_gb_gate as gate
+
+    import tools.gen2_synth_fixtures as gen2_synth_fixtures
 
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     monkeypatch.setattr(duo, "REPO", str(tmp_path))

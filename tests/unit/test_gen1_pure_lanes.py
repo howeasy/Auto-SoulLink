@@ -569,11 +569,11 @@ def _overlay_rows():
         return json.load(handle)
 
 
-def _rom(writer_at=None):
+def _rom(writer_at=None, mailbox=0xDEE2):
     """A 1 MiB cartridge image; `writer_at` plants the companion's beacon writer there."""
     rom = bytearray(0x100000)
     if writer_at is not None:
-        rom[writer_at:writer_at + 5] = bytes([0x3E, 0x53, 0xEA, 0xE2, 0xDE])  # ld a,"S" / ld [$DEE2],a
+        rom[writer_at:writer_at + 5] = bytes([0x3E, 0x53, 0xEA, mailbox & 0xFF, mailbox >> 8])
     return bytes(rom)
 
 
@@ -616,14 +616,15 @@ def test_a_cartridge_without_the_companion_is_refused(lua, pack, title, kind, wr
     ("gen1_rby", "red", "named", _BANK3F + 0x3FFB, "ef" * 20),  # last position in the bank
     ("gen1_rby", "red", "rand", _BANK3F, "12" * 20),            # randomized, then injected
     ("gen1_rby", "yellow", "clean", None, "34" * 20),               # Yellow has no companion
-    ("gen1_purergb", "purered", "overlay", None, "overlay"),
-    ("gen1_purergb", "puregreen", "overlay", None, "overlay"),
-    ("gen1_purergb", "pureblue", "rand_overlay", None, "56" * 20),  # overlay, then randomized
+    ("gen1_purergb", "purered", "overlay", _BANK3F, "overlay"),
+    ("gen1_purergb", "puregreen", "overlay", _BANK3F, "overlay"),
+    ("gen1_purergb", "pureblue", "rand_overlay", _BANK3F, "56" * 20),  # overlay, then randomized
 ])
 def test_a_companion_cartridge_is_allowed(lua, pack, title, kind, writer, sha):
     if sha == "overlay":
         sha = _pure_sha(title, "overlay").upper()
-    assert _refusal(lua, pack, title, kind, _rom(writer), sha) is None
+    mailbox = 0xDEEA if pack == "gen1_purergb" else 0xDEE2
+    assert _refusal(lua, pack, title, kind, _rom(writer, mailbox), sha) is None
 
 
 @pytest.mark.parametrize("pack,title,kind,missing", [
@@ -688,3 +689,43 @@ def test_the_duo_harness_refuses_after_admission_and_before_anything_runs():
     facts = src.index("local FACTS = dofile(")
     assert fallback < refusal < facts
     assert 'finish(false, refused .. " refused' in src[refusal:facts]
+
+
+@pytest.mark.parametrize("pack,title,kind,mailbox", [
+    ("gen1_rby", "red", "named", 0xDEE2),
+    ("gen1_purergb", "purered", "overlay", 0xDEEA),
+])
+@pytest.mark.parametrize("allow", [True, False])
+def test_harness_calls_the_production_detector(lua, pack, title, kind, mailbox, allow):
+    entry = _dofile(lua, "lua/gen1/entry.lua")
+    detector = entry.has_companion_beacon
+    calls = []
+
+    def detect(reader, address):
+        calls.append(address)
+        return detector(reader, address) and allow
+
+    entry.has_companion_beacon = detect
+    sha = _pure_sha(title, kind) if kind == "overlay" else "ab" * 20
+    adm = lua.table(pack=pack, title=title, kind=kind, rom_sha1=sha)
+    rom = _rom(_BANK3F, mailbox)
+    gate = _dofile(lua, "lua/tests/gen1_gate.lua")
+    reason = gate.companion_refusal(
+        _ROOT_FWD, _dofile(lua, "lua/json_codec.lua"), adm,
+        lambda offset: rom[int(offset)], len(rom), entry,
+    )
+    assert (reason is None) == allow
+    assert calls == [mailbox]
+
+
+@pytest.mark.parametrize("title,kind", [
+    ("purered", "overlay"), ("puregreen", "overlay"), ("pureblue", "rand_overlay"),
+])
+@pytest.mark.parametrize("writer,mailbox", [(None, 0xDEEA), (_BANK3F, 0xDEE2)])
+def test_pure_overlay_row_alone_does_not_replace_the_pure_beacon(lua, title, kind, writer, mailbox):
+    sha = _pure_sha(title, "overlay") if kind == "overlay" else "ab" * 20
+    assert _refusal(lua, "gen1_purergb", title, kind, _rom(writer, mailbox), sha)
+
+
+def test_vanilla_does_not_accept_the_pure_mailbox(lua):
+    assert _refusal(lua, "gen1_rby", "red", "named", _rom(_BANK3F, 0xDEEA), "ab" * 20)

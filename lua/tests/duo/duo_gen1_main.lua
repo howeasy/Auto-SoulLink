@@ -98,11 +98,11 @@ else
 end
 -- Companion required (owner 2026-10-02): whether admitted by sha1 or named by the header family
 -- above, a Red/Blue/pureRGB cartridge runs only with the companion in it (gen1_gate.lua
--- companion_refusal: the bank-$3F beacon writer, or an overlay admission row).
+-- companion_refusal: the production beacon detector and, for pureRGB, an overlay admission row).
 local refused = dofile(ROOT .. "/lua/tests/gen1_gate.lua").companion_refusal(ROOT, json, {
     pack = pack, title = title, kind = kind,
     rom_sha1 = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
-}, rom_u8, memory.getmemorydomainsize("ROM"))
+}, rom_u8, memory.getmemorydomainsize("ROM"), Entry)
 if refused then
     finish(false, refused .. " refused: the SLink companion is required")
 end

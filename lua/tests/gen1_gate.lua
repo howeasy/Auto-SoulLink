@@ -17,15 +17,16 @@ local Lib = {}
 -- Fails CLOSED: the companion has to be shown present, never inferred from a sha1 being unpinned.
 --   Red/Blue: bank $3F carries the companion's beacon writer, `ld a, "S" / ld [MAILBOX], a` --
 --     the code that writes the 'SLNK' beacon the client reads (MAILBOX from lua/gen1/panel.lua;
---     the same bytes patch/gen1/tools/inject.py finds as _BEACON_WRITER). Randomized companion
+--     scanned by the production Entry.has_companion_beacon detector). Randomized companion
 --     builds carry it too (vanilla randomizes clean bytes, THEN injects); a clean or unknown Red
 --     has an empty bank $3F.
 --   pureRGB: an admission_overlay.json row for the title (kind overlay by sha1, or rand_overlay by
---     anchors -- the overlay randomized after its UPS). Clean, rand and named pure are refused.
+--     anchors -- the overlay randomized after its UPS), plus the $DEEA beacon writer checked
+--     by that same production detector. Clean, rand and named pure are refused.
 --   Yellow: no companion exists for it; allowed.
 -- `adm` is { pack, title, kind, rom_sha1 }. Returns a refusal reason, or nil when allowed. A
 -- missing or unreadable admission file raises.
-function Lib.companion_refusal(root, json, adm, read_rom_u8, rom_size)
+function Lib.companion_refusal(root, json, adm, read_rom_u8, rom_size, Entry)
     local title, kind = tostring(adm.title), tostring(adm.kind)
     if adm.pack == "gen1_purergb" then
         local rel = "data/games/gen1_purergb/admission_overlay.json"
@@ -35,21 +36,22 @@ function Lib.companion_refusal(root, json, adm, read_rom_u8, rom_size)
         local sha1 = tostring(adm.rom_sha1 or ""):lower()
         for sha, row in pairs(rows) do
             if row.title == title and ((kind == "overlay" and sha:lower() == sha1) or kind == "rand_overlay") then
-                return nil
+                Entry = Entry or dofile(root .. "/lua/gen1/entry.lua")
+                if (rom_size or 0) >= 0x40 * 0x4000
+                  and Entry.has_companion_beacon(read_rom_u8, assert(Entry.PURE_MAILBOX)) then
+                    return nil
+                end
+                break
             end
         end
         return kind .. " pureRGB " .. title .. " (no companion overlay)"
     end
     if title == "yellow" then return nil end
-    local mailbox = dofile(root .. "/lua/gen1/panel.lua").MAILBOX
-    local writer = { 0x3E, 0x53, 0xEA, mailbox & 0xFF, mailbox >> 8 }
-    local first, last = 0x3F * 0x4000, 0x40 * 0x4000 - #writer
-    if (rom_size or 0) >= 0x40 * 0x4000 then
-        for a = first, last do
-            local i = 1
-            while i <= #writer and read_rom_u8(a + i - 1) == writer[i] do i = i + 1 end
-            if i > #writer then return nil end
-        end
+    local mailbox = assert(dofile(root .. "/lua/gen1/panel.lua").MAILBOX)
+    Entry = Entry or dofile(root .. "/lua/gen1/entry.lua")
+    if (rom_size or 0) >= 0x40 * 0x4000
+      and Entry.has_companion_beacon(read_rom_u8, mailbox) then
+        return nil
     end
     return kind .. " " .. title .. " (no companion beacon writer in bank $3F)"
 end
@@ -129,7 +131,7 @@ function Lib.start(gate_name, opts)
     local refused = Lib.companion_refusal(ROOT, json_codec, {
         pack = pack, title = title, kind = kind,
         rom_sha1 = gameinfo.getromhash and gameinfo.getromhash() or "",
-    }, rom_u8, memory.getmemorydomainsize("ROM"))
+    }, rom_u8, memory.getmemorydomainsize("ROM"), Entry)
     if refused then
         t.log(fmt("RESULT: FAIL %s refused: the SLink companion is required -- boot red_patched/"
                   .. "blue_patched or the *_overlay key", refused))

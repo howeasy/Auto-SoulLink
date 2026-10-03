@@ -38,7 +38,6 @@ from types import MappingProxyType
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-from repo_paths import inside_repo  # noqa: E402
 import gen1_playthrough as g1  # noqa: E402
 from gen1_playthrough import (  # noqa: E402
     BIZHAWK_CONFIG,
@@ -48,6 +47,7 @@ from gen1_playthrough import (  # noqa: E402
     write_run_config,
 )
 from gen2_source_data import load_context as load_gen2_context  # noqa: E402
+from repo_paths import inside_repo  # noqa: E402
 
 # The fixture builders, per generation. Gen 1's is tools/gen1_fixtures.py (the new client's
 # scripted pipeline); the old gen1_playthrough driver this message used to name is gone, and
