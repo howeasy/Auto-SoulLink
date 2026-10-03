@@ -58,10 +58,17 @@ owned-mailbox clobber behavior.
 Gen 1 refuses preimage restoration after that boundary and acknowledges withdrawal
 with the existing
 `trade_done{uncertain=true}` carrier, preserving the native lease and making no
-new-key claim while awaiting native completion. After 1800 held frames with missing
-consumption evidence, it rescans the party and declares uncertainty exactly once
-without any lease write. Late withdrawal and terminal uncertainty show the
-player-actionable `TRADE UNCERTAIN - CHECK PARTY` notice. Its armed-too-long tripwire is
+new-key claim while awaiting native completion. After
+`TRADE_HOLD_TERMINAL_FRAMES` (1800) held frames with missing
+consumption evidence, APPLY declares uncertainty exactly once and schedules
+`pending_change={kind="rescan"}` so the next normal settlement publishes the readback.
+PROMPT instead owes one `menu_result{choice=0}`: the server sees a decline and
+ends the confirming offer. Neither outcome writes the union. Both keep their
+terminal local trade state until reset; clearing it would reopen re-staging over
+a native-owned request. A late PROMPT completion cannot reverse the decline.
+Late withdrawal and terminal uncertainty show the
+player-actionable `TRADE UNCERTAIN - CHECK PARTY` notice. Its separate
+`TRADE_ARMED_TRIPWIRE_FRAMES` (1800) tripwire is
 a console diagnostic, not an automatic cancellation. Frame holds report the
 step and count periodically on the console; hold reasons/counters never go to
 the HUD.
@@ -97,3 +104,7 @@ they disagree.
   `picked_up` at `SlinkTradePromptEntry` and `SlinkTradeApplyPickup`.
 
 The Gen 1 entry observer runs outside the queued signal failure latch, while retaining bank, PC, ROM-byte and closed-service checks. A previously failed queue therefore cannot hide a subsequent service entry from the conservative lease hold.
+
+A verified post-restore pickup without a request-entry observation logs one
+console diagnostic per armed request. A reset/forget after request entry (or
+verified pickup) is uncertain, never a certain unchanged-party acknowledgement.

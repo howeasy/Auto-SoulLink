@@ -1,7 +1,7 @@
 """O-7 R3: distinguish a refused poll from committed native request entry."""
 import pytest
 
-from tests.unit.gen1_trade_witness import enter_world as enter
+from tests.unit.gen1_trade_witness import enter
 from tests.unit.test_gen1_trade_poll import _fire, _world
 from tests.unit.test_gen1_trade_reliability import _applying_state, _armed
 
@@ -11,7 +11,6 @@ def test_refused_polls_then_disturbance_restage_without_entry(monkeypatch, title
     world, _ = _world(monkeypatch, title)
     _applying_state(world)
     base, _, _, _ = _armed(world)
-    world.bus[world.ram["wWalkCounter"]] = 1
     for _ in range(3):
         _fire(world)
         world.client.signals.drain(world.client.signals)
@@ -74,6 +73,7 @@ def test_lost_consumption_hold_reports_once_after_bounded_frames_without_writes(
     owed = list(world.client.trade_owed.values())
     assert len(owed) == 1 and owed[0].event == "trade_done" and owed[0].fields.uncertain is True
     assert reads == [True] and world.writes == []
+    assert world.client.pending_change.kind == "rescan"
     assert bytes(world.bus[base:base+16]) == preimage
 
 
@@ -95,29 +95,10 @@ def test_repeat_entry_observation_does_not_allocate_status_or_read_context(monke
     world.io.register = counted_register
     for _ in range(500):
         enter(world)
-    assert len(statuses) <= 1 and reads == []
+    assert len(statuses) == 0 and reads == []
     assert len(world.client.signals.drain(world.client.signals)) == 0
 
 
-@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
-def test_real_gen2_binder_refusal_and_clobber_keep_pre_diff_result(title):
-    from tests.unit.test_gen2_client import TradeCart, apply_cmd, nothing_changed, proposer_ready
-    cart = TradeCart(title)
-    proposer_ready(cart)
-    cart.w.reply(apply_cmd())
-    cart.w.frames(1)
-    trade = cart.w.client.trade
-    assert trade.phase == "armed"
-    # Refusal before the native pickup label: no callback/ACK for these polls.
-    cart.w.frames(3)
-    assert trade.phase == "armed" and trade.poll_done(trade) is None
-    frame = cart.frame()
-    frame[0] = 0
-    cart.poke(cart.lease, frame)
-    assert trade.clobbered(trade) is True and trade.pickup_error is None
-    cart.w.frames(1)
-    assert nothing_changed(cart.w)
-    assert cart.w.client.trade_state is None
 
 
 @pytest.mark.parametrize("title", ["red", "purered"])
@@ -125,6 +106,74 @@ def test_locator_refuses_stack_save_without_generation_guard(monkeypatch, title)
     world, _ = _world(monkeypatch, title)
     site = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)])
     image = bytearray(world.rom)
-    image[site.rom_offset - 55 - 7] = 0  # ret z following cp b
+    image[site.request_site.rom_offset - 7] = 0  # ret z following cp b
     with pytest.raises(Exception, match="restore anchor missing"):
         world.client.trade.pickup_site(lambda addr: image[int(addr)])
+
+
+@pytest.mark.parametrize("title", ["red", "purered"])
+@pytest.mark.parametrize("byte", [0, 1, 2])
+def test_request_slot_store_is_pinned_exactly(monkeypatch, title, byte):
+    world, _ = _world(monkeypatch, title)
+    site = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)]).request_site
+    image = bytearray(world.rom)
+    image[site.rom_offset - 3 + byte] ^= 1
+    with pytest.raises(Exception, match="restore anchor missing"):
+        world.client.trade.pickup_site(lambda addr: image[int(addr)])
+
+
+@pytest.mark.parametrize("title", ["red", "purered"])
+def test_prompt_hold_declines_once_without_writes(monkeypatch, title):
+    world, _ = _world(monkeypatch, title)
+    _applying_state(world)
+    base, _, _, preimage = _armed(world)
+    world.client.trade_state.kind = "prompt"
+    world.bus[base+5] = 3
+    world.client.trade.expected[6] = 3
+    enter(world)
+    world.bus[base:base+16] = preimage
+    world.writes.clear()
+    for frame in range(2001):
+        world.client.frame = frame
+        world.client.trade_tick(world.client)
+    owed = list(world.client.trade_owed.values())
+    assert len(owed) == 1 and owed[0].event == "menu_result"
+    assert owed[0].fields.token == "late" and owed[0].fields.choice == 0
+    assert world.writes == [] and bytes(world.bus[base:base+16]) == preimage
+    assert world.client.trade_state.pickup_terminal is True
+    world.client.trade_forget(world.client, "reset after terminal")
+    assert len(world.client.trade_owed) == 1
+
+
+@pytest.mark.parametrize("title", ["red", "purered"])
+def test_verified_consumption_without_entry_logs_once_per_arm(monkeypatch, title):
+    from tests.unit.gen1_trade_witness import consume_world
+    world, _ = _world(monkeypatch, title)
+    for arm in range(2):
+        _armed(world)
+        consume_world(world)
+        consume_world(world)
+        warnings = [line for line in world.logs if "consumption verified without request-entry observation" in line]
+        assert len(warnings) == arm + 1
+    assert world.hud == []
+
+
+@pytest.mark.parametrize("title", ["red", "purered"])
+def test_forget_after_request_entry_is_uncertain(monkeypatch, title):
+    world, _ = _world(monkeypatch, title)
+    _applying_state(world)
+    enter(world)
+    world.writes.clear()
+    world.client.trade_forget(world.client, "reset")
+    owed = list(world.client.trade_owed.values())
+    assert len(owed) == 1 and owed[0].event == "trade_done" and owed[0].fields.uncertain is True
+    assert owed[0].fields.new_key is None and world.writes == []
+
+
+
+def test_enter_helper_cannot_substitute_a_poll_for_a_missing_request_hook(monkeypatch):
+    world, _ = _world(monkeypatch, "red")
+    _armed(world)
+    del world.hooks["SLink-gen1-trade_request"]
+    with pytest.raises(AssertionError, match="trade_request"):
+        enter(world)

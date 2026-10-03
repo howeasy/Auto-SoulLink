@@ -41,9 +41,10 @@ function T.pickup_site(profile, read_rom_u8)
     end
     -- The request-state tail checks generation != completion before selecting the
     -- outgoing slot. Require that straight-line predecessor as well as the stack save.
+    local slot = assert(profile.ram.wTradingWhichPlayerMon, "trade slot symbol required")
     local prefix = {0xFA, (lease+6)&0xFF, (lease+6)>>8, 0x47,
                     0xFA, (lease+7)&0xFF, (lease+7)>>8, 0xB8, 0xC8,
-                    0xFA, (lease+9)&0xFF, (lease+9)>>8, 0xEA}
+                    0xFA, (lease+9)&0xFF, (lease+9)>>8, 0xEA, slot&0xFF, slot>>8}
     local found
     local first = svc.bank * 0x4000 + svc.addr - 0x4000
     for offset = first, math.min(first + 0x200, (svc.bank+1)*0x4000 - #pattern - 8) do
@@ -54,8 +55,6 @@ function T.pickup_site(profile, read_rom_u8)
         for i, byte in ipairs(prefix) do
             if read_rom_u8(offset-15+i-1) ~= byte then matches=false; break end
         end
-        local slot_hi = read_rom_u8(offset-1)
-        matches = matches and slot_hi >= 0xC0 and slot_hi <= 0xDF
         -- CopyData is in ROM0 on both foundations; the call must return here.
         if matches and read_rom_u8(offset+#pattern+1) < 0x40 then
             assert(not found, "ambiguous native trade restore anchor")

@@ -17,7 +17,7 @@
 -- InGameTrade_DoTrade).
 -- Every write happens at the overworld checkpoint or inside the MainInBattleLoop hook.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
-                 TRADE_PICKUP_FRAMES = 1800, HOLD_REMINDER_SECONDS = 60,
+                 TRADE_HOLD_TERMINAL_FRAMES = 1800, TRADE_ARMED_TRIPWIRE_FRAMES = 1800, HOLD_REMINDER_SECONDS = 60,
                  -- A13: the two halves of the `replace_rival_team` window. ONE window measured
                  -- from `battle_begin` cannot work, because the transition alone outlasts any
                  -- figure small enough to be a write window (this was RIVAL_SWAP_FRAMES = 120,
@@ -2112,13 +2112,15 @@ function Client.new(p)
     -- is claimed; after it, uncertain.
     function self:trade_forget(why)
         local st = self.trade_state
-        if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why))
+        if st and st.kind == "apply" and (st.committing or (self.trade and
+            (self.trade.entry_observed or self.trade.phase == "picked_up" or self.trade.phase == "done"))) then
+            trade_uncertain(st, tostring(why))
         elseif st and st.kind == "apply" then
             -- review m2: before the RemovePokemon nothing was mutated or saved: a certain none, owed
             log("[SLink-gen1] apply_trade forgotten before the commit boundary (" .. tostring(why) .. "); nothing changed")
             self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
                 fields = { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 } }
-        elseif st and st.kind == "prompt" then
+        elseif st and st.kind == "prompt" and not st.declared then
             self.trade_owed[#self.trade_owed + 1] = { event = "menu_result", fields = { token = st.token, choice = 0 } }
         end
         self.trade_state = nil
@@ -2153,12 +2155,22 @@ function Client.new(p)
             local clobbered = self.trade:clobbered()
             if self.trade.pickup_error then
                 st.pickup_hold_frame = st.pickup_hold_frame or self.frame
-                if st.kind == "apply" and self.frame - st.pickup_hold_frame >= Client.TRADE_PICKUP_FRAMES then
+                if self.frame - st.pickup_hold_frame >= Client.TRADE_HOLD_TERMINAL_FRAMES then
                     -- End the protocol wait conservatively; never release/restage native work.
                     local ok, party = pcall(current_party)
                     log("[SLink-gen1] pickup hold expired; party rescan=" ..
                         tostring(ok and party and #party or "unavailable"))
-                    trade_uncertain(st, "consumption evidence missing after bounded hold")
+                    self.pending_change = {kind="rescan", frame=self.frame}
+                    if st.kind == "prompt" then
+                        if not st.declared then
+                            owe("menu_result", {token=st.token, choice=0})
+                            st.declared = true
+                            log("[SLink-gen1] prompt hold expired; declined offer, native lease held until reset")
+                        end
+                    else
+                        trade_uncertain(st, "consumption evidence missing after bounded hold")
+                    end
+                    -- Keep trade_state: clearing it reopens query handling and re-staging.
                     st.pickup_terminal = true
                     return
                 end
@@ -2170,7 +2182,7 @@ function Client.new(p)
                     st.pickup_notice = now
                 end
             end
-            if self.trade.phase == "armed" and self.frame - (st.frame or self.frame) > Client.TRADE_PICKUP_FRAMES then
+            if self.trade.phase == "armed" and self.frame - (st.frame or self.frame) > Client.TRADE_ARMED_TRIPWIRE_FRAMES then
                 local now = os.time()
                 if not st.pickup_wait_notice or now - st.pickup_wait_notice >= Client.HOLD_REMINDER_SECONDS then
                     log("[SLink-gen1] trade armed too long: step=pickup frames=" .. (self.frame - st.frame)
@@ -2298,7 +2310,12 @@ function Client.new(p)
                 all_sites.trade_consumed = pickup
                 all_sites.trade_consumed.client_accept = waiting_for_pickup
                 handlers.trade_consumed = logged("trade_consumed", function(sig)
-                    local _, why = self.trade:picked_up(sig.sp)
+                    local picked, why = self.trade:picked_up(sig.sp)
+                    if picked and not self.trade.entry_observed
+                       and self.trade_entry_warning_request ~= self.trade.expected then
+                        self.trade_entry_warning_request = self.trade.expected
+                        log("[SLink-gen1] consumption verified without request-entry observation")
+                    end
                     if why then
                         log("[SLink-gen1] trade consumption unverified; holding: " .. tostring(why))
                         if self.trade_state then self.trade_state.pickup_notice = os.time() end

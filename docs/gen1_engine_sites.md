@@ -516,6 +516,8 @@ The locator in `lua/gen1/trade_overlay.lua` recognizes the bounded straight-line
 save-overlay-on-stack/CopyData sequence and its generation-check predecessor,
 rejecting missing or ambiguous matches. The entry bytes are `2108C52A572A`;
 the predecessor is `FA0EC547FA0FC5B8C8FA11C5EA3DCD` on all five shipped builds.
+All three slot-store bytes (`EA lo hi`) are pinned to the generated
+`wTradingWhichPlayerMon` profile symbol; a WRAM-range approximation is insufficient.
 The post-restore hook checks the reversed retained request at SP and the restored
 backup. A dropped consumption hit cannot authorize re-staging: if a previously
 observed armed request now reads clobbered, the lease enters a conservative
@@ -526,7 +528,9 @@ A missing/ambiguous trade anchor disables trading only and is reported to the
 console. Other engine signals remain active. Pickup-delay and persistent-hold
 diagnostics are console-only; neither condition invents a successful commit.
 
-A missing-consumption hold expires after 1800 held frames into one uncertain
-trade_done and a party rescan, with no union writes. Withdrawal after real
+A missing-consumption hold expires after 1800 held frames with no union writes:
+APPLY owes one uncertain trade_done; PROMPT owes one menu_result decline. The
+terminal also schedules the normal pending rescan/settlement path. Local state
+stays held until reset to prevent re-staging, even after the server sees its terminal. Withdrawal after real
 request entry is acknowledgement-only. These actionable uncertainty outcomes
 show the check-party notice; diagnostic counters remain console-only.

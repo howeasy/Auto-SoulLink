@@ -2306,3 +2306,23 @@ def test_a_refused_change_is_resent_after_a_newer_census_and_a_failed_scan_retri
     falsify(check, mutant("lua/gen2/client.lua", (
         "        if self.pending_rescan or (not self.box_complete and self.frame % Client.TICK_INTERVAL == 0) then\n",
         "        if self.pending_rescan then\n")))
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_real_gen2_binder_refusal_and_clobber_keep_pre_diff_result(title):
+    cart = TradeCart(title)
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    trade = cart.w.client.trade
+    assert trade.phase == "armed"
+    # Refusal before the native pickup label: no callback/ACK for these polls.
+    cart.w.frames(3)
+    assert trade.phase == "armed" and trade.poll_done(trade) is None
+    frame = cart.frame()
+    frame[0] = 0
+    cart.poke(cart.lease, frame)
+    assert trade.clobbered(trade) is True and trade.pickup_error is None
+    cart.w.frames(1)
+    assert nothing_changed(cart.w)
+    assert cart.w.client.trade_state is None

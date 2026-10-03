@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.unit.gen1_trade_witness import enter_world
+from tests.unit.gen1_trade_witness import enter
 from tests.unit.test_gen1_trade_poll import TITLES, _fire, _world
 
 
@@ -169,7 +169,7 @@ def test_observed_entry_then_lost_consumption_witness_never_restages(monkeypatch
     world, _ = _world(monkeypatch, title)
     _applying_state(world)
     base, backup, published, preimage = _armed(world)
-    enter_world(world)  # committed request before the native restore
+    enter(world)  # committed request before the native restore
     world.client.signals.drain(world.client.signals)
     site = world.client.trade.pickup_site(lambda addr: world.rom[int(addr)])
     sp = 0xDE80
@@ -270,7 +270,7 @@ def test_entry_observation_survives_a_preexisting_registry_failure(monkeypatch):
     world.regs["PC"] = site.address + (site.capture_offset or 0) + 1
     world.hooks["SLink-gen1-save_witness"][0]()
     assert world.client.signals.status(world.client.signals).failed is not None
-    enter_world(world)  # committed entry remains visible after the queued stream stops
+    enter(world)  # committed entry remains visible after the queued stream stops
     world.bus[base:base + 16] = preimage
     writes = []
     world.parts.writes.write_enemy_party = lambda *_args: writes.append(True)
