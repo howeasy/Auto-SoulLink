@@ -374,6 +374,18 @@ function M.judge(scn, o)
   return "PASS", "both copies zero; game LOSE byte; zero reached the save party before heal; native heal restored it"
 end
 
+-- The state/save binding a run was launched with, as a stable wire kind beside the human string the
+-- config carries: "diagnostic manifest" -> diag_manifest, "recorded route save sha256" ->
+-- route_recorded. Anything else classifies as nil, so an unrecognised origin is never silently a
+-- route record. Prefix-anchored and read-only; tests/live/test_gen4_battle_faint.py pins this against
+-- its own binding_kind() so the two cannot drift.
+function M.binding_kind(state_binding)
+  if type(state_binding) ~= "string" then return nil end
+  if state_binding:find("diagnostic manifest", 1, true) == 1 then return "diag_manifest" end
+  if state_binding:find("recorded route save sha256", 1, true) == 1 then return "route_recorded" end
+  return nil
+end
+
 -- ----- live run -------------------------------------------------------------------------
 local function run()
   local root = assert(SLINK_ROOT or os.getenv("SLINK_ROOT"), "SLINK_ROOT required")
@@ -713,6 +725,11 @@ local function run()
   for _, h in ipairs(handles) do pcall(event.unregisterbyid, h) end
   local scn_status, reason = M.judge(scn, obs)
   if obs.fatal then scn_status, reason = "FAIL", "fatal: " .. obs.fatal end
+  -- this run's own provenance, echoed from the config alone (no read, no decision): which battery was
+  -- staged and which producer record paired it with the state. An unbound config stays nil rather
+  -- than disclosing an empty string.
+  local function cfgval(v) return (v ~= nil and v ~= json.null) and v or nil end
+  local state_save_sha256, state_binding = cfgval(cfg.state_save_sha256), cfgval(cfg.state_binding)
   local payload = {
     schema = "gen4-probe-row-v1", run_id = cfg.run_id, title = cfg.title, rom_sha1 = cfg.rom_sha1, level = "PHYSICAL",
     mode = cfg.scenario, reason = reason, observation = obs, requested_rate = cfg.requested_rate,
@@ -720,6 +737,8 @@ local function run()
     callback_errors = callback_errors,
     source_head = cfg.source_head, producer = "C1-8",
     setup = (cfg.setup ~= nil and cfg.setup ~= json.null) and cfg.setup or "NATIVE", synth = cfg.synth,
+    state_save_sha256 = state_save_sha256, state_binding = state_binding,
+    state_binding_kind = M.binding_kind(state_binding),
     oracle = "game result byte BattleSystem+0x2420; save-array party HP read at HealParty entry / at the end (independent of both written spans); D540 replacement flag ctx+0x13C",
     negative_control = obs.controls, callback_error = callback_error,
   }

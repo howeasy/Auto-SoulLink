@@ -3,6 +3,11 @@
 Offline (always): python -m pytest tests/live/test_gen4_battle_faint.py -m 'not live' -q
   receipt grammar, config/command shape (own-PID kill needle), Lua scenario table, and the FILE
   proof of every seam pin against the pinned ROM bytes (absent ROM skips by name, wrong bytes fail).
+
+  launch() binds the staged state to the staged save before it stages anything: a diagnostic state
+  through SLINK_GEN4_STATE_MANIFEST_<TITLE>, a route-CLI state through the operator-recorded
+  SLINK_GEN4_SOURCE_SAVE_SHA256_<TITLE>. A state carries its own SRAM, so a state/save pairing that
+  nothing produced is a named refusal, not a run.
 Live (the coordinator's ONE emulator lane, granted separately):
   SLINK_LIVE=1 python -m pytest tests/live/test_gen4_battle_faint.py -m live -q -rs
   Input: the C1-9 state <LANE_ROOT>/route/route_leg2_battle_settled.State (copied into the lane,
@@ -13,6 +18,7 @@ never a pass. Never kill by image name: only this Popen's PID and this lane's ow
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -25,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
-from tools import gen4_evidence, gen4_fixtures as g4, gen4_pins
+from tools import gen4_diag, gen4_evidence, gen4_fixtures as g4, gen4_pins
 
 pytestmark = pytest.mark.usefixtures("model_surface")
 
@@ -93,6 +99,98 @@ def check_state(state: Path, log: Path, title: str = "heartgold") -> Path:
     assert re.search(result_re, text), "route log does not name the Pidgey L2 battle"
     assert re.search(settled_re, text), "route log does not show the settled FIGHT menu (Pidgey, Cyndaquil)"
     return state
+
+# --- state/save provenance ------------------------------------------------------------------
+# A BizHawk state carries its own SRAM: loading one over a DIFFERENT battery runs the state's world
+# while the staged save -- and every receipt naming it -- describes another one. Nothing here decodes
+# the state's SRAM. Exactly two honest sources bind the two files, and nothing else passes:
+#   (a) a diagnostic-produced state: tools/gen4_diag.check_state_manifest reviews the manifest that
+#       recorded the save_sha256 that diagnostic ran from; it must equal sha256(the staged save);
+#   (b) a route-CLI-produced state (the route lane leaves no manifest): the operator records the
+#       producer save sha256 from the route lane; it must equal sha256(the staged save).
+# Quoting a hash does not pair anything by itself: the recorded value is compared against the save
+# staged for THIS run, so a retained state cannot be re-labelled as another scenario's input.
+# sha256(this save) IS sha256(the staged copy): g4.stage_save copies the battery verbatim and verifies the
+# copy's sha1 against the source (tools/gen4_fixtures.py:204-206), so hashing the source binds the bytes
+# BizHawk will load.
+MANIFEST_ENV = "SLINK_GEN4_STATE_MANIFEST_{}"
+SOURCE_SAVE_ENV = "SLINK_GEN4_SOURCE_SAVE_SHA256_{}"
+
+
+class StateSaveProvenanceError(AssertionError):
+    """Named refusal: the state was not bound to the save this run stages."""
+
+
+def _sha256(value) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def state_save_binding(state: Path, save: Path, *, title: str, manifest=None,
+                       source_save_sha256=None) -> dict:
+    """Require the state to have been produced FROM `save`; return the record the config discloses.
+
+    Both sources are producer records, neither a decode of the state: a diagnostic manifest reviewed
+    by gen4_diag.check_state_manifest (its save_sha256 must be this save), or a route-lane sha256 the
+    operator recorded. A manifest wins when both are offered. Raises StateSaveProvenanceError naming
+    which of the two failed; an absent state/save is a named OPEN skip, as everywhere here.
+    """
+    state = need(Path(state), "state/save provenance state")
+    save = need(Path(save), "state/save provenance save")
+    asked = manifest if manifest is not None else os.environ.get(MANIFEST_ENV.format(title.upper()))
+    recorded = source_save_sha256 or os.environ.get(SOURCE_SAVE_ENV.format(title.upper())) or None
+    if asked:
+        origin = "diagnostic manifest"
+        try:
+            gen4_diag.check_state_manifest(state, Path(asked), digest(state))
+            recorded = json.loads(Path(asked).read_text(encoding="utf-8")).get("save_sha256")
+        except (AssertionError, KeyError, TypeError, ValueError, OSError) as exc:
+            raise StateSaveProvenanceError(f"unbound state: {asked} does not review {state.name} ({exc})") from exc
+    elif recorded:
+        origin = "recorded route save sha256"
+    else:
+        raise StateSaveProvenanceError(
+            f"no state/save provenance: pass manifest= or set {MANIFEST_ENV.format(title.upper())} for a "
+            f"diagnostic state, or source_save_sha256= / {SOURCE_SAVE_ENV.format(title.upper())} for a route state")
+    if not _sha256(recorded):
+        raise StateSaveProvenanceError(f"no state/save provenance: {origin} records no producer save sha256")
+    staged = digest(save)
+    if recorded != staged:
+        raise StateSaveProvenanceError(
+            f"state/save provenance mismatch: {origin} save_sha256 {recorded} != staged save {staged} ({save.name})")
+    return {"state_sha256": digest(state), "state_save_sha256": staged,
+            "state_binding": f"{origin} (not a state decode)"}
+
+
+def state_save_record(state_save: dict | None) -> dict:
+    """The provenance keys the run's config discloses (tools/gen4_diag.py records the same three)."""
+    binding = state_save or {}
+    return {"state_sha256": binding.get("state_sha256"), "state_save_sha256": binding.get("state_save_sha256"),
+            "state_binding": binding.get("state_binding")}
+
+
+# The two producer records state_save_binding accepts, and the wire kind each discloses. The receipt
+# echo in lua/tests/probe_gen4_battle_faint.lua classifies the same two origins from cfg.state_binding
+# (M.binding_kind); an unrecognised origin has no kind, so it never passes as a route record.
+BINDING_KINDS = {"diagnostic manifest": "diag_manifest", "recorded route save sha256": "route_recorded"}
+
+
+def binding_kind(state_binding: str | None) -> str | None:
+    for origin, kind in BINDING_KINDS.items():
+        if isinstance(state_binding, str) and state_binding.startswith(origin):
+            return kind
+    return None
+
+
+def check_receipt_binding(payload: dict, cfg: dict) -> None:
+    """A receipt must disclose the state/save provenance ITS OWN run bound: the staged battery's sha256,
+    the binding record, and which producer record paired them. Nothing inside the state file carries that
+    pairing, so a receipt that omits or misreports it is not evidence for the run that produced it --
+    refused here, beside the setup/sidecar disclosures."""
+    assert payload.get("state_save_sha256") == cfg["state_save_sha256"], \
+        "receipt does not disclose this run's bound state_save_sha256"
+    assert payload.get("state_binding") == cfg["state_binding"], "receipt carries another state binding"
+    assert payload.get("state_binding_kind") == binding_kind(cfg["state_binding"]), \
+        "receipt misreports the state/save binding kind"
 
 
 def parse_receipt(text: str, *, title: str, rom_sha1: str, run_id: str | None = None) -> tuple[str, dict]:
@@ -274,7 +372,8 @@ def check_seam_first(obs: dict, expected: dict[str, int]) -> list[str]:
 
 def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state: Path, source_head: str,
                  profile: Path, fault: str | None = None, max_frames: int = 5400,
-                 seams: dict | None = None, synth: dict | None = None) -> dict:
+                 seams: dict | None = None, synth: dict | None = None,
+                 state_save: dict | None = None) -> dict:
     prof = json.loads(profile.read_text(encoding="utf-8"))["titles"][title]["profile"]
     # offsets come from the pack, never hard-coded: save header table, battle layout, gSystem (liveness counters)
     pack = {"save": prof["save"], "battle": prof["battle"], "system": prof["system"]}
@@ -282,7 +381,7 @@ def build_config(*, title: str, rom_sha1: str, scenario: str, lane: Path, state:
             "scenario": scenario, "state_path": state.as_posix(), "shot_dir": lane.as_posix(),
             "requested_rate": 300, "fault": fault, "max_frames": max_frames, "move_right": True,
             "script_sha256": digest(SCRIPT), "profile_sha256": digest(profile), "source_head": source_head,
-            "modules": module_digests(title)}
+            "modules": module_digests(title), **state_save_record(state_save)}
 
 
 def emuhawk_command(lane: Path, rom: Path) -> list[str]:
@@ -296,8 +395,12 @@ def terminal(out: Path) -> bool:
 
 
 def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fault: str | None = None,
-           synth: dict | None = None):
+           synth: dict | None = None, *, manifest=None, source_save_sha256=None):
     assert title in PACK, title
+    # FIRST, before any staging and before the emulator: the state and the save are one pair, or this
+    # is not a run of anything. Loading a state over an unrelated battery would let the receipt
+    # describe a world the staged save never held.
+    binding = state_save_binding(state, save, title=title, manifest=manifest, source_save_sha256=source_save_sha256)
     need(EMUHAWK, "EmuHawk")
     profile = REPO / "data/games" / PACK[title] / "profile.json"
     lane = LANES[title] / f"{title}_{scenario}{'_' + fault if fault else ''}_{time.strftime('%H%M%S')}"
@@ -313,7 +416,8 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
     shutil.copyfile(state, lane_state)  # route/ is never written, nor read by the emulator
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     cfg = build_config(title=title, rom_sha1=rom_sha1, scenario=scenario, lane=lane, state=lane_state,
-                        source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom), synth=synth)
+                        source_head=head, profile=profile, fault=fault, seams=seam_overrides(title, rom), synth=synth,
+                        state_save=binding)
     if title == "soulsilver":
         cfg["ss_file_proof"] = ss_file_proof(rom)
     (lane / "probe.json").write_text(json.dumps(cfg), encoding="utf-8")
@@ -339,6 +443,8 @@ def launch(title: str, scenario: str, state: Path, rom_src: Path, save: Path, fa
         assert payload.get("setup") == ("SYNTH" if synth else "NATIVE"), "receipt does not disclose the setup kind"
         if synth:
             assert payload["synth"]["sidecar_sha256"] == synth["sidecar_sha256"], "receipt carries another sidecar"
+        # the binding this run staged and paired is only in probe.json until the probe echoes it back
+        check_receipt_binding(payload, cfg)
         return status, payload, lane, out
     finally:
         if proc.poll() is None:
@@ -440,6 +546,185 @@ def test_real_party2_saves_and_sidecars_if_present():
         if not save.is_file():
             pytest.skip(f"OPEN {title} party2 save absent: {save}")
         assert check_synth(save, title)["out_sha1"] == g4.sha1_of(save)
+
+
+def _no_env(monkeypatch):
+    """Hermetic: the operator's own binding channels must not decide a model refusal."""
+    for template in (MANIFEST_ENV, SOURCE_SAVE_ENV):
+        for name in PACK:
+            monkeypatch.delenv(template.format(name.upper()), raising=False)
+
+
+def _state_and_save(tmp_path: Path) -> tuple[Path, Path]:
+    lane = tmp_path / "diag"
+    lane.mkdir()
+    state = lane / "leg1_battle_settled.State"
+    state.write_bytes(b"PK\x03\x04" + b"state" * 64)
+    save = tmp_path / "battery.SaveRAM"
+    save.write_bytes(b"\x00" * 512)
+    return state, save
+
+
+def _diagnostic_manifest(lane: Path, state: Path, save: Path) -> Path:
+    """The document tools/gen4_diag.collect publishes (tools/gen4_diag.py:130,198-210): the config it
+    ran with (which carries the run's save_sha256) plus its DIAGNOSTIC_PRODUCED output states."""
+    doc = {"schema": "gen4-diagnostic-v1", "producer": "tools/gen4_diag.py", "qualified": False,
+           "status": "OBSERVED", "command": "settle", "save_sha256": digest(save),
+           "state_path": state.as_posix(),
+           "outputs": {state.relative_to(lane).as_posix():
+                       {"producer": "tools/gen4_diag.py", "qualified": False, "sha256": digest(state),
+                        "setup": "DIAGNOSTIC_PRODUCED", "command": "settle", "source_head": "0" * 40}}}
+    path = lane / "diagnostic.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def test_diagnostic_state_from_another_save_refuses(tmp_path):
+    """A lead12-produced state carries a level-12 party; over the level-3 native battery the receipt would
+    describe the wrong world. The manifest knows the save it ran from, and that is not this one."""
+    state, save = _state_and_save(tmp_path)
+    lead12 = tmp_path / "lead12.SaveRAM"
+    lead12.write_bytes(b"\xff" * 512)
+    manifest = _diagnostic_manifest(state.parent, state, lead12)
+    with pytest.raises(StateSaveProvenanceError, match="state/save provenance mismatch"):
+        state_save_binding(state, save, title="heartgold", manifest=manifest)
+    # the state itself is still reviewed -- only the save pairing is refused
+    assert gen4_diag.check_state_manifest(state, manifest, digest(state))["sha256"] == digest(state)
+
+
+def test_matching_diagnostic_manifest_binds_the_state_to_that_save(tmp_path):
+    state, save = _state_and_save(tmp_path)
+    manifest = _diagnostic_manifest(state.parent, state, save)
+    bound = state_save_binding(state, save, title="heartgold", manifest=manifest)
+    assert bound["state_save_sha256"] == digest(save) and bound["state_sha256"] == digest(state)
+    assert "diagnostic manifest" in bound["state_binding"] and "not a state decode" in bound["state_binding"]
+
+
+def test_route_state_without_a_recorded_save_hash_refuses(monkeypatch, tmp_path):
+    _no_env(monkeypatch)
+    state, save = _state_and_save(tmp_path)
+    with pytest.raises(StateSaveProvenanceError, match="no state/save provenance"):
+        state_save_binding(state, save, title="heartgold")
+    with pytest.raises(StateSaveProvenanceError, match="records no producer save sha256"):
+        state_save_binding(state, save, title="heartgold", source_save_sha256="not-a-sha256")
+    with pytest.raises(StateSaveProvenanceError, match="does not review"):
+        state_save_binding(state, save, title="heartgold", manifest=tmp_path / "diag" / "absent.json")
+    # a manifest that reviews some other state does not review this one
+    other = tmp_path / "diag" / "leg0_battle_settled.State"
+    other.write_bytes(b"PK\x03\x04" + b"other" * 64)
+    with pytest.raises(StateSaveProvenanceError, match="does not review"):
+        state_save_binding(state, save, title="heartgold", manifest=_diagnostic_manifest(tmp_path / "diag", other, save))
+
+
+def test_route_state_wrong_recorded_hash_refuses_and_the_right_hash_passes(monkeypatch, tmp_path):
+    _no_env(monkeypatch)
+    state, save = _state_and_save(tmp_path)
+    with pytest.raises(StateSaveProvenanceError, match="state/save provenance mismatch"):
+        state_save_binding(state, save, title="heartgold", source_save_sha256="0" * 64)
+    bound = state_save_binding(state, save, title="heartgold", source_save_sha256=digest(save))
+    assert bound["state_save_sha256"] == digest(save) and "route save sha256" in bound["state_binding"]
+
+
+def test_the_route_binding_can_come_from_the_operator_env(monkeypatch, tmp_path):
+    """The live lane has no manifest, so the channel the coordinator actually uses is the env pair."""
+    _no_env(monkeypatch)
+    state, save = _state_and_save(tmp_path)
+    key = SOURCE_SAVE_ENV.format("HEARTGOLD")
+    with pytest.raises(StateSaveProvenanceError, match="no state/save provenance"):
+        state_save_binding(state, save, title="heartgold")
+    monkeypatch.setenv(key, "0" * 64)
+    with pytest.raises(StateSaveProvenanceError, match="state/save provenance mismatch"):
+        state_save_binding(state, save, title="heartgold")
+    monkeypatch.setenv(key, digest(save))
+    assert state_save_binding(state, save, title="heartgold")["state_save_sha256"] == digest(save)
+    # a binding offered for another title never binds this one
+    monkeypatch.setenv(SOURCE_SAVE_ENV.format("SOULSILVER"), digest(save))
+    assert state_save_binding(state, save, title="heartgold")["state_save_sha256"] == digest(save)
+
+
+def test_launch_refuses_an_unbound_pair_before_it_stages_anything(monkeypatch, tmp_path):
+    """The refusal is the first thing launch() does: no EmuHawk needed, no ROM, no run directory."""
+    _no_env(monkeypatch)
+    state, save = _state_and_save(tmp_path)
+    lead12 = tmp_path / "lead12.SaveRAM"
+    lead12.write_bytes(b"\xff" * 512)
+    manifest = _diagnostic_manifest(state.parent, state, lead12)
+    monkeypatch.setitem(LANES, "heartgold", tmp_path / "lanes")
+    with pytest.raises(StateSaveProvenanceError, match="state/save provenance mismatch"):
+        launch("heartgold", "seam_turnend", state, tmp_path / "absent.nds", save, manifest=manifest)
+    assert not (tmp_path / "lanes").exists(), "launch staged a run before refusing the pairing"
+
+
+def test_the_hash_comparison_is_what_refuses_red_revert(tmp_path):
+    """Revert-check: with that one comparison neutralised, the same mismatched pairing is ACCEPTED, so
+    the refusals above are that guard and not an accident of some other check."""
+    source = inspect.getsource(state_save_binding)
+    guard = "recorded != staged"
+    assert source.count(guard) == 1
+    namespace = {"Path": Path, "os": os, "re": re, "json": json, "digest": digest, "need": need,
+                 "gen4_diag": gen4_diag, "MANIFEST_ENV": MANIFEST_ENV, "SOURCE_SAVE_ENV": SOURCE_SAVE_ENV,
+                 "StateSaveProvenanceError": StateSaveProvenanceError, "_sha256": _sha256}
+    exec(source.replace(guard, "False"), namespace)
+    state, save = _state_and_save(tmp_path)
+    lead12 = tmp_path / "lead12.SaveRAM"
+    lead12.write_bytes(b"\xff" * 512)
+    manifest = _diagnostic_manifest(state.parent, state, lead12)
+    bound = namespace["state_save_binding"](state, save, title="heartgold", manifest=manifest)
+    assert bound["state_save_sha256"] == digest(save), "the comparison was not the thing that refused"
+
+
+def test_config_carries_the_bound_state_save_provenance(tmp_path):
+    profile = REPO / "data/games/gen4_hgss/profile.json"
+    bound = {"state_sha256": "1" * 64, "state_save_sha256": "2" * 64,
+             "state_binding": "recorded route save sha256 (not a state decode)"}
+    common = {"title": "heartgold", "rom_sha1": "ab" * 20, "scenario": "seam_turnend",
+              "lane": tmp_path / "lane", "state": tmp_path / "start.State", "source_head": "cut",
+              "profile": profile}
+    cfg = build_config(**common, state_save=bound)
+    assert (cfg["state_sha256"], cfg["state_save_sha256"], cfg["state_binding"]) == \
+        (bound["state_sha256"], bound["state_save_sha256"], bound["state_binding"])
+    assert build_config(**common)["state_save_sha256"] is None, "an unbound config must disclose nothing"
+
+
+def test_a_receipt_must_disclose_the_bound_state_save_and_red_revert():
+    cfg = {"state_save_sha256": "2" * 64, "state_binding": "diagnostic manifest (not a state decode)"}
+    good = {"state_save_sha256": "2" * 64, "state_binding": cfg["state_binding"], "state_binding_kind": "diag_manifest"}
+    wrong_sha = [{k: v for k, v in good.items() if k != "state_save_sha256"}, {**good, "state_save_sha256": "3" * 64}]
+    wrong_kind = [{**good, "state_binding_kind": "route_recorded"}, {**good, "state_binding_kind": None}]
+    wrong_record = [{**good, "state_binding": "recorded route save sha256 (not a state decode)"}]
+    check_receipt_binding(good, cfg)
+    for payload, why in [(p, "bound state_save_sha256") for p in wrong_sha] + \
+                         [(p, "binding kind") for p in wrong_kind] + \
+                         [(p, "another state binding") for p in wrong_record]:
+        with pytest.raises(AssertionError, match=why):
+            check_receipt_binding(payload, cfg)
+    # RED: with the sha256 disclosure neutralised the same receipts are accepted -- the refusals above
+    # are that comparison and not an accident of some other check. REVERT: the real one refuses again.
+    source = inspect.getsource(check_receipt_binding)
+    guard = 'payload.get("state_save_sha256") == cfg["state_save_sha256"]'
+    assert source.count(guard) == 1
+    namespace = {"binding_kind": binding_kind}
+    exec(source.replace(guard, "True"), namespace)
+    for payload in wrong_sha:
+        namespace["check_receipt_binding"](payload, cfg)
+    for payload in wrong_sha:
+        with pytest.raises(AssertionError, match="bound state_save_sha256"):
+            check_receipt_binding(payload, cfg)
+
+
+def test_the_lua_receipt_echo_classifies_exactly_the_same_bindings():
+    lupa = pytest.importorskip("lupa")
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    rt.globals().SLINK_GEN4_FAINT_TEST = True
+    m = rt.execute(SCRIPT.read_text(encoding="utf-8"))
+    for origin, kind in BINDING_KINDS.items():
+        record = f"{origin} (not a state decode)"
+        assert binding_kind(record) == kind == m.binding_kind(record)
+    # an absent, explicitly nil or unrecognised binding classifies as nil on both sides, never a default kind
+    for expr, cfg in (("return {}", {}), ("return {state_binding=nil}", {"state_binding": None}),
+                      ("return {state_binding='some other origin'}", {"state_binding": "some other origin"})):
+        assert binding_kind(cfg.get("state_binding")) is None
+        assert m.binding_kind(rt.execute(expr)) is None
 
 
 def lua_api():
