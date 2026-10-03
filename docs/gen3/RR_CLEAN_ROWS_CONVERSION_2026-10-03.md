@@ -127,3 +127,16 @@ source 3 s x3, admit 90 s x2, link 60 s x2, trainer panel 45 s x2, zip build 2 +
   `d2e807344a9d2914847426eb52cbc6674bb3872e`, equivalent_a `edd14a205734047fc84abddcaaed9a7d803a6990`, forbidden_a
   `d5409cca7e7a568883efae69d97b69713b955dc2`, companion partner `f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b`. link / trainer-panel rows
   reuse the same A and B ROMs.
+
+### What the randomized rows' evidence is (and is not)
+
+**This is NOT parity with frlgc.** An frlgc receipt carries the CLIENT's own `<title> (companion by hash)` admission line with the pinned
+ROM prefix. A randomized cartridge physically cannot produce that line: its hash is unpinned, so the client admits it by anchors as
+`rand_companion`. The evidence for the six `frlgcr_` duo rows is therefore the HARNESS's own `RAND_INPUT` self-attestation
+(`companion=overlay`, `companion_pin=` the pinned companion build, the launched ROM's `sha1=`), plus what the server independently
+verified (a hello without `companion_abi` is refused, and the contract/fingerprint checks of the admission oracle). To keep the
+attestation honest, `run_row` additionally requires each side's attested sha1 to equal the sha1 of the overlay ROM actually staged in
+the lane (`patch/build/rand_frlgcr/{a,b}_<title>.gba`), and the receipt records those overlay hashes, the randomized ROM hashes and (for the
+zip rows) the release-zip hash as inputs. `--resume` re-runs on any difference; `--merge-summary` re-checks the recorded `rand:` hashes against
+the randomized ROMs present now and does not report PASS if they are gone or repointed (overlay and zip hashes are lane-local and are not
+compared across lanes).

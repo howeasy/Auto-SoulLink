@@ -669,6 +669,37 @@ def rand_roms_for(scenario, game):
     return tuple(files)
 
 
+def rand_row_scenario(rid):
+    """(scenario, game) of a randomized duo row id, or None."""
+    for scenario, game, suffix, _est in RAND_DUO_ROWS:
+        if rid == RAND_ROW_PREFIX + scenario + suffix:
+            return scenario, game
+    return None
+
+
+def rand_row_overlays(scenario, game):
+    """The overlay ROM file names _prepare_gen3_rand stages for this scenario, derived from its sides and kind: A's and B's
+    randomized+companion ROM, and (admission only) A's clean-equivalent and rule-changed controls."""
+    import e2e_duo
+    sides = e2e_duo.GAMES[game]["sides"]
+    names = [f"a_{sides['a'][0]}.gba", f"b_{sides['b'][0]}.gba"]
+    if scenario in e2e_duo.GEN3_RAND_ADMISSION:
+        names += [f"equivalent_{sides['a'][0]}.gba", f"forbidden_{sides['a'][0]}.gba"]
+    return tuple(names)
+
+
+def _row_zip_path(row):
+    """The release zip a zip build / check / boot row reads or writes, from its own argv; None when it names none."""
+    argv = list(getattr(row, "argv", None) or ())
+    if "--zip" in argv:
+        return argv[argv.index("--zip") + 1]
+    if "tools/check_release_zip.py" in argv:
+        return argv[argv.index("tools/check_release_zip.py") + 1]
+    if "tools/make_release.py" in argv and "--out" in argv and "--version" in argv:
+        return f"{argv[argv.index('--out') + 1]}/SLink-player-{argv[argv.index('--version') + 1]}.zip"
+    return None
+
+
 def rand_row_titles(rid):
     """(clean titles the row stages/overlays, randomized-ROM files) by row id, or ((), ())."""
     for scenario, game, suffix, _est in RAND_DUO_ROWS:
@@ -684,7 +715,7 @@ def is_rand_row(row_id):
     return row_id.startswith(RAND_ROW_PREFIX)
 
 
-def rand_row_inputs(rid, lane):
+def rand_row_inputs(rid, lane, row=None):
     """{key: path} of everything a randomized-companion row consumes that git does not see: the clean dump and the staged
     companion of each title it uses, each randomized ROM, and the overlay ROMs _prepare_gen3_rand stages in the lane
     (recorded AFTER the run, so the receipt names the exact companion-randomized bytes that booted)."""
@@ -693,20 +724,23 @@ def rand_row_inputs(rid, lane):
     m = re.fullmatch(RAND_ROW_PREFIX + r"source_(firered|leafgreen|emerald)", rid)
     if m:
         titles = (m[1],)
+    zip_path = _row_zip_path(row) if rid.startswith(RAND_ROW_PREFIX + "zip_") else None
     z = re.fullmatch(RAND_ROW_PREFIX + r"zip_boot_(firered|emerald)_refused", rid)
     if z:
-        return {f"rom:{z[1]}": os.path.join(lane, STAGED[z[1]])}
+        return {f"rom:{z[1]}": os.path.join(lane, STAGED[z[1]]), **({"zip:dist": zip_path} if zip_path else {})}
+    if zip_path:        # zip_build writes, zip_check reads: the release zip is the input a swapped file would change
+        return {"zip:dist": zip_path}
     for t in titles:
         out[f"rom:{t}"] = os.path.join(lane, STAGED[t])
         out[f"rom:{t}_companion"] = os.path.join(lane, COMPANION_ROMS[t])
     rand_dir = rand_rom_dir() or "<SLINK_GEN3_RAND_ROMS unset>"
     for f in files:
         out[f"rand:{f}"] = os.path.join(rand_dir, f)
-    if files:
+    which = rand_row_scenario(rid)
+    if which:
         stage = os.path.join(lane, "patch", "build", f"rand_{RAND_LANE_ID}")
-        for t in titles:
-            for kind in ("a", "b", "equivalent", "forbidden"):
-                out[f"overlay:{kind}_{t}"] = os.path.join(stage, f"{kind}_{t}.gba")
+        for name in rand_row_overlays(*which):
+            out[f"overlay:{name[:-len('.gba')]}"] = os.path.join(stage, name)
     return out
 
 
@@ -1358,7 +1392,7 @@ def run_row(row, cut, lane, deadline):
         else:
             rc, out, killed, stopped = run_once(row, deadline)
             if is_companion_row(row.id) and rc == 0 and not (killed or stopped):
-                problem = companion_attempt_problem(row.id, out, gen3_companion_pins(lane))
+                problem = companion_attempt_problem(row.id, out, gen3_companion_pins(lane), lane)
                 if problem:
                     out += "FAIL companion evidence: " + problem + "\n"
                     rc = 1
@@ -1667,13 +1701,13 @@ def expansion_attempt_problem(row_id, cut, text):
 _COMPANION_PACK = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald"}
 
 
-def companion_attempt_problem(row_id, text, pins):
+def companion_attempt_problem(row_id, text, pins, lane=None):
     """Why a companion row's attempt output is not proof it ran the companion, or None. A duo row owes one COMPANION_ADMISSION
     line per side (e2e_duo's --gen3-companion: the CLIENT's own `<title> (companion by hash)` admission with the pinned rom
     prefix, the sides' titles taken from the orientation in the id); a zip-boot row owes that same client line in the lua log it
     prints. Rows with no client (source, boot-check, zip build/check, the release gate) owe none. `pins`: gen3_companion_pins()."""
     if is_rand_row(row_id):
-        return rand_attempt_problem(row_id, text, pins)
+        return rand_attempt_problem(row_id, text, pins, lane)
     duo = re.fullmatch(r"frlgc_.+_(fr|lg|em)_as_a_companion", row_id)
     boot = re.fullmatch(r"frlgc_zip_boot_(firered|leafgreen|emerald)", row_id)
     if duo:
@@ -1699,11 +1733,14 @@ def companion_attempt_problem(row_id, text, pins):
     return "; ".join(problems) or None
 
 
-def rand_attempt_problem(row_id, text, pins):
+def rand_attempt_problem(row_id, text, pins, lane=None):
     """Why a frlgcr_ row's attempt output is not proof of its claim, or None. A randomized duo row owes, per side, a RAND_INPUT
     line saying the launched cartridge is the randomized ROM WITH the published companion overlay (`companion=overlay`) whose base
     is the pinned companion build (`companion_pin=` the first 12 hex of the pin); the admission row also owes its clean_refused leg.
-    A clean zip-boot row owes the shipped client's refusal. Source / zip build / zip check rows owe nothing extra."""
+    A clean zip-boot row owes the shipped client's refusal. Source / zip build / zip check rows owe nothing extra.
+    NOT PARITY WITH frlgc: a randomized cartridge cannot print the client's `(companion by hash)` admission line (its hash is
+    unpinned), so this evidence is the HARNESS's own RAND_INPUT self-attestation. With `lane` (run_row, and fc_check when it is given
+    one) the note's sha1 must also equal the sha1 of the overlay ROM actually staged in that lane."""
     boot = re.fullmatch(RAND_ROW_PREFIX + r"zip_boot_(firered|emerald)_refused", row_id)
     if boot:
         want = rf"RESULT: PASS the extracted zip's client REFUSED the clean {boot[1]}"
@@ -1720,9 +1757,14 @@ def rand_attempt_problem(row_id, text, pins):
         pin = (pins or {}).get(f"{title}_companion")
         if not pin:
             return f"no {title}_companion pin to compare the overlay base with"
-        pattern = rf"(?m)^\[duo\] RAND_INPUT {side} .*title={title} companion=overlay companion_pin={pin[:12]} "
-        if not re.search(pattern, text):
+        pattern = rf"(?m)^\[duo\] RAND_INPUT {side} .*title={title} companion=overlay companion_pin={pin[:12]} sha1=([0-9a-f]{{40}})"
+        found = re.search(pattern, text)
+        if not found:
             problems.append(f"no RAND_INPUT {side} line with companion=overlay on the {title} companion pin {pin[:12]}")
+        elif lane:
+            staged = os.path.join(lane, "patch", "build", f"rand_{RAND_LANE_ID}", f"{side}_{title}.gba")
+            if file_digest(staged, "sha1") != found[1]:
+                problems.append(f"RAND_INPUT {side} sha1 {found[1][:12]} is not the overlay ROM staged in the lane ({staged})")
     if scenario in e2e_duo.GEN3_RAND_ADMISSION and not re.search(r"(?m)^\[duo\] RAND_REFUSED phase=clean_refused side=b ", text):
         problems.append("no RAND_REFUSED clean_refused leg (the clean cartridge must be refused at launch)")
     return "; ".join(problems) or None
@@ -1765,13 +1807,23 @@ def stage_companions(tree, titles=GEN3_COMPANION_TITLES):
         if composed is None or hashlib.sha1(composed[0]).hexdigest() != pins[f"{title}_companion"]:
             print(f"RESULT: FAIL stage-companions {title}: the composition is not the {title} companion pin")
             return 1
-        if os.path.exists(dst) and Path(dst).read_bytes() != composed[0]:
+        try:                              # ONE read decides: absent => stage, equal => leave alone, differing => never overwrite
+            existing = Path(dst).read_bytes()
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and existing != composed[0]:
             print(f"RESULT: FAIL stage-companions {title}: {COMPANION_ROMS[title]} exists and differs from the pinned build; "
                   f"remove it deliberately")
             return 1
-        if not os.path.exists(dst):      # an identical file is left alone (no mtime churn on a re-run)
+        if existing is None:
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            Path(dst).write_bytes(composed[0])
+            tmp = f"{dst}.tmp{os.getpid()}"      # next to the destination: os.replace is atomic, a partial file is never the ROM
+            try:
+                Path(tmp).write_bytes(composed[0])
+                os.replace(tmp, dst)
+            finally:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
         print(f"{title}: {COMPANION_ROMS[title]} sha1 {pins[f'{title}_companion']}")
     print("RESULT: PASS stage-companions")
     return 0
@@ -2007,7 +2059,7 @@ def row_inputs(row, lane, root=None):
         return os.path.join(lane, rel)
     rid = row.id
     if is_rand_row(rid):
-        return rand_row_inputs(rid, lane)
+        return rand_row_inputs(rid, lane, row)
     if is_companion_row(rid):
         return companion_row_inputs(_companion_row_titles(rid), lane)
     if is_expansion_row(rid):
@@ -2636,7 +2688,18 @@ def plan_decisions(rows, cut, carry, lane):
 
 
 def _mins(s):
-    return f"{s:.0f}s" if s < 120 else f"{s / 60:.0f}m"
+    return f"{s / 60:.0f}m"
+
+
+def rand_rom_inputs_problem(row, receipt_text):
+    """Why a frlgcr_ receipt's recorded `rand:<file>` hashes are not the randomized ROMs present NOW (absent, or repointed to other
+    bytes), or None. Lane-local inputs (overlays, the zip) are not compared: a merge may run in another lane than the row did."""
+    now = {k: file_sha256(p) or "MISSING" for k, p in rand_row_inputs(row.id, "", row).items() if k.startswith("rand:")}
+    then = parse_inputs(receipt_text)
+    differ = sorted(k for k in now if now[k] != then.get(k))
+    if not differ:
+        return None
+    return f"randomized ROM input absent or changed since the receipt ({', '.join(differ[:3])})"
 
 
 def merge_summary(cut, rows, suffix=""):
@@ -2653,6 +2716,9 @@ def merge_summary(cut, rows, suffix=""):
         hdr, ok, why = fc_check(name, text, PROBES)
         if not ok or hdr["row"] != row.id or hdr["cut"] != cut:
             results.append((row, f"FAIL invalid receipt ({why or 'wrong row/cut'})", 0, name))
+        elif is_rand_row(row.id) and hdr["verdict"].startswith(("PASS", "SKIP-ALLOWED")) and \
+                (stale := rand_rom_inputs_problem(row, text)):
+            results.append((row, f"FAIL {stale}", 0, name))
         else:
             results.append((row, hdr["verdict"], text.count("\n--- attempt "), name))
     path, ok = write_summary(cut, results, suffix)

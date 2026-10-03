@@ -29,6 +29,9 @@ ALLOWED = {"FireRed_allowed.gba", "LeafGreen_allowed.gba", "FireRed_widest.gba",
            "Emerald_allowed.gba", "Emerald_allowed_b.gba", "Emerald_widest.gba"}
 
 
+ZIP = f"{LANE}/dist/SLink-player-g4-{CUT[:8]}.zip"
+
+
 def _git(*args):
     return subprocess.run(["git", "-C", fc.REPO, *args], check=True, capture_output=True, text=True).stdout.strip()
 
@@ -67,8 +70,7 @@ def test_rows_never_share_an_id_with_another_plan_and_always_run(rand_dir):
         assert r.deps is None and fc.row_deps(r) is None, r.id          # never carried
         assert fc.build_kind(r.id) is None and fc.estimate_twin(r.id) == r.id
         assert r.cwd == LANE and r.est and r.est > 0, r.id               # priced by the plan's own evidence
-        if not r.id.endswith(("zip_build", "zip_check")):                # those two read only the git tree
-            assert fc.row_inputs(r, LANE), r.id                          # every other receipt names what it used
+        assert fc.row_inputs(r, LANE), r.id                              # every receipt names what it used (the zip rows: the zip)
 
 
 def test_the_duo_rows_are_the_randomized_companion_scenarios(rand_dir):
@@ -97,7 +99,8 @@ def test_the_zip_boot_rows_are_the_clean_refusal_proofs(rand_dir):
     for title in ("firered", "emerald"):
         row = rows[P + f"zip_boot_{title}_refused"]
         assert row.argv[-2:] == ["--title", "emerald"] if title == "emerald" else "--title" not in row.argv
-        assert fc.row_inputs(row, LANE) == {f"rom:{title}": os.path.join(LANE, fc.STAGED[title])}   # the CLEAN dump it refuses
+        assert fc.row_inputs(row, LANE) == {f"rom:{title}": os.path.join(LANE, fc.STAGED[title]),   # the CLEAN dump it refuses
+                                            "zip:dist": ZIP}                                       # and the zip it boots
     assert [r.id for r in fc.build_plan_frlgc_rand(CUT, LANE, MASTER) if "zip" in r.id] == EXPECTED[9:]
 
 
@@ -168,14 +171,54 @@ def test_inputs_name_the_clean_dump_companion_rand_rom_and_overlay_of_every_titl
                                                        "rom:leafgreen_companion"}
     assert {k for k in fr if k.startswith("rand:")} == {f"rand:{f}" for f in (
         "FireRed_allowed.gba", "LeafGreen_allowed.gba", "FireRed_widest.gba")}
-    assert {k for k in fr if k.startswith("overlay:")} == {f"overlay:{kind}_{t}" for kind in ("a", "b", "equivalent", "forbidden")
-                                                           for t in ("firered", "leafgreen")}
+    # exactly the files the harness stages: A's title for a / equivalent / forbidden, B's title for b
+    assert {k for k in fr if k.startswith("overlay:")} == {"overlay:a_firered", "overlay:b_leafgreen",
+                                                           "overlay:equivalent_firered", "overlay:forbidden_firered"}
     assert fr["rom:firered_companion"] == os.path.join(LANE, fc.COMPANION_ROMS["firered"])
     assert fr["overlay:a_firered"] == os.path.join(LANE, "patch", "build", f"rand_{fc.RAND_LANE_ID}", "a_firered.gba")
     em = fc.row_inputs(rows[P + "link_gen3_rand_emerald"], LANE)
     assert {k for k in em if k.startswith("rom:")} == {"rom:emerald", "rom:emerald_companion"}
     assert not any("firered" in k or "leafgreen" in k for k in em)
     assert set(fc.row_inputs(rows[P + "source_leafgreen"], LANE)) == {"rom:leafgreen", "rom:leafgreen_companion"}
+
+
+def test_overlay_inputs_follow_the_scenario_not_the_lane_history(rand_dir):
+    """link / trainer-panel rows stage only a and b; the admission rows add the equivalent and rule-changed controls. Six rows share
+    one stage dir, so declaring a control a row never stages would make its inputs depend on which rows ran before it."""
+    rows = _plan()
+    overlays = {rid: {k for k in fc.row_inputs(rows[P + rid], LANE) if k.startswith("overlay:")}
+                for rid in ("admit_randomized_frlg", "admit_randomized_emerald", "link_gen3_rand_frlg", "link_gen3_rand_emerald",
+                            "trainer_panel_gen3_rand_frlg", "trainer_panel_gen3_rand_emerald")}
+    assert overlays["link_gen3_rand_frlg"] == overlays["trainer_panel_gen3_rand_frlg"] == {
+        "overlay:a_firered", "overlay:b_leafgreen"}
+    assert overlays["link_gen3_rand_emerald"] == overlays["trainer_panel_gen3_rand_emerald"] == {
+        "overlay:a_emerald", "overlay:b_emerald"}
+    assert overlays["admit_randomized_emerald"] == {"overlay:a_emerald", "overlay:b_emerald", "overlay:equivalent_emerald",
+                                                    "overlay:forbidden_emerald"}
+    assert overlays["admit_randomized_frlg"] - overlays["link_gen3_rand_frlg"] == {
+        "overlay:equivalent_firered", "overlay:forbidden_firered"}
+    assert fc.rand_row_overlays("link_gen3_rand", "gen3_frlg") == ("a_firered.gba", "b_leafgreen.gba")
+
+
+def test_the_zip_rows_record_the_release_zip_and_a_swapped_zip_stops_a_resume(rand_dir, tmp_path):
+    lane = tmp_path / "lane"
+    rows = {r.id: r for r in fc.build_plan_frlgc_rand(CUT, lane.as_posix(), MASTER)}
+    zip_path = lane / "dist" / f"SLink-player-g4-{CUT[:8]}.zip"
+    for rid in ("zip_build", "zip_check", "zip_boot_firered_refused", "zip_boot_emerald_refused"):
+        assert fc.row_inputs(rows[P + rid], str(lane))["zip:dist"].replace("\\", "/") == zip_path.as_posix(), rid
+    zip_path.parent.mkdir(parents=True)
+    zip_path.write_bytes(b"the built zip")
+    for rid in ("zip_build", "zip_check", "zip_boot_firered_refused", "zip_boot_emerald_refused"):
+        row = rows[P + rid]
+        for key, path in fc.row_inputs(row, str(lane)).items():
+            if key.startswith("rom:"):
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+                Path(path).write_bytes(key.encode())
+        note = "# " + fc.inputs_note(fc.hash_inputs(fc.row_inputs(row, str(lane))))
+        assert fc.resume_inputs_problem(row, note, str(lane)) is None, rid
+        zip_path.write_bytes(b"a swapped zip")
+        assert "zip:dist" in fc.resume_inputs_problem(row, note, str(lane)), rid
+        zip_path.write_bytes(b"the built zip")
 
 
 def test_a_changed_rand_rom_or_overlay_changes_the_recorded_hash_and_stops_a_resume(rand_dir, tmp_path):
@@ -226,7 +269,7 @@ def test_the_dry_run_prices_every_row_and_totals_serial_and_three_shards(rand_di
     for rid in EXPECTED:
         assert re.search(rf"(?m)^#\s+{rid}\s+~\d+s$", out), rid
     assert "from retained receipts" in out and "reconnect_gen3" in out                   # the evidence is named
-    assert "# serial total ~475s (7.9 min)" in out
+    assert re.search(r"# serial total ~\d+s \(\d+\.\d min\)", out)                          # not a literal: receipts reprice rows
     assert re.search(r"# 3 shards ~\d+s \(\d+\.\d min\) longest", out)
     assert "no history, budget" not in out                                                # no row is unpriced
 
@@ -235,7 +278,7 @@ def test_the_estimates_total_and_shard(rand_dir):
     rows = list(fc.build_plan_frlgc_rand(CUT, LANE, MASTER))
     assert sum(r.est for r in rows) == 475
     lines = fc.rand_estimate_lines(rows, {r.id: None for r in rows})
-    assert any(line.startswith("# serial total ~475s") for line in lines)
+    assert any(line.startswith("# serial total ~475s (7.9 min)") for line in lines)     # the plan's own estimates, no history
     shards = fc.shard_rows(rows, 3, {r.id: r.est for r in rows})
     assert sum(len(s) for s in shards) == 13
     zips = {k for k, s in enumerate(shards) for r in s if "zip" in r.id}
@@ -248,9 +291,21 @@ def test_the_estimates_total_and_shard(rand_dir):
 PINS = {f"{t}_companion": hashlib.sha1(t.encode()).hexdigest() for t in ("firered", "leafgreen", "emerald")}
 
 
-def _input(side, title, pin=None, overlay=True):
+def _staged_bytes(side, title):
+    return f"{side}-{title}-overlay".encode()
+
+
+def _input(side, title, pin=None, overlay=True, sha=None):
+    sha = sha or hashlib.sha1(_staged_bytes(side, title)).hexdigest()
     return (f"[duo] RAND_INPUT {side} SYNTH=clean-derived-save title={title} "
-            f"{'companion=overlay ' if overlay else ''}companion_pin={(pin or PINS[title + '_companion'])[:12]} sha1=ab")
+            f"{'companion=overlay ' if overlay else ''}companion_pin={(pin or PINS[title + '_companion'])[:12]} sha1={sha}")
+
+
+def _stage_overlays(lane, a="firered", b="leafgreen"):
+    stage = Path(lane) / "patch" / "build" / f"rand_{fc.RAND_LANE_ID}"
+    stage.mkdir(parents=True, exist_ok=True)
+    for side, title in (("a", a), ("b", b)):
+        (stage / f"{side}_{title}.gba").write_bytes(_staged_bytes(side, title))
 
 
 def _out(a="firered", b="leafgreen", admit=True, **kw):
@@ -272,6 +327,20 @@ def test_a_randomized_row_needs_the_overlay_on_the_pinned_companion_for_both_sid
     assert p(P + "admit_randomized_frlg", _out(admit=False), PINS)                         # the clean_refused leg is missing
     assert p(P + "link_gen3_rand_frlg", _out(admit=False), {})                             # no pins: fail closed
     assert p(P + "source_firered", "RESULT: PASS", PINS) is None                           # rows with no client owe none
+    assert p(P + "admit_randomized_frlg", _out().replace("sha1=", "sha1=zz"), PINS)        # a malformed sha1 is no attestation
+
+
+def test_the_note_must_be_the_overlay_rom_actually_staged_in_the_lane(tmp_path):
+    """The evidence is the harness's self-attestation (a randomized cartridge cannot print `(companion by hash)`); with a lane the
+    attested sha1 must equal the sha1 of the overlay ROM staged there."""
+    p = fc.companion_attempt_problem
+    _stage_overlays(tmp_path)
+    assert p(P + "admit_randomized_frlg", _out(), PINS, str(tmp_path)) is None
+    assert "not the overlay ROM staged" in p(P + "admit_randomized_frlg", _out(), PINS, str(tmp_path / "elsewhere"))
+    (tmp_path / "patch" / "build" / f"rand_{fc.RAND_LANE_ID}" / "b_leafgreen.gba").write_bytes(b"a different cartridge")
+    why = p(P + "admit_randomized_frlg", _out(), PINS, str(tmp_path))
+    assert why and "RAND_INPUT b" in why and "RAND_INPUT a" not in why
+    assert p(P + "admit_randomized_frlg", _out(sha="0" * 40), PINS, str(tmp_path))      # an attested hash that was never staged
 
 
 def test_a_clean_zip_boot_row_needs_the_clients_refusal():
@@ -302,7 +371,8 @@ def test_fc_check_and_run_row_enforce_the_overlay_evidence(monkeypatch, tmp_path
     monkeypatch.setattr(fc, "tracked_clean", lambda tree: True)
     monkeypatch.setattr(fc, "rewind_violations", lambda *a: [])
     monkeypatch.setattr(fc, "head", lambda tree: CUT)
-    for body, want in ((_out(), "PASS"), ("RESULT: PASS", "FAIL")):
+    _stage_overlays(tmp_path)                                                              # run_row checks the staged ROMs too
+    for body, want in ((_out(), "PASS"), ("RESULT: PASS", "FAIL"), (_out(sha="1" * 40), "FAIL")):
         monkeypatch.setattr(fc, "run_once", lambda r, deadline, body=body: (0, body, False, False))
         verdict, _n, _clean = fc.run_row(fc.Row(row, "FRLGCR-RAND", ["x"], str(tmp_path), 10), CUT, str(tmp_path), None)
         assert verdict.startswith(want), (body, verdict)
@@ -349,6 +419,35 @@ def test_stage_companions_stages_only_the_pinned_composition_and_never_overwrite
     assert fc.stage_companions(str(tmp_path), ("leafgreen",)) == 1
     assert "not the leafgreen companion pin" in capsys.readouterr().out
     assert fc.stage_companions(str(tmp_path / "empty"), ("emerald",)) == 1               # no dump to compose from
+
+
+def test_stage_companions_writes_a_temp_file_and_replaces_atomically(tmp_path, monkeypatch):
+    clean, patched = b"clean-dump" * 4, b"patched-build"
+    pins = {"firered": hashlib.sha1(clean).hexdigest(), "firered_companion": hashlib.sha1(patched).hexdigest()}
+    monkeypatch.setattr(fc, "rom_pins", lambda tree, **kw: pins)
+    import tools.gen3_companions as gc
+    monkeypatch.setattr(gc, "published", lambda title, dump, root=None: (patched, {}))
+    (tmp_path / fc.ROOT_DUMPS["firered"]).write_bytes(clean)
+    dst = tmp_path / fc.COMPANION_ROMS["firered"]
+    real_replace, seen = os.replace, []
+
+    def failing_replace(src, dest):
+        seen.append((src, dest, os.path.exists(src), os.path.exists(dest)))
+        raise OSError("replace refused")
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError, match="replace refused"):
+        fc.stage_companions(str(tmp_path), ("firered",))
+    (src, dest, src_existed, dest_existed), = seen
+    assert os.path.normpath(dest) == os.path.normpath(str(dst)) and os.path.normpath(src) != os.path.normpath(dest)
+    assert os.path.dirname(src) == os.path.dirname(dest) and src_existed and not dest_existed   # temp next to it; ROM absent until the swap
+    assert not dst.exists() and not any(tmp_path.joinpath("patch", "build").glob("*.tmp*"))     # no partial ROM, no stray temp
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert fc.stage_companions(str(tmp_path), ("firered",)) == 0 and dst.read_bytes() == patched
+    reads = []
+    real_read = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: reads.append(str(self)) or real_read(self))
+    assert fc.stage_companions(str(tmp_path), ("firered",)) == 0
+    assert sum(1 for r in reads if os.path.normpath(r) == os.path.normpath(str(dst))) == 1       # ONE read of the destination
 
 
 # ---- the harness really emits what the evidence check demands (needs the real, uncommitted inputs: a named skip when absent) ----
@@ -413,3 +512,122 @@ def test_a_real_run_provisions_with_the_strict_companion_pins_and_the_companion_
     assert seen["pin_kw"] == {"require_companions": True}                                  # a missing companion pin aborts loudly
     assert set(fc.COMPANION_PINNED_INPUTS) <= set(seen["extra_pinned"])                    # the staged companions are provisioned
     assert (tmp_path / f"fc_SUMMARY_{cut[:8]}_frlgc_rand.txt").is_file()
+
+
+# ---- --merge-summary is not a way around the randomized-ROM block ----
+
+def _merge_env(monkeypatch, tmp_path, rand_dir):
+    monkeypatch.setattr(fc, "PROBES", str(tmp_path))
+    monkeypatch.setattr(fc, "gen3_companion_pins", lambda tree, strict=False: PINS)
+    monkeypatch.setattr(fc, "gen3_companion_pins_at", lambda cut: PINS)
+    lane = tmp_path / "lane"
+    _stage_overlays(lane)
+    row = _plan()[P + "link_gen3_rand_frlg"]
+    attempt = {"load": "cpu=1%", "start_utc": "2026-10-03T12:00:00Z", "end_utc": "2026-10-03T12:01:00Z", "rc": 0,
+               "tracked_before": True, "tracked_after": True, "classification": "pass", "output": _out(admit=False)}
+    note = fc.inputs_note(fc.hash_inputs(fc.row_inputs(row, str(lane))))
+    text = receipts.run_receipt_text(row=row.id, item="FRLGCR-RAND", cut=CUT, lane=str(lane), command="c", cwd=".", env={},
+                                     attempts=[attempt], verdict="PASS", note=note)
+    (tmp_path / f"fc_{row.id}_{CUT[:8]}.txt").write_text(text, encoding="utf-8")
+    return row
+
+
+def _merge_verdict(row, capsys):
+    rc = fc.merge_summary(CUT, [row], "_frlgc_rand")
+    return rc, capsys.readouterr().out
+
+
+def test_a_merge_passes_while_the_randomized_roms_are_what_the_receipt_recorded(rand_dir, tmp_path, monkeypatch, capsys):
+    row = _merge_env(monkeypatch, tmp_path, rand_dir)
+    rc, out = _merge_verdict(row, capsys)
+    assert rc == 0 and "OVERALL: PASS (1/1 rows)" in out
+
+
+def test_a_merge_is_not_a_pass_when_the_randomized_roms_are_gone(rand_dir, tmp_path, monkeypatch, capsys):
+    row = _merge_env(monkeypatch, tmp_path, rand_dir)
+    (rand_dir / "LeafGreen_allowed.gba").unlink()
+    rc, out = _merge_verdict(row, capsys)
+    assert rc == 1 and "OVERALL: FAIL" in out and "rand:LeafGreen_allowed.gba" in out and "absent or changed" in out
+
+
+def test_a_merge_is_not_a_pass_when_the_randomized_roms_are_repointed(rand_dir, tmp_path, monkeypatch, capsys):
+    row = _merge_env(monkeypatch, tmp_path, rand_dir)
+    other = tmp_path / "other_roms"
+    other.mkdir()
+    for name in ALLOWED:
+        (other / name).write_bytes(b"different bytes: " + name.encode())
+    monkeypatch.setenv("SLINK_GEN3_RAND_ROMS", str(other))
+    rc, out = _merge_verdict(row, capsys)
+    assert rc == 1 and "OVERALL: FAIL" in out and "rand:FireRed_allowed.gba" in out
+
+
+def test_the_merge_check_is_scoped_to_the_randomized_rows(tmp_path, monkeypatch, capsys):
+    """Another title's merge is unchanged: no frlgcr_ row, no randomized-ROM comparison."""
+    monkeypatch.setattr(fc, "PROBES", str(tmp_path))
+    called = []
+    monkeypatch.setattr(fc, "rand_rom_inputs_problem", lambda *a: called.append(a))
+    row = next(r for r in fc.build_plan_frlgc(CUT, LANE, MASTER) if r.id.startswith(fc.COMPANION_ROW_PREFIX + "source_"))
+    attempt = {"load": "cpu=1%", "start_utc": "2026-10-03T12:00:00Z", "end_utc": "2026-10-03T12:01:00Z", "rc": 0,
+               "tracked_before": True, "tracked_after": True, "classification": "pass", "output": "RESULT: PASS"}
+    monkeypatch.setattr(fc, "gen3_companion_pins", lambda tree, strict=False: PINS)
+    monkeypatch.setattr(fc, "gen3_companion_pins_at", lambda cut: PINS)
+    text = receipts.run_receipt_text(row=row.id, item="x", cut=CUT, lane="l", command="c", cwd=".", env={}, attempts=[attempt],
+                                     verdict="PASS", note="")
+    (tmp_path / f"fc_{row.id}_{CUT[:8]}.txt").write_text(text, encoding="utf-8")
+    assert fc.merge_summary(CUT, [row], "_frlgc") == 0 and called == []
+
+
+# ---- the shared ROM-unchanged guard ----
+
+def _guard_run(tmp_path, scenario):
+    run = object.__new__(e2e_duo.DuoRun)
+    rom = tmp_path / "patch" / "build" / "a_firered.gba"
+    rom.parent.mkdir(parents=True, exist_ok=True)
+    rom.write_bytes(b"prepared")
+    run.scenario = scenario
+    run._rand_inputs = {"a": {"rom": "patch/build/a_firered.gba"}}
+    run._rand_facts = {"a": {"sha1": hashlib.sha1(b"prepared").hexdigest()}}
+    run._live_complete = {scenario: True}
+    run._rand_evidence = {"pair": {"status": {}, "hellos": {}}}
+    return run, rom
+
+
+@pytest.mark.parametrize("scenario, orchestrate", [
+    ("admit_randomized_frlg", "orchestrate_admit_randomized_frlg"),
+    ("link_gen3_rand", "orchestrate_link_gen3_rand"),
+    ("trainer_panel_gen3_rand", "orchestrate_trainer_panel_gen3_rand")])
+def test_each_randomized_orchestration_stops_on_a_mid_attempt_rom_rewrite(tmp_path, monkeypatch, scenario, orchestrate):
+    monkeypatch.setattr(e2e_duo, "REPO", str(tmp_path))
+    run, rom = _guard_run(tmp_path, scenario)
+    run.game = "gen3_frlg"
+    run._gen3_prelude = lambda *a, **k: None
+    run.go = lambda *a, **k: None
+    run.assert_link_new = lambda *a, **k: None
+    run._gen3_title = lambda inst: "firered"
+    monkeypatch.setattr(e2e_duo, "gen3_rand_retail", lambda title: {})
+    monkeypatch.setattr(e2e_duo, "gen3_rand_panel_problems", lambda *a, **k: [])
+
+    def observe(phase):
+        rom.write_bytes(b"rewritten mid attempt")                    # the next row's prepare step reusing the shared stage dir
+        return {"status": {}, "hellos": {}}
+    run._observe_gen3_rand_admission = observe
+    with pytest.raises(RuntimeError, match="a: ROM file changed during the attempt"):
+        getattr(run, orchestrate)()
+    rom.write_bytes(b"prepared")
+    run._observe_gen3_rand_admission = lambda phase: {"status": {}, "hellos": {}}
+    getattr(run, orchestrate)()                                      # untouched: the guard is silent
+
+
+@pytest.mark.parametrize("scenario", ["admit_randomized_frlg", "link_gen3_rand", "trainer_panel_gen3_rand"])
+def test_the_shared_verdict_check_also_catches_a_rewrite(tmp_path, monkeypatch, scenario):
+    monkeypatch.setattr(e2e_duo, "REPO", str(tmp_path))
+    run, rom = _guard_run(tmp_path, scenario)
+    monkeypatch.setattr(e2e_duo, "gen3_rand_admission_problems", lambda *a, **k: [])
+    run._check_gen3_rand_pair()
+    rom.write_bytes(b"rewritten")
+    with pytest.raises(RuntimeError, match="ROM file changed during the attempt"):
+        run._check_gen3_rand_pair()
+
+
+def test_the_cross_plan_minute_format_is_untouched():
+    assert fc._mins(90) == "2m" and fc._mins(30) == "0m" and fc._mins(3600) == "60m"

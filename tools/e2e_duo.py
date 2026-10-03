@@ -9218,6 +9218,7 @@ class DuoRun:
     def orchestrate_admit_randomized_frlg(self):
         self._gen3_prelude()
         self._observe_gen3_rand_admission("pair")
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
 
@@ -9229,6 +9230,7 @@ class DuoRun:
         self._observe_gen3_rand_admission("pair")
         self.go()
         self.assert_link_new()
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
 
     def orchestrate_trainer_panel_gen3_rand(self):
@@ -9240,15 +9242,21 @@ class DuoRun:
         problems = gen3_rand_panel_problems(probes, self._rand_facts, retail, expected_area=area)
         if problems:
             raise RuntimeError("; ".join(problems))
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
+
+    def _assert_gen3_rand_roms_unchanged(self):
+        """Every ROM file the attempt prepared (all six randomized rows share one stage dir) still has the sha1 its facts were
+        taken from. Called by all three randomized orchestrations and by the shared verdict check."""
+        for side, row in self._rand_inputs.items():
+            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
+                raise RuntimeError(f"{side}: ROM file changed during the attempt")
 
     def _check_gen3_rand_pair(self):
         if not self._live_complete.get(self.scenario):
             raise RuntimeError("randomized live legs incomplete")
-        for side, row in self._rand_inputs.items():
-            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
-                raise RuntimeError(f"{side}: ROM file changed during the attempt")
+        self._assert_gen3_rand_roms_unchanged()
         evidence = self._rand_evidence["pair"]
         problems = gen3_rand_admission_problems("pair", **evidence, facts=self._rand_facts)
         if problems:
