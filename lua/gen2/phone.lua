@@ -20,11 +20,14 @@ Phone.MIN_GAP = 10800
 -- the ROM half. Every post writes the record, then the same nonce at mailbox +35, then +32; the ROM
 -- moves +35 at the ack, so a record from any other request (or a bare post) never matches, and it
 -- zeroes the cookie when the call is prepared (single use). HandleNewMap wipes the buffer, so the
--- binder re-stages while the call is ARMED: once, after at most RESTAGE_TRIES attempts.
+-- binder keeps the record intact while the call is ARMED: it re-stages whenever the cookie or the id is gone, at
+-- most RESTAGE_MAX times (a map load can zero the buffer more than once: sweep gen2-fsw-1003-0029 saw the ROM
+-- zero bytes 17-24 again the frame after a re-stage), after at most RESTAGE_TRIES failed writes; then it fails
+-- closed (cookie 0, the ROM rings the fixed text) and writes nothing more. Never after the call is delivered.
 Phone.STAGE_SIZE, Phone.COOKIE, Phone.TERMINATOR = 24, 0xA6, 0x50
 Phone.OFF_TRAINER, Phone.OFF_NICK, Phone.OFF_NONCE, Phone.OFF_COOKIE = 3, 11, 22, 23
 Phone.OFF_MAILBOX_NONCE = 35   -- patch/gen2/src/phone.asm SLINK_OFS_PHONE_NONCE
-Phone.RESTAGE_TRIES = 3
+Phone.RESTAGE_TRIES, Phone.RESTAGE_MAX = 3, 8
 
 local function int(v) return type(v) == "number" and math.tointeger(v) or nil end
 local function species(mon)
@@ -60,7 +63,7 @@ function Phone.new(panel, io, writes, log, names)
     local STAGE = type(names) == "table" and int(names.stage) or nil
     log = log or function() end
     local queued, inflight, seen, delivered_at, rang_first_link = nil, nil, false, nil, false
-    local queued_rec, inflight_rec, restaged, restage_tries, nonce = nil, nil, false, 0, 0
+    local queued_rec, inflight_rec, closed, restage_tries, restages, nonce = nil, nil, false, 0, 0, 0
     local self = {}
 
     local function live() return panel:fresh() and panel:caps_has(Phone.CAP) end
@@ -101,22 +104,31 @@ function Phone.new(panel, io, writes, log, names)
         if inflight then
             if armed == inflight then
                 seen = true
-                -- a map change (ClearUnusedMapBuffer) wiped a named record: put it back, ONCE
-                if inflight_rec and inflight_rec[Phone.OFF_COOKIE + 1] == Phone.COOKIE and not restaged
+                -- a map change (ClearUnusedMapBuffer) wiped a named record: put it back, bounded
+                if inflight_rec and inflight_rec[Phone.OFF_COOKIE + 1] == Phone.COOKIE and not closed
                         and (u8(STAGE + Phone.OFF_COOKIE) ~= Phone.COOKIE or u8(STAGE) ~= inflight) then
                     writes:arm("phone", allow)
-                    local ok, err = pcall(stage, inflight_rec)
-                    restage_tries = restage_tries + 1
-                    if ok then
-                        restaged = true
-                        log("[SLink-gen2] phone: call " .. inflight .. " re-staged")
-                    elseif restage_tries >= Phone.RESTAGE_TRIES then
-                        -- fail closed: no cookie, so the ROM rings the fixed text
-                        restaged = true
+                    if restages >= Phone.RESTAGE_MAX then
+                        -- the buffer keeps getting wiped: fail closed, no cookie, so the ROM rings the fixed text
+                        closed = true
                         pcall(function() writes:write_bytes(STAGE + Phone.OFF_COOKIE, { 0 }) end)
-                        log("[SLink-gen2] phone: call " .. inflight .. " re-stage failed, fixed text: " .. tostring(err))
+                        log("[SLink-gen2] phone: call " .. inflight .. " record wiped again after " .. restages
+                            .. " restages, fixed text")
                     else
-                        log("[SLink-gen2] phone: call " .. inflight .. " re-stage retry: " .. tostring(err))
+                        local ok, err = pcall(stage, inflight_rec)
+                        if ok then
+                            restages = restages + 1
+                            log("[SLink-gen2] phone: call " .. inflight .. " re-staged")
+                        else
+                            restage_tries = restage_tries + 1
+                            if restage_tries >= Phone.RESTAGE_TRIES then
+                                closed = true
+                                pcall(function() writes:write_bytes(STAGE + Phone.OFF_COOKIE, { 0 }) end)
+                                log("[SLink-gen2] phone: call " .. inflight .. " re-stage failed, fixed text: " .. tostring(err))
+                            else
+                                log("[SLink-gen2] phone: call " .. inflight .. " re-stage retry: " .. tostring(err))
+                            end
+                        end
                     end
                     writes:disarm()
                 end
@@ -148,7 +160,7 @@ function Phone.new(panel, io, writes, log, names)
         if not ok then error(err, 0) end
         log("[SLink-gen2] phone: call " .. queued .. " posted")
         if queued == Phone.FIRST_LINK then rang_first_link = true end
-        inflight, queued, inflight_rec, queued_rec, restaged, restage_tries = queued, nil, queued_rec, nil, false, 0
+        inflight, queued, inflight_rec, queued_rec, closed, restage_tries, restages = queued, nil, queued_rec, nil, false, 0, 0
     end
     return self
 end

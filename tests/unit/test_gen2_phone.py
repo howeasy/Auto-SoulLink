@@ -378,7 +378,7 @@ def test_the_higher_priority_call_keeps_its_own_record():
     assert c.staged()[:1] == bytes([FALLEN]) and c.staged()[3:6] == encode(c, "BOB")
 
 
-def test_a_map_change_while_armed_is_restaged_exactly_once():
+def test_a_map_change_while_armed_is_restaged():
     c = named()
     c.request("fallen", DATA)
     c.step(2)
@@ -387,10 +387,49 @@ def test_a_map_change_while_armed_is_restaged_exactly_once():
     c.mem[c.stage:c.stage + 24] = bytes(24)          # HandleNewMap -> ClearUnusedMapBuffer
     c.step()
     assert c.staged() == record and any("re-staged" in line for line in c.logs)
-    c.mem[c.stage:c.stage + 24] = bytes(24)          # a second map change: no second re-stage
+
+
+def test_a_wipe_that_lands_again_right_after_the_restage_still_ends_intact():
+    """Sweep gen2-fsw-1003-0029, Gold on the titled ROM: the binder re-staged all 24 bytes at f13040 and the ROM's
+    ClearUnusedMapBuffer zeroed bytes 17-24 again at f13041, so a re-stage that happens ONCE rang a cookie-less record
+    (the fixed fallback caller). The call is still ARMED, so the binder keeps the record intact (bounded)."""
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # f13040: the wipe
+    c.step()
+    assert c.staged() == record
+    c.mem[c.stage + 16:c.stage + 24] = bytes(8)      # f13041: the same wipe zeroes the tail again
+    c.step()
+    assert c.staged() == record, "the ring must read the whole record, cookie included"
+
+
+def test_a_record_wiped_every_frame_stops_at_the_cap_and_fails_closed():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    wipes = 0
+    for _ in range(40):
+        c.mem[c.stage:c.stage + 24] = bytes(24)
+        wipes += 1
+        c.step()
+    restages = sum("re-staged" in line for line in c.logs)
+    assert 1 <= restages <= 8, restages
+    assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
     c.writes.clear()
-    c.step(3)
-    assert c.staged() == bytes(24) and c.writes == []
+    c.mem[c.stage:c.stage + 24] = bytes(24)
+    c.step(5)
+    assert c.writes == [], "nothing is written once the binder has failed closed"
+
+
+def test_an_intact_record_is_never_rewritten_while_armed():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    c.writes.clear()
+    c.step(20)
+    assert c.writes == [] and not any("re-staged" in line for line in c.logs)
 
 
 def test_no_restage_for_a_fixed_text_call_or_after_delivery():
@@ -408,7 +447,7 @@ def test_no_restage_for_a_fixed_text_call_or_after_delivery():
 
 @pytest.mark.parametrize("failures, restored", [(1, True), (2, True), (3, False), (10, False)])
 def test_a_failed_restage_retries_then_fails_closed(failures, restored):
-    """F3: `restaged` only after a whole successful stage; at most 3 attempts, then the cookie is zeroed."""
+    """F3: a failed stage write is retried at most RESTAGE_TRIES times, then the cookie is zeroed and nothing more is written."""
     c = named()
     c.request("fallen", DATA)
     c.step(2)
@@ -427,10 +466,13 @@ def test_a_failed_restage_retries_then_fails_closed(failures, restored):
         assert c.staged() == record
     else:
         assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
-    c.mem[c.stage:c.stage + 24] = bytes(24)          # later wipes are never re-staged again
     c.writes.clear()
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # a later wipe: re-staged while armed, never after failing closed
     c.step(3)
-    assert c.writes == []
+    if restored:
+        assert c.staged() == record
+    else:
+        assert c.writes == [] and c.staged()[23] == 0
 
 
 def test_a_failed_stage_write_never_posts_the_request():
