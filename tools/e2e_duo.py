@@ -3568,6 +3568,43 @@ def gen3_production_route_lines(server_text, client_text, side, pack, title, rom
     return (server_line, client_line) if server_line and client_line else None
 
 
+GEN3_COMPANION_GAMES = ("gen3_frlg", "gen3_lgfr", "gen3_emerald")
+
+
+def gen3_companion_game_problem(game):
+    """Why --gen3-companion cannot apply to `game`, or None. The flag swaps the CLEAN FR/LG/Emerald dumps for their patched
+    companions (patch/build/slink_*.gba); RR already boots its companion and the expansion has no companion."""
+    if game in GEN3_COMPANION_GAMES:
+        return None
+    return (f"--gen3-companion applies only to {', '.join(GEN3_COMPANION_GAMES)} (FR/LG/Emerald pairings), not {game}")
+
+
+def gen3_companion_admission_problems(results, sides, pins):
+    """(problems, proof lines): each side's OWN admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by how)
+    player X -> host:port (rom HASH8)" -- must say `companion by hash` for that side's title and carry the first 8 hex of
+    the title's pinned companion sha1. `sides` {inst: title}, `pins` rom_pins() with the `<title>_companion` keys.
+    Every admission line of the side must qualify (a relaunch in the same receipt cannot hide a clean one); a clean-labelled
+    line, an anchors/header admission, another title, another player's line or another hash is a problem."""
+    problems, proofs = [], []
+    for inst, title in sides.items():
+        pin = pins.get(f"{title}_companion")
+        pack = GEN3_PACKS[title]
+        if not pin:
+            problems.append(f"{inst}: no {title}_companion pin to compare the admission hash with")
+            continue
+        text = results.get(inst) or ""
+        want = (rf"\[client\] \[SLink-gen3\] {re.escape(pack)}/{re.escape(title)} \(companion by hash\) "
+                rf"player {inst} -> \S+:\d+ \(rom {pin[:8]}\)")
+        lines = re.findall(r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player " + inst + r" .*$", text)
+        good = [ln for ln in lines if re.fullmatch(want, ln)]
+        bad = [ln for ln in lines if ln not in good]
+        if not good:
+            problems.append(f"{inst}: no `{title} (companion by hash)` admission line with rom {pin[:8]} (the pin)")
+        problems += [f"{inst}: admission line is not the {title} companion by hash: {ln}" for ln in bad]
+        proofs += good[:1]
+    return problems, proofs
+
+
 class DuoRun:
     def __init__(self, scenario, args, attempt=1):
         self.scenario = scenario
@@ -3576,6 +3613,8 @@ class DuoRun:
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
         self.gcfg = GAMES[self.game]
+        # --gen3-companion: boot the PATCHED FR/LG/Emerald cartridges (explicit per run; the clean rows never change)
+        self.gen3_companion = bool(getattr(args, "gen3_companion", False))
         # What the launch path actually branches on is "does this game boot from a battery
         # save", not which generation it is — Gen 2 needs the identical treatment. Kept as
         # `is_gen1` only where a SCENARIO is genuinely Gen 1-specific.
@@ -3720,6 +3759,8 @@ class DuoRun:
             if not rom.is_file():
                 raise FileNotFoundError(f"{rom} not found (tools/build_expansion.py --host hgbox)")
             return gen3_fixtures.stage_rom(str(rom))
+        if getattr(self, "gen3_companion", False) and title in ("firered", "leafgreen", "emerald"):
+            return self._gen3_companion_rom(title)
         staged = row.get("staged")
         if staged and self._gen3_rom_kind(inst) == "companion":
             if not os.path.isfile(os.path.join(REPO, staged)):
@@ -3734,6 +3775,34 @@ class DuoRun:
             return staged
         raise FileNotFoundError(f"{name} not found at the repo root or any parent, and no "
                                 f"staged {staged}")
+
+    def _gen3_companion_rom(self, title) -> str:
+        """The staged companion cartridge of a --gen3-companion run, byte-pinned to patch/dist/gen3_companions.json; a missing
+        or different file is a loud failure, never a fall back to the clean dump."""
+        from tools.gen3_final_cut import COMPANION_ROMS, rom_pins
+
+        rel = COMPANION_ROMS[title]
+        path = os.path.join(REPO, rel)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"{rel} not found (stage the {title} companion cartridge: patch/dist/SLink-*.ups on the clean dump)")
+        pin = rom_pins(REPO, require_companions=True)[f"{title}_companion"]
+        got = hashlib.sha1(Path(path).read_bytes()).hexdigest()
+        if got != pin:
+            raise RuntimeError(f"{rel} sha1 {got} does not match the {title} companion pin {pin} (patch/dist/gen3_companions.json)")
+        return rel
+
+    def _gen3_require_companion_admission(self, results):
+        """A --gen3-companion run proves, from each client's own admission line, that it ran the companion by hash."""
+        if not getattr(self, "gen3_companion", False):
+            return
+        from tools.gen3_final_cut import rom_pins
+
+        sides = {inst: self._gen3_title(inst) for inst in ("a", "b")}
+        problems, proofs = gen3_companion_admission_problems(results, sides, rom_pins(REPO, require_companions=True))
+        if problems:
+            raise RuntimeError("companion provenance: " + "; ".join(problems))
+        for inst, line in zip(sides, proofs, strict=True):
+            self._pydec_note(f"COMPANION_ADMISSION {inst}: {line}")
 
     def _gen3_battery_path(self, inst) -> str:
         title = self._gen3_title(inst)
@@ -9923,6 +9992,7 @@ class DuoRun:
             raise RuntimeError(f"the receipt's source is +dirty ({', '.join(dirty[:5])}"
                                f"{', ...' if len(dirty) > 5 else ''}): a G4 receipt must come "
                                f"from a clean cut")
+        self._gen3_require_companion_admission(results)
         global _CONSUMED_MARKERS
         _CONSUMED_MARKERS = consumed = []
         try:
@@ -10435,7 +10505,13 @@ def main():
                          "tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl")
     ap.add_argument("--list", action="store_true",
                     help="print the scenarios --scenario all would run for --game, then exit")
+    ap.add_argument("--gen3-companion", action="store_true",
+                    help="boot the PATCHED FR/LG/Emerald companion cartridges (patch/build/slink_*.gba, sha1-pinned to "
+                         "patch/dist/gen3_companions.json) instead of the clean dumps; each client's own admission line must "
+                         "say `companion by hash` (recorded as COMPANION_ADMISSION). Opt-in per run; not for RR/expansion")
     args = ap.parse_args()
+    if args.gen3_companion and gen3_companion_game_problem(args.game):
+        sys.exit(f"[duo] {gen3_companion_game_problem(args.game)}")
 
     if args.list:
         for line in list_lines(args.game):
