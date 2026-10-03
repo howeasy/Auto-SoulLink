@@ -20,7 +20,6 @@ EGG = mon_record(0x22222222, OT, is_egg=1)
 
 
 def world(monkeypatch, pack, title, kind, *, boot_egg=False):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", ROOT / "data/games/gen3_emerald")
     w = World(pack, title, kind)
     w.set_party([LEAD, EGG] if boot_egg else [LEAD])
     w.step_to(60)

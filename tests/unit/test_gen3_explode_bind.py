@@ -23,7 +23,6 @@ TITLES = (
 @pytest.mark.parametrize("pack,title,chosen,struct_ptr,controller,completed,standby", TITLES)
 def test_clean_title_commits_explosion_and_hands_off_without_zeroing_hp(
         monkeypatch, pack, title, chosen, struct_ptr, controller, completed, standby):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = live(pack, title)
     world.battle_ok = True
     world.enter_battle([FOE], active=(0,))
@@ -138,7 +137,6 @@ def test_battle_struct_offsets_match_the_pinned_c_layout(tmp_path, title, env, p
 @pytest.mark.parametrize("unqualified", ("doubles", "missing_handoff"))
 def test_unqualified_explosion_never_writes_a_partial_commit(
         monkeypatch, pack, title, chosen, struct_ptr, controller, completed, standby, unqualified):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = live(pack, title)
     world.battle_ok = True
     world.enter_battle([FOE], active=(0,), doubles=unqualified == "doubles")

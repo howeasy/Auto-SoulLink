@@ -33,7 +33,6 @@ def test_emerald_panel_shows_each_players_opposite_gender_rival(area):
 
 @pytest.mark.parametrize("gender", [0, 1])
 def test_emerald_hello_and_tick_report_native_player_gender(gender, monkeypatch):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = World("gen3_emerald", "emerald")
     world.set_party([mon_record(0x11111111, 0x0000ABCD)])
     # pokeemerald c65e93f2 include/global.h:510-513: playerGender at +0x08.
@@ -78,7 +77,6 @@ def test_other_packs_do_not_publish_an_unproven_gender(pack, title):
 
 
 def _emerald_world(monkeypatch):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = World("gen3_emerald", "emerald")
     world.set_party([mon_record(0x11111111, 0x0000ABCD)])
     return world

@@ -27,6 +27,7 @@ from tests.unit import protocol_schema as ps
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ENTRY = (REPO / "lua" / "gen3" / "entry.lua").as_posix()
 PACK_DIRS = {"gen3_frlg": REPO / "data" / "games" / "gen3_frlg",
+             "gen3_emerald": REPO / "data" / "games" / "gen3_emerald",
              "gen3_rr": REPO / "data" / "games" / "gen3_rr"}
 ROM_BASE = 0x08000000
 
@@ -36,7 +37,10 @@ SB2_ADDR = 0x02014000
 
 # (pack, title, kind) of every admitted artifact
 ARTIFACTS = [("gen3_frlg", "firered", "clean"), ("gen3_frlg", "leafgreen", "clean"),
+             ("gen3_frlg", "firered", "companion"), ("gen3_frlg", "leafgreen", "companion"),
              ("gen3_rr", "radical_red", "clean"), ("gen3_rr", "radical_red", "companion")]
+# Emerald has its own client fixtures (rom_type map, bag/rival layout), so its rows are separate.
+EMERALD_ARTIFACTS = [("gen3_emerald", "emerald", "clean"), ("gen3_emerald", "emerald", "companion")]
 
 
 def pack_json(pack: str, name: str) -> dict:
