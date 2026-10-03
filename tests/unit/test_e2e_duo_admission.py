@@ -928,7 +928,7 @@ def _oracle_runner(tmp_path, scenario):
     paths = {}
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
-        path = Path(run._saveram_dir(inst)) / GENS["gen1"]["saveram_names"][title]
+        path = Path(run._saveram_dir(inst)) / run._gen1_save_name(inst)   # the companion's save, as the oracle reads it
         path.parent.mkdir(parents=True)
         paths[inst] = (path, sram, rom)
         start = codec.SRAM_LAYOUT["sPartyData"]
