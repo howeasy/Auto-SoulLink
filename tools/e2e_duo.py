@@ -3918,15 +3918,34 @@ class DuoRun:
                               + scenario_attempt_limit(scenario, self.game) * self.cfg["timeout"]
                               + 300)
 
-    def _gen3_duo_journal_path(self):
-        """One durable journal per attempt, shared by A/B and all their relaunch phases.
+    def _gen3_duo_journal_path(self, inst):
+        """One PRIVATE durable journal per instance, kept across that instance's relaunch phases within this data identity.
+
+        Production has one journal per player, so A and B never share a file or its OS guard (sharing made one client's read answer
+        "busy", hiding the other's captures: docs/gen3/RR_JOURNAL_ISOLATION_2026-09-29.md, per-instance addendum). A new private data
+        directory (a new attempt, or the randomized-admission control's new identity) means new files for both.
 
         T5's native candidate owns its manifest-pinned path. The lock probe intentionally reads
         and locks the install-root path, so neither row uses this ordinary duo override.
         """
         if self.cfg.get("gen3_native_trade") or self.cfg.get("journal_lock_probe"):
             return None
-        return Path(self.data_dir, "slink_gen3_trade")
+        return Path(self.data_dir, f"slink_gen3_trade_{inst}")
+
+    def _archive_gen3_duo_journals(self, archive):
+        """Copy both instances' durable journal (.log and .guard) into `archive` under their own names; every source must exist."""
+        sources = []
+        for inst in "ab":
+            base = self._gen3_duo_journal_path(inst)
+            if base is None:
+                raise RuntimeError("RR reset has no private durable journal path")
+            for suffix in ("log", "guard"):
+                source = Path(str(base) + f".{suffix}")
+                if not source.is_file():
+                    raise RuntimeError(f"RR reset missing durable trade journal {source}")
+                sources.append(source)
+        for source in sources:
+            shutil.copy2(source, Path(archive) / source.name)
 
     # ── lane identity ────────────────────────────────────────────────────────
     def stub_path(self, inst: str) -> str:
@@ -4770,7 +4789,7 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
-            journal_path = self._gen3_duo_journal_path()
+            journal_path = self._gen3_duo_journal_path(inst)
             if journal_path is not None:
                 duo["journal_path"] = journal_path.as_posix()
                 print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
@@ -8893,14 +8912,7 @@ class DuoRun:
                     raise RuntimeError(f"{inst}: native save artifact missing at clean exit: {source}")
                 shutil.copy2(source, archive / f"{inst}_{source.name}")
         (archive / "links.json").write_bytes(self._links_bytes() or b"")
-        journal_base = self._gen3_duo_journal_path()
-        if journal_base is None:
-            raise RuntimeError("RR reset has no private durable journal path")
-        for suffix in ("log", "guard"):
-            source = Path(str(journal_base) + f".{suffix}")
-            if not source.is_file():
-                raise RuntimeError(f"RR reset missing durable trade journal {source}")
-            shutil.copy2(source, archive / source.name)
+        self._archive_gen3_duo_journals(archive)
         self._pydec_note(f"RR_RESET_INITIAL_ARCHIVE {rel_to_repo(archive)} "
                          + " ".join(f"{i}_sha256={hashlib.sha256(self._rr_reset_before[i]).hexdigest()}"
                                     for i in "ab"))
