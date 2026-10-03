@@ -92,3 +92,13 @@ def test_canonical_sha256_for_payloads():
     a, b = bytearray(64), bytearray(64)
     a[10:14], b[10:14] = b"dev\xff", b"v1.2"
     assert ri.canonical_sha256(bytes(a), [(10, 4)]) == ri.canonical_sha256(bytes(b), [(10, 4)])
+
+
+def test_narrow_false_masks_the_whole_field_for_hashes_taken_that_way():
+    """Gen 2's published canonical hashes mask the whole field; its builder pins the prefix itself."""
+    dev = _rom(b"SoulLink dev")
+    other_prefix = bytearray(_rom(b"SoulLink v0.3.0"))
+    other_prefix[SLOT["offset"] + 4] ^= 0x20
+    assert ri.canonical_sha1(dev, [SLOT], gb=True, narrow=False) == ri.canonical_sha1(bytes(other_prefix), [SLOT], gb=True, narrow=False)
+    assert ri.canonical_sha1(dev, [SLOT], gb=True) != ri.canonical_sha1(bytes(other_prefix), [SLOT], gb=True)      # narrowed sees it
+    ri.assert_version_only_difference(dev, bytes(other_prefix), [SLOT], gb=True, narrow=False)

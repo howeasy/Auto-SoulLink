@@ -20,16 +20,17 @@ GB_CHECKSUM = (0x14E, 0x14F)     # Game Boy global checksum: the one place outsi
 VERSION_MAX = 10                 # "v0.3.0-dev"; "SoulLink " + 10 characters + terminator <= FIELD
 
 
-def _spans(rom_len: int, slots, gb: bool) -> list[tuple[int, int]]:
+def _spans(rom_len: int, slots, gb: bool, narrow: bool = True) -> list[tuple[int, int]]:
     """The byte ranges the canonical identity zeroes. A slot of exactly FIELD bytes names a version FIELD and only its version part
     (everything after the PREFIX) is masked: the "SoulLink " wordmark stays in the identity, so a wordmark or charmap change is a
-    code change, never a stamp. Any other slot (the Gen 2 Stadium table) is masked whole."""
+    code change, never a stamp. Any other slot (the Gen 2 Stadium table) is masked whole. `narrow=False` masks the whole field: Gen 2's
+    published hashes were taken that way (its builder pins the prefix bytes itself, tools/build_gen2_companion.py)."""
     spans = []
     for slot in slots:
         off, length = (slot["offset"], slot["length"]) if isinstance(slot, dict) else slot
         if off < 0 or length <= 0 or off + length > rom_len:
             raise ValueError(f"version slot {off:#x}+{length} is outside the {rom_len}-byte ROM")
-        if length == FIELD:
+        if narrow and length == FIELD:
             off, length = off + PREFIX, FIELD - PREFIX
         spans.append((off, off + length))
     if gb:
@@ -41,16 +42,16 @@ def _spans(rom_len: int, slots, gb: bool) -> list[tuple[int, int]]:
     return spans
 
 
-def canonical_bytes(rom: bytes, slots, *, gb: bool = False) -> bytes:
+def canonical_bytes(rom: bytes, slots, *, gb: bool = False, narrow: bool = True) -> bytes:
     """`rom` with every version slot (and, for a Game Boy ROM, the global checksum) zeroed."""
     out = bytearray(rom)
-    for start, end in _spans(len(rom), slots, gb):
+    for start, end in _spans(len(rom), slots, gb, narrow):
         out[start:end] = bytes(end - start)
     return bytes(out)
 
 
-def canonical_sha1(rom: bytes, slots, *, gb: bool = False) -> str:
-    return hashlib.sha1(canonical_bytes(rom, slots, gb=gb)).hexdigest()
+def canonical_sha1(rom: bytes, slots, *, gb: bool = False, narrow: bool = True) -> str:
+    return hashlib.sha1(canonical_bytes(rom, slots, gb=gb, narrow=narrow)).hexdigest()
 
 
 def canonical_sha256(blob: bytes, slots) -> str:
@@ -58,12 +59,12 @@ def canonical_sha256(blob: bytes, slots) -> str:
     return hashlib.sha256(canonical_bytes(blob, slots)).hexdigest()
 
 
-def assert_version_only_difference(a: bytes, b: bytes, slots, *, gb: bool = False) -> None:
+def assert_version_only_difference(a: bytes, b: bytes, slots, *, gb: bool = False, narrow: bool = True) -> None:
     """Raise unless `a` and `b` are the same build up to the version field (the stamp's one guarantee)."""
     if len(a) != len(b):
         raise ValueError(f"builds differ in size: {len(a)} vs {len(b)}")
-    if canonical_bytes(a, slots, gb=gb) != canonical_bytes(b, slots, gb=gb):
-        spans = _spans(len(a), slots, gb)
+    if canonical_bytes(a, slots, gb=gb, narrow=narrow) != canonical_bytes(b, slots, gb=gb, narrow=narrow):
+        spans = _spans(len(a), slots, gb, narrow)
         outside = [i for i in range(len(a)) if a[i] != b[i] and not any(s <= i < e for s, e in spans)]
         raise ValueError(f"the builds differ outside the version field, first at {outside[0]:#x} ({len(outside)} bytes)")
 
