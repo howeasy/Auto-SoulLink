@@ -342,11 +342,32 @@ def test_async_active_bss_refuses_without_latch_then_arms_when_pin_lands():
         assert ok is None and why.startswith("loading:"), why
         assert w.sig.failure is None and w.status()["refused"] == attempt
         assert w.status()["owned"] == 0 and len(w.status()["retained"]) == 0
+        w.st.frame += 1  # N refusals over N ELAPSED frames, inside the 16-frame window
+    assert w.status()["settling"]["seam"] == 11
     w.load("battle_start_ov12")
     assert w.sig.request(w.sig, "seam") is True
     w.fire("battle_start_ov12")
     assert w.ids() == ["battle_start_ov12"] and w.status()["owned"] == 0
     assert w.sig.failure is None
+
+
+def test_a_backwards_clock_rebaselines_the_settle_streak_and_never_latches():
+    # a savestate load / rewind steps framecount backwards: a timeline reset, not a fault (gen2 precedent)
+    w = World({"seam": ["battle_start_ov12"]}, settle_polls=3)
+    w.st.put(PACK["sites"]["battle_start_ov12"]["address"], "00" * 16)
+    w.st.frame = 100
+    assert w.sig.request(w.sig, "seam")[1].startswith("loading:")
+    w.st.frame = 101
+    assert w.sig.request(w.sig, "seam")[1].startswith("loading:")
+    assert w.status()["settling"]["seam"] == 2
+    w.st.frame = 50  # rewind
+    ok, why = w.sig.request(w.sig, "seam")
+    assert ok is None and why.startswith("loading:"), why
+    assert w.sig.failure is None and w.sig.settle_failure is None and len(w.status()["faults"]) == 0
+    assert w.status()["settling"]["seam"] == 1  # fresh streak from the new baseline
+    w.st.frame = 52  # and it still bounds from there
+    assert w.sig.request(w.sig, "seam")[0] is None
+    assert w.sig.settle_failure is not None and w.sig.failure is None
 
 
 def test_persistent_wrong_pin_latches_only_at_explicit_settle_bound():

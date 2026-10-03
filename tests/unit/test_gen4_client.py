@@ -252,6 +252,30 @@ def test_two_active_pending_faints_get_the_full_frame_settle_window():
     assert len(w.hooks) == 1 and w.state.d7 is not None
 
 
+def test_a_switch_out_gap_does_not_age_the_settle_window():
+    # the pending mon is not an active battler for 120 frames (switched out): no request is made, so those
+    # frames must not count; the first request back starts a FRESH streak instead of latching at once
+    w = World(party=two_mon())
+    w.boot(80)
+    w.enter_battle(btype=2, local=((0, 0), (2, 1)))
+    w.advance(3)
+    addr, pin = w.seam_addr(), w.r(w.seam_addr(), 4)
+    w.w(addr, 0)
+    w.reply({"cmd": "force_faint", "key": w.party[0].key})
+    w.advance(5)
+    assert w.signals.status(w.signals)["settling"]["d7"] == 5
+    w.battler(0, w.party[1], 1)                              # party[0] leaves the active battlers
+    w.advance(120)
+    assert "not an active battler" in w.session.battle_pending[1].why
+    w.battler(0, w.party[0], 0)                              # and comes back, pin still not landed
+    w.advance(1)
+    assert w.signals.status(w.signals)["failure"] is None and w.signals.settle_failure is None
+    assert w.signals.status(w.signals)["settling"]["d7"] == 1
+    w.w(addr, pin)
+    w.advance(1)
+    assert len(w.hooks) == 1 and w.state.d7 is not None
+
+
 def test_settle_timeout_is_console_only_and_recovers_at_battle_end():
     w = World(party=two_mon())
     w.boot(80)

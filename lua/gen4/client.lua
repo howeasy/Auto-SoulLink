@@ -546,7 +546,7 @@ function Client.new(p)
         pe:reset()
         if signals then signals:disarm(Client.PHASE,true) end   -- save/reset ends the old battle context
         st.d7, st.d7_done, st.watch, st.changes, st.fatal = nil, setmetatable({}, { __mode = "k" }), nil, {}, nil
-        st.party_sig = nil
+        st.party_sig, st.d7_req_frame = nil, nil
         st.boxes = { gen = st.boxes.gen, mons = {}, ok = false, sig = nil, dirty = true, next_try = 0 }
     end
 
@@ -554,7 +554,7 @@ function Client.new(p)
         signals = parts.phase_signals.new({
             Registry = Registry, binding = binding, owner = "slink.gen4", max_pending = 8, capture = capture,
             -- HG serial diagnostic g1-settle-HG-1144-serial: table leads pins by 10/11 frames.
-            -- One request per client poll: 16 = measured max 11 + 5 scheduling margin.
+            -- ELAPSED FRAMES (not requests): 16 = measured max 11 + 5 scheduling margin.
             settle_polls = 16,
             framecount = now, log = log,
             phases = { [Client.PHASE] = d7_phase } })
@@ -604,6 +604,12 @@ function Client.new(p)
         if st.d7 and st.d7.entry ~= e then return "hold", "D7 seam busy with another faint" end
         local seam, swhy = resolve_seam()
         if not seam then return "hold", swhy end
+        -- The settle window counts elapsed frames, so frames with NO request (the pending mon was switched out,
+        -- the seam was busy, ...) must not age it: a gap of 2+ frames since the last request ends the old
+        -- attempt before this one. Not while a lease is armed (that entry owns the phase).
+        local f = now()
+        if st.d7_req_frame and f - st.d7_req_frame > 1 and not st.d7 then signals:disarm(Client.PHASE) end
+        st.d7_req_frame = f
         local ok, rwhy = signals:request(Client.PHASE)
         if ok then
             st.d7 = { key = k, slot = slot, entry = e, renewed = true }

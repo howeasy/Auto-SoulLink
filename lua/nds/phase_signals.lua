@@ -144,6 +144,8 @@ function PS.new(cfg)
     function self:arm(phase)
         local def=assert(cfg.phases[phase],"unknown phase: "..tostring(phase))
         if live[phase] then return true end
+        -- ponytail: settle_failure gates EVERY phase. Safe only because the sole phase that can settle-fault
+        -- is the single on-demand d7 phase; a second settling phase would need a per-phase gate here.
         if self.failure or self.settle_failure then return nil,self.failure or self.settle_failure end
         local sites=def.sites
         if #sites==0 then settling[phase]=nil; return true end -- zero-site phase: no registry
@@ -162,6 +164,8 @@ function PS.new(cfg)
             if failed then take(failed); registered_closed=registered_closed+failed:status().registered end
             if owned_by(phase)>0 then retained[phase]=failed end
             local reason=type(err)=="string" and err:match("^nds%-refused:([^:]+):.+$")
+            -- stale_epoch is listed for any binding, but is unreachable through lua/nds/hook_binding.lua:
+            -- its call_view reads residency live, so this binder only ever yields pin_mismatch/not_resident.
             local retryable=reason=="pin_mismatch" or reason=="not_resident" or reason=="stale_epoch"
             local clean=owned_by(phase)==0 and (not failed or #failed:status().cleanup_errors==0)
             if retryable and clean then
@@ -171,9 +175,9 @@ function PS.new(cfg)
                     latch(phase,"clock","invalid settle frame: "..tostring(frame)); return nil,self.failure
                 end
                 local streak=settling[phase]
-                if streak and frame<streak.last_frame then
-                    latch(phase,"clock","settle frame moved backwards"); return nil,self.failure
-                end
+                -- A savestate load / rewind steps the clock backwards: a timeline reset, not a fault
+                -- (lua/gen2/client.lua treats it the same way). Re-baseline; never latch.
+                if streak and frame<streak.last_frame then settling[phase]=nil; streak=nil end
                 if not streak then streak={first_frame=frame}; settling[phase]=streak end
                 streak.last_frame=frame
                 streak.frames=frame-streak.first_frame+1
