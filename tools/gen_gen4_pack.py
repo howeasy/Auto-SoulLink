@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
 import difflib
 import functools
 import hashlib
+import io
 import json
 import os
 import re
@@ -71,14 +73,14 @@ class Fail(Exception):
 # --------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Inputs:
-    paths: dict[str, Path]  # keys: gen4_pins ROM/asset keys
+    paths: dict[str, Path]  # keys: gen4_pins ROM / asset / source-checkout keys
     lock: Path = LOCK_PATH
 
 
 def default_inputs(overrides: dict[str, str] | None = None) -> Inputs:
     """Paths from gen4_pins.default_locations(), then SLINK_GEN4_<KEY> env, then CLI overrides."""
     loc = gen4_pins.default_locations()
-    paths = {**loc.roms, **loc.assets}
+    paths = {**loc.roms, **loc.assets, **loc.sources}  # sources back the source-derived profile blocks (profile.bag)
     for key in list(paths):
         env = os.environ.get("SLINK_GEN4_" + key.upper())
         if env:
@@ -609,6 +611,174 @@ HGE_SRC = "hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b"
 PRET_PT = "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb"
 
 
+# --------------------------------------------------------------------------------------------
+# The save-array bag: the balls pocket (the Nuzlocke gate's "does the player hold a Poké Ball")
+# --------------------------------------------------------------------------------------------
+# Every number is PARSED from the pinned source clone, never typed in here. The two builds ship the
+# same struct under two spellings (pret `Bag`/`ItemSlot` in include/bag_types_def.h + include/item.h;
+# the fork's `BAG_DATA`/`ITEM_SLOT` in include/bag.h) and the fork gates its wider pockets behind
+# ITEM_POCKET_EXPANSION, so the counts are read from the branch its own include/config.h enables.
+# Offsets are relative to the bag save ARRAY base (save.array_ids.bag), never to the general block.
+BAG_SOURCE = {
+    "hgss": ("pokeheartgold_citation", "pret/pokeheartgold",
+             {"struct": "include/bag_types_def.h", "slot": "include/item.h",
+              "counts": "include/constants/items.h", "pockets": "files/itemtool/itemdata/item_data.csv"}),
+    "hge": ("hg_engine_fork", "hg-engine fork",
+            {"struct": "include/bag.h", "counts": "include/constants/item.h",
+             "pockets": "data/itemdata/itemdata.c", "config": "include/config.h"}),
+}
+BAG_POCKET = "POCKET_BALLS"
+
+
+def _c_int(text: str, defs: dict[str, str], stack: tuple = ()) -> int:
+    """A C integer expression over #define'd integer constants (digits, + - * ( ) only)."""
+    def sub(m):
+        if m[0] in stack:
+            raise Fail(f"cyclic integer macro {m[0]}")
+        if m[0] not in defs:
+            raise Fail(f"cannot evaluate {text!r}: unknown macro {m[0]}")
+        return str(_c_int(defs[m[0]], defs, stack + (m[0],)))
+    expr = re.sub(r"\b[A-Za-z_]\w*\b", sub, text)
+    if not re.fullmatch(r"[0-9+\-*() ]+", expr):
+        raise Fail(f"cannot evaluate {text!r} (resolves to {expr!r})")
+    return int(eval(expr, {"__builtins__": {}}, {}))  # noqa: S307 -- charset-checked above: digits + - * ( )
+
+
+def _c_defines(text: str) -> dict[str, str]:
+    return {m[1]: m[2].strip() for m in re.finditer(r"^#define (\w+)[ \t]+([^\n]*?)[ \t]*(?://[^\n]*)?$", text, re.M)}
+
+
+def _struct_body(text: str, struct: str) -> str:
+    m = re.search(r"typedef struct " + struct + r"\s*\{(.*?)\}\s*\w+;", re.sub(r"//[^\n]*", "", text), re.S)
+    if not m:
+        raise Fail(f"typedef struct {struct} not found")
+    return m[1]
+
+
+def _item_slot(text: str, struct: str) -> tuple[int, dict[str, tuple[int, int]]]:
+    """(size, {field: (offset, width)}) of the item slot struct, in declaration order."""
+    out, off = {}, 0
+    for width, name, count in re.findall(r"\b(u8|u16|u32)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;", _struct_body(text, struct)):
+        n = int(count) if count else 1
+        w = {"u8": 1, "u16": 2, "u32": 4}[width]
+        out[name] = (off, w * n)
+        off += w * n
+    if not out:
+        raise Fail(f"struct {struct} has no scalar fields")
+    return off, out
+
+
+def _bag_counts(text: str, gated: bool) -> dict[str, int]:
+    """NUM_BAG_* pocket sizes. The fork's live in `#ifdef ITEM_POCKET_EXPANSION`; take that branch, but
+    resolve every macro against the WHOLE header (NUM_BAG_ITEMS names NUM_MEGA_STONES, defined elsewhere)."""
+    defs = _c_defines(text)
+    body = text
+    if gated:
+        body = next((m[1] for m in re.finditer(r"#ifdef ITEM_POCKET_EXPANSION(.*?)#else(.*?)#endif", text, re.S)
+                     if "NUM_BAG_BALLS" in m[1]), None)
+        if body is None:
+            raise Fail("the fork's NUM_BAG_* block is no longer guarded by ITEM_POCKET_EXPANSION")
+    local = _c_defines(body)
+    counts = {n: _c_int(v, defs) for n, v in local.items() if n.startswith("NUM_BAG_")}
+    if not counts:
+        raise Fail("no NUM_BAG_* pocket sizes found")
+    return counts
+
+
+def _csv_pocket_items(text: str, pocket: str) -> list[str]:
+    """Item constant names whose `fieldPocket` column is `pocket` (pret files/itemtool item_data.csv)."""
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows or "fieldPocket" not in rows[0]:
+        raise Fail("item_data.csv has no fieldPocket column")
+    col = rows[0].index("fieldPocket")
+    return [row[0] for row in rows[1:] if len(row) > col and row[col] == pocket]
+
+
+def _c_pocket_items(text: str, pocket: str) -> list[str]:
+    """Item constant names whose `itemdata.c` block sets `.fieldPocket = <pocket>` (the fork)."""
+    blocks = re.split(r"^\[([A-Z0-9_]+)\] =", text, flags=re.M)
+    # split yields [preamble, name1, body1, name2, body2, ...]: the pocket lives in the BODY half
+    return [blocks[i] for i in range(1, len(blocks) - 1, 2) if re.search(r"\.fieldPocket\s*=\s*" + pocket + r"\b", blocks[i + 1])]
+
+
+def bag_profile(build: str, inputs: Inputs, array_id: int) -> tuple[dict | None, str]:
+    """profile.bag, or (None, reason) when the pinned source clone is not on this machine."""
+    key, repo, rels = BAG_SOURCE[build]
+    src = inputs.paths[key]
+    if not src.is_dir():
+        return None, (f"absent {key} clone {src}; profile.bag is null and the client's has_pokeballs seam stays "
+                      "unwired rather than guessing a pocket")
+    try:
+        head, clean = gen4_pins.git_identity(src)
+    except Exception as exc:  # noqa: BLE001 -- any git failure means it is not the pinned checkout
+        raise Fail(f"cannot read git state of {key} clone {src}: {exc}") from exc
+    if head != gen4_pins.SOURCE_COMMITS[key] or not clean:
+        raise Fail(f"{key} clone {src} is at {head} (clean={clean}); pin {gen4_pins.SOURCE_COMMITS[key]} needs a clean tree")
+    text = {rel: (src / rel).read_text(encoding="utf-8", errors="replace") for rel in sorted(set(rels.values()))}
+
+    gated = build == "hge"
+    if gated and not re.search(r"^#define ITEM_POCKET_EXPANSION\s*$", text[rels["config"]], re.M):
+        raise Fail("the fork no longer enables ITEM_POCKET_EXPANSION; the pocket counts would be the #else branch")
+    counts = _bag_counts(text[rels["counts"]], gated)
+    slot_size, slot_fields = _item_slot(text[rels["struct"] if gated else rels["slot"]], "ItemSlot")
+    fields = re.findall(r"^\s*(?:ItemSlot|ITEM_SLOT)\s+(\w+)\[([A-Z0-9_]+)\]\s*;", text[rels["struct"]], re.M)
+    if not fields or "balls" not in dict(fields):
+        raise Fail(f"{rels['struct']} declares no `balls` pocket array")
+    layout, off = {}, 0
+    for field, const in fields:
+        if const not in counts:
+            raise Fail(f"bag pocket {field} is sized by {const}, which the counts header does not define")
+        layout[field] = {"off": off, "count": counts[const], "count_const": const}
+        off += counts[const] * slot_size
+    total = off + 4  # + the struct's trailing `u16 registeredItems[2]`, outside every pocket array
+    if total > 0x10000:
+        raise Fail(f"the parsed bag is {total} B, larger than one save array slot")
+
+    pockets = _csv_pocket_items(text[rels["pockets"]], BAG_POCKET) if not gated else _c_pocket_items(text[rels["pockets"]], BAG_POCKET)
+    id_defs = _c_defines(text[rels["counts"]])
+    missing = sorted(n for n in pockets if n not in id_defs)
+    if missing:
+        raise Fail(f"ball item(s) with no id constant in {rels['counts']}: {', '.join(missing)}")
+    ball_ids = sorted(_c_int(id_defs[n], id_defs) for n in pockets)
+    balls = layout["balls"]
+    before = ", ".join(f"{field}[{layout[field]['count_const']}]" for field, _ in fields[:[f for f, _ in fields].index("balls")])
+    cite = HGE_SRC if gated else PRET_HG
+    slot_rel = rels["struct"] if gated else rels["slot"]
+    evidence = {
+        "balls_pocket_off": f"SOURCE {cite} {rels['struct']} (pocket order {', '.join(f for f, _ in fields)}); "
+                            f"the balls pocket follows {before}; each slot is {slot_size} B "
+                            f"({slot_rel}, struct ItemSlot), so the offset is the sum of the preceding slot counts x {slot_size}",
+        "ball_slot_size": f"SOURCE {cite} {slot_rel} (struct ItemSlot: "
+                          f"{' + '.join(f'{name} {size} B' for name, (_o, size) in slot_fields.items())})",
+        "ball_slot_count": f"SOURCE {cite} {rels['counts']} ({balls['count_const']})",
+        "ball_ids": f"SOURCE {cite} {rels['pockets']} (every item whose fieldPocket is {BAG_POCKET}) "
+                     f"+ {rels['counts']} (the id constants)",
+    }
+    return {
+        "array_id": array_id,
+        "array_id_note": "the bag save array; profile.save.array_ids.bag carries the same number",
+        "base": "bag_array",
+        "balls_pocket_off": balls["off"],
+        "balls_pocket_off_hex": f"{balls['off']:#06x}",
+        "ball_slot_size": slot_size,
+        "ball_slot_count": counts["NUM_BAG_BALLS"],
+        "ball_ids": ball_ids,
+        "slot_fields": {name: {"off": o, "size": w} for name, (o, w) in slot_fields.items()},
+        "pocket_layout": layout,
+        "has_pokeballs": "any slot at balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) whose "
+                         "u16 id at +0 is in ball_ids has u16 quantity at +2 > 0",
+        "note": (f"{len(ball_ids)} item ids live in the balls pocket and {counts['NUM_BAG_BALLS']} slots hold them; "
+                 f"the pocket holds one stack per id, so ids beyond the slot count cannot be carried"
+                 if len(ball_ids) > counts["NUM_BAG_BALLS"] else
+                 f"{len(ball_ids)} item ids share {counts['NUM_BAG_BALLS']} balls-pocket slots (one stack per id)"),
+        "evidence": evidence,
+        "source": {
+            "repo": repo, "commit": head,
+            "inputs": {rel: hashlib.sha256((src / rel).read_bytes()).hexdigest() for rel in sorted(set(rels.values()))},
+        },
+    }, ""
+
+
 def save_geometry(page_max: int, evidence: str, runtime: str) -> dict:
     """SaveData geometry derived from the C struct (4 u32, dynamic_region, u32, 42 headers, 2 specs)."""
     region = page_max * 0x1000
@@ -1009,8 +1179,9 @@ def phase_table(sites: dict[str, dict], build: str) -> dict:
             "open": ["PC UI action handlers not located (engine_sites.md Open); model functions assumed to cover them",
                      "static ARM9 sites: application/caller coverage predicates are PHYSICAL cells"]
             if build == "hgss" else
-            ["hge replaces 25 PC functions in ov129 (resident from boot): no overlay trigger exists, "
-             "caller predicates are PHYSICAL cells"],
+            ["hge replaces 29 PCStorage_* functions in ov129 (resident from boot): no overlay trigger exists, "
+             "caller predicates are PHYSICAL cells. Count = the 29 PCStorage_* rows of the fork's hooks table, "
+             "hooks:433-461 under `#pc box expansion` (hooks:462 sub_02074128 is the one unnamed row in the block)"],
         },
         "field": {
             "cap": 0, "candidate_sites": ids("field"), "site_count": len(ids("field")),
@@ -2587,7 +2758,13 @@ def rtc_profile(xm: XMap, images: Images, build: str, vanilla: Images | None = N
     return out
 
 
-def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str, other: Images, other_label: str) -> dict:
+def bag_array_id() -> int:
+    """The bag save-array id, read from save_geometry so profile.bag can never drift from profile.save."""
+    return save_geometry(35, "", "")["array_ids"]["bag"]
+
+
+def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str, other: Images, other_label: str,
+                bag: dict | None = None, bag_open: str = "") -> dict:
     check_xmap_vs_rom(xm, images, label)
     symbols = {}
     for name in SYMBOL_NAMES:
@@ -2601,6 +2778,10 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str,
     profile = hgss_profile(xm)
     profile.update(battle_profile("hgss", label, xm, images))
     profile["rtc"] = rtc_profile(xm, images, "hgss")
+    profile["bag"] = bag
+    open_ = hgss_open()
+    if bag_open:
+        open_["bag"] = bag_open
     return {
         "rom": {k: rom[k] for k in ("sha1", "md5", "header_code")},
         "admission": admission,
@@ -2616,11 +2797,18 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str,
         "ui_geometry": ui,
         **build_route_legs(ui, "hgss"),
         "collision_pairs": collision_pairs(xm, images, "hgss"),
-        "open": hgss_open(),
+        "open": open_,
     }
 
 
 SCHEMA_NOTES = {
+    "bag": "profile.bag: the save-array bag's balls pocket, for the Nuzlocke gate. array_id is the same number as "
+           "profile.save.array_ids.bag; every offset is relative to that ARRAY's base (base: bag_array), never to the general "
+           "block. balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) addresses slot i; each slot is a u16 id at +0 "
+           "and a u16 quantity at +2 (slot_fields). ball_ids is every item id whose pocket is POCKET_BALLS, so has_pokeballs = "
+           "some such slot has an id in ball_ids and a quantity > 0. pocket_layout carries every pocket's offset and slot count. "
+           "Every value is parsed from the pinned source clone at the pin (source.commit + per-input sha256s); a missing clone "
+           "emits null with the reason in open.bag, never a guess.",
     "address": "integers; address_hex is the same value for humans",
     "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone. Byte source: HG/SS "
              "'arm9' bytes are ndspy's DECOMPRESSED loadArm9().sections[0] (ARM9 static image, RAM base 0x02000000); hge 'arm9' bytes are "
@@ -2713,12 +2901,13 @@ def build_hgss(inputs: Inputs) -> dict:
     for title in ("heartgold", "soulsilver"):
         roms[title] = verify_rom(inputs, lock, title)
         maps[title] = verify_asset(inputs, lock, title + "_xmap")
+    bag, bag_open = bag_profile("hgss", inputs, bag_array_id())
     for title in titles_order():
         xms[title] = load_xmap(inputs.paths[title + "_xmap"])
         imgs[title] = load_images(inputs.paths[title])
         other = "soulsilver" if title == "heartgold" else "heartgold"
         titles[title] = title_block(xms[title], imgs[title], roms[title], lock["artifacts"][title]["admission"], title,
-                                    load_images(inputs.paths[other]), other)
+                                    load_images(inputs.paths[other]), other, bag=bag, bag_open=bag_open)
     errs = validate_hg_ss(titles["heartgold"], titles["soulsilver"])
     if titles["heartgold"]["diagnostic_sites"] != titles["soulsilver"]["diagnostic_sites"]:
         errs.append("diagnostic_sites differ between HG and SS")
@@ -3013,6 +3202,7 @@ def build_hge(inputs: Inputs) -> dict:
                                       "evidence": f"SOURCE {HGE_SRC} include/pokemon.h:226-232 (exp:21, unused:10, abilityMSB:1)"}}
     profile.update(battle_profile("hge", "heartgold_hge", xm, hge_img, hg_img))
     profile["boxes"], profile["mons_per_box"], profile["memorial_box"] = 30, 30, 29
+    profile["bag"], bag_open = bag_profile("hge", inputs, profile["save"]["array_ids"]["bag"])
 
     open_ = {
         "pc.cur_box_off": "source projection 0x1E000 only; G2",
@@ -3037,6 +3227,8 @@ def build_hge(inputs: Inputs) -> dict:
         "battle_hge_effects": "hge faint is replaced in ov130; offsets are shared with vanilla but the active-faint mechanism "
                               "and copy-back are C1-8 cells (battle_pointer.md Open)",
     }
+    if bag_open:
+        open_["bag"] = bag_open
     title = {
         "rom": {k: hge_rom[k] for k in ("sha1", "md5", "header_code")},
         "admission": "HASH_ONLY",

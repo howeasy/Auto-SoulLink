@@ -99,7 +99,7 @@ Also kept:
 | `BattleScriptCommandHandler` 0x0223CF68 | |
 | `InitFaintedWork` | |
 | `BtlCmd_PlayFaintAnimation` | |
-| `PCStorage_PlaceMonInBoxFirstEmptySlot` 0x02073BFC **and** `PlaceMonInFirstEmptySlotInAnyBox` 0x02073BB8 | the latter is the party-full catch path; 25 PC functions rewritten, `hooks:434-462` |
+| `PCStorage_PlaceMonInBoxFirstEmptySlot` 0x02073BFC **and** `PlaceMonInFirstEmptySlotInAnyBox` 0x02073BB8 | the latter is the party-full catch path; **29** `PCStorage_*` functions rewritten, `hooks:433-461` (the `#pc box expansion` block; `hooks:462 sub_02074128` is its one unnamed row and is not counted) |
 | `Save_WriteManFinish` 0x02027CEC | |
 | `GiveMon` 0x020541DC (script helper; the script command `ScrCmd_GiveMon` 0x0204D088 is **kept**, FILE-verified) | |
 | `ScrCmd_GiveEgg` 0x0204D248 | |

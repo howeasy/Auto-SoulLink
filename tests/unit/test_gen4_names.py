@@ -35,7 +35,7 @@ def fresh(mode: str) -> tuple[dict, Path]:
         pytest.skip(str(exc))
     except g.Mismatch as exc:
         pytest.fail(str(exc))
-    return json.loads(g.build(mode, rom, sha1, src, commit)), rom
+    return json.loads(g.build(mode, rom, sha1, src, commit)["names.json"]), rom
 
 
 @pytest.fixture(scope="module")
@@ -186,6 +186,7 @@ def test_check_ok_then_red_on_one_edited_name(mode, tmp_path):
     target = out / "names.json"
     text = (DATA / f"gen4_{mode}" / "names.json").read_text(encoding="utf-8")
     target.write_bytes(text.replace("\n", "\r\n").encode())  # CRLF checkout must still pass
+    (out / "charmap.json").write_bytes((DATA / f"gen4_{mode}" / "charmap.json").read_bytes())  # --check covers both files
     assert g.main([mode, "--check", "--out-dir", str(out)]) == 0
     assert doc["moves"]["467"] in text
     target.write_text(text.replace('"Shadow Force"', '"Shadow Farce"', 1), encoding="utf-8", newline="\n")
