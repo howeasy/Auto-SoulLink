@@ -1960,7 +1960,8 @@ class SoulLinkState:
             return
         error = self._trade_recovery_error(msg)
         hidden = self.party_snapshot_withheld(player_id, msg)
-        party = [] if hidden else msg.get("party", [])
+        raw_party = [] if hidden else msg.get("party", [])
+        party = [m for m in raw_party if isinstance(m, dict)] if isinstance(raw_party, list) else []
 
         # ── Identity lock ── (before anything about this hello is adopted: a wrong save must
         # leave party_size / the blob cache exactly as they were)
@@ -2089,7 +2090,7 @@ class SoulLinkState:
             # This prevents stale party_keys from the previous session blocking sync commands.
             self._has_helld.discard(_partner(player_id))
             self.party_keys[player_id] = {
-                m["key"] for m in party if m.get("maxHP", 0) > 0
+                m["key"] for m in party if m.get("key") and m.get("maxHP", 0) > 0
             }
             # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
             # slot when a reconnect happens before the Lua sends the faint event back).
@@ -2102,7 +2103,7 @@ class SoulLinkState:
             # Re-quarantine: if any pending (unlinked) captures are in the party,
             # remove from party_keys and re-queue box_mon so they go back to the box.
             # Safety: never quarantine if it would leave the player with no alive mons.
-            alive_keys = {m["key"] for m in party if m.get("hp", 0) > 0}
+            alive_keys = {m["key"] for m in party if m.get("key") and m.get("hp", 0) > 0}
             quarantined = set()
             for area_id, players in self.pending_captures.items():
                 cap = players.get(player_id)
@@ -2309,6 +2310,7 @@ class SoulLinkState:
         area_id = msg.get("area_id", "")
         if not area_id:
             return
+        self.retry_areas[player_id] = {a for a in self.retry_areas[player_id] if a == area_id}
         # Gift areas (oaks_lab, intro, etc.) are not encounter areas — their captures
         # are handled directly via _handle_capture.  Don't create pending area state.
         if self._adapter_for(player_id).is_gift_area(area_id):

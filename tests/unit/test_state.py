@@ -7,6 +7,8 @@ Run:
     pytest tests/unit/test_state.py -v
 """
 
+import pytest
+
 from server.adapters.gen3_frlge import Gen3Adapter
 from server.state import (
     AreaStatus,
@@ -5711,3 +5713,41 @@ def test_key_change_on_a_buried_link_owes_the_faint_even_when_a_memorial_is_alre
     cmds2 += state2.handle_event("a", {"event": "tick"})
     assert sum(1 for c in cmds2 if c.get("cmd") == "force_faint" and c.get("key") == "CCCC:1111") == 1
     assert has_cmd(cmds2, "memorialize", "CCCC:1111"), "the memorial is owed even with a faint queued"
+
+
+
+@pytest.mark.parametrize("raw", [[{"maxHP": 50}], [1], 5])
+def test_a_malformed_party_snapshot_is_coerced_not_raised(raw):
+    state = SoulLinkState()
+    state.handle_event("a", {"event": "hello", "party": raw, "ot_id": "1234", "trainer_name": "A"})
+    assert state.party_keys["a"] == set()
+    state.handle_event("a", {"event": "hello", "ot_id": "1234", "trainer_name": "A",
+                              "party": [{"key": "1234:1", "hp": 10, "maxHP": 50}]})
+    assert state.party_keys["a"] == {"1234:1"} and state.party_size["a"] == 1
+
+def test_leaving_retry_area_allows_later_no_catch_to_dead_zone():
+    state = make_state_with_link()
+    state.retry_areas["a"].add("route_2")
+    state.handle_event("a", {"event": "area_enter", "area_id": "route_3"})
+    state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert state.area_states["route_2"] == AreaStatus.DEAD_ZONE
+
+
+def test_stale_retry_with_pending_capture_does_not_wedge_game_over():
+    state = make_state_with_link(status=LinkStatus.DEAD)
+    state.retry_areas["a"].add("route_2")
+    state.pending_captures["route_2"] = {"b": MonInfo(key="B:pending", level=5)}
+    state._check_game_over()
+    assert not state.run_over
+    state.handle_event("a", {"event": "area_enter", "area_id": "oaks_lab"})
+    commands = state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert "route_2" not in state.pending_captures and state.run_over
+    assert has_cmd(commands, "game_over")
+
+
+def test_same_area_no_catch_without_area_enter_still_suppresses_retry():
+    state = make_state_with_link()
+    state.retry_areas["a"].add("route_2")
+    commands = state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert has_cmd(commands, "unresolve_area")
+    assert state.area_states.get("route_2") != AreaStatus.DEAD_ZONE
