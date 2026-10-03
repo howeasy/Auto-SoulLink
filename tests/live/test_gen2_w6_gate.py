@@ -76,14 +76,19 @@ _U1 = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lu
 _U1F = _U1 + ("lua/tests/gen2_pc_inputs.lua",)
 U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3"},
              "a882a763": dict.fromkeys(_U1F, "a882a763"),
-             "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6")}
-U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "a882a763", "silver": "a7bf1773"}
+             "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6"),
+             # the CURRENT drivers, pinned to the checkout's own commit: Gold's U1 leg needs the disclosed SYNTH poisoned
+             # lead (start_phase "tick", O-33), which the 09-24 chains predate. Its Wade-route natural poison setup is a
+             # deterministic loss (sweep ffd54b44: 'a party mon fainted in battle before the poison', both attempts).
+             "head": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "HEAD")}
+U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "head", "silver": "a7bf1773"}
+SYNTH_PSN_U1 = {"gold": "gold_synth_psn"}   # titles whose U1 leg boots the disclosed SYNTH poisoned lead
 # O-33 clock setup for the U1 leg (tools/gen2_synth_fixtures.day_clock, disclosed in the leg as clock_setup): the
 # fixture RTC runs on with the host clock (game = the save's wStart time + RTC), and Silver Route 30 holds Weedle only by morning/day
 # (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite: Hoothoot/Rattata), so a night launch never meets a
 # POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) and Gold (trainer Wade) hunt
 # at any hour. Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
-U1_CLOCK = {"silver": 11}
+U1_CLOCK = {"silver": 11, "gold": 11}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -142,6 +147,9 @@ def frozen_u1(chain: str):
     base = REPO / ".cache/gen2-w6-frozen" / chain
     files = {}
     for rel, ref in U1_CHAINS[chain].items():
+        if ref == "HEAD":   # the receipt names the exact commit, never the moving ref
+            ref = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, check=True,
+                                 text=True).stdout.strip()
         data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_bytes(data)
@@ -166,8 +174,10 @@ def _legs(title: str, u1) -> dict:
     def u1_env(spec, qual):
         # the leg boots the overlay: its facts resolve on the overlay symbols/bytes (D4), never the clean ones
         ctx = gen2_fixtures.exec_context(spec.title, "overlay", REPO)
-        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(
-            ctx, gen2_fixtures.spec_route_facts(spec, REPO, kind="overlay"), qual))}
+        facts = gen2_fixtures.spec_route_facts(spec, REPO, kind="overlay")
+        if title in SYNTH_PSN_U1:   # the leg boots the SYNTH poisoned lead: skip the hunt (start_phase "tick")
+            return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, facts, qual, synth_psn=True))}
+        return {"SLINK_GEN2_U1_FACTS": json.dumps(u1.u1_facts(ctx, facts, qual))}
 
     pack = json.loads((REPO / f"data/games/gen2_{title}/engine_signals.json").read_text(encoding="utf-8"))
     return {
@@ -224,9 +234,12 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         if launched:
             time.sleep(STAGGER)
         launched = True
-        source_path, clock = fixture, None
+        source_path, clock, poison = fixture, None, None
+        boot = staged
+        if leg == "u1" and title in SYNTH_PSN_U1:   # O-33: the disclosed SYNTH poisoned lead (setup, not the subject)
+            boot, poison = gen2_synth_fixtures.build_named(SYNTH_PSN_U1[title], root=REPO)
         if leg == "u1" and title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-            raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()),
+            raw, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()),
                                                       title=title)
             source_path = REPO / ".cache/gen2-fixtures/w6" / f"{title}-{leg}-clock.SaveRAM"
             source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,6 +256,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
                      "qualification_attempt_id": qual["attempt_id"], "clock_setup": clock,
+                     **({"poison_setup": poison} if poison is not None else {}),
                      "driver": {"ref": chain, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},

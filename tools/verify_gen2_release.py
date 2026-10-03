@@ -1397,8 +1397,8 @@ def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
 
 # card gen2-p4-w6 (tests/live/test_gen2_w6_gate.py): the live mailbox write-watch over the whole scripted corpus.
 W6_GATE_LEGS = ("panel", "sfx", "u1")
-# Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day).
-W6_CLOCK_LEGS = {("silver", "u1")}
+# Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day; Gold boots the SYNTH psn lead).
+W6_CLOCK_LEGS = {("silver", "u1"), ("gold", "u1")}   # Gold: the SYNTH poisoned lead + the pinned clock (O-33)
 
 
 def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
