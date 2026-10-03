@@ -1077,7 +1077,9 @@ def test_bridge_runs_the_pokegear_errand_when_the_t20_event_walked_the_player_ba
     assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")  # inside the house
     assert _ident(planner.plan(_settled(8, 4, 2))) == ("errand", "exit")  # beside Mom: talked
     assert _ident(planner.plan(_settled(7, 4, 2))) == (None, None)  # outside again: the route
-    assert _ident(planner.plan(_settled(7, 7, 2))) == (None, None)  # and the errand never repeats
+    # the gate walked the player back again: the talk did not take (Codex cx-59d9d859: adjacency is not proof),
+    # so the errand re-arms; the probe's 12-attempt cap bounds the loop
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
 
 
 def test_bridge_errand_repeats_a_phase_until_the_position_advances(monkeypatch):

@@ -979,10 +979,14 @@ class BridgePlanner:
         returns to the same map still east of the event proves the gate is live (run_lane's
         `--errand pokegear`, enter -> talk -> exit, each leg re-planned from the logged position)."""
         here = self.pokegear is not None and position["map"] == self.pokegear.house_id
+        if self.phase == "done" and position["map"] == self.armed[0] and position["x"] > self.armed[1]:
+            self.phase = None  # walked back again: the talk did not take (adjacency is not proof); re-arm
+            self.gate = self.armed
         if self.phase is None:
             if self.gate is None or position["map"] != self.gate[0] or position["x"] <= self.gate[1]:
                 return None
             self.pokegear = load_errand(self.rom, self.pret, "pokegear", position["map"])
+            self.armed = self.gate
             self.phase = "enter"
         elif self.phase == "enter" and here:
             self.phase = "talk"
