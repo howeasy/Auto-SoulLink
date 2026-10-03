@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 from pathlib import Path
 
 import lupa
 import pytest
+
+from tests.unit.gen4_world import SD, World  # the model RAM + the PRODUCTION client
 
 ROOT = Path(__file__).resolve().parents[2]
 INPUTS = (ROOT / "lua/gen4/inputs.lua").read_text(encoding="utf-8")
@@ -357,3 +360,97 @@ def test_every_producer_is_reachable_by_name_and_returns_a_value_or_a_reason(tmp
     produced = w["built"][name]
     gap_names = {g["name"] for g in w["gaps"].values()}
     assert (produced is not None) != (name in gap_names)
+
+
+# -- client:save_array: the reader run.lua composes for the producers ---------------------------
+# The bag producer names no address: it asks for an array id and reads ARRAY-relative offsets. The
+# only place that can answer is the client itself (client.lua session.save_array, over the same
+# R.save_data -> R.array every other read uses), so these drive the PRODUCTION client over the model
+# RAM. BAG["array_id"] is the bag array every Gen 4 pack declares (profile.save.array_ids.bag).
+BAG_SIZE, BAG_OFF = 0x200, 0x2000
+
+
+def lay_out_bag(w, *, size=BAG_SIZE, off=BAG_OFF):
+    """Write the bag array header into the model save and return (base address, size)."""
+    sv = w.prof["save"]
+    w.put(SD + sv["array_headers_off"] + BAG["array_id"] * sv["array_header_size"],
+          struct.pack("<IIIHH", BAG["array_id"], size, off, 0, 0))
+    return w.dyn + off, size
+
+
+def reader(w):
+    return w.session.save_array(w.session, BAG["array_id"])
+
+
+def test_client_save_array_reads_the_pack_ball_pocket_out_of_the_model_ram():
+    """Every offset in profile.bag is ARRAY-relative, so the bytes the pocket names are the bytes
+    the reader returns -- read through the client's own save/array resolution."""
+    w = World()
+    base, _ = lay_out_bag(w)
+    slot = BAG["balls_pocket_off"]
+    idf, qtf = BAG["slot_fields"]["id"], BAG["slot_fields"]["quantity"]
+    for i in range(BAG["ball_slot_count"]):
+        item_id, qty = (4, 5) if i == 0 else (0, 0)
+        at = slot + i * BAG["ball_slot_size"]
+        w.w(base + at + idf["off"], item_id, idf["size"])
+        w.w(base + at + qtf["off"], qty, qtf["size"])
+    read = reader(w)
+    for i in range(BAG["ball_slot_count"]):
+        at = slot + i * BAG["ball_slot_size"]
+        assert read(at + idf["off"], idf["size"]) == (4 if i == 0 else 0)
+        assert read(at + qtf["off"], qtf["size"]) == (5 if i == 0 else 0)
+    # a u32 read crosses the slot boundary and still lands inside the array
+    assert read(slot, 4) == (4 | 5 << 16)
+
+
+def test_client_save_array_offsets_are_relative_to_the_array_base():
+    """A distinct word before the array base and a distinct word at it: the reader starts at base."""
+    w = World()
+    base, _ = lay_out_bag(w)
+    w.w(base - 2, 0xBEEF, 2)
+    w.w(base + 0, 0xCAFE, 2)
+    read = reader(w)
+    assert read(0, 2) == 0xCAFE
+    value, why = read(-2, 2)     # the reader refuses below the base, it does not wrap into the block
+    assert value is None and "out_of_array" in why
+
+
+def test_client_save_array_refuses_a_read_past_the_end_of_the_array():
+    w = World()
+    _, size = lay_out_bag(w)
+    read = reader(w)
+    assert read(size - 2, 2) == 0                       # the last bytes are readable
+    for off, length in ((size - 2, 4), (size, 2), (-2, 2), (0, 0), (1.5, 2)):
+        value, why = read(off, length)
+        assert value is None and "out_of_array" in why, f"offset {off}/{length} must refuse by name"
+
+
+def test_client_save_array_refuses_an_array_the_save_does_not_map():
+    """Three refusals, each by name: an array the header table leaves unmapped, an id the table does
+    not carry at all, and a save block that is not there (a null pointer cell)."""
+    w = World()
+    lay_out_bag(w)
+    value, why = w.session.save_array(w.session, 6)         # a header no one wrote: size 0
+    assert value is None and "bad_array" in why
+    value, why = w.session.save_array(w.session, w.prof["save"]["array_header_count"])
+    assert value is None and "bad_array_id" in why
+    w.w(w.prof["save_ptr"]["address"], 0)
+    value, why = reader(w)
+    assert value is None and why == "null_ptr"
+
+
+def test_client_save_array_resolves_the_save_block_again_on_every_call():
+    """No cached base: the game rewrites its save, and a re-created block is a different address.
+    A reader handed out BEFORE the move still reads the block it was resolved over (the resolution
+    happens in save_array, once), while a reader resolved after it reads the new one."""
+    w = World()
+    base, _ = lay_out_bag(w)
+    w.w(base + 4, 0x1111, 2)
+    before = reader(w)
+    assert before(4, 2) == 0x1111
+    moved = SD + 0x20000
+    w.put(moved, w.get(SD, 0x30000))                   # the same block, re-created somewhere else
+    w.w(moved + (base - SD) + 4, 0x2222, 2)
+    w.w(w.prof["save_ptr"]["address"], moved)
+    assert before(4, 2) == 0x1111, "a handed-out reader must keep its own array"
+    assert reader(w)(4, 2) == 0x2222, "save_array cached the SaveData base across calls"

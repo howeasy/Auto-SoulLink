@@ -15,8 +15,12 @@ from pathlib import Path
 import lupa
 import pytest
 
-from tests.unit.test_gen4_inputs import assert_area_contract, lua_inputs  # the producer harness, shared by the wiring mutants
-
+from tests.unit.test_gen4_inputs import (  # the producer harness, shared by the wiring mutants
+    BAG,
+    assert_area_contract,
+    bag_memory,
+    lua_inputs,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / "lua/gen4/run.lua"
@@ -32,12 +36,21 @@ return E
 """
 CLIENT_STUB = """
 local C = { PLATFORM = { bus_domain = "ARM9 System Bus", header_copy = HEADER_COPY } }
+-- save_array models the one reader the real client hands out (client.lua session.save_array): an
+-- array id in, a reader over ARRAY-relative offsets out, and a refusal by name for anything else.
+local function save_array(_, id)
+    CALLS.save_array_ids = CALLS.save_array_ids or {}
+    CALLS.save_array_ids[#CALLS.save_array_ids + 1] = id
+    if id ~= BAG_ARRAY_ID then return nil, "bad_array_id" end
+    return function(off, len) return BAG_MEM[off] end
+end
 function C.new(p)
     CALLS.client_new = (CALLS.client_new or 0) + 1; CALLS.client_args = p
     if CLIENT_FAIL then return nil, CLIENT_FAIL end
     return { start = function() CALLS.started = true; if START_FAIL then error(START_FAIL, 0) end end,
              frame_end = function() CALLS.frames = (CALLS.frames or 0) + 1 end,
-             stop = function() CALLS.stopped = true end }
+             stop = function() CALLS.stopped = true end,
+             save_array = save_array }
 end
 return C
 """
@@ -45,12 +58,14 @@ return C
 
 def run_root(tmp: Path, text: str | None = None, *, rom_hash: str, header: str = "IPKE",
              client_fail: str | None = None, start_fail: str | None = None,
-             stub_src: str | None = None, with_areas: bool = False):
+             stub_src: str | None = None, with_areas: bool = False, with_bag: bool = False,
+             bag_mem: dict | None = None):
     """Run run.lua (or a mutated `text` of it) in a scratch tree; returns (lua globals, calls, hud log, console log).
 
     `stub_src` replaces the client stub (mutants); `with_areas` plants the hgss area data files in
-    every scratch pack, which is the only way the optional area input can exist at all (no Gen 4
-    profile carries it).
+    every scratch pack and `with_bag` the balls-pocket fact (BAG), which are the only ways the
+    optional area / ball inputs can exist at all (no Gen 4 profile carries either fact yet).
+    `bag_mem` is the array the stub's reader answers from, at the pack's own pocket offsets.
     """
     gen4 = tmp / "lua/gen4"
     gen4.mkdir(parents=True)
@@ -68,11 +83,19 @@ def run_root(tmp: Path, text: str | None = None, *, rom_hash: str, header: str =
             # what makes "the pack CAN supply this fact" testable for whichever pack admits
             for name in ("area_map.json", "locations.json"):
                 shutil.copy(ROOT / f"data/games/gen4_hgss/{name}", d / name)
+        if with_bag:
+            # no Gen 4 profile ships the balls-pocket fact yet, so the wiring test plants the same
+            # synthetic one the producer tests use, in the same place the generator would put it
+            doc = json.loads((d / "profile.json").read_text(encoding="utf-8"))
+            for title in doc["titles"].values():
+                title.setdefault("profile", {})["bag"] = BAG
+            (d / "profile.json").write_text(json.dumps(doc), encoding="utf-8")
     (gen4 / "run.lua").write_text(text if text is not None else RUN.read_text(encoding="utf-8"), encoding="utf-8")
-    return _exec(tmp, gen4, rom_hash, header, client_fail, start_fail)
+    return _exec(tmp, gen4, rom_hash, header, client_fail, start_fail, bag_mem)
 
 
-def _exec(tmp: Path, gen4: Path, rom_hash: str, header: str, client_fail, start_fail):
+def _exec(tmp: Path, gen4: Path, rom_hash: str, header: str, client_fail, start_fail,
+           bag_mem: dict | None = None):
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
     g.HEADER_COPY = HEADER_COPY
@@ -88,6 +111,7 @@ def _exec(tmp: Path, gen4: Path, rom_hash: str, header: str, client_fail, start_
     g.CLIENT_FAIL, g.START_FAIL = client_fail, start_fail
     g.CALLS = lua.table()
     g.PYMEM, g.PYLOG, g.ROMHASH = mem, logs.append, rom_hash
+    g.BAG_MEM, g.BAG_ARRAY_ID = lua.table_from(bag_mem or {}), BAG["array_id"]
     lua.execute("""
         package.path = ROOT_DIR .. "/lua/?.lua;" .. package.path
         local hud = { shown = {}, inits = 0 }
@@ -187,6 +211,8 @@ def test_run_lua_hands_the_client_the_producers_the_pack_can_supply(tmp_path):
     assert p.charmap is None and p.has_pokeballs is None
     for name in ("charmap", "has_pokeballs"):
         assert any(f"input {name} unavailable" in line for line in logs), f"{name} gap must be visible"
+    # the bag gap must now name the PACK's missing fact, not the missing save seam
+    assert any("input has_pokeballs unavailable" in line and "profile.bag" in line for line in logs)
 
 
 def test_run_lua_without_the_area_pack_files_refuses_the_area_input(tmp_path):
@@ -214,3 +240,34 @@ def test_a_run_that_skips_admit_routed_goes_red(tmp_path):
     _, calls, _, _ = run_root(tmp_path, mutant, rom_hash="00" * 16)
     assert calls.admit_routed is None
     assert calls.client_new == 1, "the mutant built a client for an unpinned ROM: test (b) must catch this"
+
+
+def assert_bag_wiring(calls, logs):
+    """The guard every ball-seam mutant must trip: the pack ships the fact, so the producer is built,
+    it reaches the save through the CLIENT's reader, and it reads the pack's own pocket offsets."""
+    p = calls.client_args
+    assert callable(p.has_pokeballs), "the pack ships profile.bag, so the seam must be WIRED"
+    assert p.has_pokeballs() is True, "the reader never reached the pack's balls pocket"
+    assert list(calls.save_array_ids.values()) == [BAG["array_id"]], "the producer must ask for the bag array"
+    assert not any("input has_pokeballs unavailable" in line for line in logs)
+
+
+def test_run_lua_composes_the_ball_read_through_the_clients_own_save_array(tmp_path):
+    """Inputs.build runs before Client.new, so run.lua binds the seam late; what matters is that the
+    producer ends up reading through client:save_array, with no second copy of the read layer here."""
+    _, calls, _, logs = run_root(tmp_path, rom_hash=HGE["rom"]["sha1"], with_bag=True,
+                                 bag_mem=bag_memory([(4, 5)]))
+    assert_bag_wiring(calls, logs)
+
+
+def test_a_run_whose_save_seam_always_refuses_goes_red(tmp_path):
+    """Mutant: run.lua's save_array refuses for every array. A refusal must read as UNKNOWN."""
+    src = RUN.read_text(encoding="utf-8")
+    mutant = src.replace("        return client:save_array(array_id)", '        return nil, "mutant: no reader"')
+    assert mutant != src
+    _, calls, _, logs = run_root(tmp_path, mutant, rom_hash=HGE["rom"]["sha1"], with_bag=True,
+                                 bag_mem=bag_memory([(4, 5)]))
+    value, why = calls.client_args.has_pokeballs()
+    assert value is None and "mutant: no reader" in why, "an unreadable save must never read as false"
+    with pytest.raises(AssertionError):
+        assert_bag_wiring(calls, logs)
