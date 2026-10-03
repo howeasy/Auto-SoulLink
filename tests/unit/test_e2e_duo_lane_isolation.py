@@ -145,6 +145,9 @@ def test_gen2_prepares_each_title_plan_and_ui_origins(monkeypatch, tmp_path, gam
     from tests.live import test_gen2_frame_align as align, test_gen2_new_gates as inspect
     from tools import gen2_fixtures, gen2_source_data
 
+    # the default Gen 2 artifact is the overlay now (the launcher refuses clean); this test is about per-title
+    # plan/origin isolation and keeps driving the still-selectable clean harness path
+    monkeypatch.setenv("SLINK_GEN2_ARTIFACT", "clean")
     emulator = tmp_path / "EmuHawk.exe"
     emulator.touch()
     monkeypatch.setattr(duo, "EMUHAWK", str(emulator))
