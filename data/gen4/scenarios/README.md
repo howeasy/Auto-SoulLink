@@ -253,12 +253,12 @@ a PROVEN row; an OPEN row stays unset and the loop stops by that cell's name.
 
 | row o cell | retained state (lane-relative) | battery staged for the cell | recorded sha256 | status |
 |---|---|---|---|---|
-| HG-one | `route/route_leg2_battle_settled.State` | `saves/hg_base_26310.SaveRAM` | `e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6` | OPEN |
-| HG-two | `g1hg-p2-route-1016/p2hg_leg2_battle_settled.State` | `g1inputs-c935-1015/hg_p2.SaveRAM` | `bf5d3b5ff7a194d50b19de917aba8617f61cf667c146b540e6f62508ade65893` | OPEN |
-| hge-one | `route_hge/route_hge_leg5_battle_settled.State` | `saves/hge_a_OOO_630.SaveRAM` | `a9e4a48b573365bbd6e99436ed9a411523822bed1acda4ecf3868280f98b775f` | OPEN |
-| hge-two | `g1hge-p2-route-1022/p2hge_leg5_battle_settled.State` | `g1inputs-c935-1015/hge_p2.SaveRAM` | `0c9017af93cda226e81bb33ddbec563fe521340a635815cc7a082168705f2b5c` | OPEN |
+| HG-one | `route/route_leg2_battle_settled.State` | `saves/hg_base_26310.SaveRAM` | `e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6` | PROVEN: lane staged copy equal (coordinator, 2026-10-03) |
+| HG-two | `g1hg-p2-route-1016/p2hg_leg2_battle_settled.State` | `g1inputs-c935-1015/hg_p2.SaveRAM` | `bf5d3b5ff7a194d50b19de917aba8617f61cf667c146b540e6f62508ade65893` | PROVEN: lane staged copy equal (coordinator, 2026-10-03) |
+| hge-one | `route_hge/route_hge_leg5_battle_settled.State` | `saves/hge_a_OOO_630.SaveRAM` | `a9e4a48b573365bbd6e99436ed9a411523822bed1acda4ecf3868280f98b775f` | PROVEN: lane staged copy equal (coordinator, 2026-10-03) |
+| hge-two | `g1hge-p2-route-1022/p2hge_leg5_battle_settled.State` | `g1inputs-c935-1015/hge_p2.SaveRAM` | `0c9017af93cda226e81bb33ddbec563fe521340a635815cc7a082168705f2b5c` | PROVEN: lane staged copy equal (coordinator, 2026-10-03) |
 | SS-one | `$env:G4_SS_ONE` (`ss1-de5-10031709/bridge-6_battle_settled.State`) | `saves/ss_DDDD_25944.SaveRAM` | from `G4_SS_ONE_MANIFEST`'s `save_sha256` | PROVEN by producer record |
-| SS-two | `ss2-de5-10031709/p2ss_leg5_battle_settled.State` | `g1inputs-c935-1015/ss_p2.SaveRAM` | `2eef6df1bd9d29b02b3699a9b99a98924b41d017360bd0104c4f744b44890a3e` | OPEN |
+| SS-two | `ss2-de5-10031709/p2ss_leg5_battle_settled.State` | `g1inputs-c935-1015/ss_p2.SaveRAM` | `2eef6df1bd9d29b02b3699a9b99a98924b41d017360bd0104c4f744b44890a3e` | PROVEN: lane staged copy equal (coordinator, 2026-10-03) |
 
 The battery column and its hash come from the consumption-side records
 `q-de5-10031709/{HG-one,HG-two,hge-one,hge-two,SS-two-state}.json` and the file hashes in
