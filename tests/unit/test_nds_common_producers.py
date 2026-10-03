@@ -874,6 +874,33 @@ static int sc_stagelen(int var) {
   return 0;
 }
 
+/* A foreign opcode (sound/panel producers own it) is held across trade service: the trade state
+ * machine keeps polling the async save, but the held request is never acked, failed or cleared. */
+static int sc_foreign(int var) {
+  static const uint16_t ops[3] = { SLINK_OP_PLAY_SE, SLINK_OP_SHOW_INFO, SLINK_OP_PLAY_FANFARE };
+  uint16_t op = ops[var % 3];
+  reset(); if (prep()) return 1;
+  scene(2);CHECK(slink_trade_commit_entered(&s,&w,0,&e));
+  script_n=1;script[0]=SP_PEND;
+  if (var>=3) { e.save_timeout_frames=50;frame_step=0;frame=100; }
+  scene_result=1;svc();
+  CHECK(begins==1 && polls==1 && m.status==SLINK_ST_BUSY);
+  uint16_t ack=m.ack_seq, reason=m.reason; uint8_t status=m.status;
+  m.seq=40;m.opcode=op;
+  if (var<3) {
+    svc();
+    CHECK(polls==2);                                    /* the save watchdog still runs */
+    CHECK(m.opcode==op && m.seq==40 && m.ack_seq==ack && m.status==status && m.reason==reason);
+    CHECK(m.producer_phase==SLINK_PHASE_SCENE && s.phase==TP_SCENE);
+    return 0;
+  }
+  frame=151;svc();                                      /* elapsed 51 > 50: PENDING becomes FAIL */
+  CHECK(w.final_result==SLINK_TRADE_UNCERTAIN && w.save_status==SLINK_SAVE_FAILED);
+  CHECK(m.producer_phase==SLINK_PHASE_UNCERTAIN && s.phase==TP_UNCERTAIN);
+  CHECK(m.opcode==op && m.seq==40 && m.ack_seq==ack && m.status==status && m.reason==reason);
+  return 0;
+}
+
 int main(int argc,char **argv) {
   int sc=argc>1?atoi(argv[1]):1,var=argc>2?atoi(argv[2]):0;
   switch (sc) {
@@ -887,6 +914,7 @@ int main(int argc,char **argv) {
     case 8: return sc_badbinding(var);
     case 9: return sc_mutate(var);
     case 10: return sc_stagelen(var);
+    case 11: return sc_foreign(var);
   }
   return 99;
 }
@@ -904,6 +932,7 @@ SCENARIOS = (
     + [(f"badbinding{v}", 8, v) for v in range(5)]
     + [(f"mutates-input{v}", 9, v) for v in range(2)]
     + [(f"stage-len-arm{v}", 10, v) for v in range(2)]
+    + [(f"foreign-op{v}", 11, v) for v in range(6)]
 )
 
 
@@ -942,6 +971,10 @@ MUTANTS = {
                                                     "static int dec_read(void *p,const uint8_t *r,uint16_t n,uint16_t off,uint32_t *out); "
                                                     "static int received(void *p,unsigned slot,uint32_t *pid,uint32_t *ot) { (void)p;(void)slot;(void)recv_pid;(void)recv_ot; uint32_t ot_; "
                                                     "  if (!recv_ok || !dec_read(0,last_rec,B->party_len,B->otid_logical_off,&ot_)) return 0; memcpy(pid,last_rec,4);*ot=ot_;return 1; }")]),
+    "foreign-opcode-acked": ((11, 0), [
+        (TP, "if (op != SLINK_OP_TRADE_PREPARE", "if (0 && op != SLINK_OP_TRADE_PREPARE"),
+        (TP, "tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);\n    }\n}\n/* Publish",
+             "tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);\n    } else { tp_ack(m,seq,0,2); }\n}\n/* Publish")]),
 }
 
 

@@ -248,6 +248,10 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     }
     uint16_t op=m->opcode,seq=m->seq;
     if (!op) return;
+    /* Foreign opcodes (sound/panel producers) are theirs; the state machine above ran anyway
+     * so the async save watchdog keeps ticking. */
+    if (op != SLINK_OP_TRADE_PREPARE && op != SLINK_OP_TRADE_SCENE
+        && op != SLINK_OP_TRADE_WITHDRAW && op != SLINK_OP_TRADE_STATUS) return;
     if ((s->phase==TP_PRE_SAVE && op==SLINK_OP_TRADE_PREPARE && seq==s->prepare_seq)
         || (s->phase==TP_SCENE && op==SLINK_OP_TRADE_SCENE && seq==s->scene_seq)) return;
     if (op==SLINK_OP_TRADE_PREPARE) {
@@ -297,8 +301,6 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         }
         if (!e->start_scene(e->context,(unsigned)slot,handed,s->incoming_len))
             tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
-    } else {
-        tp_ack(m,seq,0,2);
     }
 }
 /* Publish ownership after every service path, including an identity rejection.
