@@ -1191,7 +1191,10 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
     Kills only the two PIDs it launched."""
     import gen3_fixtures
     import run_gate
-    tmp = tempfile.mkdtemp(prefix="slink_zipboot_")
+    _tmp_root = os.path.join(os.environ.get("SLINK_WORK_ROOT", ""), "tmp", "gen3") if os.environ.get("SLINK_WORK_ROOT") else None
+    if _tmp_root:
+        os.makedirs(_tmp_root, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="slink_zipboot_", dir=_tmp_root)
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(os.path.join(tmp, "extract"))
     entry = next((os.path.join(d, "slink.lua") for d, _s, fs in os.walk(os.path.join(tmp, "extract"))
@@ -2219,7 +2222,10 @@ def run_pass(args):
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
-    wt = os.path.join(main_checkout(), ".claude", "worktrees")
+    # Owner space rule: lanes live under SLINK_WORK_ROOT/lanes/gen3 (short names: BizHawk 240-char path budget);
+    # without it the old Drive default stays, so nothing changes for a shell that has not set it.
+    wt = (os.path.join(os.environ["SLINK_WORK_ROOT"], "lanes", "gen3") if os.environ.get("SLINK_WORK_ROOT")
+          else os.path.join(main_checkout(), ".claude", "worktrees"))
     if argv[:1] == ["zip-boot"]:
         ap = argparse.ArgumentParser(prog="gen3_final_cut.py zip-boot")
         ap.add_argument("--zip", required=True)
