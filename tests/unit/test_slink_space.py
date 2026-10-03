@@ -334,10 +334,22 @@ def test_apply_refuses_different_thresholds(W):
     assert lane.exists()
 
 
-def test_branch_delete_is_lowercase_d_only():
-    src = (REPO / "tools" / "slink_space.py").read_text(encoding="utf-8")
-    assert '"branch", "-d"' in src
-    assert '"-D"' not in src and '"--force"' not in src  # no forced remove/add anywhere
+def test_branch_git_will_not_delete_survives_apply(W):
+    # `git branch -d` re-checks the merge against the main checkout's HEAD. With the main
+    # checkout on a branch that lacks the commit, -d refuses; -D would have deleted it.
+    _git(W.repo, "branch", "dev")
+    done = add_wt(W, "done", commits=1, merge=True)
+    _git(W.repo, "checkout", "-q", "dev")
+    p = plan(W)
+    assert item(p, done)["status"] == "stale"
+    with pytest.raises(RuntimeError, match="not fully merged"):
+        apply(W, p)
+    assert "done" in branches(W)
+
+
+def test_norm_strips_long_path_prefixes():
+    assert ss._norm("\\\\?\\C:\\Slink\\x\\") == ss._norm("C:/Slink/x")
+    assert ss._norm("\\??\\C:\\Slink\\x") == ss._norm("C:/Slink/x")
 
 
 # ---------------------------------------------------------------- lanes and temps

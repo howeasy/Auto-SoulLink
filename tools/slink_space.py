@@ -59,7 +59,11 @@ def work_root(category: str | None = None) -> Path:
 # ---------------------------------------------------------------- filesystem helpers
 
 def _norm(p) -> str:
-    return os.path.normcase(os.path.abspath(str(p))).replace("\\", "/").rstrip("/")
+    s = str(p)
+    for prefix in ("\\\\?\\", "\\??\\", "//?/"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+    return os.path.normcase(os.path.abspath(s)).replace("\\", "/").rstrip("/")
 
 
 def link_detection_available() -> bool:
