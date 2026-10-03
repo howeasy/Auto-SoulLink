@@ -1744,3 +1744,54 @@ def test_strict_companion_pins_refuse_a_missing_or_malformed_title(tmp_path):
         fc.rom_pins(str(tree))                                                   # the default path is unaffected
         with pytest.raises(fc.LaneError, match=title):
             fc.rom_pins(str(tree), require_companions=True)
+
+
+# ---- R3: RR receipts record the companion hash; companion (patched FR/LG/E) rows never share a clean row's carry/cache identity ----
+
+def test_every_rr_duo_row_records_the_companion_rom_hash(tmp_path):
+    rows = [r for r in fc.build_plan_rr(CUT, str(tmp_path), MASTER) if r.id.endswith("_rr_as_a")]
+    assert rows
+    for r in rows:
+        assert fc.row_inputs(r, str(tmp_path)) == {"rom:slink_RR": os.path.join(str(tmp_path), "patch/build/slink_RR.gba")}, r.id
+        assert r.deps is None                                       # still always RUN (NEVER_CARRIED)
+    (tmp_path / "patch/build").mkdir(parents=True)
+    (tmp_path / "patch/build/slink_RR.gba").write_bytes(b"rr companion")
+    assert fc.hash_inputs(fc.row_inputs(rows[0], str(tmp_path)))["rom:slink_RR"] != "MISSING"
+
+
+def test_companion_rows_have_their_own_ids_inputs_and_are_never_carried_or_cached(tmp_path):
+    lane = str(tmp_path)
+    clean = {r.id: r for r in fc.build_plan(CUT, LANE, MASTER)}
+    for base in ("whiteout_gen3_fr_as_a", "whiteout_gen3_lg_as_a", "checkpoint_firered", "states_firered_town",
+                 "bootcheck_firered_party_town"):
+        cid = fc.companion_row_id(base)
+        assert cid != base and cid.startswith(fc.COMPANION_ROW_PREFIX) and fc.is_companion_row(cid)
+        assert not fc.is_companion_row(base)
+        assert not cid.endswith(("_fr_as_a", "_lg_as_a", "_em_as_a"))
+        row = fc.Row(cid, "companion", [], lane, 0)
+        assert fc.row_deps(row) is None                              # always RUN: no clean receipt can be carried in
+        assert fc.build_kind(cid) is None                            # not a cacheable build row
+        got = fc.row_inputs(row, lane)
+        assert got and set(got) <= {f"rom:{t}_companion" for t in ("firered", "leafgreen", "emerald")}
+        assert not set(got) & set(fc.row_inputs(clean[base], lane))  # keys never collide with the clean row's
+    hand_made = fc.Row("frlgc_whiteout_gen3_fr_as_a", "companion", [], lane, 0)       # a suffix that WOULD match a clean row
+    assert fc.row_deps(hand_made) is None and set(fc.row_inputs(hand_made, lane)) <= {f"rom:{t}_companion" for t in ("firered", "leafgreen", "emerald")}
+    assert fc.companion_row_inputs(("firered",), lane) == {"rom:firered_companion": os.path.join(lane, "patch/build/slink_FireRed.gba")}
+    assert fc.companion_row_inputs(("emerald",), lane) == {"rom:emerald_companion": os.path.join(lane, "patch/build/slink_Emerald.gba")}
+    with pytest.raises(KeyError):
+        fc.companion_row_inputs(("radical_red",), lane)
+
+
+def test_the_state_cache_never_serves_a_companion_row_and_keys_follow_the_rom_bytes(tmp_path):
+    (tmp_path / fc.STAGED["firered"]).parent.mkdir(parents=True)
+    (tmp_path / fc.STAGED["firered"]).write_bytes(b"clean")
+    blobs, biz = dict(BLOBS), dict(BIZ)
+    k1 = fc.build_key(_row("states_firered_town"), CUT, str(tmp_path), blobs=blobs, bizhawk=biz)[0]
+    (tmp_path / fc.STAGED["firered"]).write_bytes(b"patched")
+    k2 = fc.build_key(_row("states_firered_town"), CUT, str(tmp_path), blobs=blobs, bizhawk=biz)[0]
+    assert k1 and k2 and k1 != k2                                    # a different ROM is a different key
+    crow = fc.Row(fc.companion_row_id("states_firered_town"), "companion", [], str(tmp_path), 0)
+    key, why = fc.build_key(crow, CUT, str(tmp_path), blobs=blobs, bizhawk=biz)
+    assert key is None and "companion" in why                       # refused, not keyed on the clean STAGED path
+    crow = fc.Row(fc.companion_row_id("checkpoint_firered"), "companion", [], str(tmp_path), 0)
+    assert fc.predicted_checkpoint_inputs(crow, CUT, str(tmp_path)) is None

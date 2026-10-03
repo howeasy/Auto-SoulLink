@@ -1463,7 +1463,7 @@ NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "rr_zip_*", "release_gate_q
 
 def row_deps(row):
     """The row's dependency globs, or None for a row that is never carried."""
-    if any(fnmatch.fnmatch(row.id, p) for p in NEVER_CARRIED):
+    if is_companion_row(row.id) or any(fnmatch.fnmatch(row.id, p) for p in NEVER_CARRIED):
         return None
     if row.id.endswith(("_fr_as_a", "_lg_as_a")):
         return DUO_DEPS
@@ -1492,11 +1492,46 @@ def row_deps(row):
     return None
 
 
+# Companion (patched FR/LG/Emerald) rows, for the --title frlgc re-cut. Their ids carry COMPANION_ROW_PREFIX and never end in
+# _fr_as_a/_lg_as_a/_em_as_a, so none of the clean row_deps/row_inputs/build_kind shapes matches; the prefix is also checked FIRST
+# in row_deps, row_inputs, build_key and predicted_checkpoint_inputs. A clean receipt is therefore never carried into a companion
+# row, and companion states are never cached (the state cache is keyed on the clean STAGED[title] ROM; refusing is smaller and
+# safer than threading a second ROM path through build_key/predicted_checkpoint_inputs and the cache layout).
+COMPANION_ROW_PREFIX = "frlgc_"
+COMPANION_ROMS = {"firered": "patch/build/slink_FireRed.gba", "leafgreen": "patch/build/slink_LeafGreen.gba",
+                  "emerald": "patch/build/slink_Emerald.gba"}      # patch/tools/build.py --target X output names
+
+
+def is_companion_row(row_id):
+    return row_id.startswith(COMPANION_ROW_PREFIX)
+
+
+def companion_row_id(base_id):
+    """The companion twin of a clean row id (the later --title frlgc plan names its rows with this)."""
+    return COMPANION_ROW_PREFIX + re.sub(r"_as_a$", "_as_a_companion", base_id)
+
+
+def companion_row_inputs(titles, lane):
+    """{rom:<title>_companion: path}: the companion ROM keys never collide with the clean rows' rom:<title>."""
+    return {f"rom:{t}_companion": os.path.join(lane, COMPANION_ROMS[t]) for t in titles}
+
+
+def _companion_row_titles(rid):
+    """The companion ROMs a companion row boots: the titles its id names, else (duo rows, unnamed) all three.
+    Over-inclusive is safe: extra hashes only add inputs to the receipt."""
+    tokens = {"firered": "firered", "fr": "firered", "leafgreen": "leafgreen", "lg": "leafgreen",
+              "emerald": "emerald", "em": "emerald"}
+    named = {tokens[t] for t in rid.split("_") if t in tokens}
+    return tuple(t for t in COMPANION_ROMS if named and t in named and "_as_a_" not in rid) or tuple(COMPANION_ROMS)
+
+
 def row_inputs(row, lane, root=None):
     """{key: path} of the NON-git inputs that can change the row's outcome (git sees the rest)."""
     def at(rel):
         return os.path.join(lane, rel)
     rid = row.id
+    if is_companion_row(rid):
+        return companion_row_inputs(_companion_row_titles(rid), lane)
     if is_expansion_row(rid):
         return {"rom:exp": at(STAGED["exp"]),
                 "probe:exp": expansion_env(lane)["SLINK_EXPANSION_PROBE_OBJECT"],
@@ -1514,6 +1549,8 @@ def row_inputs(row, lane, root=None):
                 for n in BUILD_OUTPUTS[kind]:
                     out[f"state:{BUILD_DIRS[kind]}/{n}"] = at(f"patch/build/{BUILD_DIRS[kind]}/{m[2]}/{n}")
         return out
+    if rid.endswith("_rr_as_a"):      # the RR companion build the duo row boots (the receipt must name its hash)
+        return {"rom:slink_RR": at("patch/build/slink_RR.gba")}
     if rid == "probe_gates":   # tests/live/test_gen3_probe_gates.py: the RR build + the root FR dump
         return {"rom:slink_RR": at("patch/build/slink_RR.gba"),
                 "rom:firered_root": os.path.join(root or main_checkout(), ROOT_DUMPS["firered"])}
@@ -1907,6 +1944,8 @@ def bizhawk_fingerprint(exe=None, config=None):
 
 def build_key(row, cut, lane, blobs=None, bizhawk=None):
     """(key, manifest) for a §1 build row, or (None, why) when an input is unavailable."""
+    if is_companion_row(row.id):
+        return None, "companion states are never cached (the cache keys the clean STAGED ROM)"
     kind, title = build_kind(row.id)
     blobs = tree_blobs(cut) if blobs is None else blobs
     pats = [_glob_re(g) for g in BUILD_KEY_GLOBS]
@@ -1998,6 +2037,8 @@ def predicted_checkpoint_inputs(row, cut, lane):
     """The checkpoint row's input hashes as they WILL be once its title's three builds are
     restored from the cache, or None when any of them misses (then it is rebuilt live and
     its states' hashes cannot be known in advance)."""
+    if is_companion_row(row.id):
+        return None
     title = row.id[len("checkpoint_"):]
     out = {f"rom:{title}": file_sha256(os.path.join(lane, STAGED[title])) or "MISSING"}
     for kind in CHECKPOINT_BUILD_KINDS.get(title, ("town", "battle", "trainer", "tutorials")):
