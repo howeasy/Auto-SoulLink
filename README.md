@@ -93,18 +93,18 @@ These game families are offered by the current Manager. Game versions and option
 | **Gold, Silver, Crystal** | Two games from this family |
 | **FireRed, LeafGreen** | Two games from this family |
 | **Emerald** | Emerald on both sides |
-| **Emerald Expansion** | The prebuilt Emerald Expansion reference ROM on both sides. It is built by `tools/build_expansion.py` from the pinned pokeemerald-expansion source (it cannot be built on a Windows host, and no patch exists); no randomizer, no companion patch |
+| **Emerald Expansion** | Emerald Expansion on both sides; played clean, no randomizer |
 | **Radical Red 4.1** | Radical Red on both sides |
 
 Archipelago builds may run clean, but the Manager doesn't offer them until a client supports them. Gen 4 and Gen 5 work is experimental and isn't offered there either.
 
-Testing is performed with ROMs in **BizHawk emulation**. SLink is in active development; the list above describes available choices, not a completed playthrough of every game. See the [runtime checks](docs/gen1_gen2_runtime_checks.md) and [generation plans](#documentation) for the detailed evidence and remaining work.
+SLink is in active development and is tested in **BizHawk**; not every game has been played start to finish.
 
 ## Prepare your games
 
 For game families that support randomization, the Manager can build the pair for you: **the same settings and two different seeds**, one cartridge per player, made from your own copy of Universal Pokémon Randomizer ZX. Your ROMs stay on the machine that prepared them.
 
-The **companion patch is required** for every title that has one (Red/Blue, pureRGB, Gold/Silver/Crystal, FireRed/LeafGreen/Emerald, Radical Red): the Manager patches your cartridge for you with no opt-out, and refuses a pick it cannot patch — and the launcher and server refuse a clean one too, so bypassing the Manager doesn't get you a working run either.
+The **companion patch is required** for every game that has one (Red/Blue, pureRGB, Gold/Silver/Crystal, FireRed/LeafGreen/Emerald, Radical Red). The Manager patches each cartridge for you; a clean cartridge of these games won't connect.
 
 What it adds, inside the game:
 
@@ -116,7 +116,7 @@ What it adds, inside the game:
 
 Yellow, Archipelago and the Emerald Expansion have no companion yet and still run clean — the same Soul Link rules, without the panel or the native trades. The new-run form shows which options you can use; they are separate from the core linking rules.
 
-More detail: [pureRGB](docs/purergb/README.md) · [Companion patches](patch/README.md).
+More detail: [Companion patches](patch/README.md).
 
 ## Plan your next battle
 
@@ -152,30 +152,8 @@ pip install "twitchio>=3.0" "simpleobsws>=1.4" psutil
 
 | Guide | What you'll find |
 |---|---|
-| [Technical reference](docs/REFERENCE.md) | Configuration, tools, game support, and how SLink works |
+| [Technical reference](docs/REFERENCE.md) | Server options and how SLink works, for hosts and tinkerers |
 | [Companion patches](patch/README.md) | In-game features and patch setup |
-| [pureRGB](docs/purergb/README.md) | Supported builds and pureRGB setup |
-| [Runtime checks](docs/gen1_gen2_runtime_checks.md) | What has been exercised in emulation and the limits of that evidence |
-| [Gen 2](docs/gen2/) · [Gen 3](docs/gen3/) | Current generation plans and review records |
-
-<details>
-<summary><b>For contributors</b></summary>
-
-The game clients read each game in BizHawk; a shared Python server manages the Soul
-Link rules and browser UI. Game-specific behavior lives in adapters.
-
-- [Developer reference](docs/REFERENCE.md)
-- [Client/server protocol](docs/protocol.md)
-- [Testing guide](tests/TESTING.md)
-
-```bash
-pytest tests/unit/ -v
-```
-
-Emulator tests need their documented game files and fixtures. Passing unit tests
-alone doesn't establish that a game or release is ready.
-
-</details>
 
 ## Licence and credits
 

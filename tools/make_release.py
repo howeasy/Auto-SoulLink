@@ -468,7 +468,7 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 |---|---|
 | BizHawk | BIZHAWK_REQ (older versions refuse to start). https://github.com/TASEmulators/BizHawk/releases |
 | A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
-| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red/Emerald — Emerald pairs only with Emerald) |
+| Your cartridge | The one your host prepared in the SLink Manager (download it from the run's page). Red/Blue, pureRGB, Gold/Silver/Crystal, FireRed/LeafGreen/Emerald and Radical Red must carry the SLink patch; the Manager adds it. Yellow is played clean. |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
 """
 
@@ -510,7 +510,7 @@ is this whole package with the launcher already inside.
 and `data/`. For example:
 
 ```
-SLink-player-v1.0.0/
+SLink-player-<version>/
 ├── slink_MyRun_a.lua   ← place the downloaded launcher here
 ├── lua/
 └── data/
@@ -562,6 +562,7 @@ installation:
 | `TCP connect failed` / retrying | Server is not running, or IP/port is wrong. Ask host to verify. |
 | Connected but nothing happens | Check with host that your player slot (A or B) is not already taken. |
 | Writes disabled / validation failed | Load your save file **before** the Lua script. |
+| `… needs the SLink companion patch` | This cartridge isn't patched, or was patched by an earlier SLink. Use the cartridge your host prepared, or patch it at `/patcher` on the host's Manager. |
 | `Wrong save!` on screen | You loaded a different save file than the one registered for your slot. |
 | Folder picker appears | Put the launcher `.lua` file inside the extracted `SLink-player-*` folder, next to `lua/`. |
 
