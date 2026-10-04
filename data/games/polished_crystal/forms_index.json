@@ -1,0 +1,673 @@
+{
+  "schema": "polished-forms-index-v1",
+  "generator": "tools/gen_polished_forms.py",
+  "source": {
+    "url": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42"
+  },
+  "source_sha256": {
+    "base_stats.asm": "85d76703893f66685982d8e2aed11b52ab0f17d5f398a5757dea5a5391f6c35f",
+    "pokemon_constants.asm": "ae6f85b49f5935a6b4eb07c00946a654546327d9eecc863533d77954659b219c"
+  },
+  "rom": {
+    "sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+    "BaseData": {
+      "bank": 17,
+      "addr": 19224,
+      "flat": 281368
+    },
+    "base_stats_stride": 34
+  },
+  "counts": {
+    "records": 337,
+    "species": 289,
+    "variant_records": 46
+  },
+  "variant_forms": [
+    {
+      "record_index": 292,
+      "species_id": 130,
+      "species_constant": "GYARADOS",
+      "form_id": 21,
+      "form_constant": "GYARADOS_RED_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/gyarados.asm",
+      "rom_offset": 291262,
+      "types": [
+        10,
+        2
+      ]
+    },
+    {
+      "record_index": 293,
+      "species_id": 150,
+      "species_constant": "MEWTWO",
+      "form_id": 2,
+      "form_constant": "MEWTWO_ARMORED_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/mewtwo_armored.asm",
+      "rom_offset": 291296,
+      "types": [
+        13,
+        8
+      ]
+    },
+    {
+      "record_index": 294,
+      "species_id": 288,
+      "species_constant": "DUDUNSPARCE",
+      "form_id": 2,
+      "form_constant": "DUDUNSPARCE_THREE_SEGMENT_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/dudunsparce.asm",
+      "rom_offset": 291330,
+      "types": [
+        0,
+        15
+      ]
+    },
+    {
+      "record_index": 295,
+      "species_id": 19,
+      "species_constant": "RATTATA",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/rattata_alolan.asm",
+      "rom_offset": 291364,
+      "types": [
+        16,
+        0
+      ]
+    },
+    {
+      "record_index": 296,
+      "species_id": 20,
+      "species_constant": "RATICATE",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/raticate_alolan.asm",
+      "rom_offset": 291398,
+      "types": [
+        16,
+        0
+      ]
+    },
+    {
+      "record_index": 297,
+      "species_id": 26,
+      "species_constant": "RAICHU",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/raichu_alolan.asm",
+      "rom_offset": 291432,
+      "types": [
+        12,
+        13
+      ]
+    },
+    {
+      "record_index": 298,
+      "species_id": 27,
+      "species_constant": "SANDSHREW",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/sandshrew_alolan.asm",
+      "rom_offset": 291466,
+      "types": [
+        14,
+        8
+      ]
+    },
+    {
+      "record_index": 299,
+      "species_id": 28,
+      "species_constant": "SANDSLASH",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/sandslash_alolan.asm",
+      "rom_offset": 291500,
+      "types": [
+        14,
+        8
+      ]
+    },
+    {
+      "record_index": 300,
+      "species_id": 37,
+      "species_constant": "VULPIX",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/vulpix_alolan.asm",
+      "rom_offset": 291534,
+      "types": [
+        14,
+        14
+      ]
+    },
+    {
+      "record_index": 301,
+      "species_id": 38,
+      "species_constant": "NINETALES",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/ninetales_alolan.asm",
+      "rom_offset": 291568,
+      "types": [
+        14,
+        17
+      ]
+    },
+    {
+      "record_index": 302,
+      "species_id": 50,
+      "species_constant": "DIGLETT",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/diglett_alolan.asm",
+      "rom_offset": 291602,
+      "types": [
+        4,
+        8
+      ]
+    },
+    {
+      "record_index": 303,
+      "species_id": 51,
+      "species_constant": "DUGTRIO",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/dugtrio_alolan.asm",
+      "rom_offset": 291636,
+      "types": [
+        4,
+        8
+      ]
+    },
+    {
+      "record_index": 304,
+      "species_id": 52,
+      "species_constant": "MEOWTH",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/meowth_alolan.asm",
+      "rom_offset": 291670,
+      "types": [
+        16,
+        16
+      ]
+    },
+    {
+      "record_index": 305,
+      "species_id": 53,
+      "species_constant": "PERSIAN",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/persian_alolan.asm",
+      "rom_offset": 291704,
+      "types": [
+        16,
+        16
+      ]
+    },
+    {
+      "record_index": 306,
+      "species_id": 74,
+      "species_constant": "GEODUDE",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/geodude_alolan.asm",
+      "rom_offset": 291738,
+      "types": [
+        5,
+        12
+      ]
+    },
+    {
+      "record_index": 307,
+      "species_id": 75,
+      "species_constant": "GRAVELER",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/graveler_alolan.asm",
+      "rom_offset": 291772,
+      "types": [
+        5,
+        12
+      ]
+    },
+    {
+      "record_index": 308,
+      "species_id": 76,
+      "species_constant": "GOLEM",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/golem_alolan.asm",
+      "rom_offset": 291806,
+      "types": [
+        5,
+        12
+      ]
+    },
+    {
+      "record_index": 309,
+      "species_id": 88,
+      "species_constant": "GRIMER",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/grimer_alolan.asm",
+      "rom_offset": 291840,
+      "types": [
+        3,
+        16
+      ]
+    },
+    {
+      "record_index": 310,
+      "species_id": 89,
+      "species_constant": "MUK",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/muk_alolan.asm",
+      "rom_offset": 291874,
+      "types": [
+        3,
+        16
+      ]
+    },
+    {
+      "record_index": 311,
+      "species_id": 103,
+      "species_constant": "EXEGGUTOR",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/exeggutor_alolan.asm",
+      "rom_offset": 291908,
+      "types": [
+        11,
+        15
+      ]
+    },
+    {
+      "record_index": 312,
+      "species_id": 105,
+      "species_constant": "MAROWAK",
+      "form_id": 2,
+      "form_constant": "ALOLAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/marowak_alolan.asm",
+      "rom_offset": 291942,
+      "types": [
+        9,
+        7
+      ]
+    },
+    {
+      "record_index": 313,
+      "species_id": 52,
+      "species_constant": "MEOWTH",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/meowth_galarian.asm",
+      "rom_offset": 291976,
+      "types": [
+        8,
+        8
+      ]
+    },
+    {
+      "record_index": 314,
+      "species_id": 77,
+      "species_constant": "PONYTA",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/ponyta_galarian.asm",
+      "rom_offset": 292010,
+      "types": [
+        13,
+        13
+      ]
+    },
+    {
+      "record_index": 315,
+      "species_id": 78,
+      "species_constant": "RAPIDASH",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/rapidash_galarian.asm",
+      "rom_offset": 292044,
+      "types": [
+        13,
+        17
+      ]
+    },
+    {
+      "record_index": 316,
+      "species_id": 79,
+      "species_constant": "SLOWPOKE",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/slowpoke_galarian.asm",
+      "rom_offset": 292078,
+      "types": [
+        13,
+        13
+      ]
+    },
+    {
+      "record_index": 317,
+      "species_id": 80,
+      "species_constant": "SLOWBRO",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/slowbro_galarian.asm",
+      "rom_offset": 292112,
+      "types": [
+        3,
+        13
+      ]
+    },
+    {
+      "record_index": 318,
+      "species_id": 83,
+      "species_constant": "FARFETCH_D",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/farfetch_d_galarian.asm",
+      "rom_offset": 292146,
+      "types": [
+        1,
+        1
+      ]
+    },
+    {
+      "record_index": 319,
+      "species_id": 110,
+      "species_constant": "WEEZING",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/weezing_galarian.asm",
+      "rom_offset": 292180,
+      "types": [
+        3,
+        17
+      ]
+    },
+    {
+      "record_index": 320,
+      "species_id": 122,
+      "species_constant": "MR__MIME",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/mr__mime_galarian.asm",
+      "rom_offset": 292214,
+      "types": [
+        14,
+        13
+      ]
+    },
+    {
+      "record_index": 321,
+      "species_id": 144,
+      "species_constant": "ARTICUNO",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/articuno_galarian.asm",
+      "rom_offset": 292248,
+      "types": [
+        13,
+        2
+      ]
+    },
+    {
+      "record_index": 322,
+      "species_id": 145,
+      "species_constant": "ZAPDOS",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/zapdos_galarian.asm",
+      "rom_offset": 292282,
+      "types": [
+        1,
+        2
+      ]
+    },
+    {
+      "record_index": 323,
+      "species_id": 146,
+      "species_constant": "MOLTRES",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/moltres_galarian.asm",
+      "rom_offset": 292316,
+      "types": [
+        16,
+        2
+      ]
+    },
+    {
+      "record_index": 324,
+      "species_id": 199,
+      "species_constant": "SLOWKING",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/slowking_galarian.asm",
+      "rom_offset": 292350,
+      "types": [
+        3,
+        13
+      ]
+    },
+    {
+      "record_index": 325,
+      "species_id": 222,
+      "species_constant": "CORSOLA",
+      "form_id": 3,
+      "form_constant": "GALARIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/corsola_galarian.asm",
+      "rom_offset": 292384,
+      "types": [
+        7,
+        5
+      ]
+    },
+    {
+      "record_index": 326,
+      "species_id": 58,
+      "species_constant": "GROWLITHE",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/growlithe_hisuian.asm",
+      "rom_offset": 292418,
+      "types": [
+        9,
+        5
+      ]
+    },
+    {
+      "record_index": 327,
+      "species_id": 59,
+      "species_constant": "ARCANINE",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/arcanine_hisuian.asm",
+      "rom_offset": 292452,
+      "types": [
+        9,
+        5
+      ]
+    },
+    {
+      "record_index": 328,
+      "species_id": 100,
+      "species_constant": "VOLTORB",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/voltorb_hisuian.asm",
+      "rom_offset": 292486,
+      "types": [
+        12,
+        11
+      ]
+    },
+    {
+      "record_index": 329,
+      "species_id": 101,
+      "species_constant": "ELECTRODE",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/electrode_hisuian.asm",
+      "rom_offset": 292520,
+      "types": [
+        12,
+        11
+      ]
+    },
+    {
+      "record_index": 330,
+      "species_id": 157,
+      "species_constant": "TYPHLOSION",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/typhlosion_hisuian.asm",
+      "rom_offset": 292554,
+      "types": [
+        9,
+        7
+      ]
+    },
+    {
+      "record_index": 331,
+      "species_id": 211,
+      "species_constant": "QWILFISH",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/qwilfish_hisuian.asm",
+      "rom_offset": 292588,
+      "types": [
+        16,
+        3
+      ]
+    },
+    {
+      "record_index": 332,
+      "species_id": 215,
+      "species_constant": "SNEASEL",
+      "form_id": 4,
+      "form_constant": "HISUIAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/sneasel_hisuian.asm",
+      "rom_offset": 292622,
+      "types": [
+        3,
+        1
+      ]
+    },
+    {
+      "record_index": 333,
+      "species_id": 194,
+      "species_constant": "WOOPER",
+      "form_id": 5,
+      "form_constant": "PALDEAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/wooper_paldean.asm",
+      "rom_offset": 292656,
+      "types": [
+        3,
+        4
+      ]
+    },
+    {
+      "record_index": 334,
+      "species_id": 128,
+      "species_constant": "TAUROS",
+      "form_id": 5,
+      "form_constant": "PALDEAN_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/tauros_paldean.asm",
+      "rom_offset": 292690,
+      "types": [
+        1,
+        1
+      ]
+    },
+    {
+      "record_index": 335,
+      "species_id": 128,
+      "species_constant": "TAUROS",
+      "form_id": 2,
+      "form_constant": "TAUROS_PALDEAN_FIRE_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/tauros_paldean_fire.asm",
+      "rom_offset": 292724,
+      "types": [
+        1,
+        9
+      ]
+    },
+    {
+      "record_index": 336,
+      "species_id": 128,
+      "species_constant": "TAUROS",
+      "form_id": 3,
+      "form_constant": "TAUROS_PALDEAN_WATER_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/tauros_paldean_water.asm",
+      "rom_offset": 292758,
+      "types": [
+        1,
+        10
+      ]
+    },
+    {
+      "record_index": 337,
+      "species_id": 285,
+      "species_constant": "URSALUNA",
+      "form_id": 2,
+      "form_constant": "URSALUNA_BLOODMOON_FORM",
+      "kind": "variant",
+      "base_stats_file": "data/pokemon/base_stats/ursaluna_bloodmoon.asm",
+      "rom_offset": 292792,
+      "types": [
+        4,
+        0
+      ]
+    }
+  ]
+}
