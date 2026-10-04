@@ -489,8 +489,12 @@ def _hello_extra(player: str) -> dict:
         return {"ot_id": ot, **_companion_fields(_rom_type(player))}
     if GAME == "gen2":
         # lua/gen2/client.lua send_hello; the Gen 2 wire's ot_id is the integer.
+        # the companion evidence the server's Gen 2 gate asks for: the pinned mailbox ABI of the title's pack
+        path = os.path.join(os.path.dirname(__file__), "..", "data", "games", f"gen2_{TITLE}", "profile.json")
+        with open(path, encoding="utf-8") as fh:
+            abi = json.load(fh)["titles"][TITLE]["overlay"]["abi"]
         return {"foundation": "gen2_gsc", "artifact_kind": "overlay", "ot_id": int(ot, 16),
-                "rom_sha1": _gen2_rom_sha1(), "party": []}
+                "rom_sha1": _gen2_rom_sha1(), "party": [], "companion_abi": abi}
     return _companion_fields(_rom_type(player))
 
 

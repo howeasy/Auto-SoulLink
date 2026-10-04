@@ -833,6 +833,8 @@ class SoulLinkState:
     # while the trade makes NO progress (each trade handler resets it to 0); past this many, abandon.
     # Because the link is only mutated ATOMICALLY in _handle_trade_done (once BOTH sides report), an
     # abort here can never leave the link half-swapped — it just frees the slot.
+    # Counted in events, not seconds: both clients tick every 30 frames, so ~4000 events is roughly 17
+    # minutes with no acted-on trade event (an unanswered confirm, a partner who walked away).
     TRADE_WATCHDOG_EVENTS = 4000
     TRADE_FINAL_LIMIT = 256
     # Ticks to suppress party-key drift reconciliation on each side after a trade completes, while the
@@ -1859,12 +1861,6 @@ class SoulLinkState:
             saved_pm = data.get("pending_memorials", {})
             state.pending_memorials["a"] = set(saved_pm.get("a", []))
             state.pending_memorials["b"] = set(saved_pm.get("b", []))
-            saved_sync = data.get("queued_sync")
-            if isinstance(saved_sync, dict):
-                for pid in ("a", "b"):
-                    for c in saved_sync.get(pid) or []:
-                        if isinstance(c, dict) and c.get("cmd") in DURABLE_SYNC_COMMANDS and c.get("key"):
-                            state.queued_commands[pid].append(c)
             # Restore lock rules from persisted state (CLI flags are initial defaults;
             # saved values take precedence so mid-run restarts honor the original config).
             saved_rules = data.get("rules", {})
@@ -1986,6 +1982,21 @@ class SoulLinkState:
                                 and (not state.pending_trade or row["token"] != state.pending_trade["token"])):
                             state.trade_finals[pid][row["token"]] = {"token": row["token"], "verdict": row["verdict"]}
                     state.trade_finals[pid] = dict(list(state.trade_finals[pid].items())[-state.TRADE_FINAL_LIMIT:])
+            # Undelivered partner syncs, last: only for a key that is still a live link's half. A key the
+            # ledger shows migrated (evolution, NPC trade) or a dead pair's half would reach a cartridge
+            # that no longer holds it and come back as a failed sync.
+            saved_sync = data.get("queued_sync")
+            if isinstance(saved_sync, dict):
+                for pid in ("a", "b"):
+                    migrated = {r["old_key"] for r in state.key_migration_ledger[pid]}
+                    for c in saved_sync.get(pid) or []:
+                        if not (isinstance(c, dict) and c.get("cmd") in DURABLE_SYNC_COMMANDS and c.get("key")):
+                            continue
+                        entry = state.entry_for(pid, c["key"])
+                        if (c["key"] in migrated or c["key"] in state.pending_memorials[pid]
+                                or entry is None or entry.status != LinkStatus.ALIVE):
+                            continue
+                        state.queued_commands[pid].append(c)
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
         except UnsafeGameMigration:
             # Operator-facing and fatal: this run must not start under either adapter.

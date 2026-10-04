@@ -4950,7 +4950,8 @@ class SLinkServer:
                 {"ok": False, "error": f"Backup slot {slot} not found"}, status=404)
         os.makedirs(backup_dir, exist_ok=True)
         # Save current state as pre-rollback snapshots
-        if os.path.exists(self.state._links_path):
+        took_pre = os.path.exists(self.state._links_path)
+        if took_pre:
             shutil.copy2(self.state._links_path,
                          os.path.join(backup_dir, "links.pre_rollback.json"))
         if os.path.exists(self._events_path):
@@ -4978,8 +4979,10 @@ class SLinkServer:
         except Exception as exc:                        # e.g. UnsafeGameMigration from an old slot
             restored, problem = None, f"{type(exc).__name__}: {exc}"
         if problem:
-            if os.path.exists(pre_links):
+            if took_pre:                                 # never an older rollback's leftover
                 shutil.copy2(pre_links, self.state._links_path)
+            else:
+                os.remove(self.state._links_path)
             log.error(f"rollback to slot {slot} refused: {problem}")
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"Backup slot {slot} could not be loaded ({problem}). Nothing was changed."},

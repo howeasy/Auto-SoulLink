@@ -77,3 +77,19 @@ def test_a_whiteout_rebuild_still_owes_the_offline_partner_after_a_restart(tmp_p
     assert has_cmd(state.queued_commands["b"], "party_mon", "B:boxed")
     reloaded = SoulLinkState.load()
     assert has_cmd(reloaded.queued_commands["b"], "party_mon", "B:boxed")
+
+
+def test_a_restored_sync_for_a_key_that_migrated_or_died_is_dropped(tmp_path, monkeypatch):
+    """Review cx-6911d575: a key that evolved or traded away while the server was down, or a pair that died, must not
+    get its persisted box_mon/party_mon delivered to a cartridge that no longer holds it."""
+    import json
+    state = _fresh(tmp_path, monkeypatch)
+    state.handle_event("a", {"event": "party_to_box", "key": "A:1"})
+    doc = json.loads((tmp_path / "links.json").read_text())
+    doc["key_migration_ledger"] = {"a": [], "b": [{"old_key": "B:2", "new_key": "B:9"}]}
+    (tmp_path / "links.json").write_text(json.dumps(doc))
+    assert not has_cmd(SoulLinkState.load().queued_commands["b"], "box_mon", "B:2")
+    doc["key_migration_ledger"] = {"a": [], "b": []}
+    doc["links"][0]["status"] = "dead"
+    (tmp_path / "links.json").write_text(json.dumps(doc))
+    assert not has_cmd(SoulLinkState.load().queued_commands["b"], "box_mon", "B:2")

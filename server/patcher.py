@@ -108,6 +108,7 @@ def _companion_md5(slug: str) -> str:
 # absence rather than leaving it to be noticed.
 def _build_targets() -> dict[str, dict]:
     """The registry, read from the shipped manifests each call (a release stamp rewrites them in place)."""
+    pure = {title: _pure_md5s(title) for title in ("purered", "pureblue", "puregreen")}
     return {
     "rr": {
         "slug":        "rr",
@@ -148,8 +149,8 @@ def _build_targets() -> dict[str, dict]:
         "slug":        "pure-red",
         "label":       "pureRGB Red",
         "patch":       "SLink-PureRed.ups",
-        "base_md5":    _pure_md5s("purered")[0],
-        "patched_md5": _pure_md5s("purered")[1],
+        "base_md5":    pure["purered"][0],
+        "patched_md5": pure["purered"][1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Red (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Red build (pokered.gbc)",
@@ -158,8 +159,8 @@ def _build_targets() -> dict[str, dict]:
         "slug":        "pure-blue",
         "label":       "pureRGB Blue",
         "patch":       "SLink-PureBlue.ups",
-        "base_md5":    _pure_md5s("pureblue")[0],
-        "patched_md5": _pure_md5s("pureblue")[1],
+        "base_md5":    pure["pureblue"][0],
+        "patched_md5": pure["pureblue"][1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Blue (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Blue build (pokeblue.gbc)",
@@ -168,8 +169,8 @@ def _build_targets() -> dict[str, dict]:
         "slug":        "pure-green",
         "label":       "pureRGB Green",
         "patch":       "SLink-PureGreen.ups",
-        "base_md5":    _pure_md5s("puregreen")[0],
-        "patched_md5": _pure_md5s("puregreen")[1],
+        "base_md5":    pure["puregreen"][0],
+        "patched_md5": pure["puregreen"][1],
         "accept":      ".gbc,.gb,application/octet-stream",
         "out_name":    "Pokemon Green (pureRGB, SLink companion).gbc",
         "base_hint":   "the pureRGB v2.7.6 Green build (pokegreen.gbc)",
