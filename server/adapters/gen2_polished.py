@@ -111,14 +111,30 @@ def scan_randomized(rom: bytes) -> dict:
             "trades": reader.npc_trades()}
 
 
+@cache
+def _pack_forms() -> frozenset:
+    """Every (species, form) the pack names: the 46 variant and 56 cosmetic forms (species_index.json)."""
+    return frozenset((row["species"], row["form"]) for row in _json("species_index")["forms"])
+
+
+def _adopt_mon(row, species, form, label):
+    own = (row.get("species"), row.get("form", 1))
+    _require(form <= 1 or (species, form) in _pack_forms() or (species, form) == own,
+             f"{label}: species {species} has no form {form}")
+    if not (form <= 1 and own[1] <= 1):
+        row["form"] = form
+    row["species"] = species
+
+
 def _adopt_slots(rows, decoded, label, badges):
     """Overlay decoded (species, form, raw level) triples onto the pack's slot dicts, in place, keeping the
-    pack's own level encoding. UPR rewrites species and plain levels only, never a form or a LEVEL_FROM_BADGES
-    byte: a form that differs (NO_FORM counts as PLAIN_FORM) means the decode is misaligned -> refused."""
+    pack's own level encoding. UPR rewrites species (variant forms included, owner ruling 2026-10-04) and plain
+    levels only, never a LEVEL_FROM_BADGES byte. A decoded form is adopted when it exists for that species
+    (NO_FORM / PLAIN_FORM, a pack variant or cosmetic form, or the slot's own spelling); any other pair means
+    the decode is misaligned -> refused. NO_FORM and PLAIN_FORM are the same mon, so the pack's spelling stays."""
     _require(len(rows) == len(decoded), f"{label}: slot count differs from the pack")
     for row, (species, form, level) in zip(rows, decoded, strict=True):
-        _require(form == row.get("form", 1) or form <= 1 and row.get("form", 1) <= 1, f"{label}: slot form moved")
-        row["species"] = species
+        _adopt_mon(row, species, form, label)
         if "level_raw" in row:                    # wild rows: level None + raw byte + offset from ``badges``
             row.update(level_raw=level, level_from_badges_offset=level - badges)
         else:
@@ -156,8 +172,9 @@ def _adopt_encounters(pack: dict, tables: dict) -> dict:
             _adopt_slots(tree[rarity], [(sp, f, lv) for _c, sp, f, lv in entries], f"tree set {tree['set_id']}", badges)
     slots = out["contest"]["slots"]
     _require([s["weight"] for s in slots] == [r[0] for r in tables["contest"]], "contest weights differ")
-    for slot, (_c, species, _f, low, high) in zip(slots, tables["contest"], strict=True):
-        slot.update(species=species, min_level=low, max_level=high)
+    for slot, (_c, species, form, low, high) in zip(slots, tables["contest"], strict=True):
+        _adopt_mon(slot, species, form, "contest")
+        slot.update(min_level=low, max_level=high)
     return out
 
 
@@ -587,6 +604,7 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                 _require(species in self._species, "unresolved encounter species")
                 level = entry.get("level")
                 target.append({"species_id": species, "form": form, "name": self.species_name(species, form),
+                               "effective_species_id": polished_codec.effective_species(species, form),
                                "rate": weight, "min_level": entry.get("min_level", level),
                                "max_level": entry.get("max_level", level), "slot": slot,
                                "map_group": area["map_group"], "map_number": area["map_number"],

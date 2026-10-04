@@ -277,3 +277,32 @@ CLAIMS: [{"path":"E:/Google Drive/SLink/.cache/slink-upr/src/com/dabomstew/pkran
   `$14E-$14F` sum is not verified. SLink identifies randomized ROMs by the contract sha1, not the header CRC.
 * **F6 (lossless-when-off enforced by design, not by a test):** open; `tools/upr_lossless_check.py` is the
   existing check and should be run for Polished when the jar is cut.
+
+## Update (2026-10-04, forms worker): patches 0020-0021 - overlay signature, variant forms in the pool
+
+* **0020** tightens `isSlinkOverlay` (review cx-e8921a0c F4): besides the 7-byte signatures at $0070 and $0DA8, bank
+  $7E must start with the SLink service's own first 16 bytes `21 0b c6 3e 53 22 3e 4c 22 3e 4e 22 3e 4b 22 3e`
+  (`ld hl, wSlinkMailbox` + the S/L/N/K beacon stores of `SlinkService`); the ABI byte after them is not pinned.
+  Measured: the 0019 jar accepts a release with the bridge bytes, a stray byte in bank $7E and a foreign header
+  checksum; the 0020 jar refuses it, and still accepts the release, the overlay and an overlay with another header
+  checksum. `upr_pipeline._is_slink_polished_overlay` mirrors the rule.
+* **Pipeline bug found while verifying:** `jar_supports_polished` looked for a bare `CRCInHeader=-1` line, but the
+  real 0019 ini line carries a trailing `//` comment, so the pipeline refused every overlay on the real 0019 jar (its
+  tests used a synthetic ini). Fixed (`-1(?![0-9])`), with a test on the real line shape.
+* **0021: forms are always in the pool, with no setting** (owner ruling 2026-10-04). `getPokemon()` returns every
+  BaseData record, the 46 variant forms (292..337) included, so wild, trainer, starter, static and trade pools draw
+  them with their own stats and types; UPR's alt-forme options stay off and `upr_settings` is unchanged. A site
+  reads as the record its (species, form) resolves to (variant, else the species: plain and cosmetic forms alike),
+  so formed wild slots, trainer mons, the five resolved formed script sites (StaticSite44..48) and Jeeves's trade
+  are now in the model. One writer: a site still holding the same record keeps every byte (a cosmetic form stays);
+  otherwise LOW(species), then gender/egg bits | HIGH << 5 | the variant's form, or for a species the site's own
+  NO_FORM/PLAIN_FORM, else the context's plain spelling (NO_FORM wild/trainer/trade, PLAIN_FORM scripts). The
+  handler never writes a party/box record, so the FORMS.md H5 gender/egg hazard does not arise here. EGG, $100 and
+  Unown stay banned. Known ceiling: record 292 (Gyarados-Red) shares UPR's `Species.shedinja` number, so its
+  power-level BST drops HP (534 instead of 540).
+* SLink side: `polished_rom_scan.placed()` lists every randomizable dp with its effective species (now including
+  trainer mons) and `_check_content_polished` refuses an output whose changed sites hold anything but a plain species
+  or a variant form; `gen2_polished._adopt_slots` adopts a moved form that exists for the species and refuses any
+  other pair, and presented slots carry `effective_species_id`.
+* Verified: 48 runs (24 overlay seeds through `prepare_pair`, 24 release seeds through `randomize` + the same
+  checks), all checks pass, all 46 variant records placed, all-off byte-identical on both ROMs. The jar is UNPINNED.

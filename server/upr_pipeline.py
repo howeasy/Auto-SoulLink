@@ -66,6 +66,7 @@ from server.adapters.polished_rom_scan import (
     Rom as PolishedRom,
     RomScanError as PolishedRomScanError,
     identify as polished_identify,
+    placeable as polished_placeable,
 )
 from server.upr_settings import (
     FAMILY_EMERALD,
@@ -281,10 +282,12 @@ EXPANSION_REFUSAL = ("The Emerald Expansion has no randomizer and no companion p
 
 
 def _is_slink_polished_overlay(rom: bytes) -> bool:
-    """The structure patch 0019's PolishedCrystalRomHandler.isSlinkOverlay tests: the moved DelayFrame lead-in at
-    $0070, the `call $0070` rewrite at $0DA8, and a non-empty bank $7E (the release has it all $FF)."""
+    """The structure PolishedCrystalRomHandler.isSlinkOverlay tests (patches 0019-0020): the moved DelayFrame lead-in
+    at $0070, the `call $0070` rewrite at $0DA8, and the SLink service's own first 16 bytes at $7E:4000 (`ld hl,
+    wSlinkMailbox` + the S/L/N/K beacon stores, patch/polished/src/slink.asm), not just any non-$FF byte there."""
     return (len(rom) == 0x200000 and rom[0x70:0x77] == bytes.fromhex("f044e0d7afe08f")
-            and rom[0xDA8:0xDAF] == bytes.fromhex("cd700000000000") and any(b != 0xFF for b in rom[0x1F8000:0x1FC000]))
+            and rom[0xDA8:0xDAF] == bytes.fromhex("cd700000000000")
+            and rom[0x1F8000:0x1F8010] == bytes.fromhex("210bc63e53223e4c223e4e223e4b223e"))
 
 
 def jar_supports_polished(jar: str, rom: bytes) -> bool:
@@ -300,7 +303,8 @@ def jar_supports_polished(jar: str, rom: bytes) -> bool:
         return False
     pinned = {int(m, 0) for m in re.findall(r"^CRCInHeader=(0x[0-9A-Fa-f]+|\d+)", text, flags=re.MULTILINE)}
     if _is_slink_polished_overlay(rom):
-        return re.search(r"^CRCInHeader=-1\s*$", text, flags=re.MULTILINE) is not None
+        # the real section line carries a trailing // comment (patch 0019's ini), so no end-of-line anchor
+        return re.search(r"^CRCInHeader=-1(?![0-9])", text, flags=re.MULTILINE) is not None
     return (rom[0x14E] << 8 | rom[0x14F]) in pinned     # read big-endian, as the handler does
 
 
@@ -547,8 +551,10 @@ def _polished_rules(tables: dict) -> tuple[list, list, list]:
 def _check_content_polished(source_rom: str, output_rom: str) -> dict:
     """The Polished _check_content: a pinned source (release or companion overlay), the same cartridge
     (size and header unchanged), and base data, types, the evolution graph and the level-up learnsets
-    equal to the source's, compared as decoded records (server/adapters/polished_rom_scan.py). Returns
-    the output's table scan for the content hash."""
+    equal to the source's, compared as decoded records (server/adapters/polished_rom_scan.py), and every
+    species site the randomizer changed holding a placeable mon: a real species with NO_FORM/PLAIN_FORM or a
+    variant form, never a cosmetic form, EGG or the unused $100 (owner ruling 2026-10-04: variant forms are
+    their own mons, cosmetic forms are the species). Returns the output's table scan for the content hash."""
     with open(source_rom, "rb") as f:
         src = f.read()
     with open(output_rom, "rb") as f:
@@ -559,11 +565,20 @@ def _check_content_polished(source_rom: str, output_rom: str) -> dict:
     if len(out) != len(src) or out[0x134:0x150] != src[0x134:0x150]:
         raise UprPipelineError("output is not Polished Crystal any more (size or header changed)")
     try:
-        scan = PolishedRom(out, pinned=False).scan_all()
+        reader = PolishedRom(out, pinned=False)
+        scan = reader.scan_all()
         (s_stats, s_evos, s_moves), (o_stats, o_evos, o_moves) = (
             _polished_rules(PolishedRom(src).rule_tables()), _polished_rules(scan))
+        before, after = PolishedRom(src).placed(), reader.placed()
     except PolishedRomScanError as exc:
         raise UprPipelineError(f"the randomized ROM could not be decoded: {exc}") from exc
+    if [p[0] for p in before] != [p[0] for p in after]:
+        raise UprPipelineError("the randomized ROM's species sites do not line up with the source's (a table moved)")
+    bad = [f"{where} = species {sp} form {form}" for (where, *old), (_w, sp, form, _eff) in zip(before, after, strict=True)
+           if old[:2] != [sp, form] and not polished_placeable(sp, form)]
+    if bad:
+        raise UprPipelineError(f"the randomizer placed {len(bad)} mon(s) no Polished site may hold (a cosmetic form, "
+                               f"EGG or no species): {', '.join(bad[:4])}")
     if o_stats != s_stats:
         raise UprPipelineError(
             "base stats or types differ from the source — a setting that changes data the Soul Link "

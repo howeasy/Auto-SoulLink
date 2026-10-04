@@ -162,10 +162,36 @@ def test_ingest_accepts_the_contract_checked_bytes_of_a_real_cartridge(roms):  #
         adapter.ingest_rom_content(_payload(rom, rom_sha1=hashlib.sha1(roms[1]).hexdigest()))
 
 
-def test_adoption_refuses_a_slot_whose_form_moved(roms):  # noqa: F811
-    """UPR never rewrites a form: a decoded form other than the pack's means a misaligned decode, refused."""
+def _effective_ids(node) -> set[int]:
+    if isinstance(node, dict):
+        return ({node["effective_species_id"]} if "effective_species_id" in node else set()).union(
+            *(_effective_ids(v) for v in node.values()))
+    return set().union(*(_effective_ids(v) for v in node)) if isinstance(node, list) else set()
+
+
+@pytest.mark.parametrize("species, form, effective", [(19, 2, 295),     # Alolan Rattata: a variant, its own record
+                                                       (129, 5, 129)])  # a Magikarp pattern: cosmetic, the species
+def test_adoption_takes_a_moved_form_that_exists_for_the_species(roms, species, form, effective):  # noqa: F811
+    """Variant forms are in the randomizer pool (owner ruling 2026-10-04): a slot whose form moved to a form that
+    exists for its species is adopted, and presented with its effective species (a variant = record 292..337).
+    RED CONTROL: drop the `row["form"] = form` line in gen2_polished._adopt_mon -> the form assert fails."""
     tables = scan_randomized(roms[1])
-    level, species, _form = tables["wild"]["JohtoGrass"][0]["slots"][0]
-    tables["wild"]["JohtoGrass"][0]["slots"][0] = [level, species, 7]
-    with pytest.raises(ValueError, match="form moved"):
+    level, _species, _form = tables["wild"]["JohtoGrass"][0]["slots"][0]
+    tables["wild"]["JohtoGrass"][0]["slots"][0] = [level, species, form]
+    adapter = Gen2PolishedAdapter(artifact_kind="rand_overlay")
+    adapter.use_rom_encounters(tables)
+    head = tables["wild"]["JohtoGrass"][0]["map"]
+    row = next(r for r in adapter._encounters["wild"]["grass"] if r["table"] == "JohtoGrassWildMons"
+               and [r["map_group"], r["map_number"]] == head and r["time"] == "morning")
+    assert (row["slots"][0]["species"], row["slots"][0]["form"]) == (species, form)
+    assert effective in _effective_ids(adapter._tables)
+
+
+def test_adoption_refuses_a_form_the_species_does_not_have(roms):  # noqa: F811
+    """A decoded (species, form) pair that names no form of that species means a misaligned decode, refused.
+    RED CONTROL: make gen2_polished._adopt_mon's form check always true -> this test fails."""
+    tables = scan_randomized(roms[1])
+    level, _species, _form = tables["wild"]["JohtoGrass"][0]["slots"][0]
+    tables["wild"]["JohtoGrass"][0]["slots"][0] = [level, 19, 9]          # Rattata has no form 9
+    with pytest.raises(ValueError, match="has no form 9"):
         Gen2PolishedAdapter(artifact_kind="rand_overlay").use_rom_encounters(tables)

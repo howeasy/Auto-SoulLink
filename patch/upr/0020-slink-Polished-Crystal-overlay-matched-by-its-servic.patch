@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: howeasy <howardabudd@gmail.com>
+Date: Sun, 4 Oct 2026 16:28:53 -0400
+Subject: [PATCH 20/21] slink: Polished Crystal overlay matched by its service
+ bytes
+
+Patch 19 took any ROM with the two bridge signatures and one non-$FF byte
+in bank $7E for the SLink companion overlay (review cx-e8921a0c F4).
+isSlinkOverlay now also requires the SLink service's own first 16 bytes at
+$7E:4000 (ld hl, wSlinkMailbox and the S/L/N/K beacon stores of
+SlinkService); the ABI-version byte after them is not pinned, so an ABI
+bump still matches. The release with the bridge bytes and a stray byte in
+bank $7E is refused.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ FORK_CHANGES.md                               |  7 +++++
+ .../PolishedCrystalRomHandler.java            | 26 +++++++++----------
+ 2 files changed, 19 insertions(+), 14 deletions(-)
+
+diff --git a/FORK_CHANGES.md b/FORK_CHANGES.md
+index fec346b..63754fe 100644
+--- a/FORK_CHANGES.md
++++ b/FORK_CHANGES.md
+@@ -156,3 +156,10 @@ entries), so a vanilla `[Red (U)]`-style entry executes exactly the original cod
+   whole ROM (up to $200000) instead of the first $1000 bytes, for the bank $7E test.
+ - `config/polished_offsets.ini` supplement: the overlay section is `CopyFrom` the release with `CRCInHeader=-1`
+   (its `CRCInHeader=0x725C` and `CRC32=0x36A59795` pins are gone).
++
++## Patch 20 — Polished Crystal companion overlay matched by its service bytes
++- `PolishedCrystalRomHandler.isSlinkOverlay`: besides the two 7-byte signatures at $0070 and $0DA8, bank $7E must
++  start with the SLink service's own first 16 bytes `21 0b c6 3e 53 22 3e 4c 22 3e 4e 22 3e 4b 22 3e`
++  (`ld hl, wSlinkMailbox` and the 'S','L','N','K' beacon stores of `SlinkService`, patch/polished/src/slink.asm),
++  instead of "any non-$FF byte in bank $7E". A release with the bridge signatures and one stray byte in bank $7E
++  is no longer taken for an overlay; the ABI-version byte that follows is not pinned, so an ABI bump still matches.
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+index c8b6bbf..573411f 100644
+--- a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+@@ -197,24 +197,22 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+     }
+ 
+     // The companion overlay (patch/polished/src) moves DelayFrame's lead-in to a ROM0 bridge at $0070, puts
+-    // "call $0070" + 4 nops at DelayFrame ($0DA8) and its service in bank $7E, which is all $FF in the release.
++    // "call $0070" + 4 nops at DelayFrame ($0DA8) and its service at $7E:4000, which is all $FF in the release.
++    // The service is recognised by its own first 16 bytes (patch 20): "ld hl, wSlinkMailbox ($C60B)" and the
++    // four beacon stores 'S','L','N','K' (patch/polished/src/slink.asm SlinkService), up to the ABI-version
++    // load, so an ABI bump still matches while a stray non-$FF byte in bank $7E does not.
+     private static final byte[] OVERLAY_BRIDGE = { (byte) 0xF0, 0x44, (byte) 0xE0, (byte) 0xD7, (byte) 0xAF, (byte) 0xE0, (byte) 0x8F };
+     private static final byte[] OVERLAY_DELAYFRAME = { (byte) 0xCD, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00 };
+-    private static final int OVERLAY_SERVICE_BANK = 0x7E;
++    private static final byte[] OVERLAY_SERVICE = { 0x21, 0x0B, (byte) 0xC6, 0x3E, 0x53, 0x22, 0x3E, 0x4C, 0x22,
++            0x3E, 0x4E, 0x22, 0x3E, 0x4B, 0x22, 0x3E };
++    private static final int OVERLAY_SERVICE_OFFSET = 0x7E * GBConstants.bankSize;
+ 
+     private static boolean isSlinkOverlay(byte[] rom) {
+-        int bank = OVERLAY_SERVICE_BANK * GBConstants.bankSize;
+-        if (rom.length < bank + GBConstants.bankSize
+-                || !Arrays.equals(Arrays.copyOfRange(rom, 0x0070, 0x0077), OVERLAY_BRIDGE)
+-                || !Arrays.equals(Arrays.copyOfRange(rom, 0x0DA8, 0x0DAF), OVERLAY_DELAYFRAME)) {
+-            return false;
+-        }
+-        for (int i = bank; i < bank + GBConstants.bankSize; i++) {
+-            if (rom[i] != (byte) 0xFF) {
+-                return true;
+-            }
+-        }
+-        return false;
++        return rom.length >= OVERLAY_SERVICE_OFFSET + GBConstants.bankSize
++                && Arrays.equals(Arrays.copyOfRange(rom, 0x0070, 0x0077), OVERLAY_BRIDGE)
++                && Arrays.equals(Arrays.copyOfRange(rom, 0x0DA8, 0x0DAF), OVERLAY_DELAYFRAME)
++                && Arrays.equals(Arrays.copyOfRange(rom, OVERLAY_SERVICE_OFFSET,
++                        OVERLAY_SERVICE_OFFSET + OVERLAY_SERVICE.length), OVERLAY_SERVICE);
+     }
+ 
+     @Override
+-- 
+2.54.0.windows.1
+

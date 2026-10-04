@@ -19,7 +19,12 @@ Formats (polishedcrystal@3fa43192, tag v3.2.3; docs/polished/UPR_HANDLER.md §3)
                   loadwildmon ($5C) command (macros/scripts/events.asm), then its form byte and level byte.
   NPCTrades       9 x 33 bytes (NPCTRADE_STRUCT_LENGTH): dialog, dp wanted, dp given, nickname x11, DVs x3,
                   personality, ball, item, dw OT id, OT name x8, one skipped byte (constants/npc_trade_constants.asm).
-A dp species is (LOW, HIGH << 5 | form): 9-bit species, form in bits 0-4 (macros/data.asm:89-91).
+  TrainerGroups   per class a 3-byte bank/address of size-prefixed records (data/trainers/macros.asm end_trainer):
+                  db size, name@, db flags, then per mon level, dp and the flag-selected item, DVs, personality,
+                  nickname@, EVs, 4 moves (engine/battle/read_trainer_party.asm); INVER's entry points at WRAM.
+A dp species is (LOW, HIGH << 5 | form): 9-bit species, form in bits 0-4 (macros/data.asm:89-91). Forms (owner
+ruling 2026-10-04): a variant form (forms_index.json, records 292..337) is its own mon, a cosmetic form is its
+species; ``placed()`` lists every randomizable dp with its effective species (polished_codec.effective_species).
 
 Offsets come from the generated UPR INI (data/polished/upr_polished_entries.ini, from the release
 .sym). The SLink overlay (patch/dist/SLink-Polished.ups) touches only ROM0 $0070, the DelayFrame
@@ -36,8 +41,10 @@ import re
 from pathlib import Path
 
 from server.adapters.gen2_rom_scan import RomScanError, _Cursor
+from server.adapters.polished_codec import effective_species, is_variant_form
 
 REPO = Path(__file__).resolve().parents[2]
+TRAINERS = REPO / "data" / "games" / "polished_crystal" / "trainers.json"
 INI = REPO / "data" / "polished" / "upr_polished_entries.ini"
 SCRIPT_SITES = REPO / "data" / "polished" / "script_sites.json"
 SCRIPT_OPCODES = {"givepoke": 0x2F, "loadwildmon": 0x5C}
@@ -54,7 +61,28 @@ FISH_GROUPS = 15                                # NUM_FISHGROUPS, constants/map_
 TREE_SETS = 10                                  # NUM_TREEMON_SETS, constants/pokemon_data_constants.asm:381
 CONTEST_MONS = 12                               # (ContestMonsEnd - ContestMons) / 5
 EVOLVE_HOLDING, EVOLVE_STAT, EVOLVE_PARTY = 4, 6, 10   # constants/pokemon_data_constants.asm:312-323
+SPECIES_COUNT = 291                             # NUM_SPECIES (constants/pokemon_constants.asm:317)
+EGG, UNUSED_SPECIES = 0xFF, 0x100               # constants/pokemon_constants.asm:280-281
+GENDER_EGG = 0xC0                               # dp HIGH bits 7-6 (constants/pokemon_data_constants.asm:242-243)
+# TRAINERTYPE_* = 1 << TRNTYPE_* (constants/trainer_data_constants.asm:43-59)
+TR_ITEM, TR_EVS, TR_DVS, TR_PERSONALITY, TR_NICKNAME, TR_MOVES = 2, 4, 8, 16, 32, 64
+INVER_CLASS = 122                               # INVER ($7a): TrainerGroups points at wInverGroup in WRAM
+TEXT_END = 0x53                                 # '@' (charmap.asm:43)
 _MAX_ROWS = 512                                 # bound on every terminator-ended walk
+
+
+def placeable(species: int, form: int) -> bool:
+    """What a randomizer may write into a dp: a real species with NO_FORM / PLAIN_FORM, or a variant form.
+    A cosmetic form is never written (it is the species: a site keeps its own cosmetic form unless re-rolled)."""
+    return (1 <= species <= SPECIES_COUNT and species not in (EGG, UNUSED_SPECIES)
+            and (form <= 1 or is_variant_form(species, form)))
+
+
+@functools.cache
+def trainer_class_counts() -> tuple[int, ...]:
+    """Trainers per class 1..147, from the generated pack (the fork INI's TrainerClassCounts are these)."""
+    named = json.loads(TRAINERS.read_text(encoding="utf-8"))["named_trainers"]
+    return tuple(len(named.get(str(c), {})) for c in range(1, len(named) + 1))
 
 
 @functools.cache
@@ -202,19 +230,23 @@ class Rom:
         return species
 
     def scripted_mons(self) -> list[dict]:
-        """Species, form and level at every resolved script site. UPR rewrites only the species bytes
-        (keeping the site's gender/form bits) and, under a static level setting, the level: so the opcode
-        and every HIGH bit but species bit 8 must still be the site's, or the command moved -> refused."""
+        """Species, form and level at every resolved script site. UPR rewrites only the species bytes (keeping
+        the site's gender/egg bits; the form is the site's own unless re-rolled to a plain species or a variant
+        form) and, under a static level setting, the level: so the opcode and the gender/egg bits must still be
+        the site's, and a form other than the site's must be placeable, or the command moved -> refused."""
         out = []
         for site in script_sites():
             at, label = site["offset"], f"script site {site['source']}"
             op, lo, hi, level = self._at(at - 1, label).take(4)
-            if op != SCRIPT_OPCODES[site["kind"]] or hi & ~EXT_SPECIES != site["form"] & ~EXT_SPECIES:
+            if op != SCRIPT_OPCODES[site["kind"]] or hi & GENDER_EGG != site["form"] & GENDER_EGG:
                 raise RomScanError(f"{label}: the {site['kind']} command there differs (moved or rewritten)")
+            species, form = self._species(lo, hi, label), hi & 0x1F
+            if (species, form) != (site["species"], site["form"] & 0x1F) and not placeable(species, form):
+                raise RomScanError(f"{label}: species {species} form {form} is no placeable mon (moved or rewritten)")
             if not 1 <= level <= 100:
                 raise RomScanError(f"{label}: level {level} is not a plain level")
-            out.append({"source": site["source"], "kind": site["kind"], "species": self._species(lo, hi, label),
-                        "form": hi & 0x1F, "level": level})
+            out.append({"source": site["source"], "kind": site["kind"], "species": species, "form": form,
+                        "level": level})
         return out
 
     def npc_trades(self) -> list[dict]:
@@ -228,6 +260,61 @@ class Rom:
                         "nickname": raw[5:16].hex(), "dvs": list(raw[16:19]), "personality": raw[19], "ball": raw[20],
                         "item": raw[21], "ot_id": int.from_bytes(raw[22:24], "little"), "ot_name": raw[24:32].hex()})
         return out
+
+    def trainer_mons(self) -> list[dict]:
+        """Level, species and form of every trainer mon, walked as the fork handler walks TrainerGroups; a record
+        that does not end exactly at its size byte is refused."""
+        table, out = self.o["TrainerDataTableOffset"], []
+        for c, count in enumerate(trainer_class_counts(), 1):
+            if c == INVER_CLASS or not count:
+                continue
+            ptr = self._at(table + 3 * (c - 1), f"TrainerGroups {c}")
+            bank, word = ptr.byte(), ptr.word()
+            if not 0x4000 <= word < 0x8000:
+                raise RomScanError(f"TrainerGroups {c}: pointer {bank:02X}:{word:04X} is not ROMX")
+            cur = self._at(bank * 0x4000 + word - 0x4000, f"trainer class {c}")
+            for t in range(count):
+                end = cur.position + 1 + cur.byte()
+                self._skip_text(cur)
+                flags = cur.byte()
+                while cur.position < end:
+                    level, lo, hi = cur.take(3)
+                    cur.take((1 if flags & TR_ITEM else 0) + (1 if flags & TR_DVS else 0)
+                             + (1 if flags & TR_PERSONALITY else 0))
+                    if flags & TR_NICKNAME:
+                        self._skip_text(cur)
+                    cur.take((1 if flags & TR_EVS else 0) + (4 if flags & TR_MOVES else 0))
+                    out.append({"class": c, "trainer": t, "level": level, "species": lo | (hi & EXT_SPECIES) << 3,
+                                "form": hi & 0x1F})
+                if cur.position != end:
+                    raise RomScanError(f"trainer {c}/{t + 1}: the record does not end at its size byte")
+        return out
+
+    @staticmethod
+    def _skip_text(cur: _Cursor) -> None:
+        for _ in range(_MAX_ROWS):
+            if cur.byte() == TEXT_END:
+                return
+        raise RomScanError(f"{cur.label}: unterminated name")
+
+    def placed(self) -> list[tuple[str, int, int, int]]:
+        """(where, species, form, effective species) for every dp a randomizer may write: wild, fishing, tree and
+        contest slots, the resolved script sites, both NPC trade sides and every trainer mon, in a fixed order, so
+        a source and its output compare slot by slot. Fishing's species-0 time-of-day rows read as species 0."""
+        out = []
+        for table, rows in self.wild().items():
+            out += [(f"{table} {r}/{s}", sp, f) for r, row in enumerate(rows) for s, (_lv, sp, f) in enumerate(row["slots"])]
+        out += [(f"fish {g}/{rod}/{i}", e[1], e[2]) for g, group in enumerate(self.fishing())
+                for rod, rows in enumerate(group["rods"]) for i, e in enumerate(rows)]
+        out += [(f"tree {s}/{k}/{i}", e[1], e[2]) for s, lists in enumerate(self.trees())
+                for k, rows in enumerate(lists) for i, e in enumerate(rows)]
+        out += [(f"contest {i}", e[1], e[2]) for i, e in enumerate(self.contest())]
+        out += [(m["source"], m["species"], m["form"]) for m in self.scripted_mons()]
+        for t in self.npc_trades():
+            out += [(f"trade {t['trade_id']} requested", t["requested"], t["requested_form"]),
+                    (f"trade {t['trade_id']} offered", t["offered"], t["offered_form"])]
+        out += [(f"trainer {m['class']}/{m['trainer']}", m["species"], m["form"]) for m in self.trainer_mons()]
+        return [(where, sp, f, effective_species(sp, f)) for where, sp, f in out]
 
     def rule_tables(self) -> dict:
         """What the Soul Link rules read, per record 1..337: base data and EvosAttacks."""
