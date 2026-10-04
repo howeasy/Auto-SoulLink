@@ -33,12 +33,18 @@ from server.adapters import polished_codec as pc  # noqa: E402
 
 LANE = Path(os.environ.get("POL_LANE", "F:/slink-work/lanes/pol-live"))
 # POL_KIND: overlay (the SLink companion build, the subject) | clean (the release, a CONTROL only: no client runs on it)
+# | rand (a Manager-randomized cartridge: POL_MGR_RUN = the Manager's run dir holding roms/<p>.gbc + rom_contract.json,
+# POL_PLAYER = whose cartridge; POL_ROM/POL_ROM_SHA1 boot another file, e.g. a beacon-flipped copy, R3)
 KIND = os.environ.get("POL_KIND", "overlay")
+MGR_RUN = Path(os.environ.get("POL_MGR_RUN", "F:/slink-work/lanes/pol-rand/mgr_run"))
+PLAYER = os.environ.get("POL_PLAYER", "a")
 # POL_POSMODE: warp (Script_warp-equivalent WRAM writes + MAPSETUP_WARP, the engine reloads the map) | poke (bare
 # wMapGroup/wMapNumber/wXCoord/wYCoord write, kept only as the corruption CONTROL)
 MODE = os.environ.get("POL_POSMODE", "warp")
 CACHE = Path("F:/slink-work/cache/polished")
 ROM_SRC = CACHE / ("companion-overlay" if KIND == "overlay" else "release") / "polishedcrystal-3.2.3.gbc"
+if KIND == "rand":
+    ROM_SRC = Path(os.environ.get("POL_ROM") or MGR_RUN / "roms" / f"{PLAYER}.gbc")
 ROM = LANE / "rom" / f"pol_{KIND}.gbc"               # unknown hash -> BizHawk names the save from the filename
 SAVE_NAME = f"pol {KIND}.SaveRAM"
 SRAM = LANE / f"sram_{KIND}"
@@ -62,6 +68,8 @@ SYMBOLS = (
     "PokegearMap_JohtoMap", "PokegearPhone_Joypad", "PokegearRadio_Joypad", "LinkReceptionistScript_Trade",
     "Script_TradeCenterClosed", "Special_WaitForLinkedFriend", "Special_WaitForLinkedFriend.done", "CheckPartyForMail",
     "FixPlayerEVsAndStats", "Special_TryQuickSave",
+    # randomized-cartridge run (R2): the battle mon's form byte (form | extspecies bit 5 | gender/egg) and level
+    "wEnemyMonForm", "wEnemyMonLevel",
 )
 # SYNTH party (O-33, disclosed in docs/polished/LIVE_RESULTS.md): five level-50 mons, base stats from the pinned
 # source data/pokemon/base_stats/*.asm (non-FAITHFUL rows), the modern formula Polished uses, DV 15 / IV 31, 0 EV,
@@ -76,6 +84,10 @@ SPECIES = (  # (id, name, base hp/atk/def/spe/sat/sdf, exp at L50, gender)
 TACKLE = 0x21          # constants/move_constants.asm
 POKE_BALL = 0x01       # constants/item_constants.asm
 GRASS = (24, 3, 48, 12)  # ROUTE_29 (map_constants group 24 #3); step (48,12) is COLL_LONG_GRASS in Route29.ablk
+# POL_POS overrides it, e.g. 26,1,11,48 = ROUTE_30 step (11,48): TALL_GRASS in Route30.ablk x8..13 (johto_traditional
+# collision), no trainer sight line reaches row 48 (maps/Route30.asm object_events)
+if os.environ.get("POL_POS"):
+    GRASS = tuple(int(v) for v in os.environ["POL_POS"].split(","))
 
 
 def sym_table() -> dict:
@@ -115,6 +127,9 @@ def synth_party() -> list:
 def stage_rom() -> str:
     prov = json.loads((REPO / "data/polished/overlay_provenance.json").read_text(encoding="utf-8"))
     want = prov["output"]["sha1"] if KIND == "overlay" else prov["base_sha1"]
+    if KIND == "rand":   # the Manager's per-player pin (or the explicit sha1 of a deliberately altered copy)
+        want = os.environ.get("POL_ROM_SHA1") or json.loads(
+            (MGR_RUN / "rom_contract.json").read_text(encoding="utf-8"))["players"][PLAYER]["rom_sha1"]
     data = ROM_SRC.read_bytes()
     sha1 = hashlib.sha1(data).hexdigest()
     if sha1 != want:
@@ -194,23 +209,34 @@ def cmd_setup() -> int:
 
 def cmd_live() -> int:
     sha1 = stage_rom()
-    if KIND != "overlay":
-        raise SystemExit("the client only runs on the overlay")
+    if KIND not in ("overlay", "rand"):
+        raise SystemExit("the client only runs on the overlay or a randomized overlay")
     fixture = FIXTURE
     if not fixture.exists():
         raise SystemExit("run `setup` first")
     sram = SRAM
     sram.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(fixture, sram / SAVE_NAME)
-    run = LANE / "live"
+    run = LANE / os.environ.get("POL_RUNNAME", "live")
     srv_dir = run / "srv"
     if srv_dir.exists():
         shutil.rmtree(srv_dir)
     srv_dir.mkdir(parents=True)
-    # the sha1-bound contract (server/adapters/gen2_polished.py rom_contract_by_sha1): player a = this overlay
-    (srv_dir / "rom_contract.json").write_text(json.dumps(
-        {"upr_version": "none (overlay, not randomized)", "categories": [], "players": {"a": {"rom_sha1": sha1}}}),
-        encoding="utf-8")
+    if KIND == "rand":
+        # the Manager's run as it launches it: rom_contract.json + roms/<p>.gbc (server.py _contracted_rom reads the
+        # player's own file to adopt its tables). POL_SWAP=1 swaps the pair's pins (R3: a wrong contract sha1).
+        contract = json.loads((MGR_RUN / "rom_contract.json").read_text(encoding="utf-8"))
+        if os.environ.get("POL_SWAP") == "1":
+            pa, pb = contract["players"]["a"], contract["players"]["b"]
+            pa["rom_sha1"], pb["rom_sha1"] = pb["rom_sha1"], pa["rom_sha1"]
+        (srv_dir / "rom_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+        shutil.copytree(MGR_RUN / "roms", srv_dir / "roms",
+                        ignore=lambda _d, names: [n for n in names if n not in ("a.gbc", "b.gbc")])
+    else:
+        # the sha1-bound contract (server/adapters/gen2_polished.py rom_contract_by_sha1): player a = this overlay
+        (srv_dir / "rom_contract.json").write_text(json.dumps(
+            {"upr_version": "none (overlay, not randomized)", "categories": [], "players": {"a": {"rom_sha1": sha1}}}),
+            encoding="utf-8")
     port, http = free_port(), free_port()
     srv_log = open(run / "server.log", "w", encoding="utf-8")  # noqa: SIM115 - outlives the with-less try below
     srv = subprocess.Popen([sys.executable, "-m", "server.server", "--host", "127.0.0.1", "--port", str(port),
@@ -245,6 +271,9 @@ def cmd_live() -> int:
     finally:
         kill_own(srv, "server")
         srv_log.close()
+        client_log = REPO / "slink_lua.log"   # lua/slink.lua tees the client console there (truncated per boot)
+        if client_log.exists():
+            shutil.copyfile(client_log, run / "slink_lua.log")
     print(text[-4000:])
     return 0 if "RESULT: PASS" in text else 1
 

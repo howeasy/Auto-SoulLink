@@ -436,3 +436,174 @@ states other than radio.
 POL_LANE=F:/slink-work/lanes/pol-live2 POL_STAGES=123 python tools/polished_live/harness.py live
 POL_LANE=F:/slink-work/lanes/pol-live2/x POL_EXPLORE=B python tools/polished_live/harness.py explore   # B or C
 ```
+
+---
+
+# Run 3 (2026-10-04, evening): a Manager-randomized cartridge, end to end
+
+These are DEV results, not PHYSICAL receipts. The owner authorised live Polished randomization runs. The tree is
+`e0fd92dd` (the Manager offers Polished randomization) plus this run's driver additions. The jar is the pinned forms
+jar `F:/slink-work/cache/polished/jar/PokeRandoZX.jar` (sha256 `f3a10dd7...`, `data/upr_jars.json`). Lane:
+`F:/slink-work/lanes/pol-rand/`. Every EmuHawk was killed by its own recorded PID, at most two ran at once (only the
+two setups overlapped), and every PID was checked as gone afterwards. Duplicate ROM copies and SaveRAM scratch dirs
+were deleted after the runs. The Manager's own run directory and the fixtures were kept.
+
+| run | what | EmuHawk PID | server / Manager PID | evidence |
+|---|---|---|---|---|
+| R1 | `manager_r1.py jar` (jar installed) | none | Manager 56412 | `r1_jar/` (`calls.jsonl`, `summary.json`, `mgr/run_20261004_211320/`) |
+| R1 | `manager_r1.py nojar` / `oldjar` | none | Manager 49968 / 4744 | `r1_nojar/`, `r1_oldjar/` |
+| setup | SYNTH fixture on ROM a, Route 29 / Route 30 | 49788 / 55244 | none | `s29/`, `s30/` |
+| R2a | ROM a, Route 29: hello + 5 encounters | 15080 | 47864 | `live/r2a/` |
+| R2b | ROM a, Route 30: hunt + catch the variant form | 56360 | 36624 | `live/r2b/` |
+| R3 | clean overlay / swapped contract / flipped 0x14E / flipped $1F8028 | 53280 / 53708 / 51244 / 56920 | 31528 / 44856 / 54724 / 35744 | `r3/{clean,swap,flip14e,flip1f8028}/` |
+
+New driver pieces:
+- `manager_r1.py`: the real `python -m server.manager` on a private port and `--data-dir`, driven only over HTTP.
+- `harness.py`: `POL_KIND=rand` (`POL_MGR_RUN`, `POL_PLAYER`, `POL_ROM`/`POL_ROM_SHA1`, `POL_SWAP`, `POL_POS`,
+  `POL_RUNNAME`). The server's data dir is the Manager run's own `rom_contract.json` + `roms/a.gbc`, `roms/b.gbc`.
+- `live.lua`: `POL_MAP`/`POL_HEADER`/`POL_WALK`/`POL_EXPECT_KIND`, plus stage 5 (fled encounters, read from
+  `wEnemyMon*`) and stage 6 (hunt one species/form and catch it).
+
+## STAGE R1: the Manager path. PASS
+
+The Manager ran with `SLINK_UPR_JAR` = the pinned jar. Calls and responses, all over HTTP (`r1_jar/calls.jsonl`):
+
+| call | result |
+|---|---|
+| `GET /api/roms` | lists `Polished Crystal 3.2.3 · clean dump` (`F:/slink-work/cache/polished/release`, clean true, family `gen2_polished`). The overlay is in no ROM dir, so the pick is the release with the companion on (the Manager's UX path) |
+| `GET /api/randomizer/status?rom_a=&rom_b=` | `ok`, `jar_trusted`, `jar_fork`, `jar_polished` all true. `jar_entries` lists only the Gen 1 sections, no Polished one |
+| `POST /api/runs/new {game: gen2_polished}` | `run_20261004_211320` |
+| `GET /runs/{id}/randomizer` | 200 (`randomizer_page.html`) |
+| `POST /api/runs/{id}/cartridges` | 200 in 1.24 s. Body: `companion: true, randomize: true` and spec wild random, starters random, statics random, trainers random + rival keeps starter, trades `given_and_requested` (forms are always in the pool) |
+| `GET /api/runs/{id}/rom/a`, `/b` | 2 MiB each, sha1 `0d75313f20ec83ad1827b9cf66a6b7202793db86` / `21ed1c1cf86c14ec9f496ce119874ae9569b32fc` = the contract pins |
+
+The cartridges response:
+- `source_sha1 29ea04c2...` (the overlay: `cartridges.py` applied the UPS to the release first), `base_kind overlay`.
+- `write_domain {changed 8629, ups_bytes 107}`.
+- Seeds `4246104770686` / `178042112491888`.
+- Summary: "wild encounters random, starters random, static encounters random, trainer teams random, rival keeps their
+  starter, in-game trades random given and requested".
+
+`rom_contract.json`: `upr_version 4.6.1-slink3`, `categories [starters, statics, trainers, wild]` (trades are not a
+contract category; the UPR log shows the In-Game Trades section randomized), fingerprint `""`, per-player
+`rom_sha1` + seed.
+
+**Route 29 grass on ROM a** (`polished_rom_scan.Rom(..., pinned=False).wild()`, identical in morn/day/nite):
+`170 L2, 208 L2, 156 L3, 252 L3, 124 L2, 204 L3, 53 form 2 L3` (Alolan Persian, effective species 305). The vanilla
+overlay has `16, 161, 16, 161, 19, 187, 187` by day and `163, 19, ...` by night. Route 30 (26:1) on ROM a has the same
+Alolan Persian in slot 2 (30 %).
+
+**Without the jar** (no `SLINK_UPR_JAR`; `find_upr_jar()` finds nothing from this worktree):
+- The picker is unchanged.
+- The status shows `jar ""`, `jar_found false`, `ok false`.
+- `POST cartridges` returns **400 `missing: jar`**.
+
+**With an older trusted fork jar** (`.cache/slink-upr/PokeRandoZX.jar`, 0015, sha256 `db4bc65c...`):
+- The status shows `jar_trusted`, `jar_fork` and **`ok` true, while `jar_polished` is false**.
+- `POST cartridges` returns 400 with `POLISHED_JAR_REFUSAL` ("Polished Crystal randomization needs SLink's UPR fork
+  jar with a Polished Crystal entry for this cartridge's header checksum ...").
+
+**Status page text (`server/static/randomizer.js`):**
+- Any fork jar is described as "SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald + Polished
+  Crystal)" (`:117`). That includes the 0015 jar, which cannot randomize Polished.
+- The randomize refusal line then says "Randomizing Polished Crystal needs the current SLink fork jar (patches
+  0016-0021)." (`:377-379`, on `jar_polished`).
+- Not rendered in a browser: these strings and the API fields are the evidence.
+
+## STAGE R2: live boot of the randomized cartridge. PASS, with one presentation gap
+
+**Entry and server.** The entry path is the real one: `lua/slink.lua` -> `gen2/entry.lua` -> `run.lua`. The server
+is `python -m server.server` with `--data-dir` = a copy of the Manager run (`rom_contract.json` + `roms/a.gbc`,
+`roms/b.gbc`), the shape the Manager launches. The harness checks the ROM's sha1 against the contract pin before
+every launch.
+
+**SYNTH (O-33, disclosed).** The run 1 recipe, run on ROM a itself (`harness.py setup`).
+- NATIVE: cold boot, intro, START -> SAVE.
+- SYNTH, as WRAM writes between those steps: the five-mon party (CROBAT 169, JOLTEON 135, GOLDUCK 55, NIDOKING 34,
+  DODRIO 85, all existing species; base stats are not randomized by this spec), 99 Poke Balls, and the position by
+  the engine warp bytes (`Script_warp`'s `wDefaultSpawnpoint $FF`, `hMapEntryMethod $F1`, `wMapStatus 1`).
+- Fixtures:
+  - `s29`: 24:3 (48,12). sha256 `94b394d1...`, checksum `$13E4`, the same as run 1's overlay fixture.
+  - `s30`: 26:1 ROUTE_30 (11,48). sha256 `942c07f1...`. (11,48) is TALL_GRASS in `maps/Route30.ablk` x8..13 under
+    `johto_traditional_collision.asm`, and no trainer's sight line reaches row 48 (`maps/Route30.asm`).
+  - MAPSETUP_WARP landed natively in both, with tileset 1 and 30x9 / 13x27 headers.
+
+**Admission.**
+- Client log: `[SLink-gen2] polished_crystal/polished rand_overlay PRODUCTION (DEV_OVERLAY_SHA1) player a ->
+  127.0.0.1:<port> (rom 0d75313f)`.
+- Parts: kind `rand_overlay`, qualification `DEV_OVERLAY_SHA1`, `production_admitted false`, `runtime_rom_sha1` =
+  the contract pin.
+- Hello: `artifact_kind rand_overlay`, `rom_sha1 0d75313f...`, abi 3, party 5, area `route_29` (R2a) /
+  `route_30` (R2b).
+- Hello timing: frame 343, after the gate (first `OWPlayerInput` 335, gate running 336).
+- Server: `admission: admitted — cartridge sha1 matches the contract`, `route polished_crystal -> gen2_polished
+  (production)`, `using this cartridge's own encounter tables (8 areas)`.
+- **0 Lua-originated writes** in both runs (`memory.write*` wrapped before `slink.lua`). One hook:
+  `capture_party`.
+
+**Adoption: Route 29, 5 encounters, all fled** (`live/r2a/encounters.jsonl`, species = `wEnemyMonSpecies` | bit 5 of
+`wEnemyMonForm` << 3):
+
+| # | species | form byte | level | ROM a slot |
+|---|---|---|---|---|
+| 1 | 170 | $01 | 2 | slot 1 (170 L2) |
+| 2 | 170 | $01 | 2 | slot 1 |
+| 3 | 170 | $81 | 2 | slot 1 |
+| 4 | 170 | $81 | 2 | slot 1 |
+| 5 | 156 | $01 | 3 | slot 3 (156 L3) |
+
+None of these is a vanilla Route 29 species. The engine gives the table's NO_FORM (0) as PLAIN_FORM (1); $80 is the
+gender bit. Capture-site hits: 0 for every fled battle. The server's `/api/status` `players.a.encounter_table`
+(route_29) is ROM a's table, slot for slot, ending in `{"species_id": 53, "form": 2, "name": "Persian (Alolan)",
+"effective_species_id": 305, "rate": 2}`.
+
+**Variant form: Route 30** (`live/r2b`).
+- The first encounter was **species 53, form byte $02, Lv3**: the Alolan Persian of ROM a's slot 2.
+- One throw caught it.
+- Capture site: **1 hit, bank $03, PC $652B, SP $C0CF**, `wPartyCount` already 6 at the hit.
+- New party slot: personality byte 2 = $02 (the form), DVs `39068D`.
+- Client `capture`: `{"key":"39068D:D1C2:035:02","species_id":53,"level":3,"area_id":"route_30","in_box":false,...}`.
+  **The key carries the form** (`:02`).
+- Server: `capture key=39068D:D1C2:035:02 lv=3 area='route_30'`, `[PENDING] route_30 player=a action=add ...
+  species=53`, `skip quarantine (client has no box executor)`.
+- `/api/status` `pending_captures.route_30.a.key` = that key.
+- The server's Route 30 table reads `(97) Hypno, (53, 2) Persian (Alolan) eff 305, Heracross, Girafarig, Scizor,
+  Ivysaur, Yanmega`.
+
+**GAP (product, not worked around): the caught variant is not presented as its effective species.**
+- `pending_captures` and `party_details` show `species_id 53`, `species_name "Persian"` and the Kanto Persian sprite.
+- No field anywhere carries the form or the effective species 305. `effective_species` appears in no shared server
+  file.
+- Causes:
+  - `server/server.py:2903` calls `adapter.species_name(sid)` without the `form` it reads on the line before.
+    `Gen2PolishedAdapter.species_name(species_id, form=0)` would name it.
+  - The client's capture and party details carry no `form` field: the form is only inside the key.
+- What this means: wherever the shared state goes by `species_id`, an Alolan Persian counts as a Persian. The owner's
+  ruling is that a variant form is a different mon.
+
+**Minor.** The `(8 areas)` in `server.py`'s adoption log line counts the 8 top-level keys of `scan_randomized`
+(title, wild, fishing, ...), not areas.
+
+## STAGE R3: refusals. PASS
+
+All four use stage 1 only; the fixture is run 1's overlay fixture (clean) or `s29` (the rest).
+
+| case | client | server |
+|---|---|---|
+| clean overlay `29ea04c2`, overlay contract | `overlay PRODUCTION (DEV_OVERLAY_SHA1) ... (rom 29ea04c2)`, hello at 343 | `admission: admitted — cartridge sha1 matches the contract` |
+| ROM a with the pair's pins swapped (`POL_SWAP=1`) | admits `rand_overlay` and sends its hello (the client cannot know the contract) | **`admission: rejected — this is not the ROM built for player a (sha1 0d75313f20ec, expected 21ed1c1cf86c)`**; every reply is `{"cmd": "noop", "refused": "admission"}` |
+| ROM a, byte 0x14E flipped ($72 -> $73), sha1 `87f75ccd...` | **`polished cartridge refused (production admission): unknown artifact SHA-1 87f75ccd...: its Polished SLink companion overlay is modified or incomplete (overlay beacon mismatch); prepare it through the Manager or /patcher`**; no client, no connection | no hello |
+| ROM a, byte $1F8028 flipped ($C6 -> $C7), sha1 `26d62ad1...` | the same refusal, `overlay beacon mismatch` | no hello |
+
+The flipped ROMs were temp copies under `r3/` and were deleted after the runs. The Manager's `roms/a.gbc` was never
+touched.
+
+## Run 3 commands
+
+```
+python tools/polished_live/manager_r1.py [jar|nojar|oldjar]
+POL_KIND=rand POL_MGR_RUN=<lane>/r1_jar/mgr/<run> POL_LANE=<lane>/s30 POL_POS=26,1,11,48 python tools/polished_live/harness.py setup
+POL_KIND=rand POL_MGR_RUN=... POL_FIXTURE=<fixture> POL_RUNNAME=r2b POL_EXPECT_KIND=rand_overlay POL_STAGES=16 \
+  POL_MAP=26,1 POL_HEADER=1,13,27 POL_WALK=9,12 POL_TARGET=53,2 python tools/polished_live/harness.py live
+# R3: POL_SWAP=1 (swapped pins) | POL_ROM=<flipped copy> POL_ROM_SHA1=<its sha1> (client refusal)
+```

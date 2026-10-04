@@ -9,6 +9,15 @@ local fmt = string.format
 local J = L.json
 local STAGES = os.getenv("POL_STAGES") or "1234"
 local function want(n) return STAGES:find(tostring(n), 1, true) ~= nil end
+-- randomized-cartridge runs (R2/R3) reuse every stage on another map/kind: POL_MAP "group,number", POL_HEADER
+-- "tileset,width,height", POL_WALK "lo,hi" (x bounds of the grass run), POL_EXPECT_KIND overlay|rand_overlay.
+-- Stage 5 = POL_ENCOUNTERS wild battles fled (species/form/level read from wEnemyMon*), stage 6 = hunt POL_TARGET
+-- "species,form" (flee anything else) and catch it into the party.
+local function nums(s) local t = {} for v in s:gmatch("%d+") do t[#t + 1] = tonumber(v) end return t end
+local MAP = nums(os.getenv("POL_MAP") or "24,3")
+local HEADER = nums(os.getenv("POL_HEADER") or "1,30,9")
+local WALK = nums(os.getenv("POL_WALK") or "46,51")
+local EXPECT_KIND = os.getenv("POL_EXPECT_KIND") or "overlay"
 client.speedmode(400)
 L.log(fmt("[live] boot frame %d rom %s stages %s", emu.framecount(), gameinfo.getromhash(), STAGES))
 
@@ -85,8 +94,9 @@ local P = SLINK_GEN2_PARTS
 L.log(fmt("[live] parts: pack %s title %s kind %s qualification %s production_admitted %s rom %s",
           tostring(P.pack), tostring(P.title), tostring(P.artifact_kind), tostring(P.qualification),
           tostring(P.production_admitted), tostring(P.runtime_rom_sha1)))
-L.check("admitted as the Polished overlay (DEV_OVERLAY_SHA1)", P.pack == "polished_crystal" and P.title == "polished"
-        and P.artifact_kind == "overlay" and P.qualification == "DEV_OVERLAY_SHA1")
+L.check("admitted as the Polished " .. EXPECT_KIND .. " (DEV_OVERLAY_SHA1)", P.pack == "polished_crystal" and P.title == "polished"
+        and P.artifact_kind == EXPECT_KIND and P.qualification == "DEV_OVERLAY_SHA1")
+L.log(fmt("[live] admission: admitted_by %s overlay_sha1 %s", tostring(P.admitted_by), tostring(P.overlay_sha1)))
 
 -- wire tap: the connector module is looked up per call (run.lua), so wrapping M.send/M.receive sees every line
 local C = package.loaded["connector"]
@@ -120,14 +130,15 @@ C.receive = function(...)
 end
 
 -- ── continue into the game ──────────────────────────────────────────────────────────────────────
-if not L.to_overworld(24, 3, 60, 8000, "continue") then L.die("CONTINUE did not reach ROUTE_29") end
+if not L.to_overworld(MAP[1], MAP[2], 60, 8000, "continue") then L.die(fmt("CONTINUE did not reach map %d:%d", MAP[1], MAP[2])) end
 local first_ow = emu.framecount() - 60   -- to_overworld returns after 60 quiet idle frames
-L.log(fmt("[live] loaded header: tileset %d width %d height %d (Route 29 = 1, 30x9)", L.rw("wMapTileset"),
-          L.rw("wMapWidth"), L.rw("wMapHeight")))
-L.check("map header is Route 29's", L.rw("wMapTileset") == 1 and L.rw("wMapWidth") == 30 and L.rw("wMapHeight") == 9)
+L.log(fmt("[live] loaded header: tileset %d width %d height %d (want %d, %dx%d)", L.rw("wMapTileset"),
+          L.rw("wMapWidth"), L.rw("wMapHeight"), HEADER[1], HEADER[2], HEADER[3]))
+L.check("map header is the target map", L.rw("wMapTileset") == HEADER[1] and L.rw("wMapWidth") == HEADER[2]
+        and L.rw("wMapHeight") == HEADER[3])
 client.screenshot(L.RUN .. "/continue.png")
 local x0, y0 = L.rw("wXCoord"), L.rw("wYCoord")
-L.log(fmt("[live] on ROUTE_29 at (%d,%d) party %d", x0, y0, L.rw("wPartyCount")))
+L.log(fmt("[live] on map %d:%d at (%d,%d) party %d", MAP[1], MAP[2], x0, y0, L.rw("wPartyCount")))
 
 -- ── STAGE 1: hello ──────────────────────────────────────────────────────────────────────────────
 local f0 = emu.framecount()
@@ -146,8 +157,9 @@ if hello then
               tostring(m.artifact_kind), tostring(m.rom_sha1), tostring(m.companion_abi), tostring(m.panel),
               #(m.party or {}), table.concat(species, " "), #(m.pc_boxes or {}), tostring(m.pc_boxes_generation),
               tostring(m.area_id), tostring(m.loc_name), tostring(m.ot_id), tostring(m.trainer_name)))
-    L.check("STAGE1 hello identity polished_crystal/gen2_polished/overlay",
-            m.rom_type == "polished_crystal" and m.foundation == "gen2_polished" and m.artifact_kind == "overlay")
+    L.check("STAGE1 hello identity polished_crystal/gen2_polished/" .. EXPECT_KIND,
+            m.rom_type == "polished_crystal" and m.foundation == "gen2_polished" and m.artifact_kind == EXPECT_KIND)
+    L.check("STAGE1 hello rom_sha1 is the client rehash", m.rom_sha1 == P.runtime_rom_sha1, tostring(m.rom_sha1))
     L.check("STAGE1 hello party is the save's 5 mons", #(m.party or {}) == 5, #(m.party or {}))
     L.log(fmt("[live] STAGE1 hello context: hello frame %d, TitleScreenMain last %s, MainMenu last %s, first-idle %s",
               hello.frame, tostring(L.hit.TitleScreenMain), tostring(L.hit.MainMenu), tostring(first_ow)))
@@ -188,7 +200,7 @@ local function walk_for_battle(label)
     while not L.after("StartBattle", f) do
         if emu.framecount() - f > 20000 then L.die(label .. ": no wild battle in 20000 frames") end
         local x = L.rw("wXCoord")
-        if x <= 46 then dir = "Right" elseif x >= 51 then dir = "Left" end
+        if x <= WALK[1] then dir = "Right" elseif x >= WALK[2] then dir = "Left" end
         if L.recent("BlinkCursor", 2) then L.pulse("A") else L.frame({[dir] = true}) end
     end
     L.idle(2)
@@ -198,9 +210,19 @@ local function walk_for_battle(label)
               L.rw("wBattleType")))
 end
 
--- action "run" | "throw"; returns a list of throw outcomes
+-- the wild mon as the battle holds it: wEnemyMonForm = form (bits 0-4) | extspecies (bit 5) | gender/egg (6-7)
+local function enemy()
+    local fb = L.rw("wEnemyMonForm")
+    local g, n = L.map()
+    return {species = L.rw("wEnemyMonSpecies") | ((fb & 0x20) << 3), form = fb & 0x1F, form_byte = fb,
+            level = L.rw("wEnemyMonLevel"), frame = emu.framecount(), map = {g, n}}
+end
+
+-- action "run" | "throw" | function(foe) -> "run"/"throw" (decided at the first battle menu, when wEnemyMon* is
+-- loaded); returns the throw outcomes, the capture-site hits and the wild mon
 local BALL_POCKET = 2  -- wCurPocket is 0-based (pack.asm: cp TM_HM - 1); BALL = 3
 local function battle(action, label)
+    local foe = nil
     local f_start, handled, last_act = emu.framecount(), -1, emu.framecount()
     local throws, prepped, prep_pulses = {}, -1, 0
     local caps0 = #cap_hits
@@ -216,6 +238,12 @@ local function battle(action, label)
             L.die(label .. ": battle did not end")
         end
         local menu, btn = L.hit.LoadBattleMenu, nil
+        if menu and menu > handled and f - menu >= 6 and not foe then
+            foe = enemy()
+            if type(action) == "function" then action = action(foe) end
+            L.log(fmt("[live] %s wild mon: species %d form %d (byte %02X) level %d -> %s", label, foe.species, foe.form,
+                      foe.form_byte, foe.level, action))
+        end
         if menu and menu > handled and f - menu >= 6 then
             if L.after("PokeBallEffect", menu) or L.after("BattleMenu_Run", menu) then
                 handled = menu
@@ -252,7 +280,7 @@ local function battle(action, label)
     L.log(fmt("[live] %s: battle ended frame %d (%d frames), throws %d, capture-site bank-3 hits %d, other-bank hits so far %d, party %d",
               label, f_end, f_end - f_start, #throws, #cap_hits - caps0, cap_other_bank, L.rw("wPartyCount")))
     L.to_overworld(nil, nil, 30, 3000, label .. "-after")
-    return throws, #cap_hits - caps0
+    return throws, #cap_hits - caps0, foe
 end
 
 if want(2) then
@@ -360,6 +388,56 @@ if want(3) then
               tostring(L.hit.SaveGameData), paused_frames))
     L.to_overworld(nil, nil, 60, 3000, "STAGE3-after-save")
     L.idle(600)
+end
+
+-- ── STAGE 5: wild encounters on a randomized cartridge (fled; the facts are wEnemyMon* bytes) ──────
+local enc_path = L.RUN .. "/encounters.jsonl"
+if want(5) then
+    local n = tonumber(os.getenv("POL_ENCOUNTERS") or "5")
+    for i = 1, n do
+        walk_for_battle("STAGE5-" .. i)
+        local _, hits, foe = battle("run", "STAGE5-" .. i)
+        if foe then append(enc_path, J.encode({stage = 5, i = i, foe = foe})) end
+        L.check("STAGE5 a fled encounter does not fire the capture site", hits == 0, hits)
+    end
+end
+
+-- ── STAGE 6: hunt one (species, form) and catch it into the party ───────────────────────────────
+if want(6) then
+    local tgt = nums(os.getenv("POL_TARGET") or "53,2")
+    local caught, seen = false, 0
+    for i = 1, tonumber(os.getenv("POL_HUNT") or "30") do
+        if caught then break end
+        walk_for_battle("STAGE6-" .. i)
+        local party_before, captures_before = L.rw("wPartyCount"), #sent.capture
+        local throws, hits, foe = battle(function(f)
+            return (f.species == tgt[1] and f.form == tgt[2]) and "throw" or "run" end, "STAGE6-" .. i)
+        if foe then append(enc_path, J.encode({stage = 6, i = i, foe = foe, throws = #throws})) end
+        if foe and foe.species == tgt[1] and foe.form == tgt[2] then
+            seen = seen + 1
+            local last = throws[#throws]
+            if last and last.caught then
+                caught = true
+                L.check("STAGE6 the variant catch fires the capture site exactly once", hits == 1, hits)
+                local hit = cap_hits[#cap_hits]
+                if hit then
+                    L.log(fmt("[live] STAGE6 capture-site hit: frame %d bank %02X PC %04X SP %04X party_count@hit %d",
+                              hit.frame, hit.bank, hit.pc, hit.sp, hit.party_count))
+                end
+                L.idle(240)
+                local cap_ev = sent.capture[captures_before + 1]
+                L.check("STAGE6 client emitted capture", cap_ev ~= nil)
+                if cap_ev then L.log("[live] STAGE6 capture line: " .. J.encode(cap_ev.msg)) end
+                L.check("STAGE6 party grew by one", L.rw("wPartyCount") == party_before + 1,
+                        party_before .. " -> " .. L.rw("wPartyCount"))
+                local s = L.rw("wPartyCount") - 1
+                L.log(fmt("[live] STAGE6 new party slot %d: struct bytes %s", s + 1, L.hex(L.wbytes("wPartyMons", s * 48, 48))))
+            else
+                L.check("STAGE6 failed throws never fire the capture site", hits == 0, hits)
+            end
+        end
+    end
+    L.check(fmt("STAGE6 caught the target %d form %d (%d seen)", tgt[1], tgt[2], seen), caught)
 end
 
 -- ── wrap-up ─────────────────────────────────────────────────────────────────────────────────────
