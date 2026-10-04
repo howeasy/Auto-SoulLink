@@ -838,6 +838,43 @@
       "EVA"
     ]
   },
+  "polished_crystal": {
+    "abilities": false,
+    "badges": [
+      "Zephyr Badge",
+      "Hive Badge",
+      "Plain Badge",
+      "Fog Badge",
+      "Mineral Badge",
+      "Storm Badge",
+      "Glacier Badge",
+      "Rising Badge",
+      "Boulder Badge",
+      "Cascade Badge",
+      "Thunder Badge",
+      "Rainbow Badge",
+      "Marsh Badge",
+      "Soul Badge",
+      "Volcano Badge",
+      "Earth Badge"
+    ],
+    "explode_mode": true,
+    "game_id": "gen2_polished",
+    "info_panel": false,
+    "info_panel_width": 0,
+    "memorial_box_index": 19,
+    "mons_per_box": 20,
+    "party_blob_size": 70,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
+  },
   "pureblue": {
     "abilities": false,
     "badges": [

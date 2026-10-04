@@ -261,7 +261,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : f === 'gen3_exp' ? 'Emerald Expansion' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen2_polished' ? 'Polished Crystal' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : f === 'gen3_exp' ? 'Emerald Expansion' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -285,6 +285,7 @@ function randomizerFields(form) {
         add('Emerald', function (r) { return r.clean && r.family === 'gen3_emerald'; });
         add('Emerald Expansion', function (r) { return r.clean && r.family === 'gen3_exp'; });
         add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
+        add('Polished Crystal', function (r) { return r.clean && r.family === 'gen2_polished'; });
       }
       add('not usable', function (r) { return !r.clean; });
       return groups;

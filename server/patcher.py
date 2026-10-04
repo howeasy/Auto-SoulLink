@@ -68,6 +68,16 @@ def _gen2_overlay_md5(title: str) -> str:
     return _gen2_overlay_row(title)["md5"]
 
 
+def _polished_overlay_md5() -> str:
+    """The Polished Crystal overlay md5, read live from data/polished/overlay_provenance.json
+    (tools/build_polished_companion.py rewrites it whenever patch/polished/src changes)."""
+    import json
+
+    path = os.path.normpath(os.path.join(_SERVER_DIR, "..", "data", "polished", "overlay_provenance.json"))
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)["output"]["md5"]
+
+
 def gen2_overlay_admitted(title: str) -> bool:
     """Does the launcher (lua/gen2/entry.lua) admit this title's overlay? Its row must be
     activated (tools/gen_gen2_admission.py --promote-overlays): SELECTED/ADMITTED under G4, with the
@@ -210,6 +220,18 @@ def _build_targets() -> dict[str, dict]:
         "accept":      ".gbc,application/octet-stream",
         "out_name":    "Pokemon Silver (SLink companion).gbc",
         "base_hint":   "a clean pokesilver US build (sha1 49b163f7e57702bc939d642a18f591de55d92dae)",
+    },
+    # Polished Crystal v3.2.3 standard: the release ROM is a full build (no base ROM), pinned in
+    # data/polished_sources.lock.json; base_md5 is that release file's md5.
+    "polished-crystal": {
+        "slug":        "polished-crystal",
+        "label":       "Polished Crystal",
+        "patch":       "SLink-Polished.ups",
+        "base_md5":    "53d90e468c9eae4d602feacc6295a021",
+        "patched_md5": _polished_overlay_md5(),
+        "accept":      ".gbc,application/octet-stream",
+        "out_name":    "Polished Crystal (SLink companion).gbc",
+        "base_hint":   "polishedcrystal-3.2.3.gbc from the v3.2.3 release (sha1 6930b48af5844d373e3c9130f26d6dd1084cf4ed)",
     },
 }
 

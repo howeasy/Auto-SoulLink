@@ -455,7 +455,8 @@ def test_companion_titles_are_exactly_the_patchers_companion_targets_minus_yello
     title_of = {"rr": "Radical Red", "rb-red": "Red", "rb-blue": "Blue", "pure-red": "PureRed",
                 "pure-blue": "PureBlue", "pure-green": "PureGreen", "gen2-crystal": "Crystal",
                 "gen2-gold": "Gold", "gen2-silver": "Silver", "firered": "FireRed",
-                "leafgreen": "LeafGreen", "emerald": "Emerald"}
+                "leafgreen": "LeafGreen", "emerald": "Emerald",
+                "polished-crystal": "Polished Crystal"}
     assert set(patcher.TARGETS) <= set(title_of), "a new patcher target needs a COMPANION_TITLES decision"
     assert set(cartridges.COMPANION_TITLES) == {title_of[slug] for slug in patcher.TARGETS}
     assert "Yellow" not in cartridges.COMPANION_TITLES and len(set(cartridges.COMPANION_TITLES)) == len(

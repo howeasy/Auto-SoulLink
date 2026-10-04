@@ -183,7 +183,8 @@ Polished offsets measured from `.sym:67524-67570` (base `wPartyMon1 = 01:DCD6`).
 | Happiness (`EggCycles` alias) | +27 | +26 | moved −1 |
 | PokerusStatus | +28 | +27 | moved −1 |
 | CaughtData / CaughtTime / CaughtBall | +29 | +28 | moved −1 |
-| CaughtLocation (`CaughtGender` alias) | +30 | +29 | moved −1 |
+| CaughtLevel | (+29, packed with time) | +29 | split out (`.sym` 01:dcf3) |
+| CaughtLocation (`CaughtGender` alias) | +30 | +30 | same (`.sym` 01:dcf4; coordinator correction 2026-10-04) |
 | Level | +31 | +31 | same |
 | Status | +32 | +32 | same |
 | Unused | +33 | +33 | same |
@@ -346,7 +347,7 @@ Key items are still ID-only (width 1) with an `$FF` terminator; all other pocket
 | `wBadges` | — | `01:D7EE`, End `01:D7F0` (2 bytes) | `.sym:67247-67250` |
 | event flags | `wEventFlags` | `wEventFlags:: flag_array NUM_EVENTS`, NUM_EVENTS = 2303 → **288 bytes** (`01:DA5A`-`01:DB79`) | `constants/event_flags.asm:2433-2434`, `.sym:67402`, `wramx.asm:1180` |
 
-Badge bit **order is identical** (Zephyr, Hive, Plain, Fog, Mineral, Storm, Glacier, Rising; then Boulder, Cascade, Thunder, Rainbow, Marsh, Soul, Volcano, Earth — `ram_constants.asm:276-295`), so badge-flag semantics survive. `wEventFlags` is a **bit array**, not a byte array: the bit index for an event id `N` is `N`, byte `N >> 3`, mask `1 << (N & 7)`. Vanilla pokecrystal also uses `flag_array NUM_EVENTS` with NUM_EVENTS = 0x800-ish, so the *encoding* is the same; only the **count** moved.
+Badge bit order is **NOT** identical (coordinator correction 2026-10-04): Johto is the same (Zephyr, Hive, Plain, Fog, Mineral, Storm, Glacier, Rising), but Kanto swaps bits 4/5 — Polished is Boulder, Cascade, Thunder, Rainbow, **Marsh, Soul**, Volcano, Earth (`ram_constants.asm:288-289`), vanilla is ..., Rainbow, **Soul, Marsh**, .... `wEventFlags` is a **bit array**, not a byte array: the bit index for an event id `N` is `N`, byte `N >> 3`, mask `1 << (N & 7)`. Vanilla pokecrystal also uses `flag_array NUM_EVENTS` with NUM_EVENTS = 0x800-ish, so the *encoding* is the same; only the **count** moved.
 
 ---
 

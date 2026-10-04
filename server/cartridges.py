@@ -28,7 +28,8 @@ class CartridgeError(Exception):
 # patched through /patcher (describe_rom does not identify it, so the Manager never sees a pick
 # of it); it is listed so the list is exactly the patcher's targets, test_cartridges.py pins that.
 COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
-                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald", "Radical Red")
+                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald", "Radical Red",
+                    "Polished Crystal")
 _GEN2_TITLES = ("Crystal", "Gold", "Silver")   # the title the launcher and the adapter refuse clean for as well
 
 
@@ -36,6 +37,8 @@ def companion_admitted(info: dict) -> bool:
     """Does this pick's title get the companion? describe_rom's variant, e.g. 'Red'. A Gen 2 title
     also needs its activated catalog row."""
     variant = info.get("variant")
+    if variant == upr_pipeline.POLISHED_VARIANT:
+        return False   # P5: admitted once patcher.TARGETS carries the overlay card's Polished target
     if variant in ("Crystal", "Gold", "Silver"):
         return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
     return variant in COMPANION_TITLES
@@ -115,7 +118,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     for pid, info in infos.items():
         variant = info.get("variant")
         if variant in COMPANION_TITLES and not want[pid]:
-            if variant in _GEN2_TITLES and companion:
+            if variant in (*_GEN2_TITLES, upr_pipeline.POLISHED_VARIANT) and companion:
                 # an unactivated overlay row: the Gen 2 launcher admits no clean cartridge either
                 raise CartridgeError(
                     f"player {pid}: the Gen 2 companion is not admitted yet for {variant}; "
@@ -131,6 +134,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         raise CartridgeError(
             "Gen 2 has no randomizer support; turn Randomize off to prepare companion "
             "cartridges only")
+    if randomize is not None and family == upr_pipeline.FAMILY_POLISHED:
+        raise CartridgeError(upr_pipeline.POLISHED_RANDOMIZER_REFUSAL)
     if randomize is not None:
         if not isinstance(randomize, dict) or not randomize.get("settings_path"):
             raise CartridgeError("randomize needs settings_path pointing to a .rnqs file")
@@ -192,7 +197,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         # fingerprint_any: Gen 3 cartridges use the Gen 3 fingerprint, Gen 1 the wild/fishing
         # scanner; Gen 2 and the Emerald Expansion never randomize, so there is no content_fingerprint to cross-check it
         # against at hello either.
-        fingerprint = "" if family in (upr_pipeline.FAMILY_GEN2, upr_pipeline.FAMILY_GEN3_EXP) else upr_pipeline.fingerprint_any(rom)
+        fingerprint = "" if family in (upr_pipeline.FAMILY_GEN2, upr_pipeline.FAMILY_POLISHED,
+                                       upr_pipeline.FAMILY_GEN3_EXP) else upr_pipeline.fingerprint_any(rom)
         players[pid] = {"source": sources[pid], "source_title": infos[pid]["title"],
                         "output": str(outputs[pid]), "rom_sha1": hashlib.sha1(rom).hexdigest(),
                         "fingerprint": fingerprint, "kind": kind}

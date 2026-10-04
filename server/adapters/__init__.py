@@ -76,6 +76,10 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
     "Gold": "gen2_gsc", "gold": "gen2_gsc",
     "Silver": "gen2_gsc", "silver": "gen2_gsc",
+    # Polished Crystal v3.2.3 (Rangi42): its own Gen 2 family, like pureRGB is for Gen 1 -- 9-bit species,
+    # forms, a different party_struct middle and PC storage (docs/polished/RAM.md). Never pairs with GSC.
+    # P3: the spelling the Polished Lua client sends.
+    "polished_crystal": "gen2_polished",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
     "pokemon_black_2": "gen5_bw",
@@ -98,6 +102,7 @@ _VARIANT_LABEL: dict[str, str] = {
     "Crystal": "Crystal", "crystal": "Crystal",
     "Gold": "Gold", "gold": "Gold",
     "Silver": "Silver", "silver": "Silver",
+    "polished_crystal": "Polished Crystal",
     "pokemon_black": "Pokémon Black",
     "pokemon_white": "Pokémon White",
     "pokemon_black_2": "Pokémon Black 2",
@@ -276,3 +281,7 @@ register_adapter("gen1_purergb", Gen1PureRGBAdapter)
 from .gen2_gsc import Gen2GSCAdapter  # noqa: E402
 
 register_adapter("gen2_gsc", Gen2GSCAdapter)
+
+from .gen2_polished import Gen2PolishedAdapter  # noqa: E402
+
+register_adapter("gen2_polished", Gen2PolishedAdapter)

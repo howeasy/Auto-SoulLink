@@ -107,7 +107,7 @@ def test_every_gen2_spelling_has_its_own_foundation_row_not_the_game_id_fallback
     Every routed Gen 2 spelling is on `gen2_gsc` (U5); Archipelago Crystal routes nowhere
     (O-25), so the totality check is exactly the six admitted spellings.
     """
-    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid.startswith("gen2")}
+    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid == "gen2_gsc"}  # Polished is its own family
     assert routed == set(GEN2), "a Gen 2 spelling was added without a pairing row"
     for rom_type in GEN2:
         assert _ROM_TYPE_TO_FOUNDATION.get(rom_type) == "gen2_gsc", rom_type

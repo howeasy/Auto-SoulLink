@@ -11,12 +11,14 @@
   "FireRed",
   "LeafGreen",
   "Emerald",
-  "Radical Red"
+  "Radical Red",
+  "Polished Crystal"
  ],
  "family_words": {
   "gen1_purergb": "pureRGB",
   "gen1_rby": "vanilla Red / Blue / Yellow",
   "gen2_gsc": "Gold / Silver / Crystal",
+  "gen2_polished": "Polished Crystal",
   "gen3_emerald": "Emerald",
   "gen3_frlg": "FireRed / LeafGreen"
  },
@@ -24,6 +26,7 @@
   "gen1": "gen1_rby",
   "gen1_purergb": "gen1_purergb",
   "gen2": "gen2_gsc",
+  "gen2_polished": "gen2_polished",
   "gen3": "gen3_frlg",
   "gen3_e": "gen3_emerald"
  },
@@ -59,6 +62,14 @@
    "unadmitted": false
   },
   {
+   "key": "gen2_polished",
+   "label": "Polished Crystal",
+   "members": [
+    "polished_crystal"
+   ],
+   "unadmitted": false
+  },
+  {
    "key": "gen3",
    "label": "FireRed · LeafGreen",
    "members": [
@@ -89,6 +100,7 @@
   "gen1_purergb"
  ],
  "non_randomizable": {
+  "gen2_polished": "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off",
   "gen3_rr": "Randomized Radical Red is not supported in this release; the randomizer supports FireRed / LeafGreen / Emerald"
  },
  "randomizer_games": [
@@ -253,6 +265,56 @@
     "why": ""
    }
   },
+  "gen2_polished": {
+   "battle_calc": {
+    "always": false,
+    "ok": false,
+    "why": "The calculator has no Polished Crystal data (new species, forms and abilities)."
+   },
+   "explode_mode": {
+    "ok": true,
+    "why": ""
+   },
+   "gender_lock": {
+    "ok": true,
+    "why": ""
+   },
+   "native_messages": {
+    "always": false,
+    "ok": false,
+    "why": "Not available yet."
+   },
+   "native_sounds": {
+    "ok": true,
+    "why": ""
+   },
+   "overworld_presence": {
+    "always": false,
+    "ok": false,
+    "why": "Not available yet."
+   },
+   "pc_trade_npc": {
+    "always": true,
+    "ok": false,
+    "why": "Polished Crystal trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."
+   },
+   "phone_calls": {
+    "ok": true,
+    "why": ""
+   },
+   "rival_team_swap": {
+    "ok": true,
+    "why": ""
+   },
+   "species_lock": {
+    "ok": true,
+    "why": ""
+   },
+   "type_lock": {
+    "ok": true,
+    "why": ""
+   }
+  },
   "gen3": {
    "battle_calc": {
     "always": false,
@@ -291,9 +353,9 @@
     "why": "Only Gen 2 has a Pokégear phone for the companion to ring."
    },
    "rival_team_swap": {
+    "always": false,
     "ok": false,
-    "why": "Not available on FireRed, LeafGreen or Emerald yet.",
-    "always": false
+    "why": "Not available on FireRed, LeafGreen or Emerald yet."
    },
    "species_lock": {
     "ok": true,
@@ -342,9 +404,9 @@
     "why": "Only Gen 2 has a Pokégear phone for the companion to ring."
    },
    "rival_team_swap": {
+    "always": false,
     "ok": false,
-    "why": "Not available on FireRed, LeafGreen or Emerald yet.",
-    "always": false
+    "why": "Not available on FireRed, LeafGreen or Emerald yet."
    },
    "species_lock": {
     "ok": true,

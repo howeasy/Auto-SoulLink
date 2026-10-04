@@ -251,6 +251,13 @@ def jar_entry_crcs(jar: str) -> dict[str, int | None]:
 FAMILY_GEN2 = "gen2_gsc"
 _GEN2_TITLES = ("crystal", "gold", "silver")
 
+# Polished Crystal v3.2.3: its own Gen 2 family (server/adapters/gen2_polished.py), recognised by the exact
+# release sha1 data/polished_sources.lock.json pins. P5: the companion overlay's sha1 joins it once the
+# overlay card lands. No randomizer yet: server/cartridges.py and the Manager refuse it by this reason.
+FAMILY_POLISHED = "gen2_polished"
+POLISHED_VARIANT = "Polished Crystal"
+POLISHED_RANDOMIZER_REFUSAL = "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off"
+
 # The Emerald Expansion (pokeemerald-expansion, gen3_exp pack) is a 32 MiB BUILD, not a dump: it
 # is recognised by the exact sha1 its pack pins, never by header, so the 16 MiB Gen 3 gates
 # below (and every other 32 MiB BPEE) stay refused. It has no randomizer and no companion.
@@ -258,6 +265,12 @@ FAMILY_GEN3_EXP = "gen3_exp"
 EXPANSION_VARIANT = "Emerald Expansion"
 EXPANSION_REFUSAL = ("The Emerald Expansion has no randomizer and no companion patch (it is a prebuilt "
                      "reference ROM); turn Randomize and Companion off")
+
+
+@functools.cache
+def _polished_sha1() -> str:
+    with open(os.path.join(_REPO, "data", "polished_sources.lock.json"), encoding="utf-8") as fh:
+        return json.load(fh)["outputs"]["polishedcrystal"]["sha1"].lower()
 
 
 @functools.cache
@@ -329,12 +342,16 @@ def family_of(sources: dict[str, str]) -> str:
         if hashlib.sha1(rom).hexdigest() in gen2:
             families[pid] = FAMILY_GEN2
             continue
+        if hashlib.sha1(rom).hexdigest() == _polished_sha1():
+            families[pid] = FAMILY_POLISHED
+            continue
         ident = identify(rom)
         families[pid] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
     if len(set(families.values())) != 1:
         raise UprPipelineError(
             f"the two ROMs are different families ({families}); a cartridge only pairs with "
-            f"another of its own family (vanilla Gen 1, pureRGB, Gen 2, FireRed / LeafGreen, Emerald, Emerald Expansion)")
+            f"another of its own family (vanilla Gen 1, pureRGB, Gen 2, Polished Crystal, FireRed / LeafGreen, Emerald, "
+            f"Emerald Expansion)")
     return next(iter(families.values()))
 
 
@@ -573,6 +590,10 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
                         kind=g3["kind"], clean=g3["pinned"],
                         variant=GEN3_TITLE_WORDS[g3["title"]])
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
+            return info
+        if info["sha1"] == _polished_sha1():
+            info.update(family=FAMILY_POLISHED, kind="clean", clean=True, variant=POLISHED_VARIANT,
+                        title=f"{POLISHED_VARIANT} · {KIND_WORDS['clean']}")
             return info
         gen2_title = _gen2_clean_sha1s().get(info["sha1"])
         if gen2_title:

@@ -71,6 +71,7 @@ GAMES = [
     ("gen1", "Red · Blue · Yellow", ["red", "blue", "yellow"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
+    ("gen2_polished", "Polished Crystal", ["polished_crystal"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
     ("gen3_e", "Emerald", ["emerald"]),
@@ -90,9 +91,9 @@ GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # the randomizer -- see test_manager_names_the_frlg_family / the RR refusal test in
 # test_upr_pipeline_gen3.py.
 GAME_FAMILY = {"gen1": "gen1_rby", "gen1_purergb": "gen1_purergb",
-               "gen2": "gen2_gsc", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
+               "gen2": "gen2_gsc", "gen2_polished": "gen2_polished", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
-                "gen2_gsc": "Gold / Silver / Crystal",
+                "gen2_gsc": "Gold / Silver / Crystal", "gen2_polished": "Polished Crystal",
                 "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald",
                 "gen3_exp": "Emerald Expansion"}
 # Owner ruling 37 (2026-09-27): a Radical Red run cannot be randomized at all. It is absent
@@ -108,6 +109,8 @@ NON_RANDOMIZABLE_GAMES = {
     # randomizer form as its family, and "gen3_exp" is not one of upr_settings.FAMILIES.
     "gen3_exp": ("The Emerald Expansion has no randomizer and no companion patch -- it is a prebuilt "
                  "reference ROM; the randomizer supports FireRed / LeafGreen / Emerald"),
+    # ponytail: until the UPR fork handler lands (docs/polished/UPR_HANDLER.md), then drop this row.
+    "gen2_polished": "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off",
 }
 
 
@@ -184,6 +187,7 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen2_gsc": {"ok": True},
+                     "gen2_polished": {"ok": True},   # P3: lua writes at Polished's 35-byte battle_struct
                      "gen3_frlge_rr": {"ok": True},
                      "gen3_exp": {"ok": False, "why": "Explode Mode is not supported on the Emerald Expansion."}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
@@ -193,6 +197,7 @@ OPTION_SUPPORT = {
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},
+                        "gen2_polished": {"ok": True},   # P3: no enemy species list (wMirrorHerbPendingBoosts, RAM.md §2.4)
                         "gen3_frlge_rr": {"ok": True},
                         "gen3_exp": {"ok": False, "why": "Needs the companion patch (gEnemyParty is encrypted), and the Emerald Expansion has none."}},
     "overworld_presence": {"all": False, "why": "Not available yet."},   # deferred post-RC, docs/gen3/TODO.md
@@ -202,14 +207,17 @@ OPTION_SUPPORT = {
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
+                      "gen2_polished": {"ok": True},
                       "gen3_frlge_rr": {"ok": True},
                       "gen3_exp": {"ok": False, "why": "Needs a companion patch with a native sound path, and the Emerald Expansion has none."}},
     "phone_calls": {"all": False, "why": "Only Gen 2 has a Pokégear phone for the companion to ring.",
-                    "gen2_gsc": {"ok": True}},
+                    "gen2_gsc": {"ok": True},
+                    "gen2_polished": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen2_gsc": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 2 damage."},
+                    "gen2_polished": {"ok": False, "why": "The calculator has no Polished Crystal data (new species, forms and abilities)."},
                     "gen3_frlge_rr": {"ok": True},
                     "gen3_exp": {"ok": True}},
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
@@ -219,6 +227,7 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist, which the companion overlay makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
                      "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
+                     "gen2_polished": {"ok": False, "always": True, "why": "Polished Crystal trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."},
                      "gen3_frlge_rr": {"ok": True},
                      "gen3_exp": {"ok": False, "why": "The Emerald Expansion has no companion patch, so no Pokémon-Center trade NPC to switch off."}},
 }
@@ -365,7 +374,11 @@ def _cache_rom_dirs() -> list[str]:
         if parent == d:
             break
         d = parent
-    return out
+    # Polished Crystal: the pinned release ROM tools/build_polished_companion.py caches under the work root.
+    # P5: add the overlay build's output folder once the companion card lands.
+    from tools.slink_space import DEFAULT_WORK_ROOT
+    polished = os.path.join(os.environ.get("SLINK_WORK_ROOT") or DEFAULT_WORK_ROOT, "cache", "polished", "release")
+    return out + [polished] if os.path.isdir(polished) else out
 
 
 ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
@@ -1488,6 +1501,8 @@ class RunManager:
             EXPANSION_REFUSAL,
             FAMILY_GEN2,
             FAMILY_GEN3_EXP,
+            FAMILY_POLISHED,
+            POLISHED_RANDOMIZER_REFUSAL,
             family_of,
             find_upr_jar,
         )
@@ -1546,6 +1561,8 @@ class RunManager:
         if randomize and family == FAMILY_GEN2:
             return web.json_response({"ok": False, "error": (
                 "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
+        if randomize and family == FAMILY_POLISHED:
+            return web.json_response({"ok": False, "error": POLISHED_RANDOMIZER_REFUSAL}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
