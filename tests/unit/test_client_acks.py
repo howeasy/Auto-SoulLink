@@ -37,8 +37,10 @@ def test_there_are_clients_to_check():
     Written as a lower bound so it holds before and after the old client's deletion.
     P3b.8: three -- Gen 2's legacy client went the same way (lua/gen2/ replaces it).
     C5-6: two -- the old Gen 3 client was deleted too (lua/gen3/ replaces it).
+    G3a: one -- the legacy Gen 4 client was deleted (lua/gen4/ replaces it); gen5_bw_client.lua is
+    the last BizHawk entry-script client. Gen 4's acks are checked below against its module graph.
     """
-    assert len(CLIENTS) >= 2
+    assert len(CLIENTS) >= 1
 
 
 GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")
@@ -58,6 +60,35 @@ def test_the_gen1_client_confirms_and_can_refuse_every_deferred_command():
                 continue
             assert reply in src, (
                 f"lua/gen1/client.lua handles {cmd!r} but never sends {reply!r}; the server "
+                f"waits on that reply and re-queues the command on every reconnect")
+
+
+GEN4_GRAPH = [os.path.join(REPO, "lua", "gen4", "client.lua"),
+              os.path.join(REPO, "lua", "core", "session.lua"),
+              os.path.join(REPO, "lua", "core", "deferred.lua")]
+
+
+def test_the_gen4_client_graph_confirms_and_can_refuse_every_deferred_command():
+    """G3a: the Gen 4 client is a module on the shared core, like Gen 1, so its acks are read off the
+    protocol across the files that send them (the core owns the generic replies, the client its own)."""
+    from tests.unit.protocol_schema import ACKS
+
+    src = ""
+    for path in GEN4_GRAPH:
+        with open(path, encoding="utf-8") as f:
+            src += f.read()
+    # Gen 4 implements the deferred party/box/memorialize commands only (no rival team, menus or trade
+    # yet): a command is held to its acks once the graph names it, and the floor below keeps the filter
+    # from silently matching nothing.
+    handled = [cmd for cmd in ACKS if f'"{cmd}"' in src]
+    assert {"party_mon", "box_mon", "memorialize"} <= set(handled), handled
+    for cmd in handled:
+        done, failed = ACKS[cmd]
+        for reply in (done, failed):
+            if reply is None:
+                continue
+            assert reply in src, (
+                f"the Gen 4 client graph handles {cmd!r} but never sends {reply!r}; the server "
                 f"waits on that reply and re-queues the command on every reconnect")
 
 
