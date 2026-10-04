@@ -68,7 +68,8 @@ def _arm9_vanilla(title: dict) -> dict[int, int]:
 
 def _run_launcher(rom_hash: str, header_code: str, ram: dict[int, int] | None = None,
                   bizhawk: str = "2.11.1", loaded: list[str] | None = None,
-                  launcher_source: str | None = None) -> list[str]:
+                  launcher_source: str | None = None,
+                  logs: list[str] | None = None, unreadable_header: bool = False) -> list[str]:
     """Run `lua/slink.lua` against a modelled NDS cartridge; return the repo-relative paths it
     dofile'd. Pass `loaded` to keep the list when the launcher refuses (the error leaves dofile)."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
@@ -83,6 +84,8 @@ def _run_launcher(rom_hash: str, header_code: str, ram: dict[int, int] | None = 
     rom = bytes(0x200)                              # no NDS route reads ROM bytes; a guard, not a cartridge
 
     def read_u8(addr, domain=None):
+        if unreadable_header and domain == "ARM9 System Bus" and HEADER_COPY <= addr < HEADER_COPY + 0x20:
+            raise RuntimeError("no such address on this core")  # what a real core may do on a bad read
         if domain == "ARM9 System Bus":
             return ram.get(addr, 0)
         if domain == "Main RAM":
@@ -113,7 +116,8 @@ def _run_launcher(rom_hash: str, header_code: str, ram: dict[int, int] | None = 
     g.client = lua.table_from({"getversion": lambda: bizhawk})
     g.gameinfo = lua.table_from({"getromhash": lambda: rom_hash})  # md5 or sha1; both are pinned
     g.memory = lua.table_from({"read_u8": read_u8, "read_u32_le": read_u32_le})
-    g.console = lua.table_from({"log": lambda *a: None})
+    g.console = lua.table_from({"log": lambda *a: logs.append(" ".join(str(x) for x in a))
+                                if logs is not None else None})
     # Only the console-tee's own log file is stubbed away (it would truncate slink_lua.log in the
     # repo root); admission reads the real pack JSON through io.open, so everything else is real.
     real_io_open = g.io.open
@@ -249,3 +253,26 @@ def test_removing_the_nds_block_stops_heartgold_from_reaching_the_gen4_client():
         _run_launcher(HG["rom"]["sha1"], HG["rom"]["header_code"], _arm9_vanilla(HG),
                       loaded=loaded, launcher_source=_without_nds_block())
     assert _GEN4_RUN not in loaded, loaded
+
+
+def test_a_failed_header_read_is_logged_by_name_before_falling_through():
+    """The launcher cannot tell whose cartridge it is when the header copy is unreadable, so it hands
+    over to game_detect -- but the first live run must be told the header copy is the problem, not
+    the ROM (docs: lua/gen4/client.lua PLATFORM.header_copy is UNVERIFIED LIVE)."""
+    logs: list[str] = []
+    loaded: list[str] = []
+    with pytest.raises(lupa.LuaError):
+        _run_launcher("f" * 32, "IPKE", loaded=loaded, logs=logs, unreadable_header=True)
+    assert any("could not read the NDS cartridge header copy" in line for line in logs), logs
+
+
+def test_a_broken_gen4_graph_is_logged_not_silently_declined():
+    """If lua/gen4/entry.lua cannot load, the block declines (it cannot know it is not Gen 5), but
+    the real cause goes to the console instead of vanishing behind game_detect's message."""
+    src = Path(_SLINK).read_text(encoding="utf-8").replace(
+        'dofile(_dir .. "gen4/entry.lua")', 'error("entry.lua is gone")', 1)
+    logs: list[str] = []
+    with pytest.raises(lupa.LuaError):
+        _run_launcher("f" * 32, "IPKE", launcher_source=src, logs=logs)
+    assert any("Gen 4 admission machinery failed" in line and "entry.lua is gone" in line
+               for line in logs), logs

@@ -195,7 +195,12 @@ end
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
     if sys_ok and sys == "NDS" then
-        local json = dofile(_dir .. "json_codec.lua")
+        -- Named, not a bare dofile traceback: a missing codec is a broken release, and this is
+        -- the player-readable shape every other refusal here takes.
+        local ok_json, json = pcall(dofile, _dir .. "json_codec.lua")
+        if not ok_json then
+            error("[SLink] could not load lua/json_codec.lua: " .. tostring(json), 0)
+        end
         -- Where the NDS boot leaves the cartridge header copy, and which bus the vanilla anchor
         -- bytes are read over, are PLATFORM facts: take them from the client's own table (run.lua
         -- reads them the same way) instead of repeating an address in the launcher.
@@ -245,7 +250,20 @@ do
         end)
         if ok_codes and codes[code] then
             error("[SLink] Unsupported Gen 4 cartridge (header " .. code .. "): " .. what
-                  .. ". Supported on NDS: HeartGold, SoulSilver and the hg-engine HeartGold build.", 0)
+                  .. ". Supported on NDS: HeartGold, SoulSilver and the hg-engine HeartGold build."
+                  .. " Use an unmodified pinned cartridge.", 0)
+        end
+        -- Falling through is the right call when this block cannot tell whose cartridge it is
+        -- (Gen 5 is game_detect's), but the reason must not be lost: game_detect's own message
+        -- would otherwise say Gen 4 is "routed or refused by lua/slink.lua" when it was not.
+        -- Console only, like the Gen 1 route's engine-signal diagnostics.
+        if not ok_admit then
+            console.log("[SLink] Gen 4 admission machinery failed (" .. tostring(Entry)
+                        .. "); handing the cartridge to game detection")
+        elseif code == "" then
+            console.log("[SLink] could not read the NDS cartridge header copy ("
+                        .. "UNVERIFIED LIVE: lua/gen4/client.lua PLATFORM.header_copy); "
+                        .. "handing the cartridge to game detection")
         end
     end
 end
