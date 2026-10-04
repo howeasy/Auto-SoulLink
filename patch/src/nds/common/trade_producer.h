@@ -1,6 +1,7 @@
 /* Shared native transaction controller, NDS lift of trade_targets/trade_producer.h.
- * Same lifecycle, milestone ordering and refusals as Gen 3, bar one: a PREPARE
- * refused while UNCERTAIN answers UNCERTAIN (11), where Gen 3 answers IDENTITY.
+ * Same lifecycle, milestone ordering and refusals as Gen 3, bar two: a PREPARE
+ * refused while UNCERTAIN answers UNCERTAIN (11), where Gen 3 answers IDENTITY, and
+ * the pre-save leg is bounded (see the pre-save watchdog below).
  * Game addresses/calls and the record format belong to the engine + SlinkRecordBinding.
  * No allocator, encoder, raw-swap fallback or Lua dependency. Callers must provide
  * engine-verified terminal observations, not time guesses.
@@ -18,12 +19,17 @@
  * adapter bound that outlasts it would let the host declare the module poisoned
  * before the native side reaches UNCERTAIN, so adapters should pick a smaller one.
  *
- * Pre-save watchdog: poll_pre_save() returning neither 1 (saved) nor negative
- * (refused) left the producer in TP_PRE_SAVE forever, so a stalled pre-save dialog
- * outlasted the host budget above and the module ended poisoned rather than
- * unchanged. pre_save_timeout_frames bounds that wait; 0 leaves the bound off.
- * Nothing is mutated before the save completes, so the timeout ends the visit
- * UNCHANGED, exactly like an engine refusal.
+ * Pre-save watchdog (fail closed): a poll_pre_save() that has neither saved (1) nor
+ * refused (negative) -- still waiting (0), consented (2) or returning any
+ * out-of-contract value -- used to leave the producer in TP_PRE_SAVE forever, so a
+ * stalled pre-save outlasted the host budget above and the module ended poisoned
+ * rather than unchanged. The wait is now bounded from the frame stamped just before
+ * start_pre_save() by pre_save_timeout_frames, or, when that is 0, by the REQUIRED
+ * save_timeout_frames (so there is no unbounded configuration). A poll that returns 1
+ * on the frame the bound expires still wins. Nothing is mutated before the save
+ * completes, so the timeout ends the visit UNCHANGED, exactly like an engine
+ * refusal; if the poll had consented (2) a cartridge save may already have been
+ * written, which is a host-journal obligation. e->frame() must be monotonic.
  */
 #ifndef SLINK_NDS_TRADE_PRODUCER_H
 #define SLINK_NDS_TRADE_PRODUCER_H
@@ -44,8 +50,8 @@ static inline void slink_trade_advertise(volatile SlinkMailboxV2 *m)
 typedef struct {
     void *context;
     uint32_t save_timeout_frames;      /* REQUIRED nonzero: PENDING longer than this is FAIL */
-    uint32_t pre_save_timeout_frames;  /* OPTIONAL, 0 = no watchdog: a pre-save that neither
-                                        * saves nor refuses within this many frames is UNCHANGED */
+    uint32_t pre_save_timeout_frames;  /* OPTIONAL, 0 = use save_timeout_frames: a pre-save that has neither
+                                        * saved nor refused within this many frames is UNCHANGED */
     const SlinkRecordBinding *binding; /* record length/validation/identity */
     const SlinkDecoder *decoder;       /* decoded-body access; NULL for PK3 */
     int (*safe_field)(void *);
@@ -65,7 +71,7 @@ typedef struct {
     uint8_t slot, cancel_scene, saving, reserved;
     uint16_t incoming_len, reserved2;
     uint32_t save_start_frame;        /* stamped from e->frame at post_save_begin */
-    uint32_t pre_save_start_frame;    /* stamped from e->frame at start_pre_save */
+    uint32_t pre_save_start_frame;    /* stamped from e->frame just BEFORE start_pre_save */
     SlinkIdentity incoming_id;        /* binding identity of the staged record (host claim, checked) */
     SlinkIdentity received_id;        /* identity OBSERVED by the engine after the swap */
     uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads: 4-aligned by layout, asserted below */
@@ -231,9 +237,8 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         } else if (result < 0) {
             tp_finish(s,m,w,s->prepare_seq,SLINK_TRADE_UNCHANGED,e);
         }
-        if (s->phase == TP_PRE_SAVE && (result == 0 || result == 2)
-            && e->pre_save_timeout_frames
-            && (uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > e->pre_save_timeout_frames) {
+        if (s->phase == TP_PRE_SAVE
+            && (uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > (e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)) {
             /* The post-save leg's bound, same shape, same unsigned wrap. result == 1 wins: a
              * save that completes on the frame the bound expires is still a completion. The
              * phase guard keeps the earlier result < 0 / result == 1 exits from finishing twice. */

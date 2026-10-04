@@ -120,14 +120,19 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
    adapter bound that is longer would let the host poison the module before the
    native side reaches UNCERTAIN. A synchronous engine still finishes in one
    service call (begin, then one immediate poll).
-   The pre-trade save leg has the same kind of bound, optional: the engine field
-   `pre_save_timeout_frames` (0 = off, the pre-existing unbounded behaviour; an
-   adapter that drives the pre-save through the game's save scene should set it
-   below the host's 6000-frame budget). The producer stamps `pre_save_start_frame`
-   when it starts the pre-save; a poll still waiting (0) or consented-but-unsaved
-   (2) past the bound finishes the visit UNCHANGED (nothing is mutated before the
-   save). A poll that returns saved (1) wins over the timeout, even on the first
-   frame past the bound. Zero-fill existing `SlinkTradeEngine` initialisers.
+   The pre-trade save leg is bounded too, fail closed: the engine field
+   `pre_save_timeout_frames` (0 = use the REQUIRED `save_timeout_frames`, so there is
+   no unbounded configuration; set it below the host's 6000-frame budget, larger than
+   the human response time of a save dialog if the pre-save waits for the player).
+   The producer stamps `pre_save_start_frame` just before it calls `start_pre_save`;
+   any poll that has neither saved (1) nor refused (negative) past the bound (still
+   waiting 0, consented 2, or an out-of-contract value) finishes the visit UNCHANGED
+   (nothing is mutated before the save; when the poll had consented a cartridge save
+   may already have been written, which is a host-journal obligation, and
+   `save_status` stays 0). A poll that returns saved (1) wins over the timeout, even on
+   the first frame past the bound. `e->frame()` must be monotonic. A NDS engine struct
+   must be zero-initialised (a Gen 3 style positional initialiser would put a pointer
+   in these fields).
 5. **Observed identity**: `received_pid/otid` in the witness are the identity the
    engine returned at the same_identity check, not the host-staged claim.
 6. **Must-not-alias**: bindings flagged `SLINK_RB_COMMIT_MUTATES_INPUT` (PK4 box

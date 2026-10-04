@@ -931,9 +931,10 @@ static int sc_foreign(int var) {
  * the timeout ends the visit UNCHANGED, exactly like an engine refusal. */
 static int sc_presave(int var) {
   reset();
-  e.pre_save_timeout_frames=var==1 ? 0u : 50u;   /* 0 = no watchdog (pre-existing behaviour) */
+  e.pre_save_timeout_frames=var==1 ? 0u : (var==5 ? 0u : 50u);  /* 0 = fall back to save_timeout_frames */
+  if (var==5) e.save_timeout_frames=50u;         /* var 5: the fallback bound itself is 50 */
   frame_step=0;frame=0;                          /* deterministic clock, set by hand */
-  pre_result=var==2 ? 2 : 0;                     /* never completes: waiting, or consented */
+  pre_result=var==2 ? 2 : (var==4 ? 3 : 0);      /* never completes: waiting, consented, or an out-of-contract value */
   send_prepare(7,1);svc();
   CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && s.phase==TP_PRE_SAVE && m.status==SLINK_ST_BUSY);
   CHECK(w.visit_flags==SLINK_VISIT_ACCEPTED && !w.milestones && w.final_result==SLINK_TRADE_PENDING);
@@ -1069,7 +1070,8 @@ SCENARIOS = (
     + [(f"foreign-{n}", 11, v) for v, n in enumerate(
         ["play-se", "show-info", "play-fanfare", "play-se-idle"])]
     + [(f"presave-{n}", 12, v) for v, n in enumerate(
-        ["wait-times-out", "no-watchdog", "consented-times-out", "completion-after-bound-wins"])]
+        ["wait-times-out", "fallback-bound-large", "consented-times-out", "completion-after-bound-wins",
+          "garbage-poll-times-out", "fallback-bound-expires"])]
     + [("uncertain-terminal", 13, 0)]
 )
 
@@ -1123,7 +1125,8 @@ MUTANTS = {
     "ack-foreign-opcode": ((11, 0), [(TP, FOREIGN_GATE, "")]),
     # the pre-save leg had no frame bound: without it a poll that never saves and never refuses
     # parks the producer in TP_PRE_SAVE forever while the host's own budget expires.
-    "no-pre-save-watchdog": ((12, 0), [(TP, "(uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > e->pre_save_timeout_frames", "((void)s, 1)")]),
+    "no-pre-save-watchdog": ((12, 0), [(TP, "> (e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)", "> 0xFFFFFFFFu")]),
+    "no-pre-save-fallback-bound": ((12, 5), [(TP, "(e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)", "e->pre_save_timeout_frames")]),
     # UNCERTAIN is terminal for the arena lifetime: no opcode may clear it, and the refusal
     # has to name the phase. The self-clearing mutant still answers 11, so it must go red on
     # the phase assertion, not the reason one.
