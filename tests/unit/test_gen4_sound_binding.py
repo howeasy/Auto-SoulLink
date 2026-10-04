@@ -75,7 +75,9 @@ static SlinkGen4State state;
 static SlinkMailboxV2 mailbox;
 static NNSSndHandle handles[SND_HANDLE_MAX];
 static int token, fade, delay, plays, last_se, lookups, mappings, handle_reads, last_handle;
-static int bad_player, bad_handle, null_handle;
+static int bad_player, bad_handle, null_handle, ownership_violation;
+static int owned_state_only(const SlinkGen4State *before);
+static int mailbox_ack_only(const SlinkMailboxV2 *before);
 /* Caller-selected MODEL-only reasons; not production assignments of the OPEN seam. */
 void Slink_Gen4Sound_GetRefusalReasons(SlinkGen4SoundReasons *r)
 { r->not_ready=40u; r->hold_expired=41u; }
@@ -115,12 +117,22 @@ static void setup(int ready)
     mailbox.opcode=0; mailbox.seq=7; mailbox.session_epoch=EPOCH;
     memset(handles,0,sizeof handles);
     fade=delay=plays=lookups=mappings=handle_reads=bad_player=bad_handle=null_handle=0;
-    last_se=last_handle=-1;
-    if (ready) Slink_NDS_Sound_LatchReady(&state);
+    last_se=last_handle=-1; ownership_violation=0;
+    if (ready) {
+        SlinkGen4State before; memcpy(&before,&state,sizeof before);
+        Slink_NDS_Sound_LatchReady(&state);
+        if (!owned_state_only(&before)) ownership_violation=1;
+    }
 }
 static void post(unsigned code)
 { mailbox.opcode=SLINK_OP_PLAY_SE; mailbox.args[0]=(uint8_t)code; mailbox.status=SLINK_ST_BUSY; }
-static void visit(void) { Slink_NDS_Dispatch(&state,&mailbox); }
+static void visit(void)
+{
+    SlinkGen4State before; memcpy(&before,&state,sizeof before);
+    SlinkMailboxV2 mbefore; memcpy(&mbefore,&mailbox,sizeof mbefore);
+    Slink_NDS_Dispatch(&state,&mailbox);
+    if (!owned_state_only(&before) || !mailbox_ack_only(&mbefore)) ownership_violation=1;
+}
 static int owned_state_only(const SlinkGen4State *before)
 {
     const unsigned char *a=(const unsigned char *)before, *b=(const unsigned char *)&state;
@@ -147,7 +159,7 @@ int main(int argc,char **argv)
     SlinkMailboxV2 mbefore;
     setup(1);
     if (mode>=1 && mode<=4) {
-        post(mode); before=state; mbefore=mailbox; visit();
+        post(mode); memcpy(&before,&state,sizeof before); memcpy(&mbefore,&mailbox,sizeof mbefore); visit();
         CHECK(owned_state_only(&before)); CHECK(mailbox_ack_only(&mbefore));
         CHECK(mailbox.opcode==0 && mailbox.ack_seq==7);
         if (mode==2) { CHECK(plays==0); CHECK(mailbox.status==SLINK_ST_FAIL && mailbox.reason==32); }
@@ -188,7 +200,7 @@ int main(int argc,char **argv)
         Slink_NDS_Sound_LatchReady(&state); post(1); visit();
         CHECK(plays==0 && mailbox.reason==SLINK_REASON_IDENTITY);
     } else if (mode==13) {
-        mailbox.opcode=SLINK_OP_PLAY_FANFARE; before=state; mbefore=mailbox; visit();
+        mailbox.opcode=SLINK_OP_PLAY_FANFARE; memcpy(&before,&state,sizeof before); memcpy(&mbefore,&mailbox,sizeof mbefore); visit();
         CHECK(plays==0 && memcmp(&mbefore,&mailbox,sizeof mailbox)==0);
         CHECK(owned_state_only(&before));
     } else if (mode==14 || mode==15 || mode==16) {
@@ -196,7 +208,7 @@ int main(int argc,char **argv)
         visit(); CHECK(plays==0 && mailbox.opcode==SLINK_OP_PLAY_SE);
         CHECK(mode!=14 || mappings==0); CHECK(mode!=15 || handle_reads==0);
     } else if (mode==17) {
-        post(1); state.magic=0; before=state; mbefore=mailbox; visit();
+        post(1); state.magic=0; memcpy(&before,&state,sizeof before); memcpy(&mbefore,&mailbox,sizeof mbefore); visit();
         Slink_NDS_Sound_LatchReady(&state); CHECK(memcmp(&before,&state,sizeof state)==0);
         CHECK(memcmp(&mbefore,&mailbox,sizeof mailbox)==0 && plays==0);
         Slink_NDS_Sound_Service(NULL,&mailbox); Slink_NDS_Sound_Service(&state,NULL);
@@ -204,9 +216,10 @@ int main(int argc,char **argv)
         post(0); visit(); CHECK(plays==0 && mailbox.status==SLINK_ST_FAIL && mailbox.reason==SLINK_REASON_BAD_ARGS);
     } else if (mode==19) {
         post(1); fade=1; visit(); mailbox.opcode=SLINK_OP_TRADE_STATUS;
-        mbefore=mailbox; visit(); CHECK(state.sound.in_flight==0 && plays==0);
+        memcpy(&mbefore,&mailbox,sizeof mbefore); visit(); CHECK(state.sound.in_flight==0 && plays==0);
         CHECK(memcmp(&mbefore,&mailbox,sizeof mailbox)==0);
     } else return 2;
+    CHECK(!ownership_violation);
     printf("OK %u\n",mode); return 0;
 }
 """
@@ -269,6 +282,7 @@ MUTANTS = [
     (7, "return ((const volatile NNSSndHandle *)handle)->player != NULL;", "return 0;"),
     (1, "PlaySE((u16)se);", "PlaySE((u16)(se + 1u));"),
     (11, "&reasons, st->generation);", "&reasons, m->session_epoch);"),
+    (1, "&reasons, st->generation);", "&reasons, st->generation); st->delta++;"),
 ]
 
 
