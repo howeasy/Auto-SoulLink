@@ -46,12 +46,13 @@ COMMON = ROOT / "patch/src/nds/common"
 ABI = COMMON / "abi.h"
 README = GEN4 / "README.md"
 
-C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h")
-
 # tools/gen4_mailbox_census.py:40,44 and abi.h:40
 ARENA_SIZE = 0x1000
 SPAN = (0x01FFEC00, 0x01FFFC00)
-C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h", "sound.h", "sound_policy.h")
+# The whole directory's headers: the C2 invariants are whole-directory rules, so a file-scope
+# object or an in-span literal in any card header moves 0x021E5900 or fails census W2.
+C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h", "sound.h", "sound_policy.h",
+             "panel.h", "panel_policy.h", "trade.h", "trade_policy.h")
 TITLE_OFFSET = 0xE00
 TITLE_SIZE = 0x40
 
@@ -194,11 +195,33 @@ def det_file_scope_objects(src: dict[str, str]) -> list[str]:
     return [f"{name}: {s}" for name in src for s in file_scope_objects(src[name])]
 
 
+_DEFINE_RE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+(SLINK_\w+)", re.M)
+_TYPEDEF_NAME_RE = re.compile(r"\}\s*(SLINK\w*)\s*;")
+_ENUM_BODY_RE = re.compile(r"\benum\b[^{;]*\{(.*?)\}", re.S)
+# Compile-time switches the ROM build defines on the command line (beacon.h:266, dispatch.c:41-43);
+# they are used in #if, never defined in source.
+BUILD_SWITCHES = {"SLINK_GEN4_PANEL", "SLINK_GEN4_SOUND", "SLINK_GEN4_TRADE"}
+
+
+def _no_comments(text: str) -> str:
+    return re.sub(r"//[^\n]*", " ", re.sub(r"/\*.*?\*/", " ", text, flags=re.S))
+
+
+def slink_definitions(text: str) -> set[str]:
+    """SLINK_* names a text DEFINES (macro, typedef'd struct/enum, enum member), not merely uses."""
+    code = _no_comments(text)
+    members = {n for body in _ENUM_BODY_RE.findall(code) for n in _SLINK_RE.findall(body)}
+    return set(_DEFINE_RE.findall(code)) | set(_TYPEDEF_NAME_RE.findall(code)) | members
+
+
 def det_unknown_slink_names(src: dict[str, str]) -> list[str]:
-    known = slink_identifiers(ABI.read_text(encoding="utf-8"))
-    local = set().union(*(slink_identifiers(t) for t in src.values()))
-    used = set().union(*(slink_identifiers(t) for t in src.values()))
-    return sorted(used - known - local)
+    # known: everything the shared headers define; local: what these sources define themselves.
+    # used: identifiers in CODE (a comment may name a Gen 2 constant or a future one).
+    known = set().union(*(slink_definitions(p.read_text(encoding="utf-8"))
+                          for p in sorted(COMMON.glob("*.h"))))
+    local = set().union(*(slink_definitions(t) for t in src.values()))
+    used = set().union(*(slink_identifiers(_no_comments(t)) for t in src.values()))
+    return sorted(used - known - local - BUILD_SWITCHES)
 
 
 def det_registration_citation(src: dict[str, str]) -> list[str]:
