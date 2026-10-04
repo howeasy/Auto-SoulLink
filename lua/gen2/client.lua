@@ -45,6 +45,7 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
 -- Gen 2: the wild battle types whose failure dead-zones the map are exactly the ones the
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
 -- roamer/contest/scripted battles resolve their own namespace or nothing (O-17, O-18).
+-- A profile with derived.area_battle_types (Polished: NORMAL 0, FISH 3, TREE 4) replaces this vanilla set.
 local AREA_BATTLE_TYPES = { [0] = true, [4] = true, [8] = true }
 -- The protocol NACK of each box command (docs/protocol.md §5). The executor (p.boxes, lua/gen2/boxes.lua
 -- B.executor) runs them at the checkpoint; a kind the U2 receipt never proved is refused there, with its name.
@@ -97,6 +98,11 @@ function Client.new(p)
     local trade = p.trade -- P4.3b native SLINK TRADE: lua/gen2/trade_overlay.lua, or nil (no trade build)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
+    local area_battle_types = AREA_BATTLE_TYPES
+    if profile.derived and profile.derived.area_battle_types then
+        area_battle_types = {}
+        for _, t in ipairs(profile.derived.area_battle_types) do area_battle_types[t] = true end
+    end
 
     -- D5: the kind is the admission decision's (lua/gen2/entry.lua); anything else would run a trade or a hello as a
     -- kind the server never admitted.
@@ -104,8 +110,8 @@ function Client.new(p)
            "artifact_kind must be clean or overlay")
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
-        -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id)
-        foundation = "gen2_gsc", artifact_kind = p.artifact_kind or "clean",
+        -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id); Polished injects its own
+        foundation = p.foundation or "gen2_gsc", artifact_kind = p.artifact_kind or "clean",
         -- P4.3b: the lease the cartridge is waiting on ({kind, gen, token, frame, ...}) and this
         -- visit's role/token, kept from the first command (trade_mask/show_menu) through APPLY
         trade = trade, trade_state = nil, trade_visit = nil,
@@ -1186,7 +1192,7 @@ function Client.new(p)
                             -- the engine inserted a mon, stamped in engine order on each observation
                             refused_base = ev.refused_acquisitions,
                             -- scripted/static and special types resolve nothing (as the binder)
-                            resolves = battle ~= nil and AREA_BATTLE_TYPES[battle.battle_type] == true
+                            resolves = battle ~= nil and area_battle_types[battle.battle_type] == true
                                        and scripted ~= nil and math.floor(scripted / 128) % 2 == 0 }
             self.bench_owed = true -- O-32: a death deferred before the battle lands at its first frame
             if self.battle.resolves and self.has_pokeballs and self.seeded and area_id ~= ""
@@ -1354,6 +1360,8 @@ function Client.new(p)
             if not live then return false, why end
             local battle = reads.read_battle()
             if not battle then return false, "battle state unavailable" end
+            -- p.hello_unheld (Polished dev composition only): no checkpoint exists to hold, so a live game suffices.
+            if p.hello_unheld then return hello_identity() == identity, "identity changed while checking readiness" end
             -- PLAN §5.4: the first hello waits for the OWPlayerInput checkpoint or a running battle
             if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then
                 return false, "waiting for Gen 2 checkpoint or battle"
@@ -1660,6 +1668,7 @@ function Client.new(p)
         end
     end
     local function cur_ot_mon()
+        if not writes then return nil end -- no writer composed (Polished): no rival window to announce
         local pt = writes.sym.wCurOTMon
         if io.bank_valid(pt[1], pt[2], 1) ~= true then return nil end
         return io.read_u8(pt[2], "System Bus")

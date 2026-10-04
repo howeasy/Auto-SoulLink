@@ -308,7 +308,7 @@ def test_the_overlay_is_admitted_and_the_clean_release_refused(lua, entry):
     (decision, why), (built, build_why) = _admit(lua, entry, overlay)
     assert why is None and (decision.kind, decision.title, decision.rom_type) == ("overlay", "polished", "polished_crystal")
     assert decision.rom_sha1 == PROFILE["source"]["overlay_sha1"]
-    assert built is None and "not wired" in build_why
+    assert built is None and "explicit IO required" in build_why  # admitted; composing needs live IO (test_polished_client)
     (decision, why), (built, build_why) = _admit(lua, entry, clean)
     assert decision is None and "companion patch" in why and built is None and "companion patch" in build_why
     # the vanilla production gate never admits the Polished overlay

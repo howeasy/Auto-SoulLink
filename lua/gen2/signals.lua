@@ -527,7 +527,10 @@ function build(options, proven)
     assert(callable(io.bank_valid), "actual mapped bank observations required")
     local profile, pack = copy(options.profile), copy(options.pack)
     local title = options.title
-    assert(({crystal=true,gold=true,silver=true})[title], "selected Gen 2 title required")
+    -- the dev Polished title binds only with its own injected key builder (polished.lua P.mon_key): a vanilla
+    -- DDDD:OOOO:SS key over a 3-DV-byte, 9-bit-species record would be a silent identity bug
+    assert(({crystal=true,gold=true,silver=true})[title] or (title == "polished" and options.key_fn ~= nil),
+           "selected Gen 2 title required")
     assert(profile.schema == "gen2-profile-v1" and pack.schema == "gen2-engine-signals-v1",
            "generated profile and engine-site schemas required")
     for name in pairs(profile.titles) do assert(name == title,"profile title mismatch") end
@@ -536,6 +539,11 @@ function build(options, proven)
     -- D5: an overlay executes its own sites (qualified_sites already proved them against the receipts)
     if proven and options.view ~= nil and options.view.kind == "overlay" then data.sites = copy(options.view.sites) end
     same_source(profile.source,pack.source)
+    -- title facts from the profile (vanilla: 14 boxes; NORMAL 0, FISH 4, TREE 8 resolve an area)
+    local num_boxes = p.constants.NUM_BOXES
+    assert(integer(num_boxes,1,255),"profile NUM_BOXES required")
+    local area_types = {}
+    for _,t in ipairs(type(p.derived) == "table" and p.derived.area_battle_types or {0,4,8}) do area_types[t] = true end
     assert(p.artifact == pack.source.artifact and p.rom_sha1 == pack.source.rom_sha1,
            "selected profile artifact differs")
     assert(pack.runtime_admission == "NOT_GRANTED" and pack.f3_complete == false,
@@ -916,7 +924,7 @@ function build(options, proven)
         elseif acquisition == "wild" then
             local battle_type = scalar(site,"wBattleType")
             -- Specialized/static catch policy is not inferred from a map or key.
-            need(battle_type == 0 or battle_type == 4 or battle_type == 8,
+            need(area_types[battle_type] == true,
                  "OPEN: specialized/static acquisition policy unavailable")
             zone = area(site)
         elseif acquisition == "egg_hatch" then zone = "gift_daycare"
@@ -986,7 +994,7 @@ function build(options, proven)
                 row = r
             end
         end
-        need(row and type(row.area_id) == "string" and integer(row.species,1,251) and integer(row.level,1,100)
+        need(row and type(row.area_id) == "string" and integer(row.species,1,max_species) and integer(row.level,1,100)
              and integer(row.item,0,255), "OPEN: the gift caller is not a qualified givepoke row")
         local party,why = reads.read_party()
         need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
@@ -1058,7 +1066,8 @@ function build(options, proven)
                     assert(callable(reads.read_current_box_num),"current-box reader required")
                     local old,why = reads.read_current_box_num()
                     local requested = register("E")
-                    need(integer(old,0,13) and integer(requested,0,13),"box-change context unavailable: " .. tostring(why))
+                    need(integer(old,0,num_boxes-1) and integer(requested,0,num_boxes-1),
+                         "box-change context unavailable: " .. tostring(why))
                     starts[name] = {site_id=name,box_index=old,requested=requested,fields={},
                                     generation=held.generation,operation=held.operation}
                 elseif FAINTS[name] then

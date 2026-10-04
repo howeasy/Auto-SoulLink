@@ -1,5 +1,5 @@
 -- lua/gen2/polished.lua — the Polished Crystal v3.2.3 foundation: dev admission, pure decoding and the
--- party/foe wire entries. No emulator globals, bank switches, writes or boxes (later cards).
+-- party/foe wire entries (P.wire, the client's injected wire). No emulator globals, bank switches, writes or boxes.
 --
 -- Every address and struct member offset is the generated profile's
 -- (data/games/polished_crystal/profile.json, tools/gen_polished_profile.py, from the overlay .sym).
@@ -14,6 +14,8 @@
 local P = {}
 
 P.TITLE, P.ROM_TYPE = "polished", "polished_crystal"
+-- the server pairing foundation (server/adapters/__init__.py _ROM_TYPE_TO_FOUNDATION): never pairs with GSC
+P.FOUNDATION = "gen2_polished"
 P.PROFILE = "data/games/polished_crystal/profile.json"
 P.CHARMAP = "data/games/polished_crystal/charmap.lua"
 P.PROVENANCE = "data/polished/overlay_provenance.json"
@@ -108,7 +110,7 @@ function P.admit(args)
                 return nil, "only the pinned Polished overlay is admitted"
             end,
             describe=function()
-                return {pack="polished_crystal", title=P.TITLE, foundation="gen2_gsc", rom_type=P.ROM_TYPE,
+                return {pack="polished_crystal", title=P.TITLE, foundation=P.FOUNDATION, rom_type=P.ROM_TYPE,
                         qualification="DEV_OVERLAY_SHA1"}
             end,
             allow_unknown_hash=false,
@@ -193,6 +195,11 @@ function P.foe_entry(mon, stages)
     end
     return entry
 end
+
+--- The wire.lua-shaped table lua/gen2/client.lua takes by injection (p.wire). box_entry refuses: the newbox
+--- census is not composed into the client yet (lua/gen2/entry.lua compose_polished says why).
+P.wire = {mon_key=P.mon_key, party_entry=P.party_entry, foe_entry=P.foe_entry,
+          box_entry=function() return nil, "Polished box entries are not composed" end}
 
 --- Reads over the generated profile. io: read_range(address, length, domain), bank_valid(bank, address, length).
 function P.new(profile, io, decode_name)

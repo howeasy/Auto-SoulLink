@@ -17,7 +17,7 @@ Entry.PACKS = {
     gold={pack="gen2_gold", artifact="pokegold", revision="US", rom_type="Gold"},
     silver={pack="gen2_silver", artifact="pokesilver", revision="US", rom_type="Silver"},
     -- DEV-GRADE (P3a): admitted by Entry.admit_polished only, never by Entry.admit's catalog/G4/receipt gate;
-    -- the client composition is a later card (lua/gen2/polished.lua holds the reads).
+    -- composed by compose_polished (lua/gen2/polished.lua holds the reads), qualification DEV_OVERLAY_SHA1.
     polished={pack="polished_crystal", artifact="polishedcrystal", revision="3.2.3", rom_type="polished_crystal",
               dev=true},
 }
@@ -75,10 +75,12 @@ Entry.PACK_FILES = {
         trainers="data/games/gen2_silver/trainers.json",
         checkpoint="data/games/gen2_silver/write_checkpoint.json",
     },
-    -- dev pack: only what run.lua and Entry.admit_polished read (lua/gen2/polished.lua P.PROFILE/P.CHARMAP)
+    -- dev pack: only what run.lua, Entry.admit_polished and compose_polished read (lua/gen2/polished.lua
+    -- P.PROFILE/P.CHARMAP + the force_faint evolution table)
     polished_crystal={
         profile="data/games/polished_crystal/profile.json",
         charmap="data/games/polished_crystal/charmap.lua",
+        evolutions="data/games/polished_crystal/evolutions.json",
     },
 }
 -- The O-22 proofs a production pack ships as release data: byte copies of the committed
@@ -591,15 +593,85 @@ function Entry.detect_title(read_rom_u8)
     return nil, header
 end
 
+-- C-PACK + C-COMPOSE (docs/polished/CLIENT.md): the Polished overlay's client, under the DEV-GRADE authority of
+-- Entry.admit_polished (overlay sha1 only). Its pack is profile + charmap + evolutions (P.load pins the first two to
+-- one source), never the vanilla 15-file pack, admission matrix or receipts. What it composes, and what it does not:
+--   reads   lua/gen2/polished.lua P.new; wire = P.wire (DDDDDD:OOOO:SSS:TT keys, 70-byte party blobs)
+--   panel   lua/gen2/panel.lua over profile.overlay (the same SLNK mailbox, ABI 3): only for companion_abi, the
+--           server's companion evidence; the overlay advertises caps 0, so it never paints or plays a sound
+--   signals a binder that registers NOTHING: engine_signals.json is SOURCE_CANDIDATE / physical_firing OPEN with no
+--           receipt, so no engine-site hook is ever placed (no capture/PC/evolution events: milestone B, C-SITES)
+--   safety  refuses every write kind, so writes/boxes/phone/trade/checkpoint/battle holds are all absent (nil)
+--   pc_boxes [] and no generation: lua/gen2/polished_boxes.lua is not composed. Its CartRAM/WRAM domain mappings are
+--           unexercised on a Polished save (docs/polished/NEWBOX.md 7), and a wrong WRAM flag mapping reads every
+--           slot as empty -- a COMPLETE empty census, worse than none
+--   hello   p.hello_unheld: with no checkpoint PC to hold, the first hello waits only for a live game (party +
+--           player readable, not the title screen), not the OWPlayerInput checkpoint
+--   areas   no area_map.json yet (C-AREA): area_id "" and loc_name map_G_N
+local function compose_polished(deps, decision)
+    local ok, result = pcall(function()
+        assert(type(decision) == "table" and decision.title == "polished" and decision.kind == "overlay"
+               and decision.rehashed == true and decision.qualification == "DEV_OVERLAY_SHA1"
+               and decision.foundation == "gen2_polished",
+               "Polished composes only its admitted dev overlay decision")
+        local root = assert(deps.root, "root required")
+        local io_ = assert(deps.io, "explicit IO required")
+        assert(io_.model_only ~= true, "the Polished client requires live IO, not model_only")
+        assert(type(io_.read_u8) == "function" and type(io_.domain_size) == "function", "explicit ROM IO required")
+        local load = function(path) return dofile(root .. "/" .. path) end
+        local json, Admission, P = load("lua/json_codec.lua"), load("lua/admission.lua"), load("lua/gen2/polished.lua")
+        local profile, charmap, wrapper = P.load(root, json)
+        local evolutions = load_json(json, root .. "/" .. Entry.PACK_FILES.polished_crystal.evolutions)
+        assert(evolutions.schema == "polished-evolutions-v1" and type(evolutions.source) == "table"
+               and evolutions.source.lock_sha256 == wrapper.source.lock_sha256
+               and evolutions.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: evolutions")
+        local size = io_.domain_size("ROM")
+        assert(size == profile.derived.rom_size, "Polished ROM size mismatch")
+        -- the executed bytes are the admitted overlay's, re-hashed through the live IO
+        assert(decision.rom_sha1 == profile.overlay.rom_sha1
+               and Admission.sha1(function(offset) return io_.read_u8(offset, "ROM") end, size) == decision.rom_sha1,
+               "Polished ROM hash mismatch")
+        local decode_name = deps.decode_name or load("lua/token_scanner.lua").new({
+            glyphs=charmap.glyphs, terminator=charmap.terminator, max_length=profile.derived.name_length,
+            unknown=function(byte) return string.format("<$%02X>", byte) end})
+        local base = assert(P.new(profile, io_, decode_name))
+        local no_census = "Polished box census not composed"
+        local reads = setmetatable({read_active_box=function() return nil, no_census end,
+                                    read_storage_box=function() return nil, no_census end}, {__index=base})
+        local hud = assert(deps.hud, "explicit hud required")
+        local Panel = load("lua/gen2/panel.lua")
+        local panel = assert(Panel.new(profile, charmap, io_, Panel.writes(io_, load("lua/write_permit.lua")),
+                                       hud.sanitize or function(s) return s end))
+        local function signals()
+            return {drain=function() return {} end, status=function() return {} end,
+                    boundary=function() end, abandon=function() end, close=function() return true end}
+        end
+        local client = load("lua/gen2/client.lua").new({
+            artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
+            safety={check=function(kind) return false, "no Polished write receipt for " .. tostring(kind) end},
+            signals=signals, hello_unheld=true,
+            net=deps.net, json=json, hud=hud, io=io_, profile=profile, sites={}, area_map={},
+            player=assert(deps.player, "explicit player required"), rom_type=P.ROM_TYPE,
+            rom_sha1=decision.rom_sha1, log=deps.log, evolutions=evolutions.evolutions,
+            hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
+            owed_reports=load("lua/owed_reports.lua"),
+        })
+        return {pack="polished_crystal", title="polished", profile=profile,
+                data={profile=wrapper, charmap=charmap, evolutions=evolutions}, reads=reads, client=client,
+                production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
+                runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
+    end)
+    if not ok then return nil, tostring(result) end
+    return result
+end
+
 -- Production: the admitted title's graph (see compose). deps = admit()'s root, rom_size and
 -- read_rom_u8, plus live io (not model_only), net, hud, player and log.
 function Entry.build(deps)
     if deps.title == "polished" then
         local decision, reason = Entry.admit_polished(deps)
         if not decision then return nil, reason end
-        -- ponytail: P3a stops at admission; the Polished client graph (reads -> client) is the next card
-        return nil, "Polished Crystal overlay admitted (dev, " .. decision.rom_sha1:sub(1, 8)
-                    .. ") but its client composition is not wired yet"
+        return compose_polished(deps, decision)
     end
     local decision, reason = Entry.admit(deps)
     if not decision then return nil, reason end
