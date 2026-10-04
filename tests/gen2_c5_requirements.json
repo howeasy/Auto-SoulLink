@@ -1,0 +1,28 @@
+{
+ "schema": "gen2-c5-requirements-v1",
+ "requirement": "C-5",
+ "reader": "tools/verify_gen2_release.py --c5 <dir of tools/c5_runner.py gen2-c5-duo-cell-v1 manifests + receipts>",
+ "cells": [
+  {"id": "c5/cc/link", "covers": ["G-a"]},
+  {"id": "c5/gs/link", "covers": ["G-b"]},
+  {"id": "c5/cg/link", "covers": ["G-b"]},
+  {"id": "c5/cc/gen2_reconnect", "covers": ["G-d"]},
+  {"id": "c5/gs/gen2_reconnect", "covers": ["G-d"]},
+  {"id": "c5/cc/gen2_gift", "covers": ["G-e", "G-f"]},
+  {"id": "c5/gs/gen2_gift", "covers": ["G-e", "G-f"]},
+  {"id": "c5/ct/gen2_npc_trade", "covers": ["G-h"]},
+  {"id": "c5/cc/gen2_c5_wrong_rom", "covers": ["G-c"]},
+  {"id": "c5/cc/gen2_c5_no_contract", "covers": ["G-i"]}
+ ],
+ "named_limits": [
+  {
+   "gate": "G-g",
+   "cell": "c5/cc/c5_roamer",
+   "ruling": "owner",
+   "date": "2026-10-04",
+   "text": "roamer catches are not detected on overlay carts",
+   "why": "the overlay client registers no roamer_party_finalized / roamer_box_finalized site on any cart (not among the 27 sites the PHYSICAL overlay engine_sites receipts prove), so lua/gen2/signals.lua cannot classify a roamer catch on an overlay cart, randomized or not",
+   "fail_safe": "same-species roamer slots already fail safe; C-5 closes on the 10 passing cells (docs/gen2/RANDOMIZER_GATES.md 'C-5 evidence status')"
+  }
+ ]
+}
