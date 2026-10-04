@@ -29,6 +29,7 @@ from server.templating import resolve_theme
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
 _COMPANION_PINS = os.path.join(_DIST, "companion_pins.json")
+_GEN3_COMPANIONS = os.path.join(_DIST, "gen3_companions.json")
 _PURE_ADMISSION = os.path.normpath(os.path.join(
     _SERVER_DIR, "..", "data", "games", "gen1_purergb", "admission_overlay.json"))
 
@@ -105,7 +106,9 @@ def _companion_md5(slug: str) -> str:
 # shortened $100 -> $EB), so there is no companion build to ship and shipping one would
 # imply a capability that cannot exist. tests/unit/test_patcher_routes.py asserts its
 # absence rather than leaving it to be noticed.
-TARGETS: dict[str, dict] = {
+def _build_targets() -> dict[str, dict]:
+    """The registry, read from the shipped manifests each call (a release stamp rewrites them in place)."""
+    return {
     "rr": {
         "slug":        "rr",
         "label":       "Radical Red",
@@ -212,9 +215,9 @@ TARGETS: dict[str, dict] = {
 DEFAULT_TARGET = "rr"
 
 # The same build manifest pins the downloadable patch and runtime admission.
-def _register_gen3_companions():
+def _register_gen3_companions(targets: dict[str, dict]) -> None:
     import json
-    manifest = os.path.join(_DIST, "gen3_companions.json")
+    manifest = _GEN3_COMPANIONS
     if not os.path.exists(manifest):
         return
     with open(manifest, encoding="utf-8") as stream:
@@ -222,14 +225,27 @@ def _register_gen3_companions():
     for title, label in (("firered", "FireRed"), ("leafgreen", "LeafGreen"), ("emerald", "Emerald")):
         row = rows.get(title)
         if row and row.get("production") is True:
-            TARGETS[title] = {"slug":title,"label":f"Pokemon {label}","patch":row["patch"],
+            targets[title] = {"slug":title,"label":f"Pokemon {label}","patch":row["patch"],
                 "base_md5":row["base_md5"],"patched_md5":row["rom_md5"],
                 "accept":".gba,application/octet-stream",
                 "out_name":f"Pokemon - {label} (SLink companion).gba",
                 "base_hint":f"a clean English Pokemon {label} revision-0 ROM"}
 
 
-_register_gen3_companions()
+TARGETS: dict[str, dict] = {}
+
+
+def targets() -> dict[str, dict]:
+    """The registry as the files on disk say NOW. A release stamp rewrites the pins and manifests while a Manager may
+    be running, so every use re-reads them (a few small JSON files) into the one TARGETS dict importers hold."""
+    fresh = _build_targets()
+    _register_gen3_companions(fresh)
+    TARGETS.clear()
+    TARGETS.update(fresh)
+    return TARGETS
+
+
+targets()
 
 
 def patch_path(slug: str) -> str:
@@ -257,6 +273,7 @@ def setup_patcher_routes(
 
     async def handle_patcher_page(request: web.Request) -> web.Response:
         slug = request.query.get("game", DEFAULT_TARGET)
+        targets()
         if slug not in TARGETS:
             slug = DEFAULT_TARGET
         target = TARGETS[slug]
@@ -278,7 +295,7 @@ def setup_patcher_routes(
 
     async def handle_patch_file(request: web.Request) -> web.Response:
         name = request.match_info["name"]
-        slug = next((s for s, t in TARGETS.items() if t["patch"] == name), None)
+        slug = next((s for s, t in targets().items() if t["patch"] == name), None)
         if slug is None:
             raise web.HTTPNotFound(text=f"{name} is not a companion patch this build ships")
         path = patch_path(slug)

@@ -239,3 +239,22 @@ def test_gen2_targets_advertise_the_admitted_overlay_hashes():
         # without a local build of the decomp to recompute it from.
         assert re.fullmatch(r"[0-9a-f]{32}", patcher.TARGETS[slug]["base_md5"])
         assert clean["sha1"] in patcher.TARGETS[slug]["base_hint"]
+
+
+def test_a_release_stamp_reaches_a_running_server(tmp_path, monkeypatch):
+    """tools/stamp_release.py rewrites companion_pins.json in place. A Manager started before the stamp must see the new
+    md5 the next time it uses the registry: cartridges.py checks the UPS output against TARGETS[...]["patched_md5"], and a
+    value frozen at import refused every Red/Blue and Radical Red cartridge until the server was restarted."""
+    import json
+    import shutil
+
+    pins = tmp_path / "companion_pins.json"
+    shutil.copyfile(patcher._COMPANION_PINS, pins)
+    monkeypatch.setattr(patcher, "_COMPANION_PINS", str(pins))
+    doc = json.loads(pins.read_text(encoding="utf-8"))
+    doc["pins"]["rb-red"]["patched_md5"] = "f" * 32
+    pins.write_text(json.dumps(doc), encoding="utf-8")
+    assert patcher.targets()["rb-red"]["patched_md5"] == "f" * 32
+    assert patcher.TARGETS["rb-red"]["patched_md5"] == "f" * 32       # the module's own dict follows, for its importers
+    monkeypatch.undo()
+    patcher.targets()                                                  # leave the registry as the shipped files say

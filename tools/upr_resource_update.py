@@ -15,7 +15,7 @@ update: every zip entry except com/dabomstew/pkrandom/config/gen1_offsets.ini st
   4. pin its sha256 in data/upr_jars.json (the Manager runs only pinned jars);
   5. write patch/upr/<NNNN>-slink-pure-overlay-entries-regenerated.patch (the series is the durable record of the fork);
   6. re-pin the Gen 3 write-domain models to the new jar: `python -m server.upr_gen3_write_domain --write --title frlg|emerald`
-     (printed, not run: they need the clean Gen 3 ROMs staged; tools/stamp_release.py runs them).
+     (printed, not run here: tools/stamp_release.py runs them after installing the jar).
 """
 from __future__ import annotations
 

@@ -106,6 +106,11 @@ def plan(version: str, families: tuple[str, ...], rom_dirs: list[pathlib.Path], 
                   Step("pure", "UPR entries", (PY, "tools/gen_upr_gen1_ini.py"))]
         if jar:
             steps.append(Step("pure", "randomizer jar entries", (PY, "tools/upr_resource_update.py", "--install", "--label", f"stamp {version}")))
+            # the Gen 3 write-domain models are pinned to the jar's sha256 (server/upr_gen3_write_domain.py refuses
+            # any other jar), so a new jar needs them re-pinned or Manager randomization of FR/LG/Emerald stops
+            for title in ("frlg", "emerald"):
+                steps.append(Step("pure", f"re-pin Gen 3 write domains ({title})",
+                                  (PY, "-m", "server.upr_gen3_write_domain", "--write", "--title", title)))
     if "gen2" in families:
         steps.append(Step("gen2", "build Gen 2 overlays", (PY, "tools/build_gen2_companion.py", "--version", version, *gen2_args)))
         prov = ("--provenance", "data/gen2/build_provenance.json", "--overlay-provenance", "data/gen2/overlay_provenance.json")
