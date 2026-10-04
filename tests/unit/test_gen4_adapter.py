@@ -20,8 +20,7 @@ def test_game_id(adapter):
 # The HGSS gift set is the generated pack's `gift_areas.ids`
 # (data/games/gen4_hgss/area_map.json), pinned area-by-area against that pack in
 # tests/unit/test_gen4_gift_areas_server.py. What is left here is the two shapes the adapter adds
-# on top of any set — the unmapped-area fallback and the `gift_` prefix — plus Platinum, which has
-# no pack and stays hand-typed.
+# on top of any set — the unmapped-area fallback, the `gift_` prefix, and Pal Park.
 
 def test_gift_fallback_area(adapter):
     assert adapter.is_gift_area("gift") is True
@@ -42,24 +41,33 @@ def test_non_gift_areas_return_false(adapter, area_id):
     assert adapter.is_gift_area(area_id) is False
 
 
-# ── Platinum gift areas ──────────────────────────────────────────────────
+# ── Pal Park, and the Sinnoh ids that are gone ────────────────────────────────────────────────
+
+def test_pal_park_is_a_gift_area(adapter):
+    """Pal Park is not a Platinum id that survived by accident. It is a real HGSS/SS area —
+    the generated map owns `pal_park` (MAPSEC_PAL_PARK, Kanto) — and a migrated mon arrives
+    there with no Pokéballs and no wild encounter to fail, so it stays exempt."""
+    assert adapter.is_gift_area("pal_park") is True
+
 
 @pytest.mark.parametrize("area_id", [
-    "twinleaf_town",   # Starter
-    "sandgem_town",    # Town events
-    "eterna_city",     # Togepi egg / Cleffa
+    "twinleaf_town",   # Starter (Turtwig/Chimchar/Piplup from Prof. Rowan)
+    "sandgem_town",    # Dawn/Lucas Egg + other town events
+    "eterna_city",     # Togepi egg (Underground Man) / Cleffa
     "hearthome_city",  # Eevee from Bebe
     "iron_island",     # Riolu egg from Riley
-    "veilstone_city",  # Porygon
+    "veilstone_city",  # Porygon (condominiums)
     "route_212",       # Togepi egg from Cynthia
-    "pal_park",        # Pal Park migrations
 ])
-def test_platinum_gift_areas_return_true(adapter, area_id):
-    assert adapter.is_gift_area(area_id) is True
+def test_the_sinnoh_ids_are_not_gift_areas_any_more(adapter, area_id):
+    """Platinum is no longer routed, so no cartridge the server serves can emit these ids, and
+    none of them is an HGSS area (the generated map owns none of them). Exempting an area drops
+    that area's no_catch and its wild-slot quarantine, so an id nothing can reach is only a way
+    to exempt the wrong thing by accident later."""
+    assert adapter.is_gift_area(area_id) is False
 
 
-def test_platinum_non_gift_area(adapter):
-    """A Sinnoh route should not be a gift area."""
+def test_a_sinnoh_route_is_not_a_gift_area(adapter):
     assert adapter.is_gift_area("route_201") is False
 
 

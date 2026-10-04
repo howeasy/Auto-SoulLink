@@ -1,5 +1,12 @@
 """
-server/adapters/gen4_hgsspt.py — Game adapter for Gen 4 (HeartGold/SoulSilver/Platinum).
+server/adapters/gen4_hgsspt.py — Game adapter for Gen 4 (HeartGold/SoulSilver/hg-engine).
+
+One class serves three cartridges that do not share a memory layout, so anything describing a
+CARTRIDGE (box geometry, the pairing foundation) is keyed on the foundation rather than on the
+game_id they all share. Platinum is NOT served: it has no routing row in
+server/adapters/__init__.py and its hello is refused by name. The legacy Sinnoh tables below
+(`_PT_TRAINERS`, `_PT_ENCOUNTERS`, `_RP_*`, the platinum area map) are still loaded because
+the data directory has not been repointed yet; that removal is a separate repointing card.
 
 Gen 4 uses National Pokédex IDs natively (1-493). Mon keys use the same
 PID:OTID format as Gen 3. No CFRU/RR support.
@@ -24,6 +31,12 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
+# `foundation_for_rom_type` is a NAME bound by this package's __init__, not a module, so the
+# import below is only valid because __init__ binds that name (adapters/__init__.py:236)
+# BEFORE it imports this file (:276). Moving either line raises here, loudly, rather than
+# handing the adapter a second copy of the foundation table that could drift from the
+# registry's — the pairing decision stays in one place.
+from . import foundation_for_rom_type, gen4_codec
 from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
@@ -90,20 +103,24 @@ def _load_hgss_gift_areas() -> frozenset[str]:
 
 _HGSS_GIFT_AREAS = _load_hgss_gift_areas()
 
-# Platinum (Sinnoh) has no generated pack of its own, so its ids stay hand-typed and unchanged.
-_PLATINUM_GIFT_AREAS = frozenset({
-    "twinleaf_town",   # Starter (Turtwig/Chimchar/Piplup from Prof. Rowan)
-    "sandgem_town",    # Dawn/Lucas Egg + other town events
-    "eterna_city",     # Togepi egg (Underground Man) / Cleffa
-    "hearthome_city",  # Eevee from Bebe
-    "iron_island",     # Riolu egg from Riley
-    "veilstone_city",  # Porygon (condominiums)
-    "route_212",       # Togepi egg from Cynthia
-    "pal_park",        # Pokémon migrated via Pal Park
+# Pal Park is the one hand-typed gift id, and it is NOT a Platinum one. `pal_park` is a real
+# HGSS/SS area — data/games/gen4_hgss/area_map.json:61 (MAPSEC_PAL_PARK, Kanto region) and the
+# legacy area_map_hgss.json:2002 — and a mon migrated in arrives there with no Pokéballs and no
+# wild encounter to fail, so it stays exempt.
+#
+# Every OTHER id the old `_PLATINUM_GIFT_AREAS` carried is GONE. Platinum is no longer routed
+# (server/adapters/__init__.py `_ROM_TYPE_TO_GAME_ID` has no `platinum` / `renegade_platinum`
+# row, so `foundation_for_rom_type` answers None and the hello guard refuses both by name), so
+# twinleaf_town / sandgem_town / eterna_city / hearthome_city / iron_island / veilstone_city /
+# route_212 could not reach this predicate from any cartridge the server serves, and `pal_park`
+# is the only one of them the generated HGSS map owns at all — which is exactly what
+# tests/unit/test_gen4_gift_areas_server.py walks, area by area.
+_HGSS_EXTRA_GIFT_AREAS = frozenset({
+    "pal_park",        # migrated mons (Kanto Pal Park), backs no wild encounters
 })
 
 # `gift` stays the fallback for an unmapped area nothing else names.
-_GIFT_AREAS = _HGSS_GIFT_AREAS | _PLATINUM_GIFT_AREAS | frozenset({"gift"})
+_GIFT_AREAS = _HGSS_GIFT_AREAS | _HGSS_EXTRA_GIFT_AREAS | frozenset({"gift"})
 
 
 # Egg-pickup areas — locations where an NPC hands the player a Pokémon egg.
@@ -258,9 +275,37 @@ _FORM_SPRITE: dict[tuple[int, int], str] = {
     (172, 1): "172-spiky-eared",
 }
 
+# ── Per-foundation box geometry ─────────────────────────────────────────────────────────────
+#
+# `gen4_hgsspt` is ONE adapter for three cartridges with two different PC layouts, so a fact
+# about a CARTRIDGE rather than about the generation is keyed on the foundation
+# (`server/adapters/__init__.py _ROM_TYPE_TO_FOUNDATION`), never on the game_id they all share.
+# This is a lookup into gen4_codec, not a second table of box counts: the foundation rows and
+# the codec profiles are the two places each number already lived.
+_FOUNDATION_CODEC_PROFILE = {"gen4_hgss": "hgss", "gen4_hge": "hge"}
+
+# Mons per PC box: 30 in every Gen 4 foundation, so unlike the box COUNT this does not vary.
+# gen4_codec records the PC stride as 0x1000 and states the arithmetic — `box_stride=0x1000,
+# # 30*0x88 + 16 pad` (gen4_codec.py:175 for hgss, :183 for hge) — and both packs give the
+# number outright (data/games/gen4_hgss/profile.json `mons_per_box`, same in
+# data/games/gen4_hge/profile.json). tests/unit/test_gen4_adapter_foundation.py pins the
+# adapter against all three so they cannot drift.
+_MONS_PER_BOX = 30
+
+# Gen 4 status bits -> the token the board renders; first match wins. Bit meanings are the
+# pinned pret/pokeheartgold ones (include/constants/battle.h:296-305): STATUS_SLEEP_0/1/2 =
+# bits 0-2, STATUS_POISON bit 3, STATUS_BURN bit 4, STATUS_FREEZE bit 5, STATUS_PARALYSIS
+# bit 6, STATUS_BAD_POISON bit 7, STATUS_POISON_COUNT = 15 << 8. Two orderings are
+# load-bearing: bad poison sets STATUS_POISON as well, so TOX must be tested before PSN; and
+# sleep is a COUNTER, so 0x07 must be MASKED — `status_cond == 1` is asleep, and so is
+# turn 2's 0x02. Bits 8-11 are the poison counter and carry no condition, so nothing here
+# matches a word that has only those.
+_STATUS_TOKENS = ((0x07, "SLP"), (0x80, "TOX"), (0x08, "PSN"),
+                  (0x10, "BRN"), (0x20, "FRZ"), (0x40, "PAR"))
+
 
 class Gen4Adapter(GameAdapter):
-    """Adapter for Gen 4: HeartGold/SoulSilver/Platinum.
+    """Adapter for Gen 4: HeartGold, SoulSilver and hg-engine (not Platinum; see module docstring).
 
     Uses National Pokédex IDs (1-493). Mon keys are PID:OTID format,
     identical to Gen 3.
@@ -268,6 +313,12 @@ class Gen4Adapter(GameAdapter):
 
     def __init__(self, rom_type: str = "heartgold", **kwargs):
         self._rom_type = (rom_type or "heartgold").lower()
+        # The LAYOUT this cartridge has, as opposed to the game_id every Gen 4 title shares:
+        # hg-engine stores 30 PC boxes where HeartGold stores 18, so a property that answers
+        # "the last box" has to ask which foundation it is speaking for. None for a rom_type
+        # the registry does not route (Platinum) — which is what makes the box properties
+        # refuse below instead of answering for HeartGold.
+        self._foundation = foundation_for_rom_type(self._rom_type)
         self._is_rp = (self._rom_type == "renegade_platinum")
         # Sinnoh trainers live in Platinum (and RP); Johto/Kanto in HGSS.
         # RP override chain: prefer rp_*.json when populated, else fall back to vanilla Pt.
@@ -288,10 +339,11 @@ class Gen4Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        """True for a gift/static area. The HGSS half is the pack's (see `_HGSS_GIFT_AREAS`);
-        Platinum has no pack and stays hand-typed; `gift` is the unmapped-area fallback.
-        The `gift_` and `egg_` prefixes the client/remap emit are recognised regardless, so a
-        remapped `gift_<area>` (base.gift_link_area) still reads as a gift downstream."""
+        """True for a gift/static area. The set is the pack's own `gift_areas.ids`
+        (`_HGSS_GIFT_AREAS`) plus Pal Park and the `gift` unmapped-area fallback; see
+        `_HGSS_EXTRA_GIFT_AREAS` for why no Sinnoh id is in it any more. The `gift_` and
+        `egg_` prefixes the client/remap emit are recognised regardless, so a remapped
+        `gift_<area>` (base.gift_link_area) still reads as a gift downstream."""
         if area_id in _GIFT_AREAS or area_id.startswith("gift_"):
             return True
         return area_id.startswith("egg_")
@@ -378,6 +430,35 @@ class Gen4Adapter(GameAdapter):
     def ability_description(self, ability_id: int) -> str:
         return _ability_description(ability_id, is_rr=False)
 
+    def status_token(self, status_cond: int) -> str:
+        """Gen 4 `status` -> SLP/TOX/PSN/BRN/FRZ/PAR, or "" when no condition is set.
+
+        The word is the u32 at 0x088 of the party record — pret/pokeheartgold
+        include/pokemon_types_def.h:199-200, `typedef struct PartyPokemon { /* 0x088 */ u32
+        status; // slp:3, psn:1, brn:1, frz:1, prz:1, tox:1`, so 0x88 + 0xEC total with
+        pokemon_types_def.h:214-217 (`Pokemon` = BoxPokemon then PartyPokemon). The pack agrees:
+        data/games/gen4_hgss/profile.json `pkm` gives box_size 136 and party_size 236, so the
+        tail begins at 0x88, and gen4_codec unpacks `status` there (gen4_codec.py:53 TAIL_OFF,
+        :324-325).
+
+        The value that arrives IS that word. lua/gen4/pk4.lua:137 reads it as
+        `mon.status = u(p, TAIL, 4)` from the decoded party record and lua/gen4/client.lua:331
+        forwards the field verbatim as `status_cond`, so this decodes the representation the
+        client sends rather than re-encoding it into Gen 3's status1 — the two happen to agree
+        bit for bit, which is why Gen 3's own table was not copied from and this one was not.
+
+        No faint bits hide in here: Gen 3's FNT counter lives in status1 bits 3-6, which Gen 4
+        gives to psn/brn/frz/prz, and the pinned decomp defines no STATUS_FNT at all. A fainted
+        mon's status_cond is still whatever its status condition is, and the board draws FNT
+        from HP instead (server.py:1896).
+        """
+        if not status_cond:
+            return ""
+        for mask, token in _STATUS_TOKENS:
+            if status_cond & mask:
+                return token
+        return ""
+
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
         # Sparse table: returns ("", "") for any ID not yet seeded. Run
         # tools/gen_gen4_trainers.py --pret-hgss <path> --pret-pt <path>
@@ -454,9 +535,37 @@ class Gen4Adapter(GameAdapter):
         return _FORM_SPRITE.get((species_id, form))
 
     @property
+    def _codec_profile(self):
+        """The gen4_codec.Profile for this cartridge's foundation, or None if unrouted."""
+        return gen4_codec.PROFILES.get(_FOUNDATION_CODEC_PROFILE.get(self._foundation or ""))
+
+    @property
     def memorial_box_index(self) -> int:
-        # Gen 4: box 17 (last of 18 boxes)
-        return 17
+        """The LAST PC box, per foundation: hgss has 18 boxes (index 17), hg-engine 30 (29).
+
+        This was a bare 17 with the comment "last of 18 boxes" — HeartGold's answer written as
+        if it were the generation's. On hg-engine it named a box twelve past the end of
+        storage, so every burial overflowed into boxes the cartridge does not have.
+
+        -1 is the base contract's "this game has no dedicated memorial box", and it is what an
+        UNROUTED rom_type gets (Platinum): the server then counts no memorial boxes at all
+        (server.py:5127-5128) instead of counting boxes of a game it refuses at hello. Keeping
+        17 for an unknown rom_type would keep the old wrong answer alive for exactly the
+        cartridge it was never right for.
+        """
+        profile = self._codec_profile
+        if profile is None or not profile.box_count:
+            return -1
+        return profile.box_count - 1
+
+    @property
+    def mons_per_box(self) -> int:
+        """See _MONS_PER_BOX: 30 on every Gen 4 foundation, 0 when the foundation is unknown.
+
+        The 0 mirrors memorial_box_index's refusal rather than inventing a capacity, and every
+        consumer divides by it only after a `mem_idx < 0` early return (server.py:5127-5134).
+        """
+        return _MONS_PER_BOX if self._codec_profile is not None else 0
 
     def gym_badge_slugs(self, rom_type: str) -> list[tuple[int, str]]:
         if (rom_type or "").lower() == "platinum":
