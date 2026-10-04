@@ -354,7 +354,7 @@ include them.
   Manager makes randomized Gen 2 cartridges.
 - Not done yet: ROM-derived data (R4). Until then, static, roamer and gift captures on a randomized
   cart are dropped by `lua/gen2/signals.lua` (they are matched against vanilla species), and the
-  encounter panel shows vanilla species.
+  encounter panel shows vanilla species.
 
 ### Known limit: the Lua gate checks the two hook pins, not the whole overlay
 
