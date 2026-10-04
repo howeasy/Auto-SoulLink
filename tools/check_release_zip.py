@@ -115,6 +115,8 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
 
     for f in m._LICENSE_FILES:
         add(f, f)
+    for f in getattr(m, "_DATA_EXTRA", []):
+        add(f, f)
     for f in m._LUA_ROOT:
         add(f"lua/{f}", f"lua/{f}")
     for f in m._LUA_GEN1:

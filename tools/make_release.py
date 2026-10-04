@@ -161,6 +161,9 @@ _LUA_GEN2 = [
     "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
     "phone.lua",  # P4.5c: entry.lua composes it beside the panel
     "trade_overlay.lua",  # P4.3b: entry.lua composes it on a trade build; dofiles ../gb_trade_lease.lua
+    # Polished Crystal (dev-grade overlay admission): entry.lua compose_polished loads both by path.
+    "polished.lua",
+    "polished_boxes.lua",
 ]
 
 # lua/clients/
@@ -318,6 +321,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/silver_synth_kyle.synth.json",
         "receipts/silver_synth_bill.synth.json",
     ],
+    "polished_crystal": [
+        # lua/gen2/entry.lua Entry.PACK_FILES.polished_crystal (the dev pack: only what Entry.admit_polished and
+        # compose_polished read). Additive: no existing title's rows change.
+        "profile.json",
+        "charmap.lua",
+        "evolutions.json",
+        "area_map.json",
+    ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",
@@ -375,6 +386,10 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "gen5_bw_locations.lua",
     ],
 }
+
+# Repo-relative files outside data/games/<gen>/ that a launcher loads by path; shipped at the same path.
+# lua/gen2/polished.lua P.PROVENANCE (Entry.admit_polished pins the overlay sha1 to it).
+_DATA_EXTRA = ["data/polished/overlay_provenance.json"]
 
 # lua/x64/ — the DLL is optional to the ZIP (a player may supply it from Archipelago) but it IS
 # tracked in git (blob 896b3cba at master, lua/x64/README.md alongside it), so a checkout has it;
@@ -715,6 +730,7 @@ def build_release(
             for gen, files in game_data.items()
             for f in files
         ]
+        + [REPO_ROOT / f for f in _DATA_EXTRA]
     )
     missing = [str(p) for p in required if not p.exists()]
     if missing:
@@ -814,6 +830,10 @@ def build_release(
                     prefix + f"data/games/{gen}/{fname}",
                 )
                 say(f"  [added]   {prefix}data/games/{gen}/{fname}")
+
+        for rel in _DATA_EXTRA:
+            zf.write(REPO_ROOT / rel, prefix + rel)
+            say(f"  [added]   {prefix}{rel}")
 
         # ── Companion patches — optional ──────────────────────────────────────
         if include_companion:
