@@ -1,8 +1,8 @@
 """R3 (owner "open C-5"): runtime admission of a randomized SLink companion Gen 2 cartridge (rand_overlay).
 
-lua/gen2/entry.lua admits an unknown sha1 only by its activated overlay row's anchors plus the companion pins
-(Entry.COMPANION_PINS at the binding's builder_substitutions); a randomized clean cartridge is refused for the
-missing companion. The server binds the hello to the contract's rom_sha1 (server.py `rom_contract_by_sha1`).
+lua/gen2/entry.lua admits an unknown sha1 only by its activated overlay row's anchors, the companion pins
+(Entry.COMPANION_PINS at the binding's builder_substitutions) and the overlay beacon (every overlay-changed byte);
+a randomized clean cartridge is refused for the missing companion. The server binds the hello to the contract's rom_sha1 (server.py `rom_contract_by_sha1`).
 
 The randomized cartridge here is SYNTH (disclosed): the real overlay (the clean pret build + patch/dist/SLink-<T>.ups)
 with every Johto grass species byte of the first wild entry rewritten, the way UPR's wild randomization writes them;
@@ -24,6 +24,8 @@ from server.server import SLinkServer
 ROOT = Path(__file__).resolve().parents[2]
 ROM_TYPE = {"crystal": "Crystal", "gold": "Gold", "silver": "Silver"}
 PINNED_ABI = 3   # data/games/gen2_*/profile.json overlay.abi
+_GS_PINS = {"DelayFrame": 0x032E, "MainMenuJoypadLoop": 0x5B0A}
+COMPANION_PINS = {"crystal": {"DelayFrame": 0x045A, "MainMenuJoypadLoop": 0x49DE4}, "gold": _GS_PINS, "silver": _GS_PINS}
 
 
 def _binding(title):
@@ -150,18 +152,35 @@ def test_a_truncated_randomized_overlay_is_refused():
     assert decision is None and "unknown artifact SHA-1" in why, why
 
 
-def test_a_clean_rom_with_only_the_two_hook_pins_is_admitted_today_a_known_limit():
-    """DOCUMENTS review F-1 (cx-63dc558a): the Lua gate checks 7 of the overlay's 9839 changed bytes. The server's
-    UPS-hunk audit at preparation and the contract sha1 are the real binding. When the overlay beacon lands
-    (docs/gen2/RANDOMIZER.md, 'Known limit'), flip this to refused."""
-    binding = _binding("crystal")
-    image = bytearray(_randomize(_clean("crystal"), "crystal"))
-    pins = {"DelayFrame": 0x045A, "MainMenuJoypadLoop": 0x49DE4}
-    for edit in binding["builder_substitutions"]:
-        offset, after = pins[edit["symbol"]], bytes.fromhex(edit["after_hex"])
+def _beacon(title):
+    return json.loads((ROOT / f"data/games/gen2_{title}/overlay/beacon.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_clean_rom_with_only_the_two_hook_pins_is_refused_by_the_beacon(title):
+    """Review F-1 (cx-63dc558a): the two hook pins are 7 of the overlay's ~9k changed bytes. The overlay beacon
+    (tools/gen_gen2_beacon.py) re-hashes every one, so pins alone no longer admit."""
+    image = bytearray(_randomize(_clean(title), title))
+    for edit in _binding(title)["builder_substitutions"]:
+        offset, after = COMPANION_PINS[title][edit["symbol"]], bytes.fromhex(edit["after_hex"])
         image[offset:offset + len(after)] = after
-    decision, _why = _admit(bytes(image))
-    assert decision is not None and decision.kind == "rand_overlay"
+    decision, why = _admit(bytes(image))
+    assert decision is None, decision
+    assert "unknown artifact SHA-1" in why and "overlay beacon mismatch" in why and title in why, why
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("where", ["first", "middle", "last"])
+def test_a_randomized_overlay_with_a_flipped_beacon_byte_is_refused(title, where):
+    """Any byte the overlay changed, not only an anchor or a pin: the first, the largest span's middle, the last."""
+    spans = _beacon(title)["spans"]
+    big = max(spans, key=lambda s: s["length"])
+    offset = {"first": spans[0]["offset"], "middle": big["offset"] + big["length"] // 2,
+              "last": spans[-1]["offset"] + spans[-1]["length"] - 1}[where]
+    image = bytearray(_randomize(_overlay(title), title))
+    image[offset] ^= 0x01
+    decision, why = _admit(bytes(image))
+    assert decision is None and "unknown artifact SHA-1" in why and "overlay beacon mismatch" in why, why
 
 
 # --- server: the hello binds the contract's rom_sha1 -----------------------------------------------------------

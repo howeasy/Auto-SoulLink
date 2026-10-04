@@ -207,6 +207,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     ],
     "gen2_crystal": [
         "overlay/binding.json",
+        "overlay/beacon.json",
         "receipts/overlay/crystal.engine_sites.json",
         "receipts/overlay/crystal.write_window.json",
         "receipts/overlay/crystal_battle.qualification.json",
@@ -243,6 +244,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     ],
     "gen2_gold": [
         "overlay/binding.json",
+        "overlay/beacon.json",
         "receipts/overlay/gold.engine_sites.json",
         "receipts/overlay/gold.write_window.json",
         "receipts/overlay/gold_battle.qualification.json",
@@ -281,6 +283,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     ],
     "gen2_silver": [
         "overlay/binding.json",
+        "overlay/beacon.json",
         "receipts/overlay/silver.engine_sites.json",
         "receipts/overlay/silver.write_window.json",
         "receipts/overlay/silver_battle.qualification.json",
@@ -636,7 +639,8 @@ def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
             continue
         if overlay_state(pack, root) != "ADMITTED":
             manifest[pack] = [name for name in manifest[pack]
-                              if name != "overlay/binding.json" and not name.startswith("receipts/overlay/")]
+                              if name not in ("overlay/binding.json", "overlay/beacon.json")
+                              and not name.startswith("receipts/overlay/")]
     return manifest
 
 

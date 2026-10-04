@@ -10,7 +10,8 @@
 -- (Silver's clean U2 was Gold's receipt, O-23; an overlay has its own). Crystal 1.1 stays BUILD_ONLY. What executes is the admission
 -- decision's (kind + the ACTUAL rehashed sha1, D5), read through lua/gen2/artifact.lua's view; never a caller's claim.
 -- R3 (owner "open C-5"): a randomized companion cartridge (unknown sha1) admits as rand_overlay by its overlay row's
--- anchors plus the companion pins (Entry.COMPANION_PINS) and executes that row's view; a randomized clean one is refused.
+-- anchors, the companion pins (Entry.COMPANION_PINS) and its overlay beacon (Entry.BEACON_FILES: every overlay byte)
+-- and executes that row's view; a randomized clean one is refused.
 -- Either graph stays runtime_started=false until client:start().
 local Entry = {}
 
@@ -278,8 +279,7 @@ end
 -- they alone cannot tell a randomized stock cartridge from a randomized overlay. The companion's own same-size code
 -- edits can: the binding's builder_substitutions (after_hex, pinned by binding_sha256) at these flat ROM offsets of
 -- their symbols (data/gen2/<title>_slink.sym; tests/unit/test_gen2_rand_admission.py pins them to the sym).
--- ponytail: two hook pins prove the companion is wired in, not every overlay byte; the server's UPS-hunk audit
--- (upr_gen2_write_domain.check_output) proved the rest at preparation, and the hello sha1 binds to that contract.
+-- The pins prove the hooks are wired in; the overlay beacon (below) proves every other overlay byte is intact.
 Entry.BASE_KIND = {rand_overlay="overlay"}
 local GS_PINS = {DelayFrame=0x032E, MainMenuJoypadLoop=0x5B0A}
 Entry.COMPANION_PINS = {crystal={DelayFrame=0x045A, MainMenuJoypadLoop=0x49DE4}, gold=GS_PINS, silver=GS_PINS}
@@ -299,6 +299,38 @@ local function executed_anchors(data, title, view, kind)
         for _, anchor in ipairs(companion_anchors(title, view)) do anchors[#anchors + 1] = anchor end
     end
     return anchors
+end
+
+-- R6 overlay beacon (tools/gen_gen2_beacon.py): the sha256 over EVERY byte the overlay changes (its UPS hunks, in
+-- order). UPR never writes one (R0; upr_gen2_write_domain re-proves it per output), so a randomized overlay keeps
+-- them all and a clean ROM with only the hook pins patched does not. The beacon must name the overlay row's sha1.
+Entry.BEACON_FILES = {crystal="data/games/gen2_crystal/overlay/beacon.json",
+                      gold="data/games/gen2_gold/overlay/beacon.json",
+                      silver="data/games/gen2_silver/overlay/beacon.json"}
+local function beacon_matches(root, json, Admission, title, row, artifact)
+    local beacon = load_json(json, root .. "/" .. assert(Entry.BEACON_FILES[title], "no overlay beacon for " .. title))
+    if beacon.schema ~= "gen2-overlay-beacon-v1" or beacon.title ~= title then
+        return false, "overlay beacon schema/title mismatch"
+    end
+    if type(beacon.source) ~= "table" or beacon.source.overlay_sha1 ~= row.sha1 then
+        return false, "overlay beacon is not pinned to the overlay row's sha1"
+    end
+    local offsets, last = {}, 0
+    for _, span in ipairs(beacon.spans) do
+        local offset, length = span.offset, span.length
+        if math.type(offset) ~= "integer" or math.type(length) ~= "integer" or offset < last or length < 1
+           or offset + length > artifact.size then
+            return false, "malformed overlay beacon span"
+        end
+        for i = offset, offset + length - 1 do offsets[#offsets + 1] = i end
+        last = offset + length
+    end
+    if #offsets == 0 or #offsets ~= beacon.total or #beacon.spans ~= beacon.count then
+        return false, "overlay beacon span totals mismatch"
+    end
+    local digest = Admission.sha256(function(i) return artifact.read_u8(offsets[i + 1]) end, #offsets)
+    if digest ~= beacon.sha256 then return false, "overlay beacon mismatch" end
+    return true
 end
 
 -- The O-22 proofs of one title and ARTIFACT KIND (view.kind), re-validated from the shipped receipts: {engine, write,
@@ -334,10 +366,10 @@ end
 
 -- sha1 mode admits a SELECTED clean/overlay row by exact hash (clean always refused, patch-first). An unknown hash
 -- (anchors mode) admits only as rand_overlay: the header names the title, its activated overlay row passes the same
--- grant/binding/receipt checks, and the ROM holds that row's anchors plus the companion pins. A randomized stock
+-- grant/binding/receipt checks, and the ROM holds that row's anchors, the companion pins and its beacon. A randomized stock
 -- cartridge (the clean anchors hold, no companion) is refused for the missing companion.
 function Entry.admit(args)
-    local actual_sha, anchor_mode, stock_title
+    local actual_sha, anchor_mode, stock_title, beacon_refusal
     local ok, result, reason = pcall(function()
         local root = assert(args.root, "root required")
         local Admission = dofile(root .. "/lua/admission.lua")
@@ -405,6 +437,20 @@ function Entry.admit(args)
                 local proof
                 proof, why = proofs(root, json, candidate.data, candidate.title, candidate.def.pack, view)
                 if not proof then return false, grant .. " ADMITTED but the PHYSICAL proof refused: " .. why end
+                -- R6: a randomized overlay must still hold every overlay byte (the beacon), not only the pins.
+                if mode == "anchors" then
+                    local intact
+                    intact, why = beacon_matches(root, json, Admission, candidate.title, row, artifact)
+                    if not intact then
+                        -- hooks present but other overlay bytes differ; no hooks at all is a stock cartridge (below)
+                        if not Admission.anchors_match(companion_anchors(candidate.title, view), artifact, "anchors") then
+                            return false, why
+                        end
+                        beacon_refusal = "its " .. candidate.title .. " SLink companion overlay is modified or "
+                                         .. "incomplete (" .. why .. "); prepare it through the Manager or /patcher"
+                        return false, beacon_refusal
+                    end
+                end
                 candidate.view = view
                 return true
             end,
@@ -434,7 +480,8 @@ function Entry.admit(args)
     if result ~= nil then return result end
     if not anchor_mode then return nil, reason end
     -- (the core's own reason is the LAST candidate's, usually an unrelated row, so it is not repeated)
-    local why = stock_title and companion_reason(stock_title) or "no activated SLink companion overlay matches its anchors"
+    local why = beacon_refusal or stock_title and companion_reason(stock_title)
+              or "no activated SLink companion overlay matches its anchors"
     return nil, "unknown artifact SHA-1 " .. tostring(actual_sha) .. ": " .. why
 end
 
