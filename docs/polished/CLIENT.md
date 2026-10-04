@@ -953,3 +953,75 @@ Counting the Polished `const_def` block (`constants/battle_constants.asm:106-123
  }
 ]
 ```
+
+
+---
+
+## 5. Status after milestone A + C-BOX + C-AREA (2026-10-04)
+
+Appended, not substituted: the rows above stay as written and are corrected here. Nothing in this
+section rewrites an earlier line. Source of truth is the committed code at `cd89c370`
+(`cd89c370` C-BOX, `c3d10da9` C-AREA, `d8d75628` milestone A).
+
+### 5.1 Card status
+
+| Card | Status | Commit | Proved by | UNPROVEN without a cartridge |
+|---|---|---|---|---|
+| **C-PACK** | **DONE-tested** | `d8d75628` | `tests/unit/test_polished_client.py` (`test_the_hello_carries_the_party_and_the_companion_evidence`) | That the three pack files agree with the *live* overlay on a real save; proven only against the built overlay image and a synthetic WRAM image |
+| **C-SIGNALS** | **DONE-tested** | `d8d75628` | `test_polished_client.py::test_the_production_signals_gate_refuses_polished`, plus the re-labelled binder cases `test_the_polished_title_binds_only_with_its_key_builder`, `test_the_box_change_bound_is_the_profile_num_boxes`, `test_the_area_battle_types_are_the_profile_set` | That any Polished engine site actually fires at runtime — no site is registered, so nothing has ever been observed |
+| **C-COMPOSE** | **DONE-tested** (DEV-GRADE only) | `d8d75628` | `test_polished_client.py` (compose, hello capture, `test_the_real_server_admits_the_captured_hello`, `test_no_hook_and_no_write_on_the_whole_path`, `test_the_clean_release_and_a_random_rom_get_no_client`) | **Everything live.** `production_admitted` is hardcoded `false` and qualification `DEV_OVERLAY_SHA1`; no `PHYSICAL_RECEIPTED` exists. The hello is admitted against a **synthetic** WRAM image, never a real save |
+| **C-AREA** | **DONE-tested** | `c3d10da9` | `tests/unit/test_polished_area_map.py` | That Polished's map-group/number values and landmark constants match on a running cartridge |
+| **C-BOX** | **DONE-tested** (read-only) | `cd89c370` | `tests/unit/test_polished_boxes_census.py` | That the CartRAM→WRAM flag mapping is right on a real save. **A wrong flag mapping reads every slot as empty — a complete but wrong census**, and no synthetic image can catch that |
+| **C-SITES** | **OPEN** | — | — | Needs `engine_signals.json` promoted from `SOURCE_CANDIDATE` to a receipted pack; nothing is registered today |
+| **C-KEY** | **DONE-tested** | `d8d75628` | `test_polished_client.py` (9-bit species `291` planted, `pc.key` round trip against the server's `decode_party_blob`) | Nothing structural — but see 5.2(a): the *key format* was correct while the *foundation string* sent alongside it was not |
+| **C-ROMTABLES** | **DONE-unproven-live** | `d8d75628` | `tests/unit/test_gen2_polished_adapter.py`, `test_gen2_rand_data.py` | The R4 scan decodes a provisioned ROM's tables, but no wildcard encounter, gift or static has been resolved from a **running** cart |
+| **battle_faint` / `battle_bench` / rival swap** | **OPEN** | — | — | Need receipts that do not exist |
+| **any box write** (deposit/withdraw/memorialize) | **OPEN** | — | — | Needs NEWBOX 6.2/6.3 **and** a box write receipt |
+| **phone** | **OPEN** | — | — | `wUnusedMapBuffer` absent; needs a `$C633` staging span |
+| **trade** | **OPEN** | — | — | `profile.overlay` has no `trade` block |
+| **SFX / panel** | **OPEN** | — | — | Needs a later overlay milestone (caps != 0). `P.writes` is composed and live; the only brake is the ROM-advertised caps byte |
+
+### 5.2 Corrected claims
+
+**(a) A11 — `client.foundation` was hard-coded `gen2_gsc`; the server refused the hello. SUPERSEDED.**
+Row A11 says *"unchanged and correct — the server also says `foundation=\"gen2_gsc\"`"* and marks it
+**CLEAN**. It was not. The server maps `polished_crystal` to `gen2_polished`
+(`server/adapters/__init__.py:82`), so a client announcing `gen2_gsc` on a Polished cart was
+mismatched. Fixed by three edits: `lua/gen2/polished.lua:18` `P.FOUNDATION = "gen2_polished"`, used at
+`:113` in the admission description; `lua/gen2/client.lua:114`
+`foundation = p.foundation or "gen2_gsc"` (default preserved, so vanilla is unchanged). A11's
+*CLEAN* verdict is withdrawn; the row's premise (the client hard-coded it) was right.
+
+**(b) C-BOX — "add `read_boxes`; `wire.box_entry` need not change" was wrong on both counts.
+SUPERSEDED.**
+* The card's exclusive-file line (`CLIENT.md:304`) says *"add `read_boxes`"*, and the change section
+  implies the vanilla wire entry is reusable. It is not: `lua/gen2/wire.lua:209` refuses any
+  `box_index` outside `0..13`, and Polished has **20** boxes. A Polished box 14–19 would have been
+  dropped from `pc_boxes` silently. Polished needed its own `P.box_entry` (`lua/gen2/polished.lua:202`),
+  which widens the bound to `integer(box_index, 0, 19)` at `:207` and the slot likewise.
+* What was actually built is **`P.census`** (`lua/gen2/polished.lua:609`), not a method named
+  `read_boxes`, and its `read_current_box_num` returns **`-1`** (`:656`), not a box number. That `-1`
+  was the latent blocker: `client.lua`'s rescan walks boxes `0..19` and the vanilla path reads a
+  *current box number*; composing a census that reports `-1` would have to be refused or special-cased
+  at every consumer. **UNVERIFIED:** I did not trace whether the composed client special-cases `-1`
+  or simply never asks, because no box writer is composed.
+* Consequence for the doc: the C-BOX premise *"a box is a slot array of 32-byte records"* is already
+  marked falsified in the card; what was NOT anticipated is the **wire-shape** change.
+
+**(c) The C-BOX exclusive-files line lists `lua/gen2/boxes.lua`, which is not needed. SUPERSEDED.**
+`CLIENT.md:304` reads *"`lua/gen2/polished.lua` (add `read_boxes`), `lua/gen2/boxes.lua` (only if a
+writer is added)"*. The census is read-only, so no `boxes.lua` change was made; the real exclusive set
+was `lua/gen2/polished.lua` plus `lua/gen2/polished_boxes.lua` (**UNVERIFIED** — I did not diff the
+`cd89c370` file list to confirm whether `polished_boxes.lua` was added by that commit or already
+existed).
+
+### 5.3 What a cartridge would still have to prove
+
+1. **C-BOX flag mapping** — the only finding that could make a "tested" row *silently wrong*: a bad
+   CartRAM/WRAM flag decode yields a **complete but empty** census, and no synthetic image can catch it.
+2. **C-SITES** — nothing has ever fired on a cart.
+3. **C-AREA** — 605 maps/146 areas are generated from static data; no live area transition was observed.
+4. **The two hardening findings** from the `d8d75628` review remain open and are *not* closed by any of
+   the three commits above: the composed `P.writes` panel writer (`lua/gen2/panel.lua:66`, whose
+   `pointer_stable` and `lifetime.valid` are unconditionally `true`) and `hello_unheld`
+   (`lua/gen2/client.lua:1364`) skipping the `battle.mode` gate at `:1366`.
