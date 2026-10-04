@@ -196,6 +196,14 @@ SCENARIOS = {
     "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                         "no_setup": True, "frames": 216000,
                         "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
+    # C-5 (docs/gen2/C5_RUNBOOK.md): a Manager-randomized cart refused by the SERVER at hello -- G-c, the partner's
+    # contract names another cartridge; G-i, the run has no rom_contract.json (server.py _decide_admission). Run only
+    # through tools/c5_runner.py, which stages the randomized carts and the contract; explicit_only keeps them out of
+    # every --scenario all / scenarios_for selection (the release matrix and the final sweep).
+    **{name: {"flags": [], "timeout": 1200, "games": ("gen2_new",), "no_setup": True, "frames": 216000,
+              "target": {"a": "battle", "b": "battle_ot2"}, "explicit_only": True,
+              "oracle": "assert_gen2_c5_refused_saved", "oracle_kwargs": {}}
+       for name in ("gen2_c5_wrong_rom", "gen2_c5_no_contract")},
     "faint":   {"flags": [], "timeout": 420},
     "boxsync": {"flags": [], "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
@@ -3044,6 +3052,9 @@ GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
 GEN2_ROUTE_BATTLE_LOST = "link route failed: the battle ended without a catch"
 # DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
 # <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
+# C-5 refused-at-hello scenarios: each side's expected server admission state (status players[<side>].admission).
+GEN2_C5_REFUSED = {"gen2_c5_wrong_rom": {"a": "admitted", "b": "rejected"},
+                   "gen2_c5_no_contract": {"a": "rejected", "b": "rejected"}}
 GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
                         "gen2_npc_trade": "trade", "gen2_evolution": "evolve"}
 GEN2_SYNTH_PAIRS = {"gen2_new": {"a": ("crystal", ""), "b": ("crystal", "_ot2")},
@@ -5085,6 +5096,7 @@ class DuoRun:
                        "gen2_faint_active_trainer": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
                        "gen2_ball_gate": "ball_gate_oracle",
+                       **dict.fromkeys(GEN2_C5_REFUSED, "c5_refused_oracle"),
                        **dict.fromkeys(GEN2_SYNTH_SCENARIOS, "synth_duo_oracle"),
                        **{name: row[0] for name, row in GEN2_WAVE_C.items()},
                        **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
@@ -5312,6 +5324,12 @@ class DuoRun:
             before=self._gen2_admit_before, after=self._gen2_admit_snapshot(),
             on_verified=self._record_gen2_facts, **self._gen2_admit_paths(), **kwargs)
 
+    def assert_gen2_c5_refused_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.c5_refused_oracle(results, data_dir=self.data_dir, status=self._status(),
+            events=self._reconnect_events(), expect=dict(GEN2_C5_REFUSED[self.scenario]),
+            on_verified=self._record_gen2_facts, on_reason=self._pydec_note, **kwargs)
+
     def assert_gen2_reconnect_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
         return oracle.reconnect_oracle(results, data_dir=self.data_dir,
@@ -5529,6 +5547,8 @@ class DuoRun:
             allowed = ("alive",)
         if self.scenario in GEN2_TRADE_SCENARIOS:
             allowed = ("committed", "unchanged")
+        if self.scenario in GEN2_C5_REFUSED:
+            allowed = ("refused",)
         if facts["status"] not in allowed:
             raise RuntimeError("Gen 2 oracle verified status invalid")
         self._gen2_verified_facts = dict(facts)
@@ -8154,6 +8174,8 @@ class DuoRun:
     def orchestrate(self):
         if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
             admitted = ("a",) if self.scenario == "gen2_admit_wrong_rom" else ("a", "b")
+            if self.scenario in GEN2_C5_REFUSED:
+                admitted = tuple(inst for inst, state in GEN2_C5_REFUSED[self.scenario].items() if state == "admitted")
             def both_hellos():
                 players = (self._status() or {}).get("players", {})
                 return all(players.get(inst, {}).get("connected")
@@ -8162,6 +8184,16 @@ class DuoRun:
                                    (read_result(self.artifact_name, inst) or "").splitlines())
                             for inst in admitted)
             self.wait_for("both admitted Gen 2 hellos", both_hellos, 300)
+            if self.scenario in GEN2_C5_REFUSED:
+                refused = [inst for inst, state in GEN2_C5_REFUSED[self.scenario].items() if state == "rejected"]
+
+                def refusals():
+                    players = (self._status() or {}).get("players", {})
+                    return all(players.get(inst, {}).get("admission") == "rejected"
+                               and any(line.startswith("HELLO ") for line in
+                                       (read_result(self.artifact_name, inst) or "").splitlines())
+                               for inst in refused)
+                self.wait_for("the server's refusal of each randomized hello", refusals, 300)
             if self.scenario == "gen2_admit_wrong_rom":
                 self._gen2_admit_before = self._gen2_admit_snapshot()
             self.go()

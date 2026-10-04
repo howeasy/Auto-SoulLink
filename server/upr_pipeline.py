@@ -47,7 +47,7 @@ import re
 import shutil
 import subprocess
 
-from server import upr_gen3_write_domain, upr_polished_write_domain
+from server import upr_gen2_write_domain, upr_gen3_write_domain, upr_polished_write_domain
 from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
     GEN1_ROM_SIZE,
@@ -58,6 +58,7 @@ from server.adapters.gen1_rom_scan import (
     scan,
     scan_base_stats,
 )
+from server.adapters.gen2_rom_scan import Rom as Gen2Rom, RomScanError as Gen2RomScanError
 from server.adapters.gen3_rom_tables import (
     gen3_content_fingerprint,
     normalised_species_rules,
@@ -71,6 +72,7 @@ from server.adapters.polished_rom_scan import (
 from server.upr_settings import (
     FAMILY_EMERALD,
     FAMILY_FRLG,
+    FAMILY_GEN2,
     FAMILY_POLISHED,
     FAMILY_PURE,
     FAMILY_VANILLA,
@@ -254,10 +256,13 @@ def jar_entry_crcs(jar: str) -> dict[str, int | None]:
 # assumes the Gen 1 layout, so it is never called on one -- recognised by sha1 instead,
 # against its own per-title admission tables (the same SELECTED clean rows server/
 # manager.py's OPTION_SUPPORT and server/cartridges.py's companion apply trust). Its own
-# family: it never pairs with a Gen 1 cartridge, and (no randomizer support yet) never
-# randomizes -- server/cartridges.py refuses that before any jar runs.
-FAMILY_GEN2 = "gen2_gsc"
+# family (upr_settings.FAMILY_GEN2): it never pairs with a Gen 1 cartridge. It randomizes the
+# companion OVERLAY (server/cartridges.py applies the UPS first), on the fork jar only: R0
+# (docs/gen2/RANDOMIZER.md) measured that jar's Gen2RomHandler, and no other.
 _GEN2_TITLES = ("crystal", "gold", "silver")
+GEN2_RANDOMIZER_REFUSAL = (
+    "Gold / Silver / Crystal randomization needs SLink's UPR fork jar (tools/build_upr_fork.py) -- "
+    "only the fork's Gen 2 handler was measured against the companion overlay.")
 
 # Polished Crystal v3.2.3: its own Gen 2 family (upr_settings.FAMILY_POLISHED, server/adapters/gen2_polished.py),
 # recognised by the exact sha1s polished_rom_scan pins: the release (data/polished_sources.lock.json) and the SLink
@@ -326,18 +331,32 @@ def _expansion_sha1() -> str:
         return json.load(fh)["source"]["rom_sha1"].lower()
 
 
-def _gen2_clean_sha1s() -> dict[str, str]:
-    """sha1 -> title, for every SELECTED clean row across the three Gen 2 admission tables
-    (data/games/gen2_<title>/admission.json). Read fresh each call: three small files, and
-    an admission change (a new revision selected) must be picked up without a restart."""
+def _gen2_sha1s(kind: str) -> dict[str, str]:
+    """sha1 -> title, for every SELECTED row of ``kind`` (clean / overlay) across the three Gen 2
+    admission tables (data/games/gen2_<title>/admission.json). Read fresh each call: three small
+    files, and an admission change (a new revision selected) must be picked up without a restart."""
     out = {}
     for title in _GEN2_TITLES:
         path = os.path.join(_REPO, "data", "games", f"gen2_{title}", "admission.json")
         with open(path, encoding="utf-8") as fh:
             for row in json.load(fh)["artifacts"]:
-                if row["kind"] == "clean" and row["selection"] == "SELECTED":
+                if row["kind"] == kind and row["selection"] == "SELECTED":
                     out[row["sha1"]] = title
     return out
+
+
+def _gen2_clean_sha1s() -> dict[str, str]:
+    return _gen2_sha1s("clean")
+
+
+def gen2_identify(rom: bytes) -> dict | None:
+    """{title, kind} for a pinned Gen 2 clean dump or companion overlay, else None (by sha1 only:
+    a randomized Gen 2 cartridge has no pinned identity, which is what _check_content_gen2 is for)."""
+    sha1 = hashlib.sha1(rom).hexdigest()
+    for kind in ("clean", "overlay"):
+        if title := _gen2_sha1s(kind).get(sha1):
+            return {"title": title, "kind": kind}
+    return None
 
 
 def jar_entries(jar: str) -> set[str]:
@@ -375,7 +394,8 @@ def family_of(sources: dict[str, str]) -> str:
     """The randomizer family the pair belongs to (upr_settings.FAMILY_* incl. FR/LG and Emerald,
     or FAMILY_GEN2); any cross-family mix is refused because the two would need different
     contracts and could not link."""
-    gen2 = _gen2_clean_sha1s()
+    # the overlay too: a Gen 2 pair is randomized from its companion overlays (cartridges.py)
+    gen2 = {**_gen2_sha1s("overlay"), **_gen2_clean_sha1s()}
     families = {}
     for pid, path in sources.items():
         with open(path, "rb") as f:
@@ -604,6 +624,63 @@ def _check_content_polished(source_rom: str, output_rom: str) -> dict:
     return scan
 
 
+GEN2_TITLE_WORDS = {"crystal": "Crystal", "gold": "Gold", "silver": "Silver"}
+
+
+@functools.cache
+def _gen2_profile(title: str) -> dict:
+    with open(os.path.join(_REPO, "data", "games", f"gen2_{title}", "profile.json"), encoding="utf-8") as f:
+        return json.load(f)["titles"][title]
+
+
+def _gen2_rule_tables(rom: bytes, title: str) -> tuple[list, list, list]:
+    """(base stats, evolutions, learnsets) for species 1..251, read UNPINNED (the overlay and UPR's
+    output keep the clean build's table addresses). The catch rate and the TM/HM/tutor bits are
+    left out of the base stats: the minimum-catch-rate and TM / tutor compatibility options
+    legitimately rewrite them, and no Soul Link rule reads them."""
+    r = Gen2Rom(rom, _gen2_profile(title), pinned=False)
+    stats = [{k: v for k, v in r.base_stats(s).items() if k not in ("catch_rate", "tmhm_bytes")}
+             for s in range(1, 252)]
+    records = [r.evos_attacks(s) for s in range(1, 252)]
+    return stats, [e["evolutions"] for e in records], [e["learnset"] for e in records]
+
+
+def _check_content_gen2(source_rom: str, output_rom: str) -> dict:
+    """The Gen 2 _check_content: a pinned source (clean or companion overlay), the same title
+    (header bytes unchanged), and base stats, types, the evolution graph and the level-up
+    learnsets equal to the source's -- compared as decoded records, because UPR repacks and
+    repoints EvosAttacks on every save even with everything off (R0). Returns the output's
+    table scan (server/adapters/gen2_rom_scan.py scan_all) for the content hash."""
+    with open(source_rom, "rb") as f:
+        src = f.read()
+    with open(output_rom, "rb") as f:
+        out = f.read()
+    si = gen2_identify(src)
+    if si is None:
+        raise UprPipelineError("source ROM is not a pinned Gold / Silver / Crystal dump or companion overlay; "
+                               "randomize from a pinned cartridge so the result is reproducible")
+    title = si["title"]
+    if len(out) != len(src) or out[0x134:0x150] != src[0x134:0x150]:
+        raise UprPipelineError(f"output is not {GEN2_TITLE_WORDS[title]} any more (size or header changed)")
+    try:
+        (s_stats, s_evos, s_moves), (o_stats, o_evos, o_moves) = (
+            _gen2_rule_tables(src, title), _gen2_rule_tables(out, title))
+        scan = Gen2Rom(out, _gen2_profile(title), pinned=False).scan_all()
+    except Gen2RomScanError as exc:
+        raise UprPipelineError(f"the randomized ROM could not be decoded: {exc}") from exc
+    if o_stats != s_stats:
+        raise UprPipelineError(
+            "base stats or types differ from the source — a setting that changes data the Soul Link "
+            "rules read was enabled")
+    if o_evos != s_evos:
+        raise UprPipelineError(
+            "evolution targets differ from the source — evolution randomization was enabled, and the "
+            "species clause reads a vanilla family table")
+    if o_moves != s_moves:
+        raise UprPipelineError("level-up movesets differ from the source — moveset randomization was enabled")
+    return scan
+
+
 def _sha1(path: str) -> str:
     h = hashlib.sha1()
     with open(path, "rb") as f:
@@ -794,11 +871,14 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
         # the artifact would not be where the caller thinks it is.
         raise UprPipelineError(f"output must end in {ext}, got {output_rom!r}")
     pol = None if g3 else polished_identify(src_bytes)   # never the Gen 1 identify() on Polished
-    src_ident = {"kind": "clean"} if g3 else pol or identify(src_bytes)
+    g2 = None if g3 or pol else gen2_identify(src_bytes)  # never the Gen 1 identify() on Gen 2
+    src_ident = {"kind": "clean"} if g3 else pol or g2 or identify(src_bytes)
     if pol and not (jar_is_fork(jar) and jar_supports_polished(jar, src_bytes)):
         raise UprPipelineError(POLISHED_JAR_REFUSAL)
     if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
         raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
+    if g2 and not jar_is_fork(jar):
+        raise UprPipelineError(GEN2_RANDOMIZER_REFUSAL)
     if g3 and not jar_is_fork(jar):
         raise UprPipelineError(EMERALD_RANDOMIZER_REFUSAL if g3 == "emerald" else FRLG_RANDOMIZER_REFUSAL)
     if not jar_supports(jar, src_ident):
@@ -984,6 +1064,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}
     ext = ".gba" if family in GEN3_FAMILIES else ".gbc"
+    fam = (family,) if family in (*GEN3_FAMILIES, FAMILY_GEN2, FAMILY_POLISHED) else ()    # Gen 1 keeps its call shape
     for player in ("a", "b"):
         out = os.path.join(out_dir, f"{player}_randomized{ext}")
         info = randomize(jar, settings_path, sources[player], out, java=java)
@@ -997,7 +1078,6 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if bad := forbidden_enabled(effective, family):
             raise UprPipelineError(
                 f"player {player}: after tweakForRom the run would randomize {', '.join(bad)}")
-        fam = (family,) if family in (*GEN3_FAMILIES, FAMILY_POLISHED) else ()    # Gen 1 keeps its call shape
         info["categories"] = sorted(categories_enabled(effective, *fam))
         info["spec"] = spec_from_parsed(effective, *fam)
         if family == FAMILY_POLISHED:
@@ -1016,6 +1096,15 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             info["content_hash"] = info["fingerprint"] = gen3_content_fingerprint(tables)
             results[player] = info
             continue
+        if family == FAMILY_GEN2:
+            scan = _check_content_gen2(sources[player], info["output"])
+            info["write_domain"] = upr_gen2_write_domain.check_output(
+                sources[player], info["output"], scan["title"])
+            # no client-reproducible fingerprint yet (the adapter/runtime card); the content hash
+            # covers the decoded tables, as Gen 1's does
+            info["content_hash"], info["fingerprint"] = profile_hash(scan), ""
+            results[player] = info
+            continue
         info["content_profile"] = _check_content(sources[player], info["output"])
         if family == "gen1_purergb":              # upr_settings.FAMILY_PURE
             info["write_domain"] = _audit_write_domain(sources[player], info["output"], info["spec"])
@@ -1028,10 +1117,12 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
     if results["a"]["spec"] != results["b"]["spec"]:
         raise UprPipelineError(
             f"the two ROMs ended up with different settings applied: "
-            f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}")
+            f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}"
+            + (" (Crystal has move tutors, Gold and Silver do not: with tutors on, pair Crystal with Crystal "
+               "or Gold with Silver, or turn tutors off)" if family == FAMILY_GEN2 else ""))
 
     from server.adapters.gen1_rom_scan import fingerprint_rom
-    for player in ("a", "b") if family not in (*GEN3_FAMILIES, FAMILY_POLISHED) else ():
+    for player in ("a", "b") if family not in (*GEN3_FAMILIES, FAMILY_GEN2, FAMILY_POLISHED) else ():
         results[player]["content_hash"] = profile_hash(results[player]["content_profile"])
         # The fingerprint is the CLIENT-reproducible one: it covers only the tables a
         # running client can read out of its own cartridge, which is what makes it usable

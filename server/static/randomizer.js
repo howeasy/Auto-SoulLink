@@ -114,8 +114,8 @@ function randomizerFields(form) {
       var p = this.pre;
       if (!p) return '';
       if (!p.jar_found) return 'jar not found';
-      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald' + (p.jar_polished ? ' + Polished Crystal' : '') + ')';
-      return this.family === 'gen3_frlg' || this.family === 'gen3_emerald'
+      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + Gen 2 + FireRed / LeafGreen + Emerald' + (p.jar_polished ? ' + Polished Crystal' : '') + ')';
+      return this.family === 'gen3_frlg' || this.family === 'gen3_emerald' || this.family === 'gen2_gsc'
         ? 'stock jar (not accepted for ' + this.familyLabel(this.family) + ')' : 'stock jar (vanilla only)';
     },
     javaWords() { return !this.pre ? '' : this.pre.java_found ? 'java on PATH' : 'java not on PATH'; },
@@ -360,7 +360,6 @@ function randomizerFields(form) {
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
       if (this.rdraft.randomize && [ra, rb].some(function (r) { return r && r.family === 'gen3_exp'; })) return 'The Emerald Expansion has no randomizer; turn Randomize off.';
-      if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {
         return this.pre.jar_error || 'This PokeRandoZX.jar is not a known build; SLink will not run it.';
@@ -370,7 +369,7 @@ function randomizerFields(form) {
       if (this.rdraft.randomize && this.family === 'gen1_purergb' && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing pureRGB needs the current SLink fork jar (tools/build_upr_fork.py); this jar is the stock 4.6.1 or an older fork.';
       }
-      if (this.rdraft.randomize && (this.family === 'gen3_frlg' || this.family === 'gen3_emerald')
+      if (this.rdraft.randomize && (this.family === 'gen3_frlg' || this.family === 'gen3_emerald' || this.family === 'gen2_gsc')
           && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
       }

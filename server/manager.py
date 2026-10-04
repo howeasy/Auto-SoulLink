@@ -84,7 +84,7 @@ GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a run's game names (upr_settings.FAMILY_*): a pure run takes pure
 # cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones, a Gen 2 run
-# Gen 2 ones (companion only: Gen 2 never randomizes) -- no two families can link. "gen3_rr"
+# Gen 2 ones (companion, randomized or not) -- no two families can link. "gen3_rr"
 # (Radical Red) is a DIFFERENT game key from "gen3" and is deliberately absent here: RR is not
 # randomizable by this pipeline (its map/data no longer matches the vanilla FR/LG tables R2
 # verifies against), so a run named "gen3_rr" never lands in randomizer_games and never offers
@@ -330,7 +330,7 @@ def new_run_form() -> dict:
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
         "gen1_games": [k for k, _, m in GAMES if m and all(
             rt in ("red", "blue", "yellow", "purered", "pureblue", "puregreen") for rt in m)],
-        # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
+        # the games the Cartridges step (companion / randomizer) serves: Gen 1, Gen 2 and FR/LG
         "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY and k not in NON_RANDOMIZABLE_GAMES],
     }
 
@@ -1497,7 +1497,6 @@ class RunManager:
         from server import cartridges
         from server.upr_pipeline import (
             EXPANSION_REFUSAL,
-            FAMILY_GEN2,
             FAMILY_GEN3_EXP,
             FAMILY_POLISHED,
             POLISHED_RANDOMIZER_ENABLED,
@@ -1557,9 +1556,6 @@ class RunManager:
                     f"{FAMILY_WORDS.get(wanted, wanted)} dumps")}, status=400)
         if family == FAMILY_GEN3_EXP and randomize:
             return web.json_response({"ok": False, "error": EXPANSION_REFUSAL}, status=400)
-        if randomize and family == FAMILY_GEN2:
-            return web.json_response({"ok": False, "error": (
-                "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
         if randomize and family == FAMILY_POLISHED and not POLISHED_RANDOMIZER_ENABLED:
             return web.json_response({"ok": False, "error": POLISHED_RANDOMIZER_REFUSAL}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option

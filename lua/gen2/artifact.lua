@@ -7,7 +7,7 @@
   coordinates come from the generated sidecar data/games/gen2_<t>/overlay/binding.json,
   pinned by the catalog row's binding_sha256. There is no fallback from overlay to clean.
 
-  view = {kind, rom_sha1, base_sha1, binding_sha256, sites, checkpoint, anchors, profile_rom}
+  view = {kind, rom_sha1, base_sha1, binding_sha256, sites, checkpoint, anchors, profile_rom, substitutions}
 ]]
 local Artifact = {}
 
@@ -62,7 +62,9 @@ function Artifact.view(root, json, data, title, row)
                    "overlay binding execution facts missing")
             return {kind="overlay", rom_sha1=binding.rom_sha1, base_sha1=binding.base_sha1,
                     binding_sha256=row.binding_sha256, sites=binding.sites, checkpoint=binding.checkpoint,
-                    anchors=binding.header_anchors, profile_rom=binding.profile_rom}
+                    anchors=binding.header_anchors, profile_rom=binding.profile_rom,
+                    -- the companion's own same-size code edits (entry.lua companion_anchors, rand_overlay)
+                    substitutions=binding.builder_substitutions}
         end)
         if not ok then return nil, tostring(result) end
         return result

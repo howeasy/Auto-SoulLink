@@ -262,8 +262,8 @@ rules receipts (CR1 finding 4); the §6.1 ledger records which receipts were re-
 ## 10. Deferred (recorded so nobody infers otherwise)
 
 Archipelago Crystal beyond profile documentation (post-RC, O-8); peer ghost (post-RC, O-13); Time Capsule trades and mail (recorded limits, O-14; held items are carried); `playthrough`/`deadzone`/`dupes` on Gen 2
-(closed); non-US ROMs and VC builds; Battle Tower; Mobile Adapter; UPR
-randomizer for Gen 2 (fog; owner question at P6); ~~Explode Mode and Rival Team Swap on Gen 2~~ -- REOPENED, owner 2026-09-26: "Yes, both" (Gen 1 parity; the earlier "default no" was an unasked agent default).
+(closed); non-US ROMs and VC builds; Battle Tower; Mobile Adapter; ~~UPR
+randomizer for Gen 2~~ -- OPENED, owner 2026-10-03: "Yes, open C-5 (Recommended)" (randomized admission on Gen 2; lane `claude/gen2-randomizer`, plan: UPS overlay first, then UPR; Polished Crystal follows on `claude/gen2-polished`, owner: "Standard only first (Recommended)", randomizer "Add support to UPR"); ~~Explode Mode and Rival Team Swap on Gen 2~~ -- REOPENED, owner 2026-09-26: "Yes, both" (Gen 1 parity; the earlier "default no" was an unasked agent default).
 
 ## 11. Risks
 

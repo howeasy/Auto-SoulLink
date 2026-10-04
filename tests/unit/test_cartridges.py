@@ -281,18 +281,59 @@ def test_gen2_overlay_admitted_reads_the_activated_row(monkeypatch):
         assert not patcher.gen2_overlay_admitted("gold"), key
 
 
-def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
-    """Gen 2 has no randomizer support: the request must be refused before any jar runs,
-    not silently ignored or (worse) run against a Gen 1 jar section that doesn't exist."""
+def test_gen2_randomizes_the_companion_overlay(tmp_path, monkeypatch):
+    """Gen 2 randomize (owner ruling 2026-10-03, C-5): the UPS overlay is applied FIRST and the
+    overlay is what the randomizer reads (pureRGB order; docs/gen2/RANDOMIZER.md proved it safe).
+    The handed-out cartridge is the randomizer's output, pinned by rom_contract.json with its seed;
+    no Gen 1 fingerprint is taken (Gen 2 has no client-reproducible one yet)."""
     from server import cartridges, upr_pipeline
 
     sources = _gen2()
     # a Gen 2 pick is refused outright without its companion (patch-first), so activate the overlay row
     monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: True)
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on Gen 2 randomize"))
-    with pytest.raises(cartridges.CartridgeError, match="Gen 2 has no randomizer support"):
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda _jar: True)
+    monkeypatch.setattr(upr_pipeline, "fingerprint_any", lambda _rom: pytest.fail("Gen 1 fingerprint on Gen 2"))
+    seen = {}
+
+    def prepare(jar, settings_path, inputs, out_dir):
+        players = {}
+        for seed, (pid, path) in enumerate(sorted(inputs.items()), 7):
+            data = bytearray(Path(path).read_bytes())
+            seen[pid] = hashlib.sha1(data).hexdigest()
+            data[0x60000] ^= seed                         # stands in for UPR's tables
+            output = Path(out_dir) / f"{pid}_randomized.gbc"
+            output.write_bytes(data)
+            players[pid] = {"output": str(output), "seed": seed, "source_sha1": seen[pid], "content_hash": "h"}
+        return {"upr_version": "4.6.1-slink3", "settings_sha256": "abc", "categories": ["wild"],
+                "spec": {}, "summary": "wild encounters random", "players": players}
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", prepare)
+    result = cartridges.provision(str(tmp_path), sources, companion=True,
+                                  randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
+    assert result["family"] == upr_pipeline.FAMILY_GEN2
+    assert seen == {"a": _overlay_sha1("gold"), "b": _overlay_sha1("silver")}, "randomized the clean dump"
+    contract = json.loads((tmp_path / "rom_contract.json").read_text())
+    for seed, pid in enumerate("ab", 7):
+        player = result["players"][pid]
+        final = Path(player["output"]).read_bytes()
+        assert final == (tmp_path / "roms" / f"{pid}_randomized.gbc").read_bytes()
+        assert player["kind"] == "rand_companion" and player["fingerprint"] == ""
+        assert contract["players"][pid] == {"fingerprint": "", "rom_sha1": hashlib.sha1(final).hexdigest(),
+                                            "seed": str(seed)}
+
+
+def test_gen2_randomize_needs_the_fork_jar(tmp_path, monkeypatch):
+    """Only the fork's Gen2RomHandler was measured against the overlay (R0): any other jar is refused
+    before a byte is written or Java starts."""
+    from server import cartridges, upr_pipeline
+
+    sources = _gen2()
+    monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: True)
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda _jar: False)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a stock jar"))
+    with pytest.raises(cartridges.CartridgeError, match="UPR fork jar"):
         cartridges.provision(str(tmp_path), sources, companion=True,
                              randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
+    assert not (tmp_path / "roms").exists()
 
 
 def test_yellow_goes_clean_and_its_red_partner_keeps_the_companion(tmp_path, monkeypatch):

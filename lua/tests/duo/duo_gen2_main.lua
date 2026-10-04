@@ -258,7 +258,10 @@ jlog("CLIENT", {qualification=tostring(parts.qualification), production_admitted
                 rom_sha1=tostring(parts.runtime_rom_sha1), artifact_kind=parts.artifact_kind,
                 binding_sha256=ctx.env.binding_sha256, registered_sites=json.array(registered)})
 if parts.production_admitted ~= true or parts.qualification ~= "PHYSICAL_RECEIPTED" then finish(false, "client is not the production graph") end
-if parts.runtime_rom_sha1 ~= ctx.env.exec_sha1 or parts.artifact_kind ~= ctx.env.kind then
+-- C-5: on a randomized companion cart the production client must admit it as rand_overlay (lua/gen2/entry.lua)
+local kind_ok = parts.artifact_kind == ctx.env.kind
+    or (ctx.env.randomized and ctx.env.kind == "overlay" and parts.artifact_kind == "rand_overlay")
+if parts.runtime_rom_sha1 ~= ctx.env.exec_sha1 or not kind_ok then
     finish(false, "production artifact differs from the staged identity")
 end
 receipt_identity = {kind=parts.artifact_kind, rom_sha1=parts.runtime_rom_sha1,

@@ -190,8 +190,134 @@ def _checkpoint_for(title, kind="clean"):
     return json.loads((directory / "write_checkpoint.json").read_text())["titles"][title]
 
 
+# C-5 (docs/gen2/RANDOMIZER_GATES.md, docs/gen2/C5_RUNBOOK.md): None for every unrandomized run, whose executed
+# artifacts stay pinned to the published ones exactly as before. A Manager-randomized run sets it with
+# randomized_from_run(<dir holding rom_contract.json + roms/>): {"a"/"b": the side's contract sha1, "roms": {side: path}}.
+# A side whose CLIENT says rand_overlay must then execute exactly its own contract sha1 on the overlay binding, and it
+# is judged as the overlay layout it is (UPR writes no overlay byte, docs/gen2/RANDOMIZER.md).
+RANDOMIZED = None
+
+
+def randomized_from_run(run_dir):
+    run_dir = Path(run_dir)
+    contract = json.loads((run_dir / "rom_contract.json").read_text(encoding="utf-8"))
+    sides = {side: contract["players"][side]["rom_sha1"] for side in ("a", "b")}
+    roms = {side: run_dir / "roms" / f"{side}.gbc" for side in sides}
+    for side, rom in roms.items():
+        if hashlib.sha1(rom.read_bytes()).hexdigest() != sides[side]:
+            raise RuntimeError(f"{side}: randomized ROM differs from its contract sha1")
+    return {**sides, "roms": roms}
+
+
+def _randomized_artifact(inst, client, duo):
+    side = str(inst)[:1]
+    if RANDOMIZED is None or side not in ("a", "b"):
+        raise RuntimeError(f"{inst}: rand_overlay CLIENT in a run with no randomized contract")
+    _sha, binding = _executed_identity(client["title"], "overlay")
+    if (duo.get("artifact_kind") != "overlay" or client.get("rom_sha1") != RANDOMIZED[side]
+            or client.get("qualification") != "PHYSICAL_RECEIPTED" or client.get("production_admitted") is not True
+            or client.get("binding_sha256") != binding or duo.get("binding_sha256") != binding):
+        raise RuntimeError(f"{inst}: randomized artifact is not its contract cartridge on the overlay binding")
+    return "overlay", client["rom_sha1"]
+
+
+def _randomized_rom(inst):
+    if RANDOMIZED is None:
+        raise RuntimeError(f"{inst}: no randomized contract")
+    return Path(RANDOMIZED["roms"][str(inst)[:1]]).read_bytes()
+
+
+def _randomized_gift_species(inst, title, row_prefix):
+    """The species the executed randomized ROM gives at a pack gift row (server scan_randomized, the R4 read)."""
+    from server.adapters.gen2_gsc import scan_randomized
+
+    rows = [g for g in scan_randomized(_randomized_rom(inst), title)["gifts"] if g["id"].startswith(row_prefix)]
+    if len(rows) != 1:
+        raise RuntimeError(f"{inst}: no single {row_prefix} gift row in the randomized ROM")
+    return rows[0]["species"]
+
+
+def _randomized_npc_trade(inst, title, wanted, ot_id):
+    """(given species, OT) of the NPCTrades row (data/events/npc_trades.asm npctrade, 32 bytes: dialog, wanted, given,
+    nickname[11], DVs[2], item, OT ID (dw), ...) that still wants `wanted` from `ot_id`: trades=given keeps the request."""
+    sym = (REPO_ROOT / f"data/gen2/{title}_slink.sym").read_text(encoding="utf-8")
+    bank, addr = next(line.split()[0].split(":") for line in sym.splitlines() if line.endswith(" NPCTrades"))
+    base, rom = int(bank, 16) * 0x4000 + int(addr, 16) - 0x4000, _randomized_rom(inst)
+    rows = [rom[base + 32 * i:base + 32 * (i + 1)] for i in range(7)]
+    hits = [row for row in rows if row[1] == wanted and int.from_bytes(row[17:19], "little") == ot_id]
+    if len(hits) != 1:
+        raise RuntimeError(f"{inst}: no single NPC trade wanting {wanted} from OT {ot_id} (trades=given required)")
+    return hits[0][2], ot_id
+
+
+# The server's own refusal texts (server/server.py _decide_admission), matched EXACTLY: a different wording is a finding
+# to record, never a reason to loosen this oracle.
+C5_NO_CONTRACT_REASON = ("randomized cartridges for this game must be made by the Manager "
+                         "(this run has no randomized-ROM contract)")
+
+
+def _c5_wrong_rom_reason(player, got, want):
+    return f"this is not the ROM built for player {player} (sha1 {got.lower()[:12]}, expected {want.lower()[:12]})"
+
+
+def c5_refused_oracle(results, *, data_dir, status, events, expect, on_verified=None, on_reason=None):
+    """C-5 G-c / G-i: each refused side ran its randomized cart (rand_overlay at its own contract sha1), sent its hello,
+    and the SERVER refused it with the exact reason; it received no command, holds no identity and forms no link. An
+    admitted side (G-c's A) was admitted. expect: {side: "admitted" | "rejected"}."""
+    check_save_witness(results)
+    contract_path = Path(data_dir) / "rom_contract.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path.is_file() else None
+    players = (status or {}).get("players") or {}
+    links_path = Path(data_dir) / "links.json"   # absent when no side was ever admitted (G-i): nothing persisted
+    document = json.loads(links_path.read_text(encoding="utf-8")) if links_path.is_file() else {}
+    if not links_path.is_file() and "admitted" in expect.values():
+        raise RuntimeError("an admitted side left no links.json")
+    observed = {}
+    for side, state in expect.items():
+        text = (results or {}).get(side) or ""
+        client = _last_tagged(text, "CLIENT") or {}
+        verdict = _last_tagged(text, "SERVER_VERDICT") or {}
+        if client.get("artifact_kind") != "rand_overlay":
+            raise RuntimeError(f"{side}: not a randomized cart (CLIENT {client.get('artifact_kind')!r})")
+        if verdict.get("expect") != ("refused" if state == "rejected" else "admitted") or verdict.get("hellos", 0) < 1:
+            raise RuntimeError(f"{side}: SERVER_VERDICT {verdict} does not match the expected {state}")
+        row = players.get(side) or {}
+        reason = row.get("admission_reason", "")
+        observed[side] = {"admission": row.get("admission"), "reason": reason}
+        if on_reason is not None:
+            on_reason(f"C5_SERVER_VERDICT {json.dumps({'side': side, **observed[side]}, sort_keys=True)}")
+        if row.get("admission") != state:
+            raise RuntimeError(f"{side}: server admission {row.get('admission')!r} ({reason!r}), expected {state}")
+        if state == "admitted":
+            if verdict.get("rx", 0) < 1:
+                raise RuntimeError(f"{side}: the admitted side received no command")
+            continue
+        if contract is None:
+            want = C5_NO_CONTRACT_REASON
+        else:
+            want = _c5_wrong_rom_reason(side, client["rom_sha1"], contract["players"][side]["rom_sha1"])
+            if client["rom_sha1"] == contract["players"][side]["rom_sha1"]:
+                raise RuntimeError(f"{side}: the refused cart IS its contract cartridge; the control is invalid")
+        if reason != want:
+            raise RuntimeError(f"{side}: server refusal reason {reason!r} != expected {want!r}")
+        if verdict.get("rx") != 0:
+            raise RuntimeError(f"{side}: the refused side received {verdict.get('rx')} command(s)")
+        if str(side) in ((document.get("player_identity") or {})):
+            raise RuntimeError(f"{side}: the refused side's identity was locked")
+        if not any(e.get("player") == side and e.get("text") == f"REJECTED — {want}" for e in events or []):
+            raise RuntimeError(f"{side}: no 'REJECTED — {want}' event in the journal")
+    if document.get("links"):
+        raise RuntimeError(f"a refused run formed links: {document['links']}")
+    if on_verified is not None:
+        on_verified({"a": observed["a"]["admission"], "b": observed["b"]["admission"], "area": "none",
+                     "titles": "/".join(str((_last_tagged(results[s], "CLIENT") or {}).get("title")) for s in ("a", "b")),
+                     "status": "refused"})
+
+
 def _client_artifact(inst, client, duo):
     kind = client.get("artifact_kind", "clean")
+    if kind == "rand_overlay":
+        return _randomized_artifact(inst, client, duo)
     if duo.get("artifact_kind", "clean") != kind:
         raise RuntimeError(f"{inst}: CLIENT/DUO_GEN2 artifact kind differs")
     sha, binding = _executed_identity(client["title"], kind)
@@ -228,7 +354,7 @@ def _boot_marker(inst, text):
     receipt = _last_tagged(text, "RECEIPT")
     if receipt is not None and (receipt.get("title") != title
                                 or receipt.get("rom_sha1") != client.get("rom_sha1")
-                                or receipt.get("artifact_kind", "clean") != kind):
+                                or receipt.get("artifact_kind", "clean") != client.get("artifact_kind", "clean")):
         raise RuntimeError(f"{inst}: RECEIPT title/rom_sha1 {receipt.get('title')!r}/"
                            f"{receipt.get('rom_sha1')!r} disagrees with CLIENT/DUO_GEN2 "
                            f"{title!r}/{client.get('rom_sha1')!r} -- inconsistent title markers")
@@ -1350,6 +1476,7 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
                                 "same-save seed lost initial linked image")
             else:
                 kind = _one_marker(relaunch_results[phase], "CLIENT").get("artifact_kind", "clean")
+                kind = "overlay" if kind == "rand_overlay" else kind   # C-5: the overlay's fixture qualification
                 qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT, kind=kind)
                 _reconnect_need(qualified_ot == ot != original_ot and linked_key not in keys,
                                 "wrong-save seed is not qualified other-OT battle input")
@@ -2336,8 +2463,10 @@ def _synth_side(inst, text, kind, boot_path):
         _synth_need(sum(q for _, q in balls_after) == sum(q for _, q in balls_before) - 1,
                     f"{inst} Ball pocket {balls_before} -> {balls_after} is not one thrown Ball")
     elif kind == "bill":
-        _synth_need(keys_after == keys_before + [final_key] and after[-1]["species_id"] == EEVEE,
-                    f"{inst} the party did not gain exactly Bill's EEVEE {final_key}")
+        gift = EEVEE if _client.get("artifact_kind") != "rand_overlay" else _randomized_gift_species(
+            inst, title, "BillsFamilysHouse:BillScript")
+        _synth_need(keys_after == keys_before + [final_key] and after[-1]["species_id"] == gift,
+                    f"{inst} the party did not gain exactly Bill's {'EEVEE' if gift == EEVEE else gift} {final_key}")
     elif kind == "hatch":
         _synth_need([m["is_egg"] for m in before] == [False, True] and not any(m["is_egg"] for m in after),
                     f"{inst} the egg was not the one hatched")
@@ -2355,7 +2484,9 @@ def _synth_side(inst, text, kind, boot_path):
         final_key = changes[0]["new_key"]
         mon = after[slot] if len(after) > slot else {}
         if kind == "trade":
-            ok = mon.get("species_id") == ONIX and mon.get("ot_id") == KYLE_OT
+            given, ot = (ONIX, KYLE_OT) if _client.get("artifact_kind") != "rand_overlay" else _randomized_npc_trade(
+                inst, title, BELLSPROUT, KYLE_OT)
+            ok = mon.get("species_id") == given and mon.get("ot_id") == ot
         else:
             ok = mon.get("species_id") == METAPOD and mon.get("level", 0) >= EVOLVE_LEVEL
         _synth_need(ok and codec.key(mon) == final_key and capture["key"] not in keys_after,

@@ -683,7 +683,8 @@ function Client.new(p)
     -- Live only on a trade build (p.trade), an overlay kind, and a cartridge advertising the cap.
     local PROMPT, APPLY = 3, 5 -- gb_trade_lease commands
     function self:trade_live()
-        return trade ~= nil and self.artifact_kind == "overlay" and trade:advertised()
+        return trade ~= nil and (self.artifact_kind == "overlay" or self.artifact_kind == "rand_overlay")
+            and trade:advertised()
     end
     local function hex_bytes(hex)
         local out = {}

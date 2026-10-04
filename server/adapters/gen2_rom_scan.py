@@ -70,9 +70,13 @@ class _Cursor:
 
 
 class Rom:
-    """Read one explicitly identified title; profile hash matching is mandatory."""
+    """Read one explicitly identified title; profile hash matching is mandatory unless
+    ``pinned=False``. That mode exists ONLY for the randomizer pipeline's content check
+    (server/upr_pipeline.py `_check_content_gen2`), which reads the companion overlay and UPR's
+    output of it: neither is the profile's clean build, but both keep its table addresses
+    (BaseData and EvosAttacksPointers sit at the same bank:addr in the clean and SLink maps)."""
 
-    def __init__(self, rom: bytes, profile: Mapping):
+    def __init__(self, rom: bytes, profile: Mapping, *, pinned: bool = True):
         self.profile = _object(profile, "profile")
         self.title = profile.get("title")
         if self.title not in ("crystal", "gold", "silver"):
@@ -82,7 +86,7 @@ class Rom:
         expected = profile.get("rom_sha1")
         if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{40}", expected) is None:
             raise RomScanError("profile rom_sha1 is missing or malformed")
-        if hashlib.sha1(rom).hexdigest() != expected:
+        if pinned and hashlib.sha1(rom).hexdigest() != expected:
             raise RomScanError("ROM SHA1 differs from selected profile")
         self.rom = rom
         self.symbols = _object(profile.get("rom"), "profile.rom")
@@ -138,6 +142,26 @@ class Rom:
                       egg_group1=data[23] >> 4, egg_group2=data[23] & 15,
                       tmhm_bytes=list(data[tm_start:]))
         return result
+
+    def evos_attacks(self, species: int) -> dict:
+        """One EvosAttacks record: evolutions [kind, *params, species] up to the 0 terminator,
+        then the level-up learnset [level, move] up to its 0 (C/G data/pokemon/evos_attacks.asm;
+        EVOLVE_LEVEL..EVOLVE_STAT = 1..5 in constants/pokemon_data_constants.asm, EVOLVE_STAT
+        carrying a third parameter). Records are compared logically: UPR repacks and repoints
+        the whole bank on every save."""
+        _integer(species, "species", 1, 251)
+        bank, _ = self._location("EvosAttacksPointers")
+        pointers = self._cursor("EvosAttacksPointers")
+        pointers.take((species - 1) * 2)
+        cursor = self._pointer(bank, pointers.word(), f"EvosAttacks {species}")
+        evolutions, learnset = [], []
+        while kind := cursor.byte():
+            if not 1 <= kind <= 5:
+                raise RomScanError(f"EvosAttacks {species}: unknown evolution kind {kind}")
+            evolutions.append([kind, *cursor.take(3 if kind == 5 else 2)])
+        while level := cursor.byte():
+            learnset.append([level, cursor.byte()])
+        return {"evolutions": evolutions, "learnset": learnset}
 
     def _probabilities(self, name: str, count: int) -> list[dict]:
         cursor, previous, seen, rows = self._cursor(name), 0, set(), []
@@ -328,6 +352,46 @@ class Rom:
             if any((d["map_group"], d["map_number"]) not in seen for d in row["destinations"]):
                 raise RomScanError("roamer destination is not a roaming map")
         return {"initial": self._roamer_initial(), "maps": rows}
+
+    def contest(self) -> dict:
+        """ContestMons (C/G data/wild/bug_contest_mons.asm): `db weight, species, min, max` records whose weights total
+        100, then the fallback record with weight -1 ($ff). The symbol is not a profile fact: the caller supplies it."""
+        cursor, slots, total = self._cursor("ContestMons"), [], 0
+        while True:
+            weight, species, low, high = cursor.take(4)
+            _integer(species, "contest species", 1, 251)
+            if not 1 <= low <= high <= 100:
+                raise RomScanError("contest levels invalid")
+            row = {"weight": -1 if weight == 255 else weight, "species": species, "min_level": low, "max_level": high}
+            if weight == 255:
+                if total != 100:
+                    raise RomScanError("contest weights must total 100")
+                return {"slots": slots, "fallback": row}
+            if weight == 0 or total + weight > 100:
+                raise RomScanError("invalid contest weight")
+            total += weight
+            slots.append(row)
+
+    def scripted_mons(self, rows) -> list[dict]:
+        """The species and level (givepoke: and item) the ROM holds at each pack row's own anchored script command
+        (static_encounters.json / gifts.json `rom`: loadwildmon species, level; givepoke species, level, item, ...;
+        giveegg species, level -- C/G macros/scripts/events.asm). The same site is read instead of the vanilla value;
+        the opcode and every byte past the arguments must still be the anchor's, so a moved command refuses."""
+        out = []
+        for row in rows:
+            anchor = _object(row.get("rom"), "scripted row rom anchor")
+            expected = bytes.fromhex(anchor.get("expected_hex", ""))
+            varying = 3 if row.get("operation") == "givepoke" else 2
+            if len(expected) <= varying or anchor.get("flat") != rom_offset(anchor.get("bank"), anchor.get("addr")):
+                raise RomScanError(f"{row.get('id')}: unsupported script anchor")
+            got = self._pointer(anchor["bank"], anchor["addr"], f"script {row.get('id')}").take(len(expected))
+            if got[0] != expected[0] or got[varying + 1:] != expected[varying + 1:]:
+                raise RomScanError(f"{row.get('id')}: anchored script command differs")
+            mon = {"id": row["id"], **self._slot(got[1], got[2])}
+            if varying == 3:
+                mon["item"] = got[3]
+            out.append(mon)
+        return out
 
     def scan_all(self) -> dict:
         return {"schema": SCHEMA, "title": self.title,

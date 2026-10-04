@@ -188,7 +188,7 @@ def _closure(starts: list[str]) -> set[str]:
         parts = rel.split("/")
         if len(parts) >= 4 and parts[:2] == ["data", "games"] and parts[2].startswith("gen2_"):
             name = "/".join(parts[3:])
-            if (name == "overlay/binding.json" or name.startswith("receipts/overlay/")) and name not in shipping[parts[2]]:
+            if (name in ("overlay/binding.json", "overlay/beacon.json") or name.startswith("receipts/overlay/")) and name not in shipping[parts[2]]:
                 continue  # unactivated overlay paths are literals, never clean runtime dependencies
         if rel in seen:
             continue

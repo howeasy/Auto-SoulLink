@@ -9,6 +9,9 @@
 -- Silver (patch-first, owner 2026-10-02); the clean rows and receipts remain only as the overlay's base and evidence
 -- (Silver's clean U2 was Gold's receipt, O-23; an overlay has its own). Crystal 1.1 stays BUILD_ONLY. What executes is the admission
 -- decision's (kind + the ACTUAL rehashed sha1, D5), read through lua/gen2/artifact.lua's view; never a caller's claim.
+-- R3 (owner "open C-5"): a randomized companion cartridge (unknown sha1) admits as rand_overlay by its overlay row's
+-- anchors, the companion pins (Entry.COMPANION_PINS) and its overlay beacon (Entry.BEACON_FILES: every overlay byte)
+-- and executes that row's view; a randomized clean one is refused.
 -- Either graph stays runtime_started=false until client:start().
 local Entry = {}
 
@@ -285,6 +288,66 @@ local function source_anchors(data, title, view)
     return anchors
 end
 
+-- R3 rand_overlay (docs/gen2/RANDOMIZER.md): UPR never writes an overlay byte, an SLink section or the header, so a
+-- randomized companion cartridge keeps every executed code byte of its overlay row while its sha1 is in no catalog.
+-- The overlay view's anchors (sites, checkpoint, map headers) equal the clean ones (binding summary: 0 changed), so
+-- they alone cannot tell a randomized stock cartridge from a randomized overlay. The companion's own same-size code
+-- edits can: the binding's builder_substitutions (after_hex, pinned by binding_sha256) at these flat ROM offsets of
+-- their symbols (data/gen2/<title>_slink.sym; tests/unit/test_gen2_rand_admission.py pins them to the sym).
+-- The pins prove the hooks are wired in; the overlay beacon (below) proves every other overlay byte is intact.
+Entry.BASE_KIND = {rand_overlay="overlay"}
+local GS_PINS = {DelayFrame=0x032E, MainMenuJoypadLoop=0x5B0A}
+Entry.COMPANION_PINS = {crystal={DelayFrame=0x045A, MainMenuJoypadLoop=0x49DE4}, gold=GS_PINS, silver=GS_PINS}
+local function companion_anchors(title, view)
+    local pins, anchors = assert(Entry.COMPANION_PINS[title], "no companion pins for " .. tostring(title)), {}
+    for _, edit in ipairs(assert(view.substitutions, "overlay builder substitutions required")) do
+        local offset = assert(pins[edit.symbol], "no companion pin offset for " .. tostring(edit.symbol))
+        anchors[#anchors + 1] = {offset=offset, hex=edit.after_hex}
+    end
+    assert(#anchors > 0, "companion pins required")
+    return anchors
+end
+-- What the executed ROM must hold: the view's anchors, plus the companion pins for a randomized overlay.
+local function executed_anchors(data, title, view, kind)
+    local anchors = source_anchors(data, title, view)
+    if kind == "rand_overlay" then
+        for _, anchor in ipairs(companion_anchors(title, view)) do anchors[#anchors + 1] = anchor end
+    end
+    return anchors
+end
+
+-- R6 overlay beacon (tools/gen_gen2_beacon.py): the sha256 over EVERY byte the overlay changes (its UPS hunks, in
+-- order). UPR never writes one (R0; upr_gen2_write_domain re-proves it per output), so a randomized overlay keeps
+-- them all and a clean ROM with only the hook pins patched does not. The beacon must name the overlay row's sha1.
+Entry.BEACON_FILES = {crystal="data/games/gen2_crystal/overlay/beacon.json",
+                      gold="data/games/gen2_gold/overlay/beacon.json",
+                      silver="data/games/gen2_silver/overlay/beacon.json"}
+local function beacon_matches(root, json, Admission, title, row, artifact)
+    local beacon = load_json(json, root .. "/" .. assert(Entry.BEACON_FILES[title], "no overlay beacon for " .. title))
+    if beacon.schema ~= "gen2-overlay-beacon-v1" or beacon.title ~= title then
+        return false, "overlay beacon schema/title mismatch"
+    end
+    if type(beacon.source) ~= "table" or beacon.source.overlay_sha1 ~= row.sha1 then
+        return false, "overlay beacon is not pinned to the overlay row's sha1"
+    end
+    local offsets, last = {}, 0
+    for _, span in ipairs(beacon.spans) do
+        local offset, length = span.offset, span.length
+        if math.type(offset) ~= "integer" or math.type(length) ~= "integer" or offset < last or length < 1
+           or offset + length > artifact.size then
+            return false, "malformed overlay beacon span"
+        end
+        for i = offset, offset + length - 1 do offsets[#offsets + 1] = i end
+        last = offset + length
+    end
+    if #offsets == 0 or #offsets ~= beacon.total or #beacon.spans ~= beacon.count then
+        return false, "overlay beacon span totals mismatch"
+    end
+    local digest = Admission.sha256(function(i) return artifact.read_u8(offsets[i + 1]) end, #offsets)
+    if digest ~= beacon.sha256 then return false, "overlay beacon mismatch" end
+    return true
+end
+
 -- The O-22 proofs of one title and ARTIFACT KIND (view.kind), re-validated from the shipped receipts: {engine, write,
 -- proven, scope}, or nil,why. The validators recompute every verdict from raw records and bind every run to the
 -- view's executed sha1, kind and binding. No view, or a kind with no receipt set, proves nothing (no clean fallback).
@@ -311,7 +374,17 @@ local function proofs(root, json, data, title, pack, view)
     return {engine=engine, write=write, proven=proven, scope=scope}
 end
 
+local function companion_reason(title)
+    return "this " .. tostring(title) .. " cartridge needs the SLink companion patch; "
+           .. "prepare it through the Manager or /patcher"
+end
+
+-- sha1 mode admits a SELECTED clean/overlay row by exact hash (clean always refused, patch-first). An unknown hash
+-- (anchors mode) admits only as rand_overlay: the header names the title, its activated overlay row passes the same
+-- grant/binding/receipt checks, and the ROM holds that row's anchors, the companion pins and its beacon. A randomized stock
+-- cartridge (the clean anchors hold, no companion) is refused for the missing companion.
 function Entry.admit(args)
+    local actual_sha, anchor_mode, stock_title, beacon_refusal
     local ok, result, reason = pcall(function()
         local root = assert(args.root, "root required")
         local Admission = dofile(root .. "/lua/admission.lua")
@@ -320,7 +393,8 @@ function Entry.admit(args)
             acquire=function(request)
                 return {size=request.rom_size, read_u8=request.read_rom_u8}
             end,
-            catalog=function()
+            catalog=function(_, artifact)
+                actual_sha = artifact.sha1
                 local candidates = {}
                 for _, title in ipairs(titles) do
                     local data, profile, def = load_pack(root, json, title)
@@ -331,17 +405,33 @@ function Entry.admit(args)
                 return candidates
             end,
             hashes=function(candidate) return candidate.row.sha1 and {candidate.row.sha1} or {} end,
-            eligible=function(candidate)
+            eligible=function(candidate, mode, _, artifact)
                 local row = candidate.row
                 if row.kind ~= "clean" and row.kind ~= "overlay" then
                     return false, "Gen 2 artifact kind " .. tostring(row.kind) .. " is not admitted"
                 end
                 if row.selection ~= "SELECTED" then return false, "artifact selection " .. tostring(row.selection) .. " is not admitted" end
+                if mode == "anchors" then
+                    anchor_mode = true
+                    if Entry.detect_title(artifact.read_u8) ~= candidate.title then
+                        return false, "header does not select the " .. candidate.title .. " candidate"
+                    end
+                    -- a short flat ROM domain must refuse, not admit on the anchors it happens to cover
+                    if artifact.size ~= candidate.profile.derived.rom_size then
+                        return false, "ROM size does not match the " .. candidate.title .. " cartridge"
+                    end
+                end
                 -- Patch-first (owner 2026-10-02): the companion is REQUIRED for every Gen 2 title, so
                 -- a clean cartridge is never admitted, whatever its row and gate say.
                 if row.kind == "clean" then
-                    return false, "this " .. candidate.title .. " cartridge needs the SLink companion patch; "
-                                  .. "prepare it through the Manager or /patcher"
+                    if mode == "anchors" then
+                        local view = view_of(root, json, candidate.data, candidate.title, row)
+                        if view and Admission.anchors_match(source_anchors(candidate.data, candidate.title, view),
+                                                            artifact, "anchors") then
+                            stock_title = candidate.title
+                        end
+                    end
+                    return false, companion_reason(candidate.title)
                 end
                 -- D1: an activated overlay row carries its own G4 grant and its binding pin.
                 local grant, gate = "G4", row.runtime_gate
@@ -362,28 +452,52 @@ function Entry.admit(args)
                 local proof
                 proof, why = proofs(root, json, candidate.data, candidate.title, candidate.def.pack, view)
                 if not proof then return false, grant .. " ADMITTED but the PHYSICAL proof refused: " .. why end
+                -- R6: a randomized overlay must still hold every overlay byte (the beacon), not only the pins.
+                if mode == "anchors" then
+                    local intact
+                    intact, why = beacon_matches(root, json, Admission, candidate.title, row, artifact)
+                    if not intact then
+                        -- hooks present but other overlay bytes differ; no hooks at all is a stock cartridge (below)
+                        if not Admission.anchors_match(companion_anchors(candidate.title, view), artifact, "anchors") then
+                            return false, why
+                        end
+                        beacon_refusal = "its " .. candidate.title .. " SLink companion overlay is modified or "
+                                         .. "incomplete (" .. why .. "); prepare it through the Manager or /patcher"
+                        return false, beacon_refusal
+                    end
+                end
                 candidate.view = view
                 return true
             end,
-            anchors=function(candidate) return source_anchors(candidate.data, candidate.title, candidate.view) end,
+            anchors=function(candidate, mode)
+                return executed_anchors(candidate.data, candidate.title, candidate.view,
+                                        mode == "anchors" and "rand_overlay" or candidate.row.kind)
+            end,
             kind=function(candidate, mode)
                 if mode == "sha1" and (candidate.row.kind == "clean" or candidate.row.kind == "overlay") then
                     return candidate.row.kind
                 end
+                if mode == "anchors" and candidate.row.kind == "overlay" then return "rand_overlay" end
                 return nil, "unsupported Gen 2 artifact kind/mode"
             end,
             describe=function(candidate, kind)
+                -- rand_overlay: overlay_sha1 names the overlay row (receipts, sites) the anchors proved
                 return {pack=candidate.def.pack, title=candidate.title, kind=kind,
                         foundation="gen2_gsc", rom_type=candidate.def.rom_type,
-                        binding_sha256=kind == "overlay" and candidate.row.binding_sha256 or nil}
+                        binding_sha256=kind ~= "clean" and candidate.row.binding_sha256 or nil,
+                        overlay_sha1=kind == "rand_overlay" and candidate.row.sha1 or nil}
             end,
-            allow_unknown_hash=false,
+            allow_unknown_hash=true, -- anchors mode admits only rand_overlay (kind above)
         })
         return engine:admit(args)
     end)
     if not ok then return nil, tostring(result) end
-    if result == nil then return nil, reason end
-    return result
+    if result ~= nil then return result end
+    if not anchor_mode then return nil, reason end
+    -- (the core's own reason is the LAST candidate's, usually an unrelated row, so it is not repeated)
+    local why = beacon_refusal or stock_title and companion_reason(stock_title)
+              or "no activated SLink companion overlay matches its anchors"
+    return nil, "unknown artifact SHA-1 " .. tostring(actual_sha) .. ": " .. why
 end
 
 -- One composition, two graphs. Candidate (production=false): the explicit source/model
@@ -410,9 +524,16 @@ local function compose(deps, title, production, decision)
         local kind = production and decision.kind or "clean"
         local executed_sha = production and decision.rom_sha1 or profile.rom_sha1
         assert(Admission.sha1(read_rom, size) == executed_sha, "candidate ROM hash mismatch")
-        local view = assert(find_view(root, json, data, title, kind, executed_sha))
-        assert(view.kind == kind and view.rom_sha1 == executed_sha, "execution view differs from the admitted artifact")
-        assert(Admission.anchors_match(source_anchors(data, title, view), {size=size, read_u8=read_rom}, "sha1"),
+        -- rand_overlay executes its overlay row's view (receipts, sites, checkpoint): the anchors proved those bytes,
+        -- while executed_sha (what the hello reports) stays the randomized ROM's own.
+        local base_kind = Entry.BASE_KIND[kind] or kind
+        local view_sha = base_kind ~= kind and decision.overlay_sha1 or executed_sha
+        local view = assert(find_view(root, json, data, title, base_kind, view_sha))
+        assert(view.kind == base_kind and view.rom_sha1 == view_sha
+               and (base_kind == kind or view.binding_sha256 == decision.binding_sha256),
+               "execution view differs from the admitted artifact")
+        assert(Admission.anchors_match(executed_anchors(data, title, view, kind), {size=size, read_u8=read_rom},
+                                       base_kind == kind and "sha1" or "anchors"),
                "candidate source anchor mismatch")
         local Reads, Writes, Rom = load("lua/gen2/reads.lua"), load("lua/gen2/writes.lua"), load("lua/gen2/rom.lua")
         local Permit = load("lua/write_permit.lua")
@@ -434,7 +555,8 @@ local function compose(deps, title, production, decision)
             -- the hROMBank shadow, SVBK (0 selects 1), a same-frame hold.
             checkpoint = load("lua/gen2_write_safety.lua").new(data.checkpoint, title, io_, load("lua/gb_checkpoint.lua"), {
                 capture=held, valid=still,
-                admitted=function(t, sha) return t == title and sha == executed_sha end,
+                -- the view's identity (gen2_write_safety passes view.rom_sha1): executed_sha, or rand_overlay's overlay row
+                admitted=function(t, sha) return t == title and sha == view.rom_sha1 end,
                 -- ponytail: the production graph is the only writer; save/trade/serial ownership is the
                 -- pack predicates' job (wGameLogicPaused, wLinkMode, hSerialConnectionStatus, SC).
                 no_conflicting_owner=function() return true end,
@@ -476,7 +598,8 @@ local function compose(deps, title, production, decision)
                                           load("lua/gb_hook_binding.lua")
             local options = {title=title, profile=data.profile, pack=data.sites, io=io_,
                 Registry=Registry, GB=GB, reads=reads, owner="SLink-gen2", max_pending=64,
-                areas=data.area_map, encounters=data.encounters, statics=data.statics, gifts=data.gifts}
+                areas=data.area_map, encounters=data.encounters, statics=data.statics, gifts=data.gifts,
+                artifact_kind=kind, rom_coords=rom_profile.rom}
             local signals
             if production then
                 -- signals.new registers exactly the receipt's proven sites, under PHYSICAL authority.
