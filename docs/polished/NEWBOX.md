@@ -384,3 +384,7 @@ right (bytes 0x00-0x1F ×(i+1), 0x20-0x30 low 7 bits ×(i+2), seed 127).
 {"path": "F:/slink-work/wt/polished/lua/gen2/boxes.lua", "line": 109, "expect": "memorial backing refused while Box 14 is current"}
 ]
 ```
+
+## Coordinator note (2026-10-04): `lb de, SAVEMON_NICKNAME, 0` operand order
+
+`lb r, hi, lo` (`macros/code.asm:3`) loads `hi` into the high register. The built ROM at `ChecksumTempMon` (12:489d) reads `21 7f 00` (`ld hl, 127`) then `11 00 20` (`ld de, $2000`), i.e. d=$20=32, e=0, so pass 1 covers bytes 0-31 as specified. Settled from the ROM bytes; a live round-trip on a real deposited mon is still owed.

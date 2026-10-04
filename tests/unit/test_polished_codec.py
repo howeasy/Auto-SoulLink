@@ -109,3 +109,58 @@ def test_contradictory_fields_are_refused():
     mon["dv_bytes"] ^= 1
     with pytest.raises(ValueError, match="contradictory DV"):
         pc.encode_party_mon(mon)
+
+
+def test_name_substitutions_for_space_terminator_and_start():
+    assert pc.encode_name_bytes(bytes([0x7F, 0x53, 0x00])) == bytes([0x7A, 0x7B, 0x7C])
+    assert pc.decode_name_bytes(bytes([0xFA, 0xFB, 0xFC])) == bytes([0x7F, 0x53, 0x00])
+
+
+def test_a_party_blob_converts_to_a_sealed_savemon():
+    rng = random.Random(7)
+    raw = bytearray(rng.randrange(256) for _ in range(pc.BLOB_SIZE))
+    raw[0], raw[21] = 25, 0x00                       # Pikachu, plain form
+    raw[31] = 12                                     # level
+    raw[pc.PARTY_SIZE + 7] = pc.TERMINATOR           # OT name terminated inside its 8 bytes
+    raw[pc.PARTY_SIZE + pc.NAME_SIZE + 5:] = bytes([pc.TERMINATOR] * (pc.NICKNAME_SIZE - 5))
+    blob = bytes(raw)
+    mon = pc.decode_party_blob(blob)
+    entry = pc.party_to_savemon(mon)
+    assert pc.verify(entry)
+    assert entry[0:22] == blob[0:22]
+    assert entry[22] == sum((blob[22 + i] >> 6) << 2 * i for i in range(4))
+    assert entry[23:29] == blob[26:32]
+    assert entry[29:32] == blob[pc.PARTY_SIZE + 8:pc.PARTY_SIZE + 11]
+    assert pc.decode_savemon(entry)["level"] == 12
+
+
+def test_a_renamed_text_field_must_agree_with_the_raw_bytes():
+    mon = pc.decode_savemon(pc.seal(_hand_entry()))
+    renamed = dict(mon, nickname="STAR")
+    with pytest.raises(ValueError, match="disagree"):
+        pc.encode_savemon(renamed)
+    text_only = {k: v for k, v in renamed.items() if k != "nickname_raw_hex"}
+    out = pc.encode_savemon(text_only)
+    assert pc.decode_savemon(out)["nickname"] == "STAR"
+
+
+def test_a_hand_built_party_mon_may_omit_dv_bytes():
+    blob = bytearray(pc.BLOB_SIZE)
+    blob[0], blob[31] = 1, 5
+    mon = pc.decode_party_blob(bytes(blob))
+    hand = {k: v for k, v in mon.items() if k != "dv_bytes"}
+    assert pc.encode_party_mon(hand) == pc.encode_party_mon(mon)
+
+
+def test_glyph_table_is_immutable_and_a_missing_charmap_is_a_value_error(monkeypatch, tmp_path):
+    with pytest.raises(TypeError):
+        pc.glyphs()[83] = "Z"
+    pc.glyphs.cache_clear()
+    pc._reverse.cache_clear()
+    monkeypatch.setattr(pc, "CHARMAP", tmp_path / "nope.lua")
+    try:
+        with pytest.raises(ValueError, match="unreadable"):
+            pc.glyphs()
+    finally:
+        pc.glyphs.cache_clear()
+        pc._reverse.cache_clear()

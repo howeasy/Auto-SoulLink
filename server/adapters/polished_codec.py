@@ -19,6 +19,7 @@ import json
 import re
 from functools import cache
 from pathlib import Path
+from types import MappingProxyType
 
 ROOT = Path(__file__).resolve().parents[2]
 CHARMAP = ROOT / "data" / "games" / "polished_crystal" / "charmap.lua"
@@ -63,15 +64,18 @@ def _raw(raw, length, label):
 # ── charmap ──────────────────────────────────────────────────────────────────
 
 @cache
-def glyphs() -> dict[int, str]:
+def glyphs() -> MappingProxyType:
     """byte -> text from the generated pack's `glyphs` block (no_ngrams charmap)."""
-    text = CHARMAP.read_text(encoding="utf-8")
+    try:
+        text = CHARMAP.read_text(encoding="utf-8")
+    except OSError as err:
+        raise ValueError(f"charmap unreadable: {err}") from err
     block = re.search(r'\["glyphs"\] = \{\n(.*?)\n  \},', text, re.S)
     _require(block is not None, "charmap.lua has no glyphs block")
     # tools/gen_polished_pack.py render_lua writes every string with json.dumps(ensure_ascii=False)
     table = {int(n): json.loads(s) for n, s in re.findall(r'\[(\d+)\] = ("(?:[^"\\]|\\.)*")', block[1])}
-    _require(table.get(TERMINATOR) == "@" and len(table) == 256, "charmap glyphs incomplete or '@' is not $53")
-    return table
+    _require(table.get(TERMINATOR) == "@" and set(table) == set(range(256)), "charmap glyphs incomplete or '@' is not $53")
+    return MappingProxyType(table)
 
 
 def decode_text(raw: bytes) -> str:
@@ -81,12 +85,18 @@ def decode_text(raw: bytes) -> str:
     return "".join(table[b] for b in (raw if end < 0 else raw[:end]))
 
 
-def encode_text(text: str, length: int) -> bytes:
-    """Single-glyph characters only, '@'-padded to `length` (a full-length name has no terminator)."""
+@cache
+def _reverse() -> dict[str, int]:
     reverse = {}
     for byte, glyph in sorted(glyphs().items(), reverse=True):   # lowest byte wins for a duplicated glyph
         if len(glyph) == 1:
             reverse[glyph] = byte
+    return reverse
+
+
+def encode_text(text: str, length: int) -> bytes:
+    """Single-glyph characters only, '@'-padded to `length` (a full-length name has no terminator)."""
+    reverse = _reverse()
     _require(len(text) <= length and all(ch in reverse and ch != "@" for ch in text), f"unencodable name: {text!r}")
     return bytes(reverse[ch] for ch in text) + bytes([TERMINATOR]) * (length - len(text))
 
@@ -139,7 +149,7 @@ def _put_head(buf: bytearray, mon: dict) -> None:
     buf[8:11] = _integer(mon["exp"], 0, 0xFFFFFF, "exp").to_bytes(3, "big")
     buf[11:17] = bytes(_integer(mon["evs"][name], 0, 255, name + " EV") for name in STAT_NAMES)
     dvs = encode_dvs(mon["dvs"])
-    _require(int.from_bytes(dvs, "big") == mon["dv_bytes"], "contradictory DV fields")
+    _require(mon.get("dv_bytes", int.from_bytes(dvs, "big")) == int.from_bytes(dvs, "big"), "contradictory DV fields")
     buf[17:20] = dvs
 
 
@@ -270,13 +280,37 @@ def encode_savemon(mon) -> bytes:
                       (27, "caught_location")):
         buf[offset] = _integer(mon[k], 0, 255, k)
     buf[28] = _integer(mon["level"], 1, 100, "level")
-    buf[29:32] = _raw(bytes.fromhex(mon["extra_hex"]), 3, "extra")
-    nickname = bytes.fromhex(mon["nickname_raw_hex"])
-    ot = bytes.fromhex(mon["ot_raw_hex"])
-    _require(len(nickname) in (10, 11) and len(ot) in (7, 8), "nickname 10-11 / OT 7-8 bytes required")
+    ot_raw = bytes.fromhex(mon["ot_raw_hex"]) if "ot_raw_hex" in mon else None
+    if "extra_hex" in mon:
+        extra = bytes.fromhex(mon["extra_hex"])
+    else:   # a party transfer blob's OT field is 8 name bytes + 3 Extra (hyper training etc.)
+        _require(ot_raw is not None and len(ot_raw) == NAME_SIZE, "extra_hex or an 11-byte party OT field required")
+        extra = ot_raw[PLAYER_NAME_LENGTH:]
+    buf[29:32] = _raw(extra, 3, "extra")
+    nickname = _name_field(mon, "nickname", "nickname_raw_hex", 11)
+    ot = _name_field(mon, "ot_name", "ot_raw_hex", PLAYER_NAME_LENGTH)
+    _require(len(nickname) in (10, 11) and len(ot) >= 7, "nickname 10-11 / OT 7+ bytes required")
     buf[32:42] = encode_name_bytes(nickname[:10])
     buf[42:49] = encode_name_bytes(ot[:7])
     return seal(bytes(buf))
+
+
+def party_to_savemon(mon) -> bytes:
+    """NEWBOX.md §6.3 step 1: a sealed box entry from a decoded party mon or party blob."""
+    return encode_savemon(mon)
+
+
+def _name_field(mon, text_key, raw_key, length):
+    """One name's bytes: the raw hex, the text, or both -- which must agree (never two silent sources)."""
+    raw = bytes.fromhex(mon[raw_key]) if raw_key in mon else None
+    text = mon.get(text_key)
+    if raw is not None and text is not None:
+        _require(decode_text(raw[:length]) == text, f"{text_key} text and {raw_key} disagree")
+    if raw is None:
+        _require(text is not None, f"{text_key} or {raw_key} required")
+        _require(len(text) < length, f"{text_key} too long")
+        raw = encode_text(text, length)
+    return raw
 
 
 if __name__ == "__main__":
