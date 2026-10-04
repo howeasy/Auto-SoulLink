@@ -25,6 +25,7 @@
  * slink_trade_service), so this adds no new dependency to the build. */
 #include "panel_producer.h"
 #include "trade_producer.h"
+#include "trade_policy.h" /* C5 owns the whole retained policy, not only its producer */
 
 /* ---------------------------------------------------------------- the span accessor (ONE)
  * Every ABI region is "arena base + an abi.h offset" (C2_BEACON_SPEC.md:89-100), so C3,
@@ -164,7 +165,7 @@ typedef char slink_gen4_title_size_check[
  */
 #define SLINK_GEN4_STATE_SOUND_LAYOUT 1u
 #define SLINK_GEN4_STATE_PANEL_LAYOUT 1u
-#define SLINK_GEN4_STATE_TRADE_LAYOUT 1u
+#define SLINK_GEN4_STATE_TRADE_LAYOUT 2u
 
 /* C3. Sized from C3_SOUND_SPEC.md:527-532's ROM-private table: the pending code, the
  * hold-at visit counter, the hold-blocked latch and the sound-ready bit. The latch and the
@@ -193,14 +194,26 @@ typedef struct {
                     * declares one (beacon.h, "capabilities" above) */
 } SlinkGen4StatePanel;
 
-/* C5. The shared trade producer, by value: phase, sequences, both identities and the two
- * native-binding buffers (trade_producer.h:50-60). */
+/* C5 layout 2: the WHOLE policy plus its persistent seam. The policy retains the seam
+ * pointer and self-referential decoder/engine contexts, so neither may live on the
+ * service stack or be cast onto the former producer-only layout 1 allocation. */
 typedef struct {
-    uint32_t layout; /* SLINK_GEN4_STATE_TRADE_LAYOUT, stamped by C5 */
-    SlinkTradeProducer producer;
-    uint32_t caps; /* C5's contribution: SLINK_GEN4_TRADE_CAPABILITIES while C5's module
-                    * is in this build (trade.h step 5), rebuilt by the card every visit */
+    uint32_t layout;
+    SlinkGen4TradePolicy policy;
+    SlinkGen4TradeSeam seam;
+    uint32_t caps; /* outer contribution still composed by Slink_NDS_PublishCaps */
 } SlinkGen4StateTrade;
+
+typedef char slink_gen4_trade_policy_aligned_check[
+    ((offsetof(SlinkGen4StateTrade, policy) % 4u) == 0u
+     && (offsetof(SlinkGen4StateTrade, seam) % 4u) == 0u
+     && offsetof(SlinkGen4StateTrade, seam) >= offsetof(SlinkGen4StateTrade, policy) + sizeof(SlinkGen4TradePolicy)
+     && offsetof(SlinkGen4StateTrade, caps) >= offsetof(SlinkGen4StateTrade, seam) + sizeof(SlinkGen4TradeSeam)) ? 1 : -1];
+
+static inline int Slink_Gen4TradeState_LayoutValid(const SlinkGen4StateTrade *st)
+{
+    return st != NULL && st->layout == SLINK_GEN4_STATE_TRADE_LAYOUT;
+}
 
 typedef struct {
     uint32_t magic;         /* SLINK_GEN4_STATE_MAGIC: this block is ours and live */

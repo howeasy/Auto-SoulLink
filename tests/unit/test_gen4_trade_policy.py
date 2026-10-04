@@ -986,8 +986,12 @@ def test_gen4_trade_headers_include_only_shared_nds_headers(header):
     abi.h:31-33 refuses a translation unit holding both ABIs."""
     text = (GEN4 / header).read_text(encoding="utf-8")
     includes = set(re.findall(r'#include\s+"([^"]+)"', text))
-    assert includes <= {"abi.h", "record_binding.h", "trade_producer.h", "trade_policy.h"}, includes
-    assert "beacon.h" not in includes, "the policy must not depend on the beacon state struct"
+    allowed = {"abi.h", "record_binding.h", "trade_producer.h", "trade_policy.h"}
+    if header == TRADE_H:
+        allowed.add("beacon.h")  # layout-2 integration prototypes require the ACTUAL state typedef
+    assert includes <= allowed, includes
+    if header == TP:
+        assert "beacon.h" not in includes, "the policy must not depend on the beacon state struct"
 
 
 @pytest.mark.parametrize("header", [TRADE_H, TP])
