@@ -837,12 +837,34 @@ class SLinkServer:
                 getattr(self, "_player_adapters", {}).pop(player_id, None)
             return {"state": "rejected", "reason": refused}
         if not self._rom_contract:
+            if kind == "rand_overlay" and getattr(self.adapter, "rom_contract_by_sha1", False) is True:
+                # Bound only by the contract sha1: with no contract nothing vouches for the cartridge.
+                return {"state": "rejected",
+                        "reason": "randomized cartridges for this game must be made by the Manager "
+                                  "(this run has no randomized-ROM contract)"}
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
         if self._rom_contract.get("unreadable"):
             return {"state": "rejected", "reason": "this run's rom_contract.json could not be read"}
 
         expected = (self._rom_contract.get("players") or {}).get(player_id) or {}
         want = expected.get("fingerprint")
+        if not want and getattr(self.adapter, "rom_contract_by_sha1", False) is True:
+            # A foundation whose contract carries no table fingerprint binds the cartridge by the full-ROM
+            # sha1 its client rehashes: the contract's pin for this player, exactly.
+            want_sha1 = expected.get("rom_sha1")
+            got_sha1 = msg.get("rom_sha1")
+            if not (isinstance(want_sha1, str) and len(want_sha1) == 40):
+                return {"state": "rejected",
+                        "reason": f"the contract names no cartridge for player {player_id}"}
+            if not isinstance(got_sha1, str) or not got_sha1:
+                return {"state": "rejected",
+                        "reason": "this run is bound to randomized ROMs, but the client did not "
+                                  "report its cartridge sha1"}
+            if got_sha1.lower() != want_sha1.lower():
+                return {"state": "rejected",
+                        "reason": (f"this is not the ROM built for player {player_id} "
+                                   f"(sha1 {got_sha1.lower()[:12]}, expected {want_sha1.lower()[:12]})")}
+            return {"state": "admitted", "reason": "cartridge sha1 matches the contract"}
         if not want:
             return {"state": "rejected",
                     "reason": f"the contract names no cartridge for player {player_id}"}

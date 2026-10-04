@@ -391,17 +391,20 @@ def _cart_kind(rom_type: str, kind: str, declare: bool = False) -> dict:
     return cart
 
 
-def test_gen2_gsc_adapter_flips_native_capabilities_on_overlay_only():
-    """Direct adapter check, no server session: overlay is the only kind that opts in."""
+def test_gen2_gsc_adapter_flips_native_capabilities_on_the_companion_kinds_only():
+    """Direct adapter check, no server session: the companion kinds (overlay, and R3's randomized
+    rand_overlay) are the only ones that opt in."""
     from server.adapters.gen2_gsc import Gen2GSCAdapter
 
     adapter = Gen2GSCAdapter("crystal")
     assert not adapter.supports_info_panel() and not adapter.native_trade_ui()
     adapter.set_artifact_kind("clean")
     assert not adapter.supports_info_panel() and not adapter.native_trade_ui()
+    adapter.set_artifact_kind("rand_overlay")
+    assert adapter.supports_info_panel() and adapter.native_trade_ui()
     adapter.set_artifact_kind("overlay")
     assert adapter.supports_info_panel() and adapter.native_trade_ui()
-    for bad in ("named", "rand", "rand_overlay", "companion", "ghost", ""):
+    for bad in ("named", "rand", "companion", "ghost", ""):
         with pytest.raises(ValueError):
             adapter.set_artifact_kind(bad)
     # A rejected kind must not have partially clobbered the committed one.

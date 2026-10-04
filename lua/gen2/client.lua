@@ -89,8 +89,9 @@ function Client.new(p)
 
     -- D5: the kind is the admission decision's (lua/gen2/entry.lua); anything else would run a trade or a hello as a
     -- kind the server never admitted.
-    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay",
-           "artifact_kind must be clean or overlay")
+    -- R3: rand_overlay is the randomized companion overlay (entry.lua anchors admission); it carries the overlay.
+    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay"
+           or p.artifact_kind == "rand_overlay", "artifact_kind must be clean, overlay or rand_overlay")
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
         -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id)
@@ -661,7 +662,8 @@ function Client.new(p)
     -- Live only on a trade build (p.trade), an overlay kind, and a cartridge advertising the cap.
     local PROMPT, APPLY = 3, 5 -- gb_trade_lease commands
     function self:trade_live()
-        return trade ~= nil and self.artifact_kind == "overlay" and trade:advertised()
+        return trade ~= nil and (self.artifact_kind == "overlay" or self.artifact_kind == "rand_overlay")
+            and trade:advertised()
     end
     local function hex_bytes(hex)
         local out = {}

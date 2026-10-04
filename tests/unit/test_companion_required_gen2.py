@@ -51,6 +51,17 @@ def test_gen2_admits_a_real_overlay(rom_type):
         assert REASON in cls.companion_refusal(_hello(rom_type, kind, companion_abi=PINNED))
 
 
+@pytest.mark.parametrize("rom_type", TITLES)
+def test_gen2_admits_a_randomized_overlay_but_never_a_randomized_clean_cartridge(rom_type):
+    """R3: the randomized companion (rand_overlay) carries the same live evidence as the overlay; a randomized
+    clean cartridge ("rand") is refused for the companion, with or without evidence."""
+    cls = adapter_class_for_rom_type(rom_type)
+    assert cls.companion_refusal(_hello(rom_type, "rand_overlay", companion_abi=PINNED)) is None
+    assert REASON in cls.companion_refusal(_hello(rom_type, "rand_overlay"))
+    assert REASON in cls.companion_refusal(_hello(rom_type, "rand"))
+    assert REASON in cls.companion_refusal(_hello(rom_type, "rand", companion_abi=PINNED))
+
+
 def test_gen2_reads_the_pin_from_the_pack_and_fails_closed(monkeypatch):
     from server.adapters import gen2_gsc
     assert gen2_gsc._companion_abi("crystal") == PINNED

@@ -27,6 +27,9 @@ _ARTIFACT = {"crystal": "pokecrystal", "gold": "pokegold", "silver": "pokesilver
 # `crystal_ap` / "Crystal (AP)" are absent on purpose (O-8): they bind no title.
 _TITLE_FOR_ROM_TYPE = {spelling: title for title in _ARTIFACT
                        for spelling in (title, title.capitalize())}
+# Hello artifact kinds (set_artifact_kind) and the ones carrying the SLink companion (panel, receptionist, trade).
+_KINDS = ("clean", "overlay", "rand_overlay")
+_COMPANION = ("overlay", "rand_overlay")
 
 
 @cache
@@ -265,7 +268,7 @@ class Gen2GSCAdapter(GameAdapter):
         rivals = {int(cls) for cls, const in trainers["class_constants"].items() if const in ("RIVAL1", "RIVAL2")}
         _require(len(rivals) == 2, "RIVAL1/RIVAL2 trainer classes missing")
         self._rival_ids = frozenset(cls * 256 + inst for cls, inst in self._trainer_names if cls in rivals)
-        self._artifact_kind = "clean"
+        self._artifact_kind, self.randomized = "clean", False
         if artifact_kind is not None:
             self.set_artifact_kind(artifact_kind)
 
@@ -608,16 +611,28 @@ class Gen2GSCAdapter(GameAdapter):
         raise ValueError("Gen 2 client ROM-content admission is not qualified")
 
     def set_artifact_kind(self, kind):
-        # "clean" is the plain pret build; "overlay" is the SLink companion build (P4.1a).
-        # Neither "named" nor "rand*" applies to Gen 2 -- there is no per-cartridge patch or
-        # randomizer support here, unlike the Gen 1/Gen 3 foundations.
-        _require(kind in ("clean", "overlay"),
-                 "Gen 2 only supports the clean/overlay artifact kinds")
+        # "clean" is the plain pret build; "overlay" is the SLink companion build (P4.1a);
+        # "rand_overlay" is that overlay randomized by the Manager (R3, docs/gen2/RANDOMIZER.md:
+        # lua/gen2/entry.lua admits it by the overlay's anchors + companion pins). "named" and a
+        # randomized clean build ("rand") do not apply: the companion is required (patch-first).
+        _require(kind in _KINDS, "Gen 2 only supports the clean/overlay/rand_overlay artifact kinds")
         self._artifact_kind = kind
+        # R4 switches the encounter/static/gift/trainer sources on this; until then the shipped
+        # (vanilla) tables still answer for a randomized cartridge.
+        self.randomized = kind == "rand_overlay"
 
     @staticmethod
     def pairing_kind(kind):
         return kind  # Do not inherit named -> clean artifact equivalence.
+
+    @classmethod
+    def supports_randomized(cls, rom_type):
+        # R3: a randomized companion overlay (rand_overlay), bound at hello by the contract's rom_sha1
+        return isinstance(rom_type, str) and rom_type in _TITLE_FOR_ROM_TYPE
+
+    # The Manager's rom_contract.json carries no table fingerprint for Gen 2 (cartridges.py): the run binds
+    # each player's cartridge by the full-ROM sha1 the client rehashes (lua/gen2/entry.lua, hello rom_sha1).
+    rom_contract_by_sha1 = True
 
     @staticmethod
     def companion_refusal(hello):
@@ -629,7 +644,7 @@ class Gen2GSCAdapter(GameAdapter):
         if title is None:
             return None
         pinned, abi = _companion_abi(title), hello.get("companion_abi")
-        if pinned is None or type(abi) is not int or abi != pinned or hello.get("artifact_kind") != "overlay":
+        if pinned is None or type(abi) is not int or abi != pinned or hello.get("artifact_kind") not in _COMPANION:
             return companion_required_reason(rom_type)
         return None
 
@@ -641,11 +656,11 @@ class Gen2GSCAdapter(GameAdapter):
 
     def supports_info_panel(self):
         # The native panel ships in the SLink companion overlay (P4.1e/f), not a clean build.
-        return self._artifact_kind == "overlay"
+        return self._artifact_kind in _COMPANION
 
     def native_trade_ui(self):
         # The receptionist + native trade scene ship in the same overlay (P4.3a).
-        return self._artifact_kind == "overlay"
+        return self._artifact_kind in _COMPANION
 
     def supports_explode_mode(self):
         # W-3 (owner 2026-09-26, Gen 1 parity): lua/gen2/writes.lua explode_active_battler at the battle hold.

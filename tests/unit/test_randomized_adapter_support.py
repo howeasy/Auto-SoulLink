@@ -56,11 +56,17 @@ def test_existing_randomized_foundations_explicitly_opt_in(title):
 
 
 @pytest.mark.parametrize("title", ("Crystal", "gold", "silver"))
-def test_gen2_remains_clean_or_overlay_only(title):
+def test_gen2_binds_only_the_randomized_companion_overlay(title):
+    """R3 (owner "open C-5"): Gen 2 opts in, but only as rand_overlay -- a randomized clean build ("rand")
+    lacks the companion every Gen 2 title requires, so the adapter never commits it."""
     adapter = get_adapter("gen2_gsc", rom_type=title)
-    assert adapter.supports_randomized(title) is False
-    for kind in ("clean", "overlay"):
+    assert adapter.supports_randomized(title) is True
+    assert adapter.randomized is False
+    for kind in ("clean", "overlay", "rand_overlay"):
         adapter.set_artifact_kind(kind)
-    for kind in ("rand", "rand_overlay"):
-        with pytest.raises(ValueError, match="clean/overlay"):
+        assert adapter.randomized is (kind == "rand_overlay")
+    for kind in ("rand", "named", "rand_companion"):
+        with pytest.raises(ValueError, match="clean/overlay/rand_overlay"):
             adapter.set_artifact_kind(kind)
+    assert adapter.randomized is True, "a refused kind must not clobber the committed one"
+    assert type(adapter).supports_randomized(["Crystal"]) is False

@@ -343,5 +343,15 @@ include them.
 - End-to-end runs through `cartridges.provision` succeeded for a Crystal pair and a Gold + Silver
   pair (evidence in F:/slink-work/tmp/g2r1). One-byte mutants of base stats, types, evolution,
   learnset, hunk, SLink section and header are all refused.
-- Not done yet: the runtime side (R3: Lua `rand_overlay` admission, adapter kind and fingerprint)
-  and ROM-derived data (R4).
+## Runtime admission (R3, 2026-10-04)
+
+- `lua/gen2/entry.lua` admits an unknown sha1 only as `rand_overlay`. The title's overlay row must
+  pass its G4, binding and receipt checks, its anchors must hold, and the companion hook bytes must
+  be present: `Entry.COMPANION_PINS`, the DelayFrame and MainMenuJoypadLoop substitutions from the
+  binding. A randomized clean cart is refused with the companion message.
+- The server binds a Gen 2 hello to the contract's per-player `rom_sha1`
+  (`rom_contract_by_sha1`). A `rand_overlay` hello in a run with no contract is refused: only the
+  Manager makes randomized Gen 2 cartridges.
+- Not done yet: ROM-derived data (R4). Until then, static, roamer and gift captures on a randomized
+  cart are dropped by `lua/gen2/signals.lua` (they are matched against vanilla species), and the
+  encounter panel shows vanilla species.
