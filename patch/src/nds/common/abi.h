@@ -63,7 +63,8 @@
 /* Title-private region: the FIRST 64 BYTES of the reserved region, written by the
  * per-title ROM and read by the host. Its layout and its version number are owned
  * per title (version the field before publishing, publish it LAST), and shared code
- * never reads or writes it. It is state, never a rules channel and never a write
+ * never interprets or writes it (a shared host-side reader may hand out an UNINTERPRETED
+ * raw copy of the extent; magic/version/size validation and every field name stay per title). It is state, never a rules channel and never a write
  * permission. 0xE40..SLINK_ARENA_SIZE stays free for a future shared region. */
 #define SLINK_TITLE_OFFSET 0xE00u
 #define SLINK_TITLE_SIZE 0x40u
@@ -170,7 +171,8 @@ typedef struct {
     uint32_t capabilities;          /* 0x40: only implemented/qualified features */
     uint32_t session_epoch;         /* 0x44: client handshake; zero unarmed, reset clears */
     uint32_t producer_phase;        /* 0x48: native-only atomic phase, not epoch-retagged */
-    uint32_t reserved;              /* 0x4C */
+    uint32_t reserved;              /* 0x4C: title-private opaque word (ROM-written, host-read; Gen 4 stores its
+                                     * session epoch here); shared code never interprets or writes it */
 } SlinkMailboxV2;
 
 /* Every milestone shares immutable epoch/visit/token identity and has its own

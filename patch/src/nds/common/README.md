@@ -238,8 +238,9 @@ remove/compact. The party commit primitive resets the slot's extra itself.
   timeout number belongs to the adapter.
 - Host-C tests prove state-machine behaviour against fake engines, not flash
   durability, ARM codegen, volatile access widths, or ARM9/ARM7 cache coherence.
-- The shared Lua witness reader (NDS-3) has not been shown to implement the
-  reader rule above.
+- The shared Lua witness reader (`lua/nds/native_witness.lua`, committed on this branch, 71 tests
+  driven by the real C producer) implements and pins the reader rule above; no per-title binder
+  uses it yet.
 - **`abi.h` has never been through a real mwccarm 2.0/sp2p2.** The MWERKS path is
   walked on host gcc with `-D__MWERKS__` (`tests/unit/test_nds_abi_compat.py`),
   which proves no `<stdint.h>` include, that the asserts still evaluate and that
