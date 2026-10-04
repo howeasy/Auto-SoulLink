@@ -1,0 +1,1844 @@
+{
+  "schema": "polished-gifts-v1",
+  "generator": "tools/gen_polished_pack.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "repo": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42",
+    "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+    "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
+    "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
+    "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
+    "build_provenance_sha256": "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    "build": "polishedcrystal-3.2.3.gbc (standard: no FAITHFUL/MONOCHROME/DEBUG)",
+    "generator": "tools/gen_polished_pack.py"
+  },
+  "title": "polished_crystal",
+  "base_schema": "gen2-gifts-v1",
+  "gifts": [
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPokemonVendor:148",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 22,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CeladonGameCornerPrizeRoom.asm:148",
+      "script": "CeladonGameCornerPokemonVendor",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "MR__MIME",
+        "10"
+      ],
+      "kind": "scripted_grant",
+      "species": 122,
+      "species_const": "MR__MIME",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPokemonVendor:165",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 22,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CeladonGameCornerPrizeRoom.asm:165",
+      "script": "CeladonGameCornerPokemonVendor",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EEVEE",
+        "20"
+      ],
+      "kind": "scripted_grant",
+      "species": 133,
+      "species_const": "EEVEE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 20,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPokemonVendor:182",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 22,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CeladonGameCornerPrizeRoom.asm:182",
+      "script": "CeladonGameCornerPokemonVendor",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "PORYGON",
+        "30"
+      ],
+      "kind": "scripted_grant",
+      "species": 137,
+      "species_const": "PORYGON",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 30,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "CeladonUniversityHyperTestRoom:CeladonUniversityHyperTestRoomWestwoodScript.GiveMagikarp:136",
+      "map_name": "CeladonUniversityHyperTestRoom",
+      "map_group": 21,
+      "map_number": 55,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CeladonUniversityHyperTestRoom.asm:136",
+      "script": "CeladonUniversityHyperTestRoomWestwoodScript.GiveMagikarp",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "MAGIKARP",
+        "MAGIKARP_MASK1_FORM",
+        "10",
+        "EVIOLITE",
+        "ULTRA_BALL",
+        "DRAGON_RAGE"
+      ],
+      "kind": "scripted_grant",
+      "species": 129,
+      "species_const": "MAGIKARP",
+      "form": 16,
+      "form_expr": "MAGIKARP_MASK1_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 164,
+      "ball": 3,
+      "special_move": 82,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DayCare:DayCareLadyScript:125",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DayCare.asm:125",
+      "script": "DayCareLadyScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "CHIKORITA"
+      ],
+      "kind": "scripted_egg",
+      "species": 152,
+      "species_const": "CHIKORITA",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DayCare:DayCareLadyScript.GiveCyndaquilEgg:129",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DayCare.asm:129",
+      "script": "DayCareLadyScript.GiveCyndaquilEgg",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "CYNDAQUIL"
+      ],
+      "kind": "scripted_egg",
+      "species": 155,
+      "species_const": "CYNDAQUIL",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DayCare:DayCareLadyScript.GiveTotodileEgg:133",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DayCare.asm:133",
+      "script": "DayCareLadyScript.GiveTotodileEgg",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "TOTODILE"
+      ],
+      "kind": "scripted_egg",
+      "species": 158,
+      "species_const": "TOTODILE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DragonShrine:DragonShrineElder1Script.GiveDratini:187",
+      "map_name": "DragonShrine",
+      "map_group": 3,
+      "map_number": 72,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DragonShrine.asm:187",
+      "script": "DragonShrineElder1Script.GiveDratini",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "DRATINI",
+        "PLAIN_FORM",
+        "15",
+        "SITRUS_BERRY",
+        "ULTRA_BALL",
+        "EXTREMESPEED"
+      ],
+      "kind": "scripted_grant",
+      "species": 147,
+      "species_const": "DRATINI",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 15,
+      "item": 71,
+      "ball": 3,
+      "special_move": 245,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DragonShrine:DragonShrineElder1Script.GiveDratini:190",
+      "map_name": "DragonShrine",
+      "map_group": 3,
+      "map_number": 72,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DragonShrine.asm:190",
+      "script": "DragonShrineElder1Script.GiveDratini",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "DRATINI",
+        "PLAIN_FORM",
+        "15",
+        "SITRUS_BERRY",
+        "ULTRA_BALL"
+      ],
+      "kind": "scripted_grant",
+      "species": 147,
+      "species_const": "DRATINI",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 15,
+      "item": 71,
+      "ball": 3,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DragonsDenB1F:DragonsDenB1FRivalScript:150",
+      "map_name": "DragonsDenB1F",
+      "map_group": 3,
+      "map_number": 71,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DragonsDenB1F.asm:150",
+      "script": "DragonsDenB1FRivalScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "TOTODILE"
+      ],
+      "kind": "scripted_egg",
+      "species": 158,
+      "species_const": "TOTODILE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DragonsDenB1F:DragonsDenB1FRivalScript.GiveChikoritaEgg:154",
+      "map_name": "DragonsDenB1F",
+      "map_group": 3,
+      "map_number": 71,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DragonsDenB1F.asm:154",
+      "script": "DragonsDenB1FRivalScript.GiveChikoritaEgg",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "CHIKORITA"
+      ],
+      "kind": "scripted_egg",
+      "species": 152,
+      "species_const": "CHIKORITA",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "DragonsDenB1F:DragonsDenB1FRivalScript.GiveCyndaquilEgg:158",
+      "map_name": "DragonsDenB1F",
+      "map_group": 3,
+      "map_number": 71,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DragonsDenB1F.asm:158",
+      "script": "DragonsDenB1FRivalScript.GiveCyndaquilEgg",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "CYNDAQUIL"
+      ],
+      "kind": "scripted_egg",
+      "species": 155,
+      "species_const": "CYNDAQUIL",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "EcruteakPokeCenter1F:EcruteakPokeCenter1FBillScript:71",
+      "map_name": "EcruteakPokeCenter1F",
+      "map_group": 4,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/EcruteakPokeCenter1F.asm:71",
+      "script": "EcruteakPokeCenter1FBillScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EEVEE",
+        "PLAIN_FORM",
+        "5",
+        "NO_ITEM",
+        "GREAT_BALL"
+      ],
+      "kind": "scripted_grant",
+      "species": 133,
+      "species_const": "EEVEE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 5,
+      "item": 0,
+      "ball": 2,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "mail_label": ".GiftEeveeMail"
+    },
+    {
+      "id": "ElmsLab:CyndaquilPokeBallScript:215",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ElmsLab.asm:215",
+      "script": "CyndaquilPokeBallScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CYNDAQUIL",
+        "PLAIN_FORM",
+        "5",
+        "ORAN_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 155,
+      "species_const": "CYNDAQUIL",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 5,
+      "item": 68,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "ElmsLab:TotodilePokeBallScript:255",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ElmsLab.asm:255",
+      "script": "TotodilePokeBallScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TOTODILE",
+        "PLAIN_FORM",
+        "5",
+        "ORAN_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 158,
+      "species_const": "TOTODILE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 5,
+      "item": 68,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "ElmsLab:ChikoritaPokeBallScript:293",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ElmsLab.asm:293",
+      "script": "ChikoritaPokeBallScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHIKORITA",
+        "PLAIN_FORM",
+        "5",
+        "ORAN_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 152,
+      "species_const": "CHIKORITA",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 5,
+      "item": 68,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript:216",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 23,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodGameCorner.asm:216",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "ABRA",
+        "5"
+      ],
+      "kind": "scripted_grant",
+      "species": 63,
+      "species_const": "ABRA",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 5,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript:233",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 23,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodGameCorner.asm:233",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CUBONE",
+        "10"
+      ],
+      "kind": "scripted_grant",
+      "species": 104,
+      "species_const": "CUBONE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript:250",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 23,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodGameCorner.asm:250",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CLEFAIRY",
+        "15"
+      ],
+      "kind": "scripted_grant",
+      "species": 35,
+      "species_const": "CLEFAIRY",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 15,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "IndigoPlateauPokecenter1F:IndigoPlateauYellowScript:365",
+      "map_name": "IndigoPlateauPokecenter1F",
+      "map_group": 16,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/IndigoPlateauPokecenter1F.asm:365",
+      "script": "IndigoPlateauYellowScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHARMANDER",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 4,
+      "species_const": "CHARMANDER",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "IndigoPlateauPokecenter1F:IndigoPlateauYellowScript.Bulbasaur:371",
+      "map_name": "IndigoPlateauPokecenter1F",
+      "map_group": 16,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/IndigoPlateauPokecenter1F.asm:371",
+      "script": "IndigoPlateauYellowScript.Bulbasaur",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "BULBASAUR",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 1,
+      "species_const": "BULBASAUR",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "IndigoPlateauPokecenter1F:IndigoPlateauYellowScript.Squirtle:377",
+      "map_name": "IndigoPlateauPokecenter1F",
+      "map_group": 16,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/IndigoPlateauPokecenter1F.asm:377",
+      "script": "IndigoPlateauYellowScript.Squirtle",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SQUIRTLE",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 7,
+      "species_const": "SQUIRTLE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "ManiasHouse:ManiaScript:29",
+      "map_name": "ManiasHouse",
+      "map_group": 22,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ManiasHouse.asm:29",
+      "script": "ManiaScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SHUCKLE",
+        "MALE | PLAIN_FORM",
+        "25",
+        "BERRY_JUICE",
+        "NET_BALL",
+        "POISON_JAB",
+        "ShuckieName",
+        "ShuckieOTName",
+        "KIRK_SHUCKIE_ID"
+      ],
+      "kind": "scripted_grant",
+      "species": 213,
+      "species_const": "SHUCKLE",
+      "form": 1,
+      "form_expr": "MALE | PLAIN_FORM",
+      "gender": "MALE",
+      "level": 25,
+      "item": 92,
+      "ball": 16,
+      "special_move": 139,
+      "named_trainer": true,
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "nickname_label": "ShuckieName",
+      "nickname": "Shuckie",
+      "ot_name_label": "ShuckieOTName",
+      "ot_name": "Kirk",
+      "ot_id": 518
+    },
+    {
+      "id": "MountMortarB1F:MountMortarB1FKiyoScript.BeatKiyo:72",
+      "map_name": "MountMortarB1F",
+      "map_group": 3,
+      "map_number": 50,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/MountMortarB1F.asm:72",
+      "script": "MountMortarB1FKiyoScript.BeatKiyo",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TYROGUE",
+        "PLAIN_FORM",
+        "10",
+        "NO_ITEM",
+        "PREMIER_BALL"
+      ],
+      "kind": "scripted_grant",
+      "species": 236,
+      "species_const": "TYROGUE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 0,
+      "ball": 23,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "OaksLab:Oak.GiveStarter:63",
+      "map_name": "OaksLab",
+      "map_group": 13,
+      "map_number": 7,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/OaksLab.asm:63",
+      "script": "Oak.GiveStarter",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "BULBASAUR",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 1,
+      "species_const": "BULBASAUR",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "OaksLab:Oak.Charmander:69",
+      "map_name": "OaksLab",
+      "map_group": 13,
+      "map_number": 7,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/OaksLab.asm:69",
+      "script": "Oak.Charmander",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHARMANDER",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 4,
+      "species_const": "CHARMANDER",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "OaksLab:Oak.Squirtle:75",
+      "map_name": "OaksLab",
+      "map_group": 13,
+      "map_number": 7,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/OaksLab.asm:75",
+      "script": "Oak.Squirtle",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SQUIRTLE",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 7,
+      "species_const": "SQUIRTLE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "PewterMuseumOfScience1F:ResurrectHelixFossil:165",
+      "map_name": "PewterMuseumOfScience1F",
+      "map_group": 14,
+      "map_number": 10,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/PewterMuseumOfScience1F.asm:165",
+      "script": "ResurrectHelixFossil",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "OMANYTE",
+        "20"
+      ],
+      "kind": "scripted_grant",
+      "species": 138,
+      "species_const": "OMANYTE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 20,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "PewterMuseumOfScience1F:ResurrectDomeFossil:171",
+      "map_name": "PewterMuseumOfScience1F",
+      "map_group": 14,
+      "map_number": 10,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/PewterMuseumOfScience1F.asm:171",
+      "script": "ResurrectDomeFossil",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "KABUTO",
+        "20"
+      ],
+      "kind": "scripted_grant",
+      "species": 140,
+      "species_const": "KABUTO",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 20,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "PewterMuseumOfScience1F:ResurrectOldAmber:177",
+      "map_name": "PewterMuseumOfScience1F",
+      "map_group": 14,
+      "map_number": 10,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/PewterMuseumOfScience1F.asm:177",
+      "script": "ResurrectOldAmber",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "AERODACTYL",
+        "20"
+      ],
+      "kind": "scripted_grant",
+      "species": 142,
+      "species_const": "AERODACTYL",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 20,
+      "item": 0,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "Route35GoldenrodGate:RandyScript:41",
+      "map_name": "Route35GoldenrodGate",
+      "map_group": 11,
+      "map_number": 28,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route35GoldenrodGate.asm:41",
+      "script": "RandyScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SPEAROW",
+        "FEMALE | PLAIN_FORM",
+        "10",
+        "NO_ITEM",
+        "NET_BALL",
+        "NO_MOVE",
+        "GiftSpearowName",
+        "GiftSpearowOTName",
+        "01001"
+      ],
+      "kind": "scripted_grant",
+      "species": 21,
+      "species_const": "SPEAROW",
+      "form": 1,
+      "form_expr": "FEMALE | PLAIN_FORM",
+      "gender": "FEMALE",
+      "level": 10,
+      "item": 0,
+      "ball": 16,
+      "special_move": 0,
+      "named_trainer": true,
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "nickname_label": "GiftSpearowName",
+      "nickname": "Kenya",
+      "ot_name_label": "GiftSpearowOTName",
+      "ot_name": "Randy",
+      "ot_id": 1001,
+      "mail_label": "GiftSpearowMail"
+    },
+    {
+      "id": "ShamoutiPokeCenter1F:ShamoutiPokeCenter1FIvyScript.Bulbasaur:68",
+      "map_name": "ShamoutiPokeCenter1F",
+      "map_group": 31,
+      "map_number": 8,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ShamoutiPokeCenter1F.asm:68",
+      "script": "ShamoutiPokeCenter1FIvyScript.Bulbasaur",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "BULBASAUR",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 1,
+      "species_const": "BULBASAUR",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "ShamoutiPokeCenter1F:ShamoutiPokeCenter1FIvyScript.Charmander:78",
+      "map_name": "ShamoutiPokeCenter1F",
+      "map_group": 31,
+      "map_number": 8,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ShamoutiPokeCenter1F.asm:78",
+      "script": "ShamoutiPokeCenter1FIvyScript.Charmander",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHARMANDER",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 4,
+      "species_const": "CHARMANDER",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "ShamoutiPokeCenter1F:ShamoutiPokeCenter1FIvyScript.Squirtle:88",
+      "map_name": "ShamoutiPokeCenter1F",
+      "map_group": 31,
+      "map_number": 8,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ShamoutiPokeCenter1F.asm:88",
+      "script": "ShamoutiPokeCenter1FIvyScript.Squirtle",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SQUIRTLE",
+        "PLAIN_FORM",
+        "10",
+        "SITRUS_BERRY"
+      ],
+      "kind": "scripted_grant",
+      "species": 7,
+      "species_const": "SQUIRTLE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "gender": null,
+      "level": 10,
+      "item": 71,
+      "ball": 1,
+      "special_move": 0,
+      "named_trainer": false,
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "VioletPokeCenter1F:VioletPokeCenter1FElmsAideScript.AskTakeEgg:56",
+      "map_name": "VioletPokeCenter1F",
+      "map_group": 10,
+      "map_number": 8,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/VioletPokeCenter1F.asm:56",
+      "script": "VioletPokeCenter1FElmsAideScript.AskTakeEgg",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "TOGEPI"
+      ],
+      "kind": "scripted_egg",
+      "species": 175,
+      "species_const": "TOGEPI",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    }
+  ],
+  "npc_trades": [
+    {
+      "trade_id": 0,
+      "trade_const": "NPC_TRADE_MIKE",
+      "kind": "npc_exchange",
+      "requested_species": 63,
+      "requested_species_const": "ABRA",
+      "requested_form": 0,
+      "offered_species": 66,
+      "offered_species_const": "MACHOP",
+      "offered_form": 0,
+      "offered_gender": "FEMALE",
+      "nickname": "Muscle",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 99,
+      "personality_expr": "HIDDEN_ABILITY | NAT_ATK_UP_SATK_DOWN",
+      "ball": 6,
+      "item": 71,
+      "ot_id": 37460,
+      "ot_name": "Mike",
+      "dialog_set": "TRADE_DIALOGSET_COLLECTOR",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:3"
+    },
+    {
+      "trade_id": 1,
+      "trade_const": "NPC_TRADE_KYLE",
+      "kind": "npc_exchange",
+      "requested_species": 60,
+      "requested_species_const": "POLIWAG",
+      "requested_form": 0,
+      "offered_species": 100,
+      "offered_species_const": "VOLTORB",
+      "offered_form": 0,
+      "offered_gender": "MALE",
+      "nickname": "Mimic",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 107,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SPE_UP_DEF_DOWN",
+      "ball": 23,
+      "item": 69,
+      "ot_id": 48926,
+      "ot_name": "Kyle",
+      "dialog_set": "TRADE_DIALOGSET_COLLECTOR",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:11"
+    },
+    {
+      "trade_id": 2,
+      "trade_const": "NPC_TRADE_TIM",
+      "kind": "npc_exchange",
+      "requested_species": 208,
+      "requested_species_const": "STEELIX",
+      "requested_form": 0,
+      "offered_species": 115,
+      "offered_species_const": "KANGASKHAN",
+      "offered_form": 0,
+      "offered_gender": "MALE",
+      "nickname": "Joey",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 98,
+      "personality_expr": "HIDDEN_ABILITY | NAT_ATK_UP_SPE_DOWN",
+      "ball": 11,
+      "item": 121,
+      "ot_id": 29189,
+      "ot_name": "Tim",
+      "dialog_set": "TRADE_DIALOGSET_HAPPY",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:19"
+    },
+    {
+      "trade_id": 3,
+      "trade_const": "NPC_TRADE_EMY",
+      "kind": "npc_exchange",
+      "requested_species": 124,
+      "requested_species_const": "JYNX",
+      "requested_form": 0,
+      "offered_species": 122,
+      "offered_species_const": "MR__MIME",
+      "offered_form": 0,
+      "offered_gender": "FEMALE",
+      "nickname": "Doris",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 106,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SPE_UP_ATK_DOWN",
+      "ball": 12,
+      "item": 138,
+      "ot_id": 283,
+      "ot_name": "Emy",
+      "dialog_set": "TRADE_DIALOGSET_GIRL",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:27"
+    },
+    {
+      "trade_id": 4,
+      "trade_const": "NPC_TRADE_CHRIS",
+      "kind": "npc_exchange",
+      "requested_species": 127,
+      "requested_species_const": "PINSIR",
+      "requested_form": 0,
+      "offered_species": 214,
+      "offered_species_const": "HERACROSS",
+      "offered_form": 0,
+      "offered_gender": "MALE",
+      "nickname": "Paul",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 109,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SPE_UP_SATK_DOWN",
+      "ball": 0,
+      "item": 127,
+      "ot_id": 15616,
+      "ot_name": "Chris",
+      "dialog_set": "TRADE_DIALOGSET_NEWBIE",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:35"
+    },
+    {
+      "trade_id": 5,
+      "trade_const": "NPC_TRADE_KIM",
+      "kind": "npc_exchange",
+      "requested_species": 202,
+      "requested_species_const": "WOBBUFFET",
+      "requested_form": 0,
+      "offered_species": 113,
+      "offered_species_const": "CHANSEY",
+      "offered_form": 0,
+      "offered_gender": "FEMALE",
+      "nickname": "Chance",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 116,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SDEF_UP_ATK_DOWN",
+      "ball": 19,
+      "item": 147,
+      "ot_id": 26491,
+      "ot_name": "Kim",
+      "dialog_set": "TRADE_DIALOGSET_GIRL",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:43"
+    },
+    {
+      "trade_id": 6,
+      "trade_const": "NPC_TRADE_JACQUES",
+      "kind": "npc_exchange",
+      "requested_species": 72,
+      "requested_species_const": "TENTACOOL",
+      "requested_form": 0,
+      "offered_species": 88,
+      "offered_species_const": "GRIMER",
+      "offered_form": 0,
+      "offered_gender": "FEMALE",
+      "nickname": "Gail",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 119,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SDEF_UP_SATK_DOWN",
+      "ball": 7,
+      "item": 164,
+      "ot_id": 50082,
+      "ot_name": "Jacques",
+      "dialog_set": "TRADE_DIALOGSET_HAPPY",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:51"
+    },
+    {
+      "trade_id": 7,
+      "trade_const": "NPC_TRADE_HARI",
+      "kind": "npc_exchange",
+      "requested_species": 83,
+      "requested_species_const": "FARFETCH_D",
+      "requested_form": 0,
+      "offered_species": 84,
+      "offered_species_const": "DODUO",
+      "offered_form": 0,
+      "offered_gender": "MALE",
+      "nickname": "Clarence",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 107,
+      "personality_expr": "HIDDEN_ABILITY | NAT_SPE_UP_DEF_DOWN",
+      "ball": 10,
+      "item": 226,
+      "ot_id": 43972,
+      "ot_name": "Hari",
+      "dialog_set": "TRADE_DIALOGSET_COLLECTOR",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:59"
+    },
+    {
+      "trade_id": 8,
+      "trade_const": "NPC_TRADE_JEEVES",
+      "kind": "npc_exchange",
+      "requested_species": 77,
+      "requested_species_const": "PONYTA",
+      "requested_form": 0,
+      "offered_species": 110,
+      "offered_species_const": "WEEZING",
+      "offered_form": 3,
+      "offered_gender": "MALE",
+      "nickname": "Batty",
+      "dvs": [
+        238,
+        238,
+        238
+      ],
+      "personality": 101,
+      "personality_expr": "HIDDEN_ABILITY | NAT_DEF_UP_ATK_DOWN",
+      "ball": 22,
+      "item": 130,
+      "ot_id": 8922,
+      "ot_name": "Jeeves",
+      "dialog_set": "TRADE_DIALOGSET_COLLECTOR",
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/npc_trades.asm:67"
+    }
+  ],
+  "odd_eggs": {
+    "applicable": true,
+    "record_length": 10,
+    "records": [
+      {
+        "species": 172,
+        "species_const": "PICHU",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:20",
+        "moves": [
+          84,
+          204,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 10
+      },
+      {
+        "species": 173,
+        "species_const": "CLEFFA",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:25",
+        "moves": [
+          33,
+          204,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 24
+      },
+      {
+        "species": 174,
+        "species_const": "IGGLYBUFF",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:30",
+        "moves": [
+          47,
+          204,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 38
+      },
+      {
+        "species": 236,
+        "species_const": "TYROGUE",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:35",
+        "moves": [
+          33,
+          99,
+          193,
+          146
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 48
+      },
+      {
+        "species": 238,
+        "species_const": "SMOOCHUM",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:40",
+        "moves": [
+          33,
+          122,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 60
+      },
+      {
+        "species": 239,
+        "species_const": "ELEKID",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:45",
+        "moves": [
+          98,
+          43,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 72
+      },
+      {
+        "species": 240,
+        "species_const": "MAGBY",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:50",
+        "moves": [
+          114,
+          43,
+          146,
+          0
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 84
+      },
+      {
+        "species": 260,
+        "species_const": "MIME_JR_",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:55",
+        "moves": [
+          112,
+          93,
+          33,
+          146
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 91
+      },
+      {
+        "species": 261,
+        "species_const": "HAPPINY",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:60",
+        "moves": [
+          107,
+          33,
+          118,
+          146
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 93
+      },
+      {
+        "species": 262,
+        "species_const": "MUNCHLAX",
+        "form": 1,
+        "is_egg": true,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:65",
+        "moves": [
+          186,
+          118,
+          33,
+          146
+        ],
+        "dvs": [
+          187,
+          187,
+          187
+        ],
+        "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+        "personality": 248,
+        "threshold": 100
+      }
+    ],
+    "mystri_egg": {
+      "species": 175,
+      "species_const": "TOGEPI",
+      "form": 1,
+      "is_egg": true,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/events/odd_eggs.asm:73",
+      "moves": [
+        45,
+        204,
+        252,
+        177
+      ],
+      "dvs": [
+        255,
+        255,
+        255
+      ],
+      "personality_expr": "SHINY_MASK | HIDDEN_ABILITY | QUIRKY",
+      "personality": 248
+    }
+  },
+  "caller_inventory": [
+    {
+      "id": "DayCare:DayCareManScript_Inside:88",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/DayCare.asm:88",
+      "script": "DayCareManScript_Inside",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "GiveOddEgg"
+      ],
+      "target": "GiveOddEgg",
+      "kind": "dynamic_egg_reception",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodPokecomCenter1F:WonderTradeReceptionistScript:189",
+      "map_name": "GoldenrodPokecomCenter1F",
+      "map_group": 11,
+      "map_number": 24,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodPokecomCenter1F.asm:189",
+      "script": "WonderTradeReceptionistScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "WonderTrade"
+      ],
+      "target": "WonderTrade",
+      "kind": "dynamic_wonder_trade",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "BlackthornEmysHouse:object_event:15",
+      "map_name": "BlackthornEmysHouse",
+      "map_group": 5,
+      "map_number": 4,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/BlackthornEmysHouse.asm:15",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_EMY"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_EMY",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "EcruteakDestinyKnotHouse:object_event:17",
+      "map_name": "EcruteakDestinyKnotHouse",
+      "map_group": 4,
+      "map_number": 17,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/EcruteakDestinyKnotHouse.asm:17",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_HARI"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_HARI",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodDeptStore5F:object_event:20",
+      "map_name": "GoldenrodDeptStore5F",
+      "map_group": 11,
+      "map_number": 19,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodDeptStore5F.asm:20",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_MIKE"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_MIKE",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "GoldenrodHarbor:object_event:26",
+      "map_name": "GoldenrodHarbor",
+      "map_group": 29,
+      "map_number": 1,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/GoldenrodHarbor.asm:26",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_JACQUES"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_JACQUES",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "OlivineTimsHouse:object_event:15",
+      "map_name": "OlivineTimsHouse",
+      "map_group": 1,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/OlivineTimsHouse.asm:15",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_TIM"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_TIM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "PewterPokeCenter1F:object_event:19",
+      "map_name": "PewterPokeCenter1F",
+      "map_group": 14,
+      "map_number": 8,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/PewterPokeCenter1F.asm:19",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_CHRIS"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_CHRIS",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "Route14:object_event:21",
+      "map_name": "Route14",
+      "map_group": 17,
+      "map_number": 4,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route14.asm:21",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KIM"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_KIM",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    },
+    {
+      "id": "VioletOnixTradeHouse:object_event:16",
+      "map_name": "VioletOnixTradeHouse",
+      "map_group": 10,
+      "map_number": 9,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/VioletOnixTradeHouse.asm:16",
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KYLE"
+      ],
+      "kind": "npc_exchange",
+      "trade_const": "NPC_TRADE_KYLE",
+      "finalization": "OPEN",
+      "success": "OPEN"
+    }
+  ],
+  "policies": {
+    "egg_reception_is_capture": false,
+    "hatch_area_id": "gift_daycare"
+  },
+  "debug_only_excluded": "if DEF(DEBUG) script blocks (e.g. PlayersHouse2F debug gifts) are not in the standard build",
+  "open_obligations": [
+    "wonder_trade_tables:data/events/wonder_trade/*",
+    "source_script_reachability",
+    "success_identity_finalization_and_durability"
+  ]
+}

@@ -1,0 +1,776 @@
+{
+  "schema": "polished-static-encounters-v1",
+  "generator": "tools/gen_polished_pack.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "repo": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42",
+    "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+    "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
+    "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
+    "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
+    "build_provenance_sha256": "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    "build": "polishedcrystal-3.2.3.gbc (standard: no FAITHFUL/MONOCHROME/DEBUG)",
+    "generator": "tools/gen_polished_pack.py"
+  },
+  "title": "polished_crystal",
+  "base_schema": "gen2-static-encounters-v1",
+  "encounters": [
+    {
+      "id": "CeruleanCaveB1F:CeruleanCaveMewtwo:30",
+      "map_name": "CeruleanCaveB1F",
+      "map_group": 7,
+      "map_number": 17,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CeruleanCaveB1F.asm:30",
+      "script": "CeruleanCaveMewtwo",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 150,
+      "species_const": "MEWTWO",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 80,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "CherrygroveBay:CherrygroveBayGalarianBirdsScript:59",
+      "map_name": "CherrygroveBay",
+      "map_group": 26,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CherrygroveBay.asm:59",
+      "script": "CherrygroveBayGalarianBirdsScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 146,
+      "species_const": "MOLTRES",
+      "form": 3,
+      "form_expr": "GALARIAN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "CherrygroveBay:CherrygroveBayGalarianBirdsScript:80",
+      "map_name": "CherrygroveBay",
+      "map_group": 26,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CherrygroveBay.asm:80",
+      "script": "CherrygroveBayGalarianBirdsScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 144,
+      "species_const": "ARTICUNO",
+      "form": 3,
+      "form_expr": "GALARIAN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "CherrygroveBay:CherrygroveBayGalarianBirdsScript:101",
+      "map_name": "CherrygroveBay",
+      "map_group": 26,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CherrygroveBay.asm:101",
+      "script": "CherrygroveBayGalarianBirdsScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 145,
+      "species_const": "ZAPDOS",
+      "form": 3,
+      "form_expr": "GALARIAN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "CinnabarVolcanoB2F:CinnabarVolcanoMoltres:90",
+      "map_name": "CinnabarVolcanoB2F",
+      "map_group": 6,
+      "map_number": 15,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/CinnabarVolcanoB2F.asm:90",
+      "script": "CinnabarVolcanoMoltres",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 146,
+      "species_const": "MOLTRES",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "FarawayJungle:FarawayJungleMew:27",
+      "map_name": "FarawayJungle",
+      "map_group": 19,
+      "map_number": 9,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/FarawayJungle.asm:27",
+      "script": "FarawayJungleMew",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 151,
+      "species_const": "MEW",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "IlexForest:IlexForestShrineScript.CelebiEvent:457",
+      "map_name": "IlexForest",
+      "map_group": 3,
+      "map_number": 42,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/IlexForest.asm:457",
+      "script": "IlexForestShrineScript.CelebiEvent",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 251,
+      "species_const": "CELEBI",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "LakeOfRage:LakeOfRageRedGyaradosScript:239",
+      "map_name": "LakeOfRage",
+      "map_group": 2,
+      "map_number": 13,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/LakeOfRage.asm:239",
+      "script": "LakeOfRageRedGyaradosScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 130,
+      "species_const": "GYARADOS",
+      "form": 21,
+      "form_expr": "GYARADOS_RED_FORM",
+      "level": 35,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_NEVER_SHINY"
+      ],
+      "runtime_battle_type": 13,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "MurkySwamp:MurkySwampBloodmoonUrsaluna:201",
+      "map_name": "MurkySwamp",
+      "map_group": 11,
+      "map_number": 5,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/MurkySwamp.asm:201",
+      "script": "MurkySwampBloodmoonUrsaluna",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 285,
+      "species_const": "URSALUNA",
+      "form": 2,
+      "form_expr": "URSALUNA_BLOODMOON_FORM",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_NEVER_SHINY"
+      ],
+      "runtime_battle_type": 13,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "MurkySwamp:MurkySwampBloodmoonUrsaluna:204",
+      "map_name": "MurkySwamp",
+      "map_group": 11,
+      "map_number": 5,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/MurkySwamp.asm:204",
+      "script": "MurkySwampBloodmoonUrsaluna",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 285,
+      "species_const": "URSALUNA",
+      "form": 2,
+      "form_expr": "URSALUNA_BLOODMOON_FORM",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_NEVER_SHINY"
+      ],
+      "runtime_battle_type": 13,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "RockTunnel2F:RockTunnel2FElectrode:34",
+      "map_name": "RockTunnel2F",
+      "map_group": 3,
+      "map_number": 82,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/RockTunnel2F.asm:34",
+      "script": "RockTunnel2FElectrode",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 50,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "Route10North:Route10Zapdos:209",
+      "map_name": "Route10North",
+      "map_group": 28,
+      "map_number": 2,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route10North.asm:209",
+      "script": "Route10Zapdos",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 145,
+      "species_const": "ZAPDOS",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "Route29:Route29TutorialScript:82",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route29.asm:82",
+      "script": "Route29TutorialScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 16,
+      "species_const": "PIDGEY",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TUTORIAL"
+      ],
+      "runtime_battle_type": 2,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "Route36:WateredWeirdTreeScript:95",
+      "map_name": "Route36",
+      "map_group": 4,
+      "map_number": 11,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route36.asm:95",
+      "script": "WateredWeirdTreeScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 185,
+      "species_const": "SUDOWOODO",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 20,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "Route7:Route7Snorlax.Awake:60",
+      "map_name": "Route7",
+      "map_group": 21,
+      "map_number": 1,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/Route7.asm:60",
+      "script": "Route7Snorlax.Awake",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 143,
+      "species_const": "SNORLAX",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "SeafoamIslandsB4F:SeafoamIslandsArticuno:105",
+      "map_name": "SeafoamIslandsB4F",
+      "map_group": 6,
+      "map_number": 7,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/SeafoamIslandsB4F.asm:105",
+      "script": "SeafoamIslandsArticuno",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 144,
+      "species_const": "ARTICUNO",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 65,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "ShamoutiIsland:ShamoutiIslandAlolanExeggutorScript.Awake:63",
+      "map_name": "ShamoutiIsland",
+      "map_group": 31,
+      "map_number": 1,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/ShamoutiIsland.asm:63",
+      "script": "ShamoutiIslandAlolanExeggutorScript.Awake",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 103,
+      "species_const": "EXEGGUTOR",
+      "form": 2,
+      "form_expr": "ALOLAN_FORM",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB1F:VoltorbExplodingTrap:517",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 39,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB1F.asm:517",
+      "script": "VoltorbExplodingTrap",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 100,
+      "species_const": "VOLTORB",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB1F:GeodudeExplodingTrap:528",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 39,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB1F.asm:528",
+      "script": "GeodudeExplodingTrap",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 74,
+      "species_const": "GEODUDE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 28,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB1F:KoffingExplodingTrap:539",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 39,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB1F.asm:539",
+      "script": "KoffingExplodingTrap",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 109,
+      "species_const": "KOFFING",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 28,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode1:236",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 40,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB2F.asm:236",
+      "script": "RocketElectrode1",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 33,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode2:254",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 40,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB2F.asm:254",
+      "script": "RocketElectrode2",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 33,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode3:272",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 40,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TeamRocketBaseB2F.asm:272",
+      "script": "RocketElectrode3",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 33,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TinTower1F:TinTower1FSuicuneBattleScript.Next2:129",
+      "map_name": "TinTower1F",
+      "map_group": 3,
+      "map_number": 4,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TinTower1F.asm:129",
+      "script": "TinTower1FSuicuneBattleScript.Next2",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 245,
+      "species_const": "SUICUNE",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 40,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_LEGENDARY"
+      ],
+      "runtime_battle_type": 14,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "TinTowerRoof:TinTowerHoOh:44",
+      "map_name": "TinTowerRoof",
+      "map_group": 15,
+      "map_number": 10,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/TinTowerRoof.asm:44",
+      "script": "TinTowerHoOh",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 250,
+      "species_const": "HO_OH",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 75,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "UnionCaveB2F:UnionCaveLapras:44",
+      "map_name": "UnionCaveB2F",
+      "map_group": 3,
+      "map_number": 28,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/UnionCaveB2F.asm:44",
+      "script": "UnionCaveLapras",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 131,
+      "species_const": "LAPRAS",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 25,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "VermilionCity:VermilionSnorlax.Awake:150",
+      "map_name": "VermilionCity",
+      "map_group": 12,
+      "map_number": 3,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/VermilionCity.asm:150",
+      "script": "VermilionSnorlax.Awake",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 143,
+      "species_const": "SNORLAX",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "VioletOutskirtsHouse:VioletOutskirtsGhostBattleScript:53",
+      "map_name": "VioletOutskirtsHouse",
+      "map_group": 10,
+      "map_number": 15,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/VioletOutskirtsHouse.asm:53",
+      "script": "VioletOutskirtsGhostBattleScript",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 157,
+      "species_const": "TYPHLOSION",
+      "form": 4,
+      "form_expr": "HISUIAN_FORM",
+      "level": 60,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    },
+    {
+      "id": "WhirlIslandLugiaChamber:Lugia:44",
+      "map_name": "WhirlIslandLugiaChamber",
+      "map_group": 3,
+      "map_number": 63,
+      "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 maps/WhirlIslandLugiaChamber.asm:44",
+      "script": "Lugia",
+      "applicability": {
+        "titles": [
+          "polished_crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence (standard build); runtime reachability OPEN"
+      },
+      "species": 249,
+      "species_const": "LUGIA",
+      "form": 1,
+      "form_expr": "PLAIN_FORM",
+      "level": 75,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": null,
+      "capture_success": "OPEN",
+      "finalization": "OPEN"
+    }
+  ],
+  "open_obligations": [
+    "runtime_script_reachability",
+    "capture_success_and_finalization"
+  ]
+}

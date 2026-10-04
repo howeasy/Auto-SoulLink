@@ -1,0 +1,3181 @@
+{
+  "schema": "polished-evolutions-v1",
+  "generator": "tools/gen_polished_pack.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "repo": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42",
+    "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+    "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
+    "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
+    "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
+    "build_provenance_sha256": "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    "build": "polishedcrystal-3.2.3.gbc (standard: no FAITHFUL/MONOCHROME/DEBUG)",
+    "generator": "tools/gen_polished_pack.py"
+  },
+  "title": "polished_crystal",
+  "base_schema": "gen2-evolutions-v1",
+  "evolutions": {
+    "1": [
+      2
+    ],
+    "2": [
+      3
+    ],
+    "4": [
+      5
+    ],
+    "5": [
+      6
+    ],
+    "7": [
+      8
+    ],
+    "8": [
+      9
+    ],
+    "10": [
+      11
+    ],
+    "11": [
+      12
+    ],
+    "13": [
+      14
+    ],
+    "14": [
+      15
+    ],
+    "16": [
+      17
+    ],
+    "17": [
+      18
+    ],
+    "19": [
+      20
+    ],
+    "21": [
+      22
+    ],
+    "23": [
+      24
+    ],
+    "25": [
+      26
+    ],
+    "27": [
+      28
+    ],
+    "29": [
+      30
+    ],
+    "30": [
+      31
+    ],
+    "32": [
+      33
+    ],
+    "33": [
+      34
+    ],
+    "35": [
+      36
+    ],
+    "37": [
+      38
+    ],
+    "39": [
+      40
+    ],
+    "41": [
+      42
+    ],
+    "42": [
+      169
+    ],
+    "43": [
+      44
+    ],
+    "44": [
+      45,
+      182
+    ],
+    "46": [
+      47
+    ],
+    "48": [
+      49
+    ],
+    "50": [
+      51
+    ],
+    "52": [
+      53
+    ],
+    "54": [
+      55
+    ],
+    "56": [
+      57
+    ],
+    "57": [
+      291
+    ],
+    "58": [
+      59
+    ],
+    "60": [
+      61
+    ],
+    "61": [
+      62,
+      186
+    ],
+    "63": [
+      64
+    ],
+    "64": [
+      65
+    ],
+    "66": [
+      67
+    ],
+    "67": [
+      68
+    ],
+    "69": [
+      70
+    ],
+    "70": [
+      71
+    ],
+    "72": [
+      73
+    ],
+    "74": [
+      75
+    ],
+    "75": [
+      76
+    ],
+    "77": [
+      78
+    ],
+    "79": [
+      80,
+      199
+    ],
+    "81": [
+      82
+    ],
+    "82": [
+      265
+    ],
+    "84": [
+      85
+    ],
+    "86": [
+      87
+    ],
+    "88": [
+      89
+    ],
+    "90": [
+      91
+    ],
+    "92": [
+      93
+    ],
+    "93": [
+      94
+    ],
+    "95": [
+      208
+    ],
+    "96": [
+      97
+    ],
+    "98": [
+      99
+    ],
+    "100": [
+      101
+    ],
+    "102": [
+      103
+    ],
+    "104": [
+      105
+    ],
+    "108": [
+      266
+    ],
+    "109": [
+      110
+    ],
+    "111": [
+      112
+    ],
+    "112": [
+      267
+    ],
+    "113": [
+      242
+    ],
+    "114": [
+      268
+    ],
+    "116": [
+      117
+    ],
+    "117": [
+      230
+    ],
+    "118": [
+      119
+    ],
+    "120": [
+      121
+    ],
+    "123": [
+      212,
+      284
+    ],
+    "125": [
+      269
+    ],
+    "126": [
+      270
+    ],
+    "129": [
+      130
+    ],
+    "133": [
+      134,
+      135,
+      136,
+      196,
+      197,
+      273,
+      274,
+      278
+    ],
+    "137": [
+      233
+    ],
+    "138": [
+      139
+    ],
+    "140": [
+      141
+    ],
+    "147": [
+      148
+    ],
+    "148": [
+      149
+    ],
+    "152": [
+      153
+    ],
+    "153": [
+      154
+    ],
+    "155": [
+      156
+    ],
+    "156": [
+      157
+    ],
+    "158": [
+      159
+    ],
+    "159": [
+      160
+    ],
+    "161": [
+      162
+    ],
+    "163": [
+      164
+    ],
+    "165": [
+      166
+    ],
+    "167": [
+      168
+    ],
+    "170": [
+      171
+    ],
+    "172": [
+      25
+    ],
+    "173": [
+      35
+    ],
+    "174": [
+      39
+    ],
+    "175": [
+      176
+    ],
+    "176": [
+      271
+    ],
+    "177": [
+      178
+    ],
+    "179": [
+      180
+    ],
+    "180": [
+      181
+    ],
+    "183": [
+      184
+    ],
+    "187": [
+      188
+    ],
+    "188": [
+      189
+    ],
+    "190": [
+      254
+    ],
+    "191": [
+      192
+    ],
+    "193": [
+      272
+    ],
+    "194": [
+      195
+    ],
+    "198": [
+      258
+    ],
+    "200": [
+      257
+    ],
+    "203": [
+      289
+    ],
+    "204": [
+      205
+    ],
+    "206": [
+      288
+    ],
+    "207": [
+      275
+    ],
+    "209": [
+      210
+    ],
+    "215": [
+      264
+    ],
+    "216": [
+      217
+    ],
+    "217": [
+      285
+    ],
+    "218": [
+      219
+    ],
+    "220": [
+      221
+    ],
+    "221": [
+      276
+    ],
+    "223": [
+      224
+    ],
+    "228": [
+      229
+    ],
+    "231": [
+      232
+    ],
+    "233": [
+      277
+    ],
+    "234": [
+      283
+    ],
+    "236": [
+      106,
+      107,
+      237
+    ],
+    "238": [
+      124
+    ],
+    "239": [
+      125
+    ],
+    "240": [
+      126
+    ],
+    "246": [
+      247
+    ],
+    "247": [
+      248
+    ],
+    "252": [
+      183
+    ],
+    "253": [
+      202
+    ],
+    "259": [
+      185
+    ],
+    "260": [
+      122
+    ],
+    "261": [
+      113
+    ],
+    "262": [
+      143
+    ],
+    "263": [
+      226
+    ],
+    "295": [
+      20
+    ],
+    "298": [
+      28
+    ],
+    "300": [
+      38
+    ],
+    "302": [
+      51
+    ],
+    "304": [
+      53
+    ],
+    "306": [
+      75
+    ],
+    "307": [
+      76
+    ],
+    "309": [
+      89
+    ],
+    "313": [
+      279
+    ],
+    "314": [
+      78
+    ],
+    "316": [
+      80,
+      199
+    ],
+    "318": [
+      281
+    ],
+    "320": [
+      282
+    ],
+    "325": [
+      280
+    ],
+    "326": [
+      59
+    ],
+    "328": [
+      101
+    ],
+    "331": [
+      287
+    ],
+    "332": [
+      286
+    ],
+    "333": [
+      290
+    ]
+  },
+  "family": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 7,
+    "8": 7,
+    "9": 7,
+    "10": 10,
+    "11": 10,
+    "12": 10,
+    "13": 13,
+    "14": 13,
+    "15": 13,
+    "16": 16,
+    "17": 16,
+    "18": 16,
+    "19": 19,
+    "20": 19,
+    "21": 21,
+    "22": 21,
+    "23": 23,
+    "24": 23,
+    "25": 25,
+    "26": 25,
+    "27": 27,
+    "28": 27,
+    "29": 29,
+    "30": 29,
+    "31": 29,
+    "32": 32,
+    "33": 32,
+    "34": 32,
+    "35": 35,
+    "36": 35,
+    "37": 37,
+    "38": 37,
+    "39": 39,
+    "40": 39,
+    "41": 41,
+    "42": 41,
+    "43": 43,
+    "44": 43,
+    "45": 43,
+    "46": 46,
+    "47": 46,
+    "48": 48,
+    "49": 48,
+    "50": 50,
+    "51": 50,
+    "52": 52,
+    "53": 52,
+    "54": 54,
+    "55": 54,
+    "56": 56,
+    "57": 56,
+    "58": 58,
+    "59": 58,
+    "60": 60,
+    "61": 60,
+    "62": 60,
+    "63": 63,
+    "64": 63,
+    "65": 63,
+    "66": 66,
+    "67": 66,
+    "68": 66,
+    "69": 69,
+    "70": 69,
+    "71": 69,
+    "72": 72,
+    "73": 72,
+    "74": 74,
+    "75": 74,
+    "76": 74,
+    "77": 77,
+    "78": 77,
+    "79": 79,
+    "80": 79,
+    "81": 81,
+    "82": 81,
+    "83": 83,
+    "84": 84,
+    "85": 84,
+    "86": 86,
+    "87": 86,
+    "88": 88,
+    "89": 88,
+    "90": 90,
+    "91": 90,
+    "92": 92,
+    "93": 92,
+    "94": 92,
+    "95": 95,
+    "96": 96,
+    "97": 96,
+    "98": 98,
+    "99": 98,
+    "100": 100,
+    "101": 100,
+    "102": 102,
+    "103": 102,
+    "104": 104,
+    "105": 104,
+    "106": 106,
+    "107": 106,
+    "108": 108,
+    "109": 109,
+    "110": 109,
+    "111": 111,
+    "112": 111,
+    "113": 113,
+    "114": 114,
+    "115": 115,
+    "116": 116,
+    "117": 116,
+    "118": 118,
+    "119": 118,
+    "120": 120,
+    "121": 120,
+    "122": 122,
+    "123": 123,
+    "124": 124,
+    "125": 125,
+    "126": 126,
+    "127": 127,
+    "128": 128,
+    "129": 129,
+    "130": 129,
+    "131": 131,
+    "132": 132,
+    "133": 133,
+    "134": 133,
+    "135": 133,
+    "136": 133,
+    "137": 137,
+    "138": 138,
+    "139": 138,
+    "140": 140,
+    "141": 140,
+    "142": 142,
+    "143": 143,
+    "144": 144,
+    "145": 145,
+    "146": 146,
+    "147": 147,
+    "148": 147,
+    "149": 147,
+    "150": 150,
+    "151": 151,
+    "152": 152,
+    "153": 152,
+    "154": 152,
+    "155": 155,
+    "156": 155,
+    "157": 155,
+    "158": 158,
+    "159": 158,
+    "160": 158,
+    "161": 161,
+    "162": 161,
+    "163": 163,
+    "164": 163,
+    "165": 165,
+    "166": 165,
+    "167": 167,
+    "168": 167,
+    "169": 41,
+    "170": 170,
+    "171": 170,
+    "172": 25,
+    "173": 35,
+    "174": 39,
+    "175": 175,
+    "176": 175,
+    "177": 177,
+    "178": 177,
+    "179": 179,
+    "180": 179,
+    "181": 179,
+    "182": 43,
+    "183": 183,
+    "184": 183,
+    "185": 185,
+    "186": 60,
+    "187": 187,
+    "188": 187,
+    "189": 187,
+    "190": 190,
+    "191": 191,
+    "192": 191,
+    "193": 193,
+    "194": 194,
+    "195": 194,
+    "196": 133,
+    "197": 133,
+    "198": 198,
+    "199": 79,
+    "200": 200,
+    "201": 201,
+    "202": 202,
+    "203": 203,
+    "204": 204,
+    "205": 204,
+    "206": 206,
+    "207": 207,
+    "208": 95,
+    "209": 209,
+    "210": 209,
+    "211": 211,
+    "212": 123,
+    "213": 213,
+    "214": 214,
+    "215": 215,
+    "216": 216,
+    "217": 216,
+    "218": 218,
+    "219": 218,
+    "220": 220,
+    "221": 220,
+    "222": 222,
+    "223": 223,
+    "224": 223,
+    "225": 225,
+    "226": 226,
+    "227": 227,
+    "228": 228,
+    "229": 228,
+    "230": 116,
+    "231": 231,
+    "232": 231,
+    "233": 137,
+    "234": 234,
+    "235": 235,
+    "236": 106,
+    "237": 106,
+    "238": 124,
+    "239": 125,
+    "240": 126,
+    "241": 241,
+    "242": 113,
+    "243": 243,
+    "244": 244,
+    "245": 245,
+    "246": 246,
+    "247": 246,
+    "248": 246,
+    "249": 249,
+    "250": 250,
+    "251": 251,
+    "252": 183,
+    "253": 202,
+    "254": 190,
+    "257": 200,
+    "258": 198,
+    "259": 185,
+    "260": 122,
+    "261": 113,
+    "262": 143,
+    "263": 226,
+    "264": 215,
+    "265": 81,
+    "266": 108,
+    "267": 111,
+    "268": 114,
+    "269": 125,
+    "270": 126,
+    "271": 175,
+    "272": 193,
+    "273": 133,
+    "274": 133,
+    "275": 207,
+    "276": 220,
+    "277": 137,
+    "278": 133,
+    "279": 52,
+    "280": 222,
+    "281": 83,
+    "282": 122,
+    "283": 234,
+    "284": 123,
+    "285": 216,
+    "286": 215,
+    "287": 211,
+    "288": 206,
+    "289": 203,
+    "290": 194,
+    "291": 56
+  },
+  "methods": {
+    "1": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 2,
+        "target_const": "IVYSAUR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:81"
+      }
+    ],
+    "2": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 3,
+        "target_const": "VENUSAUR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 32,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:99"
+      }
+    ],
+    "4": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 5,
+        "target_const": "CHARMELEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:137"
+      }
+    ],
+    "5": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 6,
+        "target_const": "CHARIZARD",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 36,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:153"
+      }
+    ],
+    "7": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 8,
+        "target_const": "WARTORTLE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:192"
+      }
+    ],
+    "8": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 9,
+        "target_const": "BLASTOISE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 36,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:210"
+      }
+    ],
+    "10": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 11,
+        "target_const": "METAPOD",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 7,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:252"
+      }
+    ],
+    "11": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 12,
+        "target_const": "BUTTERFREE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 10,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:258"
+      }
+    ],
+    "13": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 14,
+        "target_const": "KAKUNA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 7,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:283"
+      }
+    ],
+    "14": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 15,
+        "target_const": "BEEDRILL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 10,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:289"
+      }
+    ],
+    "16": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 17,
+        "target_const": "PIDGEOTTO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 18,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:312"
+      }
+    ],
+    "17": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 18,
+        "target_const": "PIDGEOT",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 36,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:329"
+      }
+    ],
+    "19": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 20,
+        "target_const": "RATICATE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:362"
+      }
+    ],
+    "21": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 22,
+        "target_const": "FEAROW",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:411"
+      }
+    ],
+    "23": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 24,
+        "target_const": "ARBOK",
+        "target_form": 0,
+        "target_form_const": "NO_FORM",
+        "minimum_level": 22,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:442"
+      }
+    ],
+    "25": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 26,
+        "target_const": "RAICHU",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "THUNDERSTONE",
+        "item_id": 113,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:478"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 26,
+        "target_const": "RAICHU",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "item": "ODD_SOUVENIR",
+        "item_id": 223,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:479"
+      }
+    ],
+    "27": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 28,
+        "target_const": "SANDSLASH",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 22,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:515"
+      }
+    ],
+    "29": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 30,
+        "target_const": "NIDORINA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:587"
+      }
+    ],
+    "30": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 31,
+        "target_const": "NIDOQUEEN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:603"
+      }
+    ],
+    "32": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 33,
+        "target_const": "NIDORINO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:630"
+      }
+    ],
+    "33": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 34,
+        "target_const": "NIDOKING",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:646"
+      }
+    ],
+    "35": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 36,
+        "target_const": "CLEFABLE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:673"
+      }
+    ],
+    "37": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 38,
+        "target_const": "NINETALES",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "FIRE_STONE",
+        "item_id": 111,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:706"
+      }
+    ],
+    "39": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 40,
+        "target_const": "WIGGLYTUFF",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:769"
+      }
+    ],
+    "41": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 42,
+        "target_const": "GOLBAT",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 22,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:799"
+      }
+    ],
+    "42": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 169,
+        "target_const": "CROBAT",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:817"
+      }
+    ],
+    "43": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 44,
+        "target_const": "GLOOM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 21,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:837"
+      }
+    ],
+    "44": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 45,
+        "target_const": "VILEPLUME",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "LEAF_STONE",
+        "item_id": 110,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:856"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 182,
+        "target_const": "BELLOSSOM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "SUN_STONE",
+        "item_id": 116,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:857"
+      }
+    ],
+    "46": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 47,
+        "target_const": "PARASECT",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 24,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:885"
+      }
+    ],
+    "48": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 49,
+        "target_const": "VENOMOTH",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 31,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:917"
+      }
+    ],
+    "50": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 51,
+        "target_const": "DUGTRIO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 26,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:953"
+      }
+    ],
+    "52": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 53,
+        "target_const": "PERSIAN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1027"
+      }
+    ],
+    "54": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 55,
+        "target_const": "GOLDUCK",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 33,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1117"
+      }
+    ],
+    "56": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 57,
+        "target_const": "PRIMEAPE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1155"
+      }
+    ],
+    "57": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 291,
+        "target_const": "ANNIHILAPE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "OUTRAGE",
+        "move_id": 200,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1175"
+      }
+    ],
+    "58": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 59,
+        "target_const": "ARCANINE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "FIRE_STONE",
+        "item_id": 111,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1197"
+      }
+    ],
+    "60": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 61,
+        "target_const": "POLIWHIRL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1261"
+      }
+    ],
+    "61": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 186,
+        "target_const": "POLITOED",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "KINGS_ROCK",
+        "held_item_id": 142,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1278"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 62,
+        "target_const": "POLIWRATH",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "WATER_STONE",
+        "item_id": 112,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1279"
+      }
+    ],
+    "63": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 64,
+        "target_const": "KADABRA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1305"
+      }
+    ],
+    "64": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 65,
+        "target_const": "ALAKAZAM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "LINKING_CORD",
+        "held_item_id": 224,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1309"
+      }
+    ],
+    "66": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 67,
+        "target_const": "MACHOKE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1345"
+      }
+    ],
+    "67": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 68,
+        "target_const": "MACHAMP",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "LINKING_CORD",
+        "held_item_id": 224,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1365"
+      }
+    ],
+    "69": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 70,
+        "target_const": "WEEPINBELL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 21,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1406"
+      }
+    ],
+    "70": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 71,
+        "target_const": "VICTREEBEL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "LEAF_STONE",
+        "item_id": 110,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1423"
+      }
+    ],
+    "72": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 73,
+        "target_const": "TENTACRUEL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1448"
+      }
+    ],
+    "74": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 75,
+        "target_const": "GRAVELER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1486"
+      }
+    ],
+    "75": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 76,
+        "target_const": "GOLEM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "LINKING_CORD",
+        "held_item_id": 224,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1505"
+      }
+    ],
+    "77": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 78,
+        "target_const": "RAPIDASH",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 40,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1600"
+      }
+    ],
+    "79": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 199,
+        "target_const": "SLOWKING",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "KINGS_ROCK",
+        "held_item_id": 142,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1671"
+      },
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 80,
+        "target_const": "SLOWBRO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 37,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1672"
+      }
+    ],
+    "81": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 82,
+        "target_const": "MAGNETON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1745"
+      }
+    ],
+    "82": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 265,
+        "target_const": "MAGNEZONE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "THUNDERSTONE",
+        "item_id": 113,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1766"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 265,
+        "target_const": "MAGNEZONE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "MAGNET_TUNNEL",
+        "landmark_id": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1767"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 265,
+        "target_const": "MAGNEZONE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "DIM_CAVE",
+        "landmark_id": 93,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1768"
+      }
+    ],
+    "84": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 85,
+        "target_const": "DODRIO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 31,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1837"
+      }
+    ],
+    "86": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 87,
+        "target_const": "DEWGONG",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 34,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1875"
+      }
+    ],
+    "88": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 89,
+        "target_const": "MUK",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 38,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1916"
+      }
+    ],
+    "90": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 91,
+        "target_const": "CLOYSTER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "WATER_STONE",
+        "item_id": 112,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1988"
+      }
+    ],
+    "92": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 93,
+        "target_const": "HAUNTER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2022"
+      }
+    ],
+    "93": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 94,
+        "target_const": "GENGAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "LINKING_CORD",
+        "held_item_id": 224,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2040"
+      }
+    ],
+    "95": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 208,
+        "target_const": "STEELIX",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "METAL_COAT",
+        "held_item_id": 129,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2077"
+      }
+    ],
+    "96": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 97,
+        "target_const": "HYPNO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 26,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2100"
+      }
+    ],
+    "98": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 99,
+        "target_const": "KINGLER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2139"
+      }
+    ],
+    "100": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 101,
+        "target_const": "ELECTRODE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2172"
+      }
+    ],
+    "102": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 103,
+        "target_const": "EXEGGUTOR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "LEAF_STONE",
+        "item_id": 110,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2252"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 103,
+        "target_const": "EXEGGUTOR",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "item": "ODD_SOUVENIR",
+        "item_id": 223,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2253"
+      }
+    ],
+    "104": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 105,
+        "target_const": "MAROWAK",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2291"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 105,
+        "target_const": "MAROWAK",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "item": "ODD_SOUVENIR",
+        "item_id": 223,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2292"
+      }
+    ],
+    "108": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 266,
+        "target_const": "LICKILICKY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ROLLOUT",
+        "move_id": 205,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2392"
+      }
+    ],
+    "109": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 110,
+        "target_const": "WEEZING",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "held_item": "CHARCOAL",
+        "held_item_id": 130,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2410"
+      },
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 110,
+        "target_const": "WEEZING",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 35,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2411"
+      }
+    ],
+    "111": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 112,
+        "target_const": "RHYDON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 42,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2461"
+      }
+    ],
+    "112": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 267,
+        "target_const": "RHYPERIOR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "PROTECTOR",
+        "held_item_id": 217,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2481"
+      }
+    ],
+    "113": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 242,
+        "target_const": "BLISSEY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2502"
+      }
+    ],
+    "114": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 268,
+        "target_const": "TANGROWTH",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ANCIENTPOWER",
+        "move_id": 246,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2522"
+      }
+    ],
+    "116": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 117,
+        "target_const": "SEADRA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 32,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2560"
+      }
+    ],
+    "117": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 230,
+        "target_const": "KINGDRA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "DRAGON_SCALE",
+        "held_item_id": 214,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2575"
+      }
+    ],
+    "118": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 119,
+        "target_const": "SEAKING",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 33,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2590"
+      }
+    ],
+    "120": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 121,
+        "target_const": "STARMIE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "WATER_STONE",
+        "item_id": 112,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2624"
+      }
+    ],
+    "123": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 212,
+        "target_const": "SCIZOR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "METAL_COAT",
+        "held_item_id": 129,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2674"
+      },
+      {
+        "method": "HOLDING",
+        "method_id": 4,
+        "target": 284,
+        "target_const": "KLEAVOR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "HARD_STONE",
+        "held_item_id": 126,
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2675"
+      }
+    ],
+    "125": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 269,
+        "target_const": "ELECTIVIRE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "ELECTIRIZER",
+        "held_item_id": 218,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2715"
+      }
+    ],
+    "126": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 270,
+        "target_const": "MAGMORTAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "MAGMARIZER",
+        "held_item_id": 219,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2732"
+      }
+    ],
+    "129": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 130,
+        "target_const": "GYARADOS",
+        "target_form": 0,
+        "target_form_const": "NO_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2838"
+      }
+    ],
+    "133": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 135,
+        "target_const": "JOLTEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "THUNDERSTONE",
+        "item_id": 113,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2888"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 134,
+        "target_const": "VAPOREON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "WATER_STONE",
+        "item_id": 112,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2889"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 136,
+        "target_const": "FLAREON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "FIRE_STONE",
+        "item_id": 111,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2890"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 196,
+        "target_const": "ESPEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "SUN_STONE",
+        "item_id": 116,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2891"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 197,
+        "target_const": "UMBREON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2892"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 273,
+        "target_const": "LEAFEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "LEAF_STONE",
+        "item_id": 110,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2893"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 274,
+        "target_const": "GLACEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "ICE_STONE",
+        "item_id": 114,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2894"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 278,
+        "target_const": "SYLVEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "SHINY_STONE",
+        "item_id": 118,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2895"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 273,
+        "target_const": "LEAFEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "ILEX_FOREST",
+        "landmark_id": 17,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2896"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 274,
+        "target_const": "GLACEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "ICE_PATH",
+        "landmark_id": 58,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2897"
+      },
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 196,
+        "target_const": "ESPEON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_MORNDAY",
+        "time_id": 2,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2898"
+      },
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 197,
+        "target_const": "UMBREON",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_EVENITE",
+        "time_id": 3,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2899"
+      }
+    ],
+    "137": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 233,
+        "target_const": "PORYGON2",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "UPGRADE",
+        "held_item_id": 215,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2969"
+      }
+    ],
+    "138": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 139,
+        "target_const": "OMASTAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 40,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2986"
+      }
+    ],
+    "140": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 141,
+        "target_const": "KABUTOPS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 40,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3022"
+      }
+    ],
+    "147": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 148,
+        "target_const": "DRAGONAIR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3207"
+      }
+    ],
+    "148": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 149,
+        "target_const": "DRAGONITE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 55,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3224"
+      }
+    ],
+    "152": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 153,
+        "target_const": "BAYLEEF",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 16,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3300"
+      }
+    ],
+    "153": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 154,
+        "target_const": "MEGANIUM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 32,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3321"
+      }
+    ],
+    "155": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 156,
+        "target_const": "QUILAVA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 14,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3363"
+      }
+    ],
+    "156": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 157,
+        "target_const": "TYPHLOSION",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 36,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3382"
+      }
+    ],
+    "158": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 159,
+        "target_const": "CROCONAW",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 18,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3440"
+      }
+    ],
+    "159": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 160,
+        "target_const": "FERALIGATR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3460"
+      }
+    ],
+    "161": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 162,
+        "target_const": "FURRET",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 15,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3501"
+      }
+    ],
+    "163": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 164,
+        "target_const": "NOCTOWL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3535"
+      }
+    ],
+    "165": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 166,
+        "target_const": "LEDIAN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 18,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3577"
+      }
+    ],
+    "167": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 168,
+        "target_const": "ARIADOS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 22,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3611"
+      }
+    ],
+    "170": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 171,
+        "target_const": "LANTURN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 27,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3672"
+      }
+    ],
+    "172": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 25,
+        "target_const": "PIKACHU",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3709"
+      }
+    ],
+    "173": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 35,
+        "target_const": "CLEFAIRY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3721"
+      }
+    ],
+    "174": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 39,
+        "target_const": "JIGGLYPUFF",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3732"
+      }
+    ],
+    "175": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 176,
+        "target_const": "TOGETIC",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3743"
+      }
+    ],
+    "176": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 271,
+        "target_const": "TOGEKISS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "SHINY_STONE",
+        "item_id": 118,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3761"
+      }
+    ],
+    "177": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 178,
+        "target_const": "XATU",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3780"
+      }
+    ],
+    "179": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 180,
+        "target_const": "FLAAFFY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 15,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3816"
+      }
+    ],
+    "180": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 181,
+        "target_const": "AMPHAROS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 36,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3837"
+      }
+    ],
+    "183": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 184,
+        "target_const": "AZUMARILL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 18,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3888"
+      }
+    ],
+    "187": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 188,
+        "target_const": "SKIPLOOM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 18,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3949"
+      }
+    ],
+    "188": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 189,
+        "target_const": "JUMPLUFF",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 27,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:3972"
+      }
+    ],
+    "190": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 254,
+        "target_const": "AMBIPOM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "DOUBLE_SLAP",
+        "move_id": 3,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4017"
+      }
+    ],
+    "191": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 192,
+        "target_const": "SUNFLORA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "SUN_STONE",
+        "item_id": 116,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4034"
+      }
+    ],
+    "193": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 272,
+        "target_const": "YANMEGA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ANCIENTPOWER",
+        "move_id": 246,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4082"
+      }
+    ],
+    "194": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 195,
+        "target_const": "QUAGSIRE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4107"
+      }
+    ],
+    "198": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 258,
+        "target_const": "HONCHKROW",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "DUSK_STONE",
+        "item_id": 117,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4186"
+      }
+    ],
+    "200": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 257,
+        "target_const": "MISMAGIUS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "DUSK_STONE",
+        "item_id": 117,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4243"
+      }
+    ],
+    "203": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 289,
+        "target_const": "FARIGIRAF",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ZEN_HEADBUTT",
+        "move_id": 170,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4276"
+      }
+    ],
+    "204": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 205,
+        "target_const": "FORRETRESS",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 31,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4298"
+      }
+    ],
+    "206": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 288,
+        "target_const": "DUDUNSPARCE",
+        "target_form": 0,
+        "target_form_const": "NO_FORM",
+        "minimum_level": 32,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4336"
+      }
+    ],
+    "207": [
+      {
+        "method": "HOLDING",
+        "method_id": 4,
+        "target": 275,
+        "target_const": "GLISCOR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "RAZOR_FANG",
+        "held_item_id": 220,
+        "time": "TR_EVENITE",
+        "time_id": 3,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4362"
+      }
+    ],
+    "209": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 210,
+        "target_const": "GRANBULL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 23,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4420"
+      }
+    ],
+    "215": [
+      {
+        "method": "HOLDING",
+        "method_id": 4,
+        "target": 264,
+        "target_const": "WEAVILE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "RAZOR_CLAW",
+        "held_item_id": 221,
+        "time": "TR_EVENITE",
+        "time_id": 3,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4550"
+      }
+    ],
+    "216": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 217,
+        "target_const": "URSARING",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4589"
+      }
+    ],
+    "217": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 285,
+        "target_const": "URSALUNA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "item": "MOON_STONE",
+        "item_id": 115,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4608"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 285,
+        "target_const": "URSALUNA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "SINJOH_RUINS",
+        "landmark_id": 66,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4609"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 285,
+        "target_const": "URSALUNA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "MYSTRI_STAGE",
+        "landmark_id": 67,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4610"
+      }
+    ],
+    "218": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 219,
+        "target_const": "MAGCARGO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 38,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4630"
+      }
+    ],
+    "220": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 221,
+        "target_const": "PILOSWINE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 33,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4666"
+      }
+    ],
+    "221": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 276,
+        "target_const": "MAMOSWINE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ANCIENTPOWER",
+        "move_id": 246,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4684"
+      }
+    ],
+    "223": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 224,
+        "target_const": "OCTILLERY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4740"
+      }
+    ],
+    "228": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 229,
+        "target_const": "HOUNDOOM",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 24,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4835"
+      }
+    ],
+    "231": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 232,
+        "target_const": "DONPHAN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4887"
+      }
+    ],
+    "233": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 277,
+        "target_const": "PORYGON_Z",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "DUBIOUS_DISC",
+        "held_item_id": 216,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4920"
+      }
+    ],
+    "234": [
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 283,
+        "target_const": "WYRDEER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "RUGGED_ROAD",
+        "landmark_id": 37,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4938"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 283,
+        "target_const": "WYRDEER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "SNOWTOP_MOUNTAIN",
+        "landmark_id": 38,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4939"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 283,
+        "target_const": "WYRDEER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "SINJOH_RUINS",
+        "landmark_id": 66,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4940"
+      },
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 283,
+        "target_const": "WYRDEER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "landmark": "MYSTRI_STAGE",
+        "landmark_id": 67,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4941"
+      }
+    ],
+    "236": [
+      {
+        "method": "STAT",
+        "method_id": 6,
+        "target": 107,
+        "target_const": "HITMONCHAN",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "comparison": "ATK_LT_DEF",
+        "comparison_id": 2,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4972"
+      },
+      {
+        "method": "STAT",
+        "method_id": 6,
+        "target": 106,
+        "target_const": "HITMONLEE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "comparison": "ATK_GT_DEF",
+        "comparison_id": 1,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4973"
+      },
+      {
+        "method": "STAT",
+        "method_id": 6,
+        "target": 237,
+        "target_const": "HITMONTOP",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "comparison": "ATK_EQ_DEF",
+        "comparison_id": 3,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4974"
+      }
+    ],
+    "238": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 124,
+        "target_const": "JYNX",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4997"
+      }
+    ],
+    "239": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 125,
+        "target_const": "ELECTABUZZ",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5014"
+      }
+    ],
+    "240": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 126,
+        "target_const": "MAGMAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5031"
+      }
+    ],
+    "246": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 247,
+        "target_const": "PUPITAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5136"
+      }
+    ],
+    "247": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 248,
+        "target_const": "TYRANITAR",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 55,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5156"
+      }
+    ],
+    "252": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 183,
+        "target_const": "MARILL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5250"
+      }
+    ],
+    "253": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 202,
+        "target_const": "WOBBUFFET",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 15,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5263"
+      }
+    ],
+    "259": [
+      {
+        "method": "MOVE",
+        "method_id": 8,
+        "target": 185,
+        "target_const": "SUDOWOODO",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "move": "ROCK_THROW",
+        "move_id": 88,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5315"
+      }
+    ],
+    "260": [
+      {
+        "method": "LOCATION",
+        "method_id": 7,
+        "target": 122,
+        "target_const": "MR__MIME",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "landmark": "ICE_PATH",
+        "landmark_id": 58,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5331"
+      },
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 122,
+        "target_const": "MR__MIME",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 30,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5332"
+      },
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 122,
+        "target_const": "MR__MIME",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "item": "ICE_STONE",
+        "item_id": 114,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5333"
+      }
+    ],
+    "261": [
+      {
+        "method": "HOLDING",
+        "method_id": 4,
+        "target": 113,
+        "target_const": "CHANSEY",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "OVAL_STONE",
+        "held_item_id": 222,
+        "time": "TR_MORNDAY",
+        "time_id": 2,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5355"
+      }
+    ],
+    "262": [
+      {
+        "method": "HAPPINESS",
+        "method_id": 5,
+        "target": 143,
+        "target_const": "SNORLAX",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "minimum_happiness": 160,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5366"
+      }
+    ],
+    "263": [
+      {
+        "method": "PARTY",
+        "method_id": 10,
+        "target": 226,
+        "target_const": "MANTINE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "party_species": "REMORAID",
+        "party_species_id": 223,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5386"
+      }
+    ],
+    "295": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 20,
+        "target_const": "RATICATE",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:378"
+      }
+    ],
+    "298": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 28,
+        "target_const": "SANDSLASH",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "item": "ICE_STONE",
+        "item_id": 114,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:535"
+      }
+    ],
+    "300": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 38,
+        "target_const": "NINETALES",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "item": "ICE_STONE",
+        "item_id": 114,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:730"
+      }
+    ],
+    "302": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 51,
+        "target_const": "DUGTRIO",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "minimum_level": 26,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:971"
+      }
+    ],
+    "304": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 53,
+        "target_const": "PERSIAN",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1044"
+      }
+    ],
+    "306": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 75,
+        "target_const": "GRAVELER",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "minimum_level": 25,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1543"
+      }
+    ],
+    "307": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 76,
+        "target_const": "GOLEM",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "held_item": "LINKING_CORD",
+        "held_item_id": 224,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1562"
+      }
+    ],
+    "309": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 89,
+        "target_const": "MUK",
+        "target_form": 2,
+        "target_form_const": "ALOLAN_FORM",
+        "minimum_level": 38,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1934"
+      }
+    ],
+    "313": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 279,
+        "target_const": "PERRSERKER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 28,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1062"
+      }
+    ],
+    "314": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 78,
+        "target_const": "RAPIDASH",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "minimum_level": 40,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1617"
+      }
+    ],
+    "316": [
+      {
+        "method": "TRADE",
+        "method_id": 3,
+        "target": 199,
+        "target_const": "SLOWKING",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "held_item": "KINGS_ROCK",
+        "held_item_id": 142,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1690"
+      },
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 80,
+        "target_const": "SLOWBRO",
+        "target_form": 3,
+        "target_form_const": "GALARIAN_FORM",
+        "minimum_level": 37,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1691"
+      }
+    ],
+    "318": [
+      {
+        "method": "CRIT",
+        "method_id": 9,
+        "target": 281,
+        "target_const": "SIRFETCH_D",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "time": "TR_ANYTIME",
+        "time_id": 1,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1811"
+      }
+    ],
+    "320": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 282,
+        "target_const": "MR__RIME",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 42,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:5730"
+      }
+    ],
+    "325": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 280,
+        "target_const": "CURSOLA",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 38,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4724"
+      }
+    ],
+    "326": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 59,
+        "target_const": "ARCANINE",
+        "target_form": 4,
+        "target_form_const": "HISUIAN_FORM",
+        "item": "FIRE_STONE",
+        "item_id": 111,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:1229"
+      }
+    ],
+    "328": [
+      {
+        "method": "ITEM",
+        "method_id": 2,
+        "target": 101,
+        "target_const": "ELECTRODE",
+        "target_form": 4,
+        "target_form_const": "HISUIAN_FORM",
+        "item": "LEAF_STONE",
+        "item_id": 110,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:2211"
+      }
+    ],
+    "331": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 287,
+        "target_const": "OVERQWIL",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 33,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4471"
+      }
+    ],
+    "332": [
+      {
+        "method": "HOLDING",
+        "method_id": 4,
+        "target": 286,
+        "target_const": "SNEASLER",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "held_item": "RAZOR_CLAW",
+        "held_item_id": 221,
+        "time": "TR_MORNDAY",
+        "time_id": 2,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4569"
+      }
+    ],
+    "333": [
+      {
+        "method": "LEVEL",
+        "method_id": 1,
+        "target": 290,
+        "target_const": "CLODSIRE",
+        "target_form": 1,
+        "target_form_const": "PLAIN_FORM",
+        "minimum_level": 20,
+        "source": "polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 data/pokemon/evos_attacks.asm:4122"
+      }
+    ]
+  },
+  "key": "BaseData/EvosAttacks index: species id (1..NUM_SPECIES) or NUM_SPECIES+1+i for variant rows (see species_index.json forms[].ext); target_form NO_FORM(0)=keep pre-evo form",
+  "method_ids": {
+    "NONE": 0,
+    "LEVEL": 1,
+    "ITEM": 2,
+    "TRADE": 3,
+    "HOLDING": 4,
+    "HAPPINESS": 5,
+    "STAT": 6,
+    "LOCATION": 7,
+    "MOVE": 8,
+    "CRIT": 9,
+    "PARTY": 10,
+    "EGG": 11,
+    "PIKACHU": 12,
+    "GLOOM": 13,
+    "POLIWHIRL": 14,
+    "SLOWPOKE": 15,
+    "SLOWPOKE_GALARIAN": 16,
+    "MAGNETON": 17,
+    "EXEGGCUTE": 18,
+    "KOFFING": 19,
+    "CUBONE": 20,
+    "SCYTHER": 21,
+    "EEVEE": 22,
+    "MIME_JR_": 23,
+    "URSARING": 24,
+    "STANTLER": 25,
+    "DUNSPARCE": 26
+  },
+  "tables": {
+    "pointers": {
+      "symbol": "EvosAttacksPointers",
+      "entries": 337,
+      "record_size": 2
+    }
+  },
+  "source_files": [
+    "constants/pokemon_constants.asm",
+    "constants/pokemon_data_constants.asm",
+    "data/pokemon/evos_attacks_pointers.asm",
+    "data/pokemon/evos_attacks.asm"
+  ]
+}
