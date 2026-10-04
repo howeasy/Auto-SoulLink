@@ -1,6 +1,29 @@
 # Gen 4 resume note
 
-> **Player launcher caveat (2026-10-03):** `lua/slink_gen4.lua` still runs the LEGACY Gen 4 client. Every G1/G2 cut so far proves the rewritten `lua/gen4/*` modules through test drivers, not the player launch path. G3a switches the launcher (first batched Gen 2 digest window after the current release); G4 sign-off requires a cut launched through `slink.lua`. Gen 4 is pre-release on this branch.
+> **Player launcher caveat (2026-10-04):** this c1046d07-based branch still runs the LEGACY client via `lua/slink_gen4.lua`. On **claude/gen4-g3a-launcher@a453ea00**, `slink.lua:179-234` instead admits pinned HG/SS/hge and dofiles `lua/gen4/run.lua`; the legacy client/game/root files are deleted there. That branch must land in the batched Gen 2 window. Earlier test-driver receipts do not prove the player path; the next live cut must be launched through `slink.lua`. Gen 4 remains pre-release.
+
+## Checkpoint 13 (2026-10-04) — committed offline side branches; landing still pending
+
+**All SOURCE/MODEL, not a new PHYSICAL freeze or shipping sign-off.**
+
+| Branch | Head inspected | Offline delivery |
+|---|---|---|
+| claude/gen4-hge-area-map | 3b0da869 | hge area/location geometry proven identical to HGSS, title provenance retained; daycare egg bound to map 38 / route_34 (acquisition.json:842-853), 62 script sites. route_34 remains on_wild_area, not a gift-area id. |
+| claude/gen4-nds-mailbox | 1f339a29 (reader introduced 5edae113) | shared raw mailbox reader + Gen4 companion step/new/poll, caller-owned K/N, caps never gate liveness; tests include host-probe SetErrorMode guard |
+| claude/gen4-companion-policy | d68e8137 (C2/C3 2f89685a; C5 cff81909) | arena accessor/per-card state, sound/trade policy headers, C4 panel policy/facts/tests; no game sound.c/trade.c/panel.c binding or build driver |
+| claude/gen4-g3a-launcher | a453ea00 | pinned NDS launcher route to gen4/run.lua, manifest update, legacy Lua files retired |
+| claude/gen4-server-gift | 90c0fff0 (generated gifts c5cb4175; adapter slice 9628c2d9) | generated gift/foundation/adapter changes, Platinum adapter loaders removed and HGSS tables repointed; legacy data-directory deletion still coupled to integration cleanup |
+
+**Landing plan:** mailbox/title reader + hge area map precede live checks, then one
+new receipt re-run at the frozen combined evidence surface. Launcher/server/release
+land in the approved batched window; the reviewed Gen 5 shared stack follows its
+ABI-owner dependency order. **Live must launch through slink.lua.** The main worktree
+stays at c1046d07 until the coordinator freezes the candidate; these branch heads are
+not silently substituted for the current cut.
+
+Owner rulings and pinned-plan corrections: see
+`docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md` (save only after,
+Platinum deletion, shared-stack batch, hge PATCH ONLY, deposit-only row n, plain fatal HUD text).
 
 ## Checkpoint 12 (2026-10-04) - NEW FREEZE: all offline Gen 4 work + landed master; live checks next (owner: "new freeze, then run")
 
