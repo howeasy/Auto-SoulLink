@@ -145,7 +145,19 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
 8. **Engine struct**: `validate_incoming` is gone (binding), `start_scene` also
    takes the length, `post_save` split in two, and the engine carries `binding`,
    `decoder` and `save_timeout_frames`.
-9. **Not lifted**: Emerald-only call/Match Call records and reasons 16..18, and
+9. **UNCERTAIN is terminal for the arena lifetime.** Neither the producer nor any
+   opcode clears it; the clear is arena reinitialisation (a reset/reboot) after the
+   host has proven, out of band, that the transaction reconciled. A `TRADE_PREPARE`
+   refused while `TP_UNCERTAIN` therefore answers **`UNCERTAIN` (11)**, not
+   `IDENTITY` (12): Gen 3 answers 12 there, and 12 reads as "wrong token, retry"
+   for a retry that must never be attempted. Every other non-IDLE/non-DONE phase
+   keeps 12, and either answer leaves the witness and the accepted identity
+   untouched. The verdict is the **witness**, never the mailbox — `TRADE_STATUS`
+   acks OK and writes `m->reason = 0`, erasing the FAIL/11 evidence, so a host that
+   reads the mailbox loses the one fact that matters. The witness is volatile, so
+   the durable obligation (a host-side journal and a per-title reload proof) is the
+   host's alone; no NDS trade host exists yet to discharge it.
+10. **Not lifted**: Emerald-only call/Match Call records and reasons 16..18, and
    rival/carrier/call producers. Opcode 32 keeps its id, never advertised.
 
 ## Title-private space

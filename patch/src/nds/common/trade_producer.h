@@ -1,7 +1,8 @@
 /* Shared native transaction controller, NDS lift of trade_targets/trade_producer.h.
- * Same lifecycle, milestone ordering and refusals as Gen 3. Game addresses/calls
- * and the record format belong to the engine + SlinkRecordBinding. No allocator,
- * encoder, raw-swap fallback or Lua dependency. Callers must provide
+ * Same lifecycle, milestone ordering and refusals as Gen 3, bar one: a PREPARE
+ * refused while UNCERTAIN answers UNCERTAIN (11), where Gen 3 answers IDENTITY.
+ * Game addresses/calls and the record format belong to the engine + SlinkRecordBinding.
+ * No allocator, encoder, raw-swap fallback or Lua dependency. Callers must provide
  * engine-verified terminal observations, not time guesses.
  *
  * Changes vs Gen 3: the staged record is sized by SLINK_MAX_RECORD and handled via
@@ -9,6 +10,8 @@
  * SlinkRecordStageV1; post-save is post_save_begin()+post_save_poll() so that
  * initiating a save can never be recorded as POST_SAVE_OK, and a native watchdog
  * (save_timeout_frames) turns an unbounded PENDING into FAIL/UNCERTAIN.
+ * A PREPARE refused while UNCERTAIN answers UNCERTAIN (11) instead of IDENTITY (12):
+ * the trade may already be in the save, so the phase, not the request, is the reason.
  *
  * Save-timeout invariant: the BOUND is shared, the NUMBER is the adapter. The
  * host's own TRADE_SCENE budget is 6000 frames (lua/gen3/native.lua:177-181); an
@@ -293,7 +296,15 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         for (i=0;i<16;i++) token |= m->args[16+i];
         if ((s->phase!=TP_IDLE && s->phase!=TP_DONE) || !m->session_epoch
             || !tp_word(m->args+12) || !token || !e->safe_field(e->context)
-            || (s->phase==TP_DONE && tp_identity(m,w))) { tp_ack(m,seq,0,12); return; }
+            || (s->phase==TP_DONE && tp_identity(m,w))) {
+            /* UNCERTAIN is terminal for the arena lifetime: nothing in the producer and no
+             * opcode clears it, only arena reinitialisation after a host-proven reconciliation
+             * does. Answering IDENTITY (12) would read as "wrong token, retry" for a retry
+             * that must never be made; every other non-IDLE/non-DONE phase keeps 12, and
+             * either answer leaves the witness and the accepted identity untouched. */
+            tp_ack(m,seq,0,s->phase==TP_UNCERTAIN ? SLINK_REASON_UNCERTAIN : SLINK_REASON_IDENTITY);
+            return;
+        }
         if (!slink_binding_ok(e->binding) || !e->save_timeout_frames) { tp_ack(m,seq,0,SLINK_REASON_BAD_ARGS); return; }
         slot=e->locate(e->context,tp_word(m->args+4),tp_word(m->args+8));
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0] || m->args[1]>1) { tp_ack(m,seq,0,2); return; }

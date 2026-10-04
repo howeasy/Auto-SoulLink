@@ -979,6 +979,60 @@ static int sc_presave(int var) {
   return 0;
 }
 
+/* UNCERTAIN is terminal for the arena lifetime: no opcode clears it, the phase is never
+ * re-published, and only arena reinitialisation (the reset) returns the producer to IDLE.
+ * A PREPARE refused in UNCERTAIN names the phase (11), not the request (12). The verdict
+ * is the WITNESS: TRADE_STATUS acks OK and zeroes m->reason, so the mailbox must never be
+ * read as the record of what happened. */
+static int sc_uncertain(void) {
+  reset(); if (prep()) return 1;
+  scene(2);CHECK(slink_trade_commit_entered(&s,&w,0,&e));
+  begin_result=0;                                   /* the save never starts */
+  scene_result=1;svc();
+  CHECK(starts==1 && begins==1 && polls==0 && !bad_begin_state);
+  CHECK(w.final_result==SLINK_TRADE_UNCERTAIN && w.save_status==SLINK_SAVE_FAILED
+      && !(w.milestones&(1u<<SLINK_POST_SAVE_OK)));
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_UNCERTAIN && m.ack_seq==2 && !m.opcode);
+  CHECK(!slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  CHECK(s.phase==TP_UNCERTAIN && m.producer_phase==SLINK_PHASE_UNCERTAIN);
+  SlinkTradeWitnessV2 terminal=w;
+  int st0=starts,bg0=begins,p0=polls;
+  /* a fresh PREPARE on another epoch, visit and token: refused, and the refusal names the
+   * terminal phase. Nothing engine-side moves and the witness is byte-identical. */
+  send_prepare(9,4);svc();
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_UNCERTAIN && m.ack_seq==4 && !m.opcode);
+  CHECK(m.producer_phase==SLINK_PHASE_UNCERTAIN && s.phase==TP_UNCERTAIN && w.session_epoch==7u);
+  CHECK(starts==st0 && begins==bg0 && polls==p0 && memcmp(&terminal,&w,sizeof w)==0);
+  /* the same verdict on the witness's OWN identity: a retry is refused however it arrives */
+  send_prepare(7,5);svc();
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_UNCERTAIN && m.ack_seq==5 && !m.opcode);
+  CHECK(m.producer_phase==SLINK_PHASE_UNCERTAIN && starts==st0 && begins==bg0 && polls==p0
+      && memcmp(&terminal,&w,sizeof w)==0);
+  /* the mailbox is back on the witness identity: WITHDRAW keeps its own reason, SCENE keeps IDENTITY */
+  m.seq=6;m.opcode=SLINK_OP_TRADE_WITHDRAW;svc();
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_WITHDRAW_TOO_LATE && m.ack_seq==6 && !m.opcode);
+  m.seq=7;m.opcode=SLINK_OP_TRADE_SCENE;svc();
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_IDENTITY && m.ack_seq==7 && !m.opcode);
+  CHECK(m.producer_phase==SLINK_PHASE_UNCERTAIN && starts==st0 && begins==bg0 && polls==p0
+      && memcmp(&terminal,&w,sizeof w)==0);
+  /* STATUS is the read-only query: OK, and it erases m->reason. The mailbox reason is not
+   * durable evidence; the witness is unchanged and still says UNCERTAIN. */
+  m.seq=8;m.opcode=SLINK_OP_TRADE_STATUS;svc();
+  CHECK(m.status==SLINK_ST_OK && !m.reason && m.ack_seq==8 && !m.opcode);
+  CHECK(m.producer_phase==SLINK_PHASE_UNCERTAIN && s.phase==TP_UNCERTAIN && starts==st0
+      && begins==bg0 && polls==p0 && memcmp(&terminal,&w,sizeof w)==0);
+  /* the epoch bump above changed nothing; only the reset clears, and a fresh visit opens */
+  memset(&s,0,sizeof s);memset(&m,0,sizeof m);memset(&w,0,sizeof w);
+  svc();
+  CHECK(m.producer_phase==SLINK_PHASE_IDLE && s.phase==TP_IDLE && starts==st0 && begins==bg0
+      && polls==p0 && !w.milestones && !w.session_epoch
+      && w.final_result==SLINK_TRADE_PENDING);
+  send_prepare(9,1);svc();
+  CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && w.session_epoch==9u && w.visit_id==8u
+      && w.final_result==SLINK_TRADE_PENDING && starts==st0);
+  return 0;
+}
+
 int main(int argc,char **argv) {
   int sc=argc>1?atoi(argv[1]):1,var=argc>2?atoi(argv[2]):0;
   switch (sc) {
@@ -994,6 +1048,7 @@ int main(int argc,char **argv) {
     case 10: return sc_stagelen(var);
     case 11: return sc_foreign(var);
     case 12: return sc_presave(var);
+    case 13: return sc_uncertain();
   }
   return 99;
 }
@@ -1015,6 +1070,7 @@ SCENARIOS = (
         ["play-se", "show-info", "play-fanfare", "play-se-idle"])]
     + [(f"presave-{n}", 12, v) for v, n in enumerate(
         ["wait-times-out", "no-watchdog", "consented-times-out", "completion-after-bound-wins"])]
+    + [("uncertain-terminal", 13, 0)]
 )
 
 
@@ -1035,6 +1091,12 @@ TP = "trade_producer.h"
 # tp_ack(m,seq,0,2) catch-all that consumed every opcode the trade producer does not own.
 FOREIGN_GATE = ("    if (op!=SLINK_OP_TRADE_PREPARE && op!=SLINK_OP_TRADE_SCENE\n"
                 "        && op!=SLINK_OP_TRADE_WITHDRAW && op!=SLINK_OP_TRADE_STATUS) return;")
+# The PREPARE refusal's reason line (tp_service). Two mutants hang off it: one that clears
+# the terminal phase on the way out, and the pre-fix answer that named the request instead.
+UNCERTAIN_ACK = ("            tp_ack(m,seq,0,s->phase==TP_UNCERTAIN ? SLINK_REASON_UNCERTAIN"
+                 " : SLINK_REASON_IDENTITY);")
+UNCERTAIN_SELF_CLEAR = ("            if (s->phase==TP_UNCERTAIN) { s->phase=TP_IDLE; tp_ack(m,seq,0,SLINK_REASON_UNCERTAIN); }\n"
+                        "            else tp_ack(m,seq,0,SLINK_REASON_IDENTITY);")
 HARNESS = "<harness>"  # edit target is the PK45 scenario C source, not a header
 MUTANTS = {
     "truncate-to-100": ((1, 0), [(TP, "i < len ? st->record[i] : 0", "i < 100 ? st->record[i] : 0")]),
@@ -1062,6 +1124,12 @@ MUTANTS = {
     # the pre-save leg had no frame bound: without it a poll that never saves and never refuses
     # parks the producer in TP_PRE_SAVE forever while the host's own budget expires.
     "no-pre-save-watchdog": ((12, 0), [(TP, "(uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > e->pre_save_timeout_frames", "((void)s, 1)")]),
+    # UNCERTAIN is terminal for the arena lifetime: no opcode may clear it, and the refusal
+    # has to name the phase. The self-clearing mutant still answers 11, so it must go red on
+    # the phase assertion, not the reason one.
+    "native-self-clears-uncertain": ((13, 0), [(TP, UNCERTAIN_ACK, UNCERTAIN_SELF_CLEAR)]),
+    "uncertain-refused-as-identity": ((13, 0), [(TP, UNCERTAIN_ACK,
+                                                 "            tp_ack(m,seq,0,SLINK_REASON_IDENTITY);")]),
 }
 
 
