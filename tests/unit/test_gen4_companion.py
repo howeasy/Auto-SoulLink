@@ -3,7 +3,7 @@
 Every offset, size, field position, magic and capability value used here comes from the REAL
 committed headers (`patch/src/nds/common/abi.h`, `patch/src/nds/gen4/beacon.h`) compiled for
 the host by a C harness that stamps images in the ROM's own publish order (payload first,
-magic LAST -- beacon.c:184-196). The module under test is the shipped `lua/gen4/companion.lua`;
+magic LAST -- beacon.c:195-210). The module under test is the shipped `lua/gen4/companion.lua`;
 the reader it binds is the shipped `lua/nds/mailbox.lua`. The memory reader is a boundary
 simulation (a mutable byte buffer with injected faults), the way the mailbox test's is.
 
@@ -93,7 +93,7 @@ struct stamp {
   unsigned magic, version, size, cookie, identity, delta, generation, registrations;
 };
 
-/* beacon.c:184-196 (Slink_NDS_Publish): payload first, then size, then version, and magic
+/* beacon.c:195-210 (Slink_NDS_Publish): payload first, then size, then version, and magic
    LAST, so a host sampling mid-visit sees a valid header over a stale payload rather than
    a valid header over a torn one. That order is the reason the binder copies the block
    twice around a check. */
@@ -302,7 +302,7 @@ class Rig:
 
     def put_title(self, field, value, width=4):
         # compiled["title_magic"]/["title_version"] are CONSTANTS, not offsets; the header
-        # words sit at the block base (beacon.h:49-52)
+        # words sit at the block base (beacon.h:86-89)
         header = {"magic": (0, 4), "version": (4, 2), "size": (6, 2)}
         if field in header:
             at, width = header[field]
@@ -323,7 +323,7 @@ class Rig:
         return to_dict(state), reason
 
     def tick(self):
-        """One service visit's worth of clock: the engine delta advances (beacon.c:228-230)."""
+        """One service visit's worth of clock: the engine delta advances (beacon.c:242-244)."""
         self.put_title("delta", self.delta() + 0x10)
         return self.delta()
 
@@ -355,7 +355,7 @@ def test_layout_is_the_compiled_header_and_title_offset_is_derived(harness, comp
     assert layout["title_version"] == compiled["title_version"] == 1
     for field in ("cookie", "identity", "delta", "generation", "registrations"):
         assert layout["title_" + field + "_field"] == compiled["title_" + field + "_field"]
-    # beacon.h:38 derives the block from the ABI's reserved offset, and so does the binder
+    # beacon.h:75 derives the block from the ABI's reserved offset, and so does the binder
     # (from the shared reader's own layout), so the two headers cannot drift apart.
     assert layout["title_offset"] == compiled["title_offset"] == compiled["reserved_offset"]
     assert layout["caps_shared_mask"] == compiled["caps_shared"] == 0x7F
@@ -371,10 +371,11 @@ def test_layout_is_the_compiled_header_and_title_offset_is_derived(harness, comp
     assert to_dict(made.layout())["title_size"] == 0x40
 
 
-def test_field_offsets_follow_beacon_not_the_specs_stale_host_table(compiled):
-    # C2_BEACON_SPEC.md:474 lists cookie/identity/delta at the block base +0/+4/+8.
-    # beacon.h:53-57 puts them at +0x08/+0x0C/+0x10: the header is authoritative, the spec
-    # table is stale by 8 bytes, and a reader that copied the spec decodes the wrong words.
+def test_field_offsets_follow_beacon_h(compiled):
+    # C2_BEACON_SPEC.md:148-152 and beacon.h:86-96 agree: cookie/identity/delta/generation/
+    # registrations at +0x08/+0x0C/+0x10/+0x14/+0x18. (Spec :474 is the ABSOLUTE-address row,
+    # not a block-relative table.) A reader that assumed the block base was the first field
+    # would decode the wrong words, so the compiled offsets are pinned here.
     assert (compiled["title_cookie_rel"], compiled["title_identity_rel"],
             compiled["title_delta_rel"], compiled["title_generation_rel"],
             compiled["title_registrations_rel"]) == (8, 12, 16, 20, 24)
@@ -464,7 +465,7 @@ def test_a_generation_change_is_lost_then_warming_again(compiled, image):
     states, state = live(made, 3)
     assert states[-1] == "LIVE"
     # a soft reset: the ROM re-mints the cookie and bumps the generation in one block
-    # (beacon.c:159-179) and restarts its own delta from 0 in the same breath
+    # (beacon.c:174-193) and restarts its own delta from 0 in the same breath
     made.put_title("generation", 5)
     made.put_envelope("reserved", 5)
     made.put_title("cookie", 0xFEEDFACE)
@@ -657,7 +658,7 @@ def code_only(source):
     return "\n".join(line.split("--")[0] for line in source.splitlines())
 
 
-# The only 7-8 hex-digit literals allowed in CODE: the title magic (beacon.h:41, checked
+# The only 7-8 hex-digit literals allowed in CODE: the title magic (beacon.h:78, checked
 # against the compiled header by test_layout_is_the_compiled_header) and the u32 mask.
 ALLOWED_HEX = {"0x34474C53", "0xFFFFFFFF"}
 
@@ -795,3 +796,12 @@ def test_the_publish_order_control_moving_the_magic_first_requires_red():
     text = HARNESS.replace("  t->cookie = s->cookie;\n", "")
     text = text.replace("  t->magic = s->magic;\n", "  t->magic = s->magic;\n  t->cookie = s->cookie;\n")
     assert harness_publish_fields(text) != publish_fields(BEACON.read_text(encoding="utf-8"))
+
+
+def test_stable_saturates_instead_of_wrapping_and_dropping_live(compiled, image):
+    made = rig(compiled, image)
+    state, _ = made.go()
+    state["stable"] = 0xFFFF  # a host that has been LIVE for 65535 advancing polls
+    made.tick()
+    state, reason = made.go(state)
+    assert reason is None and state["state"] == "LIVE" and state["stable"] == 0xFFFF

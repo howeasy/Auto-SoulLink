@@ -16,23 +16,24 @@
 --
 -- WHAT THIS ADDS over the shared reader. The shared module decodes the six-scalar envelope
 -- and hands out raw regions; the 64-byte title-private block at the ABI's
--- SLINK_RESERVED_OFFSET (beacon.h:38-39) is Gen 4's own (D-C2-1, beacon.h:22-36) and it
+-- SLINK_RESERVED_OFFSET (beacon.h:75-76) is Gen 4's own (D-C2-1, beacon.h:61-73) and it
 -- carries the liveness facts the shared reader has no opinion about: cookie, identity,
 -- engine-clock delta, generation. This module decodes it and owns the liveness state
 -- machine; it owns nothing else.
 --
--- THE BLOCK IS UNTRUSTED UNTIL VALID (beacon.h:28-31,44-48). It is NOT covered by the
+-- THE BLOCK IS UNTRUSTED UNTIL VALID (beacon.h:61-73). It is NOT covered by the
 -- witness revision protocol, so its publish order and its coherent-snapshot rule are the
--- title's own: the ROM writes payload first and magic LAST (beacon.c:184-196), which means
--- a host sampling mid-visit sees a VALID header over a STALE payload -- never a torn one.
--- That is exactly why this module takes two copies around a check and refuses when they
--- differ: the valid-magic-forever header cannot detect the tear by itself.
+-- title's own: the ROM writes the payload first and magic LAST (beacon.c:195-210), so a
+-- host sampling mid-visit can read bytes of two different visits under a header that already
+-- validates (magic/version/size are constants). That is exactly why this module takes two
+-- copies around a check and refuses when they differ: identical() is the defence, the
+-- publish order is not.
 --
 local Companion = {}
 
 -- LAYOUT. Every number below is an offset or a constant from patch/src/nds/gen4/beacon.h
--- (33-70), never an address. title_offset is DERIVED at run time from the shared reader's
--- own reserved_offset, because beacon.h:38 defines SLINK_GEN4_TITLE_OFFSET as
+-- (SLINK_GEN4_TITLE_* and SlinkGen4Title, beacon.h:75-103), never an address. title_offset
+-- is DERIVED at run time from the shared reader's own reserved_offset, because beacon.h:75 defines SLINK_GEN4_TITLE_OFFSET as
 -- SLINK_RESERVED_OFFSET: deriving it is what stops the two headers from drifting apart.
 --
 -- CONFIG (base and mailbox are required; the two thresholds are optional):
@@ -41,11 +42,11 @@ local Companion = {}
 --                 file has no hidden dofile/require. lua/gen4/entry.lua loads its siblings
 --                 by literal path (entry.lua:181) and passes them in the same way.
 --   stable_polls  K: consecutive coherent polls agreeing on one (generation, cookie) before
---                 LIVE (C2_BEACON_SPEC.md:513-516). PER TITLE and adapter-owned: the
+--                 LIVE (C2_BEACON_SPEC.md:517-520). PER TITLE and adapter-owned: the
 --                 default here is a fallback for a caller that says nothing and is never
 --                 enforced over a value that was given.
 --   stall_polls   N: consecutive polls without a delta advance that make the arena stale
---                 (C2_BEACON_SPEC.md:518-520). Also per title, never enforced over a
+--                 (C2_BEACON_SPEC.md:521-522). Also per title, never enforced over a
 --                 value that was given.
 --
 -- CAPABILITIES NEVER GATE ANYTHING. capabilities is ROM-owned and informational
@@ -56,20 +57,15 @@ local Companion = {}
 -- envelope.
 --
 -- The one 8-hex-digit literal in this file is the title magic, and it is a magic, not an
--- address (beacon.h:41). tests/unit/test_gen4_companion.py asserts it against the value
+-- address (beacon.h:78). tests/unit/test_gen4_companion.py asserts it against the value
 -- the real header compiles to, so it cannot rot into an address unnoticed.
 --
--- LAYOUT. Every number below is an offset or a constant from patch/src/nds/gen4/beacon.h
--- (33-70), never an address. title_offset is DERIVED at run time from the shared reader's
--- own reserved_offset, because beacon.h:38 defines SLINK_GEN4_TITLE_OFFSET as
--- SLINK_RESERVED_OFFSET: deriving it is what stops the two headers from drifting apart.
---
--- beacon.h:38-70. headroom_first_field is the start of the declared reserved[36] tail,
--- which "stays zero" (beacon.h:58); it is REPORTED and never gated (see below).
+-- headroom_first_field is the start of the declared reserved[36] tail, which "stays zero"
+-- (beacon.h SlinkGen4Title.reserved, :95); it is REPORTED and never gated (see below).
 local L = {
-    title_size = 0x40,        -- SLINK_GEN4_TITLE_SIZE (beacon.h:39)
-    title_magic = 0x34474C53, -- SLINK_GEN4_TITLE_MAGIC, "SLG4" little-endian (beacon.h:41)
-    title_version = 1,        -- SLINK_GEN4_TITLE_VERSION (beacon.h:42)
+    title_size = 0x40,        -- SLINK_GEN4_TITLE_SIZE (beacon.h:76)
+    title_magic = 0x34474C53, -- SLINK_GEN4_TITLE_MAGIC, "SLG4" little-endian (beacon.h:78)
+    title_version = 1,        -- SLINK_GEN4_TITLE_VERSION (beacon.h:79)
     title_cookie_field = 0x08,
     title_identity_field = 0x0C,
     title_delta_field = 0x10,
@@ -80,7 +76,7 @@ local L = {
 }
 
 -- Model numbers, sized for the New Game burst the K rule exists to absorb
--- (C2_BEACON_SPEC.md:513-516). A caller-supplied threshold always wins; see new().
+-- (C2_BEACON_SPEC.md:517-520). A caller-supplied threshold always wins; see new().
 Companion.DEFAULTS = { stable_polls = 3, stall_polls = 2 }
 
 local function uint(v, maximum)
@@ -141,11 +137,11 @@ end
 --     lose and this is the start of the K-poll warmup, NOT a lost generation.
 --   * changed (generation, cookie) -> LOST, fresh handshake. That is the soft-reset /
 --     New Game latch: the cookie is re-minted and the generation bumped in one block
---     (beacon.c:159-179, C2_BEACON_SPEC.md:326-336,367-377).
+--     (beacon.c:174-193, C2_BEACON_SPEC.md:326-336,367-377).
 --   * unchanged (generation, cookie) and the engine-clock delta did not advance -> a stall
 --     tick, and N of them -> LOST.
 --   * LIVE only when K consecutive polls agreed on the pair AND the clock advanced on this
---     poll. "advanced at all within N polls", NEVER "advanced by exactly N": the service is
+--     poll. "advanced at all within N polls", NEVER "advanced by exactly N" (C2_BEACON_SPEC.md:403-407): the service is
 --     visited at most once per outer loop iteration and only inside the frame-sync guard
 --     (C2_BEACON_SPEC.md:394-407).
 function Companion.step(previous, sample, opts)
@@ -187,21 +183,26 @@ function Companion.step(previous, sample, opts)
 
     if generation ~= last_generation or cookie ~= last_cookie then
         -- LATCH. The ROM zeroes its own delta in the same block that bumps the generation
-        -- (beacon.c:167), so that reset IS the latch and is deliberately NOT counted as a
+        -- (beacon.c:181), so that reset IS the latch and is deliberately NOT counted as a
         -- stall tick: this branch returns before the clock is examined at all.
         return restart("LOST", 0, 0)
     end
 
+    -- DESIGN (open, owner/ABI call): a stall shorter than N is TOLERATED -- stable is kept and
+    -- only `stalled` moves, so a skipped service visit (C2_BEACON_SPEC.md:403-407) does not
+    -- flap LIVE. The spec says "K consecutive polls" without defining a sub-N stall.
+    -- producer_phase is REPORTED, not gated: spec 6.2 item 5 (phase == 0) is the readiness of
+    -- a publisher, which the C5 consumer reads from state.producer_phase.
     local stable = uint(previous.stable, 0xFFFF) and previous.stable or 0
     local stalled = uint(previous.stalled, 0xFFFF) and previous.stalled or 0
     if delta ~= previous.stable_delta then
-        stable, stalled = stable + 1, 0
+        stable, stalled = math.min(stable + 1, 0xFFFF), 0  -- saturate: a wrap would drop LIVE
     else
         stalled = stalled + 1
     end
     if stalled >= stall_polls then
         -- The arena has not been re-stamped for N polls: drop the bound epoch, drop every
-        -- outstanding request, re-handshake (C2_BEACON_SPEC.md:518-520).
+        -- outstanding request, re-handshake (C2_BEACON_SPEC.md:521-522).
         return restart("LOST", 0, 0)
     end
     return restart((stable >= stable_polls and stalled == 0) and "LIVE" or "WARMING", stable, stalled)
@@ -235,7 +236,7 @@ function Companion.new(io, config)
     local reader, why = mailbox.new(io, { base = config.base, abi = L.abi })
     if not reader then return nil, why end
 
-    -- beacon.h:38: SLINK_GEN4_TITLE_OFFSET IS SLINK_RESERVED_OFFSET. Derived, not copied.
+    -- beacon.h:75: SLINK_GEN4_TITLE_OFFSET IS SLINK_RESERVED_OFFSET. Derived, not copied.
     local title_offset = shared.reserved_offset
     local shared_mask, reserved_mask = shared.caps_shared, shared.caps_reserved
     local title_mask = (~(shared_mask | reserved_mask)) & 0xFFFFFFFF
@@ -257,7 +258,7 @@ function Companion.new(io, config)
             delta = word(raw, L.title_delta_field, 4),
             generation = word(raw, L.title_generation_field, 4),
             registrations = word(raw, L.title_registrations_field, 4),
-            -- Reported, never gated: beacon.h:58 says the tail stays zero, but nothing in
+            -- Reported, never gated: beacon.h:95 says the tail stays zero, but nothing in
             -- the liveness rule reads it and a host write there is transient by design.
             headroom_zero = headroom_clear(raw),
         }, nil
@@ -305,14 +306,14 @@ function Companion.new(io, config)
 
         local title, decode_why = decode(first)
         if not title then return refuse(decode_why) end
-        -- The title's generation is a MIRROR of the mailbox's reserved word (beacon.h:56).
+        -- The title's generation is a MIRROR of the mailbox's reserved word (beacon.h:93).
         -- Equal is the cross-check that binds the two headers into one coherent read; a
         -- mismatch means this poll straddled a latch.
         if title.generation ~= mid.reserved then
             return refuse("title:coherence")
         end
 
-        -- Reported whole: bits 0..6 shared, 7..15 reserved, 16..31 title-private (beacon.h:83).
+        -- Reported whole: bits 0..6 shared, 7..15 reserved, 16..31 title-private (beacon.h:111-125).
         local caps = { word = mid.capabilities, shared = mid.caps_shared,
                        reserved = mid.reserved_bits, title_private = mid.capabilities & title_mask }
         local state = Companion.step(previous, {
