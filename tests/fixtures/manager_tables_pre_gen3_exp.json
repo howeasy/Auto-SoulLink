@@ -272,8 +272,9 @@
     "why": "The calculator has no Polished Crystal data (new species, forms and abilities)."
    },
    "explode_mode": {
-    "ok": true,
-    "why": ""
+    "always": false,
+    "ok": false,
+    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
    },
    "gender_lock": {
     "ok": true,
@@ -285,8 +286,9 @@
     "why": "Not available yet."
    },
    "native_sounds": {
-    "ok": true,
-    "why": ""
+    "always": false,
+    "ok": false,
+    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
    },
    "overworld_presence": {
     "always": false,
@@ -299,12 +301,14 @@
     "why": "Polished Crystal trades at the Pokémon Center's Cable Club receptionist, which the companion patch makes the cartridge's own counter (a cartridge without it has no trade). Always on, nothing to switch off."
    },
    "phone_calls": {
-    "ok": true,
-    "why": ""
+    "always": false,
+    "ok": false,
+    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
    },
    "rival_team_swap": {
-    "ok": true,
-    "why": ""
+    "always": false,
+    "ok": false,
+    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
    },
    "species_lock": {
     "ok": true,

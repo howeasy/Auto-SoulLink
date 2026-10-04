@@ -858,7 +858,7 @@
       "Volcano Badge",
       "Earth Badge"
     ],
-    "explode_mode": true,
+    "explode_mode": false,
     "game_id": "gen2_polished",
     "info_panel": false,
     "info_panel_width": 0,

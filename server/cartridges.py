@@ -38,7 +38,7 @@ def companion_admitted(info: dict) -> bool:
     also needs its activated catalog row."""
     variant = info.get("variant")
     if variant == upr_pipeline.POLISHED_VARIANT:
-        return False   # P5: admitted once patcher.TARGETS carries the overlay card's Polished target
+        return False   # the patcher target exists (SLink-Polished.ups); held until the Polished client composes (lua/gen2/entry.lua)
     if variant in ("Crystal", "Gold", "Silver"):
         return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
     return variant in COMPANION_TITLES

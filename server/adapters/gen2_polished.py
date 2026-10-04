@@ -261,6 +261,11 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return f"{name} ({_form_label(variant)})" if variant else name
 
     def species_types(self, species_id, form=0):
+        # state.py's type clause passes only the species, never the form: for a species that has variant forms
+        # (Alolan Rattata, Paldean Tauros ...) the base types would be judged for the variant, so answer None
+        # and the clause skips the pair rather than deciding it wrongly (review cx-7110b381 #1).
+        if form == 0 and any(key[0] == species_id for key in self._variants):
+            return None
         return tuple(self._row(species_id, form)["type_ids"]) if species_id in self._species else None
 
     def evo_family(self, species_id):
@@ -414,8 +419,11 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return tables
 
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
+    def supports_explode_mode(self):
+        return False             # no Polished client handler exists yet: a queued force_explode would never fire
+
     def reports_box_census(self):
-        return True              # P3: the Polished client reads the newbox/PokeDB layout (NEWBOX.md §6.1)
+        return True              # P3: the Polished client reads the newbox/PokeDB layout (NEWBOX.md §6.1); no client yet
 
     @property
     def mons_per_box(self):

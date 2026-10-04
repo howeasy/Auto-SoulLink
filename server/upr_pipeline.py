@@ -592,8 +592,10 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
             return info
         if info["sha1"] == _polished_sha1():
-            info.update(family=FAMILY_POLISHED, kind="clean", clean=True, variant=POLISHED_VARIANT,
-                        title=f"{POLISHED_VARIANT} · {KIND_WORDS['clean']}")
+            # Recognised, but not offered: there is no Polished client to run it yet (lua/gen2/entry.lua stops at
+            # admission), so every provisioning path refuses it. Flip clean back on with the client card.
+            info.update(family=FAMILY_POLISHED, kind="clean", clean=False, variant=POLISHED_VARIANT,
+                        title=f"{POLISHED_VARIANT} 3.2.3 (the SLink client for it is not ready yet)")
             return info
         gen2_title = _gen2_clean_sha1s().get(info["sha1"])
         if gen2_title:

@@ -13,6 +13,7 @@ Run:
 
 import os
 import re
+import sys
 
 import pytest
 
@@ -219,6 +220,37 @@ def test_pure_targets_advertise_the_admitted_overlay_hashes():
         row = by_title[title]
         assert patcher.TARGETS[slug]["patched_md5"] == row["md5"]
         assert patcher.TARGETS[slug]["base_md5"] == clean[row["base_sha1"]]["md5"]
+
+
+def test_polished_target_advertises_the_built_overlay_and_fails_closed():
+    """The Polished row reads data/polished/overlay_provenance.json live; a missing file drops the row, not the Manager."""
+    import hashlib
+    import json
+    root = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), ".."))
+    with open(os.path.join(root, "data", "polished", "overlay_provenance.json"), encoding="utf-8") as fh:
+        prov = json.load(fh)
+    row = patcher.TARGETS["polished-crystal"]
+    assert row["patched_md5"] == prov["output"]["md5"] and re.fullmatch(r"[0-9a-f]{32}", row["base_md5"])
+    release = os.path.join(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work"), "cache", "polished", "release",
+                           "polishedcrystal-3.2.3.gbc")
+    if os.path.isfile(release):                       # absent skips the content check, wrong fails it
+        with open(release, "rb") as fh:
+            base = fh.read()
+        assert hashlib.md5(base).hexdigest() == row["base_md5"]
+        sys.path.insert(0, os.path.join(root, "patch", "tools"))
+        from make_ups import ups_apply
+        with open(patcher.patch_path("polished-crystal"), "rb") as fh:
+            patched = ups_apply(base, fh.read())
+        assert hashlib.md5(patched).hexdigest() == row["patched_md5"]
+        assert hashlib.sha1(patched).hexdigest() == prov["output"]["sha1"]
+    saved = patcher._polished_overlay_md5
+    patcher._polished_overlay_md5 = lambda: (_ for _ in ()).throw(FileNotFoundError("gone"))
+    try:
+        assert "polished-crystal" not in patcher.targets()
+    finally:
+        patcher._polished_overlay_md5 = saved
+        patcher.targets()
+    assert "polished-crystal" in patcher.TARGETS
 
 
 def test_gen2_targets_advertise_the_admitted_overlay_hashes():

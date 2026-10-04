@@ -221,23 +221,32 @@ def _build_targets() -> dict[str, dict]:
         "out_name":    "Pokemon Silver (SLink companion).gbc",
         "base_hint":   "a clean pokesilver US build (sha1 49b163f7e57702bc939d642a18f591de55d92dae)",
     },
-    # Polished Crystal v3.2.3 standard: the release ROM is a full build (no base ROM), pinned in
-    # data/polished_sources.lock.json; base_md5 is that release file's md5.
-    "polished-crystal": {
-        "slug":        "polished-crystal",
-        "label":       "Polished Crystal",
-        "patch":       "SLink-Polished.ups",
-        "base_md5":    "53d90e468c9eae4d602feacc6295a021",
-        "patched_md5": _polished_overlay_md5(),
-        "accept":      ".gbc,application/octet-stream",
-        "out_name":    "Polished Crystal (SLink companion).gbc",
-        "base_hint":   "polishedcrystal-3.2.3.gbc from the v3.2.3 release (sha1 6930b48af5844d373e3c9130f26d6dd1084cf4ed)",
-    },
 }
 
 DEFAULT_TARGET = "rr"
 
 # The same build manifest pins the downloadable patch and runtime admission.
+def _register_polished(targets: dict[str, dict]) -> None:
+    """Polished Crystal v3.2.3 standard: the release ROM is a full build (no base ROM), pinned in
+    data/polished_sources.lock.json; base_md5 is that release file's md5. The overlay md5 is read live from
+    data/polished/overlay_provenance.json; a missing or unreadable file leaves the target out (fail closed per
+    target, never an import-time crash for every family)."""
+    try:
+        patched = _polished_overlay_md5()
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+    targets["polished-crystal"] = {
+        "slug":        "polished-crystal",
+        "label":       "Polished Crystal",
+        "patch":       "SLink-Polished.ups",
+        "base_md5":    "53d90e468c9eae4d602feacc6295a021",
+        "patched_md5": patched,
+        "accept":      ".gbc,application/octet-stream",
+        "out_name":    "Polished Crystal (SLink companion).gbc",
+        "base_hint":   "polishedcrystal-3.2.3.gbc from the v3.2.3 release (sha1 6930b48af5844d373e3c9130f26d6dd1084cf4ed)",
+    }
+
+
 def _register_gen3_companions(targets: dict[str, dict]) -> None:
     import json
     manifest = _GEN3_COMPANIONS
@@ -262,6 +271,7 @@ def targets() -> dict[str, dict]:
     """The registry as the files on disk say NOW. A release stamp rewrites the pins and manifests while a Manager may
     be running, so every use re-reads them (a few small JSON files) into the one TARGETS dict importers hold."""
     fresh = _build_targets()
+    _register_polished(fresh)
     _register_gen3_companions(fresh)
     TARGETS.clear()
     TARGETS.update(fresh)
