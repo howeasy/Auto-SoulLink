@@ -9,7 +9,10 @@
         "offset": 3653128,
         "length": 20
       },
-      "rom_sha1": "b6875d24c34d44347de6e4c211e1c00d64da1cc3"
+      "rom_sha1": "b6875d24c34d44347de6e4c211e1c00d64da1cc3",
+      "equivalent_sha1s": [
+        "e87a6a7e4fc98a8840ef9ea0511e443ef4659219"
+      ]
     },
     "rb-red": {
       "patched_md5": "c5c715cda8b0fa178ab30f4fd9e4d821",

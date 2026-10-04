@@ -175,8 +175,14 @@ function Entry.admission_table(root, json)
             for kind, artifact in pairs(artifacts) do
                 local row = { pack = pack, title = title, kind = kind,
                               rom_type = def.rom_type[title], production = artifact.production }
-                for _, key in ipairs({ "rom_sha1", "rom_md5" }) do
-                    local digest = artifact[key]
+                -- equivalent_sha1s: earlier stamps of this same canonical build (only the menu-version
+                -- field differs), still on players' cartridges, so they admit as this artifact.
+                local digests = { { "rom_sha1", artifact.rom_sha1 }, { "rom_md5", artifact.rom_md5 } }
+                for _, sha1 in ipairs(artifact.equivalent_sha1s or {}) do
+                    digests[#digests + 1] = { "equivalent_sha1", sha1 }
+                end
+                for _, pair in ipairs(digests) do
+                    local key, digest = pair[1], pair[2]
                     if digest then
                         digest = digest:lower()
                         local prior = table_[digest]

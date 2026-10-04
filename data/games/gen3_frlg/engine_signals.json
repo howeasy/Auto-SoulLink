@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_frlg",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "f6c7a1e22b0f04574bae7f714a7d92b2a3b322894a7b957474e4efcda728bed3",
+  "sha256": "f7dd704abe7307b45062938e45f6f9b638d4c1bf07d9bdf7d4ad2a37e6af80dc",
   "titles": {
     "firered": {
       "artifacts": {
@@ -641,6 +641,9 @@
           }
         },
         "companion": {
+          "equivalent_sha1s": [
+            "96df1dd019b7ec5515b65ab26c82a251f47eb06d"
+          ],
           "production": true,
           "rom_md5": "bd44b29ac1ace67e0cc6470183f82748",
           "rom_sha1": "78ead75def87b1284b9c5b89ce1be5c1014d2fe1",
@@ -1912,6 +1915,9 @@
           }
         },
         "companion": {
+          "equivalent_sha1s": [
+            "55fb6e9bfa79d562d727b65077fa85064f342b60"
+          ],
           "production": true,
           "rom_md5": "4c2610c5d13e46daf91f0a7ab2167bd5",
           "rom_sha1": "e77b1662d655e2e8a1911763e35b79e1b94415e4",

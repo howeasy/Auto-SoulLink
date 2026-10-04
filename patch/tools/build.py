@@ -380,6 +380,9 @@ def write_pin(slug, entry):
     fields = dict(entry)
     if old.get("canonical_sha1") != entry["canonical_sha1"]:
         fields.update({key: [] for key in old if key.startswith("equivalent_")})
+    elif old.get("rom_sha1") and old["rom_sha1"] != entry.get("rom_sha1"):
+        # a version stamp: the replaced build is still on players' cartridges, so it stays admissible
+        fields["equivalent_sha1s"] = sorted({*old.get("equivalent_sha1s", ()), old["rom_sha1"]} - {entry.get("rom_sha1")})
     companion_pins.update(slug, fields, pins_path())
 
 

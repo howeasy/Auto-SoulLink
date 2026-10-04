@@ -32,6 +32,11 @@ def rom_sha1(path: Path = PINS) -> str:
     return row["rom_sha1"]
 
 
+def equivalent_sha1s(path: Path = PINS) -> list[str]:
+    """Earlier stamps of the same canonical build (patch/tools/build.py write_pin)."""
+    return list(pin(path).get("equivalent_sha1s") or [])
+
+
 def canonical_sha1(path: Path = PINS) -> str:
     return pin(path)["canonical_sha1"]
 

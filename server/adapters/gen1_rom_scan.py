@@ -117,6 +117,11 @@ def _load_purergb_admission() -> dict:
         for name in ("admission.json", "admission_overlay.json"):
             with open(os.path.join(_PUREGB_DATA, name), encoding="utf-8") as f:
                 rows.update(json.load(f))
+        # Earlier stamps of the same canonical build (only the menu-version field differs) are
+        # still on players' cartridges: each resolves to the row that lists it.
+        for row in list(rows.values()):
+            for old in row.get("equivalent_sha1s") or ():
+                rows.setdefault(old, row)
         _PUREGB_ADMISSION_CACHE = rows
     return _PUREGB_ADMISSION_CACHE
 

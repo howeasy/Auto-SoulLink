@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_emerald",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "db0e42a9bd9f1c57dd30dbb287738ba6817e334651838557669742c89d0d61b6",
+  "sha256": "2516b924686efe6f0f7cb5496b78f3159e7783273076f970c47fbc7f661e57d0",
   "titles": {
     "emerald": {
       "artifacts": {
@@ -641,6 +641,9 @@
           }
         },
         "companion": {
+          "equivalent_sha1s": [
+            "f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b"
+          ],
           "production": true,
           "rom_md5": "d42abd51a4252ca80f53416630549944",
           "rom_sha1": "9aff3d2a43790424e9a11b324d7a4259e64d8ee7",

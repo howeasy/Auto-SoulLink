@@ -249,6 +249,20 @@ def test_write_pin_replaces_one_slug_and_keeps_every_other(tmp_path, monkeypatch
     assert json.loads(path.read_text())["pins"]["rb-red"] == RB
 
 
+def test_a_stamp_lists_the_build_it_replaces(tmp_path, monkeypatch):
+    """A version stamp (same canonical identity, new exact sha1) keeps the replaced build admissible: cartridges patched with it
+    are still in players' hands. The v0.3.0 stamp dropped Radical Red's dev build because write_pin never added it."""
+    dev = {"patched_md5": "0" * 32, "rom_sha1": "d" * 40, "canonical_sha1": "e" * 40, "version": "dev"}
+    path = seeded_pins(tmp_path, monkeypatch, dev)
+    stamped = {**dev, "patched_md5": "1" * 32, "rom_sha1": "2" * 40, "version": "v0.3.0"}
+    build.write_pin("rr", stamped)
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == ["d" * 40]
+    build.write_pin("rr", {**stamped, "rom_sha1": "3" * 40, "version": "v0.3.1"})   # the next stamp keeps the history
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == sorted(["d" * 40, "2" * 40])
+    build.write_pin("rr", {**stamped, "rom_sha1": "3" * 40, "version": "v0.3.1"})   # an unchanged rebuild adds nothing
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == sorted(["d" * 40, "2" * 40])
+
+
 def test_pin_problems_reports_a_stale_or_missing_row(tmp_path, monkeypatch):
     entry = {"patched_md5": "1" * 32, "rom_sha1": "2" * 40, "canonical_sha1": "e" * 40, "version": "dev",
              "version_slot": {"offset": 7, "length": 20}}

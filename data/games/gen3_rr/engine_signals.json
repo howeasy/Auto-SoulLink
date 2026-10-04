@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "475bfe9a7a5e937c223b49d230dfe0bad29320e5a3f3670db9f04ded3aeca02c",
+  "sha256": "4c217db2f539e4163b2b86d647d0d805a3bf1f18dca5e5c31f6d688fec5ff6f9",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -856,6 +856,9 @@
           }
         },
         "companion": {
+          "equivalent_sha1s": [
+            "e87a6a7e4fc98a8840ef9ea0511e443ef4659219"
+          ],
           "production": true,
           "rom_md5": "b9b8304c0c189bfbe54e9fc8df33c486",
           "rom_sha1": "b6875d24c34d44347de6e4c211e1c00d64da1cc3",

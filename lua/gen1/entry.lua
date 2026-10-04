@@ -114,8 +114,14 @@ function Entry.admission_table(root, json)
             for _, key in ipairs({ "admission", "admission_overlay" }) do
                 if files[key] then
                     for sha, row in pairs(load_json(json, root .. "/" .. files[key])) do
-                        table_[sha:lower()] = { pack = pack, title = row.title, kind = row.kind or "clean",
-                                                rom_type = def.rom_type[row.title] }
+                        local hit = { pack = pack, title = row.title, kind = row.kind or "clean",
+                                      rom_type = def.rom_type[row.title] }
+                        table_[sha:lower()] = hit
+                        -- earlier stamps of this same canonical build (only the menu-version field
+                        -- differs): still on players' cartridges, so they admit as this row
+                        for _, old in ipairs(row.equivalent_sha1s or {}) do
+                            if not table_[old:lower()] then table_[old:lower()] = hit end
+                        end
                     end
                 end
             end

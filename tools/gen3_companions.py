@@ -97,6 +97,9 @@ def published(title, clean, root=ROOT):
 def artifact(clean_artifact, rom, row):
     out=copy.deepcopy(clean_artifact)
     out.update(production=True,rom_sha1=row["rom_sha1"],rom_md5=row["rom_md5"])
+    if row.get("equivalent_sha1s"):
+        # earlier stamps of the same canonical build: still on players' cartridges, admitted as this artifact
+        out["equivalent_sha1s"]=list(row["equivalent_sha1s"])
     frame=out["sites"]["frame_control"]
     # FR/LG replace CallCallbacks completely, so the old +10 help-call site is
     # unreachable. Observe its real entry (the detour), as Emerald already does.
