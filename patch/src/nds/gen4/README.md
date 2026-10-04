@@ -5,14 +5,39 @@ only**: where the mailbox is, when the service runs, and which module is compile
 
 | File | Role |
 |---|---|
-| `beacon.h` | Title-private block layout (D-C2-1), capability policy, the SysTask heap state block, `Slink_NDS_Register()` |
-| `beacon.c` | Arena placement, cookie/liveness, the reset latch, the per-visit body |
-| `dispatch.h` / `dispatch.c` | Every producer, every visit, no opcode pre-route |
-| `README.md` | This file: integration points, addresses, resolved ambiguities |
+| `beacon.h` | Versioned 0x40 title layout; exported `Slink_NDS_ArenaBase()` and host-testable `Slink_NDS_SpanBase()`; one heap state with versioned sound/panel/trade sub-structs and one capability publisher |
+| `beacon.c` | Arena binding, cookie/session liveness, reset latch, one service registration/body |
+| `dispatch.h` / `dispatch.c` | Producer fan-out every visit; C3 `sound.c`, C4 `panel.c`, C5 `trade.c`; no opcode pre-route |
+| `sound.h` / `sound_policy.h` | C3 service interface and header-only code/hold/capability policy; game sound.c still missing |
+| `panel.h` / `panel_policy.h` | C4 service interface, shared-producer state, gate/result policy; game panel.c still missing |
+| `trade.h` / `trade_policy.h` | C5 interface and header-only arm/commit policy; game trade.c still missing; post-save-only ruling |
+| `README.md` | Integration points and evidence boundaries |
+
+The accessor/sub-struct amendment is `2f89685a`; C5 headers `cff81909`; C4 headers
+`d68e8137` on `claude/gen4-companion-policy`. Read that branch with `git show`;
+this c1046d07-based tree still has the earlier header and no game bindings.
+Authoritative side-branch locations: `beacon.h:29-57,169-220`,
+`dispatch.c:34-46`, `trade_policy.h:281-301,383-410`, `panel_policy.h:95-119`.
+No C3/C4/C5 policy stores a second producer outside its owning heap sub-struct.
 
 `patch/src/nds/common/abi.h` is used **UNMODIFIED**. Nothing here includes it with a
 game header in the same translation unit as `trade_targets/abi.h` (that pairing trips
 `abi.h:31-33`).
+
+## Toolchain evidence (2026-10-04)
+
+The coordinator-verified hgbox job compiled `beacon.c/dispatch.c` and shared
+`common/*.h` at **nds-shared 78c2a0a0** using the real pinned pret **mwccarm
+2.0/sp2p2**, `-W error`, with no shim (freeze record `docs/gen4/RESUME.md`, checkpoint 12,
+C2 beacon row; compiler provenance `companion/FEATURE_BAR.md:137`). This is compile
+SOURCE evidence, not a linked ROM, reproducible build or PHYSICAL pass. The raw job
+log is not in this worktree and was not independently replayed by this docs card.
+
+**Version boundary:** this tree's `common/abi.h` predates `compat.h`; the 78c2a0a0
+header instead includes compat.h and defines SLINK_TITLE_OFFSET/SIZE. Do not claim
+the old header was that compiler job's input. The approved landing order is ABI+
+compat.h, then beacon title-offset comment correction, then the mailbox reader;
+see `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
 
 ## Build include paths
 
@@ -150,10 +175,12 @@ payload rather than a valid header over a torn one.
 11. **Task priority 0** puts the beacon at the head of the frame
     (`src/sys_task.c:124-133`); game tasks use 0 and 1000+.
 
-## Host side (not this card)
+## Host side (side branch, not landed here)
 
-`lua/gen4/companion.lua` is a pure reader of the mailbox header plus
-`+0x00/+8/+C/+10/+14/+18` of the title block. It must not require a capability bit for
+`lua/nds/mailbox.lua` plus `lua/gen4/companion.lua` are delivered on
+`claude/gen4-nds-mailbox@1f339a29`. The shared reader copies the mailbox and the
+title binder validates the versioned header (+0/+4/+6), published +8/+C/+10/+14/+18
+fields, and reports the +0x1C reserved tail. See `docs/shared-nds-mailbox.md`. It must not require a capability bit for
 liveness — the shared enum has no beacon member (`C2_BEACON_SPEC.md:436-442`) — and it
 must read the `"Instruction TCM"` domain, not the ARM9 mirror of the same bytes
 (`C2_BEACON_SPEC.md:411-415`).

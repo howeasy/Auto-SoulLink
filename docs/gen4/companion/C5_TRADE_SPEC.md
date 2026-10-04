@@ -1,5 +1,7 @@
 > **Status: DRAFT** (OMP cx-52e45b38, 2026-10-02). The coordinator's review decisions are below; they WIN over the draft.
 >
+> - **Q3 RESOLVED, owner 2026-10-04: SAVE ONLY AFTER.** No pre-commit save. `start_pre_save/poll_pre_save` are YesNo consent only; RAM commit precedes the post-save durability witness. See `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
+> - **hge delivery is PATCH ONLY:** no commit to the owner's fork before an approved branch.
 > - **Q1 (MUTATES_INPUT on the PK4 binding): no owner call needed.** My ruling summary was imprecise. The flag stays set (a harmless scratch copy for the party raw copy); DECISIONS is corrected. No shared edit.
 > - **D1:** PLAN.md's stale box-delivery lines are fixed (C5 row + open question 3 closed by the party-only ruling).
 > - **F5:** the hge fork is at `E:/Howard/HGEngine_ROMHack/hg-engine` (not under hgss_archipelago-master). The hge citations go through FEATURE_BAR until C6 re-reads them there.
@@ -216,8 +218,9 @@ remains the box path (`record_binding.h:36-39`, `README.md:92-96`), which Gen 4 
 ### 3.2 The identity gate: the engine's decrypt, on a scratch, never on `s->incoming`
 
 `tp_accept_stage` runs `validate` and `identity` **on `s->incoming`**
-(`trade_producer.h:151-155`), and `tp_service` then hands `s->incoming` to `start_scene`
-(`:292`). For PK4 both callbacks need a `SlinkDecoder` — without one they **fail closed**
+(`trade_producer.h:151-155`), and `tp_service` then copies the bytes to `s->scratch` and hands THAT copy to
+`start_scene` (`trade_producer.h:296-302`), because the PK4 binding sets
+`SLINK_RB_COMMIT_MUTATES_INPUT` (`record_binding.h:167-171`). For PK4 both callbacks need a `SlinkDecoder` — without one they **fail closed**
 (`record_binding.h:33-40, 119-140`; `README.md:76-77`).
 
 The engine supplies everything the decoder needs, with no new cipher:
@@ -335,10 +338,18 @@ C5 is **INFERRED-unused** and must be tested (F4).
 (`README.md:32-35`). `SAVE_PENDING` past `save_timeout_frames` is FAIL, so `UNCERTAIN` stays
 reachable after `COMMIT_ENTERED` (`trade_producer.h:160-171`).
 
-**Ordering matches the accepted Gen 1 flow**: consent → save → commit
-(`patch/gen1/src/trade_receptionist.asm:54-57`, `patch/gen1/src/trade_ui.asm:114-135`). The
-Gen 4 pre-save maps to that same point; **INFERRED**, because the Gen 1 pre-save is a game-context
-save and the Gen 4 pre-save here is a script-context save. See §7 Q3.
+**OWNER RESOLVED 2026-10-04: SAVE ONLY AFTER.** Gen 4 ordering is
+consent → arm → commit marker → RAM write → post-save begin/poll → durable result.
+There is NO pre-commit native save, unlike Gen 1. The shared hooks named
+`start_pre_save/poll_pre_save` bind YesNo consent only; a label is not a save witness.
+
+The policy's two-phase shape is explicit: `slink_gen4_trade_start_scene` only arms
+(`trade_policy.h:281-301`); `Slink_Gen4Trade_CommitEntered` publishes the commit marker
+(:383-388), then `Slink_Gen4Trade_Commit` writes the pristine incoming bytes (:393-410).
+Citations are to `claude/gen4-companion-policy@d68e8137`, not an implemented game ScrCmd.
+The consent-to-ready adapter callbacks still need a game binding, but Q3 is no longer an
+owner decision. See `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
+
 
 ---
 
@@ -408,7 +419,7 @@ cancel, which is only true because nothing is published before consent.
 
 | # | Claim | Class | Method | Pass |
 |---|---|---|---|---|
-| **F1** | The received record lands **byte-exact (encrypted)** in the chosen slot | S+M+P | S: static — the decoder writes only to a third buffer (§3.2), and `start_scene` is handed `s->incoming` unmodified (`trade_producer.h:292`). M: a fake engine captures the pointer; assert it equals the staged bytes. P: on a patched cartridge, after commit, read the party slot and byte-compare against the host's `encrypt_party` output — **no decrypt on the ROM side** | Byte-identical, all three |
+| **F1** | The received record lands **byte-exact (encrypted)** in the chosen slot | S+M+P | S: static — the decoder writes only to a third buffer (§3.2), and `start_scene` is handed the byte-identical `s->scratch` copy (`trade_producer.h:296-302`, PK4 MUTATES_INPUT flag `record_binding.h:167-171`). M: assert pointer non-aliasing AND equal staged bytes; the policy only arms there, then CommitEntered precedes Slink_Gen4Trade_Commit reading pristine incoming. P: on a patched cartridge, after commit, read the party slot and byte-compare against the host's `encrypt_party` output — **no decrypt on the ROM side** | Byte-identical, all three |
 | **F2** | Cancel leaves the party unchanged | M+P | B at the YesNo gate; 255 at `GetPartySelection`; `no` at PREPARE. Snapshot all 6 slots before and after | Byte-identical; no milestone above `SLINK_VISIT_ACCEPTED` |
 | **F3** | A stale or mismatched stage is refused | S+M | (a) `stage_len != 0xEC`; (b) `binding_id != 4`; (c) `generation != 4`; (d) an unknown `flags` bit; (e) `RAW_ENCRYPTED` cleared; (f) `layout_version != 1`; (g) `claimed_pid/otid` altered; (h) a record whose `CHECKSUM` disagrees. Each must be `SLINK_TRADE_UNCHANGED` with the party untouched (`trade_producer.h:146-155`) | Every case refused, no mutation, no ack-with-OK |
 | **F4** | An out-of-range or stale slot is refused, **never asserted** | S+M+P | Force `slot >= Party_GetCount` (a party of 3, slot chosen as 5 by a synthetic script path) and a `locate()` that disagrees with the chosen slot | No `GF_AssertFail`; `SLINK_TRADE_UNCHANGED`; party byte-identical. Pins `src/party.c:9-12` + `config.mk:36-37` |
@@ -467,10 +478,10 @@ to it and it must be proven at the cited class).
    `CONTINUE`/`NEXT`/`SUCCESS`; `SlinkSavePoll` is PENDING/OK/FAIL
    (`trade_producer.h:144-146`). **INFERRED**: `SUCCESS` → OK, `CONTINUE`/`NEXT` → PENDING,
    anything else → FAIL. Must be pinned at C5 MODEL.
-3. **Pre-save semantics.** §3.5 maps the YesNo gate onto `start_pre_save`. That gives consent, not
-   a save. Gen 1's pre-save is a real game-context save before the commit
-   (`patch/gen1/src/trade_receptionist.asm:55-57`). **INFERRED**: Gen 4 needs no pre-commit save,
-   because the party write is in RAM and durability is the post-save's job. **Owner call.**
+3. **Q3 CLOSED, owner 2026-10-04: SAVE ONLY AFTER.** The YesNo hooks are consent only,
+   not a native pre-save. The party write is RAM; post-save supplies durability (§3.5).
+   The concrete consent-to-ready engine binding is still SOURCE work, not an unresolved policy.
+   See `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
 4. **`UpdatePokedexWithReceivedSpecies`** (`src/npc_trade.c:155`). The native trade calls it so the
    received species is registered. Soul Link pairs usually arrive already registered. **INFERRED**:
    call it. Cheap and faithful to the native shape; **owner call** if the coordinator wants the

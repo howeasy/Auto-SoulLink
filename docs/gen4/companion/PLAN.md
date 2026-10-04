@@ -1,13 +1,28 @@
 # Gen 4 companion plan (HG/SS + hg-engine), draft 2026-10-02
 
-**Status:** a draft for coordinator review and owner sign-off. Nothing here is built. Facts come from `FEATURE_BAR.md` (cited as FB) and repo files. Anything not yet proven is marked UNKNOWN.
+**Status (2026-10-04):** specifications plus delivered SOURCE/MODEL side-branch work;
+no linked/shipping companion or PHYSICAL qualification is claimed. Facts come from FB,
+the cited source and `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
+
+| Card | Delivered offline | Remaining |
+|---|---|---|
+| C2 | ROM source + interface amendment `2f89685a` (arena accessor and per-card heap structs); shared mailbox + title binder `claude/gen4-nds-mailbox@1f339a29`, with committed MODEL tests | ROM integration/link and live beacon/canary |
+| C3 | `sound.h/sound_policy.h`, `2f89685a`; SOURCE/MODEL policy | `sound.c` game binding, listen/trace PHYSICAL |
+| C4 | `panel.h/panel_policy.h`, C4_FACTS and MODEL tests `d68e8137` | `panel.c`, START hook, heap/window bindings, link and PHYSICAL |
+| C5 | `trade.h/trade_policy.h`, MODEL tests `cff81909` | `trade.c`/ScrCmd/save bindings and PHYSICAL exchange |
+| Build/host integration | side-branch title reader exists (1f339a29) | `tools/build_gen4_companion.py` still absent; reader/run integration not in c1046d07 |
+
+These are side-branch delivery records, not a statement that their files are in this freeze.
+This documentation card does not rerun those branches' MODEL suites.
 
 **Authority:** `docs/gen4/reviews/DECISIONS_2026-10-01.md`, the owner rulings of 2026-10-02:
 - the companion is REQUIRED for the first RC at the Gen 1/2 bar;
 - trade is in the minimum;
 - two artifacts;
 - no peer ghost and no native message boxes;
-- the shared NDS stack with Gen 5 has the go-ahead.
+- the shared NDS stack with Gen 5 has the go-ahead; landing requires independent review and the batched window (owner 2026-10-04).
+- C5 is SAVE ONLY AFTER: YesNo consent is not a pre-commit native save.
+- hge fork work is prepared as a patch only; no owner-fork commit until an approved branch.
 
 ## 1. Scope
 
@@ -32,7 +47,7 @@
 
 **Two artifacts (owner ruling), one design:**
 - **A. HG/SS.** Patch the PINNED pret `pokeheartgold` source (`data/gen4_sources.lock.json`, pin `ad7a3afa`; see the `reference_gen4_pret_pinned_tree` memory) with a new overlay plus hooks, then rebuild. The output is distributable as a diff against the pinned vanilla dumps. This is the Gen 2 model: `tools/build_gen2_companion.py` copies `patch/gen2/src/*` into a fresh pinned checkout, builds, writes `patch/dist/*.ups` via `patch/tools/make_ups.py`, and records provenance. The pret tree is never edited in place; the build runs in a cache directory, like `.cache/gen2-build`. There is no slack in vanilla HG/SS (FB, build shape), so appending bytes is not an option.
-- **B. hge.** A `src/slink/` overlay module plus one `hooks` line inside the owner's hg-engine fork (a SLink branch), built by the fork's own make. There is no post-build patch (FB). The result is a NEW pinned hge build; the current pin is `cb2dc435`. The build runs on the owner's `hgbox` (`tools/gen4_hge_build.py`, ssh, outputs under `.cache/gen4/hge/build-<commit12>/`). Whether the box is reachable for the C6 build is UNKNOWN.
+- **B. hge.** A prepared patch for the owner's hg-engine fork: `src/slink/` module, START-table `repoints`, one inhibit-bit `hooks` row, and the armips `.org` C3 latch (`C6_HGE_BUILD_SPEC.md:3,51,241`). Nothing is committed in the owner's fork until a branch is approved. The planned result uses the fork's own make. There is no post-build patch (FB). The result is a NEW pinned hge build; the current pin is `cb2dc435`. The build runs on the owner's `hgbox` (`tools/gen4_hge_build.py`, ssh, outputs under `.cache/gen4/hge/build-<commit12>/`). Whether the box is reachable for the C6 build is UNKNOWN.
 
 **Layers:**
 
@@ -62,13 +77,13 @@ The "Shared?" column marks a touch of `lua/*.lua`, `lua/core/**` or `server/**`.
 | **C1** mailbox proof | `tools/gen4_mailbox_census.py` (new, cf. `tools/gen2_mailbox_census.py`), `lua/tests/probe_gen4_mailbox.lua`, `tests/live/test_gen4_mailbox.py`, receipts | C0 for HG/SS; the hge build for hge; G1 hook rows d, h, n | A control address that the game is known to write must trip the watch (known-positive control) | S: ELF gap and arena table. P: a write-watch over boot, field, battle, menu and SAVE with zero foreign writes on HG, SS and hge. Output: ONE accepted address per artifact, or "no address, escalate" | No (lua/tests only) |
 | **C2** beacon, caps, liveness | `patch/src/nds/gen4/beacon.*`, `lua/gen4/companion.lua` (new) | C1, shared cards 1-2 | Boot with the patch and then New Game: a stale cookie must NOT read as live (Gen 2 liveness rule) | S: ABI bytes in the built ELF. M: lupa world for cookie, counter and capability gating. P: hello and caps read live on HG, SS and hge | No (new gen4-only file). `lua/gen4/client.lua` hookup is deferred to C7 only if it touches shared state, UNKNOWN. **`patch/src/nds/common/abi.h` is NOT an exclusive Gen 4 file** (corrected 2026-10-03): Gen 5 card 2 owns it and Gen 4 co-owns, so it is not listed here. The comment-only `abi.h` rulings Gen 4 depends on (title-private cap bit 16, title-private reason 32, the `result = 0x7F` comment) are **queued with the shared-stack owner**, not owned by C2. |
 | **C3** sound | `patch/src/nds/gen4/sound.*`, `tests/unit/test_gen4_sound_codes.py` | C2 | A code written to the mailbox while the field task is inactive must not play, and a held code must expire (bounded hold) | S: code table and `PlaySE` call site. P: audible and trace-verified SE on all three artifacts (**success, boo, notify**). (corrected 2026-10-03: **failure** is dropped from the PHYSICAL exit evidence — the FAILURE sound is PENDING by owner ruling and must not be guessed, so it is never played and can never be heard; it is proved by *refusal* with reason 32, not by an audible receipt. See `C3_SOUND_SPEC.md` F5.) Open: the SE id choice is a content decision | No |
-| **C4** START panel | `patch/src/nds/gen4/start_menu_hook.*`, `patch/src/nds/gen4/panel_overlay.*`, panel-payload layout in the ABI | C2; C1 for any new RAM | The start menu in a save without the capability must not show the SLINK row (capability-gated); the row at fixed display slots 7/8 (`ACTION_9`/`_10`) must stay unmoved | S: `sStartMenuActions` bytes and the cleared inhibit bit. M: payload round trip. P: a screenshot of the panel on the top screen and the touch screen, plus the menu closing without a leak, on HG, SS and hge | No |
+| **C4** START panel | `patch/src/nds/gen4/panel.c`, `panel.h`, `panel_policy.h`, title-owned START integration; shared panel layout is ABI-owner-owned (`dispatch.c:41-43` pins panel.c) | C2; C1 for any new RAM | The start menu in a save without the capability must not show the SLINK row (capability-gated); the row at fixed display slots 7/8 (`ACTION_9`/`_10`) must stay unmoved | S: `sStartMenuActions` bytes and the cleared inhibit bit. M: payload round trip. P: a screenshot of the panel on the top screen and the touch screen, plus the menu closing without a leak, on HG, SS and hge | No |
 | **C5** trade | `patch/src/nds/gen4/trade_*`, `lua/nds/trade_lease.lua` (or an extended `gb_trade_lease.lua`), the `std_nurse_joy` branch | C2, C4 panel for UX; the shared PK45 cipher (card 3) | An unmodified save plus a staged blob with a bad checksum must be refused, and a partial commit must leave the party byte-identical | S: confirmed std dispatch, commit offsets. M: lease state machine and blob round trip. P: duo exchange on HG-HG, SS-SS and hge-hge with the native SAVE and a cold-reload witness (`tools/e2e_duo.py` row). (Box delivery dropped: owner ruling 2026-10-02, trade is PARTY-ONLY; see C5_TRADE_SPEC.md) | Possibly (host lease). Batched into C7 if so |
-| **C6** hge in-fork module + rebuild + re-pin | The fork: `src/slink/`, one `hooks` line (SLink branch); in SLink: `data/gen4_sources.lock.json` and `tools/gen4_hge_build.py` | C2-C5 source in a stable form; owner's fork access | A fresh build whose `test.nds` sha1 is not reproducible (the tool's own finding) | S: build sha1, the new pin. P: C1-C5 receipts on the new hge | No |
+| **C6** hge in-fork module + rebuild + re-pin | Prepared fork patch: `src/slink/`, START `repoints`, one inhibit-bit `hooks` row, C3 armips `.org` patch; owner-approved branch required before fork commits; in SLink: `data/gen4_sources.lock.json` and `tools/gen4_hge_build.py` | C2-C5 source in a stable form; owner's fork access | A fresh build whose `test.nds` sha1 is not reproducible (the tool's own finding) | S: build sha1, the new pin. P: C1-C5 receipts on the new hge | No |
 | **C7** distribution + admission | `server/patcher.py` (`TARGETS`), `server/manager.py` (`COMPANION_TITLES`, D13), `patch/dist/SLink-HeartGold.ups` and `SLink-SoulSilver.ups`, hge distributable, `tools/verify_gen4_release.py` rows, `tests/unit/test_manager_option_labels.py` | C1-C6; G3a window | A ROM patched with the UPS differs from the build output (round-trip), or the Manager lists HG/SS before the G4 sign-off | S/M: round-trip UPS, unit tests, Gen 1/2/3 lanes green. The one batched shared diff | **YES**, the single shared window for all of `lua/*.lua`, `lua/core`, `server/**` |
 | **C8** PHYSICAL re-run | Receipt files only | C7 | A receipt bound to a vanilla sha1 must fail verification on a patched ROM (it forces a re-run) | P: every G1-G4 PHYSICAL receipt re-run on the patched HG, SS and hge | No |
 
-**Batching rule:** every shared-code edit (a possible `lua/gen4/client.lua` hookup, `lua/nds/*` if shared, `server/**`) lands once in C7, together with the Gen 2 notification and the ~2 h re-sweep (`feedback_ping_gen2_before_server_changes`). New `lua/gen4/*` and `lua/nds/*` files that touch nothing shared can land earlier.
+**Batching rule (C2 amendment, 2026-10-04):** edits to EXISTING shared modules and `server/**` land in C7 with the Gen 2 window/re-sweep. NEW shared reader files under `lua/nds` may land at C2: they are outside the Gen 2 digest scope but inside the Gen 4 evidence surface and must precede live checks. The broader Gen 5 shared stack lands after independent review in the approved batched window; see the decision note.
 
 **Why not parallelize C6 early:** the hge fork must carry the stable overlay source. Doing C6 before C2-C5 settle would force a re-pin per card.
 

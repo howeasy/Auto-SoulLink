@@ -1,7 +1,8 @@
 > **Status: DRAFT** (OMP cx-ac8472b6, 2026-10-02). The coordinator's review decisions are below; where they conflict with the draft, the decisions WIN.
 >
+> - **hge work is PATCH ONLY (owner 2026-10-04):** prepare outside the fork, no fork commit before an approved branch; see `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`.
 > - **Row = `START_MENU_ACTION_7` ACCEPTED** (verified: `msg_0196_00007` is an empty "garbage" row and `_00008` is the live RETIRE, `files/msgdata/msg/msg_0196.gmm:31-39`; the inhibit is at `src/start_menu.c:303`; fixed slots 7/8 at `:518-519`).
-> - **`SEQ_SE_GS_GEARCANCEL` = 2368** (`include/constants/sndseq.h:1366`). Resolved; no longer open.
+> - **`SEQ_SE_GS_GEARCANCEL` = 2368 VERIFIED** (`pret/pokeheartgold@ad7a3afa`, `include/constants/sndseq.h:1366`). Re-read 2026-10-04; §3.4 agrees. C4 policy/facts are delivered on `claude/gen4-companion-policy@d68e8137`; `panel.c` game binding is still absent.
 > - **Rows are 16 UTF-16 units incl. the 0xFFFF terminator**: the host truncates to 15 (`panel_producer.h:3-5`). Accepted.
 > - **The ROM owns no page cursor**; the host re-posts pages (Gen 3/Gen 2 precedent). Accepted.
 > - **Q1 RULED by the ABI owner (Gen 5, 2026-10-02): option (a).**
@@ -35,8 +36,9 @@
 `FEATURE_BAR.md:218-231`.
 
 **Card inputs and outputs (`PLAN.md:65`):** exclusive files
-`patch/src/nds/gen4/start_menu_hook.*`, `patch/src/nds/gen4/panel_overlay.*`, plus the
-panel-payload layout in the ABI. Exit evidence S/M/P: `sStartMenuActions` bytes and the cleared
+`patch/src/nds/gen4/panel.c`, `panel.h`, `panel_policy.h` and the title-owned START
+integration. `dispatch.c:41-43` names panel.c; the old start_menu_hook/panel_overlay
+names are superseded, and shared ABI layout stays with its owner. Exit evidence S/M/P: `sStartMenuActions` bytes and the cleared
 inhibit bit; payload round trip; a screenshot of the panel on both screens plus the menu closing
 without a leak, on HG, SS and hge. Shared? **No.**
 
@@ -325,9 +327,9 @@ and the fade the caller runs on that return value:
    `OverlayManager` deletes the app;
 6. publish `result = 0x7F` (B/close) at `closed_seq` before returning (see §3.5 and §8-Q1).
 
-**INFERRED**: `SEQ_SE_GS_GEARCANCEL`'s numeric id — the asm loads it as an immediate
-(`:1891-1893`), so the constant is in `include/constants/sndseq.h`; I did not read the value and
-it must not be guessed.
+**VERIFIED:** `SEQ_SE_GS_GEARCANCEL` is **2368**, read directly at pinned pret
+`include/constants/sndseq.h:1366` (between GEARCURSOR 2367 and GEARDECIDE 2369).
+The decision block and body use the same value; this is SOURCE, not an inferred sound id.
 
 ### 3.5 Page navigation (the ABI has pages, so use them)
 
@@ -412,15 +414,14 @@ the overlay ordering. Within that constraint the draft's reasoning was: `FEATURE
 `field` (ov1) and `trainer_card` (ov50) **both** load at `0x021E5900` on HG, so loading the app
 overlay evicts the field overlay by region conflict, which is why the return path reloads it — and a
 panel in the same region is therefore mutually exclusive with both, which is what we want.
-(corrected 2026-10-03: the 0x021E5900 sharing behind that sentence was measured on **hge only**.
-The HG/SS statement is not yet measured, and the panel's own placement on HG/SS is not yet proven —
-see §8-Q9, which gates it on one `main.elf` read. Treat the HG overlap as a hypothesis until then.)
-It is also why the panel must be small: ov1 is `0x60280` and *"a panel far smaller than ov1 cannot
-move the arena"* (`FEATURE_BAR.md:227`; the largest overlay end equals `SDK_SECTION_ARENA_START` =
-`0x0226EC40`, and `SDK_STATIC_BSS_END` = `0x021E5900` is the load base — `FEATURE_BAR.md:143`).
-**Constraint on C4: the panel overlay's `ramSize` must stay well under ov1's `0x60280`.** That is a
-number to check at build time, not now — **UNVERIFIED** what the panel costs once
-`AddWindow`/`TextPrinter`/frame gfx are linked in.
+**SOURCE correction 2026-10-04:** HG sharing is also proven: pinned
+`heartgoldus.xMAP:53318` (field) and `:130861` (trainer_card) both start at
+`0x021E5900`; `:63123` puts field BSS_END at `0x02245B80`, giving ov1's footprint
+`0x60280`. The window to the arena `0x0226EC40` is instead `0x89340`.
+**The linked group's END must not exceed SDK_SECTION_ARENA_START**, not a guessed
+"free 0x60280" budget. New panel placement/ramSize and SS values remain UNVERIFIED
+until the corresponding link/ELF. See side-branch `C4_FACTS.md` Q9 at
+`claude/gen4-companion-policy@d68e8137`; no HG number is asserted as SS evidence.
 
 ### 4.2 hge — a `src/<dir>` overlay at `0x021E5900`
 
@@ -628,12 +629,12 @@ The mailbox-vs-info **epoch and request** agreement is checked twice, inside the
 | **Q1** | **`result = 0x7F` on A-on-last-page.** `abi.h:213-214` documents `result` as *"`0` A/more, `0x7F` B/close"*. Gen 2's accepted UX closes on A-at-last-page with no wrap (`patch/gen2/src/panel.asm:66`), which is not "B". Either (a) the ABI comment is widened to "`0x7F` = close, cause not distinguished", or (b) the host is taught to wrap, which **rejects Gen 2's no-wrap rule** and must be an owner ruling. I chose (a) and flagged it rather than deciding it. | The Gen 3 host tolerates any non-zero result as "done" (`lua/gen3/native.lua:1151-1155`), so (a) is backward compatible — but the ABI header is shared with Gen 3 and Gen 5, and C4 may not edit it (`C2_BEACON_SPEC.md:47-49`). | The ABI owner. One comment line in `abi.h:213`. |
 | **Q2** | ~~**hge's msgdata.**~~ **RESOLVED by the decision block.** The label route is settled: new `hg-engine/data/text/196.txt`, **CRLF**, decoded member 196 with row 7 filled, gated on a no-edit decode → re-encode round-trip `cmp` on an output file named exactly `7_196` before the edit, then a NARC diff proving only member 196 and only row 7 changed (`C4_PANEL_SPEC.md:16-18`). The "largest open risk on hge" framing is void. | Carried into C6 SOURCE as falsifiers F5 and F6 (`C6_HGE_BUILD_SPEC.md:498-499`), not as an open question. (corrected 2026-10-03.) |
 | **Q3** | **Launch-always vs launch-on-valid.** §3.5 recommends always launching (fallback inside the app). The alternative is a row handler that skips the launch when `slink_panel_valid` fails, so no window ever appears without a payload. | Gen 2 shows a fallback (`panel.asm:21-46`), which favours launch-always. But a Gen 4 window that appears with host-absent text may read as a bug to a player. | An owner UX ruling. Cheap to flip: the two shapes differ by one branch in the row handler. |
-| **Q4** | **The panel overlay's `ramSize`.** ov1 is `0x60280` and the arena cannot move (`FEATURE_BAR.md:227`). | If the panel with `AddWindow` + `TextPrinter` + frame gfx exceeds what fits under ov1's end, the whole placement is wrong. | Read the linked `ramSize` of `slink_panel` out of the C0 ELF after the first link. One number. |
-| **Q5** | **`parentWork = NULL`.** §4.3's assumption that no engine path dereferences the manager's args before the app's `Init`. | A null deref on the first open is an immediate, loud failure — cheap to find, expensive to find late. | Read `OverlayManager_New` / `OverlayManager_GetArgs` (`src/overlay_manager.c`) and confirm nothing touches args before `Init`. |
+| **Q4** | **Panel ramSize remains OPEN.** HG ov1 footprint is 0x60280; the base-to-arena window is 0x89340 (C4_FACTS Q9e). | The new group must end at or below 0x0226EC40 on HG. SS placement is UNVERIFIED. | Read the actual linked panel sections and arena start, F10. |
+| **Q5** | **SOURCE CLOSED: parentWork=NULL is stored verbatim.** `src/overlay_manager.c:5-18,41-43` neither dereferences it nor changes it. | Panel Init must not call OverlayManager_GetArgs expecting trainer-card arguments. | C4_FACTS Q5; actual panel binding still missing. |
 | **Q6** | **The row's display position.** `ACTION_7` lands at display position 1 (`start_menu.c:487-489`), i.e. **second**, behind `RETIRE` — which is always inhibited — so in practice it is the **top** visible row in an ordinary save (Pokedex is not yet unlocked early on, `:490-492`). | Cosmetic, but it is the one thing a player sees first. If the owner wants SLINK below Pokédex, that needs a display-position edit, which brushes the §2.5 never-move rule. | Owner preference. The rule in §2.5 is satisfied either way as long as no explicit position ≥ 7 is used. |
-| **Q7** | **Charset for the `SlinkTextSpec`.** `record_binding.h:44` wants `width`, `charset`, `terminator`. Width 2 and terminator `0xFFFF` are settled (`panel_producer.h:3-5`). The `charset` value is HGSS font-specific and I did not read it. | `slink_panel_valid` rejects the payload outright if the spec is wrong (`panel_producer.h:29`). | Read `patch/src/nds/gen4/record_binding_gen4.c` when it exists, or the HGSS font id enum. |
-| **Q8** | **`safe()` predicate.** `panel_producer.h:49` calls `e->safe(ctx)` before every start. The trainer card's own precondition is a fade helper plus the `state = 2` transition (`asm/overlay_trainer_card_main.s:379-398`). C4's predicate is **INFERRED**: "fade finished and no text window active". | Too loose and the panel opens over a fade; too tight and the row silently does nothing. | Trace the trainer card's WAIT_FADE entry conditions; mirror them verbatim. |
-| **Q9** | **HG/SS placement of the appended `slink_panel` overlay group is not yet proven.** §4.1 reasons from `field` and `trainer_card` both loading at `0x021E5900` on HG, but that sharing was **measured on hge only**; the HG/SS overlay table has not been read for it. `After main` is a predecessor constraint (the group is ordered after `main`; it is not a free placement choice), and the whole §4.1 argument — mutual exclusion with the field overlay, hence the reload-on-return path — rests on a number that has one artifact of evidence, not three. | If `slink_panel` lands outside `0x021E5900` on HG/SS, the app may coexist with `field` rather than evict it, and `FieldSystem_LoadFieldOverlay` on the return path could then assert or double-load (`field_system.c:90-91`). Conversely a load *inside* the arena would move `SDK_SECTION_ARENA_START` and invalidate every pinned address. | **One `main.elf` read, before any panel code:** the appended group's load address and the new `SDK_SECTION_ARENA_START`. Falsifier F10. Two numbers, one link — this must close before C4 SOURCE, because both the return path and Q4's `ramSize` budget depend on the answer. (corrected 2026-10-03: added as an OPEN item; the draft presented the HG 0x021E5900 overlap as established.) |
+| **Q7** | **SOURCE CLOSED: charset is not a font id.** Pass `&slink_binding_gen4_pk4.text` (width 2, charset GEN4=2, terminator 0xFFFF); `record_binding.h:165-171,185-195` validates width/terminator, not charset. | A wrong charset value alone cannot refuse a payload. HGSS window font 4 is a separate precedent (`src/party_menu.c:285`), not this enum. | C4_FACTS Q7; symbolic font name remains UNVERIFIED. |
+| **Q8** | **Policy resolved; binding OPEN.** Fade-finished + launching menu context + no running child app (`panel_policy.h:146-153`). | `src/start_menu.c:705-715` supplies the fade wait. No text-window-active predicate is in this chain. | C4_FACTS Q8: menu_open/app_running remain adapter seams, not proven single engine flags. |
+| **Q9** | **HG vanilla overlap SOURCE proven; new group and SS placement OPEN.** `heartgoldus.xMAP:53318,130861` both load at 0x021E5900; arena at 0x0226EC40. | Existing groups do not prove where a newly appended slink_panel group will link. | Actual HG/SS linked ELF plus new arena start, F10; C4_FACTS Q9. |
 
 ---
 

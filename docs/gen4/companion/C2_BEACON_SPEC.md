@@ -11,17 +11,17 @@
 >   - 0xE40..0x1000 stays free.
 >   - Follow-up (Gen 5): a named `SLINK_TITLE_OFFSET 0xE00 / SLINK_TITLE_SIZE 0x40` in abi.h; until then cite this ruling.
 > - **The link gate (`sub_02036144`):** C2 scope is single-player; the `vwaitTaskQueue` insurance site is not added now. Record it in the C8 checklist.
-> - **The host reads the header itself** in `lua/gen4/companion.lua` (no `lua/nds` edit at C2); a shared reader export waits for the C7 window.
+> - **C2 interface amendment (2026-10-04):** NEW reader files under `lua/nds` may land at C2; they are outside the Gen 2 digest scope and inside the Gen 4 evidence surface, so land before live checks. Edits to EXISTING shared modules still wait for C7. `lua/nds/mailbox.lua` supplies the raw reader and `lua/gen4/companion.lua` supplies title liveness (side branch `claude/gen4-nds-mailbox@1f339a29`; see `docs/shared-nds-mailbox.md`).
 > - **Service registration site DECIDED (OMP cx-72f089e6, coordinator-verified):**
 >   - **HG/SS:** call `Slink_NDS_Register()` (latched) in `NitroMain` right after `InitSystemForTheGame()` (`src/main.c:51`), before the first `RegisterMainOverlay` at **`:77`** (not `:83`). A soft reset re-runs `NitroMain`.
 >   - **hge:** NO hooks row. hge already replaces `SaveData_New` (its only vanilla caller is `src/main.c:64`, during boot; `hooks:402`) with its own `src/save.c:139`, so append the register call before its `return`. That code calls `CreateSysTask`, which the fork already binds to `0x0200E320|1` = vanilla `SysTask_CreateOnMainQueue` (`rom.ld:477`, `include/task.h:51`).
->   - A one-line fork source edit, like the accepted C5 commonscript edit.
+>   - Prepare the fork change as a patch only. No commit to the owner's hg-engine fork until an approved branch (owner ruling 2026-10-04; see `docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md`).
 >   - **Falsifier:** a published `registrations` counter stays 1 across a full route and becomes 2 after a START+SELECT+L+R soft reset.
 >
 # Gen 4 companion C2: beacon, capabilities and liveness (SPEC draft, 2026-10-02)
 
-**Status:** a specification draft for coordinator review and owner sign-off. Nothing here is
-built. Every fact carries a `file:line`. Anything I could not verify from a file in this tree
+**Status (2026-10-04):** reviewed interface with ROM source/compile and title-reader MODEL
+work on the cited branches; no linked companion or PHYSICAL qualification is claimed. Every fact carries a `file:line`. Anything I could not verify from a file in this tree
 or the pinned pret is marked **UNVERIFIED**; anything I reasoned to but did not read is marked
 **INFERRED**.
 
@@ -33,7 +33,7 @@ or the pinned pret is marked **UNVERIFIED**; anything I reasoned to but did not 
 ## 1. Scope
 
 C2 delivers **only**: the 4 KiB arena placement, the shared ABI header republished every
-service tick, the capability handshake, and liveness (cookie + boot generation + engine-clock
+service tick, the capability handshake, and liveness (cookie + save-session generation + engine-clock
 delta).
 
 C2 does **not** deliver:
@@ -133,24 +133,27 @@ itself declares free on NDS is `SLINK_RESERVED`: *"Gen 3 call region: reserved, 
 v1"* (`abi.h:62`), which exists solely for the Match Call record that is *"never advertised"*
 on NDS (`abi.h:70`, `patch/src/nds/common/README.md:108`).
 
-**DECISION (D-C2-1):** the C2 published + ROM-private state lives in `SLINK_RESERVED`
-(`0x01FFFA00 .. 0x01FFFC00`), split into a host-readable published half and a ROM-private
-half:
+**DECISION (D-C2-1), corrected 2026-10-04:** only the versioned, published
+64-byte title block occupies `0xE00..0xE40` in the arena (absolute
+`0x01FFFA00..0x01FFFA40`). The remainder `0xE40..0x1000` stays free. Private
+cookie/identity/clock latches live in the service's heap `SlinkGen4State`, not ROM-private
+cells in this window. Authoritative layout: `patch/src/nds/gen4/beacon.h:49-66` at c1046d07;
+private state: `:97-111`. No shared ABI field is moved.
 
-| Offset from `0x01FFFA00` | Size | Field | Owner |
+| Offset from title base | Size | Published field | Owner |
 |---|---|---|---|
-| `+0x00` | `u32` | published cookie | ROM writes, host reads |
-| `+0x04` | `u32` | published save identity (`PlayerProfile.id`) | ROM writes, host reads |
-| `+0x08` | `u32` | published engine-clock delta | ROM writes, host reads |
-| `+0x0C` | `u32` | ROM-private: last accepted save identity | **ROM only** |
-| `+0x10` | `u32` | ROM-private: last published cookie | **ROM only** |
-| `+0x14` | `u32` | ROM-private: last clock sample (`gSystem.vblankCounter`) | **ROM only** |
-| `+0x18 .. +0x200` | — | stays zero (C3–C5 headroom) | ROM |
+| `+0x00` | u32 | magic `0x34474C53` (little-endian `SLG4`) | ROM writes, host validates |
+| `+0x04` | u16 | version `1` | ROM writes, host validates |
+| `+0x06` | u16 | size `0x40` | ROM writes, host validates |
+| `+0x08` | u32 | cookie | ROM writes, host reads |
+| `+0x0C` | u32 | identity (`PlayerProfile.id`) | ROM writes, host reads |
+| `+0x10` | u32 | engine-clock delta | ROM writes, host reads |
+| `+0x14` | u32 | session generation, mirrors mailbox `+0x4C` | ROM writes, host reads |
+| `+0x18` | u32 | registrations | ROM writes, host reads |
+| `+0x1C..+0x40` | 36 bytes | reserved, zero headroom | ROM writes; host may report raw copy |
 
-Counter-alternative if the coordinator reads `reserved` as untouchable: put the same twelve
-words at the tail of the blob region (`0x01FFEF40 .. 0x01FFEF58` is only 24 B, so it would not
-fit) — i.e. the only alternative with room is the **menu** region, which C5/C4 own. I
-therefore recommend accepting D-C2-1 rather than relocating.
+The superseded draft placed cookie at `+0` and invented private cells at `+0x0C/+0x10/+0x14`.
+Those addresses now hold published fields; they are not forbidden/private reads.
 
 ---
 
@@ -252,10 +255,9 @@ On **every** service visit, `Slink_NDS_Service` writes, in this order:
    no command to execute.
 7. `ack_seq` `0x01FFEC0C` = the `seq` of the request the ROM has consumed.
 8. Delta accumulation: `d = (u32)(gSystem.vblankCounter - last_sample)`,
-   `last_sample = gSystem.vblankCounter`, `delta += d`; publish `delta` to `0x01FFFA08`.
-9. Identity check (§4.3): compare `Slink_NDS_SaveIdentity()` to the ROM-private latch at
-   `0x01FFFA0C`; on change run the reset latch (§4.4).
-10. Republish cookie (`0x01FFFA00`) and identity (`0x01FFFA04`) every tick. They are stable
+   `last_sample = gSystem.vblankCounter`, `delta += d`; publish `delta` to title `+0x10` (`0x01FFFA10`).
+9. Identity check (§4.3): compare `Slink_NDS_SaveIdentity()` to the heap state's `identity` latch; on change run the reset latch (§4.4).
+10. Republish cookie (`0x01FFFA08`) and identity (`0x01FFFA0C`) every tick. They are stable
     values, republished so that a host write into them is transient and always observable.
 
 Fields the ROM **never** writes at C2: `opcode`, `seq`, `args[]`, `session_epoch`, and the
@@ -374,7 +376,7 @@ the new session will honour. On detection, in one uninterrupted block:
   `args[32] = 0`, `result[16] = 0`;
 - `producer_phase = SLINK_PHASE_IDLE (0)`;
 - zero the whole witness region `0x01FFEC50 .. 0x01FFECA0`;
-- latch the new identity and clock sample in the ROM-private cells.
+- latch the new identity and clock sample in the private SysTask heap state.
 
 This is the Gen 1/2 "reset latch" discipline the shared NDS layer is meant to generalize
 (`PLAN.md:47`).
@@ -457,8 +459,8 @@ deserves to be written down because the brief bundles them as one "256-aliasing 
 
 ### 6.1 What `lua/gen4` reads
 
-`lua/gen4/companion.lua` (new, gen4-only, `PLAN.md:63`) is the only file this card adds on the
-host, and it is a **pure reader**: no writes, no emulator API beyond read, no retained
+`lua/gen4/companion.lua` is the title binder, composed with NEW shared
+`lua/nds/mailbox.lua` (side branch `claude/gen4-nds-mailbox@1f339a29`). Both are **pure readers**: no writes, no emulator API beyond read, no retained
 transaction state — the discipline `lua/nds/native_witness.lua:1` already sets.
 
 Reads per poll, from `base = 0x01FFEC00`:
@@ -470,9 +472,11 @@ Reads per poll, from `base = 0x01FFEC00`:
 | `capabilities` | `0x01FFEC40` | informational at C2; the future C3–C5 gate |
 | `session_epoch` | `0x01FFEC44` | binds the request the host is about to publish |
 | `producer_phase` | `0x01FFEC48` | must be `0` at C2 |
-| generation | `0x01FFEC4C` | liveness |
-| cookie, identity, delta | `0x01FFFA00 / +4 / +8` | liveness, wrong-save cross-check |
-| ROM-private cells | `0x01FFFA0C / +10 / +14` | **never read** |
+| Gen4 generation mirror (shared reader calls it reserved) | `0x01FFEC4C` | opaque to shared code; title-specific liveness |
+| title magic / version / size | title `+0x00 / +0x04 / +0x06` | validate `SLG4`, 1, 0x40 before payload |
+| cookie / identity / delta | `0x01FFFA08 / 0x01FFFA0C / 0x01FFFA10` | liveness and title identity |
+| title generation / registrations | `0x01FFFA14 / 0x01FFFA18` | epoch mirror / registration observation |
+| reserved[36] | title `+0x1C..+0x40` | report raw headroom; never a liveness gate |
 
 **`native_witness.lua` is not applicable at C2, and this is a constraint, not a preference.**
 
@@ -483,11 +487,12 @@ Reads per poll, from `base = 0x01FFEC00`:
   it returns anything (`lua/nds/native_witness.lua:158-185`); that is C5 machinery.
 - Its mailbox header read is a **local** function (`lua/nds/native_witness.lua:152-157`), not
   exported, so C2 cannot reuse it as-is.
-- Exporting one would be an edit to `lua/nds/*`, which is **shared code** and therefore belongs
-  to the single C7 window (`PLAN.md:49,71`). C2 must not need it.
+- Editing that EXISTING module still belongs to C7. The C2 amendment instead permits a
+  NEW `lua/nds/mailbox.lua`; it reads no witness revision or transaction identity. See
+  `docs/shared-nds-mailbox.md` for its six-scalar consistency limit.
 
 So: from C5 onward `native_witness` is the reader for the witness region and
-`lua/gen4/companion.lua` is the reader for the mailbox header. Both are cross-checked against
+`lua/nds/mailbox.lua` is the raw mailbox reader beneath `lua/gen4/companion.lua`. Both are cross-checked against
 the same compiled layout (`lua/nds/native_witness.lua:2-4,9`) and against `abi.h`'s static
 asserts (`abi.h:261-286`).
 
@@ -561,27 +566,24 @@ later.
 | menu | `0x01FFF160` | host (C4) | ROM | zero at C2 |
 | info | `0x01FFF2E0` | host req / ROM drawn (C4) | both | split per `abi.h:207-217` |
 | control | `0x01FFF400` | host (C5) | ROM | zero at C2 |
-| published cookie | `0x01FFFA00` | **ROM** | host | |
-| published identity | `0x01FFFA04` | **ROM** | host | |
-| published delta | `0x01FFFA08` | **ROM** | host | |
-| identity latch | `0x01FFFA0C` | **ROM** | *nobody* | |
-| cookie latch | `0x01FFFA10` | **ROM** | *nobody* | |
-| clock sample | `0x01FFFA14` | **ROM** | *nobody* | |
-| boot cookie latch | SysTask heap data block (§4.1) | **ROM** | *nobody* | re-allocated every boot, freed by any reset |
+| title magic / version / size | `0x01FFFA00 / +4 / +6` | **ROM** | host | versioned header |
+| published cookie | `0x01FFFA08` | **ROM** | host | |
+| published identity | `0x01FFFA0C` | **ROM** | host | |
+| published delta | `0x01FFFA10` | **ROM** | host | |
+| published generation | `0x01FFFA14` | **ROM** | host | mirrors mailbox +0x4C |
+| registrations | `0x01FFFA18` | **ROM** | host | |
+| reserved[36] | `0x01FFFA1C..0x01FFFA40` | **ROM** | raw-copy host reader | zero headroom |
+| private cookie / identity / clock / boot latch | SysTask heap block | **ROM** | *nobody* | never title-window cells |
 
-(The former "DTCM cookie latch" row is void — see §4.1 and the decision block.)
-
-Source of the split: `FEATURE_BAR.md:258`. The last four rows are the reason "ROM only" must
-mean *ROM only*: a host write into a latch is indistinguishable from a ROM write, which is why
-D-C2-1 splits published from private cells inside the same region.
+The published block and private heap state are distinct (`beacon.h:49-66,97-111`).
+The host has no write path. The former title-window private-cell table and DTCM latch are void.
 
 ---
 
 ## 8. Open questions
 
-1. **D-C2-1 (§2.4):** is `SLINK_RESERVED` (`0x01FFFA00..0x01FFFC00`) sanctioned for C2
-   published + private state, or must it stay zero? There is no roomier alternative inside the
-   4 KiB span.
+1. **D-C2-1 CLOSED:** the ABI-owner ruling permits the published 0x40-byte title block at
+   offset 0xE00; private state is heap-only (§2.4). The larger reserved tail is not claimed.
 2. ~~**DTCM latch proof (§4.1).**~~ **CLOSED / VOID.** The latch is not in DTCM, so the DTCM
    W1/W2/W3 census rows are not needed. The reasoning that required them assumed
    `crt0.s:44-47` cleared a usable block; the ruling is that DTCM is the launcher stack
@@ -595,7 +597,8 @@ D-C2-1 splits published from private cells inside the same region.
    moot, because `SaveData_New` is called from `src/main.c:64`, after `:51`.)
 4. **Session epoch vs boot generation (§4.2).** I widened the coordinator's "which boot" to
    "which boot **or** which save session". Without the widening, falsifier 1 is unsatisfiable.
-   Needs an explicit accept or reject.
+   Accepted by D-C2-4 above; the title binder MODEL covers epoch/cookie changes
+   (`claude/gen4-nds-mailbox@1f339a29`, `test_gen4_companion.py:462-490`).
 5. **Oak-chain burst tolerance (§6.2).** K = 3 is **INFERRED**. Measure it: how many
    generation changes does the New Game route produce, and over how many polls?
 6. **`sub_02036144()` gate (§6.3).** Is a link/wireless session in scope for C2? If yes, the
@@ -629,7 +632,7 @@ D-C2-1 splits published from private cells inside the same region.
 - No static ARM9 `.bss` symbol in the HG/SS rebuild (`FEATURE_BAR.md:145`).
 - No new BizHawk exec hook. The host reads the mailbox by polling only; the owner's ruling
   allows zero steady-state hooks and one on-demand hook (`PLAN.md:95`).
-- No write to a ROM-owned field, and no read of a ROM-private cell.
+- No write to a ROM-owned field, and no read of the private heap state. The published title payload and raw reserved tail are host-readable.
 - No capability bit advertised ahead of its card (§5).
 - No box/trade arm; trade is party-only (`DECISIONS_2026-10-02_companion.md:12`).
 - No `PlaySE` from the vblank queue or `gSystem.vBlankIntr` — both are IRQ context
