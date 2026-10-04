@@ -244,7 +244,181 @@ whether the swap applies to all five classes, the three `RIVAL*` only, or per-fi
 SLink should implement the predicate as a configurable class set; it should not
 hard-code the answer.
 
-## 4. Answers in one line each
+## 6. CORRECTION — turn ordering **does** read `wCurPlayerMove`
+
+> **This overturns §1 of this document.** The claim there — "Polished's turn
+> ordering does not read `wCurPlayerMove`" — was **wrong**. It came from reading
+> `GetMovePriority` and seeing `BATTLE_VARS_MOVE` without following that constant
+> through its dispatch table. It does resolve to `wCurPlayerMove`.
+>
+> Separately, the "ROM at 0xC4A7 / 0xC4B0" dumps in §2.1 were **ROM file reads at
+> WRAM addresses**. WRAM is not in the ROM; those bytes are code at that file offset
+> and say nothing about `wBattleMonMoves` or `wBattleMonPP`. Discard them, and the
+> gap claim they supported.
+
+### 6.1 The dispatch, end to end
+
+`GetBattleVarAddr` (`home/battle_vars.asm:7`) is table-driven:
+
+```
+ld hl, BattleVarPairs
+ld c, a                  ; a = BATTLE_VARS_*
+add hl, bc
+add hl, bc
+ldh a, [hBattleTurn]
+and a
+jr z, .getvar            ; player turn -> first byte of the pair
+inc hl                   ; enemy turn  -> second byte
+.getvar
+ld c, [hl]               ; var id
+ld hl, BattleVarLocations
+...
+ld a, [hl]               ; the byte at that address
+```
+
+**Step 1 — `BATTLE_VARS_MOVE` is index `$12` = 18.** `constants/battle_constants.asm:145`
+is `const BATTLE_VARS_MOVE`; counting from `BATTLE_VARS_SUBSTATUS1` at `:127` gives
+18. ROM: `BattleVarPairs` is `sym:1183`, `00:37c6`, flat `0x37C6`, `table_width 2`;
+entry 18 sits at byte offset 36, i.e. `00:37ea`, flat `0x37EA`, bytes **`18 19`** —
+exactly `db PLAYER_CUR_MOVE, ENEMY_CUR_MOVE`. So `PLAYER_CUR_MOVE = $12 = 18`,
+`ENEMY_CUR_MOVE = $13 = 19`.
+
+**Step 2 — those ids index `BattleVarLocations`.** `home/battle_vars.asm:65-66` is
+`.CurMove: db PLAYER_CUR_MOVE, ENEMY_CUR_MOVE` / `.CurMoveOpp: ...`, and
+`home/battle_vars.asm:89` is `dw wCurPlayerMove, wCurEnemyMove` — the 13th `dw`,
+index 12. ROM: `BattleVarLocations` is `sym:1209`, `00:37f8`, flat `0x37F8`,
+`table_width 2 + 2` (4 bytes per entry); entry 12 is at offset 48, i.e. `00:3828`,
+flat `0x3828`, bytes **`40 c5 41 c5`** = `dw $c540, $c541` =
+`dw wCurPlayerMove, wCurEnemyMove`. `wCurPlayerMove` is `sym:64052`, `00:c540`;
+`wCurEnemyMove` is `sym:64055`, `00:c541`.
+
+**Therefore, on the player's turn `GetBattleVar(BATTLE_VARS_MOVE)` returns the byte
+at `wCurPlayerMove` (`00:c540`); on the enemy's turn, the byte at `wCurEnemyMove`
+(`00:c541`).**
+
+ROM for `GetBattleVarAddr` itself, `sym:1181`, `00:37a9`, flat `0x37A9`:
+`c5 21 c6 37 4f 06 00 09 09 f0 d1 a7 28 01 23 4e 06 00 21 f8 37` — `21 c6 37` is
+`ld hl, $37c6` (`BattleVarPairs`) and `21 f8 37` is `ld hl, $37f8`
+(`BattleVarLocations`). Both table addresses are confirmed in the ROM bytes.
+
+### 6.2 When the selected move is committed
+
+`wCurPlayerMove` is written **at menu time**, well before the hold:
+
+- `engine/battle/core.asm:5446-5453` — the normal move-selection commit:
+  `call SetPlayerTurn`, `ld hl, wBattleMonMoves`, `ld a, [wMenuCursorY]`,
+  `ld b, 0`, `add hl, bc`, `ld a, [hl]`, `ld [wCurPlayerMove], a`.
+- `engine/battle/core.asm:5118-5122` — the forced/locked path (Encore, Gorilla
+  Tactics, Assault Vest, Choice): `ld b, 0`, `ld hl, wBattleMonMoves`,
+  `add hl, bc`, `ld a, [hl]`, `ld [wCurPlayerMove], a`, then `call SetChoiceLock`
+  at `:5126`.
+
+Both precede `BattleTurn` → `DetermineMoveOrder` (`core.asm:190`). The read at
+`core.asm:500` (`ld a, [wCurPlayerMove]` → click SFX) already sees a committed value,
+which is itself proof the commit happened earlier.
+
+**The selected move is committed before `DetermineMoveOrder`, so the explode write
+window is not wrong.**
+
+## 7. Rival window — the closing edge
+
+### 7.1 What I could establish
+
+`wCurOTMon` (`sym:63909`, `00:c4dd`) has exactly **two writers** in the battle engine:
+
+- `engine/battle/core.asm:8052` — `ld a, -1 / ld [wCurOTMon], a` in trainer-battle
+  setup. This **opens** the window with `$FF`.
+- `engine/battle/core.asm:5916` — inside `LoadEnemyWildmon` (`sym:10916`,
+  `0f:6556`, flat `0x3E556`; ROM `af ea 83 d2 ea dd c4 3c` =
+  `xor a; ld [$d283],a; ld [$c4dd],a`). This **closes** it — but only on the
+  **wild** path, where `:5917-5918` does `inc a / ld [wMonType], a` and
+  `wEnemyMonSpecies` is written at `:5922`.
+
+Its readers are `core.asm:1114`, `:1521` (`GetParticipantVar`), `:1729`, `:3126`
+(`GetEnemyMonPersonality`) and `:8180` (`ShowLinkBattleParticipantsAfterEnd`). None
+writes `wEnemyMonSpecies`.
+
+`wEnemyMonSpecies` (`sym:66010`, `01:d209`) is written in exactly two places:
+`engine/battle/core.asm:5922` (`LoadEnemyWildmon`, wild only) and
+`engine/pokemon/move_mon.asm:1055` / `engine/items/item_effects.asm:428` — neither
+of which is the trainer send-out.
+
+### 7.2 Verdict
+
+**UNVERIFIED — not closable from source in this pass.** The trainer send-out that
+copies `wOTPartyMons[wCurOTMon]` into `wEnemyMon` is reached through
+`farcall ReadTrainerParty` (`sym:6112`, `07:4000`, flat `0x1C000`, ROM
+`fa 94 ce a7 c0 fa c1 ce a7 c0`); I did not find the `CopyBytes` /
+`BATTLEMON_STRUCT_LENGTH` site that performs the copy, and `SwitchEnemyMon`,
+`LoadEnemyMon` and `SendOutBattleMon` are still not symbols.
+
+What the client **can** observe today, which is enough to refuse safely:
+
+- `wCurOTMon` (`00:c4dd`) stops reading `$FF` as soon as the first enemy mon index
+  is committed. A writer that requires `wCurOTMon == $FF` therefore **fails closed**
+  once the send-out starts. That is a RAM predicate, not a PC breakpoint, and it
+  mirrors the vanilla client's `wCurOTMon == $FF` test that
+  `lua/gen2/client.lua:1186` documents for `rival_tick`.
+
+**Open-until label: none available.** The safest statement is "open while
+`wCurOTMon == $FF`, and no longer", with the caveat that I cannot prove the index is
+committed before the first mon is copied rather than after — so a write racing the
+transition may be wasted, but is not corrupting.
+
+## 8. Re-derivation of the move between the hold and execution
+
+| Where | Reads | Overrides a `wCurPlayerMove` write? |
+|---|---|---|
+| `core.asm:5118-5122` | `wBattleMonMoves[b]` → `wCurPlayerMove` | **No** — menu-time, before the hold |
+| `core.asm:5446-5453` | `wBattleMonMoves[wMenuCursorY]` → `wCurPlayerMove` | **No** — menu-time |
+| `GetMovePriority` `core.asm:629-658` | `BATTLE_VARS_MOVE` → `wCurPlayerMove` | No — it *consumes* the write |
+| `.setmovedata` `core.asm:508-510` | `SetPlayerTurn` + `UpdateMoveData` | No — consumes |
+| `MovePriorities`, `sym:10433` `0f:443a` flat `0x3C43A`, ROM `00 0a cb 04 b6 04 f5 02 ef 01 8c 01` | priority table | No |
+
+**No reader re-derives the move after `DetermineMoveOrder`.** `SetChoiceLock` (with a
+`.got_encore_count` sub-label) runs at `:5126`, also menu-time. Encore, Gorilla
+Tactics, Assault Vest and Choice lock all resolve *before* the hold, so none can
+override an explode write made at `core.asm:190`.
+
+> The index used at `core.asm:5118` (`ld b, 0` → `wBattleMonMoves[0]`) is **not
+> fully explained**; the `dec a / jr z` chain above it decides which branch is
+> taken. **UNVERIFIED** whether `b` is always 0 on that path. It does not affect the
+> verdict, because the path is menu-time either way.
+
+## 9. Verdicts
+
+### 9.1 Explode Mode — **SAFE** at the hold
+
+Exact write list, in order:
+
+1. `wCurPlayerMove` (`00:c540`) ← `$99` (EXPLOSION). **The decisive byte.**
+2. The battler's PP if it must be adjusted — read-modify-write, preserving the top
+   two PP-Up bits.
+3. Party mirror for durability across `UpdateBattleMonInParty` (`sym:1099`,
+   `00:34b0`): moves `+2..+5`, PP `+22..+25` in the 48-byte `breed_struct`.
+
+`wCurPlayerMove` **goes last**, exactly as `lua/gen2/writes.lua:245` states — the
+vanilla rule holds after all. Writing `wBattleMonMoves[wCurMoveNum]` is *also*
+correct as a belt-and-braces measure (both `:5453` and `:5122` derive from it), but
+it is not the decisive field.
+
+Hold point: immediately before `call DetermineMoveOrder` at `core.asm:190`;
+`DetermineMoveOrder` is `sym:10394`, `0f:4235`, flat `0x3C235`.
+
+### 9.2 Rival Team Swap — **UNVERIFIED** window
+
+Write list: `wOTPartyCount` (`01:d283`), `wOTPartyMons` (`01:d28b`, 48 B/mon),
+`wOTPartyMonOTs` (`01:d3ab`), `wOTPartyMonNicknames` (`01:d3ed`). **Never**
+`01:d284` (`wMirrorHerbPendingBoosts`). Species goes in each struct's `Species` byte
+at +0; Polished has no enemy species list.
+
+Gate: `wCurOTMon` (`00:c4dd`) must read `$FF`; otherwise refuse. Fails closed.
+**Open-until label: none established — §7.2.**
+
+> Every address in §9.2 is WRAM and is cited from the `.sym`. No ROM byte is quoted
+> for any of them, because WRAM is not in the ROM.
+
+## 10. Answers in one line each (superseded by §6-§9)
 
 | Question | Answer | Status |
 |---|---|---|
@@ -256,15 +430,14 @@ hard-code the answer.
 | When is the window? | From `ld [wCurOTMon], a` = `$FF` at `core.asm:8052` until the enemy mon is loaded into `wEnemyMon`. | **open edge UNVERIFIED** |
 | Which classes are rivals? | Five; fights in 3.4. `RIVAL0`'s three fights are named `"boy"`, so a name filter would miss them. | **owner decision** |
 
-## 5. Claims
+## 11. Claims
 
 Each entry is (absolute path, 1-indexed line, exact substring on that line).
 
+## Coordinator verification (2026-10-04)
+
+Re-read from the release ROM by the coordinator, independent of the helper: `GetBattleVarAddr` (file `0x37A9`) loads `BattleVarPairs` `$37C6` and `BattleVarLocations` `$37F8`; `BattleVarPairs[18]` (`BATTLE_VARS_MOVE`) at `0x37EA` is `18 19` (word ids 24/25); `BattleVarLocations` is indexed by word id (`add hl,bc` twice), so word 24 = pair 12 = `dw wCurPlayerMove, wCurEnemyMove` at `0x3828` = `40 c5 41 c5`. Hence `GetBattleVar(BATTLE_VARS_MOVE)` on the player turn reads `wCurPlayerMove` and the vanilla explode write rule transfers. The earlier "turn ordering does not read wCurPlayerMove" reading (and the coordinator note that endorsed it) is withdrawn. Rival window closing edge is still open: refuse unless `wCurOTMon == $FF`.
+
 ```json
-CLAIMS: [{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10429,"expect":"CompareMovePriority"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10430,"expect":"GetMovePriority"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1079,"expect":"SetPlayerTurn"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1081,"expect":"SetEnemyTurn"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10394,"expect":"DetermineMoveOrder"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10398,"expect":"GetSpeed"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1166,"expect":"CheckMoveSpeed"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10439,"expect":"ResolveFaints.no_fainted_mons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1099,"expect":"UpdateBattleMonInParty"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1100,"expect":"UpdateEnemyMonInParty"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":11105,"expect":"InitEnemy"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":6112,"expect":"ReadTrainerParty"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1130,"expect":"GetTrueUserAbility"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63853,"expect":"wBattleMonMoves"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63868,"expect":"wBattleMonPP"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":65729,"expect":"wCurMoveNum"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":64052,"expect":"wCurPlayerMove"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63856,"expect":"wBattleMonHP"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":65728,"expect":"wCurBattleMon"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66118,"expect":"wOTPartyCount"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66119,"expect":"wMirrorHerbPendingBoosts"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66122,"expect":"wOTPartyMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66122,"expect":"wOTPartyMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66409,"expect":"wOTPartyMonOTs"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66422,"expect":"wOTPartyMonNicknames"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63909,"expect":"wCurOTMon"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66012,"expect":"wEnemyMonMoves"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":618,"expect":"CompareMovePriority:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":629,"expect":"GetMovePriority:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":314,"expect":"DetermineMoveOrder:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":316,"expect":"call CompareMovePriority"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":621,"expect":"call SetPlayerTurn"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":624,"expect":"call SetEnemyTurn"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":633,"expect":"ld a, BATTLE_VARS_MOVE"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":636,"expect":"ld hl, MovePriorities"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":646,"expect":"call GetTrueUserAbility"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":647,"expect":"cp PRANKSTER"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":500,"expect":"ld a, [wCurPlayerMove]"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":190,"expect":"call DetermineMoveOrder"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":509,"expect":"call SetPlayerTurn"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":510,"expect":"farcall UpdateMoveData"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":8040,"expect":"farcall ReadTrainerParty"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":8039,"expect":"farcall GetTrainerAttributes"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":8052,"expect":"ld [wCurOTMon], a"},{"path":"F:/slink-work/cache/polished/src/home/battle.asm","line":130,"expect":"SetPlayerTurn::"},{"path":"F:/slink-work/cache/polished/src/home/battle.asm","line":132,"expect":"ldh [hBattleTurn], a"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1074,"expect":"def_trainer_class RIVAL0"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1095,"expect":"def_trainer_class RIVAL1"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1290,"expect":"def_trainer_class RIVAL2"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1405,"expect":"def_trainer_class LYRA1"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1543,"expect":"def_trainer_class LYRA2"},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1075,"expect":"\"boy\""},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1096,"expect":"\"<RIVAL>\""},{"path":"F:/slink-work/cache/polished/src/data/trainers/parties.asm","line":1406,"expect":"\"Lyra\""},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/engine/battle/core.asm","line":815,"expect":"CompareMovePriority:"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/engine/battle/core.asm","line":819,"expect":"ld a, [wCurPlayerMove]"},{"path":"F:/slink-work/wt/polished/lua/gen2/writes.lua","line":245,"expect":"wCurPlayerMove goes LAST"},{"path":"F:/slink-work/wt/polished/lua/gen2/client.lua","line":20,"expect":"frame end"},{"path":"F:/slink-work/wt/polished/server/adapters/gen2_polished.py","line":6,"expect":"RIVAL0/1/2 + LYRA1/2"},{"path":"F:/slink-work/wt/polished/docs/polished/RAM.md","line":44,"expect":"wMirrorHerbPendingBoosts"}]
+CLAIMS: [{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10429,"expect":"CompareMovePriority"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10430,"expect":"GetMovePriority"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1079,"expect":"SetPlayerTurn"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10394,"expect":"DetermineMoveOrder"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1183,"expect":"BattleVarPairs"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1209,"expect":"BattleVarLocations"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1181,"expect":"GetBattleVarAddr"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10433,"expect":"MovePriorities"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":64052,"expect":"wCurPlayerMove"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":64055,"expect":"wCurEnemyMove"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":65429,"expect":"wMenuCursorY"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":65729,"expect":"wCurMoveNum"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66010,"expect":"wEnemyMonSpecies"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10916,"expect":"LoadEnemyWildmon"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":6112,"expect":"ReadTrainerParty"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":1099,"expect":"UpdateBattleMonInParty"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10439,"expect":"ResolveFaints.no_fainted_mons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66118,"expect":"wOTPartyCount"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66119,"expect":"wMirrorHerbPendingBoosts"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66122,"expect":"wOTPartyMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66409,"expect":"wOTPartyMonOTs"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":66422,"expect":"wOTPartyMonNicknames"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63909,"expect":"wCurOTMon"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":10379,"expect":"BattleTurn"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63853,"expect":"wBattleMonMoves"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":63868,"expect":"wBattleMonPP"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":7,"expect":"GetBattleVarAddr::"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":65,"expect":".CurMove:"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":43,"expect":"BattleVarPairs:"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":74,"expect":"BattleVarLocations:"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":89,"expect":"dw wCurPlayerMove,"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":20,"expect":"ldh a, [hBattleTurn]"},{"path":"F:/slink-work/cache/polished/src/home/battle_vars.asm","line":23,"expect":"inc hl"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":618,"expect":"CompareMovePriority:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":629,"expect":"GetMovePriority:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":314,"expect":"DetermineMoveOrder:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":633,"expect":"ld a, BATTLE_VARS_MOVE"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":190,"expect":"call DetermineMoveOrder"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5122,"expect":"ld [wCurPlayerMove], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5453,"expect":"ld [wCurPlayerMove], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":500,"expect":"ld a, [wCurPlayerMove]"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5448,"expect":"ld a, [wMenuCursorY]"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5126,"expect":"call SetChoiceLock"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5119,"expect":"ld hl, wBattleMonMoves"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":510,"expect":"farcall UpdateMoveData"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":8052,"expect":"ld [wCurOTMon], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5916,"expect":"ld [wCurOTMon], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5922,"expect":"ld [wEnemyMonSpecies], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":5912,"expect":"LoadEnemyWildmon:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":8040,"expect":"farcall ReadTrainerParty"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":1520,"expect":"GetParticipantVar::"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":3124,"expect":"GetEnemyMonPersonality:"},{"path":"F:/slink-work/cache/polished/src/constants/battle_constants.asm","line":145,"expect":"const BATTLE_VARS_MOVE"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/engine/battle/core.asm","line":815,"expect":"CompareMovePriority:"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/engine/battle/core.asm","line":819,"expect":"ld a, [wCurPlayerMove]"},{"path":"F:/slink-work/wt/polished/lua/gen2/writes.lua","line":245,"expect":"wCurPlayerMove goes LAST"},{"path":"F:/slink-work/wt/polished/lua/gen2/client.lua","line":20,"expect":"frame end"},{"path":"F:/slink-work/wt/polished/docs/polished/RAM.md","line":44,"expect":"wMirrorHerbPendingBoosts"}]
 ```
-
-## Coordinator correction (2026-10-04)
-
-- The "ROM at `0xC4A7` / `0xC4B0`" byte dumps in F2 are NOT WRAM contents: `0xC4A7` is a *file offset* into the ROM image, and WRAM is not in the ROM. Disregard those bytes. What survives is the symbol-level fact: `wBattleMonMoves` `00:c4a7` and `wBattleMonPP` `00:c4b0` are 9 bytes apart, so the five bytes between the move slots and PP hold other battle-struct members (DVs, personality, form); a writer must address moves and PP separately and never assume moves+4 == PP. The PP-Up read-modify-write rule (top two bits) stands.
-- The turn-ordering finding (F1) is read from real ROM file offsets (`0x343B`, `0x3C3FE`, `0x3C40D`) and was re-checked by the coordinator against the release ROM and `core.asm:618-627`.
