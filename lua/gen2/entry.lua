@@ -82,6 +82,8 @@ Entry.PACK_FILES = {
         charmap="data/games/polished_crystal/charmap.lua",
         evolutions="data/games/polished_crystal/evolutions.json",
         area_map="data/games/polished_crystal/area_map.json",
+        -- rand_overlay: the overlay beacon P.admit re-hashes (tools/gen_polished_beacon.py)
+        beacon="data/games/polished_crystal/overlay/beacon.json",
     },
 }
 -- The O-22 proofs a production pack ships as release data: byte copies of the committed
@@ -614,7 +616,8 @@ end
 --           asserts for the vanilla area_map (source artifact + commit, group*256+number key), inline below
 local function compose_polished(deps, decision)
     local ok, result = pcall(function()
-        assert(type(decision) == "table" and decision.title == "polished" and decision.kind == "overlay"
+        assert(type(decision) == "table" and decision.title == "polished"
+               and (decision.kind == "overlay" or decision.kind == "rand_overlay")
                and decision.rehashed == true and decision.qualification == "DEV_OVERLAY_SHA1"
                and decision.foundation == "gen2_polished",
                "Polished composes only its admitted dev overlay decision")
@@ -642,10 +645,19 @@ local function compose_polished(deps, decision)
         assert(maps > 0, "area-map source rows missing")
         local size = io_.domain_size("ROM")
         assert(size == profile.derived.rom_size, "Polished ROM size mismatch")
-        -- the executed bytes are the admitted overlay's, re-hashed through the live IO
-        assert(decision.rom_sha1 == profile.overlay.rom_sha1
-               and Admission.sha1(function(offset) return io_.read_u8(offset, "ROM") end, size) == decision.rom_sha1,
-               "Polished ROM hash mismatch")
+        -- the executed bytes are the admitted ones, re-hashed through the live IO: the overlay's own sha1, or (rand_overlay)
+        -- the randomized ROM's, whose overlay facts (size, anchors, beacon) are re-proven on the live bytes too
+        local read_rom = function(offset) return io_.read_u8(offset, "ROM") end
+        assert(Admission.sha1(read_rom, size) == decision.rom_sha1, "Polished ROM hash mismatch")
+        if decision.kind == "overlay" then
+            assert(decision.rom_sha1 == profile.overlay.rom_sha1, "Polished ROM hash mismatch")
+        else
+            assert(decision.overlay_sha1 == profile.overlay.rom_sha1 and decision.admitted_by == "anchors",
+                   "Polished rand_overlay decision names another overlay")
+            assert(P.rand_overlay_intact(root, json, Admission, profile, Entry.PACK_FILES.polished_crystal.beacon,
+                                         decision.overlay_sha1, {size=size, read_u8=read_rom}),
+                   "Polished rand_overlay facts differ on the executed ROM")
+        end
         local decode_name = deps.decode_name or load("lua/token_scanner.lua").new({
             glyphs=charmap.glyphs, terminator=charmap.terminator, max_length=profile.derived.name_length,
             unknown=function(byte) return string.format("<$%02X>", byte) end})
@@ -724,12 +736,14 @@ function Entry.build(deps)
 end
 
 -- DEV-GRADE Polished admission, separate from Entry.admit: the exact overlay sha1 of
--- data/polished/overlay_provenance.json only; the clean release is refused with the companion message.
+-- data/polished/overlay_provenance.json, or an unknown sha1 as rand_overlay (size + overlay anchors + overlay beacon,
+-- lua/gen2/polished.lua P.admit); the clean release is refused with the companion message. The run contract's
+-- per-player rom_sha1 is bound by the server against the hello's rehashed rom_sha1 (rom_contract_by_sha1).
 -- deps = {root, rom_size, read_rom_u8}. The decision, or nil, why.
 function Entry.admit_polished(deps)
     local ok, P = pcall(dofile, tostring(deps.root) .. "/lua/gen2/polished.lua")
     if not ok then return nil, tostring(P) end
-    return P.admit(deps)
+    return P.admit(deps, Entry.PACK_FILES.polished_crystal.beacon)
 end
 
 -- tools/gen_gen2_admission.py --promote-overlays (D6): does a PROSPECTIVE overlay row (binding_sha256 set) pass its own

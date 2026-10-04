@@ -10,7 +10,9 @@
 --
 -- ADMISSION IS DEV-GRADE and deliberately separate from lua/gen2/entry.lua's vanilla production gate
 -- (no catalog rows, no G4 grant, no receipts): the exact overlay sha1 of data/polished/overlay_provenance.json
--- is admitted, the clean release is refused with the companion message, everything else is refused.
+-- is admitted, the clean release is refused with the companion message. An UNKNOWN sha1 admits only as
+-- rand_overlay (the Manager-randomized overlay, the Polished R3/R6): the pinned size, the patch-0020 overlay
+-- anchors and the overlay beacon must all hold; the server then binds its hello sha1 to the run contract.
 local P = {}
 
 P.TITLE, P.ROM_TYPE = "polished", "polished_crystal"
@@ -77,9 +79,70 @@ function P.load(root, json)
     return profile, charmap, wrapper
 end
 
---- Dev admission: {title, kind="overlay", rom_sha1, rehashed=true, ...} (an immutable Admission decision),
---- or nil, why. args = {root, rom_size, read_rom_u8}.
-function P.admit(args)
+-- rand_overlay (the Polished counterpart of entry.lua's R3 + R6 beacon): UPR writes data tables only, and the Manager's
+-- write-domain audit (server/upr_polished_write_domain.check_output) refuses any output that wrote an overlay byte,
+-- bank $7E or the header, so a randomized overlay keeps every overlay byte while its sha1 is in no catalog.
+-- P.RAND_ANCHORS: the $0070 bridge, the $0DA8 DelayFrame lead-in and the $7E:4000 service prologue, the same bytes
+-- server/upr_pipeline._is_slink_polished_overlay (UPR fork patch 0020) matches; the beacon (tools/gen_polished_beacon.py)
+-- re-hashes every overlay-changed byte. The contract pin (the run's per-player rom_sha1) is the SERVER's check: the
+-- client reports the rehashed sha1 in its hello and server.py binds it (rom_contract_by_sha1), as for vanilla Gen 2.
+P.RAND_ANCHORS = {{offset=0x0070, hex="f044e0d7afe08f"}, {offset=0x0DA8, hex="cd700000000000"},
+                  {offset=0x1F8000, hex="210bc63e53223e4c223e4e223e4b223e"}}
+local COMPANION_REASON = "this Polished Crystal cartridge needs the SLink companion patch; "
+                         .. "prepare it through the Manager or /patcher"
+
+--- true, or false, why: the overlay beacon (path relative to root) re-hashed from artifact {size, read_u8}.
+function P.beacon_matches(root, json, Admission, path, overlay_sha1, artifact)
+    local beacon = load_json(json, root .. "/" .. assert(path, "no Polished overlay beacon path"))
+    if beacon.schema ~= "polished-overlay-beacon-v1" or beacon.title ~= P.TITLE then
+        return false, "overlay beacon schema/title mismatch"
+    end
+    if type(beacon.source) ~= "table" or beacon.source.overlay_sha1 ~= overlay_sha1 then
+        return false, "overlay beacon is not pinned to the overlay sha1"
+    end
+    local offsets, last = {}, 0
+    for _, span in ipairs(beacon.spans) do
+        local offset, length = span.offset, span.length
+        if math.type(offset) ~= "integer" or math.type(length) ~= "integer" or offset < last or length < 1
+           or offset + length > artifact.size then
+            return false, "malformed overlay beacon span"
+        end
+        for i = offset, offset + length - 1 do offsets[#offsets + 1] = i end
+        last = offset + length
+    end
+    if #offsets == 0 or #offsets ~= beacon.total or #beacon.spans ~= beacon.count then
+        return false, "overlay beacon span totals mismatch"
+    end
+    local digest = Admission.sha256(function(i) return artifact.read_u8(offsets[i + 1]) end, #offsets)
+    if digest ~= beacon.sha256 then return false, "overlay beacon mismatch" end
+    return true
+end
+
+--- The rand_overlay facts of an executing ROM {size, read_u8}: true, or false, why. Size, header, anchors, beacon.
+function P.rand_overlay_intact(root, json, Admission, profile, beacon_path, overlay_sha1, artifact)
+    if artifact.size ~= profile.derived.rom_size then
+        return false, "ROM size does not match the Polished Crystal cartridge"
+    end
+    if not Admission.anchors_match({{offset=0x134, hex=hex_of(P.HEADER)}}, artifact, "anchors") then
+        return false, "header is not Polished Crystal"
+    end
+    if not Admission.anchors_match(P.RAND_ANCHORS, artifact, "anchors") then
+        return false, COMPANION_REASON
+    end
+    local intact, why = P.beacon_matches(root, json, Admission, beacon_path, overlay_sha1, artifact)
+    if not intact then
+        return false, "its Polished SLink companion overlay is modified or incomplete (" .. why
+                      .. "); prepare it through the Manager or /patcher"
+    end
+    return true
+end
+
+--- Dev admission: {title, kind="overlay"|"rand_overlay", rom_sha1, rehashed=true, ...} (an immutable Admission
+--- decision), or nil, why. args = {root, rom_size, read_rom_u8}; beacon_path = Entry.PACK_FILES.polished_crystal.beacon.
+--- rand_overlay keeps the overlay's DEV_OVERLAY_SHA1 qualification (it executes the overlay's facts, as vanilla
+--- rand_overlay executes its overlay row's view); decision.overlay_sha1 names that overlay, admitted_by="anchors".
+function P.admit(args, beacon_path)
+    local actual_sha, rand_refusal
     local ok, result, reason = pcall(function()
         local root = assert(args.root, "root required")
         local Admission = dofile(root .. "/lua/admission.lua")
@@ -91,35 +154,44 @@ function P.admit(args)
                and prov.base_sha1 == overlay.base_sha1 and prov.base_sha1 == profile.rom_sha1,
                "Polished profile is stale against data/polished/overlay_provenance.json")
         local anchors = {{offset=0x134, hex=hex_of(P.HEADER)}}
+        local rand_anchors = {anchors[1]}
+        for _, anchor in ipairs(P.RAND_ANCHORS) do rand_anchors[#rand_anchors + 1] = anchor end
         local engine = Admission.new({
             acquire=function(request) return {size=request.rom_size, read_u8=request.read_rom_u8} end,
-            catalog=function()
+            catalog=function(_, artifact)
+                actual_sha = artifact.sha1
                 return {{kind="overlay", sha1=prov.output.sha1}, {kind="clean", sha1=prov.base_sha1}}
             end,
             hashes=function(candidate) return {candidate.sha1} end,
-            eligible=function(candidate)
-                if candidate.kind == "clean" then
-                    return false, "this Polished Crystal cartridge needs the SLink companion patch; "
-                                  .. "prepare it through the Manager or /patcher"
+            eligible=function(candidate, mode, _, artifact)
+                if candidate.kind == "clean" then return false, COMPANION_REASON end
+                if mode == "anchors" then
+                    local intact, why = P.rand_overlay_intact(root, json, Admission, profile, beacon_path,
+                                                              prov.output.sha1, artifact)
+                    if not intact then rand_refusal = why return false, why end
                 end
                 return true
             end,
-            anchors=function() return anchors end,
+            anchors=function(_, mode) return mode == "anchors" and rand_anchors or anchors end,
             kind=function(candidate, mode)
-                if mode == "sha1" and candidate.kind == "overlay" then return "overlay" end
-                return nil, "only the pinned Polished overlay is admitted"
+                if candidate.kind == "overlay" then return mode == "sha1" and "overlay" or "rand_overlay" end
+                return nil, "only the pinned Polished overlay (or its randomized form) is admitted"
             end,
-            describe=function()
+            describe=function(_, kind)
                 return {pack="polished_crystal", title=P.TITLE, foundation=P.FOUNDATION, rom_type=P.ROM_TYPE,
-                        qualification="DEV_OVERLAY_SHA1"}
+                        qualification="DEV_OVERLAY_SHA1",
+                        overlay_sha1=kind == "rand_overlay" and prov.output.sha1 or nil}
             end,
-            allow_unknown_hash=false,
+            allow_unknown_hash=true, -- anchors mode admits only rand_overlay, through rand_overlay_intact
         })
         return engine:admit(args)
     end)
     if not ok then return nil, tostring(result) end
-    if result == nil then return nil, reason end
-    return result
+    if result ~= nil then return result end
+    if actual_sha ~= nil and rand_refusal ~= nil then
+        return nil, "unknown artifact SHA-1 " .. tostring(actual_sha) .. ": " .. rand_refusal
+    end
+    return nil, reason
 end
 
 -- (species_id * 32 + form) of every REGIONAL/variant form, from profile.derived.variant_forms (set by P.new).

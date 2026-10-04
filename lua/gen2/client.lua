@@ -106,8 +106,9 @@ function Client.new(p)
 
     -- D5: the kind is the admission decision's (lua/gen2/entry.lua); anything else would run a trade or a hello as a
     -- kind the server never admitted.
-    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay",
-           "artifact_kind must be clean or overlay")
+    -- R3: rand_overlay is the randomized companion overlay (entry.lua anchors admission); it carries the overlay.
+    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay"
+           or p.artifact_kind == "rand_overlay", "artifact_kind must be clean, overlay or rand_overlay")
     assert(p.rescan_every == nil or (type(p.rescan_every) == "number" and p.rescan_every % 1 == 0
            and p.rescan_every >= Client.TICK_INTERVAL), "rescan_every must be nil or whole frames >= one tick")
     local self = {

@@ -382,6 +382,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "evolutions.json",
         "area_map.json",
         "engine_signals.json",  # Signals.new_polished (C-SITES) loads the site pack
+        "overlay/beacon.json",  # P.admit's rand_overlay gate re-hashes the overlay spans (tools/gen_polished_beacon.py)
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",

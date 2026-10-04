@@ -27,6 +27,7 @@ POLISHED = {
     "data/games/polished_crystal/evolutions.json",
     "data/games/polished_crystal/area_map.json",
     "data/games/polished_crystal/engine_signals.json",
+    "data/games/polished_crystal/overlay/beacon.json",
     "data/polished/overlay_provenance.json",
     "lua/gen2/polished.lua",
     "lua/gen2/polished_boxes.lua",
@@ -64,7 +65,8 @@ def test_polished_files_ship_and_nothing_else_changes(tmp_path):
 def test_the_polished_manifest_rows_are_not_gated_by_a_gen2_overlay_catalog():
     # Dev-grade admission (Entry.admit_polished) reads these unconditionally; overlay_state gates Crystal/Gold/Silver only.
     names = make_release.data_game_files()["polished_crystal"]
-    assert set(names) == {Path(p).name for p in POLISHED if p.startswith("data/games/polished_crystal/")}
+    prefix = "data/games/polished_crystal/"
+    assert set(names) == {p.removeprefix(prefix) for p in POLISHED if p.startswith(prefix)}
 
 
 def test_red_control_without_the_polished_rows_the_files_are_missing(tmp_path, monkeypatch):
