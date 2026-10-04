@@ -4730,6 +4730,9 @@ class SLinkServer:
         if entry is None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"No link found for area {area_id}"}, status=404)
+        if s.link_in_trade(entry):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "This pair is in a trade. Settle the trade first."}, status=409)
 
         s.unindex_entry(entry)
 
@@ -4953,22 +4956,36 @@ class SLinkServer:
         if os.path.exists(self._events_path):
             shutil.copy2(self._events_path,
                          os.path.join(backup_dir, "events.pre_rollback.json"))
-        # Restore links.json and reload state
+        # Restore links.json and reload state. The slot is loaded BEFORE anything else changes: a
+        # truncated or unloadable backup must leave links.json, the live state and the clients as they were.
+        pre_links = os.path.join(backup_dir, "links.pre_rollback.json")
         shutil.copy2(backup_links, self.state._links_path)
+        try:
+            restored = SoulLinkState.load(
+                data_dir=self._data_dir,
+                species_lock=self.state.species_lock,
+                gender_lock=self.state.gender_lock,
+                type_lock=self.state.type_lock,
+                explode_mode=self.state.explode_mode,
+                rival_team_swap=self.state.rival_team_swap,
+                overworld_presence=self.state.overworld_presence,
+                native_messages=self.state.native_messages,
+                native_sounds=self.state.native_sounds,
+                battle_calc=self.state.battle_calc,
+                pc_trade_npc=self.state.pc_trade_npc,
+                phone_calls=self.state.phone_calls)
+            problem = restored.load_failed
+        except Exception as exc:                        # e.g. UnsafeGameMigration from an old slot
+            restored, problem = None, f"{type(exc).__name__}: {exc}"
+        if problem:
+            if os.path.exists(pre_links):
+                shutil.copy2(pre_links, self.state._links_path)
+            log.error(f"rollback to slot {slot} refused: {problem}")
+            return aiohttp_web.json_response(
+                {"ok": False, "error": f"Backup slot {slot} could not be loaded ({problem}). Nothing was changed."},
+                status=409)
         self._disconnect_clients()
-        self.state = SoulLinkState.load(
-            data_dir=self._data_dir,
-            species_lock=self.state.species_lock,
-            gender_lock=self.state.gender_lock,
-            type_lock=self.state.type_lock,
-            explode_mode=self.state.explode_mode,
-            rival_team_swap=self.state.rival_team_swap,
-            overworld_presence=self.state.overworld_presence,
-            native_messages=self.state.native_messages,
-            native_sounds=self.state.native_sounds,
-            battle_calc=self.state.battle_calc,
-            pc_trade_npc=self.state.pc_trade_npc,
-            phone_calls=self.state.phone_calls)
+        self.state = restored
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -5377,6 +5394,9 @@ class SLinkServer:
 
         # If override requested, unlink existing entries for these keys
         if override:
+            if any(s.link_in_trade(s.entry_for(pid, k)) for pid, k in (("a", a_key), ("b", b_key))):
+                return aiohttp_web.json_response(
+                {"ok": False, "error": "This pair is in a trade. Settle the trade first."}, status=409)
             for pid, key_to_free in (("a", a_key), ("b", b_key)):
                 old_entry = s.entry_for(pid, key_to_free)
                 if old_entry:

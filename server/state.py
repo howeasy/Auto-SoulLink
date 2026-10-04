@@ -54,6 +54,8 @@ class UnsafeGameMigration(RuntimeError):
 # answers.  Tracked from delivery to answer in SoulLinkState.sync_inflight so the drift
 # reconciler never acts on a key whose command is still on the wire.
 SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
+# Persisted while undelivered (memorialize has its own durable record, pending_memorials).
+DURABLE_SYNC_COMMANDS = ("party_mon", "box_mon")
 
 # KEY-SCOPE-5: accepted key migrations remembered per player (replay idempotence and stale-snapshot
 # canonicalization). The count, not a clock, is the guarantee window.
@@ -702,6 +704,8 @@ class SoulLinkState:
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
         self._arm_inflight(player_id, cmds)
+        if any(c.get("cmd") in DURABLE_SYNC_COMMANDS for c in cmds):
+            self._save()                                 # handed over: no longer owed after a restart
         if cmds:
             _summary = ", ".join(
                 c.get("cmd", "?") + (":" + c["key"][:8] if "key" in c else "")
@@ -1121,8 +1125,16 @@ class SoulLinkState:
                 and player_id == _partner(pt["initiator"])
                 and choice == 1):
             return  # replayed YES cannot renew the watchdog or duplicate native preparation
-        pt["age"] = 0                                  # progress — reset the abandonment watchdog
         phase = pt.get("phase")
+        # Only an event a branch below acts on is progress. Anything else (a partner's menu_result
+        # while preparing/applying, the initiator's bare choice 0 mid-trade) is discarded, and
+        # resetting the abandonment watchdog for it let an echoing client keep a stuck trade alive.
+        initiator = pt["initiator"]
+        if ((phase == "menu" and player_id == initiator)
+                or (player_id == initiator and phase in ("choosing", "confirming", "preparing", "applying")
+                    and msg.get("withdraw") is True)
+                or (phase == "confirming" and player_id == _partner(initiator))):
+            pt["age"] = 0
         if phase == "menu":                                # initiator's action menu (multichoice index)
             if player_id != pt["initiator"]:
                 return
@@ -1354,7 +1366,6 @@ class SoulLinkState:
         # without it matches no trade (review e9d5e136 NIT: the empty-token compat path is gone).
         if str(msg.get("token", "") or "") != pt["token"]:
             return
-        pt["age"] = 0                                   # progress — reset the abandonment watchdog
         new_key = str(msg.get("new_key", "") or "")
         try:
             new_species = int(msg.get("new_species", 0) or 0)
@@ -1365,6 +1376,7 @@ class SoulLinkState:
         pt.setdefault("verdict", {"a": None, "b": None})
         if pt["verdict"][player_id] not in (None, "await"):
             return                                      # already decided (a replayed report)
+        pt["age"] = 0                                   # progress — reset the abandonment watchdog
         barred = self.adapter.supports_trade_recovery() and (
             self.party_hidden[player_id] or self.trade_recovery_pending[player_id]
             or pt.get("hello_only", {}).get(player_id) or msg.get("after_reset") is True)
@@ -1570,6 +1582,11 @@ class SoulLinkState:
             epochs = pt.get("recovery_epochs", {}).get(pid) or [None]
             for epoch in epochs:
                 self._queue_trade_final(pid, pt["token"], epoch)
+
+    def link_in_trade(self, entry) -> bool:
+        """True while the pending trade holds `entry`: removing it would settle the trade onto a link
+        links.json no longer has."""
+        return self.pending_trade is not None and self.pending_trade.get("link") is entry
 
     def trade_problem(self) -> dict | None:
         """The uncertain/conflicted trade for the status page, or None."""
@@ -1842,6 +1859,12 @@ class SoulLinkState:
             saved_pm = data.get("pending_memorials", {})
             state.pending_memorials["a"] = set(saved_pm.get("a", []))
             state.pending_memorials["b"] = set(saved_pm.get("b", []))
+            saved_sync = data.get("queued_sync")
+            if isinstance(saved_sync, dict):
+                for pid in ("a", "b"):
+                    for c in saved_sync.get(pid) or []:
+                        if isinstance(c, dict) and c.get("cmd") in DURABLE_SYNC_COMMANDS and c.get("key"):
+                            state.queued_commands[pid].append(c)
             # Restore lock rules from persisted state (CLI flags are initial defaults;
             # saved values take precedence so mid-run restarts honor the original config).
             saved_rules = data.get("rules", {})
@@ -2164,7 +2187,7 @@ class SoulLinkState:
             # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
             # own deaths are routed, so they follow the swapped link.
             pt = self.pending_trade
-            if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id, "") is None:
+            if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id) is None:
                 # A fresh hello while this side never reported: a Lua reload lost its owed trade_done.
                 # The hello is sent only at the checkpoint, never inside the trade scene, so its party
                 # is evidence now rather than after the watchdog.
@@ -3213,6 +3236,11 @@ class SoulLinkState:
         """
         partner = _partner(player_id)
         now = datetime.now(UTC).isoformat()
+        # Same gate as _handle_faint: before the first Poke Ball nothing is a Soul Link death. A lost
+        # rival battle would otherwise retire a gift-linked starter pair through this path.
+        if not self.pokeballs_obtained[player_id]:
+            log.debug(f"[WHITEOUT GATE] player={player_id}  suppressed=True  reason=nuzlocke_not_active")
+            return
 
         # Plan rebuild against the pre-whiteout state. Dying-pair halves are
         # still in party_keys at this point, so the co-location check inside
@@ -4245,6 +4273,10 @@ class SoulLinkState:
         partner     = _partner(player_id)
         player_mon  = entry.a if player_id == "a" else entry.b
         partner_mon = entry.b if player_id == "a" else entry.a
+        if player_mon:
+            # A dead mon is not in the linked party; owned here, not left to each caller (the hello
+            # path did not do it, so a fresh death still counted toward "party full").
+            self.party_keys[player_id].discard(player_mon.key)
         if partner_mon:
             # Explode Mode: send `force_explode` so the client takes the
             # Variant-3 menu-skip path (auto-Explosion for active battlers,
@@ -4383,6 +4415,7 @@ class SoulLinkState:
         if not key:
             return
         self.pending_memorials[player_id].discard(key)
+        self.party_keys[player_id].discard(key)              # as memorialize_done: dead is not party
         log.warning(f"[{player_id}] memorialize_failed key={key[:8]} reason={reason}")
         # Check if the pair can now be finalized despite the failure
         entry = self.entry_for(player_id, key)
@@ -4737,6 +4770,13 @@ class SoulLinkState:
             # Memorials awaiting Lua confirmation (re-queued on reconnect).
             "pending_memorials": {
                 pid: list(keys) for pid, keys in self.pending_memorials.items()
+            },
+            # Partner syncs not yet handed to their client (typically an offline partner): a restart
+            # must not drop them, or the pair stays split with nothing to notice. Delivered ones are
+            # forgotten; their answers and the tick reconciler own them from there.
+            "queued_sync": {
+                pid: [c for c in cmds if c.get("cmd") in DURABLE_SYNC_COMMANDS]
+                for pid, cmds in self.queued_commands.items()
             },
             "retry_areas": {
                 pid: list(areas) for pid, areas in self.retry_areas.items()
