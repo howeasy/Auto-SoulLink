@@ -28,19 +28,70 @@ from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
 
+_GAMES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "games",
+)
+# The legacy Gen 4 tables (area_map_hgss.json / area_map_platinum.json / trainers_*.json).
+_data_dir = os.path.join(_GAMES_DIR, "gen4_hgsspt")
+# The GENERATED HeartGold/SoulSilver pack (tools/gen_gen4_area_map.py + tools/gen_gen4_acquisition.py).
+# Same wire area ids the client reads, with the gift-area split derived from acquisition.json.
+_HGSS_PACK_DIR = os.path.join(_GAMES_DIR, "gen4_hgss")
+
 # Gift/static encounter area_ids — Pokémon obtained without requiring Pokéballs.
-_GIFT_AREAS = frozenset({
-    # HGSS (Johto/Kanto)
-    "new_bark_town",   # Starter (Chikorita/Cyndaquil/Totodile)
-    "route_30",        # Pokémon Egg from Mr. Pokémon (Togepi)
-    "ruins_of_alph",   # Unown (gift-like static encounters)
-    "dragons_den",     # Dratini from Elder / Extreme Speed Dratini
-    "goldenrod_city",  # Eevee from Bill / Game Corner prizes
-    "mt_mortar",       # Tyrogue from Kiyo
-    "cianwood_city",   # Shuckle from Kirk
-    "ilex_forest",     # Spiky-eared Pichu (event)
-    "route_35",        # Kenya the Spearow (guard delivery)
-    # Platinum (Sinnoh)
+#
+# The HGSS half is the generated pack's own list, not a hand-typed one:
+# data/games/gen4_hgss/area_map.json `gift_areas.ids`. The rule is that file's `rules.gift_areas`:
+# an id is an area a scripted starter/gift/egg/loan reaches where NO map in the area owns a
+# wildEncounterBank, so a failed wild encounter there is impossible. Every candidate whose area DOES
+# own a wild map is named in `gift_areas.on_wild_area` instead — a gift landing there is already
+# handled by the base `gift_link_area` remap (`gift_<area>`), and exempting the whole area would
+# swallow a real no_catch (server/state.py:3053) and quarantine its wild slot (:2365). The client
+# builds the same predicate from the same `ids` (lua/gen4/inputs.lua Inputs.gift_area), so the two
+# cannot drift on a pin bump.
+
+def _load_hgss_gift_areas() -> frozenset[str]:
+    """HGSS gift areas from the pack's `gift_areas.ids`; an EMPTY set when the pack cannot answer.
+
+    Fail CLOSED, and never back to the old hand-typed list: a missing pack, an unreadable file, a
+    `gift_areas` block that is not a list of non-empty strings, or an id the pack itself lists under
+    `on_wild_area` all leave that area NOT exempt. Wrongly EXEMPTING an area is the dangerous
+    direction — the exemption drops that area's no_catch and its wild-slot quarantine, so a genuine
+    KO on Route 35 or Mt. Mortar would vanish and both players would keep a slot the run spent.
+    Wrongly failing to exempt is cheap: the capture is flagged `gift`/`is_egg` on the wire
+    (lua/gen4/poll_events.lua:306,384; server/state.py:2401) and `gift_link_area` still forms the
+    standalone `gift_<area>` pair. This is the same refusal the client makes for a pack with no
+    valid list (lua/gen4/inputs.lua:113-116).
+    """
+    path = os.path.join(_HGSS_PACK_DIR, "area_map.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError) as e:
+        log.error("Gen 4: no usable HGSS gift-area pack at %s (%s) — no HGSS area is exempt from "
+                  "no_catch and every HGSS gift links under gift_<area>", path, e)
+        return frozenset()
+    block = doc.get("gift_areas") if isinstance(doc, dict) else None
+    ids = block.get("ids") if isinstance(block, dict) else None
+    if not isinstance(ids, list) or not all(isinstance(i, str) and i for i in ids):
+        log.error("Gen 4: %s .gift_areas.ids is not a list of non-empty strings (%r) — refused; no "
+                  "HGSS area is exempt from no_catch", path, ids)
+        return frozenset()
+    # on_wild_area is the pack's own record of the candidates the generator removed BECAUSE the area
+    # owns a wild-encounter map; it refuses to emit such a pack (check_gift_ids), so a hit is a
+    # contradiction between two halves of one file and the id is dropped rather than trusted.
+    wild = set((block.get("on_wild_area") or {}).values())
+    contradiction = sorted(set(ids) & wild)
+    if contradiction:
+        log.error("Gen 4: %s .gift_areas.ids covers wild-encounter areas %s — exempting one would "
+                  "drop a real no_catch there; dropped", path, contradiction)
+    return frozenset(i for i in ids if i not in wild)
+
+
+_HGSS_GIFT_AREAS = _load_hgss_gift_areas()
+
+# Platinum (Sinnoh) has no generated pack of its own, so its ids stay hand-typed and unchanged.
+_PLATINUM_GIFT_AREAS = frozenset({
     "twinleaf_town",   # Starter (Turtwig/Chimchar/Piplup from Prof. Rowan)
     "sandgem_town",    # Dawn/Lucas Egg + other town events
     "eterna_city",     # Togepi egg (Underground Man) / Cleffa
@@ -49,24 +100,33 @@ _GIFT_AREAS = frozenset({
     "veilstone_city",  # Porygon (condominiums)
     "route_212",       # Togepi egg from Cynthia
     "pal_park",        # Pokémon migrated via Pal Park
-    # Universal fallback
-    "gift",            # Fallback for unmapped gift areas
 })
+
+# `gift` stays the fallback for an unmapped area nothing else names.
+_GIFT_AREAS = _HGSS_GIFT_AREAS | _PLATINUM_GIFT_AREAS | frozenset({"gift"})
+
 
 # Egg-pickup areas — locations where an NPC hands the player a Pokémon egg.
 # These are fixed-species (the NPC always gives the same Pokémon's egg) and should
 # bypass species/gender clauses, since both linked players receive the same species
 # from the egg. Distinct from `_DAYCARE_AREAS` (player-bred eggs from breeding pair).
+# HGSS is violet_city and only violet_city: the pack's acquisition inventory has exactly four
+# `kind: "egg"` script sites, all in it — Mr. Pokémon's Togepi on MAP_VIOLET_POKEMART
+# (scr_seq_0858_T22FS0101:53) and Mareep / Wooper / Slugma on MAP_VIOLET_POKECENTER_1F
+# (scr_seq_0860_T22PC0101:79, :91, :103). NOT route_30: Mr. Pokémon's house is in Violet City and
+# no acquisition site is in route_30 at all. NOT mt_mortar: Kiyo's Tyrogue is `kind: "gift"`
+# (GiveMon SPECIES_TYROGUE, level 10) — a mon handed over, not an egg. The Spiky-eared Pichu in
+# Ilex Forest is `kind: "special_gift"`, likewise not an egg. Note an egg site can sit in a wild
+# area (violet_city owns an encounter bank), so membership here is independent of `_GIFT_AREAS`.
 _EGG_PICKUP_AREAS = frozenset({
     # HGSS
-    "route_30",        # Togepi egg from Mr. Pokémon
-    "violet_city",     # alt cutscene location for Mr. Pokémon's egg
-    "mt_mortar",       # Tyrogue from Kiyo (handed at L10 in some patches)
+    "violet_city",     # Togepi from Mr. Pokémon; Mareep/Wooper/Slugma in the Poké Center
     # Platinum
     "eterna_city",     # Togepi egg via Underground Man / Cynthia
     "iron_island",     # Riolu egg from Riley
     "route_212",       # Cynthia's alternate Togepi egg cutscene
 })
+
 
 # Daycare areas — eggs ORIGINATE from a breeding pair the player deposited.
 # Treated separately from egg pickups: daycare eggs hatch into a random species
@@ -84,8 +144,12 @@ _DAYCARE_AREAS = frozenset({
 
 # Gift areas with a forced, identical species (no player choice).
 # Excludes starters, Odd Egg / random eggs, and variable Game Corner prizes.
+# This is an AREA-level bypass of the species/dupes clause and of the pair-formation clause
+# (server/state.py:2668 and :2771), so every id here is one where an ordinary wild catch in that
+# area cannot exist either — it must not name a route. route_30 is gone for that reason: it has no
+# acquisition at all (no acquisition.json script site resolves into it), so listing it only
+# disabled both clauses for Route 30's grass.
 _FIXED_SPECIES_GIFTS = frozenset({
-    "route_30",        # Togepi egg from Mr. Pokémon
     "dragons_den",     # Dratini from Elder
     "mt_mortar",       # Tyrogue from Kiyo
     "ilex_forest",     # Spiky-eared Pichu (event)
@@ -97,10 +161,6 @@ _FIXED_SPECIES_GIFTS = frozenset({
 
 # Area display names: loaded from both HGSS and Platinum area maps.
 _AREA_DISPLAY_NAMES: dict[str, str] = {}
-_data_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen4_hgsspt",
-)
 for _map_file in ("area_map_hgss.json", "area_map_platinum.json"):
     _area_map_path = os.path.join(_data_dir, _map_file)
     if os.path.exists(_area_map_path):
@@ -228,20 +288,23 @@ class Gen4Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        # Also recognize the "egg_*" prefix the client emits for egg pickups.
+        """True for a gift/static area. The HGSS half is the pack's (see `_HGSS_GIFT_AREAS`);
+        Platinum has no pack and stays hand-typed; `gift` is the unmapped-area fallback.
+        The `gift_` and `egg_` prefixes the client/remap emit are recognised regardless, so a
+        remapped `gift_<area>` (base.gift_link_area) still reads as a gift downstream."""
         if area_id in _GIFT_AREAS or area_id.startswith("gift_"):
             return True
         return area_id.startswith("egg_")
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        # Strip "egg_" prefix so e.g. "egg_route_30" still matches the Togepi entry.
+        # Strip "egg_" prefix so e.g. "egg_dragons_den" still matches the Dratini entry.
         bare = area_id[4:] if area_id.startswith("egg_") else area_id
         return bare in _FIXED_SPECIES_GIFTS
 
     def is_egg_pickup_area(self, area_id: str) -> bool:
-        # NPC-given eggs (route_30 Togepi, iron_island Riolu, etc.). Daycare eggs
-        # use is_daycare_area instead — they aren't pickups, they're player-bred.
-        # Strip the "egg_" prefix the client emits to consult the underlying area.
+        # NPC-given eggs (HGSS violet_city Togepi/Mareep/Wooper/Slugma, Platinum iron_island
+        # Riolu, etc.). Daycare eggs use is_daycare_area instead — they aren't pickups, they're
+        # player-bred. Strip the "egg_" prefix the client emits to consult the underlying area.
         bare = area_id[4:] if area_id.startswith("egg_") else area_id
         # Daycare always wins over egg-pickup classification (player-bred ≠ NPC gift).
         if bare in _DAYCARE_AREAS:

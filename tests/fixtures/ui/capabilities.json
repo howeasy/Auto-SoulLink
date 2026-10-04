@@ -598,7 +598,7 @@
       "EVA"
     ]
   },
-  "hgss": {
+  "heartgold_hge": {
     "abilities": true,
     "badges": [
       "Zephyr Badge",
@@ -683,35 +683,6 @@
     "memorial_box_index": 13,
     "mons_per_box": 30,
     "party_blob_size": 100,
-    "stat_stage_labels": [
-      "ATK",
-      "DEF",
-      "SPD",
-      "SATK",
-      "SDEF",
-      "ACC",
-      "EVA"
-    ]
-  },
-  "platinum": {
-    "abilities": true,
-    "badges": [
-      "Coal Badge",
-      "Forest Badge",
-      "Cobble Badge",
-      "Fen Badge",
-      "Relic Badge",
-      "Mine Badge",
-      "Icicle Badge",
-      "Beacon Badge"
-    ],
-    "explode_mode": false,
-    "game_id": "gen4_hgsspt",
-    "info_panel": false,
-    "info_panel_width": 0,
-    "memorial_box_index": 17,
-    "mons_per_box": 30,
-    "party_blob_size": 0,
     "stat_stage_labels": [
       "ATK",
       "DEF",
@@ -979,43 +950,6 @@
       "SPD",
       "SPC",
       "",
-      "ACC",
-      "EVA"
-    ]
-  },
-  "renegade_platinum": {
-    "abilities": true,
-    "badges": [
-      "Zephyr Badge",
-      "Hive Badge",
-      "Plain Badge",
-      "Fog Badge",
-      "Storm Badge",
-      "Mineral Badge",
-      "Glacier Badge",
-      "Rising Badge",
-      "Boulder Badge",
-      "Cascade Badge",
-      "Thunder Badge",
-      "Rainbow Badge",
-      "Soul Badge",
-      "Marsh Badge",
-      "Volcano Badge",
-      "Earth Badge"
-    ],
-    "explode_mode": false,
-    "game_id": "gen4_hgsspt",
-    "info_panel": false,
-    "info_panel_width": 0,
-    "memorial_box_index": 17,
-    "mons_per_box": 30,
-    "party_blob_size": 0,
-    "stat_stage_labels": [
-      "ATK",
-      "DEF",
-      "SPD",
-      "SATK",
-      "SDEF",
       "ACC",
       "EVA"
     ]

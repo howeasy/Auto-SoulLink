@@ -17,21 +17,11 @@ def test_game_id(adapter):
 
 
 # ── Gift areas ───────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("area_id", [
-    "new_bark_town",
-    "route_30",
-    "ruins_of_alph",
-    "dragons_den",
-    "goldenrod_city",
-    "mt_mortar",
-    "cianwood_city",
-    "ilex_forest",
-    "route_35",
-])
-def test_gift_areas_return_true(adapter, area_id):
-    assert adapter.is_gift_area(area_id) is True
-
+# The HGSS gift set is the generated pack's `gift_areas.ids`
+# (data/games/gen4_hgss/area_map.json), pinned area-by-area against that pack in
+# tests/unit/test_gen4_gift_areas_server.py. What is left here is the two shapes the adapter adds
+# on top of any set — the unmapped-area fallback and the `gift_` prefix — plus Platinum, which has
+# no pack and stays hand-typed.
 
 def test_gift_fallback_area(adapter):
     assert adapter.is_gift_area("gift") is True
@@ -71,16 +61,6 @@ def test_platinum_gift_areas_return_true(adapter, area_id):
 def test_platinum_non_gift_area(adapter):
     """A Sinnoh route should not be a gift area."""
     assert adapter.is_gift_area("route_201") is False
-
-
-def test_hgss_gift_areas_unaffected_by_platinum(adapter):
-    """HGSS gifts must still be recognised even after Platinum gifts were added."""
-    hgss_gifts = [
-        "new_bark_town", "route_30", "ruins_of_alph", "dragons_den",
-        "goldenrod_city", "mt_mortar", "cianwood_city", "ilex_forest", "route_35",
-    ]
-    for area_id in hgss_gifts:
-        assert adapter.is_gift_area(area_id) is True, f"HGSS gift area {area_id!r} broken"
 
 
 # ── PID:OTID key parsing ────────────────────────────────────────────────
@@ -377,11 +357,17 @@ class TestEggPickupArea:
     """Egg-pickup detection (Phase 4)."""
 
     def test_egg_prefix_recognized(self, adapter):
-        assert adapter.is_egg_pickup_area("egg_route_30") is True
+        assert adapter.is_egg_pickup_area("egg_violet_city") is True
         assert adapter.is_egg_pickup_area("egg_iron_island") is True
 
-    def test_route_30_recognized(self, adapter):
-        assert adapter.is_egg_pickup_area("route_30") is True
+    def test_violet_city_recognized(self, adapter):
+        # The pack's acquisition inventory puts every `kind: "egg"` site in violet_city: Mr.
+        # Pokémon's Togepi on MAP_VIOLET_POKEMART and Mareep/Wooper/Slugma in the Poké Center.
+        assert adapter.is_egg_pickup_area("violet_city") is True
+        # Mr. Pokémon's house is NOT on Route 30 — no acquisition site resolves into that area.
+        assert adapter.is_egg_pickup_area("route_30") is False
+        # Kiyo's Tyrogue is `kind: "gift"` (a mon handed over), not an egg.
+        assert adapter.is_egg_pickup_area("mt_mortar") is False
 
     def test_non_egg_area_returns_false(self, adapter):
         assert adapter.is_egg_pickup_area("new_bark_town") is False
@@ -389,11 +375,14 @@ class TestEggPickupArea:
 
     def test_egg_area_also_gift_area(self, adapter):
         # Egg pickups are treated as gifts for clause-bypass purposes.
-        assert adapter.is_gift_area("egg_route_30") is True
+        assert adapter.is_gift_area("egg_violet_city") is True
 
     def test_egg_fixed_species_strips_prefix(self, adapter):
-        # "egg_route_30" should map to route_30 (Togepi, fixed species).
-        assert adapter.is_fixed_species_gift("egg_route_30") is True
+        # "egg_dragons_den" should map to dragons_den (Dratini from the Elder, fixed species).
+        assert adapter.is_fixed_species_gift("egg_dragons_den") is True
+        # route_30 is not a fixed-species gift either: it has no acquisition at all, so listing it
+        # only disabled the species clause for Route 30's grass.
+        assert adapter.is_fixed_species_gift("route_30") is False
 
 
 class TestDaycareArea:
@@ -418,9 +407,9 @@ class TestDaycareArea:
         # Daycare-bred eggs aren't NPC pickups — clause logic gets different treatment.
         assert adapter.is_egg_pickup_area("route_34") is False
         assert adapter.is_egg_pickup_area("egg_route_34") is False
-        # But the route_30 (Mr. Pokémon) IS an NPC egg pickup, not daycare.
-        assert adapter.is_egg_pickup_area("route_30") is True
-        assert adapter.is_daycare_area("route_30") is False
+        # But violet_city (Mr. Pokémon, the Poké Center eggs) IS an NPC egg pickup, not daycare.
+        assert adapter.is_egg_pickup_area("violet_city") is True
+        assert adapter.is_daycare_area("violet_city") is False
 
 
 class TestRomTypeVariants:

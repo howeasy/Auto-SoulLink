@@ -379,26 +379,28 @@ def test_a_malformed_hello_goes_red_at_send_time():
             send(line)
 
 
-def test_open_hge_hello_is_currently_refused_for_routing():
-    """OPEN (pending G3a): heartgold_hge is admitted by the LUA client but has NO
-    _ROM_TYPE_TO_GAME_ID row yet (server/adapters/__init__.py:42-87), so foundation_for_rom_type
-    returns None and protocol_schema refuses the hello as 'not one the server routes'.
+def test_hge_hello_routes_on_its_own_foundation():
+    """CLOSED (G3a): heartgold_hge used to have NO `_ROM_TYPE_TO_GAME_ID` row, so
+    foundation_for_rom_type returned None and protocol_schema refused its hello as
+    'not one the server routes' (tests/unit/protocol_schema.py:254-256). The registry now
+    routes it (server/adapters/__init__.py) and pairs it on its OWN foundation, `gen4_hge`:
+    the hg-engine fork is the `gen4_hgsspt` adapter but not the HGSS layout.
 
-    gen4_world.py:458-459 suppresses exactly this problem for the heartgold_hge title. This test
-    does NOT inherit that suppression: it runs the raw validator on a real hge hello and asserts the
-    refusal is present. When G3a adds the server row, this test must be inverted AND the harness
-    suppression at gen4_world.py:458-459 removed.
+    This test does NOT inherit gen4_world's suppression (gen4_world.py:558-559, which is
+    still in the harness and is now DEAD -- it filters a problem that can no longer occur;
+    it should be deleted by whoever owns that file). It runs the raw validator on a real
+    hge hello, so if the registry row is dropped again the refusal reappears HERE.
     """
-    from server.adapters import foundation_for_rom_type
+    from server.adapters import foundation_for_rom_type, game_id_for_rom_type
 
-    assert foundation_for_rom_type("heartgold_hge") is None, "G3a added the row; update this OPEN"
+    assert game_id_for_rom_type("heartgold_hge") == "gen4_hgsspt"
+    assert foundation_for_rom_type("heartgold_hge") == "gen4_hge"
     w = World("heartgold_hge", party=two_mon(), charmap=CHARMAP, area_of=AREA)
     w.boot(80)
     hello = w.events("hello")[0]
     assert hello["rom_type"] == "heartgold_hge"
-    problems = ps.validate_event(hello, strict=True)
-    assert any("not one the server routes" in p for p in problems), \
-        f"expected the hge routing refusal, got {problems}"
+    problems = [p for p in ps.validate_event(hello, strict=True) if "'writes_enabled'" not in p]
+    assert problems == [], f"hge routes now, so its hello must be schema-valid: {problems}"
 
 
 # -- 11 / 20 / 21 / 26 / 27: the encounter + reducer half, on the production client -------------------
