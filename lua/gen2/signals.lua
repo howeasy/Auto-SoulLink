@@ -13,7 +13,8 @@
 -- authority={kind,allow_model_registration,capture,valid}, owner,max_pending,
 -- areas (generated area_map), encounters (generated encounter_tables),
 -- statics (generated static_encounters), gifts (generated gifts.json: card U1G qualifies a givepoke caller from it;
--- without it gift_static stays OPEN).
+-- without it gift_static stays OPEN), artifact_kind ("rand_overlay": static/gift/roamer species are read from the ROM at
+-- the pack's own sites, R4; any other value keeps the pack's).
 -- view (new, PHYSICAL only; OVERLAY_ADMISSION D5): the selected artifact view {kind, rom_sha1, base_sha1, binding_sha256,
 -- sites}. S.qualified_sites/S.bind_fixture_qualification validate every run against its sha1/kind/binding (nil = the
 -- clean pack) and an overlay registers its OWN sites, never the clean pack's.
@@ -550,6 +551,60 @@ function build(options, proven)
         assert(gifts.schema == "gen2-gifts-v1" and type(gifts.gifts) == "table", "generated gifts pack required")
         same_source(gifts.source,pack.source)
     end
+    -- R4 (docs/gen2/RANDOMIZER.md): a randomized companion cartridge (rand_overlay) keeps every site -- the map, the
+    -- anchored script command, the InitRoamMons slot -- while UPR rewrote the species/level/item bytes AT that site.
+    -- Those are read from the executed ROM instead of the vanilla pack; the site stays the invariant, so a static or
+    -- gift elsewhere is still refused. Clean and overlay carts never take this path: their bytes ARE the pack's.
+    local randomized = options.artifact_kind == "rand_overlay"
+    -- The anchored command as the ROM holds it, or nil unless its opcode and every byte past the `varying` argument
+    -- bytes equal the pack's (a moved or rewritten command never qualifies).
+    local function rom_command(anchor, varying)
+        if type(anchor) ~= "table" or not integer(anchor.flat,0,COUNT) or type(anchor.expected_hex) ~= "string"
+           or #anchor.expected_hex < 2*(varying+1) then return nil end
+        local bytes = {}
+        for i=0,#anchor.expected_hex//2-1 do
+            local byte = io.read_u8(anchor.flat+i,"ROM")
+            if not integer(byte,0,255) then return nil end
+            if (i == 0 or i > varying) and byte ~= tonumber(anchor.expected_hex:sub(2*i+1,2*i+2),16) then return nil end
+            bytes[i] = byte
+        end
+        return bytes
+    end
+    if randomized then
+        -- loadwildmon species, level / givepoke species, level, item (C/G macros/scripts/events.asm); a row whose
+        -- command does not hold is unselected here (fail closed for that site only)
+        local function from_rom(rows, varying, fields)
+            for _,row in ipairs(rows) do
+                local command = rom_command(row.rom, varying)
+                if command then
+                    for i,field in ipairs(fields) do row[field] = command[i] end
+                else row.applicability = {selected=false} end
+            end
+        end
+        if statics then
+            statics = copy(statics)
+            from_rom(statics.encounters, 2, {"species","level"})
+        end
+        if gifts then
+            gifts = copy(gifts)
+            local givepoke = {}
+            for _,row in ipairs(gifts.gifts) do if row.operation == "givepoke" then givepoke[#givepoke+1] = row end end
+            from_rom(givepoke, 3, {"species","level","item"})
+        end
+    end
+    -- Roamer slot index's species: the pack's, or on a randomized cart the `ld a, <species>` immediate InitRoamMons
+    -- stores into wRoamMon<index>Species (C wildmons.asm:493-524, G:488-529; 3E xx EA lo hi per slot); nil if the
+    -- instruction is not that store.
+    local function roamer_species(index, row)
+        if not randomized then return row.species end
+        local init = type(p.rom) == "table" and p.rom.InitRoamMons
+        local store = p.ram["wRoamMon" .. index .. "Species"]
+        if type(init) ~= "table" or not integer(init.flat,0,COUNT) or not integer(store,0,65535) then return nil end
+        local base = init.flat + 5*(index-1)
+        local function at(i) return io.read_u8(base+i,"ROM") end
+        if at(0) ~= 0x3E or at(2) ~= 0xEA or at(3) ~= store%256 or at(4) ~= store//256 then return nil end
+        return at(1)
+    end
     local reads = assert(options.reads,"independent Gen 2 reads binding required")
     assert(callable(reads.read_party) and callable(reads.read_active_box),"party/active-box readers required")
     local Registry, GB = assert(options.Registry), assert(options.GB)
@@ -895,10 +950,17 @@ function build(options, proven)
             local encounters = options.encounters
             assert(type(encounters) == "table", "OPEN: roamer species policy unavailable")
             same_source(encounters.source,pack.source)
-            local allowed = false
-            for _,row in ipairs(encounters.roamers.initial) do if row.species == after.mon.species_id then allowed=true end end
-            need(allowed,"OPEN: species is not a selected-title roamer")
-            acquisition,zone,classifications = "roamer","legend_" .. after.mon.species_id,{classifier}
+            -- the zone is the slot's pack species (legend_<species>): on a randomized cart the caught species is
+            -- whatever UPR stored in that slot, the area stays the slot's own
+            local slot
+            for index,row in ipairs(encounters.roamers.initial) do
+                if roamer_species(index,row) == after.mon.species_id then
+                    need(slot == nil or slot == row.species,"OPEN: species matches two roamer slots")
+                    slot = row.species
+                end
+            end
+            need(slot,"OPEN: species is not a selected-title roamer")
+            acquisition,zone,classifications = "roamer","legend_" .. slot,{classifier}
         elseif acquisition == "wild" then
             local battle_type = scalar(site,"wBattleType")
             -- Specialized/static catch policy is not inferred from a map or key.

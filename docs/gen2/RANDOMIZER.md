@@ -352,9 +352,12 @@ include them.
 - The server binds a Gen 2 hello to the contract's per-player `rom_sha1`
   (`rom_contract_by_sha1`). A `rand_overlay` hello in a run with no contract is refused: only the
   Manager makes randomized Gen 2 cartridges.
-- Not done yet: ROM-derived data (R4). Until then, static, roamer and gift captures on a randomized
-  cart are dropped by `lua/gen2/signals.lua` (they are matched against vanilla species), and the
-  encounter panel shows vanilla species.
+## ROM-derived data (R4, 2026-10-04)
+
+- On a `rand_overlay` cart, `lua/gen2/signals.lua` keeps the vanilla site identity (map + script position) and reads the species (and level, and item for `givepoke`) from the ROM bytes at that site; the opcode and trailing bytes must still match the pack, else that one site is unselected. Roamers read the immediate of `ld a,xx; ld [wRoamMon<i>Species],a` in InitRoamMons. Clean/overlay behaviour is unchanged (the ROM is never read).
+- The server decodes each player's provisioned ROM (`_contracted_rom`, bytes whose sha1 equals the contract pin; a client's JSON is never trusted) with `gen2_rom_scan` unpinned, and adopts it per player like Gen 3. Wild, tree, fishing, contest and static tables come from the ROM; until adopted, a randomized cart shows no encounter table.
+- Checked against the UPR logs on real randomized ROMs: starters 4/4, statics/gifts 24/24, 24/24, 21/21, 21/21, roamers all match.
+- Known limits: the legend area's display name still shows the slot's vanilla name (e.g. "Raikou"); `gift_link_area(acquisition="roamer")` still checks the vanilla species (nothing calls it).
 
 ### Known limit: the Lua gate checks the two hook pins, not the whole overlay
 

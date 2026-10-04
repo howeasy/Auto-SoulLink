@@ -353,6 +353,46 @@ class Rom:
                 raise RomScanError("roamer destination is not a roaming map")
         return {"initial": self._roamer_initial(), "maps": rows}
 
+    def contest(self) -> dict:
+        """ContestMons (C/G data/wild/bug_contest_mons.asm): `db weight, species, min, max` records whose weights total
+        100, then the fallback record with weight -1 ($ff). The symbol is not a profile fact: the caller supplies it."""
+        cursor, slots, total = self._cursor("ContestMons"), [], 0
+        while True:
+            weight, species, low, high = cursor.take(4)
+            _integer(species, "contest species", 1, 251)
+            if not 1 <= low <= high <= 100:
+                raise RomScanError("contest levels invalid")
+            row = {"weight": -1 if weight == 255 else weight, "species": species, "min_level": low, "max_level": high}
+            if weight == 255:
+                if total != 100:
+                    raise RomScanError("contest weights must total 100")
+                return {"slots": slots, "fallback": row}
+            if weight == 0 or total + weight > 100:
+                raise RomScanError("invalid contest weight")
+            total += weight
+            slots.append(row)
+
+    def scripted_mons(self, rows) -> list[dict]:
+        """The species and level (givepoke: and item) the ROM holds at each pack row's own anchored script command
+        (static_encounters.json / gifts.json `rom`: loadwildmon species, level; givepoke species, level, item, ...;
+        giveegg species, level -- C/G macros/scripts/events.asm). The same site is read instead of the vanilla value;
+        the opcode and every byte past the arguments must still be the anchor's, so a moved command refuses."""
+        out = []
+        for row in rows:
+            anchor = _object(row.get("rom"), "scripted row rom anchor")
+            expected = bytes.fromhex(anchor.get("expected_hex", ""))
+            varying = 3 if row.get("operation") == "givepoke" else 2
+            if len(expected) <= varying or anchor.get("flat") != rom_offset(anchor.get("bank"), anchor.get("addr")):
+                raise RomScanError(f"{row.get('id')}: unsupported script anchor")
+            got = self._pointer(anchor["bank"], anchor["addr"], f"script {row.get('id')}").take(len(expected))
+            if got[0] != expected[0] or got[varying + 1:] != expected[varying + 1:]:
+                raise RomScanError(f"{row.get('id')}: anchored script command differs")
+            mon = {"id": row["id"], **self._slot(got[1], got[2])}
+            if varying == 3:
+                mon["item"] = got[3]
+            out.append(mon)
+        return out
+
     def scan_all(self) -> dict:
         return {"schema": SCHEMA, "title": self.title,
                 "base_stats": [self.base_stats(species) for species in range(1, 252)],

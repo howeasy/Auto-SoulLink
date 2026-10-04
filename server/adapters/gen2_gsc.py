@@ -13,12 +13,13 @@ pokegold@656583c939d30f920a316177311a502dd222b57c; per-pack source receipts.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 from functools import cache
 from pathlib import Path
 
-from . import gen2_codec
+from . import gen2_codec, gen2_rom_scan
 from .base import GameAdapter, companion_required_reason, gb_status_token, humanize_area_id
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games"
@@ -125,6 +126,36 @@ def _fixed_species_gift_areas():
 
 
 _FIXED_SPECIES_GIFT_AREAS = _fixed_species_gift_areas()
+
+# R4 (docs/gen2/RANDOMIZER.md): the header title each randomized cartridge must keep (UPR never writes the header).
+_HEADER_TITLE = {"crystal": b"PM_CRYSTAL", "gold": b"POKEMON_GLD", "silver": b"POKEMON_SLV"}
+
+
+@cache
+def _rand_profile(title: str) -> dict:
+    """The title's profile row plus ContestMons (not a profile fact) from the companion overlay's own symbols: a
+    randomized cartridge is UPR's output of that overlay, which keeps every table address."""
+    profile = _json(_DATA / f"gen2_{title}" / "profile.json")["titles"][title]
+    sym = _DATA.parent / "gen2" / f"{title}_slink.sym"
+    for line in sym.read_text(encoding="utf-8").splitlines():
+        if line.endswith(" ContestMons"):
+            bank, addr = line.split()[0].split(":")
+            profile["rom"]["ContestMons"] = {"bank": int(bank, 16), "addr": int(addr, 16)}
+    return profile
+
+
+def scan_randomized(rom: bytes, title: str) -> dict:
+    """A randomized companion cartridge's own tables, read unpinned at the overlay's table addresses: wild, tree,
+    fishing, roamers and contest, plus the species at every static/gift pack row's own script command (the site
+    stays the pack's; only the bytes there are UPR's). Raises on anything that does not decode."""
+    _require(title in _HEADER_TITLE and rom[0x134:0x134 + len(_HEADER_TITLE[title])] == _HEADER_TITLE[title],
+             f"the cartridge header is not {title}")
+    reader = gen2_rom_scan.Rom(rom, _rand_profile(title), pinned=False)
+    directory = _DATA / f"gen2_{title}"
+    return {"title": title, "wild": reader.wild(), "tree": reader.tree(), "fishing": reader.fishing(),
+            "roamers": reader.roamers(), "contest": reader.contest(),
+            "statics": reader.scripted_mons(_json(directory / "static_encounters.json")["encounters"]),
+            "gifts": reader.scripted_mons(_json(directory / "gifts.json")["gifts"])}
 
 
 class Gen2GSCAdapter(GameAdapter):
@@ -268,7 +299,7 @@ class Gen2GSCAdapter(GameAdapter):
         rivals = {int(cls) for cls, const in trainers["class_constants"].items() if const in ("RIVAL1", "RIVAL2")}
         _require(len(rivals) == 2, "RIVAL1/RIVAL2 trainer classes missing")
         self._rival_ids = frozenset(cls * 256 + inst for cls, inst in self._trainer_names if cls in rivals)
-        self._artifact_kind, self.randomized = "clean", False
+        self._artifact_kind, self.randomized, self._rom_adopted = "clean", False, False
         if artifact_kind is not None:
             self.set_artifact_kind(artifact_kind)
 
@@ -602,13 +633,38 @@ class Gen2GSCAdapter(GameAdapter):
         return tables
 
     def encounter_table(self, area_id):
+        # a randomized cartridge shows only its own tables (use_rom_encounters), never the vanilla ones
+        if self.randomized and not self._rom_adopted:
+            return None
         return copy.deepcopy(self._tables.get(area_id))
 
     def rom_content_fingerprint(self, payload):
         raise ValueError("Gen 2 client ROM-content admission is not qualified")
 
     def ingest_rom_content(self, payload):
-        raise ValueError("Gen 2 client ROM-content admission is not qualified")
+        """R4: a randomized companion cartridge's own tables (scan_randomized). The payload is the server's read of
+        the Manager's file for this player (server.py _contracted_rom): bytes, which a JSON hello cannot carry, whose
+        sha1 must be the contract's pin. A client report stays unqualified."""
+        if not (isinstance(payload, dict) and type(payload.get("rom")) is bytes):
+            raise ValueError("Gen 2 client ROM-content admission is not qualified")
+        rom = payload["rom"]
+        _require(hashlib.sha1(rom).hexdigest() == payload.get("rom_sha1"), "cartridge bytes differ from the contract sha1")
+        title = _TITLE_FOR_ROM_TYPE.get(payload.get("rom_type"))
+        _require(title is not None, "no Gen 2 title for the cartridge")
+        return scan_randomized(rom, title)
+
+    def use_rom_encounters(self, tables):
+        """Adopt ingest_rom_content's tables for this player's cartridge. {} (an unreadable cartridge) shows no
+        encounters at all, never the vanilla ones. Static/gift/roamer AREAS stay the pack's site ids (lua/gen2/signals.lua
+        R4 publishes the site's own id), so only the presentation tables change."""
+        self._rom_adopted = True
+        if not tables:
+            self._tables = {}
+            return
+        _require(tables.get("title") == self.title, "ROM tables belong to another title")
+        self._encounters = {**self._encounters, **{name: tables[name] for name in ("wild", "tree", "fishing", "roamers")},
+                            "contest": {**self._encounters["contest"], **tables["contest"]}}
+        self._tables = self._presentation_tables()
 
     def set_artifact_kind(self, kind):
         # "clean" is the plain pret build; "overlay" is the SLink companion build (P4.1a);
@@ -617,8 +673,7 @@ class Gen2GSCAdapter(GameAdapter):
         # randomized clean build ("rand") do not apply: the companion is required (patch-first).
         _require(kind in _KINDS, "Gen 2 only supports the clean/overlay/rand_overlay artifact kinds")
         self._artifact_kind = kind
-        # R4 switches the encounter/static/gift/trainer sources on this; until then the shipped
-        # (vanilla) tables still answer for a randomized cartridge.
+        # R4: a randomized cartridge answers encounters only from its own ROM (use_rom_encounters).
         self.randomized = kind == "rand_overlay"
 
     @staticmethod

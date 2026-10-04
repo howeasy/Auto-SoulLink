@@ -536,7 +536,8 @@ local function compose(deps, title, production, decision)
                                           load("lua/gb_hook_binding.lua")
             local options = {title=title, profile=data.profile, pack=data.sites, io=io_,
                 Registry=Registry, GB=GB, reads=reads, owner="SLink-gen2", max_pending=64,
-                areas=data.area_map, encounters=data.encounters, statics=data.statics, gifts=data.gifts}
+                areas=data.area_map, encounters=data.encounters, statics=data.statics, gifts=data.gifts,
+                artifact_kind=kind}
             local signals
             if production then
                 -- signals.new registers exactly the receipt's proven sites, under PHYSICAL authority.
