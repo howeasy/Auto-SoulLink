@@ -67,10 +67,10 @@ uint32_t Slink_NDS_ArenaBase(void);
  *     untrusted-until-valid;
  *   - it never carries rules or write permission;
  *   - everything past 64 bytes stays free.
- * abi.h carries no SLINK_TITLE_OFFSET/SLINK_TITLE_SIZE yet (the ruling asks the ABI
- * owner to add them; cite the ruling until then -- C2_BEACON_SPEC.md:12). The block
- * is therefore derived from the ABI's own SLINK_RESERVED_OFFSET / SLINK_ARENA_SIZE,
- * so a change to either shared constant cannot silently move it.
+ * abi.h now carries SLINK_TITLE_OFFSET / SLINK_TITLE_SIZE (the ruling's request,
+ * C2_BEACON_SPEC.md:12) and statically asserts them equal to SLINK_RESERVED_OFFSET and
+ * 0x40 (abi.h:303-305). This block is still derived from SLINK_RESERVED_OFFSET so a change
+ * to the shared constant cannot silently move it.
  */
 #define SLINK_GEN4_TITLE_OFFSET (SLINK_RESERVED_OFFSET)
 #define SLINK_GEN4_TITLE_SIZE 0x40u
