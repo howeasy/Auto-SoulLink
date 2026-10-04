@@ -372,7 +372,7 @@ def test_option_form_is_json_safe_and_ordered_like_the_table():
     assert [c["value"] for c in by_key["wild"]["choices"]] == ["unchanged", "random", "area", "global"]
 
 
-# ── the Polished Crystal family (docs/polished/UPR_HANDLER.md; fork patch 0017 = wild only) ─────────
+# ── the Polished Crystal family (docs/polished/UPR_HANDLER.md; fork patches 0017 wild, 0018 the rest) ───
 def test_polished_family_is_the_handlers_wild_allowlist():
     from server.upr_settings import (
         FAMILIES,
@@ -383,7 +383,8 @@ def test_polished_family_is_the_handlers_wild_allowlist():
     )
     assert FAMILY_POLISHED == "gen2_polished" and FAMILY_POLISHED in FAMILIES
     assert tuple(options_for(FAMILY_POLISHED)) == POLISHED_OPTION_KEYS
-    assert all(o["group"] == "Wild encounters" for o in options_for(FAMILY_POLISHED).values())
+    assert {o["group"] for o in options_for(FAMILY_POLISHED).values()} == {
+        "Wild encounters", "Starters", "Static encounters", "Trainers", "In-game trades"}      # 0018
     assert not any("misc" in o for o in options_for(FAMILY_POLISHED).values())
     assert ROM_NAME[FAMILY_POLISHED] == "Polished Crystal (U) 3.2.3"
 
@@ -398,24 +399,22 @@ def test_polished_widest_allowed_file_round_trips_and_is_admitted():
         unexpected_settings,
     )
     spec = dict(default_spec(FAMILY_POLISHED), wild="area", wild_restriction="type_themed",
-                wild_block_legendaries=False, wild_min_catch_rate=5, wild_levels=-20)
+                wild_block_legendaries=False, wild_min_catch_rate=4, wild_levels=-20)
     parsed = load(build_spec(spec, family=FAMILY_POLISHED))
     assert parsed["misc_tweaks"] == 0 and parsed["rom_name"] == "Polished Crystal (U) 3.2.3"
     assert forbidden_enabled(parsed, FAMILY_POLISHED) == []
     assert unexpected_settings(parsed, FAMILY_POLISHED) == []
     assert spec_from_parsed(parsed, FAMILY_POLISHED) == spec
-    assert categories_enabled(parsed, FAMILY_POLISHED) == {"wild"}
-    assert "starters" not in summarize(spec_from_parsed(parsed, FAMILY_POLISHED))    # absent, not "random"
+    assert categories_enabled(parsed, FAMILY_POLISHED) == {"wild", "starters", "trainers"}   # 0018 defaults
+    assert "tm moves" not in summarize(spec_from_parsed(parsed, FAMILY_POLISHED))    # absent, not "unchanged"
 
 
 @pytest.mark.parametrize("flags, expected", [
     ({"baseStats_UNCHANGED": False, "baseStats_RANDOM": True}, "base_stats"),
     ({"types_UNCHANGED": False}, "types"), ({"evolutions_UNCHANGED": False}, "evolutions"),
     ({"movesets_UNCHANGED": False}, "movesets"),
-    ({"starters_UNCHANGED": False, "starters_COMPLETELY_RANDOM": True}, "starters"),
-    ({"trainers_UNCHANGED": False, "trainers_RANDOM": True}, "trainers"),
-    ({"static_UNCHANGED": False, "static_COMPLETELY_RANDOM": True}, "statics"),
-    ({"tms_UNCHANGED": False, "tms_RANDOM": True}, "tms")])
+    ({"tms_UNCHANGED": False, "tms_RANDOM": True}, "tms"),
+    ({"fieldItems_UNCHANGED": False, "fieldItems_RANDOM": True}, "field_items")])
 def test_polished_refuses_rule_tables_and_every_category_without_a_writer(flags, expected):
     from server.upr_settings import FAMILY_POLISHED, unexpected_settings
     parsed = load(build(flags, rom_name="Polished Crystal (U) 3.2.3"))
@@ -433,7 +432,67 @@ def test_polished_refuses_every_misc_tweak(tweak):
 
 def test_polished_refuses_a_non_wild_option_by_name():
     from server.upr_settings import FAMILY_POLISHED, build_spec
-    with pytest.raises(UprSettingsError, match="starters"):
-        build_spec({"starters": "random"}, family=FAMILY_POLISHED)
+    with pytest.raises(UprSettingsError, match="tms"):
+        build_spec({"tms": "random"}, family=FAMILY_POLISHED)
     with pytest.raises(UprSettingsError, match="fastest_text"):
         build_spec({"fastest_text": True}, family=FAMILY_POLISHED)
+
+
+# P8 / fork patch 0018: starters, statics (+ levels), trainer species and NPC-trade species; measured with the 0018
+# jar on the release ROM (every allowed option honoured; the excluded ones throw in the handler or are dropped).
+def test_polished_0018_widest_file_round_trips_and_is_admitted():
+    from server.upr_settings import (
+        FAMILY_POLISHED,
+        build_spec,
+        default_spec,
+        spec_from_parsed,
+        unexpected_settings,
+    )
+    spec = dict(default_spec(FAMILY_POLISHED), starters="two_evos", statics="matching", static_levels=20,
+                trainers="type_themed_gyms", trainers_similar_strength=True, trainers_rival_starter=True,
+                trainers_block_legendaries=False, trainers_match_typing=True, trades="given_and_requested")
+    parsed = load(build_spec(spec, family=FAMILY_POLISHED))
+    assert forbidden_enabled(parsed, FAMILY_POLISHED) == []
+    assert unexpected_settings(parsed, FAMILY_POLISHED) == []
+    assert spec_from_parsed(parsed, FAMILY_POLISHED) == spec
+    assert categories_enabled(parsed, FAMILY_POLISHED) == {"wild", "starters", "statics", "trainers"}
+
+
+@pytest.mark.parametrize("key, value", [
+    ("trainers_levels", 20),            # the handler throws on any trainer level change
+    ("trainers_force_evolved", 30),     # LEVEL_FROM_BADGES-relative trainer levels (> 100) read as plain levels
+    ("trainer_names", True), ("trainer_class_names", True),            # canChangeTrainerText off: silently dropped
+    ("trades_nicknames", True), ("trades_items", True), ("trades_ivs", True), ("trades_ots", True),   # handler throws
+    ("wild_held_items", True), ("trainer_items_boss", True), ("tutors", "random"), ("shops", "random"),
+    ("field_items", "random"), ("fastest_text", True), ("running_shoes_indoors", True)])
+def test_polished_refuses_what_the_0018_handler_does_not_honour(key, value):
+    from server.upr_settings import (
+        FAMILY_FRLG,
+        FAMILY_POLISHED,
+        build_spec,
+        default_spec,
+        unexpected_settings,
+    )
+    with pytest.raises(UprSettingsError, match=key):
+        build_spec({key: value}, family=FAMILY_POLISHED)
+    # the same option in a file built elsewhere (FR/LG's table carries every key) is outside the envelope
+    raw = {**default_spec(FAMILY_FRLG), "wild": "unchanged", "starters": "unchanged", "trainers": "unchanged",
+           "fastest_text": False, key: value}
+    assert unexpected_settings(load(build_spec(raw, rom_name="Polished Crystal (U) 3.2.3", family=FAMILY_FRLG)),
+                               FAMILY_POLISHED)
+
+
+def test_polished_minimum_catch_rate_stops_below_guaranteed_catching():
+    """Level 5 is UPR's guaranteed catching, a code write the 0018 handler throws on (measured)."""
+    from server.upr_settings import (
+        FAMILY_POLISHED,
+        OPTIONS,
+        build_spec,
+        options_for,
+        unexpected_settings,
+    )
+    assert options_for(FAMILY_POLISHED)["wild_min_catch_rate"]["max"] == 4 and OPTIONS["wild_min_catch_rate"]["max"] == 5
+    with pytest.raises(UprSettingsError, match="wild_min_catch_rate"):
+        build_spec({"wild_min_catch_rate": 5}, family=FAMILY_POLISHED)
+    assert unexpected_settings(load(build_spec({"wild_min_catch_rate": 5}, rom_name="Polished Crystal (U) 3.2.3")),
+                               FAMILY_POLISHED)

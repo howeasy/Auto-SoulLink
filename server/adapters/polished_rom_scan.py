@@ -15,6 +15,10 @@ Formats (polishedcrystal@3fa43192, tag v3.2.3; docs/polished/UPR_HANDLER.md §3)
   TreeMons        10 set pointers; a set is a common then a rare (chance, dp, level) list each ended
                   by $FF, the last set (ROCK) has only one (data/wild/treemons.asm).
   ContestMons     12 x (chance, dp, min, max), no terminator (data/wild/bug_contest_mons.asm).
+  script sites    data/polished/script_sites.json: the species LOW byte of each resolved givepoke ($2F) /
+                  loadwildmon ($5C) command (macros/scripts/events.asm), then its form byte and level byte.
+  NPCTrades       9 x 33 bytes (NPCTRADE_STRUCT_LENGTH): dialog, dp wanted, dp given, nickname x11, DVs x3,
+                  personality, ball, item, dw OT id, OT name x8, one skipped byte (constants/npc_trade_constants.asm).
 A dp species is (LOW, HIGH << 5 | form): 9-bit species, form in bits 0-4 (macros/data.asm:89-91).
 
 Offsets come from the generated UPR INI (data/polished/upr_polished_entries.ini, from the release
@@ -35,6 +39,11 @@ from server.adapters.gen2_rom_scan import RomScanError, _Cursor
 
 REPO = Path(__file__).resolve().parents[2]
 INI = REPO / "data" / "polished" / "upr_polished_entries.ini"
+SCRIPT_SITES = REPO / "data" / "polished" / "script_sites.json"
+SCRIPT_OPCODES = {"givepoke": 0x2F, "loadwildmon": 0x5C}
+STARTER_SOURCES = ("maps/ElmsLab.asm:215", "maps/ElmsLab.asm:255", "maps/ElmsLab.asm:293")   # UPR's order
+NPC_TRADES, NPC_TRADE_LENGTH = 9, 33           # NUM_NPC_TRADES, NPCTRADE_STRUCT_LENGTH
+EXT_SPECIES = 0x20                              # HIGH byte bit 5 = species bit 8; the rest is gender/form
 ROM_SIZE = 0x200000
 HEADER_TITLE = b"PKPCRYSTAL"
 BASE_DATA_SIZE = 34
@@ -66,6 +75,13 @@ def pinned_sha1s() -> dict[str, str]:
     lock = json.loads((REPO / "data" / "polished_sources.lock.json").read_text(encoding="utf-8"))
     prov = json.loads((REPO / "data" / "polished" / "overlay_provenance.json").read_text(encoding="utf-8"))
     return {lock["outputs"]["polishedcrystal"]["sha1"].lower(): "clean", prov["output"]["sha1"].lower(): "overlay"}
+
+
+@functools.cache
+def script_sites() -> tuple[dict, ...]:
+    """The resolved script sites (offset known on the release build; the SLink overlay moves none)."""
+    data = json.loads(SCRIPT_SITES.read_text(encoding="utf-8"))
+    return tuple(site for site in data["sites"] if site["offset"] is not None)
 
 
 def identify(rom: bytes) -> dict | None:
@@ -178,6 +194,40 @@ class Rom:
     def contest(self) -> list[list[int]]:
         cur = self._at(self.o["BCCWildsOffset"], "ContestMons")
         return [[r[0], *_dp(r[1], r[2]), r[3], r[4]] for r in (cur.take(5) for _ in range(CONTEST_MONS))]
+
+    def _species(self, lo: int, hi: int, label: str) -> int:
+        species = lo | (hi & EXT_SPECIES) << 3
+        if not 1 <= species <= self.o["SpeciesCount"]:
+            raise RomScanError(f"{label}: species {species} outside 1..{self.o['SpeciesCount']}")
+        return species
+
+    def scripted_mons(self) -> list[dict]:
+        """Species, form and level at every resolved script site. UPR rewrites only the species bytes
+        (keeping the site's gender/form bits) and, under a static level setting, the level: so the opcode
+        and every HIGH bit but species bit 8 must still be the site's, or the command moved -> refused."""
+        out = []
+        for site in script_sites():
+            at, label = site["offset"], f"script site {site['source']}"
+            op, lo, hi, level = self._at(at - 1, label).take(4)
+            if op != SCRIPT_OPCODES[site["kind"]] or hi & ~EXT_SPECIES != site["form"] & ~EXT_SPECIES:
+                raise RomScanError(f"{label}: the {site['kind']} command there differs (moved or rewritten)")
+            if not 1 <= level <= 100:
+                raise RomScanError(f"{label}: level {level} is not a plain level")
+            out.append({"source": site["source"], "kind": site["kind"], "species": self._species(lo, hi, label),
+                        "form": hi & 0x1F, "level": level})
+        return out
+
+    def npc_trades(self) -> list[dict]:
+        """Both species of each NPCTrades record, plus the fields UPR must leave alone."""
+        out = []
+        for i in range(NPC_TRADES):
+            label = f"NPCTrades {i}"
+            raw = self._at(self.o["TradeTableOffset"] + i * NPC_TRADE_LENGTH, label).take(NPC_TRADE_LENGTH)
+            out.append({"trade_id": i, "requested": self._species(raw[1], raw[2], label), "requested_form": raw[2] & 0x1F,
+                        "offered": self._species(raw[3], raw[4], label), "offered_form": raw[4] & 0x1F,
+                        "nickname": raw[5:16].hex(), "dvs": list(raw[16:19]), "personality": raw[19], "ball": raw[20],
+                        "item": raw[21], "ot_id": int.from_bytes(raw[22:24], "little"), "ot_name": raw[24:32].hex()})
+        return out
 
     def rule_tables(self) -> dict:
         """What the Soul Link rules read, per record 1..337: base data and EvosAttacks."""

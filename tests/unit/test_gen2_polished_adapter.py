@@ -105,3 +105,67 @@ def test_companion_is_required():
 
 def test_kanto_badge_bits_swap_marsh_and_soul(adapter):
     assert [name for _, name in adapter.gym_badge_slugs("polished_crystal")[12:14]] == ["Marsh Badge", "Soul Badge"]
+
+
+# ── P8: randomized companion cartridges (rand_overlay) ─────────────────────────────────────
+def test_rand_overlay_is_a_companion_kind_and_nothing_else_is_added():
+    assert Gen2PolishedAdapter.supports_randomized("polished_crystal")
+    assert not Gen2PolishedAdapter.supports_randomized("crystal") and not Gen2PolishedAdapter.supports_randomized(None)
+    assert Gen2PolishedAdapter.rom_contract_by_sha1 is True
+    for kind in ("rand", "named", "companion"):
+        with pytest.raises(ValueError):
+            Gen2PolishedAdapter(artifact_kind=kind)
+    clean, overlay, rand = (Gen2PolishedAdapter(artifact_kind=k) for k in ("clean", "overlay", "rand_overlay"))
+    assert (clean.randomized, overlay.randomized, rand.randomized) == (False, False, True)
+    assert [a.supports_info_panel() for a in (clean, overlay, rand)] == [False, True, True]
+    assert [a.native_trade_ui() for a in (clean, overlay, rand)] == [False, True, True]
+    # clean and overlay keep the shipped tables; a randomized adapter shows nothing until it adopts its own
+    assert clean.encounter_table("route_29") == overlay.encounter_table("route_29") is not None
+    assert rand.encounter_table("route_29") is None
+
+
+def test_companion_gate_admits_a_randomized_overlay_with_the_pinned_abi():
+    from server.adapters.gen2_polished import _companion_abi
+    if _companion_abi() is None:
+        pytest.skip("companion overlay provenance absent")
+    hello = {"rom_type": "polished_crystal", "artifact_kind": "rand_overlay", "companion_abi": _companion_abi()}
+    assert Gen2PolishedAdapter.companion_refusal(hello) is None
+    assert Gen2PolishedAdapter.companion_refusal(dict(hello, companion_abi=_companion_abi() + 1))
+    assert Gen2PolishedAdapter.companion_refusal(dict(hello, artifact_kind="rand"))     # a randomized RELEASE
+
+
+@pytest.mark.parametrize("fault", ["client_json", "client_list", "sha1", "no_pin", "rom_type", "not_a_dict"])
+def test_ingest_takes_only_the_servers_contract_checked_bytes(fault):
+    import hashlib
+    rom = b"\x00" * 0x200
+    payload = {"rom": rom, "rom_type": "polished_crystal", "rom_sha1": hashlib.sha1(rom).hexdigest()}
+    if fault == "client_json":
+        payload["rom"] = rom.hex()              # a JSON hello can carry text, never bytes
+    elif fault == "client_list":
+        payload["rom"] = list(rom)
+    elif fault == "sha1":
+        payload["rom_sha1"] = "0" * 40
+    elif fault == "no_pin":
+        del payload["rom_sha1"]
+    elif fault == "rom_type":
+        payload["rom_type"] = "crystal"
+    else:
+        payload = [rom]
+    with pytest.raises(ValueError):
+        Gen2PolishedAdapter(artifact_kind="rand_overlay").ingest_rom_content(payload)
+
+
+def test_a_client_reported_rom_content_leaves_the_player_with_no_tables():
+    """server.py _ingest_rom_content: a hello's JSON rom_content reaches the adapter, which refuses it; the player's
+    adapter then shows NO encounters (the 'unavailable' state), never the shipped tables."""
+    from types import SimpleNamespace
+
+    from server.server import SLinkServer
+    server = SLinkServer.__new__(SLinkServer)
+    server.adapter = Gen2PolishedAdapter(artifact_kind="rand_overlay")
+    server.connected_players = {"a": {"rom_type": "polished_crystal"}}
+    server.state = SimpleNamespace(is_rr=False, artifact_kind="rand_overlay")
+    server._player_adapters = {}
+    server._ingest_rom_content("a", {"wild": {}, "rom_sha1": "ab" * 20})
+    adopted = server._player_adapters["a"]
+    assert adopted.randomized and adopted.encounter_table("route_29") is None

@@ -16,12 +16,13 @@ data/polished_sources.lock.json); docs/polished/RAM.md, docs/polished/NEWBOX.md.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 from functools import cache
 from pathlib import Path
 
-from . import polished_codec
+from . import polished_codec, polished_rom_scan
 from .base import companion_required_reason
 from .gen2_gsc import _AREA, _STATIC, Gen2GSCAdapter, _display
 
@@ -34,6 +35,11 @@ _COMMIT = "3fa43192379df5c3e7b09a08e4d5d79af4f02f42"
 _SPLIT = {"Physical": 0, "Special": 1, "Status": 2}
 _KEY = re.compile(r"([0-9A-F]{6}):([0-9A-F]{4}):([0-9A-F]{3}):([0-9A-F]{2})")
 _GENDERLESS, _ALL_FEMALE, _ALL_MALE = 15, 8, 0   # GENDER_UNKNOWN / GENDER_F100 / GENDER_F0, pokemon_data_constants.asm:39-49
+# P8: "rand_overlay" is the companion overlay randomized by the Manager (fork patch 0018 run on the overlay);
+# "clean" (the release) stays refused at hello by companion_refusal (patch-first).
+_KINDS = ("clean", "overlay", "rand_overlay")
+_COMPANION = ("overlay", "rand_overlay")
+_TIME_INDEX = {"morning": 0, "day": 1, "night": 2, "all": 0}
 
 
 def _type_display(name):
@@ -85,6 +91,70 @@ def _companion_abi() -> int | None:
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return abi if type(abi) is int and abi > 0 else None
+
+
+def scan_randomized(rom: bytes) -> dict:
+    """A randomized companion cartridge's own tables, read unpinned at the overlay's offsets (UPR moves no
+    table): wild, fishing, trees, contest, the species/level at every resolved script site (starters = the
+    three Elm's Lab givepokes, in UPR's order) and the NPC trades. Roamers are not read: the 0018 handler has
+    no roamer writer, so they are the overlay's own. Raises on anything that does not decode."""
+    reader = polished_rom_scan.Rom(rom, pinned=False)
+    mons = reader.scripted_mons()
+    return {"title": TITLE, "wild": reader.wild(), "fishing": reader.fishing(), "trees": reader.trees(),
+            "contest": reader.contest(),
+            "starters": [m for m in mons if m["source"] in polished_rom_scan.STARTER_SOURCES],
+            "statics": [m for m in mons if m["source"] not in polished_rom_scan.STARTER_SOURCES],
+            "trades": reader.npc_trades()}
+
+
+def _adopt_slots(rows, decoded, label, badges):
+    """Overlay decoded (species, form, raw level) triples onto the pack's slot dicts, in place, keeping the
+    pack's own level encoding. UPR rewrites species and plain levels only, never a form or a LEVEL_FROM_BADGES
+    byte: a form that differs (NO_FORM counts as PLAIN_FORM) means the decode is misaligned -> refused."""
+    _require(len(rows) == len(decoded), f"{label}: slot count differs from the pack")
+    for row, (species, form, level) in zip(rows, decoded, strict=True):
+        _require(form == row.get("form", 1) or form <= 1 and row.get("form", 1) <= 1, f"{label}: slot form moved")
+        row["species"] = species
+        if "level_raw" in row:                    # wild rows: level None + raw byte + offset from ``badges``
+            row.update(level_raw=level, level_from_badges_offset=level - badges)
+        else:
+            row["level"] = level
+
+
+def _adopt_encounters(pack: dict, tables: dict) -> dict:
+    """The pack's encounter tables (maps, times, thresholds, policy) with this cartridge's species and levels."""
+    out = copy.deepcopy(pack)
+    badges = out["wild"]["level_from_badges"]
+    rows = {(table, *row["map"]): row for table, decoded in tables["wild"].items() for row in decoded}
+    seen = set()
+    for kind in ("grass", "water"):
+        for row in out["wild"][kind]:
+            key = (row["table"].removesuffix("WildMons"), row["map_group"], row["map_number"])
+            source = rows.get(key)
+            _require(source is not None, f"wild {key}: not on the cartridge")
+            seen.add(key)
+            n, i = len(row["slots"]), _TIME_INDEX[row["time"]]
+            row["rate"] = source["rates"][i]
+            _adopt_slots(row["slots"], [(sp, f, lv) for lv, sp, f in source["slots"][i * n:(i + 1) * n]], f"wild {key}", badges)
+    _require(seen == set(rows), "the cartridge has wild maps the pack does not")
+    groups = out["fishing"]["groups"]
+    _require(len(groups) == len(tables["fishing"]), "fish group count differs")
+    for group, decoded in zip(groups, tables["fishing"], strict=True):
+        for rod, entries in zip(("old", "good", "super"), decoded["rods"], strict=True):
+            _require([e["threshold"] for e in group[rod]] == [e[0] for e in entries], "fish thresholds differ")
+            _adopt_slots(group[rod], [(sp, f, lv) for _c, sp, f, lv in entries], f"fish group {group['group_id']}", badges)
+    sets = out["tree"]["sets"]
+    _require(len(sets) == len(tables["trees"]), "tree set count differs")
+    for tree, lists in zip(sets, tables["trees"], strict=True):
+        _require(len(lists) == sum(bool(tree.get(r)) for r in ("common", "rare")), "tree list count differs")
+        for rarity, entries in zip(("common", "rare"), lists, strict=False):
+            _require([e["weight"] for e in tree[rarity]] == [e[0] for e in entries], "tree weights differ")
+            _adopt_slots(tree[rarity], [(sp, f, lv) for _c, sp, f, lv in entries], f"tree set {tree['set_id']}", badges)
+    slots = out["contest"]["slots"]
+    _require([s["weight"] for s in slots] == [r[0] for r in tables["contest"]], "contest weights differ")
+    for slot, (_c, species, _f, low, high) in zip(slots, tables["contest"], strict=True):
+        slot.update(species=species, min_level=low, max_level=high)
+    return out
 
 
 def _form_label(row):
@@ -222,7 +292,7 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                  and all(trainers["class_constants"][str(c)] == k for k, c in trainers["rival_classes"].items()),
                  "rival classes missing or inconsistent")
         self._rival_ids = frozenset(c * 256 + i for c, i in self._trainer_names if c in rivals)
-        self._artifact_kind = "clean"
+        self._artifact_kind, self.randomized, self._rom_adopted = "clean", False, False
         if artifact_kind is not None:
             self.set_artifact_kind(artifact_kind)
 
@@ -237,13 +307,66 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
     @staticmethod
     def companion_refusal(hello):
         # Owner 2026-10-02 patch-first: the Polished companion overlay is required; a clean build is refused.
+        # A randomized overlay (rand_overlay) carries the same companion and publishes the same ABI.
         rom_type = hello.get("rom_type")
         if rom_type not in _ROM_TYPES:
             return None
         pinned, abi = _companion_abi(), hello.get("companion_abi")
-        if pinned is None or type(abi) is not int or abi != pinned or hello.get("artifact_kind") != "overlay":
+        if pinned is None or type(abi) is not int or abi != pinned or hello.get("artifact_kind") not in _COMPANION:
             return companion_required_reason("Polished Crystal")
         return None
+
+    # ── randomized cartridges (P8, the Polished counterpart of Gen 2's R4) ─────────────
+    def set_artifact_kind(self, kind):
+        _require(kind in _KINDS, "Polished Crystal only supports the clean/overlay/rand_overlay artifact kinds")
+        self._artifact_kind = kind
+        # a randomized cartridge answers encounters only from its own ROM (use_rom_encounters)
+        self.randomized = kind == "rand_overlay"
+
+    @classmethod
+    def supports_randomized(cls, rom_type):
+        # rand_overlay, bound at hello by the contract's rom_sha1 (rom_contract_by_sha1)
+        return isinstance(rom_type, str) and rom_type in _ROM_TYPES
+
+    # The Manager's contract carries no table fingerprint for Polished (upr_pipeline: fingerprint ""): the run
+    # binds each cartridge by the full-ROM sha1 the client rehashes, as Gen 2 does.
+    rom_contract_by_sha1 = True
+
+    def supports_info_panel(self):
+        return self._artifact_kind in _COMPANION   # the panel ships in the companion, randomized or not
+
+    def native_trade_ui(self):
+        return self._artifact_kind in _COMPANION
+
+    def encounter_table(self, area_id):
+        # a randomized cartridge shows only its own tables, never the vanilla ones beside it
+        if self.randomized and not self._rom_adopted:
+            return None
+        return copy.deepcopy(self._tables.get(area_id))
+
+    def ingest_rom_content(self, payload):
+        """The cartridge's own tables (scan_randomized). The payload must be the SERVER's read of the Manager's
+        file for this player (server.py _contracted_rom): bytes -- which a JSON hello cannot carry -- whose sha1
+        is the contract's pin. Anything a client reports stays unqualified."""
+        if not (isinstance(payload, dict) and type(payload.get("rom")) is bytes):
+            raise ValueError("Polished Crystal client ROM-content admission is not qualified")
+        rom, pin = payload["rom"], payload.get("rom_sha1")
+        _require(isinstance(pin, str) and hashlib.sha1(rom).hexdigest() == pin.lower(),
+                 "cartridge bytes differ from the contract sha1")
+        _require(payload.get("rom_type") in _ROM_TYPES, "not a Polished Crystal cartridge")
+        return scan_randomized(rom)
+
+    def use_rom_encounters(self, tables):
+        """Adopt ingest_rom_content's tables for this player's cartridge. {} (an unreadable cartridge) shows no
+        encounters at all, never the vanilla ones. Area ids stay the pack's (static/gift/legend ids name the
+        vanilla site); roamers are the overlay's own (no handler writer), so legend names need no remap."""
+        self._rom_adopted = True
+        if not tables:
+            self._tables = {}
+            return
+        _require(tables.get("title") == TITLE, "ROM tables belong to another title")
+        self._encounters = _adopt_encounters(self._encounters, tables)
+        self._tables = self._presentation_tables()
 
     # ── identity (polished_codec.key: DDDDDD:OOOO:SSS:TT) ────────────────────────────
     def _key(self, key):

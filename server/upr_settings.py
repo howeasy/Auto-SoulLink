@@ -498,8 +498,9 @@ FAMILY_PURE = "gen1_purergb"
 FAMILY_FRLG = "gen3_frlg"
 FAMILY_EMERALD = "gen3_emerald"
 # Polished Crystal 3.2.3 (docs/polished/UPR_HANDLER.md): randomizes the companion OVERLAY on the
-# fork's PolishedCrystalRomHandler, which writes wild encounters only so far (patch/upr/0017). The
-# family is an ALLOWLIST (POLISHED_OPTION_KEYS); each new handler writer extends that one tuple.
+# fork's PolishedCrystalRomHandler, which writes wild encounters (patch/upr/0017) and trainers,
+# starters, statics/gifts and NPC trades (0018). The family is an ALLOWLIST (POLISHED_OPTION_KEYS);
+# each new handler writer extends that one tuple.
 FAMILY_POLISHED = "gen2_polished"
 FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG, FAMILY_EMERALD, FAMILY_POLISHED)
 GEN3_FAMILIES = (FAMILY_FRLG, FAMILY_EMERALD)
@@ -563,11 +564,21 @@ GEN3_OPTIONS: dict[str, dict] = {
     "balance_static_levels": _bool("Tweaks", "Balance static levels", misc="BALANCE_STATIC_LEVELS"),
 }
 ALL_OPTIONS: dict[str, dict] = {**OPTIONS, **GEN3_OPTIONS}
-# What the Polished handler can write (patch/upr/0017: grass/surf, swarms, fishing, headbutt/rock
-# smash, the bug contest; the catch-rate byte is written in place by its base-data saver). No misc
-# tweak: the handler implements none, and tweakForRom would drop one silently. The 0018 card
-# (trainers / starters / statics / trades) extends THIS tuple and nothing else.
-POLISHED_OPTION_KEYS = ("wild", "wild_restriction", "wild_block_legendaries", "wild_min_catch_rate", "wild_levels")
+# What the Polished handler can write: wild (patch/upr/0017: grass/surf, swarms, fishing, headbutt/
+# rock smash, the bug contest; the catch-rate byte is written in place by its base-data saver) and,
+# from 0018, starters, statics/gifts (species, and the level byte under static_levels), trainer
+# species and NPC-trade species. Every 0018 writer rewrites species bytes in place and THROWS on
+# anything else, so these stay out: trainers_levels and trade nicknames/IVs/items/OTs (the handler
+# throws), trainer names and class names (canChangeTrainerText is off: the Randomizer skips them
+# silently, the log still claiming them), and trainers_force_evolved (264 Polished trainer mons carry LEVEL_FROM_BADGES-relative
+# level bytes above 100, which UPR compares as plain levels). No misc tweak: the handler implements
+# none, and tweakForRom would drop one silently.
+POLISHED_OPTION_KEYS = ("wild", "wild_restriction", "wild_block_legendaries", "wild_min_catch_rate", "wild_levels",
+                        "starters", "statics", "static_levels", "trainers", "trainers_similar_strength",
+                        "trainers_rival_starter", "trainers_block_legendaries", "trainers_match_typing", "trades")
+# Minimum catch rate 5 is UPR's "guaranteed catching", a code write: the handler throws on it
+# (enableGuaranteedPokemonCatching, measured with the 0018 jar). 1-4 are the base-data byte.
+POLISHED_OPTION_LIMITS = {"wild_min_catch_rate": {"max": 4}}
 
 
 def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
@@ -575,7 +586,7 @@ def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
     if family == FAMILY_POLISHED:
-        return {k: ALL_OPTIONS[k] for k in POLISHED_OPTION_KEYS}
+        return {k: {**ALL_OPTIONS[k], **POLISHED_OPTION_LIMITS.get(k, {})} for k in POLISHED_OPTION_KEYS}
     if family in GEN3_FAMILIES:
         unavailable = (*GEN1_ONLY_OPTIONS, "balance_static_levels") if family == FAMILY_EMERALD else GEN1_ONLY_OPTIONS
         return {k: o for k, o in ALL_OPTIONS.items() if k not in unavailable}

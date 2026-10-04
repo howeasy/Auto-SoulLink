@@ -113,6 +113,28 @@ def test_scan_wild_tables_match_the_pack(roms):
         (c, sp, lo, hi) for c, sp, _f, lo, hi in rom.contest()]
 
 
+def test_scan_script_sites_and_npc_trades_match_the_pack(roms):
+    """P8: the species/form/level at all 53 resolved script sites equal script_sites.json and the statics/gifts
+    pack rows of the same source line; the 9 NPC trades equal gifts.json npc_trades, on release AND overlay."""
+    release, overlay = roms
+    sites = [s for s in json.loads((REPO / "data/polished/script_sites.json").read_text(encoding="utf-8"))["sites"]
+             if s["offset"] is not None]
+    rows = {r["source"].split()[-1]: r for r in [*_pack("static_encounters")["encounters"], *_pack("gifts")["gifts"]]}
+    for rom in (release, overlay):
+        mons = S.Rom(rom).scripted_mons()
+        assert len(mons) == len(sites) == 53
+        for mon, site in zip(mons, sites, strict=True):
+            assert (mon["source"], mon["kind"], mon["species"], mon["level"]) == (
+                site["source"], site["kind"], site["species"], site["level"])
+            assert mon["form"] == site["form"] & 0x1F == rows[site["source"]]["form"]
+            assert (rows[site["source"]]["species"], rows[site["source"]]["level"]) == (mon["species"], mon["level"])
+        trades = S.Rom(rom).npc_trades()
+        assert [(t["requested"], t["requested_form"], t["offered"], t["offered_form"], t["dvs"], t["personality"],
+                 t["ball"], t["item"], t["ot_id"]) for t in trades] == [
+            (p["requested_species"], p["requested_form"], p["offered_species"], p["offered_form"], p["dvs"],
+             p["personality"], p["ball"], p["item"], p["ot_id"]) for p in _pack("gifts")["npc_trades"]]
+
+
 def test_the_pinned_reader_admits_the_two_pinned_artifacts_and_nothing_else(roms):
     release, overlay = roms
     assert S.Rom(overlay).base_stats(25) == S.Rom(release).base_stats(25)
