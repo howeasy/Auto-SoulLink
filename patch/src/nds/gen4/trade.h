@@ -11,6 +11,7 @@
 
 #include "abi.h"
 #include "trade_policy.h"
+#include "beacon.h" /* integration prototype; the policy itself stays beacon-independent */
 
 /* ------------------------------------------------------------------ the dispatch contract
  *
@@ -18,13 +19,8 @@
  *
  *     void Slink_NDS_Trade_Service(SlinkGen4State *st, volatile SlinkMailboxV2 *m);
  *
- * It is deliberately NOT a C declaration here. SlinkGen4State is an ANONYMOUS-struct
- * typedef in beacon.h (patch/src/nds/gen4/beacon.h:88-98) and another card owns that file
- * and is appending its own state to it; the type carries no tag, so it cannot be
- * forward-declared compatibly here -- `struct SlinkGen4State;` would be a DIFFERENT
- * incomplete type and every use of it would be a hard error (or worse, a mismatched
- * declaration). The real prototype lands in trade.c beside its definition, once that
- * state exists.
+ * beacon.h now embeds the policy and a persistent seam in C5 layout 2. Include the
+ * actual type rather than declaring a different struct tag for the anonymous parent.
  *
  * The policy is deliberately independent of SlinkGen4State as well: it takes its own
  * SlinkGen4TradePolicy by pointer, so it can be compiled and driven by a host gcc with
@@ -38,6 +34,15 @@
  * SLINK_GEN4_CAPABILITIES (zero at C2) OR-ed with every compiled-in card's contribution
  * word, once the fan-out has run (patch/src/nds/gen4/beacon.h, Slink_NDS_PublishCaps).
  * A host must not gate liveness on the bit (README.md:156-158). */
+void Slink_NDS_Trade_Service(SlinkGen4State *st, volatile SlinkMailboxV2 *m);
+int Slink_NDS_Trade_Bind(SlinkGen4State *st, const SlinkGen4TradeSeam *seam,
+                       volatile SlinkTradeWitnessV2 *witness,
+                       const volatile SlinkRecordStageV1 *stage, uint32_t save_timeout_frames);
+int Slink_NDS_Trade_Init(SlinkGen4State *st, void *context, volatile SlinkTradeWitnessV2 *witness,
+                       const volatile SlinkRecordStageV1 *stage, uint32_t save_timeout_frames);
+int Slink_NDS_Trade_CommitEntered(SlinkGen4State *st, unsigned slot);
+int Slink_NDS_Trade_Commit(SlinkGen4State *st, unsigned slot);
+
 #define SLINK_GEN4_TRADE_CAPABILITIES SLINK_CAP_DURABLE_TRADE
 
 /* ------------------------------------------------------------------ wiring recipe (trade.c, not this card)
@@ -46,9 +51,11 @@
  *     data block (patch/src/nds/gen4/README.md:12-13, :126-128) -- never a file-scope
  *     object: a static .bss symbol moves SDK_STATIC_BSS_END = 0x021E5900 and every pinned
  *     overlay address above it.
- *  2. Init once per boot, after the beacon's own reset latch:
+ *  2. Copy the constructed seam into st->trade.seam (persistent heap storage), then
+ *     Init once per boot after the beacon's own reset latch. Layout 0 is fresh;
+ *     any nonzero stale layout must REFUSE before a write, never reinterpret layout 1:
  *
- *         Slink_Gen4TradePolicy_Init(&st->trade, &seam, witness, stage, TIMEOUT_FRAMES)
+ *         Slink_Gen4TradePolicy_Init(&st->trade.policy, &st->trade.seam, witness, stage, TIMEOUT_FRAMES)
  *
  *     witness = arena_base + SLINK_WITNESS_OFFSET (beacon.c:100-102 derives the base);
  *     stage   = arena_base + SLINK_BLOB_OFFSET. The ABSOLUTE base must not appear in
@@ -58,13 +65,13 @@
  *     scene.
  *  3. Every service visit, after the beacon has stamped the header:
  *
- *         Slink_Gen4TradePolicy_Service(&st->trade, m);
+ *         Slink_Gen4TradePolicy_Service(&st->trade.policy, m);
  *
  *  4. From the ScrCmd (the opcode-1 gScriptCmdTable slot, C5_TRADE_SPEC.md:188-193), in
  *     the order §3.3 fixes:
  *
- *         if (Slink_Gen4Trade_CommitEntered(&st->trade, slot))
- *             Slink_Gen4Trade_Commit(&st->trade, slot);
+ *         if (Slink_Gen4Trade_CommitEntered(&st->trade.policy, slot))
+ *             Slink_Gen4Trade_Commit(&st->trade.policy, slot);
  *
  *     slot comes from the ScrCmdContext (OPEN -- §3.3 step 1). Do not call Commit first:
  *     without the marker it refuses, and the marker is the only evidence that a mutation

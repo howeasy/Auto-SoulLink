@@ -429,7 +429,7 @@ int scen_numbers(void)
     /* the state block: fixed size per card, versioned, zero at allocation (layout 0) */
     CHECK(sizeof(SlinkGen4StateSound) == 16u, 14);
     CHECK(SLINK_GEN4_STATE_SOUND_LAYOUT == 1u && SLINK_GEN4_STATE_PANEL_LAYOUT == 1u
-          && SLINK_GEN4_STATE_TRADE_LAYOUT == 1u, 15);
+          && SLINK_GEN4_STATE_TRADE_LAYOUT == 2u, 15);
     return 0;
 }
 
