@@ -14,7 +14,7 @@ def test_an_unknown_adapter_does_not_inherit_randomized_support():
     assert UnknownRules.supports_randomized("unknown") is False
 
 
-@pytest.mark.parametrize("title", ("heartgold", "platinum", "pokemon_black", "pokemon_white_2"))
+@pytest.mark.parametrize("title", ("heartgold", "pokemon_black", "pokemon_white_2"))
 @pytest.mark.parametrize("kind", ("rand", "rand_overlay"))
 @pytest.mark.asyncio
 async def test_unbound_randomized_generations_are_refused_at_hello(tmp_path, title, kind):
@@ -23,6 +23,19 @@ async def test_unbound_randomized_generations_are_refused_at_hello(tmp_path, tit
         await send(hello(title, kind))
     assert server.admission["a"]["state"] == "rejected"
     assert title in server.admission["a"]["reason"] and "binding" in server.admission["a"]["reason"]
+    assert not server.state.rom_type and not server.state.player_identity
+
+
+@pytest.mark.parametrize("kind", ("rand", "rand_overlay", "clean", "companion"))
+@pytest.mark.asyncio
+async def test_platinum_is_refused_as_an_unrouted_game_in_every_artifact_kind(tmp_path, kind):
+    """Platinum is bind-only data, not a runtime pack (docs/gen4/PLAN.md 4.5/4.6): its rom_type no longer
+    routes, so it is refused by name BEFORE any capability/binding question is asked."""
+    server = SLinkServer(data_dir=str(tmp_path))
+    async with client(server) as send:
+        await send(hello("platinum", kind))
+    assert server.admission["a"]["state"] == "rejected"
+    assert "platinum" in server.admission["a"]["reason"] and "not a game this server routes" in server.admission["a"]["reason"]
     assert not server.state.rom_type and not server.state.player_identity
 
 

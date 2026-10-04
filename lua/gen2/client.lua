@@ -1827,7 +1827,7 @@ function Client.new(p)
         if st and st.failed and st.failed ~= self.signal_failure_logged then
             self.signal_failure_logged = st.failed
             log("[SLink-gen2] engine signals STOPPED: " .. tostring(st.failed))
-            hud.show("SLINK SIGNALS STOPPED - SEE LOG", 255, 64, 64, 600)
+            hud.show("SLINK STOPPED - SEE LOG", 255, 64, 64, 600)
         end
         self:settle_faints()
         -- KEY-SCOPE-5: an incomplete scan is retried, at most once per tick

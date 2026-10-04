@@ -40,9 +40,18 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     "firered_ap": "gen3_frlge", "leafgreen_ap": "gen3_frlge",
     "firered_rr": "gen3_frlge",
     "emerald_expansion_28877d73": "gen3_exp",
-    "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
-    "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
-    "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
+    # Gen 4 (docs/gen4/PLAN.md §4.5). ONE game_id for every Gen 4 title -- `gen4_hgsspt` is the
+    # adapter, never a foundation. `heartgold_hge` is the hg-engine fork of HeartGold: same
+    # adapter, different pack, so it gets its own foundation row below.
+    #
+    # `platinum`, `hgss` and `renegade_platinum` HAD rows here and are GONE. With a single
+    # `gen4_hgsspt` game_id and no foundation rows at all, all five Gen 4 rom_types derived the
+    # foundation `gen4_hgsspt`, so HeartGold paired with Platinum on a Sinnoh layout it cannot
+    # read. Platinum is bind-only data (`data/games/gen4_pt/profile.json`,
+    # `admission: BIND_ONLY_NOT_ADMITTED`) and there is no Renegade Platinum runtime; no live
+    # run was ever persisted under either spelling (docs/gen4/research/prior_art.md:8), so
+    # both now answer None and the hello guard refuses them by name (server.py:1716).
+    "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt", "heartgold_hge": "gen4_hgsspt",
     "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
     "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
     # Archipelago (Alchav's Red/Blue world). Same adapter, same RAM layout — the AP fork
@@ -93,7 +102,7 @@ _VARIANT_LABEL: dict[str, str] = {
     "firered_rr": "Radical Red", "emerald": "Emerald",
     "emerald_expansion_28877d73": "Emerald Expansion 1.17.0 (28877d73)",
     "heartgold": "HeartGold", "soulsilver": "SoulSilver",
-    "platinum": "Platinum", "hgss": "HGSS",
+    "heartgold_hge": "HeartGold (hg-engine)",
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
     "red": "Red", "blue": "Blue", "yellow": "Yellow",
     "red_ap": "Red (AP)", "blue_ap": "Blue (AP)",
@@ -196,6 +205,12 @@ def persisted_migration_refusal(old_game_id: str, new_game_id: str | None) -> st
 # clean RR. Everything absent here derives its foundation from its game_id, which is
 # already fine-grained enough (the Gen 1 packs differ by game_id: gen1_rby vs
 # gen1_purergb). Adding a Gen 3 ROM variant: add it here too (docs/gen3/PLAN.md §5.1).
+#
+# The game_id fallback is correct only while a generation's game_id IS its layout. Gen 4
+# broke exactly that: every Gen 4 title shares the `gen4_hgsspt` adapter, so the fallback
+# mapped HG, SS, hge and Platinum to one foundation and paired them freely. Every Gen 4
+# rom_type therefore carries an explicit row, and tests/unit/test_gen4_foundation.py pins
+# that (and pins which other rom_types still ride the fallback).
 _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
     "firered": "gen3_frlg", "leafgreen": "gen3_frlg",
     "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
@@ -212,6 +227,14 @@ _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
     "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
     "Gold": "gen2_gsc", "gold": "gen2_gsc",
     "Silver": "gen2_gsc", "silver": "gen2_gsc",
+    # Gen 4 (docs/gen4/PLAN.md §4.5, D9): the foundation is the LAYOUT, so it is what pairs.
+    # HeartGold and SoulSilver are the same Johto/Kanto pack, so they share `gen4_hgss`;
+    # hg-engine is a different save layout with its own tables, so `gen4_hge` pairs with
+    # hge only. Foundation equality is necessary but not sufficient -- HG↔HG and SS↔SS also
+    # share `gen4_hgss`, and the exact-title relation (HG↔SS, hge↔hge) is a later card that
+    # owns it in server/server.py (PLAN §4.5 row 2).
+    "heartgold": "gen4_hgss", "soulsilver": "gen4_hgss",
+    "heartgold_hge": "gen4_hge",
 }
 
 

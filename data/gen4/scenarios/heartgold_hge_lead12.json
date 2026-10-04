@@ -1,0 +1,14 @@
+{
+  "schema": "gen4-probe-scenario-v3",
+  "title": "heartgold_hge",
+  "purpose": "baseline",
+  "save": {
+    "path": "lead12-43b8-100314/hge_lead12.SaveRAM",
+    "sha256": "3634296aa16352377adaf5e53c82d00edc187ba883513c1491c8befcb5a1d3b4",
+    "sidecar_sha256": "a6fc1f6e195bc72ef265046b70a605fe9d233333e1f14371ee4c4807ff7f46bc",
+    "setup": "SYNTH"
+  },
+  "row_i_scenario": "data/gen4/scenarios/heartgold_hge_row_i.json",
+  "provenance": "Disclosed O-33 SYNTH lead-level12 baseline from the untouched native OUTDOOR save; ROM personal/growth recomputation, moves/identity unchanged. Row-i/PC-case retain their separate bound inputs. Live win is unverified.",
+  "pc_case_scenario": "data/gen4/scenarios/heartgold_hge_pc_case.json"
+}

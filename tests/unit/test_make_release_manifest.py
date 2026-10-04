@@ -126,14 +126,33 @@ _REQUIRE_RE = re.compile(r'\brequire\s*[(,]?\s*[\'"]([\w.]+)[\'"]')
 # lua/socket.lua requires these; they are the interpreter's, not files SLink ships.
 _STDLIB = {"string", "math", "table", "io", "os", "coroutine", "debug", "utf8", "package"}
 
-# Extra roots a `require()` name can resolve against, beyond plain lua/<name>.lua: each Gen
-# 2-5 client prepends lua/games/, lua/clients/, and its own data/games/<gen>/ to package.path
-# (e.g. lua/clients/gen4_hgsspt_client.lua:56-59). Mirrors that search order so a name that
-# only exists under one of these roots (e.g. "gen4_hgsspt_areas") resolves to the real file
-# instead of a lua/<name>.lua that doesn't exist.
+# Extra roots a `require()` name can resolve against, beyond plain lua/<name>.lua: the legacy
+# single-file clients prepended lua/games/ and lua/clients/ and their own data/games/<gen>/ to
+# package.path. Mirrors that search order so a name that only exists under one of these roots
+# resolves to the real file instead of a lua/<name>.lua that doesn't exist.
 _REQUIRE_SEARCH_DIRS = ["lua", "lua/games", "lua/clients"] + [
     f"data/games/{gen}" for gen in make_release._DATA_GAME_LUA
 ]
+
+# The Gen 4 client has its own entry: lua/gen4/run.lua is the BizHawk bootstrap lua/slink.lua's Gen 4
+# route dofiles, and nothing else in the tree reaches lua/gen4/*. Rooting the closure here keeps this
+# file independent of which launcher reaches it.
+_GEN4_ENTRYPOINTS = ["lua/gen4/run.lua"]
+
+# Two edges a quoted-literal scan provably cannot reach, so they are named here instead:
+#   * lua/nds/hook_binding.lua:23 dofiles its sibling off its OWN directory
+#     (`dofile(here.."residency_contract.lua")`) -- a concatenation of a runtime variable, with no
+#     separator inside the literal, and _PATH_RE needs a quoted path that has one.
+#   * the pack files inputs.lua opens: it derives the pack directory from the profile path
+#     (inputs.lua pack_dir :64-71) and appends a BARE filename -- "area_map.json" (:80),
+#     "locations.json" (:85), "charmap.json" (:146) -- so none is quotable either. The same three
+#     are the pack runtime inputs tools/gen4_evidence.py:43 declares (PACK_INPUTS). gen4_hge ships
+#     the same three: its area map is the HGSS map, proven byte-identical (area_map.json source.hge_proof).
+_GEN4_CONCAT_ONLY = {"lua/nds/residency_contract.lua"}
+_GEN4_RUNTIME_PACK_FILES = {
+    "gen4_hgss": ("area_map.json", "locations.json", "charmap.json"),
+    "gen4_hge": ("area_map.json", "locations.json", "charmap.json"),
+}
 
 
 def _require_to_path(name: str) -> str:
@@ -216,14 +235,24 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         "lua/hook_registry.lua", "lua/gb_hook_binding.lua",
         "lua/hello_session.lua", "lua/reply_dispatch.lua",
         "data/games/gen1_rby/profile.json",
-        # Only reachable once the closure is rooted at the launchers, not run.lua alone.
+        # Only reachable once the closure is rooted at the launchers, not run.lua alone. The legacy
+        # Gen 4 client is gone (PLAN 4.6): clients/gen4_hgsspt_client.lua, games/gen4_hgsspt.lua and
+        # the gen4_hgsspt_*.lua tables it required were deleted, and lua/game_detect.lua no longer
+        # registers "games.gen4_hgsspt" -- so slink.lua's Gen 4 route dofiles lua/gen4/run.lua.
         "lua/game_detect.lua",
-        "lua/clients/gen4_hgsspt_client.lua",
         "lua/clients/gen5_bw_client.lua",
-        "lua/games/gen4_hgsspt.lua",
         "lua/games/gen5_bw.lua",
-        "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
         "data/games/gen5_bw/gen5_bw_areas.lua",
+        # The rewritten Gen 4 client (G3a): slink.lua -> gen4/run.lua -> gen4/{entry,client,inputs}
+        # -> lua/nds/* and the shared core, with the per-pack profiles it admits against.
+        "lua/gen4/run.lua", "lua/gen4/entry.lua", "lua/gen4/client.lua", "lua/gen4/inputs.lua",
+        "lua/gen4/reads.lua", "lua/gen4/pk4.lua", "lua/gen4/safety.lua",
+        "lua/gen4/poll_events.lua",
+        "lua/nds/hook_binding.lua", "lua/nds/phase_signals.lua", "lua/nds/pkm45_crypto.lua",
+        "data/games/gen4_hgss/profile.json", "data/games/gen4_hge/profile.json",
+        # Bind-only, never admitted -- but Entry.admission_table opens it for EVERY cartridge
+        # (entry.lua:76-80) and load_json asserts on a missing file (entry.lua:37).
+        "data/games/gen4_pt/profile.json",
         # The Gen 3 route (slink.lua -> gen3/run.lua -> gen3/entry.lua) and its shared core
         # (P4 C4-1/C4-4). gen3_rr ships even though a gen3_frlg cartridge never loads it at
         # runtime, because Entry.admit/admission_table reads every pack's sites to admit any
@@ -250,21 +279,98 @@ def test_every_runtime_dependency_of_the_new_gen1_client_is_packaged(archive):
     )
 
 
+def _manifest_paths() -> set[str]:
+    """Every repo-relative path the release ships, from the SAME table build_release walks
+    (`_MANIFEST_TREES`), so this file cannot drift from the pre-flight and the ZIP writer."""
+    return (
+        {make_release._lua_rel(sub, f)
+         for sub, files in make_release._MANIFEST_TREES.items() for f in files}
+        | {f"data/games/{gen}/{f}"
+           for gen, files in make_release.data_game_files().items() for f in files}
+    )
+
+
 def test_every_manifest_entry_names_a_file_that_exists():
     """The build's own pre-flight, run without building: a typo here fails the release."""
-    listed = (
-        [f"lua/{f}" for f in make_release._LUA_ROOT]
-        + [f"lua/gen1/{f}" for f in make_release._LUA_GEN1]
-        + [f"lua/gen3/{f}" for f in make_release._LUA_GEN3]
-        + [f"lua/core/{f}" for f in make_release._LUA_CORE]
-        + [f"lua/gen2/{f}" for f in make_release._LUA_GEN2]
-        + [f"lua/clients/{f}" for f in make_release._LUA_CLIENTS]
-        + [f"lua/games/{f}" for f in make_release._LUA_GAMES]
-        + [f"data/games/{gen}/{f}"
-           for gen, files in make_release.data_game_files().items() for f in files]
-    )
-    missing = [p for p in listed if not os.path.exists(os.path.join(_REPO, p))]
+    missing = [p for p in sorted(_manifest_paths()) if not os.path.exists(os.path.join(_REPO, p))]
     assert not missing, f"manifest names files that do not exist: {missing}"
+
+
+def test_the_gen4_rows_are_the_whole_client_and_every_row_names_a_real_file():
+    """_LUA_GEN4 ships lua/gen4/ whole (a missing module there is a dofile error, not a degraded
+    feature) and _LUA_NDS ships exactly what the Gen 4 graph loads -- not lua/nds/native_witness.lua,
+    which is the Gen 3 companion mailbox reader (docs/shared-nds-witness.md) that nothing here loads."""
+    listed = [make_release._lua_rel(sub, f)
+              for sub in ("gen4", "nds") for f in make_release._MANIFEST_TREES[sub]]
+    missing = [p for p in listed if not os.path.exists(os.path.join(_REPO, p))]
+    assert not missing, f"Gen 4 manifest rows name files that do not exist: {missing}"
+    # the client directory is not partially shipped
+    on_disk = sorted(f"lua/gen4/{f}" for f in os.listdir(os.path.join(_REPO, "lua", "gen4"))
+                     if f.endswith(".lua"))
+    assert sorted(make_release._lua_rel("gen4", f)
+                  for f in make_release._MANIFEST_TREES["gen4"]) == on_disk
+    assert "lua/nds/native_witness.lua" not in listed
+
+
+def test_no_deleted_legacy_gen4_path_is_in_the_manifest():
+    """PLAN 4.6: the legacy Gen 4 client is deleted, so nothing in the release may still name it.
+    Named literally, not derived from disk, so the check survives the files being restored."""
+    deleted = {
+        "lua/slink_gen4.lua",
+        "lua/clients/gen4_hgsspt_client.lua",
+        "lua/games/gen4_hgsspt.lua",
+        "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
+        "data/games/gen4_hgsspt/gen4_hgsspt_areas_pt.lua",
+        "data/games/gen4_hgsspt/gen4_hgsspt_locations.lua",
+        "data/games/gen4_hgsspt/gen4_hgsspt_locations_pt.lua",
+    }
+    assert not (deleted & _manifest_paths()), "a deleted legacy Gen 4 file is still shipped"
+    assert "slink_gen4.lua" not in make_release._LAUNCHER_SCRIPTS
+
+
+def test_every_runtime_dependency_of_the_gen4_client_is_packaged(archive):
+    """The Gen 4 closure rooted at lua/gen4/run.lua -- the file lua/slink.lua's Gen 4 route dofiles --
+    plus the two edges no literal scan can see (see _GEN4_CONCAT_ONLY / _GEN4_RUNTIME_PACK_FILES).
+    A player who extracts the ZIP and loads lua/gen4/run.lua must not hit a Lua error on the first
+    missing dofile."""
+    needed = (set(_closure(_GEN4_ENTRYPOINTS)) | _GEN4_CONCAT_ONLY
+              | {f"data/games/{pack}/{name}"
+                 for pack, names in _GEN4_RUNTIME_PACK_FILES.items() for name in names}
+              # every pack profile the client admits against, routed or bind-only
+              | {"data/games/gen4_hgss/profile.json", "data/games/gen4_hge/profile.json",
+                 "data/games/gen4_pt/profile.json"})
+    missing = sorted(f for f in needed if f not in archive)
+    assert not missing, f"the release ZIP is missing files the Gen 4 client loads: {missing}"
+
+
+def test_the_zip_contains_everything_the_manifest_lists(archive):
+    """Keeps _manifest_paths() honest -- the red control below trusts it as the set that ships."""
+    assert not (set(_manifest_paths()) - archive)
+
+
+def test_dropping_one_gen4_row_goes_red(monkeypatch):
+    """RED CONTROL for the packaging assertion: remove one manifest row and the Gen 4 closure must
+    stop being covered. Without it, a manifest that shipped nothing from lua/gen4/ would be green."""
+    monkeypatch.setattr(make_release, "_LUA_GEN4",
+                        [f for f in make_release._LUA_GEN4 if f != "safety.lua"])
+    monkeypatch.setattr(make_release, "_MANIFEST_TREES",
+                        {**make_release._MANIFEST_TREES, "gen4": make_release._LUA_GEN4})
+    shipped = _manifest_paths()
+    assert "lua/gen4/safety.lua" in _closure(_GEN4_ENTRYPOINTS)   # the client really does load it
+    assert "lua/gen4/safety.lua" not in shipped
+    assert sorted(_closure(_GEN4_ENTRYPOINTS) - shipped), "the control did not actually go red"
+
+
+def test_a_gen4_row_naming_a_file_that_is_not_there_fails_the_preflight(tmp_path, monkeypatch):
+    """RED CONTROL for the pre-flight half: a manifest row that names a missing file must abort the
+    build (sys.exit(1)), not ship a zip that fails at the first dofile."""
+    monkeypatch.setattr(
+        make_release, "_MANIFEST_TREES",
+        {**make_release._MANIFEST_TREES, "gen4": [*make_release._LUA_GEN4, "not_a_module.lua"]},
+    )
+    with pytest.raises(SystemExit) as exc:
+        make_release.build_release(version="test", out_dir=tmp_path, skip_generators=True, quiet=True)
+    assert exc.value.code == 1
 
 
 def test_the_shipped_socket_dll_is_packaged(archive):

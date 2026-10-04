@@ -1,0 +1,1134 @@
+{
+  "artifact_status": "BIND_ONLY_NOT_ADMITTED",
+  "generator": "tools/gen_gen4_pack.py",
+  "pack": "gen4_pt",
+  "provenance": {
+    "lock": {
+      "path": "data/gen4_sources.lock.json",
+      "sha256": "9726431cb2f0f8460deaa24d51123ea36a63a4e2db1c59b7e8255aaa9265deec"
+    },
+    "notes": [
+      "Platinum names differ from HGSS; PT_SYMBOLS maps roles to names.",
+      "Bind-only: source schema feasibility, not runtime support (D3)."
+    ],
+    "roms": {
+      "platinum": {
+        "header_code": "CPUE",
+        "md5": "d66ad7a2a0068b5d46e0781ca4953ae9",
+        "sha1": "ce81046eda7d232513069519cb2085349896dec7",
+        "sha256": "ede62292aa7f7014ff27d42097e769753380531739889c29b968b67b80f80678",
+        "size_bytes": 134217728
+      }
+    },
+    "sources": {
+      "pokeplatinum_citation": "c248fb3f8cc9934ded800e489567c5c0eeee92eb",
+      "pokeplatinum_xmap": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61"
+    },
+    "xmaps": {
+      "platinum": {
+        "path": ".cache/gen4/xmap/platinumus.xMAP",
+        "sha256": "c3b3451b4815a646514bf9d456062e644d83010f996eaff17abf8d2fe667e72a",
+        "size_bytes": 12107496,
+        "source_commit": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61"
+      }
+    }
+  },
+  "schema": "gen4-profile-v1",
+  "schema_notes": {
+    "address": "integers; address_hex is the same value for humans",
+    "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
+    "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
+    "bag": "profile.bag: the save-array bag's balls pocket, for the Nuzlocke gate. array_id is the same number as profile.save.array_ids.bag; every offset is relative to that ARRAY's base (base: bag_array), never to the general block. balls_pocket_off + i*ball_slot_size (0 <= i < ball_slot_count) addresses slot i; each slot is a u16 id at +0 and a u16 quantity at +2 (slot_fields). ball_ids is every item id whose pocket is POCKET_BALLS, so has_pokeballs = some such slot has an id in ball_ids and a quantity > 0. pocket_layout carries every pocket's offset and slot count. Every value is parsed from the pinned source clone at the pin (source.commit + per-input sha256s); a missing clone emits null with the reason in open.bag, never a guess.",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE) and `owner` {struct, cite}: the struct each offset is relative to (BattleSystem / BattleContext / BattleMon / OverlayManager), since the table mixes them; battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). battle.d7 = the D7 in-battle linked-faint seam read by lua/gen4/client.lua: seam {cmd, overlay_id, addr + pin_hex (HG/SS) | table (hge: the ROM dispatch word for cmd, client reads the pin live)}, ctx_cmd_off (u32 BattleContext.command), bs_party_off (BattleSystem.trainerParty[]), party_hp_off (PartyPokemon.hp), repl_flag_off (BattleContext replacement flag u32[ctx + off + 4*b] & 1); evidence in battle_evidence.d7.fields (class + cite + PHYSICAL receipt per field) and battle_d7_file_checks (the ROM bytes). Platinum: battle is null, reason in open",
+    "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
+    "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
+    "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
+    "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in differing_names_in_several_images (file-local statics defined in two images)",
+    "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by the generator and a test)",
+    "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
+    "field_save": "profile.field_save (HG/SS + hge only; Pt OPEN): general-block offsets for the SYNTH `place` kind: vars[] (base id 0x4000), flags[] bitmap (id 0 = no-op, ids >= 0x4000 temp/never saved), the 64 SavedMapObject list (stride 0x50) and PlayerSaveData.state. Each block carries evidence_class SOURCE / FILE / DERIVED; the gen4_codec oracle reads none of it",
+    "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
+    "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
+    "image": "arm9 (static main only) or ov<N>; sites are resolved from this image, never from the address alone. Byte source: HG/SS 'arm9' bytes are ndspy's DECOMPRESSED loadArm9().sections[0] (ARM9 static image, RAM base 0x02000000); hge 'arm9' bytes are the RAW uncompressed rom.arm9 (hge stores it uncompressed; the raw file is padded to 0x2477C8, so `collides_with` of an hge site can list arm9 where the arm9 bytes are zero padding); 'ov<N>' bytes are the decompressed overlay N from the ROM overlay table",
+    "location": "profile.location: array-relative Location offsets {array_id, map_off, warp_off, x_off, y_off, dir_off} of 5 x s32 (struct_size 20); file_cross_check.general_off_of_array is the FILE position of that array in the general block (a cross-check, the runtime reads the array header)",
+    "mode": "thumb|arm from the xMAP $t/$a mapping symbol (hgss/pt) or the stub/linker evidence recorded in mode_evidence (hge)",
+    "overlays": "ROM overlay table; size is the decompressed byte length, bss is separate",
+    "phase_cases": "titles.<t>.phase_cases[] are G1 qualification cases, NOT the production armed_set: sites (a subset of the phase's candidate_sites within its cap; sites + 1 oracle observer <= 4 handles), producer_site (one of sites; the probe compares an independent always-on observer of the same address with the registry events), predicate {symbol, deref[], offset, value|nonzero} evaluated before each frame, route (named legs, status in route_status) and caller_matrix (exercised_by_route is a design claim; every unexercised caller is listed in open). phase_cases_blocked[] has the same shape but no fixture; phase_cases_excluded[phase][site] says why a candidate is not selected",
+    "phases": "candidate_sites are the G1 candidates; cap/target_max are the plan's per-phase budgets; armed_set is chosen at G2",
+    "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
+    "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
+    "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "rtc": "profile.rtc (card C1-2e): the game's cached RTC work struct (symbol sRTCWork; Platinum sRTCState): symbol, address, work_size, date_off/date_size (RTCDate: u32 year, month, day, week) and time_off/time_size (RTCTime: u32 hour, minute, second), the async pair the refresh loop writes (async_date_off/async_time_off; async_names gives the field names: HGSS date_async/time_async, Platinum tempDate/tempTime), refresh_gate (lock/counter field names + offsets: getDateTimeLock/getDateTimeSleep, Platinum readInProgress/framesSinceRead; the refresh fires when counter > counter_threshold and no read is in flight), frozen_state_off/frozen_time_off (HGSS/hge only: the returned time is frozenTime while frozenTimeState == 3), source (citations), file_checks (ROM reader literal pools; bytes_source = which ARM9 bytes were read), hge_checks (hge only: the four functions' byte identity, decompressed HG ARM9 vs raw hge ARM9, sha256 per function), caveat",
+    "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
+    "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
+  },
+  "titles": {
+    "platinum": {
+      "admission": "BIND_ONLY_NOT_ADMITTED",
+      "open": {
+        "battle": "Platinum battle context offsets are not established (BattleContext/BattleMon have no offset annotations or accessor pins in pokeplatinum, and a hand-counted layout of those nested structs was not attempted); do not derive from HGSS. profile.battle_enums IS filled: the constants are plain bit values in include/constants/battle.h. profile.battle.d7 (the in-battle linked-faint seam) is therefore ABSENT, OPEN: Platinum is a bind-check only",
+        "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
+        "collision_pairs": "bind-only: no Platinum shared-address pair was derived (FieldMap_VBlankCallback is not in the Platinum xMAP)",
+        "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
+        "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
+        "probe_field": "bind-only and structurally different: Platinum has no FieldSystemUnkSub0 (launched-app / field-app / isPaused cells) and no HGSS save-driver SysTask; its application state is FieldProcessManager parent/child (offsets not established, platinum_bind.md) and taskman is a transient FieldTask*. The HGSS probe_field keys have no Platinum counterpart to fill",
+        "probe_wrong_write_offset": "no Platinum gSystem padding-byte audit (the struct layout is derived for system.vblank_counter_off only)",
+        "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
+        "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
+        "route_legs": "bind-only: no Platinum probe route, button recipe or UI geometry was derived (pokeplatinum menus differ; D3)",
+        "save.footer.runtime": "RAM footer address (block_info + footer.addr) is SOURCE only; lua/gen4/reads.lua still uses a structural page-table check for Platinum until it consumes save.footer / save.block_info",
+        "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
+        "trainer.badges": "TrainerInfo has one badgeMask byte (8 Sinnoh badges): trainer.badge_mask_off, no johto/kanto pair"
+      },
+      "overlay_table": {
+        "active_off": 4,
+        "address": 35386224,
+        "entry_size": 8,
+        "evidence": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb src/game_overlay.c:13-32 (same {id,active} shape; size 0xC0 checked)",
+        "id_off": 0,
+        "per_region": 8,
+        "regions": 3,
+        "symbol": "Unk_021BF370"
+      },
+      "overlays": {
+        "0": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "1": {
+          "bss": 32,
+          "ram": 35458432,
+          "size": 32
+        },
+        "10": {
+          "bss": 0,
+          "ram": 35780608,
+          "size": 15008
+        },
+        "100": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18368
+        },
+        "101": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 37120
+        },
+        "102": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 2080
+        },
+        "103": {
+          "bss": 0,
+          "ram": 35839200,
+          "size": 32
+        },
+        "104": {
+          "bss": 32,
+          "ram": 35839200,
+          "size": 81376
+        },
+        "105": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 18912
+        },
+        "106": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 7616
+        },
+        "107": {
+          "bss": 0,
+          "ram": 35920608,
+          "size": 34880
+        },
+        "108": {
+          "bss": 32,
+          "ram": 35920608,
+          "size": 7360
+        },
+        "109": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 20960
+        },
+        "11": {
+          "bss": 0,
+          "ram": 35780608,
+          "size": 1056
+        },
+        "110": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 5568
+        },
+        "111": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 11232
+        },
+        "112": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 4736
+        },
+        "113": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 20096
+        },
+        "114": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 15680
+        },
+        "115": {
+          "bss": 64,
+          "ram": 36045888,
+          "size": 25216
+        },
+        "116": {
+          "bss": 0,
+          "ram": 36045888,
+          "size": 31776
+        },
+        "117": {
+          "bss": 0,
+          "ram": 36045888,
+          "size": 27648
+        },
+        "118": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1088
+        },
+        "119": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 6464
+        },
+        "12": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 111904
+        },
+        "120": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1216
+        },
+        "121": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1600
+        },
+        "13": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 41472
+        },
+        "14": {
+          "bss": 0,
+          "ram": 35781664,
+          "size": 62560
+        },
+        "15": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "16": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 219776
+        },
+        "17": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 105632
+        },
+        "18": {
+          "bss": 33248,
+          "ram": 35780608,
+          "size": 178784
+        },
+        "19": {
+          "bss": 416,
+          "ram": 35458432,
+          "size": 63584
+        },
+        "2": {
+          "bss": 0,
+          "ram": 35458496,
+          "size": 32
+        },
+        "20": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18112
+        },
+        "21": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 102912
+        },
+        "22": {
+          "bss": 0,
+          "ram": 35999200,
+          "size": 28832
+        },
+        "23": {
+          "bss": 128,
+          "ram": 35905856,
+          "size": 103936
+        },
+        "24": {
+          "bss": 0,
+          "ram": 35994848,
+          "size": 256
+        },
+        "25": {
+          "bss": 0,
+          "ram": 35994848,
+          "size": 9440
+        },
+        "26": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1504
+        },
+        "27": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3840
+        },
+        "28": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 6400
+        },
+        "29": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2656
+        },
+        "3": {
+          "bss": 0,
+          "ram": 33523296,
+          "size": 32
+        },
+        "30": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1376
+        },
+        "31": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2048
+        },
+        "32": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2976
+        },
+        "33": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 6048
+        },
+        "34": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2304
+        },
+        "35": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1536
+        },
+        "36": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1536
+        },
+        "37": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1184
+        },
+        "38": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "39": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1216
+        },
+        "4": {
+          "bss": 21504,
+          "ram": 35458432,
+          "size": 300672
+        },
+        "40": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2464
+        },
+        "41": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3264
+        },
+        "42": {
+          "bss": 32,
+          "ram": 36004288,
+          "size": 1376
+        },
+        "43": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2880
+        },
+        "44": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3296
+        },
+        "45": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3168
+        },
+        "46": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 4416
+        },
+        "47": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2304
+        },
+        "48": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2496
+        },
+        "49": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1184
+        },
+        "5": {
+          "bss": 245792,
+          "ram": 35458432,
+          "size": 201632
+        },
+        "50": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2368
+        },
+        "51": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "52": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 3232
+        },
+        "53": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 2208
+        },
+        "54": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 1632
+        },
+        "55": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 800
+        },
+        "56": {
+          "bss": 0,
+          "ram": 36004288,
+          "size": 4416
+        },
+        "57": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 1024
+        },
+        "58": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 9408
+        },
+        "59": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 10112
+        },
+        "6": {
+          "bss": 32,
+          "ram": 35905856,
+          "size": 47104
+        },
+        "60": {
+          "bss": 4160,
+          "ram": 35780608,
+          "size": 42528
+        },
+        "61": {
+          "bss": 2912,
+          "ram": 35827296,
+          "size": 14592
+        },
+        "62": {
+          "bss": 0,
+          "ram": 35844800,
+          "size": 108256
+        },
+        "63": {
+          "bss": 0,
+          "ram": 35827296,
+          "size": 11904
+        },
+        "64": {
+          "bss": 0,
+          "ram": 35839200,
+          "size": 18496
+        },
+        "65": {
+          "bss": 32,
+          "ram": 35839200,
+          "size": 49536
+        },
+        "66": {
+          "bss": 4160,
+          "ram": 35839200,
+          "size": 186848
+        },
+        "67": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 3488
+        },
+        "68": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 6080
+        },
+        "69": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 11584
+        },
+        "7": {
+          "bss": 32,
+          "ram": 35952992,
+          "size": 23616
+        },
+        "70": {
+          "bss": 0,
+          "ram": 36030208,
+          "size": 73920
+        },
+        "71": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 9824
+        },
+        "72": {
+          "bss": 0,
+          "ram": 35903392,
+          "size": 5568
+        },
+        "73": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 11648
+        },
+        "74": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4000
+        },
+        "75": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4288
+        },
+        "76": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 15936
+        },
+        "77": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 27776
+        },
+        "78": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7296
+        },
+        "79": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 12320
+        },
+        "8": {
+          "bss": 0,
+          "ram": 35952992,
+          "size": 20000
+        },
+        "80": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 9888
+        },
+        "81": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 10176
+        },
+        "82": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 1120
+        },
+        "83": {
+          "bss": 0,
+          "ram": 35894688,
+          "size": 20576
+        },
+        "84": {
+          "bss": 0,
+          "ram": 35894688,
+          "size": 24224
+        },
+        "85": {
+          "bss": 0,
+          "ram": 35918912,
+          "size": 5664
+        },
+        "86": {
+          "bss": 32,
+          "ram": 35893568,
+          "size": 9248
+        },
+        "87": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 3648
+        },
+        "88": {
+          "bss": 0,
+          "ram": 35893568,
+          "size": 16576
+        },
+        "89": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 32
+        },
+        "9": {
+          "bss": 0,
+          "ram": 35952992,
+          "size": 41856
+        },
+        "90": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 4672
+        },
+        "91": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7744
+        },
+        "92": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 7488
+        },
+        "93": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 2176
+        },
+        "94": {
+          "bss": 352,
+          "ram": 35893568,
+          "size": 47488
+        },
+        "95": {
+          "bss": 160,
+          "ram": 35941408,
+          "size": 22208
+        },
+        "96": {
+          "bss": 288,
+          "ram": 35893568,
+          "size": 11424
+        },
+        "97": {
+          "bss": 6528,
+          "ram": 35827296,
+          "size": 82720
+        },
+        "98": {
+          "bss": 32,
+          "ram": 35941408,
+          "size": 12800
+        },
+        "99": {
+          "bss": 0,
+          "ram": 35458432,
+          "size": 18272
+        }
+      },
+      "phases": {},
+      "profile": {
+        "battle": null,
+        "battle_enums": {
+          "evidence": {
+            "battle_types": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/battle.h:24-37 (no bug-catching-contest type in Platinum)",
+            "outcomes": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/battle.h:72-80 (BATTLE_RESULT_* flags: WIN 1, LOSE 2, CAPTURED_MON 4; DRAW/PLAYER_FLED/ENEMY_FLED are their ORs)"
+          },
+          "exempt_mask": 2147485372,
+          "exempt_roles": {
+            "debug": "BATTLE_TYPE_DEBUG",
+            "frontier": "BATTLE_TYPE_FRONTIER",
+            "link": "BATTLE_TYPE_LINK",
+            "multi": "BATTLE_TYPE_2vs2",
+            "pal_park": "BATTLE_TYPE_PAL_PARK",
+            "safari": "BATTLE_TYPE_SAFARI",
+            "tag": "BATTLE_TYPE_TAG",
+            "tutorial": "BATTLE_TYPE_CATCH_TUTORIAL"
+          },
+          "no_catch_mask": 2147485372,
+          "no_catch_mask_note": "same value as exempt_mask under the name lua/gen4/poll_events.lua cfg.no_catch_mask uses",
+          "not_exempt": {
+            "BATTLE_TYPE_AI": "a partner or AI-controlled side (BATTLE_TYPE_AI_PARTNER = DOUBLES|2vs2|AI is exempt through 2vs2)",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change",
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter",
+            "BATTLE_TYPE_SINGLES": "0: no bit",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask"
+          },
+          "outcome_consts": {
+            "caught": "BATTLE_RESULT_CAPTURED_MON",
+            "draw": "BATTLE_RESULT_DRAW",
+            "foe_fled": "BATTLE_RESULT_ENEMY_FLED",
+            "lose": "BATTLE_RESULT_LOSE",
+            "none": "BATTLE_IN_PROGRESS",
+            "player_fled": "BATTLE_RESULT_PLAYER_FLED",
+            "win": "BATTLE_RESULT_WIN"
+          },
+          "outcome_encoding": "the battle result byte at bs+battle.outcome_off, masked with battle.outcome_mask (0x3F); numeric codes are identical for BATTLE_OUTCOME_* and BATTLE_RESULT_*",
+          "outcomes": {
+            "caught": 4,
+            "draw": 3,
+            "foe_fled": 6,
+            "lose": 2,
+            "none": 0,
+            "player_fled": 5,
+            "win": 1
+          },
+          "trainer_const": "BATTLE_TYPE_TRAINER",
+          "trainer_mask": 1,
+          "type_bits": {
+            "BATTLE_TYPE_2vs2": 8,
+            "BATTLE_TYPE_AI": 64,
+            "BATTLE_TYPE_CATCH_TUTORIAL": 1024,
+            "BATTLE_TYPE_DEBUG": 2147483648,
+            "BATTLE_TYPE_DOUBLES": 2,
+            "BATTLE_TYPE_FRONTIER": 128,
+            "BATTLE_TYPE_LINK": 4,
+            "BATTLE_TYPE_PAL_PARK": 512,
+            "BATTLE_TYPE_ROAMER": 256,
+            "BATTLE_TYPE_SAFARI": 32,
+            "BATTLE_TYPE_SINGLES": 0,
+            "BATTLE_TYPE_TAG": 16,
+            "BATTLE_TYPE_TRAINER": 1
+          }
+        },
+        "boxes": 18,
+        "dirty": {
+          "full_save_flag": {
+            "base": "SaveData",
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:50-57 (fullSaveRequired, src/savedata.c:251-254)",
+            "off": 12,
+            "width": 4
+          },
+          "modified_flag_off": null
+        },
+        "fieldsys_ptr": {
+          "address": 35391452,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/field/field_system.h:76-82 (processManager, unk_04, bgConfig, saveData)",
+          "process_manager_off": 0,
+          "save_data_off": 12,
+          "symbol": "sFieldSystem",
+          "width": 4
+        },
+        "idle": {
+          "app_clause": "FieldSystem_IsRunningApplication = processManager(+0x00)->parent/child",
+          "taskman_clause": "NOT valid (+0x10 is a transient FieldTask*)"
+        },
+        "location": {
+          "array_id": 11,
+          "dir_off": 16,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/location.h:18-24 (Location: mapHeaderID, warpId, x, z, faceDirection), include/field_overworld_state.h:13-14 (FieldOverworldState.player is the first member), src/field_overworld_state.c:42-45, include/constants/savedata/save_table.h:23 (SAVE_TABLE_ENTRY_FIELD_OVERWORLD_STATE = 11)",
+          "file_cross_check": {
+            "evidence": "FILE: owner Pt save pt_TTT_44361: Location (411,-1,116,886,1) at general+0x1280 with entrance/previous at +0x14/+0x28 and exit at +0x50, matching the struct order player, entrance, previous, special, exit",
+            "general_off_of_array": 4736
+          },
+          "map_off": 0,
+          "struct_size": 20,
+          "warp_off": 4,
+          "x_off": 8,
+          "y_field": "z",
+          "y_off": 12
+        },
+        "memorial_box": null,
+        "mons_per_box": 30,
+        "party_off": {
+          "array_id": 2,
+          "base": "general_block",
+          "count_off": 4,
+          "evidence": {
+            "platinum": "FILE (owner Pt save pt_TTT_44361: max=6 @+0x98, count=1 @+0x9C, Turtwig species 387 at +0xA0 via codec.parse_save(img,'pt')); SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/party.h:11-15 (Party: capacity, currentCount, pokemon[6])"
+          },
+          "max_off": 0,
+          "mons_off": 8,
+          "value": 152
+        },
+        "pc": {
+          "array_id": 37,
+          "box_base": 4,
+          "box_stride": 4080,
+          "boxes": 18,
+          "cur_box_off": 0,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/pc_boxes.h:18-24 (u32 currentBoxID, then boxMons[18][30], no pad)",
+          "modified_flag_off": null,
+          "mon_stride": 136,
+          "mons_per_box": 30
+        },
+        "pkm": {
+          "ability_msb": null,
+          "ball_off_block_d": 27,
+          "block_d_0x1E": "unused in Platinum (HGSS ball/mood)",
+          "box_size": 136,
+          "exp_bits": 32,
+          "party_hp_width": 2,
+          "party_size": 236
+        },
+        "probe_field": null,
+        "probe_wrong_write_offset": null,
+        "rtc": {
+          "address": 35386824,
+          "async_date_off": 44,
+          "async_names": {
+            "date": "tempDate",
+            "time": "tempTime"
+          },
+          "async_time_off": 60,
+          "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
+          "caveat": "date/time are a CACHE of the host RTC: UpdateRTC returns while readInProgress is set, else increments framesSinceRead and, when it exceeds 10, zeroes it and starts an async read into the pair tempDate/tempTime; GetTimeCallback copies that pair over date/time and clears readInProgress; the cached copy refreshes every 11 frames when no read is in flight (the counter must exceed 10) and later when one is (the counter does not advance while a read is in flight), so a pin written only to date/time is clobbered; pin the host RTC or rewrite each frame. Refresh loop: src/rtc.c:35-47",
+          "date_fields": {
+            "day": 8,
+            "month": 4,
+            "week": 12,
+            "year": 0
+          },
+          "date_off": 16,
+          "date_size": 16,
+          "evidence": "SOURCE + FILE",
+          "file_checks": {
+            "GetCurrentDate": {
+              "address": 33634468,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
+              "image": "arm9",
+              "pool_offsets": [
+                0,
+                16
+              ],
+              "proves": "date_off"
+            },
+            "RTC_GetCurrentTime": {
+              "address": 33634432,
+              "bytes_source": "ARM9 bytes: HG/SS = ndspy loadArm9().sections[0] (the DECOMPRESSED static image, RAM base 0x02000000; never the compressed raw rom.arm9); hge = the raw uncompressed rom.arm9",
+              "image": "arm9",
+              "pool_offsets": [
+                0,
+                32
+              ],
+              "proves": "time_off"
+            }
+          },
+          "refresh_gate": {
+            "counter_field": "framesSinceRead",
+            "counter_off": 8,
+            "counter_threshold": 10,
+            "lock_field": "readInProgress",
+            "lock_off": 4
+          },
+          "source": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb src/rtc.c:9-18 (RTCState: 4 words, then date src/rtc.c:14, time src/rtc.c:15, tempDate, tempTime); src/rtc.c:23; RTCDate/RTCTime layouts are the NitroSDK structs (pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 lib/include/nitro/rtc/ARM9/api.h:29, lib/include/nitro/rtc/ARM9/api.h:36; pokeplatinum ships no SDK header); FILE: computed size 0x48 equals the xMAP sRTCState size, the readers' literal pools address +0x10 and +0x20",
+          "symbol": "sRTCState",
+          "time_fields": {
+            "hour": 0,
+            "minute": 4,
+            "second": 8
+          },
+          "time_off": 32,
+          "time_size": 12,
+          "work_size": 72
+        },
+        "save": {
+          "array_addr": "SaveData + body_off + u32[SaveData + table_off + id*entry_size + field_off]",
+          "array_ids": {
+            "bag": 3,
+            "field_overworld_state": 11,
+            "field_player_state": 6,
+            "party": 2,
+            "pc_boxes": 37,
+            "player": 1,
+            "system": 0
+          },
+          "array_ids_note": "pc_boxes counted from the SaveTableEntryID enum (SAVE_TABLE_ENTRY_PC_BOXES = 37, MAX = 38); platinum_bind.md says 38, which is SAVE_TABLE_ENTRY_MAX",
+          "block_info": {
+            "entry_count": 2,
+            "entry_fields": {
+              "block_id": 0,
+              "offset": 4,
+              "sector_start": 1,
+              "sectors_in_use": 2,
+              "size": 8
+            },
+            "entry_size": 12,
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:17-23,59-60 (SaveBlockInfo; SaveData order: pageInfo then blockInfo), src/savedata.c:852-870 (offset = running sum of block sizes, size = entries + footer); the 0x20284 start follows from the same struct layout as table_off",
+            "table_off": 131716
+          },
+          "body_off": 20,
+          "body_size": 131072,
+          "entry_count": 38,
+          "entry_fields": {
+            "block_id": 14,
+            "checksum": 12,
+            "location": 8,
+            "page_id": 0,
+            "size": 4
+          },
+          "entry_size": 16,
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-62, include/constants/savedata/save_table.h:65-66",
+          "field_off": 8,
+          "footer": {
+            "addr": "SaveData + body_off + blockInfo[b].offset + blockInfo[b].size - size",
+            "block_count": 2,
+            "blocks": {
+              "boxes": 1,
+              "normal": 0
+            },
+            "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/savedata.h:7-14 (differs from HGSS: extra blockCounter + blockID), src/savedata.c:313-325,327-350,361-373 (SaveBlockFooter_Ptr / _Validate / _Set: the footer sits in the RAM body at the end of each block); FILE: owner Pt save pt_TTT_44361 general block ends with a 0x14-byte footer (counter 1, blockCounter 1, size 0xCF2C = the block length, signature, blockID 0); RAM address is SOURCE only (no Platinum emulator work, D3)",
+            "fields": {
+              "block_counter": 4,
+              "block_id": 16,
+              "checksum": 18,
+              "save_counter": 0,
+              "signature": 12,
+              "size": 8
+            },
+            "signature": 537265699,
+            "size": 20,
+            "valid_when": "signature == 0x20060623 and footer.size == blockInfo[b].size and footer.block_id == b"
+          },
+          "runtime_confirmation": "OPEN: no Platinum emulator work in this release (D3)",
+          "table": "pageInfo",
+          "table_off": 131108
+        },
+        "save_ptr": {
+          "address": 35391380,
+          "symbol": "sSaveDataPtr",
+          "width": 4
+        },
+        "system": {
+          "address": 35387004,
+          "address_evidence": "xMAP gSystem (the same symbol row as title.symbols.gSystem)",
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/system.h:30-66 (struct System: 11 four-byte callback/pointer slots, then vblankCounter include/system.h:42, then frameCounter); FILE: the struct's computed size 0x74 equals the xMAP gSystem size; src/main.c:138 (main loop increments vblankCounter). PHYSICAL: none (no Platinum emulator work, D3)",
+          "frame_counter_off": 48,
+          "symbol": "gSystem",
+          "vblank_counter_off": 44
+        },
+        "trainer": {
+          "appearance_off": 27,
+          "array_id": 1,
+          "badge_mask_evidence": "SOURCE (TrainerInfo.badgeMask, ONE u8 of 8 Sinnoh badges; no johto/kanto pair, so reads.badges has no Pt shape)",
+          "badge_mask_off": 26,
+          "evidence": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/save_player.h:9-16 (PlayerSave: options u16 + 2 pad, then TrainerInfo @+4), include/trainer_info.h:9-21 (name[8] u16, id u32 @0x10, money u32 @0x14, gender/language/badgeMask/appearance/gameCode u8 @0x18..0x1C); src/save_player.c:27-31; FILE: owner Pt save pt_TTT_44361 (array at general+0x64, profile +0x68): TTT, TID 44361 / SID 13120, money 3500, gameCode 12",
+          "gender_off": 24,
+          "id_evidence": "FILE (TID 44361 / SID 13120 on the owner Pt save)",
+          "id_off": 16,
+          "identity": {
+            "general_off_evidence": "FILE (Pt save: PlayerSave array at general+0x64, TrainerInfo +4)",
+            "general_off_of_profile": 104,
+            "id_general_off": 120,
+            "id_is": "u32: TID in the low half, SID in the high half"
+          },
+          "language_off": 25,
+          "money_off": 20,
+          "name_chars": 8,
+          "name_off": 0,
+          "name_terminator": 65535,
+          "profile_off_in_array": 4,
+          "version_evidence": "FILE (gameCode 12 = VERSION_PLATINUM on the owner Pt save; pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/versions.h:17)",
+          "version_off": 28,
+          "version_values": {
+            "platinum": 12
+          }
+        }
+      },
+      "rom": {
+        "header_code": "CPUE",
+        "md5": "d66ad7a2a0068b5d46e0781ca4953ae9",
+        "sha1": "ce81046eda7d232513069519cb2085349896dec7"
+      },
+      "sites": {},
+      "symbols": {
+        "BtlCmd_TryFaintMon": {
+          "address": 35920064,
+          "address_hex": "0x022418c0",
+          "image": "ov16",
+          "mode": "thumb",
+          "object": "src_battle_battle_script.c.o",
+          "role": "faint_cmd",
+          "section": ".text",
+          "size": 100
+        },
+        "OS_Halt": {
+          "address": 34357944,
+          "address_hex": "0x020c42b8",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "libos.a src_os_terminat",
+          "role": "idle_halt",
+          "section": ".text",
+          "size": 12
+        },
+        "OS_WaitIrq": {
+          "address": 34345652,
+          "address_hex": "0x020c12b4",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "libos.a src_os_irqhandl",
+          "role": "irq_wait",
+          "section": ".text",
+          "size": 116
+        },
+        "Overlay_LoadByID": {
+          "address": 33580432,
+          "address_hex": "0x02006590",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_load",
+          "section": ".text",
+          "size": 180
+        },
+        "Overlay_UnloadByID": {
+          "address": 33580308,
+          "address_hex": "0x02006514",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_unload",
+          "section": ".text",
+          "size": 48
+        },
+        "Party_AddPokemon": {
+          "address": 34054216,
+          "address_hex": "0x0207a048",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_party.c.o",
+          "role": "party_add_mon",
+          "section": ".text",
+          "size": 54
+        },
+        "SaveData_Ptr": {
+          "address": 33703332,
+          "address_hex": "0x020245a4",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "src_savedata.c.o",
+          "role": "save_data_get",
+          "section": ".text",
+          "size": 24
+        },
+        "Unk_021BF370": {
+          "address": 35386224,
+          "address_hex": "0x021bf370",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_game_overlay.c.o",
+          "role": "overlay_table",
+          "section": ".bss",
+          "size": 192
+        },
+        "gSystem": {
+          "address": 35387004,
+          "address_hex": "0x021bf67c",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_system.c.o",
+          "role": "gSystem",
+          "section": ".bss",
+          "size": 116
+        },
+        "sFieldSystem": {
+          "address": 35391452,
+          "address_hex": "0x021c07dc",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_field_system.c.o",
+          "role": "field_system_ptr",
+          "section": ".bss",
+          "size": 4
+        },
+        "sRTCState": {
+          "address": 35386824,
+          "address_hex": "0x021bf5c8",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_rtc.c.o",
+          "role": "rtc_work",
+          "section": ".bss",
+          "size": 72
+        },
+        "sSaveDataPtr": {
+          "address": 35391380,
+          "address_hex": "0x021c0794",
+          "image": "arm9",
+          "mode": null,
+          "object": "src_savedata.c.o",
+          "role": "sSaveDataPtr",
+          "section": ".bss",
+          "size": 4
+        }
+      }
+    }
+  }
+}

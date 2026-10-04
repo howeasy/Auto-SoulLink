@@ -61,3 +61,15 @@ lua/tests/gen3_title_syms_exp_28877d73.lua text eol=lf
 # patch/dist/companion_version.json records the sha256 of every shipped file in patch/dist, and the
 # tools write them with LF; a CRLF checkout would make make_release refuse its own release.
 patch/dist/*.json text eol=lf
+
+# Gen 4: the generated packs, the requirements ledger/plan/lock/manifest and the evidence inputs are
+# hashed or --check-compared byte-for-byte against LF output (tests/unit/test_gen4_pack.py,
+# test_gen4_requirements.py input_sha256, tools/gen_gen4_*.py --check). A Windows checkout
+# (core.autocrlf=true) turned them CRLF and failed those pins in a fresh clone.
+data/games/gen4_*/*.json text eol=lf
+data/gen4/** text eol=lf
+data/gen4_sources.lock.json text eol=lf
+tests/gen4_requirements.json text eol=lf
+docs/gen4_requirements.md text eol=lf
+docs/gen4/PLAN.md text eol=lf
+docs/gen4/research/data/*.json text eol=lf

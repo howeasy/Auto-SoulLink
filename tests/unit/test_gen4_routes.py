@@ -1,0 +1,2844 @@
+"""tools/gen4_routes.py: path-finding on map data (no emulator). Synthetic grids always run; the
+real ROM/pret/save cases skip by name when an input is absent and fail when present but wrong
+(tests/TESTING.md)."""
+
+import hashlib
+import json
+import re
+import struct
+from pathlib import Path
+
+import pytest
+
+from tests.unit.test_gen4_evidence import model_surface  # noqa: F401
+from tools import gen4_routes as gr
+
+pytestmark = pytest.mark.usefixtures("model_surface")
+
+ROM, PRET, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_PRET, gr.DEFAULT_SAVE
+
+
+def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None, header=7):
+    """One 32x32 land cell from ascii rows: '#' collision, '.' floor, 'g' encounter grass,
+    '~' surfable water; header id 7 (named "TST")."""
+    words = [0x8006] * 1024
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            words[y * 32 + x] = {"#": 0x8006, ".": 0x0000, "g": 0x0002, "~": 0x0015}[ch]
+    return gr.World(
+        1,
+        1,
+        [header],
+        [0],
+        {0: tuple(words)},
+        set(blocked),
+        set(soft),
+        water or frozenset({0x15}),
+        {header: "TST"},
+        frozenset(warps),
+        dict(scripts or {}),
+    )
+
+
+def _start(x, y):
+    return {"map": 7, "x": x, "y": y, "dir": 1}
+
+
+def _check_never_blocked(world, route):
+    for x, y in gr.replay(world, route)[1:]:
+        assert world.walkable(x, y), f"route crosses blocked tile {(x, y)}"
+        assert (x, y) not in world.blocked
+
+
+ROWS = [
+    "################",
+    "#..............#",
+    "#.#####.######.#",
+    "#.#...#.#....#.#",
+    "#.#.#.#.#.##.#.#",
+    "#...#...#.ggg..#",
+    "################",
+]
+
+
+def test_path_reaches_grass_and_never_crosses_a_blocked_tile():
+    w = _world(ROWS)
+    r = gr.plan_route(w, _start(1, 1))
+    _check_never_blocked(w, r)
+    end = gr.replay(w, r)[-1]
+    assert w.is_grass(*end)
+    # the pace partner is a horizontal grass neighbour
+    a, b = r["grass"]["pace"]["a"], r["grass"]["pace"]["b"]
+    assert tuple(a) == end and w.is_grass(*b) and abs(a[0] - b[0]) == 1 and a[1] == b[1]
+    assert r["tiles"] == len(gr.replay(w, r)) - 1
+
+
+def test_unrelated_event_tiles_are_hard_blocked():
+    w = _world(ROWS, blocked={(7, 1), (7, 2)})  # an NPC box plugging the only corridor east
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_route(w, _start(1, 1))
+    assert e.value.reason == "no_grass_reachable"
+
+
+def test_coord_event_is_crossed_only_when_unavoidable():
+    # two corridors to the grass: the direct one carries a coord event, the detour is longer
+    rows = [
+        "################",
+        "#.....gg.......#",
+        "#.############.#",
+        "#..............#",
+        "################",
+    ]
+    w = _world(rows, soft={(3, 1), (4, 1)}, scripts={(3, 1): ("T20_002",), (4, 1): ("T20_002",)})
+    r = gr.plan_route(w, _start(1, 1))
+    _check_never_blocked(w, r)
+    assert r["soft_events"] == []  # the long way round beats a coord-event crossing
+    assert gr.replay(w, r)[-1] == (7, 1)
+    # when the only way is through the event it is taken, and the scriptIds travel with the route
+    w2 = _world(["########", "#..gg###", "########"], soft={(2, 1)}, scripts={(2, 1): ("R29_001",)})
+    r2 = gr.plan_route(w2, _start(1, 1))
+    assert r2["soft_events"] == [{"x": 2, "y": 1, "scriptIds": ["R29_001"]}]
+
+
+def test_wrong_map_id_is_refused():
+    w = _world(ROWS)
+    bad = _start(1, 1)
+    bad["map"] = 8
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_route(w, bad)
+    assert e.value.reason == "map_mismatch"
+
+
+def test_start_off_the_map_is_refused():
+    w = _world(ROWS)
+    w.lands[0] = gr.VOID_LAND
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_route(w, _start(1, 1))
+    assert e.value.reason == "start_off_map"
+
+
+def test_grass_without_a_pace_partner_is_skipped():
+    # a lone grass tile has no horizontal grass neighbour; the pair further on is chosen
+    w = _world(["#########", "#.g.gg..#", "#########"])
+    r = gr.plan_route(w, _start(1, 1))
+    assert gr.replay(w, r)[-1] == (4, 1) and r["grass"]["pace"]["b"] == [5, 1]
+
+
+def test_edge_split_is_a_segment_end():
+    w = _world(["#########", "#..ggg..#", "#########"])
+    r = gr.plan_route(w, _start(1, 1))
+    tiles = gr.replay(w, r)
+    # walk: (1,1)->(2,1) floor, (3,1) first grass: the edge (2,1) must end a segment
+    idx = r["grass_edge_after_step"]
+    assert idx is not None
+    last = r["steps"][idx]["to"]
+    assert (last["x"], last["y"]) == (2, 1) and not w.is_grass(2, 1)
+    assert tiles[-1] == (3, 1)
+
+
+def test_surfable_water_is_blocked_not_priced():
+    # behaviour 0x15 is surfable water: the game gates it behind Surf
+    # (Field_PlayerCanSurfOnTile, asm/overlay_01_021F1AFC.s:763-780; the blocked predicate
+    # sub_02060E54, asm/unk_0205FD20.s:2155-2181), so a water tile is impassable on foot.
+    # Pricing it instead would plan a swim the walker cannot make.
+    w = _world(["##########", "#........#", "#~~~~~~~~#", "#...gg...#", "##########"])
+    assert w.is_water(4, 2) and not w.walkable(4, 2)
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_route(w, _start(1, 1))
+    assert e.value.reason == "no_grass_reachable"
+    # and a route that does exist never reports a water tile
+    ok = _world(["#########", "#.......#", "#..~~~..#", "#...gg..#", "#########"])
+    r = gr.plan_route(ok, _start(1, 1))
+    assert r["water_tiles"] == [] and gr.replay(ok, r)[-1] == (4, 3)
+
+
+def test_grass_crossed_on_the_approach_is_reported():
+    # a lone grass tile on the way to the pace pair is legal, and a wild encounter can fire
+    # there, so the route has to name those tiles (the Lua polls the battle chain for them)
+    w = _world(["##########", "#.g..gg..#", "##########"])
+    r = gr.plan_route(w, _start(1, 1))
+    assert r["approach_grass"] == [[2, 1]]
+    assert r["grass"]["tile"]["x"] == 5  # the first grass with a horizontal partner
+    # a start that is already on the goal grass has no approach to report
+    assert gr.plan_route(w, _start(6, 1))["approach_grass"] == []
+
+
+def test_the_start_tile_exemption_does_not_mutate_the_world():
+    w = _world(ROWS, blocked={(1, 1)})
+    before = set(w.blocked)
+    r = gr.plan_route(w, _start(1, 1))
+    assert w.blocked == before and (1, 1) in w.blocked  # the world's events are untouched
+    _check_never_blocked(w, r)
+    assert gr.replay(w, r)[-1] == (12, 5)
+
+
+def test_an_exhausted_search_budget_is_its_own_refusal():
+    w = _world(ROWS)
+    with pytest.raises(gr.RouteError) as e:
+        gr._search(w, (1, 1), lambda t: False, limit=5)
+    assert e.value.reason == "search_budget"
+    assert gr.plan_route(w, _start(1, 1))["tiles"] > 0  # the default budget is not the limit
+
+
+def test_terrain_layout_guard_refuses_a_misaligned_member():
+    body = struct.pack("<4I", 0x800, 0x10, 0x20, 0x30) + struct.pack("<HH", 0x1234, 0)
+    good = body + bytes(0x800 + 0x10 + 0x20 + 0x30)
+    assert len(gr._terrain(good, 1)) == 1024
+    extra = (
+        struct.pack("<4I", 0x800, 0x10, 0x20, 0x30)
+        + struct.pack("<HH", 0x1234, 8)
+        + bytes(8 + 0x800 + 0x10 + 0x20 + 0x30)
+    )
+    assert len(gr._terrain(extra, 2)) == 1024
+    with pytest.raises(gr.FixtureError):
+        gr._terrain(good + b"\0", 3)  # length identity broken
+    with pytest.raises(gr.FixtureError):
+        gr._terrain(b"\0" * 8 + good[8:], 4)  # bad terrain size
+
+
+def test_parse_result_takes_the_last_result_line():
+    log = (
+        "[f1] x\n[f9] RESULT RESYNC map=60 x=1 y=2 dir=1 state=C:/a.State\n"
+        "[f10] RESULT BATTLE phase=pace species=PIDGEY(16) level=2 map=33 x=665 y=404"
+    )
+    r = gr.parse_result(log)
+    assert r["status"] == "BATTLE"
+    assert "phase=pace" in r["detail"] and "species=PIDGEY(16)" in r["detail"]
+    assert gr.parse_result("nothing")["status"] == "NO_RESULT"
+    # an encounter on the approach is still a battle, not a resync
+    assert gr.parse_result("[f1] RESULT BATTLE phase=approach species=PIDGEY(16)")["status"] == (
+        "BATTLE"
+    )
+
+
+def test_save_position_absent_is_a_named_skip(tmp_path):
+    with pytest.raises(gr.RomAbsent):
+        gr.save_position(tmp_path / "nope.SaveRAM")
+
+
+# --- errands (enter / talk / exit a house) ----------------------------------------------------------
+def _errand():
+    outer = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 3)})
+    house = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 1), (2, 3)}, header=8)
+    return outer, gr.Errand(8, 7, house, (4, 3), (2, 3), (4, 1))
+
+
+def test_errand_enter_ends_with_a_flagged_door_step():
+    outer, err = _errand()
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    last = r["steps"][-1]
+    assert last["warp"] and last["dir"] == "Down" and last["to"]["map"] == 8
+    tiles = gr.replay(outer, {**r, "steps": r["steps"][:-1]})
+    assert tiles[-1] == (4, 2)  # the tile in front of the door
+    _check_never_blocked(outer, {**r, "steps": r["steps"][:-1]})
+
+
+def test_errand_talk_faces_the_npc_and_exit_leaves_by_the_door():
+    _, err = _errand()
+    t = gr.plan_errand(err.house, err, "talk", {"map": 8, "x": 1, "y": 2, "dir": 0})
+    end = gr.replay(err.house, t)[-1]
+    assert abs(end[0] - 4) + abs(end[1] - 1) == 1 and "warp" not in json.dumps(t["steps"])
+    assert gr.DIRS[t["talk"]["face"]] == (4 - end[0], 1 - end[1])  # toward the NPC
+    x = gr.plan_errand(err.house, err, "exit", {"map": 8, "x": 1, "y": 2, "dir": 0})
+    assert x["steps"][-1]["warp"] and x["steps"][-1]["to"]["map"] == 7
+
+
+def test_errand_refuses_a_wrong_start_map_and_a_bad_phase():
+    outer, err = _errand()
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_errand(outer, err, "enter", {"map": 8, "x": 1, "y": 1, "dir": 0})
+    assert e.value.reason == "map_mismatch"
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_errand(outer, err, "dance", _start(1, 1))
+    assert e.value.reason == "unknown_phase"
+
+
+# --- per-game save Location (pack-derived) ---------------------------------------------------------
+class _FakeSave:
+    def __init__(self, general):
+        self.general = general
+
+
+def _fake_general(game, loc):
+    off = gr.location_spec(game)["general_off"]
+    g = bytearray(0x40000)
+    struct.pack_into("<5i", g, off, *loc)
+    return bytes(g)
+
+
+def test_location_offset_comes_from_the_pack_per_game():
+    assert gr.location_spec("HG")["general_off"] == 0x1234  # the old hard-coded constant
+    assert gr.location_spec("hge")["general_off"] == 0x1424  # hge's earlier arrays are larger
+    assert gr.location_spec("hge")["array_id"] == 5
+    with pytest.raises(gr.RouteError) as e:
+        gr.location_spec("pt")
+    assert e.value.reason == "unknown_game"
+
+
+@pytest.mark.parametrize("game", ["HG", "hge"])
+def test_save_position_reads_the_game_pack_offset(game, tmp_path, monkeypatch):
+    sav = tmp_path / "x.SaveRAM"
+    sav.write_bytes(b"x")
+    g = _fake_general(game, (7, -1, 1, 1, 1))
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeSave(g))
+    pos = gr.save_position(sav, game)
+    assert pos == {"map": 7, "warp": -1, "x": 1, "y": 1, "dir": 1}
+    r = gr.plan_route(_world(ROWS), pos, game=game)
+    assert r["game"] == game
+
+
+def test_a_wrong_pack_offset_is_refused(tmp_path, monkeypatch):
+    sav = tmp_path / "x.SaveRAM"
+    sav.write_bytes(b"x")
+    g = _fake_general("hge", (7, -1, 1, 1, 1))
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeSave(g))
+    good = gr.location_spec("hge")
+    for bad in (good["general_off"] + 4, good["general_off"] - 0x1424 + 0x1234):
+        monkeypatch.setattr(gr, "location_spec", lambda _g, bad=bad: {**good, "general_off": bad})
+        pos = gr.save_position(sav, "hge")
+        with pytest.raises(gr.RouteError) as e:  # a shifted read is not a real Location
+            gr.plan_route(_world(ROWS), pos)
+        assert e.value.reason == "map_mismatch"
+
+
+# --- real data (named skips) ---------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def real():
+    for p, what in ((ROM, "HG ROM"), (PRET, "pokeheartgold source"), (SAVE, "HG battery save")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    return gr.load_world(ROM, PRET), gr.save_position(SAVE)
+
+
+def test_real_save_position_is_new_bark_outside_the_player_house(real):
+    world, pos = real
+    assert (pos["map"], pos["x"], pos["y"]) == (60, 695, 397)
+    assert world.map_at(pos["x"], pos["y"]) == pos["map"]  # matrix agrees with the save
+    assert world.names[60] == "T20" and world.names[33] == "R29"
+
+
+def test_real_route_is_walkable_ends_in_route29_grass_and_matches_the_door_check(real):
+    world, pos = real
+    # derivation check: every New Bark warp tile decodes to a door behaviour (0x69..0x6f)
+    for x, y in ((684, 393), (695, 396), (679, 405), (690, 407)):
+        assert 0x68 <= world.attr(x, y) & 0xFF <= 0x6F
+    r = gr.plan_route(world, pos)
+    _check_never_blocked(world, r)
+    end = gr.replay(world, r)[-1]
+    assert world.is_grass(*end) and world.map_at(*end) == 33
+    assert r["map_name"] == "R29" and not r["water_tiles"]
+    # the declared map ids on each segment end are the matrix's
+    for s in r["steps"]:
+        assert world.map_at(s["to"]["x"], s["to"]["y"]) == s["to"]["map"]
+    json.dumps(r)  # JSON-clean
+
+
+def test_real_every_warp_tile_decodes_to_a_door(real):
+    world, _ = real
+    decoded = [(x, y, world.attr(x, y)) for x, y in world.warps if world.attr(x, y) is not None]
+    bad = [(x, y, a & 0xFF) for x, y, a in decoded if (a & 0xFF) not in gr.DOOR_BAND]
+    # The door band is the proof for the land-data layout: a warp tile is a door by
+    # construction, so 0x14 + the u16 at +0x12, the row-major order and the matrix index are
+    # all pinned at once here. A fixed 0x14 puts only 162 of the 313 warp entries (the used
+    # banks list a few tiles twice) in the band; at 0x14+extra it is every one but one.
+    assert len(decoded) >= 307, f"only {len(decoded)} distinct warp tiles in the used banks"
+    assert len(decoded) - len(bad) >= 306, f"{len(decoded) - len(bad)}/{len(decoded)} are doors"
+    assert [b for _, _, b in bad] == [62], f"the door-band outlier changed: {bad}"
+
+
+def test_real_wrong_map_id_refused(real):
+    world, pos = real
+    with pytest.raises(gr.RouteError):
+        gr.plan_route(world, {**pos, "map": 33})
+
+
+# --- hge real data ---------------------------------------------------------------------------------
+HGE_ROM, HGE_SAVE = gr.HGE_ROM, gr.HGE_SAVE
+
+
+def test_real_hge_world_files_are_byte_identical_to_vanilla():
+    """hge reuses the pret events because the matrix, land-data and zone-event NARCs are the same
+    bytes in both ROMs (hge_data_delta.md section 3); a rebuilt hge that changes any needs its own
+    event source."""
+    import hashlib
+
+    ndspy_rom = pytest.importorskip("ndspy.rom")
+    for p, what in ((ROM, "HG ROM"), (HGE_ROM, "hge ROM")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    a = ndspy_rom.NintendoDSRom.fromFile(str(ROM))
+    b = ndspy_rom.NintendoDSRom.fromFile(str(HGE_ROM))
+    for name in (gr.MATRIX_NARC, gr.LAND_NARC, "a/0/3/2"):
+        assert (
+            hashlib.sha1(a.getFileByName(name)).digest()
+            == hashlib.sha1(b.getFileByName(name)).digest()
+        ), f"{name} differs between HG and hge"
+
+
+def test_real_hge_save_position_matches_the_pack_cross_check():
+    if not Path(HGE_SAVE).exists():
+        pytest.skip(f"hge save absent: {HGE_SAVE}")
+    pos = gr.save_position(HGE_SAVE, "hge")
+    # the pack's FILE cross-check: Location (60,-1,685,396,1) on this save
+    assert (pos["map"], pos["warp"], pos["x"], pos["y"], pos["dir"]) == (60, -1, 685, 396, 1)
+
+
+def test_real_pokegear_errand_data_matches_the_decomp():
+    for p, what in ((HGE_ROM, "hge ROM"), (PRET, "pokeheartgold source")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    e = gr.load_errand(HGE_ROM, PRET, "pokegear", 60)
+    # zone_event 057_T20 warp -> player house 1F; 060_T20R0201 door warp and Mom (gsmama)
+    assert (e.house_id, e.door_out, e.door_in, e.npc) == (63, (695, 396), (3, 10), (6, 7))
+    assert e.house.map_at(3, 10) == 63 and e.house.attr(3, 10) is not None
+
+
+# --- the Cherrygrove PC stop (G1 row i / the `pc` phase) -------------------------------------------
+def _pc_stop():
+    """An outdoor strip with a door at (4,3) and an interior with the PC at (4,1); the stand tile is
+    south of the PC, the counter tiles beside it are collisions."""
+    outer = _world(["#######", "#.....#", "#.....#", "#######"], blocked={(4, 3)})
+    house = _world(
+        ["#######", "#.....#", "#.....#", "#.....#", "#######"], blocked={(4, 1), (1, 3)}, header=8
+    )
+    return outer, gr.Errand(8, 7, house, (4, 3), (1, 3), (4, 1))
+
+
+def test_pc_leg_ends_on_the_tile_south_of_the_pc_facing_it():
+    _, err = _pc_stop()
+    r = gr.plan_pc(err, {"map": 8, "x": 1, "y": 3, "dir": 0})
+    end = gr.replay(err.house, r)[-1]
+    assert end == (4, 2) and r["pc"] == {"x": 4, "y": 1, "stand": [4, 2], "face": "Up"}
+    assert r["kind"] == "pc" and r["phase"] == "deposit"
+    _check_never_blocked(err.house, r)
+    # already standing there: an empty walk, not a refusal
+    assert gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 3})["steps"] == []
+
+
+def test_pc_leg_refuses_a_wrong_map_and_an_unreachable_stand_tile():
+    _, err = _pc_stop()
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 7, "x": 1, "y": 3, "dir": 0})
+    assert e.value.reason == "map_mismatch"
+    err.house.blocked.add((4, 2))  # a counter/NPC on the stand tile: the PC cannot be faced
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 8, "x": 1, "y": 3, "dir": 0})
+    assert e.value.reason == "pc_data"
+
+
+def test_the_walk_to_the_door_avoids_grass_when_a_detour_exists():
+    # row 1 is 6 grass tiles; the clean detour along row 3 is a few tiles longer: grass is priced
+    rows = [
+        "###########",
+        "#.gggggg..#",
+        "#.#######.#",
+        "#.........#",
+        "###########",
+    ]
+    outer = _world(rows, blocked={(9, 1)})
+    house = _world(["###", "#.#", "###"], header=8)
+    err = gr.Errand(8, 7, house, (9, 1), (1, 1), (1, 1))
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    body = {**r, "steps": r["steps"][:-1]}
+    assert r["approach_grass"] == [] and not any(outer.is_grass(*t) for t in gr.replay(outer, body))
+    assert gr.replay(outer, body)[-1] == (9, 2) and r["steps"][-1]["warp"]
+
+
+def test_unavoidable_grass_and_coord_events_are_reported_to_the_walker():
+    # the only way to the door crosses 2 grass tiles and a coord event: the Lua polls the battle chain
+    # on the grass tiles (route.approach_grass) and, with route.run_from_wild, escapes the fight
+    outer = _world(
+        ["########", "#.gg...#", "########"],
+        blocked={(6, 1)},
+        soft={(4, 1)},
+        scripts={(4, 1): ("T21_001",)},
+    )
+    house = _world(["###", "#.#", "###"], header=8)
+    err = gr.Errand(8, 7, house, (6, 1), (1, 1), (1, 1))
+    r = gr.plan_errand(outer, err, "enter", _start(1, 1))
+    assert r["approach_grass"] == [[2, 1], [3, 1]]
+    assert r["soft_events"] == [{"x": 4, "y": 1, "scriptIds": ["T21_001"]}]
+    assert r["steps"][-1]["warp"] and r["steps"][-1]["to"]["map"] == 8
+
+
+# --- pack-derived legs, RAM layout and the SYNTH setup --------------------------------------------
+@pytest.mark.parametrize("game", ["HG", "hge"])
+def test_pack_legs_resolve_the_battle_escape_and_the_native_save(game):
+    legs = gr.pack_legs(game, gr.PC_LEGS + gr.SAVE_LEGS)
+    run = legs["run_from_wild"]
+    assert run["until"]["address"] == 0x021D4158 and run["until"]["symbol"] == "sFieldSysPtr"
+    assert run["steps"][0]["press"] == ["X"]  # the first key press only wakes the battle cursor
+    assert legs["start_menu_cursor_to_save"]["until"]["value"] == 5  # SAVE is cell 5
+    assert [s["press"] for s in legs["start_menu_cursor_to_save"]["steps"]] == [["Down"], ["Left"]]
+    assert legs["save_confirm_until_saved"]["until"]["value"] == 15  # TouchSaveApp CLOSE
+
+
+def test_an_open_pack_leg_is_refused_by_name():
+    with pytest.raises(gr.RouteError) as e:
+        gr.pack_legs("HG", ["pc_open_storage"])
+    assert e.value.reason == "leg_open" and "pc_open_storage" in str(e.value)
+
+
+def test_pack_ram_comes_from_the_pack_and_hge_has_no_modified_word():
+    hg, hge = gr.pack_ram("HG"), gr.pack_ram("hge")
+    assert (hg["pc"]["cur_box_off"], hg["pc"]["mod_off"], hg["pc"]["boxes"]) == (
+        0x12000,
+        0x12004,
+        18,
+    )
+    assert (hge["pc"]["cur_box_off"], hge["pc"]["mod_off"], hge["pc"]["boxes"]) == (None, 0x1E004, 30)
+    assert hg["hdr_off"] == 143380 and hge["hdr_off"] == 192532  # hge's SaveData is larger
+    assert (hg["id_party"], hg["id_pc"], hg["party"]["size"], hg["pc"]["mon_stride"]) == (
+        2,
+        41,
+        236,
+        136,
+    )
+    assert hg["field"]["save_state"] == 1 and hg["fieldsys"] == 0x021D4158
+
+
+def _synth_save(tmp_path, *, sidecar=True, sha=None):
+    save = tmp_path / "party2.SaveRAM"
+    save.write_bytes(b"synthetic save bytes")
+    if sidecar:
+        row = {
+            "schema": gr.SYNTH_SCHEMA,
+            "kind": "party2",
+            "out_sha1": sha or gr.sha1_of(save),
+            "new_pid": 0xCAFEBABE,
+            "otid": 0x12345678,
+        }
+        Path(str(save) + ".synth.json").write_text(json.dumps(row), encoding="utf-8")
+    return save
+
+
+def test_the_pc_run_refuses_a_save_without_its_synth_sidecar(tmp_path):
+    save = _synth_save(tmp_path, sidecar=False)
+    with pytest.raises(gr.RouteError) as e:
+        gr.synth_setup(save)
+    assert e.value.reason == "setup_missing" and "gen4_synth_save.py party2" in str(e.value)
+    # the refusal comes before the lane is touched or the emulator is looked for
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(save=save, target="pc", lane="never_created_pc_lane")
+    assert e.value.reason == "setup_missing"
+    assert not gr.lane_dir("never_created_pc_lane").exists()
+
+
+def test_the_synth_sidecar_must_describe_this_save(tmp_path):
+    save = _synth_save(tmp_path, sha="0" * 40)
+    with pytest.raises(gr.RouteError) as e:
+        gr.synth_setup(save)
+    assert e.value.reason == "setup_mismatch"
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(target="nowhere")
+    assert e.value.reason == "unknown_target"
+
+
+def test_the_receipt_is_labelled_synth_with_the_sidecar_hash(tmp_path):
+    import hashlib
+
+    save = _synth_save(tmp_path)
+    synth = gr.synth_setup(save)
+    sidecar = Path(str(save) + ".synth.json")
+    assert synth["setup"] == "SYNTH" and synth["new_pid"] == 0xCAFEBABE
+    assert synth["sidecar_sha256"] == hashlib.sha256(sidecar.read_bytes()).hexdigest()
+    legs = [
+        {
+            "leg": 1,
+            "kind": "pc",
+            "phase": "deposit",
+            "status": "PC_DEPOSIT",
+            "detail": "x",
+            "log": "y",
+        }
+    ]
+    rec = gr.build_receipt("HG", save, synth, legs, {"status": "PC_DEPOSIT", "detail": "x"})
+    assert (rec["setup"], rec["sidecar_sha256"], rec["final_status"]) == (
+        "SYNTH",
+        synth["sidecar_sha256"],
+        "PC_DEPOSIT",
+    )
+    assert "log" not in rec["legs"][0]  # only the status line travels
+
+
+def test_resync_detail_carries_done_and_old_logs_still_parse():
+    new = gr.RESYNC_RE.search("map=69 x=8 y=19 dir=0 done=1 state=C:/a.State")
+    assert (new[1], new[5], new[6]) == ("69", "1", "C:/a.State")
+    mid = gr.RESYNC_RE.search("map=33 x=1 y=2 dir=2 done=0 state=C:/b.State")
+    assert mid[5] == "0"  # interrupted mid-walk: the same phase is re-planned
+    old = gr.RESYNC_RE.search("map=60 x=1 y=2 dir=1 state=C:/c.State")
+    assert old[5] is None and old[6] == "C:/c.State"
+
+
+def test_the_lua_leg_reads_only_keys_the_planner_and_pack_provide():
+    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
+    ram = gr.pack_ram("HG")
+
+    for k in set(re.findall(r"\bRAM\.(\w+)", src)):
+        assert k in ram, f"Lua reads RAM.{k}, which pack_ram does not provide"
+    for k in set(re.findall(r"\bF\.(\w+)", src)):
+        assert k in ram["field"], f"Lua reads F.{k}, absent from probe_field"
+    assert set(
+        re.findall(
+            r'"(open_start_menu|start_menu_\w+|save_confirm_until_saved|close_start_menu)"', src
+        )
+    ) == set(gr.SAVE_LEGS)
+    for k in ("run_from_wild", "persistence", "ram", "synth", "pc"):
+        assert f"route.{k}" in src
+
+
+def test_the_pc_behaviour_and_facing_requirement_match_the_decomp():
+    for p, what in ((PRET, "pokeheartgold source"),):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    mb = (PRET / "include/constants/metatile_behavior.h").read_text(encoding="utf-8")
+    body = mb[mb.index("enum TILE_BEHAVIOR {") :]
+    names = re.findall(r"TILE_BEHAVIOR_\w+", body.split("};")[0])
+    assert names.index("TILE_BEHAVIOR_131") == gr.PC_BEHAVIOR == 0x83  # enum position = value
+    c = (PRET / "src/metatile_behavior.c").read_text(encoding="utf-8")
+    assert re.search(r"BOOL sub_0205B7E0\(u8 tile\) \{\s*return tile == TILE_BEHAVIOR_131;", c)
+    asm = (PRET / "asm/overlay_01_021E6880.s").read_text(encoding="utf-8")
+    # GetInteractedMetatileScript: PC script only when the player faces north (r6 == 0)
+    pc = asm[asm.index("bl sub_0205B7E0") :][:400]
+    assert "cmp r6, #0" in pc and "std_pokecenter_pc" in pc
+    std = (PRET / "include/constants/std_script.h").read_text(encoding="utf-8")
+    assert re.search(r"#define std_pokecenter_pc\s+2010", std)
+
+
+def test_real_cherrygrove_pc_data_matches_the_decomp():
+    for p, what in ((ROM, "HG ROM"), (PRET, "pokeheartgold source")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    e = gr.load_errand(ROM, PRET, "cherrygrove_pc", gr.CHERRYGROVE_ID)
+    # zone_event 064_T21 warp -> MAP_CHERRYGROVE_POKECENTER_1F; 066_T21PC0101 door warp; the PC tile
+    assert (e.house_id, e.door_out, e.door_in, e.npc) == (69, (564, 391), (8, 19), (11, 12))
+    assert e.house.map_at(8, 19) == 69  # the interior loads as its own map
+    assert e.house.attr(8, 19) is not None and e.house.attr(11, 12) & 0x8000  # PC tile is solid
+    stand = (e.npc[0], e.npc[1] + 1)
+    assert e.house.walkable(*stand)
+    # the interior bg event at (4,8) is not the PC (it decodes to behaviour 0x85)
+    assert (e.house.attr(4, 8) & 0xFF) == 0x85 and (4, 8) in e.house.blocked
+
+
+def test_real_pc_stop_plan_from_the_hg_save(real):
+    world, pos = real
+    plan = gr.plan_pc_stop(ROM, PRET, world, pos)
+    enter, dep = plan["enter"], plan["deposit"]
+    # outdoors: never crosses a blocked tile, ends in front of the door and takes the warp into map 69
+    body = {**enter, "steps": enter["steps"][:-1]}
+    _check_never_blocked(world, body)
+    assert gr.replay(world, body)[-1] == (564, 392)
+    assert enter["steps"][-1]["warp"] and enter["steps"][-1]["to"]["map"] == 69
+    maps = {s["to"]["map"] for s in enter["steps"][:-1]}
+    assert maps == {33, 67}  # Route 29 and Cherrygrove (the New Bark start tile is map 60)
+    # encounters: the corridor has grass no path avoids; every tile is named for the battle poll
+    assert 0 < len(enter["approach_grass"]) <= 40
+    assert all(world.is_grass(*t) for t in map(tuple, enter["approach_grass"]))
+    ids = {sid for e in enter["soft_events"] for sid in e["scriptIds"]}
+    assert ids == {
+        "_EV_scr_seq_T20_002 + 1",
+        "_EV_scr_seq_R29_001 + 1",
+        "_EV_scr_seq_T21_003 + 1",
+        "_EV_scr_seq_T21_001 + 1",
+    }
+    # indoors: ends on the tile south of the PC, facing it
+    pc = gr.load_errand(ROM, PRET, "cherrygrove_pc", gr.CHERRYGROVE_ID)
+    _check_never_blocked(pc.house, dep)
+    assert gr.replay(pc.house, dep)[-1] == (11, 13) and dep["pc"]["face"] == "Up"
+    assert (pc.house.attr(11, 12) & 0xFF) == gr.PC_BEHAVIOR  # the tile north of it is the PC
+    json.dumps(plan)
+
+
+def test_real_pc_stop_plan_wrong_map_is_refused(real):
+    world, pos = real
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc_stop(ROM, PRET, world, {**pos, "map": 33})
+    assert e.value.reason == "map_mismatch"
+
+
+# --- the Lua PC leg against a fake DS (lupa): Lua plumbing, NOT game truth --------------------------
+# The fake encodes the control flow documented in lua/tests/gen4_route_play.lua (PC script menus, the
+# OVY_14 state machine, the start-menu SAVE panel). It proves the leg's loops, RAM readers and
+# verifications run end to end and fail by name; whether the real game behaves like the fake is the
+# live run's job (card gen4-C1-10 phase 2).
+class _Exit(Exception):
+    pass
+
+
+class FakeDS:
+    BASE = 0x02000000
+    FS, SUB0, LOC, DRV, DATA, P3, P4 = (
+        0x02300000,
+        0x02301000,
+        0x02302000,
+        0x02303000,
+        0x02303100,
+        0x02303200,
+        0x02303300,
+    )
+    MAN, APPD, SAVE = 0x02304000, 0x02305000, 0x02310000
+    PC_WORK, GRID = 0x02308000, 0x02309000
+    AV, MO = 0x02304800, 0x02304900
+    SCRIPT_ENV, PC_ARGS, SCRIPT_TASK = 0x02306000, 0x02306800, 0x02307000
+    PARTY_OFF, PC_OFF = 0x90, 0x10000
+
+    def __init__(
+        self, ram_layout, stand, new_pid, *, wake_first=False, party=2, withdraw=False, fault=None,
+        extra_a=0, recover_msg=False, launch_delay=0, print_frames=0, witness_mode_override=None,
+        menu_cursor=0x22, menu_sel=0, menu_busy=8, menu_stuck=False,
+    ):
+        self.ram = bytearray(0x400000)
+        self.R = ram_layout
+        self.stand, self.new_pid, self.wake_first = stand, new_pid, wake_first
+        # withdraw: the source script model (scr_seq_0003.s: text prints with no WaitButton, then a menu),
+        # the SYNTH mon boxed at box 0 slot 0, and an optional commit fault (see commit_withdraw)
+        self.withdraw, self.fault, self.mcur, self.app_mode = withdraw, fault, 0, 0
+        self.swallowed, self.pre_a = False, 0  # swallow_a/swallow_down faults; A presses the script accepted
+        # the real step model is settled by the live per-press trace: extra_a = one more blocking message
+        # before the sub-menu (NPCMsg itself blocks), recover_msg = the script shows a message after the app
+        # closes, launch_delay = extra frames between the sub-menu A and the app coming up
+        self.order = (["msg0"] if extra_a else []) + ["msg1", "menu_pc", "msg2", "menu_sub"]
+        self.recover_msg, self.launch_delay = recover_msg, launch_delay
+        self.print_frames=print_frames
+        self.pc_choice=0
+        self.witness_mode_override=witness_mode_override
+        # the keyboard box-mon menu (overlay_14.s:16968-16999): the first A parks nextInput on
+        # menu_cursor through the async wait, and the second A at that cursor is WITHDRAW
+        self.menu_cursor, self.menu_sel, self.menu_busy = menu_cursor, menu_sel, menu_busy
+        self.menu_stuck = menu_stuck  # the grid is back at 0x51 but work+4 never clears
+        self.busy = 0
+        self.frame, self.prev, self.t, self.exited = 0, set(), 0, False
+        self.x, self.y, self.dir = stand[0], stand[1], 3  # facing east after the walk
+        self.mode, self.sub, self.cursor, self.toolbar, self.woke = "field", "", 0, False, False
+        w = self.w32
+        w(0x021D4158, self.FS)
+        w(0x021D2228, self.SAVE)
+        w(self.FS, self.SUB0)
+        w(self.FS + 0x6C, 1)
+        w(self.FS + 0x20, self.LOC)
+        w(self.FS + 0x40, self.AV)  # PlayerAvatar -> LocalMapObject -> currentFacing
+        w(self.AV + 0x30, self.MO)
+        # Independently fixed SOURCE layout, not read back from the mutated plan.
+        w(self.SCRIPT_TASK+0xC,self.SCRIPT_ENV)
+        w(self.SCRIPT_ENV,222271)
+        w(self.SCRIPT_ENV+0xA4,0xBEEFEEEE)  # result u16 plus a neighbouring canary
+        w(self.PC_ARGS+4,0xFADE)
+        w(self.FS + 216, self.DRV)
+        w(self.DRV + 16, self.DATA)
+        w(self.DATA + 4, self.P3)
+        w(self.P3 + 16, self.P4)
+        self.ram[self.DATA - self.BASE + 1] = 1  # save driver idle
+        R = ram_layout
+        for aid, off in ((R["id_party"], self.PARTY_OFF), (R["id_pc"], self.PC_OFF)):
+            h = self.SAVE + R["hdr_off"] + aid * R["hdr_size"]
+            w(h, aid)
+            w(h + R["hdr_offset_field"], off)
+        self.party = self.SAVE + R["dyn_off"] + self.PARTY_OFF
+        self.pc = self.SAVE + R["dyn_off"] + self.PC_OFF
+        w(self.party, 6)
+        w(self.party + R["party"]["count_off"], party)
+        pids = [0x1111 + i for i in range(party)] if withdraw else (0x1111, new_pid)[:party]
+        for i, pid in enumerate(pids):
+            w(self.party + R["party"]["mons_off"] + i * R["party"]["size"], pid)
+        if withdraw:
+            w(self.pc + R["pc"]["box_base"], new_pid)
+            if fault == "dup_box":  # the same PID twice in the boxes (F8)
+                w(self.pc + R["pc"]["box_base"] + R["pc"]["mon_stride"], new_pid)
+            if fault == "party_dup":  # a party PID also boxed
+                w(self.pc + R["pc"]["box_base"] + 5 * R["pc"]["mon_stride"], 0x1111)
+            if fault == "dirty_before" and R["pc"]["mod_off"] is not None:  # F4: the bit is set before the leg
+                w(self.pc + R["pc"]["mod_off"], 1)
+        self.sync()
+
+    # --- memory
+    def w32(self, a, v):
+        struct.pack_into("<I", self.ram, a - self.BASE, v & 0xFFFFFFFF)
+
+    def r(self, a, n):
+        o = a - self.BASE
+        return int.from_bytes(self.ram[o : o + n], "little") if 0 <= o < len(self.ram) - 4 else 0
+
+    def sync(self):
+        # Location.direction is NOT the live facing (it stays 0): the leg must read the map object
+        struct.pack_into("<5i", self.ram, self.LOC - self.BASE, 8, -1, self.x, self.y, 0)
+        self.w32(self.MO + 0x28, self.dir)
+
+    def task(self, v):
+        self.w32(self.FS + 16, self.SCRIPT_TASK if v else 0)
+
+    def app_state(self, s):
+        self.st, self.t = s, 0
+        self.w32(self.MAN + 0x14, s)
+
+    # --- the game
+    def step(self, held):
+        if self.exited:
+            raise _Exit
+        self.frame += 1
+        new = {b for b in held if b not in self.prev}
+        self.prev, self.t = set(held), self.t + 1
+        getattr(self, "_" + self.mode)(held, new)
+        self.sync()
+
+    def _field(self, held, new):
+        if "Up" in held and self.dir != 0:
+            self.dir = 0
+        if "A" in new and (self.x, self.y) == tuple(self.stand) and self.dir == 0:
+            self.mode, self.sub, self.t = "script", self.order[0], 0
+            self.task(1)
+        if "X" in new:
+            self.mode, self.t, self.cell, self.panel = "startmenu", 0, 0, 0
+            self.task(1)
+            self.panel_sync()
+
+    def _script(self, held, new):
+        # ONE script model for the deposit and the withdraw leg: each NPCMsg / menu needs a button
+        # (three A presses after the interact), then the sub-menu: Down moves its cursor (row 0 DEPOSIT,
+        # row 1 WITHDRAW POKEMON, scr_seq_0003.s:821-846) and A launches the box app in that mode.
+        order = self.order
+        # SOURCE render_text.c:95-105: A while printing speeds it up, does NOT
+        # satisfy the \r wait or accept the following menu. Replay D4's three
+        # presses ending at Which PC, rather than assume one A per NPCMsg.
+        if self.sub in ("msg1","menu_pc","msg2") and self.t<self.print_frames:
+            if "A" in new:
+                self.t=self.print_frames
+            return
+        if self.t < 8:
+            return
+        if ("A" in new or "B" in new) and self.sub == "msg_back":  # the message after the app closed (recover_msg)
+            self.sub, self.t = "menu_sub", 0
+            return
+        if "Down" in new and self.sub == "menu_pc":
+            self.pc_choice=1  # scr_seq_0003_010: row1 PLAYER'S PC, not storage
+        elif ("Down" in new or "Right" in new) and self.sub == "menu_sub":
+            if self.fault == "swallow_down" and not self.swallowed:
+                self.swallowed = True  # a press the menu did not take
+            else:
+                self.mcur = min(self.mcur + (2 if "Down" in new else 1), 4)
+        elif "A" in new and self.sub in order[:-1]:
+            if self.sub=="menu_pc" and self.pc_choice!=0:
+                self.sub="wrong_pc"
+                return
+            if self.fault == "swallow_a" and not self.swallowed:
+                self.swallowed = True  # a press while the text still prints
+            else:
+                self.sub, self.t, self.pre_a = order[order.index(self.sub) + 1], 0, self.pre_a + 1
+        elif "A" in new and self.sub == "menu_sub":  # the highlighted row -> the PC application
+            self.mode, self.t, self.app_mode = "launching", 0, self.mcur
+            struct.pack_into('<H',self.ram,self.SCRIPT_ENV+0xA4-self.BASE,self.mcur)
+            self.w32(self.SCRIPT_ENV+0xAC,self.PC_ARGS)
+            self.w32(self.PC_ARGS+8,self.mcur if self.witness_mode_override is None else self.witness_mode_override)
+        elif "B" in new and self.sub == "menu_sub":
+            self.sub, self.t = "menu_pc2", 0
+        elif "B" in new and self.sub == "menu_pc2":
+            self.mode = "field"
+            self.task(0)
+
+    def _launching(self, held, new):
+        if self.t >= 20 + self.launch_delay:
+            self.w32(self.SUB0 + 4, self.MAN)
+            self.w32(self.MAN + 0x0C, 14)
+            self.w32(self.MAN + 0x1C, self.APPD)
+            self.w32(self.MAN + 0x18, self.PC_ARGS)
+            self.w32(self.APPD+0x34,self.PC_WORK)
+            self.w32(self.PC_WORK+0x2C,self.GRID)
+            self.ram[self.GRID-self.BASE+0xD]=0
+            self.w32(self.GRID+8,1)
+            if self.witness_mode_override is not None:
+                self.app_mode=self.witness_mode_override
+            self.ram[self.APPD - self.BASE + 0x21] = 0xFF
+            self.mode, self.cursor, self.toolbar = "app", 0, False
+            self.app_state(0xB)
+
+    def _app(self, held, new):
+        st, t = self.st, self.t
+        if st == 0xB and t >= 30:
+            self.app_state(2 if self.withdraw and self.app_mode == 2 else 0x51 if self.withdraw and self.app_mode == 1 else 0x5B)
+        elif st == 2 and t >= 7:
+            self.app_state(0xC)  # replay PHYSICAL wrong-mode 0xB -> 0x2 -> 0xC
+        elif st == 0x5B and t >= 10:
+            if "Right" in new:
+                if self.wake_first and not self.woke:
+                    self.woke = True  # the first d-pad press only wakes the cursor
+                else:
+                    self.cursor = min(self.cursor + 1, 1)
+            if "A" in new:
+                if self.toolbar:
+                    self.app_state(0x5C)
+                elif self.cursor < self.r(self.party + self.R["party"]["count_off"], 4):
+                    self.toolbar = True
+                    self.ram[self.APPD - self.BASE + 0x21] = 0x1E + self.cursor
+                    self.app_state(0x6F)
+            elif "B" in new:
+                if self.toolbar:
+                    self.toolbar = False
+                    self.app_state(0x70)
+                else:
+                    self.app_state(0x94)
+        elif st in (0x6F, 0x70) and t >= 20:
+            self.app_state(0x5B)
+        elif st == 0x94 and t >= 10:
+            self.app_state(7)
+        elif st == 7 and "B" in new:
+            self.app_state(0xB3)
+        elif st == 0xB3 and t >= 30:
+            self.w32(self.SUB0 + 4, 0)
+            self.w32(self.SCRIPT_ENV+0xAC,0)  # source frees args when the app ends
+            self.mode, self.sub, self.t, self.mcur = "script", "msg_back" if self.recover_msg else "menu_sub", 0, 0
+        elif st == 0x5C and t >= 40:
+            self.app_state(0x61)
+        elif st == 0x61 and t >= 10 and "A" in new:
+            self.app_state(0x66)
+        elif st == 0x66 and t >= 60:
+            self.commit()
+            self.app_state(0x6B)
+        elif st == 0x6B and t >= 40:
+            self.toolbar = False
+            self.app_state(0x5B)
+        elif st == 0x51 and t >= 10:  # the box grid, KEYBOARD: two A, not one
+            # SOURCE ov14_021EDA4C: an A with the cursor on an occupied BOX cell (<0x1E) does NOT
+            # transfer -- it builds the mon's action menu (0x45 WITHDRAW first), parks nextInput on
+            # 0x22 and hands over to the async wait (:16968-16999). Only a SECOND A at 0x22, case 4
+            # of the 0x1E-base jump table (:16730-16746), selects WITHDRAW.
+            cell = self.r(self.GRID + 0xD, 1)
+            occupied = self.r(self.pc + self.R["pc"]["box_base"], 4) != 0
+            if "A" in new and cell < 0x1E and occupied:
+                self.app_state(5)
+                self.busy = self.menu_busy
+                self.w32(self.PC_WORK + 4, 1)          # work+4: async callback in flight
+                self.w32(self.APPD + 0x30, 0x51)       # the deferred continuation
+                self.ram[self.GRID - self.BASE + 0xD] = self.menu_cursor
+                self.ram[self.APPD - self.BASE + 0x21] = self.menu_sel
+            elif "A" in new and cell == self.menu_cursor:
+                if self.fault == "fill_party":  # the party filled up before WITHDRAW was chosen
+                    n = self.r(self.party + self.R["party"]["count_off"], 4)
+                    for i in range(n, 6):
+                        self.w32(self.party + self.R["party"]["mons_off"] + i * self.R["party"]["size"], 0xF00D + i)
+                    self.w32(self.party + self.R["party"]["count_off"], 6)
+                self.app_state(0xA7)
+            elif "B" in new:
+                self.app_state(0x94)
+        elif st == 5:  # the generic async wait (ov14_021EB1C0): dispatch data+0x30 once work+4 clears
+            if self.busy > 0:
+                self.busy -= 1
+                if self.busy == 0 and not self.menu_stuck:
+                    self.w32(self.PC_WORK + 4, 0)
+                elif self.busy == 0:
+                    self.app_state(0x51)
+                    self.t = 10
+            elif self.r(self.PC_WORK + 4, 4) == 0:
+                self.app_state(self.r(self.APPD + 0x30, 4))
+                self.t = 10  # the grid handler reads input every frame: no entry settle after the menu
+        elif st == 0xA7 and t >= 10:  # ov14_021F13B0 (:23511-23528)
+            if self.r(self.party + self.R["party"]["count_off"], 4) >= 6:
+                self.app_state(6)  # 'Your party is full!' -- refuses, never schedules the commit
+            else:
+                self.app_state(0x53)
+        elif st == 0x53 and t >= 10:  # ov14_021EDE38: data+0x22 = 2, reads no input
+            self.app_state(0x54)
+        elif st == 0x54 and t >= 10:  # ov14_021EDE70
+            self.app_state(0x55)
+        elif st == 0x55 and t >= 20:  # ov14_021EDE88 -> ov14_021E637C -> ov14_021E6184: reads no input
+            self.commit_withdraw()
+            self.app_state(0x51)
+
+    def commit_withdraw(self):
+        R = self.R
+        n = self.r(self.party + R["party"]["count_off"], 4)
+        if self.fault == "noop":
+            return
+        slot = self.pc + R["pc"]["box_base"]
+        pid = self.r(slot, 4)
+        if self.fault != "slot_kept":
+            self.w32(slot, 0)
+        self.w32(self.party + R["party"]["mons_off"] + n * R["party"]["size"], pid)
+        self.w32(self.party + R["party"]["count_off"], n + 1)
+        bit, mod = {"no_dirty": 0, "wrong_bit": 2}.get(self.fault, 1), R["pc"]["mod_off"]
+        if mod is not None and bit:
+            self.w32(self.pc + mod, self.r(self.pc + mod, 4) | bit)
+
+    def commit(self):
+        R = self.R
+        slot = self.cursor
+        pid = self.r(self.party + R["party"]["mons_off"] + slot * R["party"]["size"], 4)
+        self.w32(self.pc + 0 * R["pc"]["box_stride"] + 0 * R["pc"]["mon_stride"], pid)
+        self.w32(self.party + R["party"]["mons_off"] + slot * R["party"]["size"], 0)
+        self.w32(self.party + R["party"]["count_off"], 1)
+        if R["pc"]["mod_off"] is not None:
+            self.w32(self.pc + R["pc"]["mod_off"], self.r(self.pc + R["pc"]["mod_off"], 4) | 1)
+
+    def panel_sync(self):
+        self.w32(self.P4 + 20, self.cell)
+        self.w32(self.P4 + 12, self.panel)
+
+    def _startmenu(self, held, new):
+        if self.t < 10:
+            return
+        if self.panel == 0:
+            if "Down" in new:
+                self.cell = 2
+            if "Left" in new and self.cell == 2:
+                self.cell = 5
+            if "A" in new and self.cell == 5:
+                self.panel = 4
+            if "B" in new:
+                self.mode = "field"
+                self.task(0)
+        elif self.panel == 4 and "A" in new:
+            self.panel, self.t = 15, 0
+            mod = self.R["pc"]["mod_off"]
+            if mod is not None:
+                self.w32(self.pc + mod, 0)  # Save_ResetPCBoxModifiedFlags
+        elif self.panel == 15 and self.t >= 30:
+            self.panel = 0
+        self.panel_sync()
+
+
+def _run_lua_leg(
+    tmp_path, monkeypatch, *, wake_first=False, party=2, pid=0xCAFEBABE, library=False, withdraw=False,
+    fault=None, plan=None, reload=None, fake=None,
+):
+    lupa = pytest.importorskip("lupa")
+    _, err = _pc_stop()
+    stand = (4, 2)
+    route = gr.plan_pc(
+        err, {"map": 8, "x": stand[0], "y": stand[1], "dir": 1}, "HG", "withdraw" if withdraw else "deposit"
+    )
+    if plan:
+        route["pc"]["withdraw"].update(plan)
+    if reload:  # the cold-reload leg of a run: a fresh boot, no steps (tools/gen4_routes.py _cold_reload)
+        route = {"version": 1, "game": "HG", "kind": "reload", "phase": "reload", "start": route["start"],
+                 "steps": [], "tiles": 0, **({"op": "withdraw"} if reload == "withdraw" else {})}
+    route.update(
+        run_from_wild=gr.pack_legs("HG", gr.PC_LEGS)["run_from_wild"],
+        persistence=gr.pack_legs("HG", gr.SAVE_LEGS),
+        ram=gr.pack_ram("HG"),
+        synth={"new_pid": pid, "otid": 0x12345678},
+    )
+    rpath, out = tmp_path / "route.json", tmp_path / "out.log"
+    rpath.write_text(json.dumps(route), encoding="utf-8")
+    env = {
+        "G4_REPO": str(gr.REPO).replace("\\", "/"),
+        "G4_ROUTE": str(rpath).replace("\\", "/"),
+        "G4_OUT": str(out).replace("\\", "/"),
+        "G4_LANE": str(tmp_path).replace("\\", "/"),
+        "G4_TAG": "t",
+        "G4_LOAD_STATE": "",
+    }
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    ds = FakeDS(route["ram"], stand, pid, wake_first=wake_first, party=party, withdraw=withdraw, fault=fault, **(fake or {}))
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    held: dict = {}
+
+    def frameadvance():
+        h = set(held)
+        held.clear()
+        ds.step(h)
+
+    def joypad_set(t):
+        held.clear()
+        held.update({k: True for k, v in t.items() if v})
+
+    def read(n):
+        return lambda a, _d=None: ds.r(a, n)
+
+    def noop(*_a):
+        return None
+
+    def exit_():
+        ds.exited = True
+
+    g = lua.globals()
+    ds.rate_calls=[]
+    g.emu = lua.table(frameadvance=frameadvance, framecount=lambda: ds.frame, limitframerate=lambda on:ds.rate_calls.append(('throttle',on)))
+    g.joypad = lua.table(set=joypad_set)
+    g.memory = lua.table(read_u32_le=read(4), read_u16_le=read(2), read_u8=read(1))
+    g.savestate = lua.table(save=noop, load=noop)
+    g.client = lua.table(screenshot=noop, exit=exit_,speedmode=lambda rate:ds.rate_calls.append(('rate',rate)))
+    src = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text(encoding="utf-8")
+    if library:
+        def table(value):
+            if isinstance(value, dict):
+                return lua.table_from({k: table(v) for k, v in value.items()})
+            if isinstance(value, list):
+                return lua.table_from([table(v) for v in value])
+            return value
+        g.SLINK_GEN4_ROUTE_LIBRARY = True
+        driver = lua.execute(src)
+        pumped = []
+        def pump(buttons):
+            pressed = {k for k, v in buttons.items() if v}
+            pumped.append(pressed)
+            held.clear()
+            ds.step(pressed)
+        context = table({"route": route, "title": gr._pack_title("HG"), "env": env})
+        context.step = pump
+        ok, result = lua.eval("function(f,c) local ok,r=pcall(f,c); return ok,r end")(driver.run, context)
+        assert not ok and result["route_result"] is not None
+        result = result["route_result"]
+        assert not ds.exited and len(pumped) == ds.frame
+        return "RESULT " + result.status + " " + result.detail, ds, "\n".join(result.lines.values())
+    try:
+        lua.execute(src)
+    except Exception as exc:  # the script ends in finish(): the fake raises once client.exit ran
+        assert ds.exited, f"the Lua leg crashed instead of finishing: {exc}"
+    last = [ln for ln in out.read_text(encoding="utf-8").splitlines() if "RESULT" in ln][-1]
+    return last, ds, out.read_text(encoding="utf-8")
+
+
+def test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch)
+    assert ds.rate_calls[:2]==[('throttle',True),('rate',300)]
+    assert 'ROUTE_RATE applied=300 throttle=true' in log
+    assert (
+        "RESULT PC_DEPOSIT party=2->1 box=0/0 pid=0xcafebabe modified=0x1->0 save_driver=idle"
+        in last
+    ), log
+    assert ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1
+    assert (
+        "slot 1" not in log and "select try 1 sel 0x1f" in log
+    )  # the cursor selected slot 1 first try
+
+
+def test_route_library_reuses_pc_engine_and_pumps_every_frame_without_exit(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, library=True)
+    assert "RESULT PC_DEPOSIT" in last, log
+    assert not ds.exited and ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1
+
+
+def test_bridge_uses_observed_position_unknown_leg_fails_and_pc_needs_fixture(monkeypatch):
+    w = _world(ROWS)
+    monkeypatch.setattr(gr, "load_world", lambda *a: w)
+    monkeypatch.setattr(gr, "wild_land_day", lambda *a: {})
+    planner = gr.BridgePlanner("rom", "HG")
+    request = {"leg": "gen4_routes:battle_settled", "position": _start(1, 1)}
+    route = planner.plan(request)
+    assert route["start"]["x"] == 1 and route["grass"]
+    with pytest.raises(gr.RouteError, match="unsupported_bridge"):
+        planner.plan(dict(request, leg="guessed_recipe"))
+    with pytest.raises(gr.RomAbsent, match="disclosed SYNTH"):
+        planner.plan(dict(request, leg="gen4_pc:reach_pc_terminal"))
+    assert planner.plan(request) == route
+
+
+T20 = "_EV_scr_seq_T20_002 + 1"
+
+
+def _pokegear_bridge(monkeypatch, scripts):
+    """A New Bark strip (map 7): grass in the west, the coord event on the x=5 column, a door at
+    (4,3) into the house (map 8). The pokegear errand data is the stub from _errand()."""
+    outer = _world(
+        ["#########", "#gg.....#", "#.......#", "#########"],
+        soft={(5, 1), (5, 2)},
+        blocked={(4, 3)},
+        scripts=scripts,
+    )
+    _, err = _errand()
+    monkeypatch.setattr(gr, "load_world", lambda *a: outer)
+    monkeypatch.setattr(gr, "wild_land_day", lambda *a: {})
+    monkeypatch.setattr(gr, "load_errand", lambda rom, pret, name, outer_id: err)
+    return gr.BridgePlanner("rom", "HG")
+
+
+def _settled(map_, x, y):
+    return {"leg": "gen4_routes:battle_settled", "position": {"map": map_, "x": x, "y": y, "dir": 1}}
+
+
+def _ident(route):
+    return route.get("kind"), route.get("phase")
+
+
+def test_bridge_runs_the_pokegear_errand_when_the_t20_event_walked_the_player_back(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    first = planner.plan(_settled(7, 7, 1))
+    assert _ident(first) == (None, None) and first["soft_events"][0]["scriptIds"] == [T20]
+    # the event fired and walked the player back east of x=5: the save has no Pokegear
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")  # inside the house
+    assert _ident(planner.plan(_settled(8, 4, 2))) == ("errand", "exit")  # beside Mom: talked
+    assert _ident(planner.plan(_settled(7, 4, 2))) == (None, None)  # outside again: the route
+    # the gate walked the player back again: the talk did not take (Codex cx-59d9d859: adjacency is not proof),
+    # so the errand re-arms; the probe's 12-attempt cap bounds the loop
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
+
+
+def test_bridge_errand_repeats_a_phase_until_the_position_advances(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    planner.plan(_settled(7, 7, 1))
+    assert _ident(planner.plan(_settled(7, 7, 2))) == ("errand", "enter")
+    assert _ident(planner.plan(_settled(7, 6, 2))) == ("errand", "enter")  # a script cut it short
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")
+    assert _ident(planner.plan(_settled(8, 2, 2))) == ("errand", "talk")  # not beside Mom yet
+    assert _ident(planner.plan(_settled(8, 4, 2))) == ("errand", "exit")
+    assert _ident(planner.plan(_settled(8, 3, 2))) == ("errand", "exit")  # still inside
+
+
+def test_bridge_never_runs_the_errand_unprompted(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    # a save with the Pokegear walks west past the event: it never returns east of it
+    assert _ident(planner.plan(_settled(7, 7, 1))) == (None, None)
+    assert _ident(planner.plan(_settled(7, 3, 1))) == (None, None)
+    # control: a crossed event that is not T20_002 is not the Pokegear gate
+    other = _pokegear_bridge(monkeypatch, {(5, 1): ("_EV_other",), (5, 2): ("_EV_other",)})
+    other.plan(_settled(7, 7, 1))
+    assert _ident(other.plan(_settled(7, 7, 2))) == (None, None)
+
+
+def test_bridge_errand_needs_the_return_to_the_same_map(monkeypatch):
+    planner = _pokegear_bridge(monkeypatch, {(5, 1): (T20,), (5, 2): (T20,)})
+    planner.plan(_settled(7, 7, 1))
+    seen = []
+    monkeypatch.setattr(gr, "plan_route", lambda w, pos, *a: seen.append(pos) or {"soft_events": []})
+    assert planner.plan(_settled(9, 7, 2))["soft_events"] == []  # another map east of x=5: no errand
+    assert seen and seen[0]["map"] == 9
+
+
+def test_pc_bridge_runs_the_pokegear_errand_before_cherrygrove(monkeypatch):
+    # Codex cx-e759a0f4: the hge/SS party2 fixtures have no Pokegear, and the PC bridge walked to
+    # Cherrygrove without the errand, so New Bark would loop the PC case too.
+    from types import SimpleNamespace as NS
+    gear, pc = NS(name="pokegear", house_id=8, npc=(6, 7)), NS(name="cherrygrove_pc", house_id=20, npc=(3, 3))
+    monkeypatch.setattr(gr, "load_world", lambda *a: object())
+    monkeypatch.setattr(gr, "load_errand", lambda rom, pret, name, outer_id: gear if name == "pokegear" else pc)
+    monkeypatch.setattr(gr, "pack_legs", lambda game, legs: {"run_from_wild": {}})
+    monkeypatch.setattr(gr, "pack_ram", lambda game: {})
+    monkeypatch.setattr(gr, "pack_profile_slice", lambda game: {})
+    crossing = [{"x": 5, "y": 2, "scriptIds": [T20]}]
+    monkeypatch.setattr(gr, "plan_errand", lambda w, e, phase, start, game="HG": {
+        "kind": "errand", "phase": phase, "which": e.name, "soft_events": crossing if e is pc else []})
+    planner = gr.BridgePlanner("rom", "HG", synth={"kind": "party2"})
+    def leg(m, x, y):
+        return {"leg": "gen4_pc:reach_pc_terminal", "position": {"map": m, "x": x, "y": y, "dir": 1}}
+    first = planner.plan(leg(7, 7, 2))
+    assert (first["which"], first["phase"]) == ("cherrygrove_pc", "enter") and "synth" in first
+    walked_back = planner.plan(leg(7, 7, 2))  # T20_002 fired: no Pokegear
+    assert (walked_back["which"], walked_back["phase"]) == ("pokegear", "enter") and "synth" in walked_back
+    assert planner.plan(leg(8, 2, 2))["phase"] == "talk"
+    assert planner.plan(leg(8, 6, 6))["phase"] == "exit"  # beside Mom
+    after = planner.plan(leg(7, 4, 4))
+    assert (after["which"], after["phase"]) == ("cherrygrove_pc", "enter")
+
+
+def test_the_lua_pc_leg_retries_a_cursor_that_only_woke_up(tmp_path, monkeypatch):
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, wake_first=True)
+    # first Right is swallowed: slot 0 is selected, cancelled with B, then Right+A picks slot 1
+    assert "select try 1 sel 0x1e" in log and "select try 2 sel 0x1f" in log
+    assert "RESULT PC_DEPOSIT" in last, log
+
+
+def test_the_lua_pc_leg_refuses_a_save_that_is_not_the_synth_setup(tmp_path, monkeypatch):
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, party=1)
+    assert "RESULT FAIL setup_not_party2" in last
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, pid=0xCAFEBABE)  # control: the setup passes
+    assert "RESULT PC_DEPOSIT" in last
+
+
+# --- run_lane phase sequencing (fake emulator process, real map data) -----------------------------
+_SYNTH = {
+    "setup": "SYNTH",
+    "sidecar": "party2.SaveRAM.synth.json",
+    "sidecar_sha256": "ab" * 32,
+    "new_pid": 0xABCD1234,
+    "otid": 0x00010002,
+    "out_sha1": "x",
+    "kind": "party2",
+    "species": None,
+}
+
+
+def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
+    """Replace the EmuHawk process and the fixtures it needs: `script(leg, route)` returns the leg's
+    log text. Returns the recorded (route, load_state) of every launched leg."""
+    calls = []
+    witnesses = iter(({"bank": 0, "counter": 1, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}))
+    monkeypatch.setattr(gr, "save_witness", lambda *a: next(witnesses))
+
+    class FakeProc:
+        def __init__(self, cmd, cwd=None, env=None):
+            route = json.loads(Path(env["G4_ROUTE"]).read_text(encoding="utf-8"))
+            calls.append({"route": route, "load_state": env["G4_LOAD_STATE"]})
+            Path(env["G4_OUT"]).write_text(script(len(calls), route), encoding="utf-8")
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    for name, fake in {
+        "lane_dir": lambda lane: tmp_path / lane,
+        "write_nds_run_config": lambda *a, **k: None,
+        "kill_our_emuhawk": lambda *a, **k: None,
+        "stage_rom": lambda rom, ld: Path(ld) / "rom.nds",
+        "stage_save": lambda save, ld, *a, **k: Path(ld) / "x.SaveRAM",
+        "sha1_of": lambda p: "0" * 40,
+        "synth_setup": lambda save, kind="party2": _SYNTH,
+        "save_position": lambda save, game="HG": pos,
+        "verify_saved": lambda *a: {"party": 1, "box": 0, "slot": 0},
+        "git_head": lambda: "f" * 40,  # git itself runs through the faked Popen
+    }.items():
+        monkeypatch.setattr(gr, name, fake)
+    monkeypatch.setattr(gr.subprocess, "Popen", FakeProc)
+    return calls
+
+
+def test_run_lane_replans_an_interrupted_enter_leg_then_deposits(real, tmp_path, monkeypatch):
+    _, pos = real
+
+    def script(leg, route):
+        if leg == 1:  # a coord-event cutscene mid-walk (done=0): the same phase must be re-planned
+            assert (
+                route["kind"] == "errand" and route["phase"] == "enter" and route["run_from_wild"]
+            )
+            return "[f1] RESULT RESYNC map=33 x=640 y=398 dir=2 done=0 state=C:/s1.State\n"
+        if leg == 2:  # re-planned from the logged tile, resumed from the state, reaches the door
+            assert route["start"]["x"] == 640 and route["phase"] == "enter"
+            return "[f2] RESULT RESYNC map=69 x=8 y=19 dir=0 done=1 state=C:/s2.State\n"
+        if route["kind"] == "reload":  # the cold reload boots the saved battery fresh
+            assert (
+                leg == 4 and not route["steps"] and route["synth"]["new_pid"] == _SYNTH["new_pid"]
+            )
+            return "[f4] RESULT RELOAD_OK party=1 box=0/0\n"
+        assert route["kind"] == "pc" and route["start"]["map"] == 69
+        assert route["synth"]["new_pid"] == _SYNTH["new_pid"] and route["persistence"]
+        assert route["ram"]["id_pc"] == 41
+        return "[f3] RESULT PC_DEPOSIT party=2->1 box=0/0\n"
+
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, script)
+    save = tmp_path / "party2.SaveRAM"
+    res = gr.run_lane(ROM, save, PRET, target="pc", lane="L", tag="t")
+    assert res["status"] == "PC_DEPOSIT"
+    assert [c["load_state"] for c in calls] == [
+        "",
+        "C:/s1.State",
+        "C:/s2.State",
+        "",
+    ]  # the cold reload boots fresh
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["setup"] == "SYNTH" and rec["sidecar_sha256"] == _SYNTH["sidecar_sha256"]
+    assert [leg["status"] for leg in rec["legs"]] == ["RESYNC", "RESYNC", "PC_DEPOSIT", "RELOAD_OK"]
+
+
+def test_run_lane_stops_a_cutscene_that_puts_the_player_back(real, tmp_path, monkeypatch):
+    _, pos = real
+    here = f"map={pos['map']} x={pos['x']} y={pos['y']} dir=1 done=0 state=C:/s.State"
+    _fake_emuhawk(monkeypatch, tmp_path, pos, lambda leg, route: f"[f1] RESULT RESYNC {here}\n")
+    res = gr.run_lane(ROM, tmp_path / "party2.SaveRAM", PRET, target="pc", lane="L", tag="t")
+    assert res["status"] == "RESYNC_LOOP"  # the same script again: no endless re-planning
+
+
+def test_run_lane_reports_a_saved_file_that_lacks_the_clone(real, tmp_path, monkeypatch):
+    _, pos = real
+    calls = _fake_emuhawk(
+        monkeypatch, tmp_path, pos, lambda leg, route: "[f1] RESULT PC_DEPOSIT x\n"
+    )
+
+    def refuse(*a):
+        raise gr.RouteError("saved_mismatch", "saved file: party 2 mons")
+
+    monkeypatch.setattr(gr, "verify_saved", refuse)
+    res = gr.run_lane(ROM, tmp_path / "party2.SaveRAM", PRET, target="pc", lane="L", tag="t")
+    assert (
+        res["status"] == "SAVE_MISMATCH" and "saved_mismatch" in res["detail"] and len(calls) == 1
+    )
+
+
+# --- the grass leg's producer receipt (no SAVE, no reload: the battle chain IS the evidence) ----------
+_BATTLE_DETAIL = (
+    "phase=pace species=PIDGEY(16) level=2 player=155 map=33 x=665 y=404 paceSteps=12 framesInGrass=900"
+)
+
+
+def _grass_log(state: Path | None, detail: str, frames: int = 900):
+    """One fake EmuHawk log: the savestate line the real Lua writes, then the settled-chain line, then
+    RESULT. `frames` only varies the frame count the receipt must NOT read as its outcome."""
+    lines = []
+    if state is not None:
+        lines.append(f"[f1800] savestate battle_settled ok {state.as_posix()}")
+    lines.append(f"[f2700] settled after {frames} frames; chain fs=0x02300000 sub0=0x02300100 man=0x02300200 "
+                 "ovy=12 bs=0x02300300 ctx=0x02300400 battleType=0x0 enemy=16 L2 hp=13/13 player=155")
+    lines.append(f"[f2700] RESULT {detail}")
+    return "\n".join(lines) + "\n"
+
+
+def _battle_doc(**over):
+    """A consumable BATTLE route receipt: bound to this tree, with the three bindings it must carry."""
+    from tools import gen4_pins
+
+    doc = {
+        **gr.receipt_binding(),
+        "source_head": HEAD,
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
+        "final_status": "BATTLE",
+        "staged_save": {"path": "C:/lane/SaveRAM/hg_a.SaveRAM", "sha256": "1" * 64},
+        "plan": {"path": "C:/lane/route_leg1.json", "sha256": "2" * 64},
+        "battle": {
+            "witness": {
+                "entered": True, "reason": "", "phase": "pace", "species": 16, "level": 2,
+                "player": 155, "map": 33, "x": 665, "y": 404,
+            },
+            "settled_state": {"path": "C:/lane/route_leg1_battle_settled.State", "sha256": "3" * 64},
+        },
+    }
+    return {**doc, **over}
+
+
+def _grass_lane(monkeypatch, tmp_path, log):
+    """A grass run on the synthetic grid: the real ROM/pret are never read (load_world and the wild
+    table are stubbed), so this leg's receipt is proven without an emulator or an E: drive."""
+    pos = _start(1, 1)
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, lambda leg, route: log(leg))
+    monkeypatch.setattr(gr, "load_world", lambda *a, **k: _world(ROWS))
+    monkeypatch.setattr(gr, "wild_land_day", lambda pret: None)
+    return calls
+
+
+def test_the_grass_leg_writes_a_receipt_whose_save_hash_is_the_staged_battery(tmp_path, monkeypatch):
+    staged = tmp_path / "L" / "x.SaveRAM"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(b"staged battery bytes")
+    state = tmp_path / "L" / "t_leg1_battle_settled.State"
+    state.write_bytes(b"settled battle state")
+    calls = _grass_lane(
+        monkeypatch, tmp_path, lambda leg: _grass_log(state, f"BATTLE {_BATTLE_DETAIL}")
+    )
+
+    res = gr.run_lane("rom.nds", tmp_path / "hg_a.SaveRAM", PRET, target="grass", lane="L", tag="t")
+    assert res["status"] == "BATTLE" and len(calls) == 1, res.get("detail")
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "BATTLE" and rec["receipt_kind"] == "route"
+    # the save sha256 names the BYTES the lane booted from, not the source it was copied from
+    assert rec["staged_save"]["path"] == str(staged)
+    assert rec["staged_save"]["sha256"] == hashlib.sha256(b"staged battery bytes").hexdigest()
+    assert rec["plan"]["path"].endswith("t_leg1.json")
+    assert rec["plan"]["sha256"] == gr._sha256(tmp_path / "L" / "t_leg1.json")
+    assert rec["battle"]["settled_state"]["sha256"] == hashlib.sha256(b"settled battle state").hexdigest()
+    assert rec["battle"]["witness"]["entered"] and rec["battle"]["witness"]["species"] == 16
+    # no SYNTH fixture stands behind a grass run, and the receipt says so rather than inventing one
+    assert rec["setup"] == "NATIVE" and rec["sidecar"] is None and rec["sidecar_sha256"] is None
+
+
+def test_a_grass_run_that_never_reached_a_battle_receipts_fail_naming_why(tmp_path, monkeypatch):
+    _grass_lane(
+        monkeypatch, tmp_path,
+        lambda leg: "[f1] RESULT FAIL no_encounter 12 pace steps, frames 900\n",
+    )
+    res = gr.run_lane("rom.nds", tmp_path / "hg_a.SaveRAM", PRET, target="grass", lane="L", tag="t")
+    assert res["status"] == "FAIL"
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "FAIL"  # never a PASS: the leg never entered a battle
+    assert rec["battle"]["witness"]["entered"] is False
+    assert "no_encounter" in rec["battle"]["witness"]["reason"]
+    assert rec["battle"]["settled_state"] is None  # the Lua never wrote one
+    assert gr.verify_receipt(_write(tmp_path, rec), "route", head=HEAD)[0] != "PASS"
+
+
+def test_the_battle_outcome_is_the_chain_not_the_frames_the_leg_waited():
+    """The red control on the outcome rule: 900 frames in grass with no live chain is a FAIL, and
+    padding the frame count cannot turn it into a PASS."""
+    waited = "phase=pace paceSteps=4000 framesInGrass=900000"
+    assert gr.battle_witness({"status": "BATTLE", "detail": waited})["entered"] is False
+    # a chain that vanished (species 0 / player 0) is not an entered battle either
+    for detail in ("phase=pace species=GONE(0) level=0 player=0 map=33 x=1 y=2",
+                   "phase=pace species=PIDGEY(16) level=2 player=0 map=33 x=1 y=2"):
+        w = gr.battle_witness({"status": "BATTLE", "detail": detail})
+        assert w["entered"] is False and w["reason"]
+    live = gr.battle_witness({"status": "BATTLE", "detail": _BATTLE_DETAIL})
+    assert live["entered"] and (live["species"], live["level"], live["player"]) == (16, 2, 155)
+
+
+def test_a_settled_state_that_the_leg_never_wrote_is_absent_not_invented(tmp_path):
+    assert gr.settled_state([]) is None
+    assert gr.settled_state(["[f1] savestate battle_settled ERR no such path C:/x.State"]) is None
+    gone = gr.settled_state([f"[f1] savestate battle_settled ok {(tmp_path / 'gone.State').as_posix()}"])
+    assert gone["path"].endswith("gone.State") and gone["sha256"] is None  # hashed None, never faked
+    state = tmp_path / "s.State"
+    state.write_bytes(b"bytes")
+    assert gr.settled_state([f"[f1] savestate battle_settled ok {state.as_posix()}"])["sha256"] == (
+        hashlib.sha256(b"bytes").hexdigest()
+    )
+
+
+def test_a_battle_receipt_passes_only_with_every_binding_and_a_live_chain(tmp_path, monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _battle_doc())[0] == "PASS"  # baseline green before any fault
+    trimmed = {k: v for k, v in _battle_doc().items() if k != "staged_save"}
+    verdict, why = _consume(tmp_path, trimmed)
+    assert verdict == "STALE" and "staged battery" in why, (verdict, why)
+    for over, gap in (
+        ({"plan": {"path": "x"}}, "plan"),
+        ({"battle": {"witness": {"entered": True}, "settled_state": {"path": "x"}}}, "settled battle state"),
+        ({"battle": {"settled_state": {"sha256": "3" * 64}}}, "battle witness"),
+        ({"battle": None}, "battle block"),
+    ):
+        verdict, why = _consume(tmp_path, _battle_doc(**over))
+        assert verdict == "STALE" and gap in why, (over, verdict, why)
+    # a receipt that binds everything but records no entered battle is a FAIL, naming why
+    dead = _battle_doc()
+    dead["battle"] = {**dead["battle"], "witness": {"entered": False, "reason": "no chain"}}
+    verdict, why = _consume(tmp_path, dead)
+    assert verdict == "FAIL" and "no chain" in why, (verdict, why)
+    # a PC save receipt is not battle proof and vice versa
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    assert gr.verify_receipt(_write(tmp_path, _battle_doc()), "route", head=HEAD, want="BATTLE")[0] == "PASS"
+    assert gr.verify_receipt(_write(tmp_path, _battle_doc()), "route", head=HEAD, want="PC_WITHDRAW")[0] == "FAIL"
+    assert "BATTLE" in gr.RECEIPT_KINDS["route"]["pass"]
+    assert "BATTLE" not in gr.RECEIPT_KINDS["route"]["save_pass"]  # it claims no native SAVE
+
+
+# --- SoulSilver (same HGSS pack, title "soulsilver") ---------------------------------------------
+SS_ROM, SS_SAVE = gr.SS_ROM, gr.SS_SAVE
+
+
+def test_ss_uses_the_hgss_pack_title_and_the_same_location_offset():
+    assert gr.GAMES["SS"][1:] == ("soulsilver", "hgss")
+    assert gr.location_spec("SS")["general_off"] == 0x1234
+    assert gr.pack_ram("SS") == gr.pack_ram("HG")  # same symbols, same save geometry
+    assert gr.pack_legs("SS", gr.SAVE_LEGS) == gr.pack_legs("HG", gr.SAVE_LEGS)
+
+
+def test_real_ss_world_files_are_byte_identical_to_vanilla_hg():
+    import hashlib
+
+    ndspy_rom = pytest.importorskip("ndspy.rom")
+    for p, what in ((ROM, "HG ROM"), (SS_ROM, "SS ROM")):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    a = ndspy_rom.NintendoDSRom.fromFile(str(ROM))
+    b = ndspy_rom.NintendoDSRom.fromFile(str(SS_ROM))
+    for name in (gr.MATRIX_NARC, gr.LAND_NARC, "a/0/3/2"):
+        assert (
+            hashlib.sha1(a.getFileByName(name)).digest()
+            == hashlib.sha1(b.getFileByName(name)).digest()
+        ), f"{name} differs between HG and SS"
+
+
+def test_real_ss_save_position_is_new_bark():
+    if not Path(SS_SAVE).exists():
+        pytest.skip(f"SS save absent: {SS_SAVE}")
+    pos = gr.save_position(SS_SAVE, "SS")
+    assert (pos["map"], pos["x"], pos["y"]) == (60, 687, 397)
+
+
+# --- verify_saved: the exact claim (clone at box 0 slot 0, party 1, cur_box 0), battery flag recorded ---
+class _FakeBattery:
+    def __init__(self, *, party=1, boxes=None, meta=None):
+        self._party, self._meta = (
+            [{}] * party,
+            meta or {"box_count": 18, "cur_box": 0, "modified": 1},
+        )
+        self._boxes = boxes if boxes is not None else {(0, 0): "AAAA0001:BBBB0002"}
+
+    def party(self):
+        return self._party
+
+    def boxes(self):
+        out = [{"mons": {}} for _ in range(18)]
+        for (b, s), key in self._boxes.items():
+            out[b]["mons"][s] = {"key": key}
+        return out
+
+    def pc_meta(self):
+        return self._meta
+
+
+def _verify(monkeypatch, tmp_path, **kw):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeBattery(**kw))
+    return gr.verify_saved(f, "HG", {"new_pid": 0xAAAA0001, "otid": 0xBBBB0002})
+
+
+def test_verify_saved_asserts_box0_slot0_party1_cur_box0_and_records_the_battery_flag(
+    monkeypatch, tmp_path
+):
+    ok = _verify(monkeypatch, tmp_path)
+    assert (ok["party"], ok["box"], ok["slot"], ok["cur_box"], ok["battery_modified"]) == (
+        1,
+        0,
+        0,
+        0,
+        1,
+    )
+    for bad in (
+        {"boxes": {(0, 1): "AAAA0001:BBBB0002"}},  # wrong slot
+        {"boxes": {(1, 0): "AAAA0001:BBBB0002"}},  # wrong box
+        {"boxes": {}},  # clone not boxed
+        {"party": 2},  # still two party mons
+        {"meta": {"box_count": 18, "cur_box": 3, "modified": 1}},  # active box moved
+        {"boxes": {(0, 0): "AAAA0001:BBBB0002", (2, 5): "AAAA0001:BBBB0002"}},  # boxed twice
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            _verify(monkeypatch, tmp_path, **bad)
+        assert e.value.reason == "saved_mismatch", bad
+
+
+def test_the_receipt_carries_the_battery_the_reload_leg_and_the_ram_vs_file_flag_split():
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    final = {
+        "status": "PC_DEPOSIT",
+        "detail": "d",
+        "battery_sha1": "ab" * 20,
+        "saved": {"clone_key": "K", "box": 0, "slot": 0, "battery_modified": 1},
+        "reload": {
+            "leg": 5,
+            "status": "RELOAD_OK",
+            "detail": "party=1",
+            "wall": 9.9,
+            "log": "L",
+            "lines": ["x"],
+        },
+    }
+    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], final)
+    assert rec["battery_sha1"] == "ab" * 20 and rec["battery"]["slot"] == 0
+    assert rec["reload"] == {
+        "leg": 5,
+        "status": "RELOAD_OK",
+        "detail": "party=1",
+        "wall": 9.9,
+        "log": "L",
+    }
+    assert (
+        rec["modified_flag"]["battery"] == 1
+        and "0 after the native SAVE" in rec["modified_flag"]["ram"]
+    )
+    assert "clears" not in json.dumps(rec["modified_flag"])  # SAVE does not clear the file's word
+
+
+# --- the egg-hatch pace (plan_hatch) ------------------------------------------------------------
+def test_plan_hatch_paces_between_two_plain_tiles_and_skips_grass_coord_and_warp_neighbours():
+    # west neighbour is grass, east is a coord-event tile, south is a warp: only north is plain floor
+    w = _world(
+        ["#####", "#...#", "#.g.#", "#...#", "#####"],
+        soft={(3, 2)},
+        warps=[(2, 3)],
+        blocked={(2, 3)},
+    )
+    start = {"map": 7, "x": 2, "y": 1, "dir": 1}
+    r = gr.plan_hatch(w, start)
+    assert r["kind"] == "hatch" and r["pace"]["a"] == [2, 1]
+    assert r["pace"]["b"] in ([1, 1], [3, 1]) and r["pace"]["dir_ab"] in ("Left", "Right")
+    # a start on grass or a wrong map is refused by name
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(w, {"map": 7, "x": 2, "y": 2, "dir": 1})
+    assert e.value.reason == "start_not_plain"
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(w, {**start, "map": 8})
+    assert e.value.reason == "map_mismatch"
+    boxed_in = _world(["###", "#.#", "###"])
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_hatch(boxed_in, {"map": 7, "x": 1, "y": 1, "dir": 1})
+    assert e.value.reason == "no_pace_tile"
+
+
+# --- receipts bound at consumption (verify_receipt) ------------------------------------------------
+def test_counter_progress_rejects_no_save_or_old_reload_and_reverts():
+    before = {"bank": 0, "counter": 1, "keys": ["K"]}
+    after = {"bank": 1, "counter": 2, "keys": ["K"]}
+    gr.assert_save_progress(before, after, after)
+    for saved, reload in ((before, before), (after, before), (after, dict(after, keys=["other"]))):
+        with pytest.raises(gr.RouteError):
+            gr.assert_save_progress(before, saved, reload)
+        gr.assert_save_progress(before, after, after)
+    gr.assert_save_progress(dict(before, counter=0xFFFFFFFF), dict(after, counter=0), dict(after, counter=0))
+
+
+HEAD = "a" * 40
+
+
+def _route_doc(**over):
+    from tools import gen4_pins
+
+    doc = {
+        **gr.receipt_binding(),
+        "source_head": HEAD,
+        "title": "heartgold",
+        "rom_sha1": gen4_pins.ROM_SPECS["heartgold"][0],
+        "final_status": "PC_DEPOSIT",
+        "before_save": {"bank": 0, "counter": 1, "keys": ["K"]},
+        "battery": {"bank": 1, "counter": 2, "keys": ["K"]},
+        "reload": {"witness": {"bank": 1, "counter": 2, "keys": ["K"]}},
+    }
+    return {**doc, **over}
+
+
+def _catch_doc(**over):
+    from tools import gen4_pins
+
+    doc = {
+        **gr.receipt_binding(kind="catch", title="soulsilver"),
+        "source_head": HEAD,
+        "title": "soulsilver",
+        "rom_sha1": gen4_pins.ROM_SPECS["soulsilver"][0],
+        "verdict": "PASS",
+        "battery_mon": {"key": "K", "pid": 1, "species": 16},
+    }
+    return {**doc, **over}
+
+
+def _consume(tmp_path, doc, kind="route"):
+    path = tmp_path / "receipt.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return gr.verify_receipt(path, kind, head=HEAD)
+
+
+def test_verify_receipt_passes_only_a_receipt_bound_to_this_tree(tmp_path, monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"  # baseline green before any fault
+    assert _consume(tmp_path, _route_doc(final_status="HATCH_OK"))[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(final_status="RESYNC_LOOP"))[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(final_status="OPEN"))[0] == "OPEN"
+    assert _consume(tmp_path, _catch_doc(), "catch")[0] == "PASS"
+    assert _consume(tmp_path, _catch_doc(verdict="FAIL"), "catch")[0] == "FAIL"
+
+
+@pytest.mark.parametrize(
+    "fault", ["script_hash", "module_hash", "no_modules"]
+)
+def test_verify_receipt_is_stale_never_pass(tmp_path, monkeypatch, fault):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    mods = dict(_route_doc()["module_sha256"])
+    over = {
+        "head": {"source_head": "b" * 40},
+        "script_hash": {"script_sha256": "0" * 64},
+        "module_hash": {"module_sha256": {**mods, "tools/gen4_routes.py": "0" * 64}},
+        "unbound_head": {"source_head": ""},
+        "no_modules": {"module_sha256": {}},
+    }[fault]
+    verdict, why = _consume(tmp_path, _route_doc(**over))
+    assert verdict == "STALE", why
+
+
+def test_a_missing_bound_file_is_stale(tmp_path):
+    path = tmp_path / "r.json"
+    mods = _route_doc()["module_sha256"]
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    doc = _route_doc(module_sha256={**mods, "lua/gen4/no_such_module.lua": "0" * 64})
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert gr.verify_receipt(path, "route", head=HEAD)[0] == "STALE"
+
+
+def test_b1_a_trimmed_receipt_is_refused_for_each_required_module(tmp_path):
+    """B1: module_sha256 must be a superset of the kind's required set; dropping any one hash is STALE."""
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    for kind, doc_fn in (("route", _route_doc), ("catch", _catch_doc)):
+        full = doc_fn()
+        assert _consume(tmp_path, full, kind)[0] == "PASS"
+        for mod in gr.RECEIPT_KINDS[kind]["modules"]:
+            trimmed = {k: v for k, v in full["module_sha256"].items() if k != mod}
+            verdict, why = _consume(tmp_path, {**full, "module_sha256": trimmed}, kind)
+            assert verdict == "STALE" and mod in why, (kind, mod, why)
+
+
+def test_b2_the_script_must_be_the_kinds_script(tmp_path):
+    """B2: a receipt hashing some OTHER (even unchanged) Lua script is not evidence for this kind."""
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    other = "lua/tests/probe_gen4_catch.lua"
+    doc = _route_doc(script=other, script_sha256=gr._sha256(gr.REPO / other))
+    verdict, why = _consume(tmp_path, doc)
+    assert verdict == "STALE" and "script" in why
+    assert (
+        _consume(tmp_path, _catch_doc(script="lua/tests/gen4_route_play.lua"), "catch")[0]
+        == "STALE"
+    )
+
+
+def test_b4_the_rom_is_bound_to_the_pinned_title_rom(tmp_path):
+    """B4: rom_sha1 must equal the pinned ROM of the receipt's title; absent is unbound, wrong is FAIL."""
+    from tools import gen4_pins
+
+    assert _consume(tmp_path, _route_doc())[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(rom_sha1="0" * 40))[0] == "STALE"
+    # the SS ROM is not the HG ROM: a receipt cannot claim one title and ship the other's artifact
+    ss = gen4_pins.ROM_SPECS["soulsilver"][0]
+    assert _consume(tmp_path, _route_doc(rom_sha1=ss))[0] == "STALE"
+    assert _consume(tmp_path, _route_doc(title="soulsilver", rom_sha1=ss))[0] == "PASS"
+    assert _consume(tmp_path, _route_doc(title="no_such_title"))[0] == "STALE"
+    assert _consume(tmp_path, _route_doc(rom_sha1=""))[0] == "STALE"
+    assert _consume(tmp_path, _route_doc(title=""))[0] == "STALE"
+
+
+def test_b5_a_receipt_of_one_kind_never_passes_as_the_other(tmp_path):
+    """B5: the expected kind picks the script, modules and passing statuses."""
+    route, catch = _route_doc(), _catch_doc()
+    assert (
+        _consume(tmp_path, route, "route")[0] == "PASS"
+        and _consume(tmp_path, catch, "catch")[0] == "PASS"
+    )
+    assert _consume(tmp_path, route, "catch")[0] != "PASS"
+    assert _consume(tmp_path, catch, "route")[0] != "PASS"
+    # a route-status verdict under the catch kind, and a PASS verdict under the route kind, are not passes
+    assert _consume(tmp_path, _catch_doc(verdict="PC_DEPOSIT"), "catch")[0] == "FAIL"
+    assert _consume(tmp_path, _route_doc(final_status="PASS"), "route")[0] == "FAIL"
+    with pytest.raises(KeyError):
+        _consume(tmp_path, route, "nonsense")
+
+
+def test_every_lua_dofile_is_in_the_bound_module_set():
+    """The scripts' own dofile/loadfile/require targets must all be hashed in their kind's module set."""
+    pat = re.compile(r"""(?:dofile|loadfile|require)\s*\(\s*[^"')]*["']/?([\w./-]+?)["']""")
+    for kind, script in (("route", gr.LUA), ("catch", gr.REPO / "lua/tests/probe_gen4_catch.lua")):
+        text = script.read_text(encoding="utf-8")
+        found = {m.group(1) for m in pat.finditer(text)}
+        assert found, f"{script.name}: no dofile target found (pattern drifted)"
+        bound = set(gr.RECEIPT_KINDS[kind]["modules"])
+        assert {f for f in found if f.endswith(".lua")} <= bound, (kind, found - bound)
+    assert {"lua/json_codec.lua", "lua/gen4/reads.lua", "lua/gen4/pk4.lua"} <= set(
+        gr.RECEIPT_KINDS["route"]["modules"]
+    )
+    assert "lua/json_codec.lua" in gr.RECEIPT_KINDS["catch"]["modules"]
+    # a script growing an unbound dofile is caught: the check on a synthetic script text
+    extra = pat.findall('local X = dofile(REPO .. "/lua/gen4/new_module.lua")')
+    assert (
+        extra == ["lua/gen4/new_module.lua"] and "lua/gen4/new_module.lua" not in gr.BOUND_MODULES
+    )
+
+
+def test_receipt_binding_is_what_the_run_wrote_and_build_receipt_carries_it(monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: "c" * 40)
+    b = gr.receipt_binding()
+    assert b["source_head"] and b["script"] == "lua/tests/gen4_route_play.lua"
+    assert b["script_sha256"] == gr._sha256(gr.LUA)
+    assert set(gr.BOUND_MODULES) <= set(b["module_sha256"])
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    rec = gr.build_receipt(
+        "SS", "s.SaveRAM", synth, [], {"status": "PC_DEPOSIT", "detail": "d"}, "f" * 40
+    )
+    assert {k: rec[k] for k in b if k != "title"} == {k: b[k] for k in b if k != "title"}
+    assert (
+        rec["title"] == "soulsilver" and rec["rom_sha1"] == "f" * 40
+    )  # B4: the title and ROM travel
+
+
+# --- the PC WITHDRAW leg (box -> party), sibling of the deposit -----------------------------------------
+WD_ORDER = [
+    "interact", "script_a", "menu_move", "menu_withdraw", "app_state_0x51", "cursor_on_cell",
+    "select_box_mon", "menu_context", "select_withdraw", "commit", "grid_restored", "exit_app", "save",
+]
+
+
+def _wd_plan():
+    _, err = _pc_stop()
+    return gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1}, "HG", "withdraw")
+
+
+def test_withdraw_plan_carries_the_source_cited_steps_in_order():
+    r = _wd_plan()
+    wd = r["pc"]["withdraw"]
+    assert r["kind"] == "pc" and r["phase"] == "withdraw"
+    assert [s["step"] for s in wd["steps"]] == WD_ORDER
+    assert (wd["menu_steps"], wd["box_cell"], wd["party_max"]) == (1, 0, 5)
+    # the press counts are PLAN parameters (a live finding is a one-line plan change); 3 vs 4 is INFERRED
+    assert wd["script_a"] == gr.WITHDRAW_SCRIPT_A == 3 and wd["menu_attempts"] >= 2
+    assert wd["recover_a"] == gr.WITHDRAW_RECOVER_A == 0
+    assert all(s["source"] for s in wd["steps"]), "every input step cites its SOURCE"
+    # the input steps in press order: A (interact), A (menu 1), Right, A (WITHDRAW row), A (the box
+    # mon's action menu), A (WITHDRAW in it), B (exit)
+    assert [s["press"] for s in wd["steps"] if "press" in s] == ["A", "A", "Right", "A", "A", "A", "B"]
+    # the box app is entered at state 0x51 (mode 1); the KEYBOARD commit continuation is 0x55
+    by = {s["step"]: s for s in wd["steps"]}
+    assert by["app_state_0x51"]["wait_state"] == 0x51 and by["commit"]["state"] == 0x55
+    # the keyboard menu: one A opens it, the cursor must park on the context cell, one more selects
+    assert (by["select_box_mon"]["press"], by["select_box_mon"]["count"]) == ("A", 1)
+    assert by["menu_context"]["wait_cursor"] == wd["context_target"] == 0x22
+    assert by["select_withdraw"]["press"] == wd["context_select_key"] == "A"
+    assert wd["context_select_count"] == 1 and wd["commit_state"] == gr.WITHDRAW_COMMIT_STATE == 0x55
+    # INFERRED steps are exactly the ones the Lua polls or logs instead of trusting
+    assert {s["step"] for s in wd["steps"] if s["inferred"]} == {"script_a", "grid_restored", "exit_app"}
+    # the deposit plan is untouched by the sibling
+    _, err = _pc_stop()
+    dep = gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1})
+    assert dep["phase"] == "deposit" and "withdraw" not in dep["pc"]
+    with pytest.raises(gr.RouteError) as e:
+        gr.plan_pc(err, {"map": 8, "x": 4, "y": 2, "dir": 1}, "HG", "release")
+    assert e.value.reason == "unknown_pc_phase"
+
+
+def test_withdraw_inputs_match_the_decomp():
+    for p, what in ((PRET, "pokeheartgold source"),):
+        if not Path(p).exists():
+            pytest.skip(f"{what} absent: {p}")
+    scr = (PRET / "files/fielddata/script/scr_seq/scr_seq_0003.s").read_text(encoding="utf-8")
+    menu = scr[scr.index("_0B17:") :][:400]
+    assert menu.index("msg_0191_00067, 76, 0") < menu.index("msg_0191_00068, 77, 1")  # DEPOSIT 0, WITHDRAW 1
+    assert gr.WITHDRAW_MENU_STEPS == 1
+    assert re.search(r"_0BB5:\s+CloseMsg\s+Call _0E16\s+ScrCmd_158 1\b", scr)  # WITHDRAW = box app mode 1
+    asm = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8")
+    table = asm[asm.index("ov14_021F7D9C: ;") :].split("\n")
+    assert table[1 + 0xB].split()[-1] == "ov14_021EB2EC"  # state 0xB is the mode switch
+    mode1 = asm[asm.index("_021EB342:") :][:400]
+    assert "bl ov14_021E7588" in mode1 and "mov r5, #0x51" in mode1  # mode 1: cursor cell 0, state 0x51
+    assert "mov r5, #0x5b" in asm[asm.index("_021EB312:") :][:900]  # mode 0 (deposit) is 0x5B
+    touch = asm[asm.index("ov14_021F0418: ;") :][:2600]  # the TOUCH grab, not the keyboard path
+    assert "mov r2, #0x57" in touch and "bl Party_GetCount" in touch and "cmp r0, #6" in touch
+
+
+def test_withdraw_decomp_menu_path_has_three_npcmsg_and_no_waitbutton_the_a_count_stays_inferred():
+    if not Path(PRET).exists():
+        pytest.skip(f"pokeheartgold source absent: {PRET}")
+    scr = (PRET / "files/fielddata/script/scr_seq/scr_seq_0003.s").read_text(encoding="utf-8")
+
+    def body(label):  # a label's text up to the next label
+        i = scr.index(f"\n{label}:") + 1
+        return re.split(r"\n\w+:", scr[i:], maxsplit=1)[0]
+
+    path = ("scr_seq_0003_010", "_0A2E", "_0B01")  # interact -> Which PC -> storage -> sub-menu (_0B53)
+    assert "GoTo _0A2E" in body("scr_seq_0003_010") and "GoTo _0B53" in body("_0B01")
+    assert all("WaitButton" not in body(lb) for lb in path)
+    npc = sum(body(lb).count("NPCMsg") for lb in path)
+    # msg_0040_00033 booted up, 00034 Which PC (+ its MenuExec), 00035 Storage System accessed, then the
+    # _0B53 sub-menu MenuExec. This pins ONLY the script shape. Whether NPCMsg itself blocks for a press
+    # is not in the source we parse (asm/macros/script.inc: WaitButton is the A/B/dpad wait), so the A
+    # count is INFERRED: 3 if only WaitButton-like prompts block, 4 if NPCMsg blocks. WITHDRAW_SCRIPT_A is
+    # the default; the live per-press trace settles it.
+    assert npc == 3 and (body("_0AD1").count("MenuExec"), body("_0B53").count("MenuExec")) == (1, 1)
+    assert gr.WITHDRAW_SCRIPT_A in (npc, npc + 1)
+
+
+def test_deposit_and_withdraw_legs_share_the_one_fake_script_model(tmp_path, monkeypatch):
+    # wiring only: both legs run on the fake's default (3 A) model, which is an assumption until the live trace
+    _, dep, _ = _run_lua_leg(tmp_path, monkeypatch)
+    _, wd, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert dep.pre_a == wd.pre_a == gr.WITHDRAW_SCRIPT_A
+
+
+def test_the_plan_not_the_lua_decides_the_press_counts(tmp_path, monkeypatch):
+    # a script with one more blocking message (NPCMsg itself blocks): the 3-A default recovers through the
+    # retry, script_a=4 lands first time -- so a live finding is a one-line plan change
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"extra_a": 1})
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" in log
+    last, ds, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, fake={"extra_a": 1}, plan={"script_a": 4}
+    )
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" not in log and ds.pre_a == 4
+    # a wrong-mode launch (a swallowed Down) is left by B; a script that then shows a message needs recover_a
+    kw = {"withdraw": True, "party": 1, "fault": "swallow_down", "fake": {"recover_msg": True}}
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, plan={"menu_attempts": 2}, **kw)
+    assert "RESULT FAIL pc_not_launched" in last
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, plan={"menu_attempts": 2, "recover_a": 1}, **kw)
+    assert "RESULT PC_WITHDRAW" in last and "A recover 1" in log
+
+
+def test_every_script_press_is_logged_once_with_its_index_and_no_per_frame_spam(tmp_path, monkeypatch):
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    rows = re.findall(r"\[f\d+\] press (\d+) (.+?) taskman (\S+) ovy (\S+) state (\S+)", log)
+    assert [int(r[0]) for r in rows] == list(range(1, len(rows) + 1)) and len(rows) == 8, rows
+    assert [r[1] for r in rows] == ["A interact", "A script 1", "A script 2", "A script 3", "Right",
+                                    "A submenu", "A box mon menu", "A WITHDRAW"]
+    assert rows[0][3] == "-" and rows[0][2] != "0x00000000"  # no app yet; the script task is running
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_cursor_cache_guard_red_revert(tmp_path, monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
+    original = Path.read_text
+    for old, new in [
+        ("if a.grid_target ~= wd.box_cell then", "if a.sel ~= wd.box_cell then"),
+    ]:
+        assert source.count(old) == 1
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                Path,
+                "read_text",
+                lambda path, *a, old=old, new=new, **k: (
+                    source.replace(old, new)
+                    if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                    else original(path, *a, **k)
+                ),
+            )
+            with pytest.raises(AssertionError):
+                test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(
+                    tmp_path, monkeypatch
+                )
+        test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(
+            tmp_path, monkeypatch
+        )
+
+
+def test_route_rate_and_d2_flush_red_revert(tmp_path, monkeypatch):
+    from tools import gen4_diag as diag
+
+    base = json.loads(
+        (gr.REPO / "tests/fixtures/gen4/diag_config_autosave_before.json").read_text()
+    )
+    paced = gr.route_pacing({**base, "SpeedPercent": 800, "ClockThrottle": False})
+    assert paced["SpeedPercent"] == 300 and paced["ClockThrottle"] is True
+    ini = tmp_path / "rate.ini"
+    ini.write_text(json.dumps(paced))
+    cfg = {
+        "requested_rate": 300,
+        "emulator_config": {
+            "path": str(ini),
+            "before_sha256": "before flush",
+            "expected_settings": diag.emulator_settings(paced, 300),
+        },
+    }
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is True
+    ini.write_text(json.dumps({**paced, "ClockThrottle": False}))
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is False
+    ini.write_text(json.dumps(paced))
+    assert diag.emulator_config_audit(cfg)["settings_valid"] is True
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    original = Path.read_text
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda path, *a, **k: (
+                source.replace(
+                    "emu.limitframerate(true); client.speedmode(rate)",
+                    "emu.limitframerate(false); client.speedmode(rate)",
+                )
+                if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else original(path, *a, **k)
+            ),
+        )
+        with pytest.raises(AssertionError):
+            test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
+    test_the_lua_pc_leg_deposits_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch)
+
+
+def test_the_withdraw_leg_never_presses_into_a_late_launch(tmp_path, monkeypatch):
+    # the app comes up after launch_wait: a Down/A then would move the box cursor / grab. It must stop first.
+    # the delay picks which guard sees the app: 950 = up before the retry's Down, 1030 = up during the Down
+    for delay, where in ((950, "before the menu direction"), (1030, "before the sub-menu A")):
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"launch_delay": delay})
+        assert f"RESULT FAIL pc_late_launch {where}" in last, last
+        assert ds.r(ds.party + ds.R["party"]["count_off"], 4) == 1 and ds.r(ds.pc, 4) == 0xCAFEBABE  # untouched
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"launch_delay": 300})  # control
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_the_failure_reason_is_never_nil_even_with_no_menu_attempts(tmp_path, monkeypatch):
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_attempts": 0})
+    assert "RESULT FAIL pc_menu_not_attempted" in last and "nil" not in last
+
+
+def test_the_lua_withdraw_leg_recovers_from_a_swallowed_press_and_names_the_failure_without_retries(
+    tmp_path, monkeypatch
+):
+    for fault, why in (("swallow_a", "pc_not_launched"), ("swallow_down", "pc_wrong_mode")):
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fault=fault)
+        assert "RESULT PC_WITHDRAW party_before=1 party_after=2" in last and "withdraw menu attempt 2" in log, (fault, last)
+        assert ds.swallowed
+        # control: the same swallowed press with ONE attempt is a named failure, so the fault is real
+        last, _, _ = _run_lua_leg(
+            tmp_path, monkeypatch, withdraw=True, party=1, fault=fault, plan={"menu_attempts": 1}
+        )
+        assert f"RESULT FAIL {why}" in last, (fault, last)
+
+
+def test_the_lua_withdraw_leg_refuses_a_pid_that_is_boxed_twice(tmp_path, monkeypatch):
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fault="dup_box")
+    assert "RESULT FAIL setup_duplicate_pid" in last
+
+
+def _wd(**over):
+    f = {"party_before": 1, "party_after": 2, "box": "0/0", "slot_after": "empty", "pid": "0x8e10e3f5",
+         "mod_before": "0", "mod_after": "0x1", "mod_saved": "0", "save_driver": "idle"}
+    f.update(over)
+    return " ".join(f"{k}={v}" for k, v in f.items()) + " m69 (11,13) d0"
+
+
+def test_withdraw_oracle_accepts_the_real_shape_and_refuses_each_missing_claim():
+    ok = gr.check_withdraw_ram(_wd())
+    assert (ok["party_before"], ok["party_after"], ok["box"], ok["slot"]) == (1, 2, 0, 0)
+    for over, reason in (
+        ({"party_after": 1}, "withdraw_party_unchanged"),  # the party did not grow
+        ({"party_after": 3}, "withdraw_party_unchanged"),  # grew by two
+        ({"slot_after": "0x8e10e3f5"}, "withdraw_slot_occupied"),  # the box slot still holds the mon
+        ({"mod_after": "0"}, "withdraw_dirty_bit"),  # dirty mask never set
+        ({"mod_after": "0x2"}, "withdraw_dirty_bit"),  # WRONG-BIT control: non-zero, but not box 0's bit
+        ({"mod_before": "0x1", "mod_after": "0x1"}, "withdraw_dirty_bit"),  # F4: bit already set before the leg
+        ({"mod_saved": "0x1"}, "withdraw_dirty_not_cleared"),  # still dirty after the native SAVE
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            gr.check_withdraw_ram(_wd(**over))
+        assert e.value.reason == reason, over
+    # controls: the mask is a MASK (other bits may be set), the bit follows the source box, hge has no word
+    assert gr.check_withdraw_ram(_wd(mod_after="0x3"))["mod_after"] == "0x3"
+    assert gr.check_withdraw_ram(_wd(box="1/4", mod_after="0x2"))["box"] == 1
+    with pytest.raises(gr.RouteError):
+        gr.check_withdraw_ram(_wd(box="1/4", mod_after="0x1"))
+    assert gr.check_withdraw_ram(_wd(mod_after="nil", mod_saved="nil"))["mod_after"] == "nil"
+    # an observation without a token is unreadable, never a pass
+    assert gr.check_withdraw_ram(_wd(mod_before="0x2"))["mod_after"] == "0x1"  # another box's bit is fine
+    assert gr.check_withdraw_ram(_wd(mod_before="nil", mod_after="nil", mod_saved="nil"))["mod_before"] == "nil"
+    for missing in ("party_after", "box", "mod_before", "mod_after", "slot_after", "mod_saved"):
+        bad = " ".join(t for t in _wd().split() if not t.startswith(missing + "="))
+        with pytest.raises(gr.RouteError) as e:
+            gr.check_withdraw_ram(bad)
+        assert e.value.reason == "withdraw_obs", missing
+
+
+def _wd_witness(party, boxes, cur_box=0):
+    return {"party_keys": party, "cur_box": cur_box,
+            "box_keys": [{"box": b, "slot": s, "key": k} for (b, s), k in boxes.items()]}
+
+
+WD_SYNTH = {"new_pid": 0xAAAA0001, "otid": 0xBBBB0002}
+WD_KEY = "AAAA0001:BBBB0002"
+
+
+def test_withdraw_precondition_refuses_a_full_party_and_a_misplaced_clone():
+    ok = _wd_witness(["P1"], {(0, 0): WD_KEY})
+    gr.withdraw_precondition(ok, WD_SYNTH)
+    gr.withdraw_precondition(_wd_witness(list("ABCDE"), {(0, 0): WD_KEY}), WD_SYNTH)  # 5 mons: room for one
+    for bad, reason in (
+        (_wd_witness(list("ABCDEF"), {(0, 0): WD_KEY}), "withdraw_party_full"),  # no room, by source's own rule
+        (_wd_witness(["P1"], {(0, 1): WD_KEY}), "withdraw_setup"),  # not cell 0
+        (_wd_witness(["P1"], {(1, 0): WD_KEY}), "withdraw_setup"),  # not box 0
+        (_wd_witness(["P1"], {}), "withdraw_setup"),  # not boxed at all
+        (_wd_witness(["P1", WD_KEY], {(0, 0): WD_KEY}), "withdraw_setup"),  # already in the party too
+        (_wd_witness(["P1"], {(0, 0): WD_KEY, (3, 3): WD_KEY}), "withdraw_setup"),  # boxed twice
+        (_wd_witness(["P1"], {(0, 0): WD_KEY}, cur_box=1), "withdraw_setup"),  # F-F: box 1 is displayed, not 0
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            gr.withdraw_precondition(bad, WD_SYNTH)
+        assert e.value.reason == reason, bad
+
+
+class _FakeWdBattery:
+    def __init__(self, party, boxes):
+        self._party, self._boxes = party, boxes
+
+    def party(self):
+        return [{"key": k} for k in self._party]
+
+    def boxes(self):
+        out = [{"mons": {}} for _ in range(18)]
+        for (b, s), key in self._boxes.items():
+            out[b]["mons"][s] = {"key": key}
+        return out
+
+    def pc_meta(self):
+        return {"box_count": 18, "cur_box": 0, "modified": 1}
+
+
+def _verify_wd(monkeypatch, tmp_path, party, boxes, detail=None):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeWdBattery(party, boxes))
+    before = _wd_witness(["P1"], {(0, 0): WD_KEY})
+    return gr.verify_saved_withdraw(f, "HG", WD_SYNTH, before, detail or _wd())
+
+
+def test_verify_saved_withdraw_demands_the_clone_appended_and_the_slot_empty(monkeypatch, tmp_path):
+    ok = _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {})
+    assert (ok["op"], ok["party"], ok["party_slot"], ok["box"], ok["slot"]) == ("withdraw", 2, 1, 0, 0)
+    for party, boxes, why in (
+        (["P1"], {(0, 0): WD_KEY}, "party unchanged"),
+        (["P1", WD_KEY], {(0, 0): WD_KEY}, "a boxed copy remains"),
+        (["P1", WD_KEY], {(5, 5): WD_KEY}, "boxed elsewhere"),
+        ([WD_KEY, "P1"], {}, "not appended"),
+        (["P1", WD_KEY], {(0, 0): "OTHER:0001"}, "source slot occupied by another mon"),
+        (["P1", "ZZ"], {}, "wrong mon joined"),
+    ):
+        with pytest.raises(gr.RouteError) as e:
+            _verify_wd(monkeypatch, tmp_path, party, boxes)
+        assert e.value.reason == "saved_mismatch", why
+    with pytest.raises(gr.RouteError) as e:  # the RAM half is judged on the same call
+        _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {}, _wd(mod_after="0x2"))
+    assert e.value.reason == "withdraw_dirty_bit"
+    assert not hasattr(gr, "assert_reload_party")  # F6: the reload half re-reads the SAME file; RAM is the evidence
+    # F-H: the saved box is judged at the clone's position in the INPUT witness, not the cell the Lua reported
+    for detail in (_wd(box="3/5", mod_after="0x8"), _wd(box="0/1")):
+        with pytest.raises(gr.RouteError) as e:
+            _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {}, detail)
+        assert e.value.reason == "saved_mismatch", detail
+    with pytest.raises(gr.RouteError) as e:  # the real slot 0/0 still holds a mon while the Lua says 3/5 is empty
+        _verify_wd(monkeypatch, tmp_path, ["P1", WD_KEY], {(0, 0): "OTHER:0001"}, _wd(box="3/5", mod_after="0x8"))
+    assert e.value.reason == "saved_mismatch"
+
+
+def test_save_witness_records_the_displayed_box(monkeypatch, tmp_path):
+    f = tmp_path / "b.SaveRAM"
+    f.write_bytes(b"x")
+    battery = _FakeWdBattery(["P1"], {(0, 0): WD_KEY})
+    battery.bank, battery.counter, battery.fallback = 1, 7, False
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: battery)
+    assert gr.save_witness(f, "HG")["cur_box"] == 0
+    battery.pc_meta = lambda: {"box_count": 18, "cur_box": 4, "modified": 0}
+    assert gr.save_witness(f, "HG")["cur_box"] == 4
+
+
+def test_a_deposit_receipt_is_not_withdraw_proof_and_the_battery_op_is_checked(tmp_path, monkeypatch):
+    monkeypatch.setattr(gr, "git_head", lambda: HEAD)
+
+    def consume(doc, want):
+        path = tmp_path / "receipt.json"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return gr.verify_receipt(path, "route", head=HEAD, want=want)
+
+    dep = _route_doc()
+    wd = _route_doc(final_status="PC_WITHDRAW", battery={"bank": 1, "counter": 2, "keys": ["K"], "op": "withdraw"})
+    assert consume(dep, "PC_DEPOSIT")[0] == "PASS" and consume(wd, "PC_WITHDRAW")[0] == "PASS"
+    assert consume(dep, "PC_WITHDRAW")[0] == "FAIL"  # a deposit receipt must not stand in for withdraw
+    assert consume(wd, "PC_DEPOSIT")[0] == "FAIL"
+    # a PC_WITHDRAW status without the battery's op=withdraw is not a withdraw receipt either
+    no_op = _route_doc(final_status="PC_WITHDRAW")
+    assert consume(no_op, "PC_WITHDRAW")[0] == "FAIL"
+    # unbound callers keep the any-of behaviour
+    assert gr.verify_receipt(_write(tmp_path, dep), "route", head=HEAD)[0] == "PASS"
+
+
+def _write(tmp_path, doc):
+    path = tmp_path / "unbound.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def test_withdraw_receipts_pass_kind_and_flag_text_name_the_withdraw():
+    assert "PC_WITHDRAW" in gr.RECEIPT_KINDS["route"]["pass"] and "PC_DEPOSIT" in gr.RECEIPT_KINDS["route"]["pass"]
+    assert gr.PC_TARGETS["pc_withdraw"] == ("party2", "PC_WITHDRAW", "withdraw")
+    assert gr.PC_TARGETS["pc"][1] == "PC_DEPOSIT"
+    synth = {"setup": "SYNTH", "sidecar": "s", "sidecar_sha256": "0", "out_sha1": "x"}
+    final = {"status": "PC_WITHDRAW", "detail": "d", "saved": {"op": "withdraw", "clone_key": "K", "battery_modified": 1}}
+    rec = gr.build_receipt("HG", "s.SaveRAM", synth, [], final)
+    assert rec["final_status"] == "PC_WITHDRAW" and rec["modified_flag"]["ram"].startswith("set by the withdraw")
+
+
+def test_the_lua_withdraw_leg_withdraws_saves_and_verifies_against_a_fake_ds(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW party_before=1 party_after=2 box=0/0 slot_after=empty pid=0xcafebabe" in last, log
+    assert "mod_before=0 mod_after=0x1 mod_saved=0 save_driver=idle" in last
+
+    gr.check_withdraw_ram(last.split("PC_WITHDRAW", 1)[1])  # the host oracle accepts what the Lua reported
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
+    assert ds.r(ds.party + R["party"]["mons_off"] + R["party"]["size"], 4) == 0xCAFEBABE  # appended
+    # the state trace: the box app entered at the GRID state 0x51 (never the deposit's 0x5B list),
+    # ran the KEYBOARD chain 5 -> 0xA7 -> 0x53 -> 0x54 -> 0x55, and never touched 0x57 (the TOUCH grab)
+    trace = next(ln for ln in log.splitlines() if "PC app closed" in ln)
+    assert ":0x51" in trace and ":0x55" in trace and ":0x57" not in trace and ":0x5b" not in trace
+    assert "menu witness: cursor 0x22 selected 0 buttons true busy false" in log
+    assert "select try" not in log  # none of the deposit's party-slot selection
+
+
+def test_pc_menu_and_launch_mode_witness_reaches_log_and_receipt(tmp_path, monkeypatch):
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last
+    parsed = gr.parse_result(log)
+    witnesses = parsed["pc_witnesses"]
+    launches = [w for w in witnesses if w["when"] == "launch"]
+    assert len(launches) == 1
+    launch = launches[0]
+    assert launch["menu_result"] == launch["launch_mode"] == 1
+    assert launch["menu_result_address"] == ds.SCRIPT_ENV + 0xA4
+    assert launch["launch_mode_address"] == ds.PC_ARGS + 8
+    assert launch["script_args_match"] is True
+    terminal = witnesses[-1]
+    assert terminal["when"] == "terminal"
+    assert terminal["last_launch"]["menu_result"] == terminal["last_launch"]["launch_mode"] == 1
+    assert "launch_mode" not in terminal  # app/args have been freed; never read cached pointers
+    assert "storage_app_not_live" in terminal["gaps"]
+    rec = gr.build_receipt(
+        "HG",
+        "MODEL.SaveRAM",
+        {"setup": "SYNTH", "sidecar": "MODEL", "sidecar_sha256": "0", "out_sha1": "0"},
+        [{**parsed, "leg": 1, "kind": "pc", "phase": "withdraw"}],
+        parsed,
+    )
+    assert rec["legs"][0]["pc_witnesses"] == witnesses
+
+
+def test_title_settle_policies_match_pinned_epoch_provenance():
+    from tests.live.test_gen4_probe_gates import phase_settle_policy
+
+    for game, title, max_delay in [("hge", "heartgold_hge", 1), ("SS", "soulsilver", 11)]:
+        p = phase_settle_policy(title, gr._pack_title(game))
+        assert (
+            p["measured_max"] == max_delay and p["margin"] == 5 and p["max_frames"] == max_delay + 5
+        )
+        measured = max(row["pin_frame"] - row["active_frame"] for row in p["epochs"])
+        assert p["max_frames"] == measured + 5
+        original = p["max_frames"]
+        p["max_frames"] += 1
+        with pytest.raises(AssertionError):
+            assert p["max_frames"] == measured + 5
+        p["max_frames"] = original
+        assert p["max_frames"] == measured + 5
+
+
+def test_real_menu_exec_grid_schedule_from_pinned_source(tmp_path, monkeypatch):
+    # Opcode 752 (NOT opcode 67's legacy Create2dMenu): touchscreen ov27 grid.
+    table = (PRET / "src/data/fieldmap/script_cmd_table.h").read_text()
+    commands = table[table.index("gScriptCmdTable") :]
+    assert "ScrCmd_MenuInitStdGmm" in commands and "ScrCmd_MenuExec" in commands
+    c = (PRET / "src/scrcmd_c.c").read_text()
+    body = c[
+        c.index("BOOL ScrCmd_MenuExec(ScriptContext *ctx) {") : c.index(
+            "BOOL sub_020478D0(ScriptContext *ctx) {"
+        )
+    ]
+    assert "ov01_021F6ABC(fieldSystem, 3, 7, p_ret);" in body
+    asm = (PRET / "asm/overlay_27.s").read_text()
+
+    def data(label):
+        block = asm[asm.index(label + ":") :]
+        block = block[: block.index("\n\n")]
+        return bytes(
+            int(x, 16)
+            for line in block.splitlines()
+            if ".byte" in line
+            for x in re.findall(r"0x([0-9A-Fa-f]{2})", line)
+        )
+
+    # Navigation tables select by item count-2; five and six items BOTH give
+    # index0 Down=2 (MOVE), Right=1 (WITHDRAW). Order: Up/Down/Left/Right.
+    for label in ["ov27_0225D174", "ov27_0225D1B4"]:
+        neighbors = data(label)
+        assert list(neighbors[:4]) == [0, 2, 0, 1]
+    last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert gr.withdraw_plan()["menu_key"] == "Right" and gr.withdraw_plan()["menu_hold"] == 3
+    last, _, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_key": "Down"}
+    )
+    assert "RESULT FAIL pc_input_state_not_reached" in last, log
+    snap = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+    assert snap["menu_result"] == snap["launch_mode"] == 2
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def test_pc_witness_wrong_mode_fail_and_offset_controls(tmp_path, monkeypatch):
+    kw = {"withdraw": True, "party": 1, "fake": {"witness_mode_override": 2}}
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, **kw)
+    assert "RESULT FAIL pc_input_state_not_reached" in last
+    parsed = gr.parse_result(log)
+    assert [
+        (w["menu_result"], w["launch_mode"])
+        for w in parsed["pc_witnesses"]
+        if w["when"] in ("launch", "terminal")
+    ] == [
+        (1, 2),
+        (1, 2),
+    ]
+    last, _, log = _run_lua_leg(
+        tmp_path, monkeypatch, withdraw=True, party=1, plan={"menu_key": "Down"}
+    )
+    assert "RESULT FAIL pc_input_state_not_reached" in last
+    assert [
+        (w["menu_result"], w["launch_mode"])
+        for w in gr.parse_result(log)["pc_witnesses"]
+        if w["when"] in ("launch", "terminal")
+    ] == [
+        (2, 2),
+        (2, 2),
+    ]
+    _, _, log = _run_lua_leg(
+        tmp_path,
+        monkeypatch,
+        withdraw=True,
+        party=1,
+        plan={"witness": {**gr.withdraw_plan()["witness"], "env_magic": 222272}},
+    )
+    first = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+    assert "menu_result" not in first and first["launch_mode"] == 1
+    assert "script_environment_absent_or_bad_magic" in first["gaps"]
+    # SOURCE/MODEL separation: a mismapped launch arg is not relabelled as a menu choice.
+    source = gr.withdraw_plan()["witness"]
+    for key in ["env_result_off", "args_mode_off"]:
+        bad = {**source, key: source[key] + 4}
+        _, _, log = _run_lua_leg(
+            tmp_path, monkeypatch, withdraw=True, party=1, plan={"witness": bad}
+        )
+        with pytest.raises(AssertionError):
+            w = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+            assert w["menu_result"] == w["launch_mode"] == 1
+        _, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+        w = next(w for w in gr.parse_result(log)["pc_witnesses"] if w["when"] == "launch")
+        assert w["menu_result"] == w["launch_mode"] == 1
+
+
+@pytest.mark.parametrize("title", ["heartgold", "soulsilver", "heartgold_hge"])
+def test_pc_witness_offsets_against_pinned_source_xmap_and_rom(title):
+    """FILE proof of every new memory-layout offset; no emulator or guessed address."""
+    from capstone import CS_ARCH_ARM, CS_MODE_THUMB, Cs
+
+    from tools import gen4_pins, gen_gen4_pack as p
+
+    locations = gen4_pins.default_locations()
+    rom = locations.roms[title]
+    if not rom.is_file():
+        pytest.skip(f"PC witness FILE input absent: {rom}")
+    assert gr.sha1_of(rom) == gen4_pins.ROM_SPECS[title][0]
+    map_key = "soulsilver_xmap" if title == "soulsilver" else "heartgold_xmap"
+    map_path = locations.assets[map_key]
+    if not map_path.is_file():
+        pytest.skip(f"PC witness FILE xMAP absent: {map_path}")
+    assert gen4_pins.digest_file(map_path, ("sha256",))["sha256"] == gen4_pins.MAP_SPECS[map_key][0]
+    xm = p.load_xmap(map_path)
+    images = p.load_images(rom, raw_arm9=title == "heartgold_hge")
+    cs = Cs(CS_ARCH_ARM, CS_MODE_THUMB)
+
+    def function(name):
+        sym = xm.lookup(name)
+        assert sym.image == "arm9" and xm.mode(sym) == "thumb"
+        raw = images.arm9[
+            sym.address - images.arm9_base : sym.address - images.arm9_base + sym.size
+        ]
+        return sym, raw, list(cs.disasm(raw, sym.address))
+
+    _, _, task = function("TaskManager_GetEnvironment")
+    _, _, args = function("OverlayManager_GetArgs")
+    _,_,grid=function('GridInputHandler_GetNextInput')
+    cursor=gr.withdraw_plan()['cursor']
+    assert (grid[0].mnemonic,grid[0].op_str)==('ldrb','r0, [r0, #0xd]')
+    assert cursor['target_off']==0xD and cursor['buttons_off']==8
+    _, _, scr = function("ScrCmd_158")
+    _, attr_raw, attr = function("FieldSysGetAttrAddr")
+    facts = gr.withdraw_plan()["witness"]
+    assert (task[0].mnemonic, task[0].op_str) == ("ldr", "r0, [r0, #0xc]")
+    assert facts["task_env_off"] == 0xC and facts["task_prev_off"] == 0
+    assert (attr[1].mnemonic, attr[1].op_str) == ("ldr", "r0, [r0, #0x10]")
+    assert struct.unpack_from("<I", attr_raw, len(attr_raw) - 4)[0] == facts["env_magic"]
+    assert (args[0].mnemonic, args[0].op_str) == ("ldr", "r0, [r0, #0x18]")
+    assert facts["manager_args_off"] == 0x18 and facts["args_mode_off"] == 8
+    assert ("ldrb", "r1, [r2]") in [(i.mnemonic, i.op_str) for i in scr]
+    assert ("str", "r1, [r0, #8]") in [(i.mnemonic, i.op_str) for i in scr]
+    header = (PRET / "include/script.h").read_text()
+    enum = header[header.index("typedef enum ScriptEnvField {") : header.index("} ScriptEnvField;")]
+    fields = re.findall(r"^\s+(SCRIPTENV_\w+)", enum, re.M)
+    sym, raw, ins = function("FieldSysGetAttrAddrInternal")
+    branch = next(i for i in ins if i.mnemonic == "add" and i.op_str == "pc, r2")
+
+    def field_code(name):
+        # Thumb jump-table entries immediately follow add pc,r2. Its PC is +4.
+        offset = branch.address + 2 - sym.address + 2 * fields.index(name)
+        target = branch.address + 4 + struct.unpack_from("<h", raw, offset)[0]
+        return list(cs.disasm(raw[target - sym.address :], target))[:5]
+
+    result = field_code("SCRIPTENV_SPECIAL_VAR_RESULT")
+    assert [(i.mnemonic, i.op_str) for i in result[:4]] == [
+        ("subs", "r1, #0x2a"),
+        ("adds", "r0, #0x8c"),
+        ("lsls", "r1, r1, #1"),
+        ("adds", "r0, r0, r1"),
+    ]
+    assert (
+        facts["env_result_off"]
+        == 0x8C + (fields.index("SCRIPTENV_SPECIAL_VAR_RESULT") - 42) * 2
+        == 0xA4
+    )
+    app = field_code("SCRIPTENV_RUNNING_APP_DATA")
+    assert (app[0].mnemonic, app[0].op_str) == ("adds", "r0, #0xac")
+    assert facts["env_app_args_off"] == 0xAC
+    # The real opcode752 path delegates to overlay27, NOT Create2dMenu.
+    # CA68's last literal points at count-indexed navigation tables; C618's
+    # penultimate literal points at WindowTemplate tables (8 bytes per item).
+    base, overlay, _ = images.overlays[27]
+
+    def ov(name):
+        sym = xm.lookup(name)
+        assert sym.image == "ov27"
+        return overlay[sym.address - base : sym.address - base + sym.size]
+
+    def word(addr):
+        return struct.unpack_from("<I", overlay, addr - base)[0]
+
+    nav_table = struct.unpack_from("<I", ov("ov27_0225CA68"), len(ov("ov27_0225CA68")) - 4)[0]
+    window_table = struct.unpack_from("<I", ov("ov27_0225C618"), len(ov("ov27_0225C618")) - 8)[0]
+    for count in [5, 6]:
+        nav = word(nav_table + (count - 2) * 4)
+        assert list(overlay[nav - base : nav - base + 4]) == [0, 2, 0, 1]
+        windows = word(window_table + (count - 2) * 4)
+        coords = [
+            tuple(overlay[windows - base + i * 8 + 1 : windows - base + i * 8 + 3])
+            for i in range(count)
+        ]
+        assert coords[:4] == [(2, 4), (18, 4), (2, 10), (18, 10)]
+    profile = gr._pack_title(
+        {"heartgold": "HG", "soulsilver": "SS", "heartgold_hge": "hge"}[title]
+    )["profile"]
+    assert facts["fs_task_off"] == profile["probe_field"]["task"] == 0x10
+    assert facts["fs_sub_off"] == profile["probe_field"]["sub"] == 0
+    assert facts["sub_manager_off"] == profile["probe_field"]["launched_app"] == 4
+    assert facts["env_magic"] == 222271 and facts["special_var_id"] == 0x800C
+    assert "#define Unk80_10_C_MAGIC (222271)" in header
+    assert (
+        "#define VAR_SPECIAL_RESULT      0x800C" in (PRET / "include/constants/vars.h").read_text()
+    )
+
+
+def test_the_lua_withdraw_leg_fails_by_name_on_every_broken_claim(tmp_path, monkeypatch):
+    for kw, want in (
+        ({"party": 6}, "RESULT FAIL withdraw_party_full"),  # the source refuses it too; refused before any input
+        ({"fault": "noop"}, "RESULT FAIL withdraw_not_committed"),  # 0x55 copied nothing into the party
+        ({"fault": "slot_kept"}, "RESULT FAIL withdraw_not_committed"),  # party +1 but the box slot still full
+        ({"fault": "no_dirty"}, "RESULT FAIL box_modified_flag_not_set"),
+        ({"fault": "wrong_bit"}, "RESULT FAIL box_modified_flag_not_set"),  # non-zero mask, wrong bit
+        ({"plan": {"menu_steps": 0}}, "RESULT FAIL pc_wrong_mode"),  # the DEPOSIT row: list state 0x5B, not 0x51
+        ({"plan": {"box_cell": 7}}, "RESULT FAIL setup_not_in_cell"),
+        ({"fault": "dirty_before"}, "RESULT FAIL setup_dirty_bit_already_set"),  # F4: a set bit proves nothing
+        ({"fault": "party_dup"}, "RESULT FAIL setup_duplicate_pid"),  # F8: party PID also boxed
+    ):
+        last, _, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, **{"party": 1, **kw})
+        assert want in last, (kw, log[-600:])
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=5)  # control: room for one more
+    assert "RESULT PC_WITHDRAW party_before=5 party_after=6" in last
+
+
+def _press_rows(log):
+    return re.findall(r"\[f\d+\] press (\d+) (.+?) taskman", log)
+
+
+def test_the_keyboard_box_mon_menu_needs_the_second_a_red_revert(tmp_path, monkeypatch):
+    """MODEL: the fake's FIRST A only opens the mon's action menu (0x51 -> 5 -> 0x51 at cursor 0x22,
+    party untouched), exactly as ov14_021EDA4C does. Delete the second A -- the leg as it stood --
+    and nothing commits."""
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    original = Path.read_text
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert ":0x55" in log  # the keyboard chain ran to the real commit state
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda path, *a, **k: (
+                source.replace("for _ = 1, wd.context_select_count do", "for _ = 1, 0 do")
+                if path == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else original(path, *a, **k)
+            ),
+        )
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT FAIL withdraw_not_committed" in last, last
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 1  # the menu transferred nothing
+    assert ds.r(ds.pc, 4) == 0xCAFEBABE and ds.r(ds.pc + R["pc"]["mod_off"], 4) == 0
+
+
+def test_the_box_menu_refuses_before_the_second_a_on_every_wrong_settlement(tmp_path, monkeypatch):
+    for fake, want in (
+        ({"menu_cursor": 0x23}, "box_menu_wrong_cursor"),  # SUMMARY, not WITHDRAW
+        ({"menu_sel": 0xFF}, "box_menu_wrong_selection"),  # the selection cache never landed
+        ({"menu_busy": 100000}, "box_menu_busy"),  # stuck in the async wait (state 5): never idle
+        ({"menu_stuck": True}, "box_menu_busy"),  # grid back at 0x51 with the callback flag (work+4) still set
+    ):
+        last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake=fake)
+        assert want in last, (fake, last)
+        assert [r[1] for r in _press_rows(log)][-1] == "A box mon menu"  # refused BEFORE the 2nd A
+        R = ds.R
+        assert ds.r(ds.party + R["party"]["count_off"], 4) == 1 and ds.r(ds.pc, 4) == 0xCAFEBABE
+
+
+def test_a_full_party_is_refused_by_the_source_and_never_adds_a_mon(tmp_path, monkeypatch):
+    # the fake fills the party to 6 before WITHDRAW is chosen; ov14_021F13B0 (:23511-23528) then takes
+    # the refusal branch instead of scheduling the commit, so the slot is never cleared
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fault="fill_party")
+    assert "RESULT FAIL withdraw_not_committed" in last, log
+    R = ds.R
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 6
+    assert ds.r(ds.pc, 4) == 0xCAFEBABE  # still boxed: nothing was copied into the party
+    assert ds.r(ds.pc + R["pc"]["mod_off"], 4) == 0  # and the box was never even marked dirty
+
+
+def test_the_withdraw_leg_never_oracles_on_a_sampled_state_word(tmp_path, monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    assert '":0x57"' not in source and "state 0x57" not in source  # 0x57 is the TOUCH grab
+    assert all(s.get("state") != 0x57 for s in gr.withdraw_plan()["steps"])
+    assert gr.withdraw_plan()["commit_state"] == 0x55
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1)
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert "state 0x55 sampled: true" in log and ":0x57" not in log
+    R = ds.R  # the DATA oracles carry the claim, not the state word
+    assert ds.r(ds.party + R["party"]["count_off"], 4) == 2 and ds.r(ds.pc, 4) == 0
+
+
+def test_every_withdraw_witness_offset_turns_its_oracle_red_when_moved(tmp_path, monkeypatch):
+    cursor = gr.withdraw_plan()["cursor"]
+    for key, bad in (
+        ("target_off", 0xE),  # the cursor is read one byte past nextInput
+        ("work_busy_off", 0x2C),  # reads the grid pointer: an async callback that never clears
+        ("selected_off", 0x30),  # reads the deferred continuation, not data+0x21
+        ("work_grid_off", 0x30),  # work+0x30 is not the grid
+        ("data_work_off", 0x38),  # data+0x38 is not the work struct
+    ):
+        last, _, log = _run_lua_leg(
+            tmp_path, monkeypatch, withdraw=True, party=1, plan={"cursor": {**cursor, key: bad}}
+        )
+        assert "RESULT FAIL" in last, (key, bad, log[-500:])
+
+
+def test_the_keyboard_menu_ids_cursor_and_commit_state_come_from_the_pinned_source():
+    if not Path(PRET).exists():
+        pytest.skip(f"pokeheartgold source absent: {PRET}")
+    lines = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8").splitlines()
+
+    def block(label, n):
+        i = next(k for k, l in enumerate(lines) if l.startswith(label))
+        return "\n".join(lines[i : i + n])
+
+    # the box mon's action menu: WITHDRAW FIRST, then SUMMARY, MARKING, RELEASE (msg_0024 69/65/67/68)
+    assert re.findall(r"0x([0-9A-Fa-f]{2}), 0x00, 0x00, 0x00", block("ov14_021F7D2C:", 3)) == [
+        "45", "41", "43", "44",
+    ]
+    # the first A: that menu, nextInput parked on 0x22, then the async hand-off (:16968-16999)
+    ctx = block("_021EDDC4:", 32)
+    assert "ov14_021F7D2C" in ctx and "mov r1, #0x22" in ctx
+    assert "bl GridInputHandler_SetNextInput" in ctx and "bl ov14_021F04D4" in ctx
+    assert "mov r2, #0x58" in block("ov14_021F04D4:", 50)  # the continuation is state 0x58
+    assert "bl Heap_Free" in block("ov14_021EE850:", 9)  # ... which frees the block
+    assert "mov r0, #0x51" in block("ov14_021EE850:", 9)  # ... and returns to the grid
+    # the generic async wait reads work+4 before dispatching the deferred handler at data+0x30
+    wait = block("ov14_021EB1C0:", 15)
+    assert "ldr r1, [r0, #0x34]" in wait and "ldr r1, [r1, #4]" in wait
+    assert "ldr r1, [r0, #0x30]" in wait and "blx r1" in wait
+    # the second A: jump-table case 4 (r5 = 0x22 - 0x1E) -> Party_GetCount -> highlight wait 0xA7
+    case4 = block("_021EDB98:", 17)
+    assert "bl Party_GetCount" in case4 and "bl ov14_021F2270" in case4 and "mov r2, #0xa7" in case4
+    assert "case 4" in block("_021EDB64:", 9)  # the table is 0x1E-based
+    hl = block("ov14_021F2270:", 100)
+    assert "str r6, [r5, #0x30]" in hl and "mov r0, #8" in hl  # state 8 + the deferred 0xA7
+    # 0xA7 tails into the party-full check, and 0x55 is the commit that appends and deletes
+    assert "ov14_021F13B0" in block("ov14_021F27CC:", 4)
+    full = block("ov14_021F13B0:", 60)
+    assert "bl Party_GetCount" in full and "cmp r0, #6" in full and "mov r2, #0x53" in full
+    assert "bl ov14_021E637C" in block("ov14_021EDE88:", 56)  # state 0x55
+    add = block("ov14_021E6184:", 25)
+    assert "bl Party_AddMon" in add and "PCStorage_DeleteBoxMonByIndexPair" in block(
+        "ov14_021E6100:", 10
+    )
+    # 0x57 belongs to the TOUCH grab alone: the only ov14_021F0418 caller sits behind the touch hitbox
+    assert "TouchscreenHitbox_FindRectAtTouchNew" in block("ov14_021F6A14:", 6)
+    assert "bl ov14_021F6A14" in block("ov14_021EDA4C:", 12) and "bl ov14_021F0418" in block(
+        "ov14_021EDA4C:", 50
+    )
+    touch = block("ov14_021F0418:", 90)
+    assert "mov r2, #0x57" in touch and "cmp r0, #6" in touch  # the touch branch, never a keyboard one
+    assert gr.WITHDRAW_CONTEXT_TARGET == 0x22 and gr.WITHDRAW_COMMIT_STATE == 0x55
+
+
+def test_wiring_the_lua_reload_branch_selects_its_check_by_op_on_synthetic_ram(tmp_path, monkeypatch):
+    # WIRING test, not evidence: a real run never reaches the failing reload cases (the reload boot reads the
+    # battery the SAVE wrote, so the persisted state is whatever the run already proved). It only proves the
+    # Lua branch exists, is selected by route.op and fails by name.
+    # synthetic cold-boot state after a withdraw + SAVE: party [x, clone], box empty
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", party=2, pid=0xCAFEBABE)
+    assert "RESULT RELOAD_OK party=2 clone_slot=2 boxed=0 pid=0xcafebabe" in last
+    # the clone still boxed and the party unchanged (the withdraw never persisted) is a named failure
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", withdraw=True, party=1)
+    assert "RESULT FAIL reload_party_count" in last
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="withdraw", withdraw=True, party=2)  # clone not appended
+    assert "RESULT FAIL reload_clone_not_in_party" in last
+    # control: the deposit reload (no op) on the boxed state still passes, so `op` is what selects the check
+    last, _, _ = _run_lua_leg(tmp_path, monkeypatch, reload="deposit", withdraw=True, party=1)
+    assert "RESULT RELOAD_OK party=1 box=0/0" in last
+
+
+def test_run_lane_withdraw_runs_one_leg_from_the_pc_then_reloads_and_judges_the_battery(
+    real, tmp_path, monkeypatch
+):
+    pos = {"map": 69, "warp": -1, "x": 11, "y": 13, "dir": 0}  # a save made inside the Pokemon Center
+    key = gr.mon_key(_SYNTH["new_pid"], _SYNTH["otid"])
+    wit = iter((
+        {"bank": 0, "counter": 1, "party_keys": ["P1"], "box_keys": [{"box": 0, "slot": 0, "key": key}], "keys": sorted(["P1", key])},
+        {"bank": 1, "counter": 2, "party_keys": ["P1", key], "box_keys": [], "keys": sorted(["P1", key])},
+        {"bank": 1, "counter": 2, "party_keys": ["P1", key], "box_keys": [], "keys": sorted(["P1", key])},
+    ))
+    detail = ("party_before=1 party_after=2 box=0/0 slot_after=empty pid=0xabcd1234 mod_before=0 "
+              "mod_after=0x1 mod_saved=0 save_driver=idle m69")
+
+    def script(leg, route):
+        if route["kind"] == "reload":
+            assert leg == 2 and route["op"] == "withdraw" and not route["steps"]
+            return "[f2] RESULT RELOAD_OK party=2 clone_slot=2 boxed=0\n"
+        assert leg == 1 and route["kind"] == "pc" and route["phase"] == "withdraw" and route["start"]["map"] == 69
+        assert route["steps"] == [] and route["pc"]["withdraw"]["menu_steps"] == 1  # already at the PC: no door leg
+        return f"[f1] RESULT PC_WITHDRAW {detail}\n"
+
+    calls = _fake_emuhawk(monkeypatch, tmp_path, pos, script)
+    monkeypatch.setattr(gr, "save_witness", lambda *a: next(wit))
+    (tmp_path / "L").mkdir()
+    (tmp_path / "L" / "x.SaveRAM").write_bytes(b"x")
+    monkeypatch.setattr(gr, "parse_save", lambda _b, _p: _FakeWdBattery(["P1", key], {}))
+    res = gr.run_lane(ROM, tmp_path / "boxed.SaveRAM", PRET, target="pc_withdraw", lane="L", tag="t")
+    assert res["status"] == "PC_WITHDRAW" and len(calls) == 2, res.get("detail")
+    rec = json.loads((tmp_path / "L" / "t_receipt.json").read_text(encoding="utf-8"))
+    assert rec["final_status"] == "PC_WITHDRAW" and rec["setup"] == "SYNTH"
+    assert [leg["status"] for leg in rec["legs"]] == ["PC_WITHDRAW", "RELOAD_OK"]
+    assert rec["battery"]["party_keys"] == ["P1", key] and rec["modified_flag"]["ram"].startswith("set by the withdraw")
+
+
+def test_run_lane_withdraw_refuses_a_full_party_before_touching_the_lane(tmp_path, monkeypatch):
+    key = gr.mon_key(_SYNTH["new_pid"], _SYNTH["otid"])
+    monkeypatch.setattr(gr, "synth_setup", lambda save, kind="party2": _SYNTH)
+    monkeypatch.setattr(
+        gr, "save_witness",
+        lambda *a: {"party_keys": list("ABCDEF"), "box_keys": [{"box": 0, "slot": 0, "key": key}]},
+    )
+    with pytest.raises(gr.RouteError) as e:
+        gr.run_lane(target="pc_withdraw", save=tmp_path / "s.SaveRAM", lane="never_created_wd_lane")
+    assert e.value.reason == "withdraw_party_full"
+    assert not gr.lane_dir("never_created_wd_lane").exists()
+
+
+def test_live_d4_printing_replay_selects_storage_pc_before_down(tmp_path, monkeypatch):
+    # print_frames=180 is a chosen MODEL constant, not measured PHYSICAL timing.
+    # The fake is harsher than the engine: its swallowed press completes printing
+    # immediately, without another continuation acceptance on a held key.
+    # Old 60-frame interact wait + 120-frame A spacing
+    # consume A1/A3 in printing; Down reaches Which PC instead of WITHDRAW.
+    last, ds, log = _run_lua_leg(tmp_path, monkeypatch, withdraw=True, party=1, fake={"print_frames":180})
+    assert "RESULT PC_WITHDRAW" in last, log
+    assert ds.pre_a==3
+
+
+def test_short_printer_wait_delays_launch_then_reverts(tmp_path,monkeypatch):
+    kw={"withdraw":True,"party":1,"fake":{"print_frames":180}}
+    last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
+    assert "RESULT PC_WITHDRAW" in last
+    last,_,log=_run_lua_leg(tmp_path,monkeypatch,plan={"script_wait":0},**kw)
+    assert "RESULT PC_WITHDRAW" in last and "withdraw menu attempt 2" in log and "press 5 Right" in log
+    last,_,_=_run_lua_leg(tmp_path,monkeypatch,**kw)
+    assert "RESULT PC_WITHDRAW" in last
+
+
+def assert_pc_item_order_and_cursor(scr, command_source):
+    def body(label):
+        text=scr[scr.index(label+':')+len(label)+1:]
+        return re.split(r'\n\w+:',text,maxsplit=1)[0]
+    access=body('_0A2E')
+    for label,msg in [('_0A78','msg_0191_00061'),('_0A82','msg_0191_00062')]:
+        assert re.findall(r'MenuItemAdd\s+(\w+),\s*(\d+),\s*(\d+)',body(label))==[(msg,'255','0')]
+        assert access.index(label)<access.index('MenuItemAdd msg_0191_00063, 255, 1')
+    assert re.findall(r'MenuInitStdGmm\s+(\d+),\s*(\d+),\s*(\d+),\s*(\d+)',access)==[('1','1','0','1')]
+    assert 'MenuItemAdd msg_0191_00063, 255, 1' in access
+    block=command_source[command_source.index('static void sub_02041770('):][:650]
+    assert re.findall(r'u8\s+(\w+)\s*=\s*ScriptReadByte\(ctx\)',block)==['x','y','initCursorPos','cancellable']
+    assert ', initCursorPos, cancellable,' in block
+
+
+def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
+    import xml.etree.ElementTree as ET
+    scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
+    root=ET.parse(PRET/'files/msgdata/msg/msg_0040.gmm').getroot()
+    def message(index):
+        return root.find(f".//row[@index='{index}']/language[@name='English']").text
+    assert message(33).endswith(r"\r") and message(35).endswith(r"\r")
+    assert r"\r" not in message(34) and '{YESNO 0}' in message(34)
+    assert gr.WITHDRAW_SCRIPT_A==2+1  # two carriage waits plus storage-PC choice
+    assert gr.WITHDRAW_RECOVER_A==0  # _0C01 NonNPCMsg, no carriage wait
+    assert_pc_item_order_and_cursor(scr,(PRET/'src/scrcmd_c.c').read_text())
+    render=(PRET/'src/render_text.c').read_text()
+    focus=render[render.index('case 0x200:'):render.index('case 0x207:')]
+    assert 'RenderScreenFocusIndicatorTile' in focus and 'printer->state =' not in focus
+    assert 'case 0x25BC:' in render and 'TextPrinter_ContinueInputNew' in render
+    code=(PRET/'src/field/scrcmd_message.c').read_text()
+    assert 'return IsPrintFinished(*textPrinterNumPtr);' in code
+    nonnpc=code[code.index('BOOL ScrCmd_NonNPCMsg('):code.index('BOOL ScrCmd_NonNPCMsgExtern(')]
+    assert 'SetupNativeScript' not in nonnpc and 'return FALSE;' in nonnpc
+
+
+@pytest.mark.parametrize("old,new",[
+    ('MenuItemAdd msg_0191_00061, 255, 0','MenuItemAdd msg_0191_00061, 255, 1'),
+    ('MenuItemAdd msg_0191_00062, 255, 0','MenuItemAdd msg_0191_00062, 255, 1'),
+    ('MenuInitStdGmm 1, 1, 0, 1','MenuInitStdGmm 1, 1, 1, 1'),
+])
+def test_pc_order_cursor_controls_red_revert(old,new):
+    scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
+    code=(PRET/'src/scrcmd_c.c').read_text()
+    assert_pc_item_order_and_cursor(scr,code)
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr.replace(old,new),code)
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr,code.replace('u8 initCursorPos = ScriptReadByte(ctx);','u8 initCursorPos = ScriptReadHalfword(ctx);'))
+    a=scr.index('\tCallIfUnset FLAG_SYS_MET_BILL, _0A78',scr.index('_0A2E:'))
+    b=scr.index('\tGoToIfSet FLAG_GAME_CLEAR',a)
+    region=scr[a:b].splitlines()
+    with pytest.raises(AssertionError):
+        assert_pc_item_order_and_cursor(scr[:a]+'\n'.join([region[-1],*region[:-1]])+'\n'+scr[b:],code)
+    assert_pc_item_order_and_cursor(scr,code)
+
+
+def test_no_unreachable_wake_a_branch():
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    assert "A wake cursor" not in source and "cursor_not_activated" not in source
+
+
+def _grid_source_contract(c_source, asm):
+    writes = re.findall(r"modeSwitchLagFrame\s*=\s*(?![=])([^;]+);", c_source)
+    assert writes == ["FALSE"]
+    functions = ("ov14_021EC150", "ov14_021EDA4C", "ov14_021EDF28", "ov14_021F21D0")
+    for name in functions:
+        body = asm.split("thumb_func_start " + name, 1)[1].split("thumb_func_end " + name, 1)[0]
+        calls = list(re.finditer(r"bl GridInputHandler_SetButtonInputMode", body))
+        assert calls, name
+        for call in calls:
+            before = body[: call.start()]
+            writes_r1 = re.findall(r"\b(?:mov|add|ldr|ldrb|lsr|lsl) r1, ([^\n]+)", before)
+            assert writes_r1[-1] == "#1", name
+
+
+def test_051_entry_button_mode_source_red_revert():
+    # Census every C translation unit, not just the known constructor file.
+    c = "\n".join(
+        path.read_text() for path in PRET.rglob("*.c")
+        if b"modeSwitchLagFrame" in path.read_bytes()
+    )
+    asm = (PRET / "asm/overlay_14.s").read_text()
+    _grid_source_contract(c, asm)
+    for bad_c, bad_asm in [
+        (c.replace("modeSwitchLagFrame = FALSE", "modeSwitchLagFrame = TRUE"), asm),
+        (
+            c,
+            asm.replace(
+                "mov r1, #1\n\tldr r0, [r0, #0x2c]\n\tbl GridInputHandler_SetButtonInputMode",
+                "mov r1, #0\n\tldr r0, [r0, #0x2c]\n\tbl GridInputHandler_SetButtonInputMode",
+            ),
+        ),
+    ]:
+        with pytest.raises(AssertionError):
+            _grid_source_contract(bad_c, bad_asm)
+        _grid_source_contract(c, asm)
+
+
+def test_settle_policy_reads_committed_observations_and_checks_hash(monkeypatch, tmp_path):
+    from tests.live import test_gen4_probe_gates as gate
+
+    for title, game, lane, maximum in [
+        ("heartgold_hge", "hge", "d2-hge-10031339", 1),
+        ("soulsilver", "SS", "d2-ss-10031344", 11),
+    ]:
+        p = gate.phase_settle_policy(title, gr._pack_title(game))
+        fixture = gr.REPO / "tests/fixtures/gen4" / f"{lane}_observation.json"
+        assert p["receipt"] == str(fixture)
+        assert gate.digest(fixture) == p["receipt_sha256"]
+        raw = json.loads(fixture.read_text())
+        epochs = raw["settle"]["epochs"]
+        assert p["epochs"] == epochs and p["max_frames"] == maximum + 5
+        # The current fixture bytes are mandatory, even when the mutation still
+        # describes a plausible larger margin. Reverting restores admission.
+        copied = tmp_path / "tests/fixtures/gen4" / fixture.name
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes(fixture.read_bytes() + b" ")
+        with monkeypatch.context() as patch:
+            patch.setattr(gate, "REPO", tmp_path)
+            with pytest.raises(AssertionError, match="hash"):
+                gate.phase_settle_policy(title, gr._pack_title(game))
+        assert gate.phase_settle_policy(title, gr._pack_title(game)) == p
+
+
+def test_removed_wake_branch_control_red_revert(monkeypatch):
+    source = (gr.REPO / "lua/tests/gen4_route_play.lua").read_text()
+    old = Path.read_text
+    test_no_unreachable_wake_a_branch()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            Path,
+            "read_text",
+            lambda p, *a, **k: (
+                source + '\nif not a.button_mode then tap("A",1,30); pressed("A wake cursor") end\n'
+                if p == gr.REPO / "lua/tests/gen4_route_play.lua"
+                else old(p, *a, **k)
+            ),
+        )
+        with pytest.raises(AssertionError):
+            test_no_unreachable_wake_a_branch()
+    test_no_unreachable_wake_a_branch()

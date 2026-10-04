@@ -1,0 +1,303 @@
+{
+  "evidence": "PHYSICAL input schedule only; synthetic RAM/latencies in MODEL are not measured policies",
+  "source_cut": "4a0f178683f367fc92fa0a103ec57a0d9cc0d9ea",
+  "runs": {
+    "heartgold_hge": {
+      "frames": 11127,
+      "site_ids": [
+        "battle_faint_cmd",
+        "battle_outcome_copy",
+        "battle_start_ov12",
+        "pc_place_first_in_box"
+      ],
+      "bridge_response": {
+        "id": 6,
+        "route": {
+          "version": 1,
+          "game": "hge",
+          "start": {
+            "map": 60,
+            "x": 676,
+            "y": 397,
+            "dir": 1
+          },
+          "steps": [
+            {
+              "dir": "Left",
+              "n": 11,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 397
+              }
+            },
+            {
+              "dir": "Down",
+              "n": 6,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 403
+              }
+            },
+            {
+              "dir": "Down",
+              "n": 1,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 404
+              }
+            }
+          ],
+          "grass_edge_after_step": 1,
+          "grass": {
+            "enter": {
+              "map": 33,
+              "x": 665,
+              "y": 404
+            },
+            "tile": {
+              "map": 33,
+              "x": 665,
+              "y": 404
+            },
+            "pace": {
+              "a": [
+                665,
+                404
+              ],
+              "b": [
+                664,
+                404
+              ],
+              "dir_ab": "Left",
+              "dir_ba": "Right",
+              "max_steps": 4000
+            }
+          },
+          "tiles": 18,
+          "approach_grass": [],
+          "soft_events": [
+            {
+              "x": 676,
+              "y": 397,
+              "scriptIds": [
+                "_EV_scr_seq_T20_002 + 1"
+              ]
+            },
+            {
+              "x": 666,
+              "y": 397,
+              "scriptIds": [
+                "_EV_scr_seq_R29_001 + 1"
+              ]
+            }
+          ],
+          "water_tiles": [],
+          "map_name": "R29",
+          "wild_land_hg_day": [
+            [
+              "SPECIES_PIDGEY",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              3
+            ],
+            [
+              "SPECIES_SENTRET",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              2
+            ],
+            [
+              "SPECIES_RATTATA",
+              4
+            ],
+            [
+              "SPECIES_PIDGEY",
+              4
+            ],
+            [
+              "SPECIES_RATTATA",
+              4
+            ],
+            [
+              "SPECIES_PIDGEY",
+              4
+            ]
+          ]
+        }
+      },
+      "bridge_response_sha256": "d3ece69095a14af1b5d3bdb5d73839c2ba5f0f42d4578daf5180679482e6a711",
+      "lane": "d2-hge-1003055138"
+    },
+    "soulsilver": {
+      "frames": 11199,
+      "site_ids": [
+        "battle_faint_cmd",
+        "battle_outcome_copy",
+        "battle_start_ov12"
+      ],
+      "bridge_response": {
+        "id": 6,
+        "route": {
+          "version": 1,
+          "game": "SS",
+          "start": {
+            "map": 60,
+            "x": 676,
+            "y": 397,
+            "dir": 1
+          },
+          "steps": [
+            {
+              "dir": "Left",
+              "n": 11,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 397
+              }
+            },
+            {
+              "dir": "Down",
+              "n": 6,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 403
+              }
+            },
+            {
+              "dir": "Down",
+              "n": 1,
+              "to": {
+                "map": 33,
+                "x": 665,
+                "y": 404
+              }
+            }
+          ],
+          "grass_edge_after_step": 1,
+          "grass": {
+            "enter": {
+              "map": 33,
+              "x": 665,
+              "y": 404
+            },
+            "tile": {
+              "map": 33,
+              "x": 665,
+              "y": 404
+            },
+            "pace": {
+              "a": [
+                665,
+                404
+              ],
+              "b": [
+                664,
+                404
+              ],
+              "dir_ab": "Left",
+              "dir_ba": "Right",
+              "max_steps": 4000
+            }
+          },
+          "tiles": 18,
+          "approach_grass": [],
+          "soft_events": [
+            {
+              "x": 676,
+              "y": 397,
+              "scriptIds": [
+                "_EV_scr_seq_T20_002 + 1"
+              ]
+            },
+            {
+              "x": 666,
+              "y": 397,
+              "scriptIds": [
+                "_EV_scr_seq_R29_001 + 1"
+              ]
+            }
+          ],
+          "water_tiles": [],
+          "map_name": "R29",
+          "wild_land_hg_day": [
+            [
+              "SPECIES_PIDGEY",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              3
+            ],
+            [
+              "SPECIES_PIDGEY",
+              3
+            ],
+            [
+              "SPECIES_SENTRET",
+              2
+            ],
+            [
+              "SPECIES_SENTRET",
+              2
+            ],
+            [
+              "SPECIES_RATTATA",
+              4
+            ],
+            [
+              "SPECIES_PIDGEY",
+              4
+            ],
+            [
+              "SPECIES_RATTATA",
+              4
+            ],
+            [
+              "SPECIES_PIDGEY",
+              4
+            ]
+          ]
+        }
+      },
+      "bridge_response_sha256": "9d41c27515b3a7cd6b78fd8ef09a0cfd48bc050defbfd1121c3fdd2a92e17a01",
+      "lane": "d2-ss-1003055138"
+    }
+  }
+}

@@ -1,0 +1,509 @@
+# Gen 4 resume note
+
+> **Player launcher caveat (2026-10-04):** this c1046d07-based branch still runs the LEGACY client via `lua/slink_gen4.lua`. On **claude/gen4-g3a-launcher@a453ea00**, `slink.lua:179-234` instead admits pinned HG/SS/hge and dofiles `lua/gen4/run.lua`; the legacy client/game/root files are deleted there. That branch must land in the batched Gen 2 window. Earlier test-driver receipts do not prove the player path; the next live cut must be launched through `slink.lua`. Gen 4 remains pre-release.
+
+## Checkpoint 13 (2026-10-04) — committed offline side branches; landing still pending
+
+**All SOURCE/MODEL, not a new PHYSICAL freeze or shipping sign-off.**
+
+| Branch | Head inspected | Offline delivery |
+|---|---|---|
+| claude/gen4-hge-area-map | 3b0da869 | hge area/location geometry proven identical to HGSS, title provenance retained; daycare egg bound to map 38 / route_34 (acquisition.json:842-853), 62 script sites. route_34 remains on_wild_area, not a gift-area id. |
+| claude/gen4-nds-mailbox | 1f339a29 (reader introduced 5edae113) | shared raw mailbox reader + Gen4 companion step/new/poll, caller-owned K/N, caps never gate liveness; tests include host-probe SetErrorMode guard |
+| claude/gen4-companion-policy | d68e8137 (C2/C3 2f89685a; C5 cff81909) | arena accessor/per-card state, sound/trade policy headers, C4 panel policy/facts/tests; no game sound.c/trade.c/panel.c binding or build driver |
+| claude/gen4-g3a-launcher | a453ea00 | pinned NDS launcher route to gen4/run.lua, manifest update, legacy Lua files retired |
+| claude/gen4-server-gift | 90c0fff0 (generated gifts c5cb4175; adapter slice 9628c2d9) | generated gift/foundation/adapter changes, Platinum adapter loaders removed and HGSS tables repointed; legacy data-directory deletion still coupled to integration cleanup |
+
+**Landing plan:** mailbox/title reader + hge area map precede live checks, then one
+new receipt re-run at the frozen combined evidence surface. Launcher/server/release
+land in the approved batched window; the reviewed Gen 5 shared stack follows its
+ABI-owner dependency order. **Live must launch through slink.lua.** The main worktree
+stays at c1046d07 until the coordinator freezes the candidate; these branch heads are
+not silently substituted for the current cut.
+
+Owner rulings and pinned-plan corrections: see
+`docs/gen4/reviews/DECISIONS_2026-10-04_companion_and_g3a.md` (save only after,
+Platinum deletion, shared-stack batch, hge PATCH ONLY, deposit-only row n, plain fatal HUD text).
+
+## Checkpoint 12 (2026-10-04) - NEW FREEZE: all offline Gen 4 work + landed master; live checks next (owner: "new freeze, then run")
+
+**State.** The Gen 1-3 release landed on local master (`30834347`, then the board-only `4c2eb702`; not pushed). This branch was fast-forwarded to `claude/gen4-integration`, which merges:
+- master;
+- every Gen 4 side branch: withdraw-docs, generators, c2-beacon, faint-provenance, withdraw, run-root, g3-model with ss-world;
+- the later integration fixes.
+The de5ab39f re-run was SKIPPED by owner ruling: its receipts are stale against this tree. Every earlier PHYSICAL receipt is historical; re-run at the freeze below. **FROZEN = the commit that adds this checkpoint** (docs only, off the evidence surface).
+
+**Offline at the freeze.** Run at merged head `3a0375b0`: (gen4 or nds or hgss or server or adapter or state or protocol) and not gen3, 4672 passed / 294 named skips / 0 failed; Lua syntax OK. After the board-only tip merge: board/dashboard 105 pass; gen4 client/hud/requirements 232 pass. PLAN.md and tests/gen4_requirements.json are unchanged since G0.
+
+**New since checkpoint 11 (all SOURCE/MODEL):**
+- **Withdraw.** Keyboard withdraw is two A presses (route leg + falsifier). See G2_PRODUCER_PLAN.md 6b CORRECTION 3 and research/hge_pc_redirects.md (29 PCStorage ov129 targets, observer pins).
+- **Grass route receipt.** The grass route writes the shared receipt: staged battery, plan, settled state sha256 and a battle witness.
+- **Faint provenance.** The faint receipt echoes its state/save binding. All 5 route-state batteries are PROVEN by staged-copy hashes (data/gen4/scenarios/README.md).
+- **Run root.** `lua/gen4/run.lua` composition root plus `inputs.lua` producers: area_of, charmap, has_pokeballs (bag via client:save_array), gift_area.
+- **Packs.** charmap.json + profile.bag. gift_areas holds goldenrod/pewter/saffron/sinjoh_ruins only; gift sites on wild areas sit in on_wild_area, fail-closed. hge PC redirect count is 29.
+- **Client fixes.** `safe` armed once per debounced battle end (protocol item 19). HUD parity with the accepted gens: Nuzlocke Start, NEW ENCOUNTER, WHITED OUT, D7 KO'd. A landed D7 entry is retired before the ending flush, so there is no double KO'd.
+- **Conformance.** Map of 50 items, OWED empty. Checkpoint forbidden-state matrix. Real probe dumps through reads.lua.
+- **Evidence.** It binds the pack inputs the producers open: charmap/area_map/locations, with hge area files recorded `absent`.
+- **C2 beacon.** Source compiles clean under the real pret mwccarm. The shared NDS headers at nds-shared `78c2a0a0` are mwcc-clean. ROM integration (main.lsf + link) belongs to the shared-stack writer.
+
+**Owner rulings 2026-10-04:**
+- Row n G1 scope = deposit only (`reviews/DECISIONS_2026-10-04_rown.md`).
+- The 3 cherry-picked side branches are approved for delete. They are tagged `archive/gen4/*`; the owner runs the force delete.
+- The HUD fatal text becomes "SLINK STOPPED - SEE LOG" (claude/hud-fatal-text `370e5f75`; batched window).
+
+**Queued for the first batched Gen 2 digest window (overlord-confirmed):**
+- G3a launcher/server;
+- the hud-fatal-text fix;
+- the server `_GIFT_AREAS` fix: server/adapters/gen4_hgsspt.py is hand-typed and wrong (wild areas listed, route_30 wrong, six sites missing). Load data/games/gen4_hgss/area_map.json gift_areas.ids instead.
+
+**NEXT (one emulator slot, overlord-granted; confirm with the overlord before the first EmuHawk; own PIDs only; F: lanes):**
+- row o HG/hge one+two;
+- SS row o one+two (first ever; states ss1/ss2-de5-10031709, bindings PROVEN);
+- then rows a-n HG/hge/SS at the freeze;
+- D1-D4 diagnostics as needed.
+No unchanged failed run is repeated.
+
+## Checkpoint 11 (2026-10-03) - committed-scenario run at FROZEN `108c025d`; row-n mechanisms landed; G1 still NOT qualified
+
+**Cut `108c025d`** = committed outdoor scenarios, no in-process harness overrides: the first run under the receipt rule from the evidence caveat below.
+
+**PHYSICAL at `108c025d`** (coordinator-verified; receipts under `F:/slink-work/lanes/g4/live108-1002220018/`; every combined.txt read back against the current surface/scenario parse; all three control-reds `missed=[]`):
+
+| Row | HG | hge | SS |
+|---|---|---|---|
+| a,c,d,e,g,h,i,j,k,l | PASS | PASS | PASS |
+| b | OPEN | FAIL | FAIL |
+| f (PERF) | OPEN (machine HOLD) | OPEN | OPEN |
+| m | FAIL (lost the wild fight) | FAIL (no battle reached) | FAIL (no battle reached) |
+| n | OPEN | FAIL | FAIL |
+| o (combined) | PASS | OPEN | OPEN |
+
+- Combined: `probes/heartgold-7a5a0a43970f`, `probes/heartgold_hge-ee1e528d388e`, `probes/soulsilver-58fa42635ae2` (each RESULT FAIL); detail in `{heartgold,heartgold_hge,soulsilver}-audit.json`.
+- Row o PHYSICAL x4, consume PASS (`F:/slink-work/lanes/g4/faint2/`): HG one `heartgold_seam_ufce_bit_220117`, HG two `..._p2_220209`, hge one `heartgold_hge_seam_ufce_bit_220245`, hge two `..._p2_220337`. **SS has no row-o faint receipt at all.**
+- **hge/SS b/m/n share one cause:** both committed saves predate the Pokegear, and New Bark coord event `T20_002` walks the player back on every pass (`tools/gen4_routes.py:496-508`). 12 bridge RESYNCs at map 60 x682 y399, no battle. In the same runs, the wrapper's `assert p is not None` aborted before consuming row o (pre-existing; fixed, see below).
+- **HG m is a real loss, not a timeout:** enemy HP 17->13 once while ours went 20->0 (outcome LOSE f2550). The A-only recipe cannot move the move cursor, so the cause is still open (misses vs foe vs input drift).
+- Not run (overlord machine HOLD): the HG PC-withdraw DIAGNOSTIC and PERF. Audit: 21 originals unchanged; PID census empty at 02:55:37Z.
+
+**On the branch since `108c025d`:**
+- `efc76dd9` shared trade gate: `tp_service` leaves foreign opcodes to the sound/panel producers. Its state machine still runs every visit for the async-save watchdog. Gen 5 imports it when the shared phase reopens.
+- `92863dd2` companion spec sweep: bodies match their decision blocks. `InitSoundData` bl at `0x02000D12` in HG/SS/hge (pinned-ROM read); the hge vehicle is an SLink armips `.org` patch with a five-writer-class census, not a `hooks` row.
+- Pokegear errand: `a2e98a22` (battle bridge), `b1f0c58b` (re-arm when walked back again), `f7da11e7` (PC bridge, before the Cherrygrove walk).
+- `60bb187f` missing CPU histograms are a named row-m OPEN, not a Lua nil-index.
+- `aee4966c` fight samples carry species/level/moves/PP for both battlers (pret BattleMon moves 0x0C, movePPCur 0x2C); pack label `gSystem+0x48` corrected to `newKeys`.
+- Row-n mechanisms (Codex `a994eca7` + `32f03f66`, OMP adversarial review cx-64491722):
+  - a `battle_close` case at `Battle_Exit` with a closing-frame oracle (seam-agnostic; frame parity explicitly OPEN);
+  - a deposit-only `pc` case with committed SYNTH party2 fixtures (scenario schema v3, `<title>_pc_case.json`, no baseline fallback);
+  - the hge `pc_place_arm9_entry` static placement trampoline (row n's, not C3's);
+  - `MIN_SITE_ANCHORS` 20 (HG/SS; hge stays hash-only);
+  - the n aggregate made reachable (it never was: pre-existing F1);
+  - hge/SS graded instead of aborting (F8);
+  - n split into strict per-case invariants vs aggregate coverage (static PC + reset + pending at close).
+- Closing-frame flag fails closed, and the aggregate requires a witnessed `battle_close` case (OMP cx-3d38711e).
+
+**Decision (coordinator):** C2-C5 are consolidated into ONE companion build before C6. A per-card build would force a C6 re-pin plus re-run receipts each time (`PLAN.md:73`, `C6_HGE_BUILD_SPEC.md:379-382`).
+
+**OPEN:**
+- **Owner ruling:** the G1 caller scope for row n. Is the deposit-only PC case enough, or are all PC callers required (delete-by-index, withdraw, release)? Today every unexercised caller is an explicit n OPEN.
+- Live-only: frame parity, the hge/SS settle policies, the HG fight cause, SS row o.
+- The C1 live mailbox canary; the C6 fork-branch approval.
+- Three local side branches (`claude/gen4-tp-gate`, `-companion-docs`, `-bridge-errand`) are fully cherry-picked (`git cherry`: 0 unpicked each). They are kept pending an owner OK for a force delete.
+- Empty dir `F:/slink-work/wt/g4-rown` is held open by a process; remove it later.
+
+**NEXT, on the overlord's slot release (one EmuHawk, sequential, at the freeze SHA):**
+- D1 HG fight DIAGNOSTIC (which move, which turn);
+- D2 hge then SS errand + settle DIAGNOSTIC (uncensored cold/pre-load start);
+- D3 HG `battle_close` boundary DIAGNOSTIC (frame parity);
+- D4 HG `pc_withdraw` DIAGNOSTIC;
+- then SS row o, row o x4, and a-n HG/hge/SS at the freeze.
+No unchanged failed run is repeated.
+
+> Checkpoint 10 below is superseded by this checkpoint (its next-cut list was executed or replaced).
+
+## Checkpoint 10 (2026-10-02 18:40Z) - adoption milestone CLOSED; live re-run at FROZEN `feb6b9c4`; session WRAPPED
+
+**Cut `feb6b9c4`** = the shared NDS adoption (`8a36e6ee`, `36fd0615`, `b4e17db2`) + the hge row-k fixed-frame RTC fix (1200 = measured max 1035 + 165).
+
+**PHYSICAL results at `feb6b9c4`**, all coordinator-verified: combined read back, control-reds missed=[], row o via consume_receipt.
+
+| Cell | Verdict | Receipt (`C:/slink/g4/`) |
+|---|---|---|
+| Row o HG one / two | PASS / PASS | `g1d-hg1-1400`, `g1d-hg2-1402` |
+| Row o hge one / two | PASS / PASS (the first live run of the pack-pinned hge seam) | `g1d-hge1-1403`, `g1d-hge2-1404` |
+| HG a–n | FAIL: m (fight timeout); b/f/n OPEN; the rest PASS | `g1dprobeHG-1405/heartgold-aea65d46ec72/combined.txt` |
+| hge a–n | FAIL: b (indoor fixture, no battle); f/m/n OPEN; the rest PASS (k now PASS at 1200/1200) | `g1dprobeHGE-1417/heartgold_hge-a5da2f1e3fff/combined.txt` |
+| SS a–n | FAIL: b (indoor fixture); f/m/n/o OPEN; the rest PASS | `g1dprobeSS-1425/soulsilver-2f9d94e5ba0f/combined.txt` |
+| PERF (f) | OPEN: a foreign Gen 2 EmuHawk was running at the preflight (PIDs 30896 / 32612) | none started |
+| Final audit | 44 owned processes all exited; originals unchanged (HG e18a15c7, SS 8b6fbf17, hge a9e4a48b) | `C:/slink/g4/g1-feb6b9c4-final.json` (sha256 55ef363e) |
+
+**What the cut proved:**
+- The k fix works physically on all three titles.
+- Production residency adoption plus the pinned hge seam: all 4 faint cells PASS.
+- No settle or pin faults.
+
+**New defect from the k fix:** waiting to frame 1200 shifts the RNG. On HG the encounter (Cyndaquil Lv5 vs Rattata Lv4, normal) overran the fight leg's 3000-frame budget, so HG m FAIL. Baseline i was unobserved, but the i SAVE/cold-read cases PASS. Enemy-HP movement is UNVERIFIED (no per-turn trace). `max_frames` is a pack value, so it was not changed in this cut.
+
+**Still open:** G1 is NOT qualified or signed.
+
+**Lane relocation (overlord, owner-approved, 2026-10-02):** the Gen 4 lane `C:/slink/g4` (46 GB) moved to **`F:/slink-work/lanes/g4`** (`SLINK_WORK_ROOT=F:/slink-work`, `PYTEST_DEBUG_TEMPROOT=F:/slink-work/tmp`). `C:/slink/g4` is now a directory JUNCTION to it (0 bytes on C:), so every hardcoded path and all receipt paths in these docs still resolve. All new Gen 4 lanes, logs and temps go on F:. Also moved: `C:/slink-cache/gen4-pret` (C0 ELF/xMAP/nm dumps, 11 files, all sha256-equal) -> `F:/slink-work/cache/gen4-pret`, with a junction left at the old path (the C1 census still passes through it). The Gen 5 shared worktree is now `F:/slink-work/wt/nds-shared` (branch `claude/nds-shared-stack`, head b13c897f); `C:/slink-wt/nds-shared` is gone. Verified before delete: robocopy dry-run 0 to copy; 4808 files / 49,471,554,728 bytes equal; sha256 spot checks (final audit 55ef363e, HG save e18a15c7, hge save a9e4a48b, settle ddf1dc69) equal; write through the junction lands on F:. C: freed about 46.7 GB. Item 0 adopts the shared `tools/slink_space.py` `work_root('lanes')` (overlord).
+
+**NEXT SESSION, in order:**
+0. **Cut item 0:** replace the ~14 hardcoded `C:/slink/g4` paths (tools/gen4_fixtures.py `LANE_ROOT`, gen4_routes.py, test_gen4_{probe_gates,battle_faint,catch,perf,mailbox}.py, unit tests; DONE a0096a08 except probe_gates (Codex, in flight). The packs' evidence strings KEEP their recorded C:/slink/g4 paths as historical provenance) with ONE lane root derived from `SLINK_WORK_ROOT` (`<root>/lanes/g4`). Keep the BizHawk MAX_PATH preflight. It rides the fight-budget cut, which stales receipts anyway. Then retire the junction.
+0b. **Re-import the shared NDS stack** at `claude/nds-shared-stack` 364203be (the docs + `residency_contract.lua` comment now describe Gen 4's real wiring; comment-only, but `lua/nds` is on the evidence surface, so it rides the next cut).
+1. Add per-turn enemy HP + frames-used telemetry to the fight leg; size the budget from the measurement (pack). Then re-run HG m/i.
+2. b on hge/SS: a battle route on those fixtures.
+3. n: PC withdraw leg (live Right+A trial, G2_PRODUCER_PLAN §6b) + a queued-event-at-close witness.
+4. PERF on a quiet machine.
+5. C1 live mailbox canary (4 KiB ITCM span), then C2.
+6. Owner rulings (2026-10-02 late): the trade is **party-only** (no box arm); the FAILURE sound is **pending** (deferred, not blocking).
+
+## Checkpoint 9 (2026-10-02, owner: "Do the Gen 4 adoption cut now") - shared NDS adoption cut DONE (SOURCE/MODEL)
+
+- **Commits:**
+  - `8a36e6ee` imports the shared stack @`b13c897f` as a file import, not a merge (master 735dea38 is not an ancestor). It is blob-identical, and 604 shared tests pass in this tree.
+  - `36fd0615` makes pk4 delegate its cipher to the injected `lua/nds/pkm45_crypto.lua`. `BOUND_MODULES` and the perf `MODULES` bind it.
+  - `b4e17db2`:
+    - production `hook_binding` / `phase_signals` adopt `residency_contract`: arm = table-active AND full pin; loading refusals counted; latch only after `settle_polls=16`; `may_fire` at context; battle end always disarms.
+    - The D7 seam pin is FILE-proven on every build: the hge pack gains addr 35951836 + pin `004a1047`, and the client never mints a pin from RAM. (Codex cx-e7249b41 did the binding; the coordinator did the pack and pk4 halves.)
+- **Verified:** gen4+nds suites 2633 passed (coordinator, independent); Codex reports gen4 1611 and nds 617. The only red is the out-of-scope `test_gen3_borrowed_rows` (needs `patch/build/slink_RR.gba`).
+- **ALL `aa45dd94` PHYSICAL receipts are STALE at HEAD.** The evidence surface globs `lua/nds/*.lua` and hashes pk4, the binding and the hge pack.
+- **Next:** the live re-run at `b4e17db2`: row o ×4, HG/hge/SS a–n, plus the D7 seam on hge, now pinned. It needs an owner go-ahead for the emulator lane and must avoid foreign EmuHawks. The hge k fixed-frame fix should ride in the same cut first (replay staged in `.cache/gen4-next-cut/replay_hge_rtc_frame.py`).
+
+## Checkpoint 8 (2026-10-02 12:25 EDT; owner timebox: stop 13:31 EDT / 17:31Z; final status appended at stop)
+
+### G1 carry-over
+- **Current FROZEN cut: `aa45dd94`.**
+  - It adds the settle-arm probe: an overlay site is armed only when table-active AND its full pin matches, with HG bound 16 = measured 11 + 5. The measurement is the serial DIAGNOSTIC `C:/slink/g4/g1-settle-HG-1144-serial`: table-active at 7325, ready at +10/+11.
+  - It adds the hge `load_arm9_expansion` symbol row.
+  - The previous cut `6290dd3a` added: hge census `internal_loads` (async ids 130/131), publish on every aborted attempt, the Windows replace retry, exact pin-site diagnostics, and the row-o fight recipe.
+- **HG at `aa45dd94`** (`C:/slink/g4/g1cprobeHG-1201/heartgold-a48971929487/combined.txt`, coordinator-verified): a,c,d,e,g,h,i,j,k,l,m,o PASS; b/f/n OPEN; missed=[]; RESULT OPEN.
+  - n's raw per-case case is a coverage FAIL: `static_pc=false/reset=false`, queued-event-at-close not exercised.
+  - b: the wrong-overlay collision was not observed.
+  - f: PERF, blocked by foreign EmuHawks.
+- **Row o, all 4 current PASS at `aa45dd94`** (consume_receipt verified by the coordinator): HG `g1b-hg1-1119` and `g1b-hg2-1122` (from 6290, still current); hge re-runs `g1c-hge1-1222` and `g1c-hge2-1224` (the 6290 hge pair is historical/stale).
+- **hge k replay (scratch, not frozen):** `.cache/gen4-next-cut/replay_hge_rtc_frame.py` is red on 977/979 for the next cut.
+- **hge at `aa45dd94`** (`C:/slink/g4/g1cprobeHGE-1215/heartgold_hge-08256aad427a/combined.txt`, coordinator-verified): a,c,d,e,g,h,i,j,l PASS; **b FAIL, k FAIL**; f/m/n/o OPEN; missed=[]; RESULT FAIL.
+  - c: 20/20 transitions matched, including 129/131 at lag 1.
+  - **k FAIL: "RTC compared at different frame counts" (977 vs 979).** The bytes are identical, so this is a harness sampling point that drifts with boot length. Codex's note misreported it as PASS. Next cut: a red-first fixed-frame k sample.
+  - b raw FAIL: no own-overlay faint trigger on the indoor fixture.
+  - m/n named OPEN: no battle route; PC withdraw unrouted.
+- **SS at `aa45dd94`** (`C:/slink/g4/g1cprobeSS-1227/soulsilver-410efd246406/combined.txt`, coordinator-verified; the first SS a–n): a,c,d,e,g,h,i,j,k,l PASS; b FAIL (no battle faint trigger in the indoor subset); f/m/n/o OPEN; missed=[]; RESULT FAIL.
+  - k PASS on SS (frames 1025/1025). This supports the hge k drift being a hge boot-length sampling issue.
+  - SS row o has never run; it needs SS battle states.
+- **b FAILs on hge and SS** share one cause: the prepared indoor fixture has no battle. Row b needs a battle route on those titles (as HG's phase legs have).
+- **Historical (do not relabel):**
+  - HG `g1bprobeHG-1125` at 6290: n FAIL from the async-load race;
+  - hge `g1bprobeHGE-1135` at 6290: c FAIL from the missing symbol;
+  - c935: `g1probeHG-1033` and `g1probeHGE-1058`.
+- **Production follow-up:** `lua/nds/hook_binding.lua:105-107` has the same async-load exposure ("resident" = table flag alone). The fix comes with the NDS-3 residency-contract adoption (`may_arm` requires `site_confirmed`). First falsifier: an ov12 site armed during the load window.
+
+### Companion (plan C0-C8)
+- **C0 DONE** (`9b5c7a25`): pret `ad7a3afa` rebuilds HG and SS byte-identical on hgbox.
+- **C1:**
+  - census + canary authored (`82edb0f2`);
+  - span widened to 4 KiB, ITCM 0x01FFEC00..0x01FFFC00, so the shared ABI arena fits unmodified (`29febbf3`); census PASS on HG/SS/hge;
+  - the **live canary run is pending a free lane**. Command in the C1 Sonnet report: `SLINK_LIVE=1 ... pytest tests/live/test_gen4_mailbox.py -m live`. Register a permanent `mailbox` kind in `tools/gen4_evidence.py` (it is currently a setdefault at import).
+- **Decisions recorded in FEATURE_BAR:**
+  - ScrCmd slot = opcode 1, not 486 (486 is executed by scripts); the opcode-1 gate passed by composition;
+  - sound codes: SUCCESS 1501, NOTIFY 1500, BOO 1536 provisional; **FAILURE has no HGSS SE, an owner content choice**;
+  - the trade copies the NPC-trade slot-overwrite shape; the box arm is new behaviour;
+  - service tick = one `mainTaskQueue` SysTask;
+  - C4 panel: HG/SS append an After-main overlay; hge uses the 0x021E5900 slot; the trainer card is a lifecycle template only, its exit is asm;
+  - hge start menu, `start_menu.o`, is identical to HG;
+  - C2 layout direction: shared ABI + ROM-only boot generation + liveness pair.
+- **Owner questions to raise:** the FAILURE sound choice; whether C5 keeps a box arm.
+
+### G3 research
+- **The new-game route is fully sourced** (`docs/gen4/research/new_game_route.md`): legs, warps, mom MAP-INIT, YES defaults; a blind A,A,A picks Chikorita.
+- **PC withdraw:** the box app is ov14 asm; the dirty signal is a per-box mask. Next step: the live Right+A trial from `G2_PRODUCER_PLAN.md` §6b (assert data+0x2C==8, data+0x30==9).
+
+### Shared NDS (Gen 5, `claude/nds-shared-stack`, local only)
+- Commits: 5a7c45f5 (NDS-3), 4cd04812 (NDS-2), 0c680554, e2cb38e4 + 3c252ace (NDS-1), bfafb93b (NDS-4), 5cf43acb (NDS-5). NDS-6 composer in flight.
+- All Gen 4 requirements were sent and accepted.
+- Later commits: 4ff3e193 (abi asserts) and 9731330a (contract tightening that affects adoption: SitePin decodes the first instruction under the declared isa (`data=True` for literal sites); `continuation` is an absolute RAM address in a pinned container; autoload accessors return an AutoloadBlock).
+- **Adopt in ONE Gen 4 cut next session:** pk4.lua -> `pkm45_crypto`; hook_binding -> the residency contract. Then live receipts on HG/SS/hge.
+
+### Stop state (2026-10-02 16:37Z, owner timebox)
+- **Nothing in flight.**
+  - Codex card cx-b0f03f97 is complete and the lane released; its final audit is `C:/slink/g4/g1-aa45dd94-final.json` (24 cleanup records, originals unchanged).
+  - OMP 13112 and 21352 are idle, with all outcomes recorded. No Sonnet running.
+  - The only EmuHawk is foreign PID 45616 (Gen 2, gen2_frame_align.lua), untouched; PERF stays blocked while it runs.
+- **G1 is NOT qualified and NOT signed.** At `aa45dd94`:
+  - HG OPEN; hge FAIL (b, k); SS FAIL (b);
+  - all 4 row-o cells PASS;
+  - PERF OPEN.
+- **Next session, in order:**
+  1. **hge k:** fixed-frame RTC sampling. The red-first replay is staged in `.cache/gen4-next-cut/replay_hge_rtc_frame.py`.
+  2. **b/n prerequisites:** a battle route for hge/SS b; the PC withdraw leg (live Right+A trial, §6b); a queued-event-at-close witness.
+  3. **Shared NDS adoption cut:** pin `claude/nds-shared-stack` head **`b13c897f`** (`C:/slink-wt/nds-shared`; 12 commits over master 735dea38; 563 shared tests; NDS-1..6, with NDS-6 = `tools/nds_companions.py`). It brings the production residency fix. Gen 5's resume note: `docs/gen5/RESUME.md` checkpoint 4. Host composition rows in `server/**` and depth-1 lua stay for the batched G3a window (Gen 2 digest).
+  4. **C1 live canary** on the 4 KiB ITCM span (HG/SS/hge), then C2.
+  5. **PERF** on a quiet machine.
+  6. **Owner questions:** the FAILURE sound; whether C5 keeps a box arm.
+
+### Other
+- Spawned chip: the `tests/conftest.py` cross-drive relpath INTERNALERROR (shared file).
+- OMP peers 13112 and 21352 are idle with all outcomes recorded. Codex is running hge/row-o/SS until the 17:05Z launch guard.
+
+## Checkpoint 7 (2026-10-02 11:30 EDT, owner timebox: stop 13:31 EDT / 17:31Z)
+
+- **Companion C0 is DONE** (`9b5c7a25`).
+  - The pinned pret `ad7a3afa` rebuilds HG `4fcded0e` and SS `f8dc38ea` byte-identical on hgbox; the coordinator re-hashed both.
+  - The dumps are in `C:/slink-cache/gen4-pret/`.
+  - Consequence: no free static RAM. C1 must ALLOCATE the mailbox; the lead is the ITCM arena tail 0x01FF8620..0x02000000 (FEATURE_BAR, last section).
+- **hge identity** (`4b2d4144`):
+  - `start_menu.o` is static ARM9 and byte-identical in HG and hge.
+  - `gScriptCmdTable` differs only at #208; #486 is Dummy in both.
+- **In flight:**
+  - Codex: FROZEN `c935530b` G1 runs. The HG aggregate is offline-recovered (`g1probeHG-1033`): a,c,d,e,g,h,i,j,k,l,o PASS; b/f OPEN; m/n FAIL.
+  - Sonnet: C1 offline authoring (census + canary live watch).
+  - OMP 21352: cx-00760b09 (opcode-486 usage).
+  - OMP 13112: cx-23a2453d (sound id mapping).
+- **The next FROZEN cut bundles five items:**
+  1. hge census `internal_loads` wiring (a harness gap: nothing sets it; PLAN:272);
+  2. publish-before-assert, `test_gen4_probe_gates.py:1578`;
+  3. a bounded retry for `Path.replace` WinError 5 (`:1274`, `:1280`);
+  4. the fight recipe (a Codex diff, landed by the coordinator in the pack);
+  5. the HG reset-phase pin mismatch (path requested).
+  Then the a–n re-run, and PERF last.
+- **Gen 5 shared NDS:** cards 2-3 were reviewed and answered. Adoption waits for committed shas and for the end of the FROZEN runs.
+
+## Checkpoint 6 (2026-10-02 08:50 EDT, recovery after a machine crash, unrelated to the work)
+
+**Owner instruction:** "Stop at the next milestone." The milestone is the **G2 signature package**.
+
+**Post-crash recovery check (coordinator):**
+- HEAD is `c6977960`. `git rev-list --objects c8b7a99f..HEAD` shows no missing objects.
+- The owner saves and the SYNTH saves in `C:/slink/g4/saves` are intact.
+- The guide JSON parses.
+- No EmuHawk is running.
+- The pre-existing `.git/refs/heads/master (1)` (Drive conflict copy, dated Sep 23) is NOT ours and was left alone. The real master is `735dea38`.
+
+**Committed today (all verified: tests + ruff + `--check`; independent OMP reviews reconciled, each finding fixed or rejected with evidence):**
+
+| Commit | What |
+|---|---|
+| `997c4977` | Owner rulings: row i persistence-only; row c 0..2 frames |
+| `211b1625` + `9d6c8fbf` | SYNTH `party6` / `species` (hge forme ids refused, MAX_MON_NUM 1075) |
+| `a11831be` | Pace test fixes |
+| `20b03aea` + `3745647c` + `391b7df2` | Acquisition reachability: 61/61 sites `resolved` with cited story gates; CallStd modelled; hge member-3 paths flagged `inherits_unproven` |
+| `7dbc1cfc` | hge box dirty flag `0x1E004` (PHYSICAL PCDIFF) |
+| `b8150e11` | Pack `battle.d7` |
+| `3f5f447d` | SYNTH `place` + pack `field_save` offsets + d7/probe_field review fixes. **Packs FROZEN here.** |
+| `12a05f6e` | Receipts bind the evidence surface (`tools/gen4_evidence.py`), not HEAD; PC/hatch receipts carry counter + keys |
+| `5dba81b9` | PERF producer bound to the evidence surface |
+| `dbec8e7c`, `056dcf71`, `c6977960` | Client `lua/gen4/client.lua` steps 0-6 + review fixes: boolean D7 lease, party signature (792 to 116 reads/frame), fail-closed pre_pump, PartyExtra shift. **Client FROZEN here.** |
+| `970b2736` | `protocol_schema` `sync_retrieve_failed.reason` (shared test file; core/gen1/gen2 all send it) |
+| docs | `synth_place_save_layout.md` (its SavedMapObject offsets are superseded by `3f5f447d`); `new_game_route.md` (the waitButtonMode note is INVERTED: mode 0 waits for A, mode 1 auto-advances, per OMP cx-fa2be506; starter = 3×A, OVY_61 in the field child slot, trigger tile (8,4)) |
+
+**In flight at the crash: Codex "Gen4 Worker", card cx-42ec6089 Part 3. UNCOMMITTED in the worktree, intact; 315 offline tests green; ruff clean.**
+- Files: `tools/gen4_evidence.py`, `tools/gen4_routes.py`, `lua/tests/gen4_route_play.lua`, `lua/tests/probe_gen4_hooks.lua`, `tests/live/test_gen4_probe_gates.py`, `tests/unit/test_gen4_routes.py`.
+- Contains:
+  - row i persistence and row c 0..2 lag;
+  - control publish-before-assert (`control-reds.json`, `combined.txt`);
+  - the CONTROL_REDS set assert;
+  - the 7-key throttle model;
+  - `first_field_live_frame == 1`;
+  - a partial route-leg bridge.
+- Safety copy: the session scratchpad `codex_part3_wip_postcrash.patch`.
+
+**Next, to reach the milestone:**
+1. Codex finishes Part 3 and reports hashes; the coordinator commits. That commit is the FROZEN cut.
+2. Codex runs the bound landing re-runs, at most 2 lanes: PC deposit/SAVE/reload, catch and hatch on HG/SS/hge, plus faint on HG/hge (one-mon and 2-mon).
+3. The coordinator presents the G2 cell table (`G2_PRODUCER_PLAN.md` §6) for the owner signature, then STOPS.
+
+**G2 SIGNED 2026-10-02** (`docs/gen4/reviews/G2_SIGNATURE_2026-10-02.md`); ruling 35 accepted.
+- Landing runs at the frozen cut `c1123171`: 9 G2 cells PASS (see the package).
+- **G1 row o:** hge one-mon faint PASS, bound, verified by `consume_receipt` (`C:/slink/g4/g2faintHGE1-0932`).
+- **Not run (stopped at the milestone):** HG one-mon and two-mon faint, and hge two-mon faint. Preparation-only lanes `g2faintHG2-route-0932` and `g2faintHGE2-route-0936` are left on disk.
+- Codex: all 52 owned PIDs exited and the original saves are unchanged. A running EmuHawk at the stop (PID 41196) is a Gen 2 gate run from another lane; it was left alone.
+
+**Queued after the G2 re-runs** (it touches frozen surface files): OMP cx-3bab37d5's review of `3f5f447d`.
+1. **F1 MAJOR:** `place` never writes SavedMapObject `vecY` (+0x2C, the world height restored at `map_object.c:494-496`), and `--height` writes only `currentY`. Either refuse a cross-map place, or write `vecY`, and pin +0x2C in the tests.
+2. **F5:** the save_state cite should be `:365-374`.
+3. **F3:** derive the FieldSystem-level probe key set instead of hand-listing it.
+4. **F2:** the temp-flag branch is dead; the tests should assert reasons.
+5. **F4:** pin `bics`/`str` at +0x54/+0x58.
+6. **F6:** hgss map_objects 0x2348 IS summable (SOURCE+FILE).
+7. **F7:** there is no map-bounds gate.
+8. **F8:** read VAR_BASE/NUM_VARS from the pack.
+9. **F9:** document that all five Locations are written.
+
+**Also queued (client, G3):** OMP cx-09f09a39's review of `c6977960`.
+1. **F1 MAJOR:** the PartyExtra pack gap disables box_mon/party_mon/memorialize-from-party in production. Use a pret-sourced `PERFORMANCE_MAX = 5` plus array bounds instead.
+2. **F2:** bound `mons_off + 6*psize <= party_size`, and stride == 5.
+3. **F3:** a dropped key_change must be server-visible, not log-only, and needs a larger cap. NOT a HUD notice (owner rule: the HUD is player-facing only).
+4. **F4:** test the bounds.
+5. **F5:** the write-count test should be against span bytes, with a 6-mon fixture.
+6. **F6:** rename the read-budget test, and add a box-pass bound (~1080 reads).
+7. **F7:** party analogue of the box flags test.
+8. **F8:** on_reset should disarm the hook.
+9. **F9:** derive SIG_OFFS from pk4.
+10. **F10:** do not queue a "lease already used" event.
+11. **F11:** rename the test.
+
+**2026-10-02 afternoon:**
+- Step 1 fixes are committed: client r3 `c32ce7d2`, place/pack `c935530b`. **New FROZEN cut: `c935530b`**, which supersedes the c6977960 client freeze noted above.
+- Owner: keep HG and SS in the RC (not hge-only). hg-engine cannot build on SoulSilver as-is: the fork's Makefile gates on gamecode IPKE.
+- **Queued client minors (OMP cx-c01cf37c):**
+  - N2: a PartyExtra `off != base` override needs a cite.
+  - N3: `cite` should be validated, not a bare string.
+  - N4: delete the unreachable bound.
+  - N5: surface or drop the `d7_stray`/`refires` counters.
+  - N6: carry `new_species`/`new_nickname` on the queued key_change note.
+  - N7: relax the burst-count assertion.
+  - **Rejected:** N1, verified against the real hge fork.
+
+**G1 row o COMPLETE at FROZEN `c935530b`** (all verified with consume_receipt by the coordinator), all in `C:/slink/g4/`:
+
+| | One-mon | Two-mon |
+|---|---|---|
+| HG | `g1hg-one-1018` | `g1hg-two-1022` |
+| hge | `g1hge-one-1026` | `g1hge-two-1029` |
+
+Two-mon runs: replacement, slot 1 sent in, slot 0 zero in the save, no whiteout. Next: probe a–n per-case on HG/hge/SS, then PERF last on a quiet machine.
+
+**OWNER RULING 2026-10-02: ROM companion patch REQUIRED for the first Gen 4 RC, at the Gen 1/2 feature bar** (DECISIONS). This adds a companion workstream before G4, re-runs every PHYSICAL receipt on the patched ROMs, and coordinates with the Gen 5 shared NDS companion stack.
+
+**Open owner items:** ruling 35 at G2 (ACCEPTED). Deferred G3 work, not part of the milestone: the live client smoke test; the new-game route card; the physical boot check for `place`; the pack `party_off.extra` geometry the client needs before deposits work in production.
+
+
+## Checkpoint 5 (2026-10-01, end of the owner-timeboxed session)
+
+- **Worktree/branch:** `.claude/worktrees/gen4-support-framework-dfd5e2` on `claude/gen4-support-framework-dfd5e2`. It merged master `ea9c8a07` at `9033a7be`, and nothing has gone to master or been pushed. A master landing needs its own owner yes. `server/adapters/gen4_codec.py` is `server/**`, so ping Gen 2 at landing.
+- **Gates:**
+  - **G0** is SIGNED: `docs/gen4/reviews/G0_SIGNATURE_2026-10-01.md`.
+  - **G1** is PROVISIONALLY SIGNED (owner: "Consider all signatures signed for now"), recorded in `docs/gen4/reviews/G1_SIGNATURE_2026-10-01.md`. Its open rows are carried as work and were not converted to PASS.
+  - The session then worked toward **G2**.
+- **Owner rulings and standing rules** are all in `docs/gen4/reviews/DECISIONS_2026-10-01.md`:
+  - **D7 latency:** the faint lands at the end of the current turn, using the normal faint animation (the cmd-11 + FAINTED-bit seam; on hge, cmd 9).
+  - **Performance:** real play must hold 1x continuously. 1x is the native NDS 59.8261 fps plus host jitter. The design uses zero steady-state exec hooks, polls everything, and arms one on-demand hook for the D7 write.
+  - **SYNTH setup** is allowed for any row, provided it is disclosed (sidecar hash) and the behaviour under test runs natively.
+  - Up to two concurrent functional emulator lanes are allowed. PERF needs a quiet machine.
+- **Owner saves** (backed up in `C:/slink/g4/saves/`):
+
+  | Save | Trainer, TID |
+  |---|---|
+  | HG base | 26310 |
+  | SS | DDDD, 25944 |
+  | Pt | TTT, 44361 |
+  | hge A | OOO, 630 |
+  | hge B | JIII, 31846 |
+
+  D3, D4 and D15 are met. The hge ROM copies are `E:/Google Drive/SLink/hg-engine.nds` and `hg-engine-b.nds` (main checkout root, gitignored; both byte-identical to the pin `cb2dc435`, two names only so BizHawk keeps two saves). The pinned build is also at `.cache/gen4/hge/build-fc5175764983/test.nds`.
+
+### PHYSICAL evidence on this branch
+
+| Item | HG | SS | hge | Commit / receipts |
+|---|---|---|---|---|
+| Row o, in-battle linked faint, one-mon whiteout | PASS | n/a | PASS | `a15b7d74`, `0f75c938`, regression `ae0995dc` |
+| Row o, 2-mon replacement path (SYNTH party2) | PASS | n/a | PASS | `de7fc1b2`, hardening `7a234174`; PASS runs `C:/slink/g4/faint2/heartgold_seam_turnend_p2_201327`, `heartgold_seam_ufce_bit_p2_201242`, `_201440`, `heartgold_hge_seam_turnend_p2_201400`, `heartgold_hge_seam_ufce_bit_p2_201513` (`_201013`/`_201104` were OPEN pre-fix attempts) |
+| PC deposit, native SAVE, cold reload (row i box leg, G2 fixtures) | PASS | PASS | PASS | `02705ce5`, `01dd2bb3`, hardening `8db9c26f` |
+| Dirty-flag offset (HG 0x12004, hge 0x1E004) | measured | measured | measured | RAM: set by deposit, 0 after SAVE and load. The saved battery keeps 1 (`f426a76b`). |
+| Wild capture (SYNTH bag) | PASS | PASS | PASS | `6676a13b`, `2a43bfb6`, `76ec3bac`; `C:/slink/g4/catch/catch_203302`, `catch_hge/catch_203823`, `catch_ss/catch_204123` |
+| Egg hatch (SYNTH egg1) | PASS | PASS | PASS | `8db9c26f`, `76ec3bac`; `C:/slink/g4/hatch`, `hatch_hge`, `hatch_ss` |
+| 1x performance | 0-hook rows met the rule. The 1-hook row had p99 +2.2 ms, accepted under the G1 signature. | n/a | same | These receipts are refused by the hardened validator (`8b5047c2`), so they need a re-run at the current cut. |
+| G1 rows a, c–e, g, h | PASS in the `baseline` case of `C:/slink/g4/probe/shakedown-hg-ac0d70aa43` (cut `abf2b72c`); j–l passed only on the earlier cut `C:/slink/g4/probe/heartgold-0cc5b0ee2c21` | | | All of a–n need a re-run at the landing cut, on HG and hge. |
+
+### Committed G2 client modules
+
+These are offline and lupa-tested, with independent OMP reviews reconciled:
+
+| Module | What it does |
+|---|---|
+| `lua/nds/hook_binding.lua`, `lua/nds/phase_signals.lua` | Default cap of 1 hook, plus on-demand `request()` |
+| `lua/gen4/pk4.lua` | Record format, with torn-read and plausibility guards |
+| `lua/gen4/reads.lua` | Zero-hook battle chain, double-read |
+| `lua/gen4/poll_events.lua` | Wire events by polling; whiteout = the LOSE latch |
+| `lua/gen4/safety.lua` | Checkpoint predicate |
+| `lua/gen4/entry.lua` | Hash admission plus anchor floor |
+
+Supporting tools and data:
+- Packs: `data/games/gen4_*/profile.json`. They hold battle, enums, route_legs, phase_cases, diagnostic sites and admission anchors.
+- G2 data: area map, encounters, trainers, acquisition (HGSS + hge) and names. The hge acquisition proves script bytecode and source-level dispatch (`34efe45f`).
+- `tools/gen4_synth_save.py`, with kinds party2, bag and egg1. The bag writer refuses an unverified layout: it checks pocket classes (vanilla from pret, hge from the fork) and contiguity (`36f9cec3`, `8637544c`).
+- `tools/gen4_routes.py`, with targets battle, pc and hatch and the Pokégear errand, for HG, SS and hge.
+- The producer plan, with its G2 checklist: `docs/gen4/G2_PRODUCER_PLAN.md`.
+
+### Next actions
+
+1. Commit or reconcile anything listed under "In flight at stop" below.
+2. Re-run gen4-PERF at the current cut:
+   - Set `SLINK_GEN4_<TITLE>_SAVE` and the `_STATE` env vars.
+   - Run on a quiet machine, so the run is not concurrent with Gen 3 duo runs.
+   - Row f stays OPEN until a bundle binds the current HEAD.
+3. **G1 rows a–n.** The HG shakedown at `abf2b72c` (`C:/slink/g4/probe/shakedown-hg-ac0d70aa43`) PASSed a, c, d, e, g and h in its `baseline` case. `patched-rom` (j: ROM hash differs) and `rtc-unpinned` (c: unpinned core settings) are targeted control reds (OMP cx-9265e740). `no-buttons` l FAILs with "buttons-only CONTINUE failed". `party-write` FAILs every row because its CONTINUE never reached the overworld: that is the PC-facing boot defect fixed in `c5cca903`, NOT a control. The wrapper does not yet assert expected control reds. g PASSes in every case. and `profile.rtc` has landed (`5e232930`). Two gaps in the C1-1 gate wrapper (`tests/live/test_gen4_probe_gates.py`) block a full pass:
+   - It does not bridge the route tool's legs (`gen4_routes:battle_settled` and the PC legs). Without that, rows b, m and n cannot run.
+   - FIXED in `c5cca903` (Codex): the SYNTH identity check now accepts the clone in the party OR the boxes. The same commit stops the probe boot pulsing A/Start once the field is live; a PC-facing save used to open the PC.
+
+   - **Boxed persistence retry at `bf58a7c8`** (Codex, `C:/slink/g4/probe/shakedown-hg-ac0d70aa43/boxed-fix/observation.json` plus a per-case `receipt.txt`):
+     - **Boot fix PHYSICAL:** HG reached the overworld (`overworld=true`, boot_frame 1024) in all 5 cases: party-write, no-write, box-write, box-no-dirty and cold-reload.
+     - **All four native SAVE traces** ran idle → active 2..7 → idle, with `Save_WriteManFinish` hit once; the newer banks decode coherently.
+     - **Row i is a measured FAIL of its oracle premise.** A box write persists across SAVE and reload **even without the dirty flag**: original 70, target 71, with dirty 71, without dirty also 71. The party leg behaves as expected (written 19, no-write 20, cold reload 19).
+       - Decide next session whether row i should require the dirty flag at all. A native SAVE appears to write the whole PC regardless.
+       - No rerun of the unchanged row i, and no threshold relaxation.
+     - **Row c, measured discrepancy:** on PC-derived input, the first residency changes land 2 frames after the pinned `HandleLoadOverlay` causes (id0 at f222 vs 220, id38 at f231 vs 229). `census_ok` allows 0..1. Native-stock baseline c PASSes. Decide whether the tolerance should be 2, from this measurement, not by guess.
+   - HG only so far. SS and hge are UNRUN under the HG-only lane grant.
+
+   After the route-leg bridge, run a–n on HG and hge at the landing cut.
+4. G2 remainder, per `docs/gen4/G2_PRODUCER_PLAN.md`:
+   - The client card: `lua/gen4/client.lua` composing lua/core, with key_change / D11 wiring and the gift_area classifier. Build from the OMP design in `docs/gen4/reviews/CLIENT_DESIGN_PROPOSAL_2026-10-01.md` (steps 0–6, each with a falsifier). N2 is SETTLED (OMP cx-de3446b7, coordinator-verified): a client-side completion latch with no `lua/core` change. The armed hook is a one-frame lease that each `battle_write` call renews, and an unrenewed frame disarms it in `pre_pump`. That covers the core paths that hold or retire an entry without asking the driver (`session.lua:182-192`). See the proposal doc's "N2 research" section.
+   - The priority order for the rest is in `G2_PRODUCER_PLAN.md` §6a.
+   - SYNTH `place` and `species` kinds for statics and gifts.
+5. **Standing rule, the receipt-binding class** (flagged by three OMP reviews: cx-97ce7f50, cx-33981fc1, cx-9661fc31):
+   - Already DONE: consumers bind at consumption. That covers `committed_cut` in `test_gen4_probe_gates.py` (`a11d87a0`); faint `consume_receipt` with modules and ROM (`52136900`, `b2784f1b`); and route/catch `verify_receipt` by kind, full module set, script and ROM (`abf2b72c`, `1bbc1f88`).
+   - Re-run the lanes at the landing HEAD.
+   - **Refinement (OMP cx-50ff7abe):** bind the *evidence surface*, not the repository position. Hash the probe's full dependency set, mirroring `committed_modules()` in `tests/live/test_gen4_perf.py`: `lua/json_codec.lua`, `lua/hook_registry.lua`, `lua/gen4/*`, `lua/nds/*` and the packs it reads. Refuse when any of those changed. `source_head` becomes informational, so a docs-only commit no longer stales receipts while a dependency edit does. Apply this to every consumer: `committed_cut` in `test_gen4_probe_gates.py`, `consume_receipt` in `test_gen4_battle_faint.py`, and `verify_receipt` in `tools/gen4_routes.py`.
+   - Catch judge branch tests are done (`abf2b72c`).
+   - Receipts on disk from before `1bbc1f88` / `b2784f1b` now read STALE by design: they lack the module sets and the kind binding (some, such as `catch_203302`, already carry title and rom_sha1). That covers `C:/slink/g4/route_pc*`, `catch*`, `hatch*` and `faint*`. Treat them as superseded behaviour evidence until the landing re-run.
+   - Tidy-up: hoist `from tools import gen4_pins` to module scope in `tools/gen4_routes.py` (two module identities coexist; OMP cx-421a1f56 N1).
+6. **Small pack fixes:** DONE in `49ca5e35`: Pt has its own rtc caveat, the ARM9 byte provenance is labelled and the battle evidence cites its owning structs. Follow-up (OMP cx-b6e028df P5): also pin `VSyncThrottle`/`SuperHawkThrottle` false in `PACE_1X`, if receipts are to claim "clock throttled" exactly.
+7. Owner items:
+   - Ruling 35: the server force-faints a traded-in mon that breaks an enabled clause. Present it at G2.
+   - A separate session asked whether Gen 4 will require a ROM companion patch. No Gen 4 patch exists, and requiring one is an owner decision.
+
+### Workers and peers
+
+- **Codex:** the "Gen4 Worker" thread. An off-task status line was seen once, but the OMP review found no off-task content in its work.
+- **OMP:** live peers 27808, 39632 and 5212. **Never** use the Gen 3 SLink-RR* peers.
+- **Sonnet subagents:** up to 3.
+- **Ledger:** the sole guide is `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (the gen4-* cards).
+
+### In flight at stop
+
+Session stopped at the owner timebox (2026-10-01, 22:09 EDT). HEAD is at the end of the `c8b7a99f..` range, below.
+
+- **Nothing in flight.** Codex is frozen and has released the lane. All OMP cards are reconciled, with outcomes recorded. The working tree is clean.
+  - The last OMP card, cx-600a3abc (the node-8 path: 0x97 → state 2), is recorded in `G2_PRODUCER_PLAN.md` §6b.
+- **EmuHawk:** PID 32580 was running at the stop and is NOT ours. Codex's PIDs all exited, and the coordinator launched none. It was left alone.
+- **This session's commits (`c8b7a99f..HEAD`):**
+  - pack wording `49ca5e35`
+  - pace pins `31c7fa9d` and `b943f588`
+  - probe boot fix / boxed SYNTH `c5cca903`
+  - `first_field_live_frame` `d15438ef`
+  - control-red assertion + boot tests `4e7bf0f9`
+  - docs `204d55d7`, `220b93f9`, `bf58a7c8`, `d970ea6e`, `35b786de`
+- **Live evidence this session:** `C:/slink/g4/probe/shakedown-hg-ac0d70aa43/boxed-fix/observation.json` (at `bf58a7c8`, HG only). See next action 3.
+- **Decisions waiting for the owner or the next session:**
+  1. **Row i premise.** A box write persisted WITHOUT the dirty flag. Should row i still require the flag?
+  2. **Row c tolerance.** The 2-frame residency lag on PC-derived input against `census_ok` 0..1.
+  3. **Ruling 35**, at G2.
+  4. **The ROM-patch question** from the other session.
+- **Design inputs ready for the client card:** `docs/gen4/reviews/CLIENT_DESIGN_PROPOSAL_2026-10-01.md`:
+  - N2 is settled as a client lease, with the guard in the callback; framecount −1 still needs a live confirm.
+  - The idle predicate is settled, with no new pack data.
+  - F2 is closed.
+
+### Row b coverage (OMP cx-6c26d2e1, coordinator-checked against the receipts)
+- HG b is OPEN (it got the owning-overlay faint hit; the wrong-overlay collision is unobserved). hge/SS b FAIL at an earlier gate: no faint hit at all.
+- The cause is the run SCENARIO (`SLINK_GEN4_PROBE_SCENARIO`): it replaced the pack route with an indoor PC-SAVE subset for hge/SS. The hge/SS packs already carry the full battle route and the four phase cases.
+- **Fix (next cut, no code):** run hge/SS with a scenario that keeps the pack route, from an OUTDOOR save. hge: `saves/hge_a_OOO_630.SaveRAM` @ m60 (676,397). SS: `gen4_routes.py plan --game SS` (coordinator, 2026-10-02): the owner save `ss_DDDD_25944` starts OUTDOORS at m60 (687,397) and reaches grass m33 (665,404) on R29 in 29 tiles / 3 segments, so the pack battle route works natively.
+- Commit the scenario files (path + sha256) so the narrowing stops living only in receipt text.
+- The best outcome for hge/SS b is OPEN, not PASS: the collision row is unobserved on HG too.
+- SS row o needs its own route lane + harness entry (`test_gen4_battle_faint.py:56` PACK lacks soulsilver).
+
+### EVIDENCE CAVEAT + RULE (Codex disclosure, 2026-10-02)
+- **What happened:** the hge/SS a–n receipts (c935 `g1probeHGE-1058`, 6290 `g1bprobeHGE-1135`, aa45 `g1cprobeHGE-1215`/`g1cprobeSS-1227`, feb6 `g1dprobeHGE-1417`/`g1dprobeSS-1425`) were produced by a host harness that overrode `scenario_input` (route: []) and `phase_case_plan` IN-PROCESS, from tool-executed text that is not in the repo.
+  - The committed `test_gen4_probe_gates.py` hash in each receipt is correct, but the runtime behaviour was narrowed by uncommitted code. The narrowing is disclosed in the receipt reasons ("indoor native PC-SAVE fixture...").
+  - The effective configs are each run's `*/probe.json`.
+  - OMP cx-6c26d2e1 F5 ("not producible by this tree's code") was therefore essentially RIGHT. The coordinator's rejection of it is withdrawn.
+- **Status of those rows** (the FROZEN `108c025d` run is the first outside this caveat): their PASS rows stand as disclosed per-case evidence. They are NOT qualification evidence for the coverage the overrides removed: b, m, n and the phase cases on hge/SS.
+- **RULE from now on:** no in-process overrides of harness functions in any receipt-producing run. Every narrowing is a COMMITTED scenario file (path + sha256 bound in the receipt), and a scenario may only omit fields so the pack defaults hold. Codex's next-cut plan adopts this: committed scenario files, native OUTDOOR baseline saves, a separate PC-deposit/SAVE descendant for row i only, no `phase_case_plan` suppression.
