@@ -306,3 +306,32 @@ CLAIMS: [{"path":"E:/Google Drive/SLink/.cache/slink-upr/src/com/dabomstew/pkran
   other pair, and presented slots carry `effective_species_id`.
 * Verified: 48 runs (24 overlay seeds through `prepare_pair`, 24 release seeds through `randomize` + the same
   checks), all checks pass, all 46 variant records placed, all-off byte-identical on both ROMs. The jar is UNPINNED.
+
+## Update (2026-10-04, jar cut worker): the jar is cut and PINNED once (patches 0001-0021)
+
+* **Jar:** `PokeRandoZX.jar` sha256 `f3a10dd744ff0ecb5834a0559c4e165c5eab9802bf8eda6521ce66c6c71f08ab`, built by
+  `tools/build_upr_fork.py --bootstrap` (v4.6.1 + `patch/upr/0001..0021`, JDK 17 `--release 8`) and pinned in
+  `data/upr_jars.json` as "SLink fork, built 2026-10-04 (patches 0001-0021; PokeRandoZX.jar)" (one added entry,
+  additive: every older jar stays pinned). Kept at `F:/slink-work/cache/polished/jar/PokeRandoZX.jar`.
+* **Reproducibility:** the sha256 is NOT byte-reproducible (the build tool's own docstring: `jar` stamps file times), but
+  the content is: all 392 entries of the official build have the same names and CRC-32s as the scratch
+  `PokeRandoZX-forms-final.jar` (sha256 `0e2fe51d...`), and of a rebuild from the series with the stray jar removed
+  (below). Pin the jar that was tested, never a rebuild.
+* **Delta against the previous pin (0015, `db4bc65c...`):** added `polished_offsets.ini` and the seven
+  `PolishedCrystalRomHandler`/`PolishedConstants` classes; changed only `CliRandomizer.class` and
+  `NewRandomizerGUI*.class` (the handler registered between Gen 2 and Gen 3); every other class and EVERY non-class
+  resource (`gen1_offsets.ini`, `gen2_offsets.ini`, `gen3_offsets.ini`, the `.ips` files) is byte-identical.
+* **Unchanged families, measured:** the same seeded driver (CLI handler chain, fixed seeds) over the old and the new jar,
+  13 ROMs x {all-off, random-all x 2 seeds} = 39 runs: Red, Blue, Yellow, pureRed/Blue/Green, pureRed overlay,
+  FireRed, LeafGreen, Emerald, Crystal, Gold, Silver. 39/39 output ROMs byte-identical (sha1) and the 36 logs equal
+  but for the `Time elapsed` line; the all-off pureRGB runs are `out == in`. `isLoadable` also leaves every one of
+  those to its old handler (the Polished factory claims only the release and the overlay). Through
+  `upr_pipeline.prepare_pair` with the new jar: pureRGB overlay, FireRed+LeafGreen, Emerald and Polished overlay all
+  pass their content checks and write-domain audits.
+* **Gen 3 write-domain models are pinned to ONE jar sha** (`jar_sha256` in `data/games/gen3_{frlg,emerald}/upr_write_domains.json`,
+  checked by `upr_gen3_write_domain.check_output`): installing this jar as `.cache/slink-upr/PokeRandoZX.jar` needs both
+  models regenerated, as at every earlier cut. Regenerated from the new jar, each model equals the committed one with only
+  `jar_sha256` swapped (0015 reproduces the committed models byte-for-byte), so the re-pin is that one line per file.
+* **Defect found in the committed series:** `0021-...patch` also adds a stray 1.1 MB binary `PokeRandoZX-forms.jar` at the
+  fork root (outside `src/`, so it is not in the jar). A cleaned 0021 (3 files, 30 KB) builds a CRC-identical jar.
+* **Held:** `POLISHED_RANDOMIZER_ENABLED` stays False; the flip is prepared as patch files, not applied.
