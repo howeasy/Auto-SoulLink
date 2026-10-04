@@ -1029,3 +1029,14 @@ plus one SYNTH event flag (EVENT_GAVE_MYSTERY_EGG_TO_ELM, `wEventFlags+4` $00 ->
 YES/NO prompt and talk-start stacks share the same bank-$25 tail; text printing gives 167 distinct stacks over 249 samples
 (not fingerprintable). The idle-overworld constant (`$516B` at sp+12) does not hold inside the script; inside it the
 stable tail is `$62B5/$515F/$50E2`.
+
+
+---
+
+## Coordinator note (2026-10-05): the snapshot preimage is 70 bytes, NOT 75
+
+Withdraws the "53 + 11 + 11 = 75" statement in section 8.2 and the earlier coordinator note. The snapshot is built from PARTY structs
+(`patch/gen2/src/trade_snapshot.asm:19` copies `PARTYMON_STRUCT_LENGTH`; the asm asserts it is 48 at `:4`), and Polished's party struct is
+48 bytes (`wPartyMon1 01:dcd6` .. `wPartyMon1End 01:dd06`), so the preimage is 48 + 11 + 11 = 70 bytes; the 53-byte trademon is the STAGED struct
+(`wPlayerTrademon 00:c51c`..`00:c551`), a different thing. What does differ is which bytes Polished legitimately rewrites on a trade (personality
+word +20, form word +21): T4 stays open as a re-derivation of that mutation list, not a size change. Verified by the coordinator against the sym.
