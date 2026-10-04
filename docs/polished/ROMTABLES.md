@@ -198,6 +198,106 @@ Two things must change outside `rom.lua`: `reads.lua`'s constants (§4.2) and th
 wild-slot decoder that consumes `Rom` output, since a Polished slot now yields a
 `(species, form)` pair rather than a bare species.
 
+## 8. Open items settled
+
+### 8.1 `probabilities()` — **fails on Polished, proven**
+
+`data/wild/probabilities.asm` in Polished is `table_width 1`: a bare cumulative
+threshold per slot, no index. Vanilla's is `table_width 2` with
+`MACRO mon_prob: db \1, \2 * 2` — `(percent, slot offset)`.
+
+ROM proof. `GrassMonProbTable` `0c:4235` flat `0x30235`, 7 bytes:
+`1e 3c 50 5a 5f 62 64` = **30, 60, 80, 90, 95, 98, 100** — matching the source comments
+30/30/20/10/5/3/2 exactly. `WaterMonProbTable` flat `0x3023C`, 3 bytes:
+`3c 5a 64` = **60, 90, 100**.
+
+`rom.lua:113` reads `byte(entry.flat + index * 2)` and `byte(entry.flat + index * 2 + 1)`
+and asserts at `:115` that the second byte is `even` and `< slots * 2` (= 14). On Polished
+entry 0 the pair is (30, **60**) and `60 < 14` is false — **the assert fires on the very
+first entry**. It is not a silent misread; it refuses. Conclusion: **does not work
+unchanged**; it needs a `width == 1` branch (thresholds only, index implied by position).
+
+### 8.2 `roamers()` — **fails on Polished, proven**
+
+`rom.lua:275-291` recognises exactly four opcodes: `0x3e` (`ld a, imm`), `0xaf`
+(`xor a`), `0xea` (`ld [abs], a`), `0xc9` (`ret`); anything else raises
+`"unsupported roamer initializer opcode "`.
+
+`InitRoamMons` is `0c:437d` flat `0x3037D`; `CheckEncounterRoamMon` is `0c:43aa` flat
+`0x303AA`. The 45 bytes in between:
+
+```
+3e f3 ea bc df | 3c ea c7 df | 3e 28 ea bd df | ea c8 df | 3e 02 ea be df
+3e 05 ea bf df | 3e 04 ea c9 df | 3e 0e ea ca df | af ea c0 df | ea cb df | c9
+```
+
+The `3c` at offset 5 is **`inc a`** — Polished asserts `RAIKOU + 1 == ENTEI` at
+`engine/overworld/wildmons.asm:689` and derives Entei's species with `inc a` rather
+than a second immediate. `0x3c` is not in the vanilla vocabulary, so `roamers()` raises
+on byte 5. **Fails, and fails loudly.**
+
+`RoamMaps` `0c:44bd` flat `0x304BD` is new (vanilla has no equivalent table).
+`data/wild/roammon_maps.asm` emits `MACRO roam_map: map_id, db _NARG-1, <ids…>, db 0` —
+variable width per entry. Decoding from the ROM until a `map_id == 0` terminator gives
+**12 entries**, ending at flat `0x30708`. First 24 bytes: `18 03 02 1a 01 05 09 00 1a 01 02 18 03 1a 02 00 1a 02 03 1a 01 0a 01 04`.
+
+### 8.3 Box-struct constants — the vanilla asserts do not apply
+
+| Assert | Vanilla | Polished | Source |
+|---|---|---|---|
+| `BOXMON_STRUCT_LENGTH` | 32 | **49** | `constants/pokemon_data_constants.asm:231` `SAVEMON_STRUCT_LENGTH`; NEWBOX.md uses `49*(e-1)` for `sBoxMons1A` etc. |
+| `BOX_LENGTH` | 1104 | **660** (`0x294`) | NEWBOX.md: `sNewBoxEnd` = `01:B378` (`.sym:49793`), each copy 660 bytes |
+| `EGG` | 253 | **UNVERIFIED** | `CANCEL EQU -1` (`:320`) is `$FF`, not an egg species; not derived |
+| `PARTYMON_STRUCT_LENGTH` | 48 | **48** | `:185` — same length, different field order (RAM.md) |
+| `MONS_PER_BOX` / `NUM_BOXES` | 20 / 14 | **20 / 20** | `:298`, `:304` |
+
+**Recommendation: drop these four asserts from the Polished path.** `reads.lua:60-70`
+asserts a *box geometry* that Polished replaces wholesale — 49-byte records, 660-byte
+boxes, three box banks plus a new-box region, 20 boxes. Keeping the asserts would mean
+maintaining a second set of vanilla-shaped numbers for a game that has neither. They
+belong to `reads.lua` (the vanilla path C-ROMTABLES replaces), not to the ROM-table
+reader, so the correct move is: **leave `reads.lua` alone, and give the Polished client
+its own constants block sourced from `SAVEMON_STRUCT_LENGTH` / NEWBOX.md.**
+
+### 8.4 `num_roammon_maps` / `roamer_count` — settled
+
+`num_roammon_maps` = **12** (decoded from the ROM, §8.2). `roamer_count` = **2**:
+`wRoamMon1Species` and `wRoamMon2Species` both exist, and `InitRoamMons` writes exactly
+two HP bytes (`af ea c0 df` / `ea cb df`).
+
+### 8.5 Which count a box reader uses — **291, not 289**
+
+Three numbers, three jobs:
+
+| Number | Meaning | Use |
+|---|---|---|
+| **291** (`NUM_SPECIES`, `pokemon_constants.asm:317`) | every valid internal species id | **validation bound** for a box record's species byte |
+| 289 (`NUM_POKEMON`, `:318`) | ids with the high bit clear — `NUM_SPECIES - 2*HIGH(NUM_SPECIES)` | never a validation bound; it silently rejects ids 289-291 |
+| 334 | `BaseData` records = species + non-cosmetic variants | **base-stats lookup only**; record index ≠ species id |
+
+A box record stores `SAVEMON_SPECIES` (1 byte, `LOW`) plus the form byte, so the reader
+must accept `LOW(species)` in 1..291 and reconstruct
+`species9 = LOW | ((form & 0x20) << 3)`. Using 289 as the bound would reject three
+legitimate species; using 334 would let a corrupt record through. **`num_boxes * capacity`
+must be multiplied by 49, not 32** — a box-block reader that assumed 32 would misalign
+every record after the first.
+
+## 9. Summary table
+
+| Reader | Reusable with a `layout` block? | Exact profile keys to add |
+|---|---|---|
+| `probabilities()` | **yes**, with a `width` branch (1 vs 2) | `GrassMonProbTable` `0c:4235`/`0x30235`, `WaterMonProbTable` `0c:423c`/`0x3023C`, `prob_width` 1, `num_grassmon` 7, `num_watermon` 3 |
+| `wild()` grass | **yes**, fully data-driven | 4 grass table keys + `wild_grass_row` 68, `wild_slot` 3, `map_bytes` 1, `species_bytes` 2 |
+| `wild()` water | **yes**, fully data-driven | 4 water table keys + `wild_water_row` 12, `wild_slot` 3 |
+| `tree()` maps | **yes** | `TreeMonMaps` `2e:4483`/`0xB8483`, `RockMonMaps` `2e:4505`/`0xB8505`, `tree_map_row` variable (`map_id, count, ids…`) |
+| `tree()` slots | **yes** | `TreeMons` `2e:4701`/`0xB8701`, `tree_slot` 4, `num_treemon_sets` 10, `treemon_set_rock` |
+| `fishing()` | **yes** | `FishGroups` `24:6213`/`0x92213`, `fish_group_header` 8, `fish_slot` 4, `num_fishgroups` 17, `num_time_fishgroups` 0 (drop the `TimeFishGroups` read entirely) |
+| `roamers()` | **no** — needs an `inc a` opcode (`0x3c`) and a `RoamMaps` walk | `InitRoamMons` `0c:437d`/`0x3037D`, `CheckEncounterRoamMon` `0c:43aa`/`0x303AA`, `RoamMaps` `0c:44bd`/`0x304BD`, `num_roammon_maps` 12, `roamer_count` 2 |
+| `base_stats()` | **yes**, but assert must go | `BaseData` `11:4b18`/`0x44B18`, `base_stats_stride` 34, `base_tmhm_offset` 20, `base_data_records` 334, `species_count` 291 |
+
+**Net: seven of eight readers are fixable with a `layout` block; only `roamers()` needs
+new control flow.**
+
 ```json
-CLAIMS: [{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":36,"expect":"assert(count == 251 and stride == 32"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":109,"expect":"local function probabilities("},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":124,"expect":"function self.wild()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":161,"expect":"function self.tree()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":219,"expect":"span(entry.flat, groups * 7, bank_end(entry), \"FishGroups\")"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":214,"expect":"function self.fishing()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":255,"expect":"function self.roamers()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":87,"expect":"function self.base_stats(id)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":92,"expect":"assert(byte(flat) == id, \"base stats species does not match record\")"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":137,"expect":"local map = map_at(cursor)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":225,"expect":"local threshold, id, lev = byte(cursor), byte(cursor + 1), byte(cursor + 2)"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":60,"expect":"PARTYMON_STRUCT_LENGTH=48"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":62,"expect":"NUM_POKEMON=251, EGG=253"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":61,"expect":"MONS_PER_BOX=20, NUM_BOXES=14"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":67,"expect":"party_struct_size=\"PARTYMON_STRUCT_LENGTH\""},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":70,"expect":"species_count=\"NUM_POKEMON\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2086,"expect":"\"BaseData\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2106,"expect":"\"GrassMonProbTable\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2101,"expect":"\"FishGroups\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2176,"expect":"\"TimeFishGroups\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2186,"expect":"\"TreeMons\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2161,"expect":"\"RockMonMaps\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":2156,"expect":"\"RoamMaps\""},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":240,"expect":"\"base_stats_stride\": 32"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":249,"expect":"\"num_fishgroups\": 13"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":253,"expect":"\"num_treemon_sets\": 8"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":248,"expect":"\"num_boxes\": 14"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":259,"expect":"\"species_count\": 251"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":250,"expect":"\"num_grassmon\": 7"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":34,"expect":"DEF BASE_TMHM        rb (NUM_TM_HM_TUTOR + 7) / 8"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":35,"expect":"DEF BASE_DATA_SIZE EQU _RS"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":185,"expect":"DEF PARTYMON_STRUCT_LENGTH EQU _RS"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":298,"expect":"DEF MONS_PER_BOX    EQU 20"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":304,"expect":"DEF NUM_BOXES       EQU (MONDB_ENTRIES * 2 - MIN_MONDB_SLACK) / MONS_PER_BOX ; 20"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_constants.asm","line":318,"expect":"DEF NUM_POKEMON EQU NUM_SPECIES - (2 * HIGH(NUM_SPECIES)) ; 121"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_constants.asm","line":320,"expect":"DEF CANCEL EQU -1"},{"path":"F:/slink-work/cache/polished/src/constants/battle_constants.asm","line":7,"expect":"DEF NUM_MOVES EQU 4"},{"path":"F:/slink-work/cache/polished/src/constants/text_constants.asm","line":5,"expect":"DEF MON_NAME_LENGTH    EQU 11"},{"path":"F:/slink-work/cache/polished/src/constants/battle_constants.asm","line":110,"expect":"const BATTLETYPE_FISH"},{"path":"F:/slink-work/cache/polished/src/constants/battle_constants.asm","line":111,"expect":"const BATTLETYPE_TREE"},{"path":"F:/slink-work/cache/polished/src/constants/battle_constants.asm","line":115,"expect":"const BATTLETYPE_GHOST"},{"path":"F:/slink-work/cache/polished/src/macros/data.asm","line":89,"expect":"MACRO? dp ; db species, extspecies | form"},{"path":"F:/slink-work/cache/polished/src/macros/data.asm","line":91,"expect":"db LOW(\\1), HIGH(\\1) << MON_EXTSPECIES_F | \\2"},{"path":"F:/slink-work/cache/polished/src/macros/asserts.asm","line":79,"expect":"map_id \\1"},{"path":"F:/slink-work/cache/polished/src/data/pokemon/base_stats/bulbasaur.asm","line":1,"expect":"db  45,  49,  49,  45,  65,  65"},{"path":"F:/slink-work/cache/polished/src/data/wild/bug_contest_mons.asm","line":21,"expect":"ContestMonsEnd:"},{"path":"F:/slink-work/tmp/upr-fork-b/check_wild.py","line":71,"expect":"p += 4"},{"path":"F:/slink-work/tmp/upr-fork-b/check_wild.py","line":20,"expect":"NUM_SPECIES = 291"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":11989,"expect":"11:4b18 BaseData"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":22504,"expect":"24:6213 FishGroups"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":23048,"expect":"25:58b4 ContestMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8442,"expect":"0c:46e8 JohtoGrassWildMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8524,"expect":"0c:5c6d JohtoWaterWildMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":27930,"expect":"2e:4701 TreeMons"}]
+CLAIMS: [{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":36,"expect":"assert(count == 251 and stride == 32"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":109,"expect":"local function probabilities("},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":113,"expect":"local threshold, offset = byte(entry.flat + index * 2), byte(entry.flat + index * 2 + 1)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":115,"expect":"assert(offset % 2 == 0 and offset < slots * 2 and not seen[offset],"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":124,"expect":"function self.wild()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":137,"expect":"local map = map_at(cursor)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":161,"expect":"function self.tree()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":177,"expect":"row.set_id = integer(byte(cursor + 2)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":219,"expect":"span(entry.flat, groups * 7, bank_end(entry), \"FishGroups\")"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":214,"expect":"function self.fishing()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":255,"expect":"function self.roamers()"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":275,"expect":"local opcode = byte(cursor)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":276,"expect":"if opcode == 0x3e then"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":279,"expect":"elseif opcode == 0xaf then"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":281,"expect":"elseif opcode == 0xea then"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":287,"expect":"elseif opcode == 0xc9 then"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":291,"expect":"error(\"unsupported roamer initializer opcode \" .. opcode)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":87,"expect":"function self.base_stats(id)"},{"path":"F:/slink-work/wt/polished/lua/gen2/rom.lua","line":92,"expect":"assert(byte(flat) == id, \"base stats species does not match record\")"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":60,"expect":"PARTYMON_STRUCT_LENGTH=48"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":62,"expect":"NUM_POKEMON=251, EGG=253"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":61,"expect":"MONS_PER_BOX=20, NUM_BOXES=14"},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":67,"expect":"box_struct_size=\"BOXMON_STRUCT_LENGTH\""},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":69,"expect":"sram_box_stride=\"BOX_LENGTH\""},{"path":"F:/slink-work/wt/polished/lua/gen2/reads.lua","line":70,"expect":"egg_species=\"EGG\""},{"path":"F:/slink-work/cache/polished/src/data/wild/probabilities.asm","line":1,"expect":"GrassMonProbTable:"},{"path":"F:/slink-work/cache/polished/src/data/wild/probabilities.asm","line":12,"expect":"WaterMonProbTable:"},{"path":"F:/slink-work/cache/polished/src/data/wild/probabilities.asm","line":2,"expect":"table_width 1"},{"path":"F:/slink-work/cache/polished/src/data/wild/probabilities.asm","line":10,"expect":"assert_table_length NUM_GRASSMON"},{"path":"F:/slink-work/cache/polished/src/data/wild/probabilities.asm","line":17,"expect":"assert_table_length NUM_WATERMON"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/data/wild/probabilities.asm","line":1,"expect":"MACRO mon_prob"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/data/wild/probabilities.asm","line":3,"expect":"db \\1, \\2 * 2"},{"path":"E:/Google Drive/SLink/.cache/pret/pokecrystal/data/wild/probabilities.asm","line":7,"expect":"table_width 2"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":683,"expect":"InitRoamMons:"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":689,"expect":"assert RAIKOU + 1 == ENTEI"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":691,"expect":"ld [wRoamMon2Species], a"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":717,"expect":"CheckEncounterRoamMon:"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":699,"expect":"ld a, GROUP_ROUTE_42"},{"path":"F:/slink-work/cache/polished/src/engine/overworld/wildmons.asm","line":711,"expect":"xor a ; generate new stats"},{"path":"F:/slink-work/cache/polished/src/data/wild/roammon_maps.asm","line":4,"expect":"MACRO roam_map"},{"path":"F:/slink-work/cache/polished/src/data/wild/roammon_maps.asm","line":6,"expect":"db _NARG - 1"},{"path":"F:/slink-work/cache/polished/src/data/wild/roammon_maps.asm","line":10,"expect":"db 0"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":231,"expect":"DEF SAVEMON_STRUCT_LENGTH EQU _RS"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":189,"expect":"DEF SAVEMON_SPECIES            rb"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":185,"expect":"DEF PARTYMON_STRUCT_LENGTH EQU _RS"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":298,"expect":"DEF MONS_PER_BOX    EQU 20"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":304,"expect":"DEF NUM_BOXES       EQU (MONDB_ENTRIES * 2 - MIN_MONDB_SLACK) / MONS_PER_BOX ; 20"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":35,"expect":"DEF BASE_DATA_SIZE EQU _RS"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":357,"expect":"DEF NUM_GRASSMON EQU 7"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_data_constants.asm","line":358,"expect":"DEF NUM_WATERMON EQU 3"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_constants.asm","line":317,"expect":"DEF NUM_SPECIES EQU const_value - 1 ; 123"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_constants.asm","line":318,"expect":"DEF NUM_POKEMON EQU NUM_SPECIES - (2 * HIGH(NUM_SPECIES)) ; 121"},{"path":"F:/slink-work/cache/polished/src/constants/pokemon_constants.asm","line":320,"expect":"DEF CANCEL EQU -1"},{"path":"F:/slink-work/cache/polished/src/macros/data.asm","line":89,"expect":"MACRO? dp ; db species, extspecies | form"},{"path":"F:/slink-work/cache/polished/src/macros/asserts.asm","line":79,"expect":"map_id \\1"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":11989,"expect":"11:4b18 BaseData"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":22504,"expect":"24:6213 FishGroups"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8354,"expect":"0c:4235 GrassMonProbTable"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8355,"expect":"0c:423c WaterMonProbTable"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8396,"expect":"0c:437d InitRoamMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8397,"expect":"0c:43aa CheckEncounterRoamMon"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":8417,"expect":"0c:44bd RoamMaps"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":27915,"expect":"2e:4483 TreeMonMaps"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":27930,"expect":"2e:4701 TreeMons"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":68004,"expect":"wRoamMon1Species"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":68015,"expect":"wRoamMon2Species"},{"path":"F:/slink-work/wt/polished/docs/polished/NEWBOX.md","line":32,"expect":"sNewBoxEnd"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":251,"expect":"\"num_roammon_maps\": 16"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":257,"expect":"\"roamer_count\": 2"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":240,"expect":"\"base_stats_stride\": 32"},{"path":"F:/slink-work/wt/polished/data/games/gen2_crystal/profile.json","line":252,"expect":"\"num_time_fishgroups\": 22"}]
 ```
