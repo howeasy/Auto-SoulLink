@@ -55,6 +55,28 @@ CONSTANTS = {
     "constants/item_data_constants.asm": ("MAX_ITEM_STACK", "MAX_ITEMS", "MAX_MEDICINE", "MAX_BALLS",
                                           "MAX_BERRIES"),
 }
+# C-ROMTABLES (docs/polished/ROMTABLES.md): the encounter-table reader lua/gen2/rom.lua.
+CONSTANTS["constants/pokemon_constants.asm"] = ("NUM_SPECIES", "NUM_POKEMON")
+CONSTANTS["constants/map_data_constants.asm"] = ("FISHGROUP_SHORE", "NUM_FISHGROUPS")
+# rom.lua base_stats field -> BASE_* member. Polished has no BASE_DEX_NO (no species byte) and packs
+# gender with egg steps in one byte (BASE_EGG_STEPS EQU BASE_GENDER), so `hatch` is left out.
+BASE_FIELDS = {"hp": "BASE_HP", "attack": "BASE_ATK", "defense": "BASE_DEF", "speed": "BASE_SPE",
+               "sat": "BASE_SAT", "sdf": "BASE_SDF", "type1": "BASE_TYPE_1", "type2": "BASE_TYPE_2",
+               "catch_rate": "BASE_CATCH_RATE", "base_exp": "BASE_EXP", "item1": "BASE_ITEM_1",
+               "item2": "BASE_ITEM_2", "gender": "BASE_GENDER", "growth": "BASE_GROWTH_RATE",
+               "egg_groups": "BASE_EGG_GROUPS", "tmhm": "BASE_TMHM"}
+CONSTANTS["constants/pokemon_data_constants.asm"] += (
+    "NUM_GRASSMON", "NUM_WATERMON", "GRASS_WILDDATA_LENGTH", "WATER_WILDDATA_LENGTH", "FISHGROUP_DATA_LENGTH",
+    "NUM_ROAMMON_MAPS", "LEVEL_FROM_BADGES", "NUM_TREEMON_SETS", "TREEMON_SET_ROCK", *BASE_FIELDS.values())
+WILD_REGIONS = ("Johto", "Kanto", "Orange", "Swarm")
+ROM_SYMBOLS = ("BaseData", "GrassMonProbTable", "WaterMonProbTable", "TreeMons", "TreeMonMaps", "RockMonMaps",
+               "FishGroups", "RoamMaps", "InitRoamMons", "CheckEncounterRoamMon", "ContestMons", "ContestMonsEnd",
+               *(f"{r}{kind}WildMons" for r in WILD_REGIONS for kind in ("Grass", "Water")))
+# rom symbol -> its key in the generated UPR ini (a second, independently generated view of the clean sym)
+INI_KEYS = {"BaseData": "PokemonStatsOffset", "FishGroups": "FishingWildsOffset", "ContestMons": "BCCWildsOffset",
+            "TreeMons": "TreemonWildsOffset", "RoamMaps": "RoamMonsterMapsOffset",
+            **{f"{r}{k}WildMons": f"{r}{k}WildMonsOffset" for r in WILD_REGIONS for k in ("Grass", "Water")}}
+INI = ROOT / "data/polished/upr_polished_entries.ini"
 PARTY_REQUIRED = ("Species", "Item", "Moves", "ID", "Exp", "EVs", "HPEV", "AtkEV", "DefEV", "SpeEV",
                   "SatEV", "SdfEV", "DVs", "Personality", "Form", "PP",
                   "Happiness", "PokerusStatus", "CaughtData", "CaughtLevel", "CaughtLocation", "Level",
@@ -83,6 +105,85 @@ def _members(symbols, prefix, end_name):
     return out
 
 
+def _routine(rel, label, stop):
+    """Code lines of `label` up to (not including) the first line equal to `stop`."""
+    out, inside = [], False
+    for _, line in pack.lines(rel):
+        if line == label:
+            inside = True
+        elif inside and line == stop:
+            return out
+        elif inside:
+            out.append(line)
+    raise ValueError(f"{rel}: {label} .. {stop} not found")
+
+
+def _ini() -> dict:
+    """key=value pairs of the generated UPR ini, after checking it was cut from the pinned clean sym."""
+    text = INI.read_text(encoding="utf-8")
+    require(f"sym sha256 {pack.sha256(pack.SYM_PATH)}" in text, f"{INI.name}: not generated from {pack.SYM_PATH.name}")
+    pairs = (line.split("//", 1)[0].strip().partition("=") for line in text.splitlines())
+    return {k.strip(): v.strip() for k, sep, v in pairs if sep}
+
+
+def rom_tables(symbols, constants) -> tuple[dict, dict, dict]:
+    """profile.rom, the reader's derived counts and the `layout` block for lua/gen2/rom.lua."""
+    clean, ini = parse_symbols(pack.SYM_PATH.read_text(encoding="utf-8")), _ini()
+    rom = {}
+    for name in ROM_SYMBOLS:
+        require(name in symbols and symbols[name] == clean.get(name), f"{name}: overlay and clean sym disagree")
+        bank, addr = symbols[name]
+        require(bank >= 1 and 0x4000 <= addr < 0x8000, f"{name} outside banked ROM")
+        rom[name] = {"bank": bank, "addr": addr, "flat": bank * 0x4000 + addr - 0x4000}
+        if name in INI_KEYS:
+            require(int(ini[INI_KEYS[name]], 16) == rom[name]["flat"], f"{name}: ini offset disagrees")
+    require("TimeFishGroups" not in symbols, "TimeFishGroups present: the fishing layout changed")
+    regions = sorted(WILD_REGIONS, key=lambda r: rom[f"{r}GrassWildMons"]["flat"])
+    require(tuple(regions) == WILD_REGIONS, "wild region tables out of order")
+
+    # GRASS_WILDDATA_LENGTH = 2 + (1 + NUM_GRASSMON * slot) * 3, slot = level byte + species bytes
+    grass, water = constants["GRASS_WILDDATA_LENGTH"], constants["WATER_WILDDATA_LENGTH"]
+    slot, rest = divmod((grass - 2) // 3 - 1, constants["NUM_GRASSMON"])
+    require(rest == 0 and (grass - 2) % 3 == 0 and slot >= 2, "GRASS_WILDDATA_LENGTH shape")
+    require(water == 2 + 1 + constants["NUM_WATERMON"] * slot, "WATER_WILDDATA_LENGTH disagrees with the grass slot")
+    widths = {line.split()[1] for _, line in pack.lines("data/wild/probabilities.asm")
+              if line.startswith("table_width")}
+    require(len(widths) == 1, "probability tables disagree on table_width")
+    gate = _routine("engine/events/treemons.asm", "GetTreeMons:", "add a")
+    require(gate == ["cp NUM_TREEMON_SETS", "ret nc"], f"unsupported GetTreeMons set gate: {gate}")
+    init = _routine("engine/overworld/wildmons.asm", "InitRoamMons:", "CheckEncounterRoamMon:")
+    roamers = sorted({int(n) for line in init for n in re.findall(r"ld \[wRoamMon(\d+)Species\], a", line)})
+    require(roamers and roamers == list(range(1, len(roamers) + 1)), "non-contiguous or empty roamer slots")
+
+    tmhm_bits = sum(1 for _, line in pack.lines("constants/tmhm_constants.asm")
+                    if line.split(" ", 1)[0] in ("add_tm", "add_hm", "add_mt"))
+    stride = constants["BASE_TMHM"] + (tmhm_bits + 7) // 8
+    require(int(ini["BaseStatsEntrySize"]) == stride, "BASE_DATA_SIZE: source and ini disagree")
+    require(int(ini["SpeciesCount"]) == constants["NUM_SPECIES"], "NUM_SPECIES: source and ini disagree")
+    derived = {
+        # 291 is the species-id validation bound; 289 (NUM_POKEMON) is not (ROMTABLES.md 8.5)
+        "species_count": constants["NUM_SPECIES"], "num_pokemon": constants["NUM_POKEMON"],
+        "base_stats_stride": stride, "base_tmhm_offset": constants["BASE_TMHM"],
+        "num_grassmon": constants["NUM_GRASSMON"], "num_watermon": constants["NUM_WATERMON"],
+        "num_treemon_sets": constants["NUM_TREEMON_SETS"], "treemon_set_rock": constants["TREEMON_SET_ROCK"],
+        "treemon_enabled_limit": constants["NUM_TREEMON_SETS"],
+        "num_fishgroups": constants["NUM_FISHGROUPS"], "num_time_fishgroups": 0,
+        "num_roammon_maps": constants["NUM_ROAMMON_MAPS"], "roamer_count": len(roamers),
+        # battle types whose wild encounter resolves an area (ROMTABLES.md 4.1): normal, fish, tree
+        "area_battle_types": [constants[f"BATTLETYPE_{n}"] for n in ("NORMAL", "FISH", "TREE")],
+    }
+    layout = {
+        "species_bytes": slot - 1, "prob_width": int(widths.pop()),
+        "wild_grass_row": grass, "wild_water_row": water, "wild_regions": list(WILD_REGIONS),
+        "fish_group_header": constants["FISHGROUP_DATA_LENGTH"], "fish_group_base": constants["FISHGROUP_SHORE"],
+        "tree_first_set": 0, "level_from_badges": constants["LEVEL_FROM_BADGES"],
+        "roamer_inc_a": "inc a" in init,
+        "species_count": int(ini["SpeciesCount"]), "base_stats_stride": int(ini["BaseStatsEntrySize"]),
+        "base_fields": {field: constants[name] for field, name in BASE_FIELDS.items()},
+    }
+    return rom, derived, layout
+
+
 def build() -> dict:
     pack.verify_source()
     raw_sym, raw_prov = SYM.read_bytes(), PROVENANCE.read_bytes()
@@ -106,10 +207,12 @@ def build() -> dict:
         for name in names:
             require(type(values.get(name)) is int, f"{rel}: {name} unresolved")
             constants[name] = values[name]
+    constants.update({k: v for k, v in pack.parse_consts("constants/battle_constants.asm").items()
+                      if k.startswith("BATTLETYPE_")})
 
     names = set(RAM) | {fields[i] for fields in POCKETS.values() for i in range(3)}
     names |= {f"w{side}{suffix}Level" for side in ("Player", "Enemy") for _, suffix in STAGES}
-    patterns = (r"wPartyMon[1-6]\w*", r"wBattleMon\w*", r"wEnemyMon\w*", r"h\w+")
+    patterns = (r"wPartyMon[1-6]\w*", r"wBattleMon\w*", r"wEnemyMon\w*", r"wRoamMon\d\w*", r"h\w+")
     names |= {n for n in symbols if any(re.fullmatch(p, n) for p in patterns)}
     names |= set(OVERLAY_RAM)
     ram, ram_bank, hram = {}, {}, {}
@@ -168,6 +271,7 @@ def build() -> dict:
                "ram": {name: ram[name] for name in OVERLAY_RAM}}
     for name in OVERLAY_RAM:
         require(ram_bank[name] == 0, f"{name} outside WRAM0")
+    rom, rom_derived, layout = rom_tables(symbols, constants)
     source = pack.source_block()
     source.update({"artifact": ARTIFACT, "overlay_sha1": out["sha1"], "overlay_sym_sha256": sym_sha,
                    "overlay_provenance_sha256": hashlib.sha256(raw_prov).hexdigest(),
@@ -175,12 +279,12 @@ def build() -> dict:
     selected = {
         "title": TITLE, "variant": TITLE, "artifact": ARTIFACT, "repo": pack.LOCK["source"]["url"],
         "sym": SYM.name, "rom_sha1": clean["sha1"], "header_title": clean["title"],
-        "ram": ram, "ram_bank": ram_bank, "hram": hram, "constants": constants,
+        "ram": ram, "ram_bank": ram_bank, "hram": hram, "constants": constants, "rom": rom, "layout": layout,
         "structs": {"party": party, "battle": battle},
         "derived": {"party_struct_size": size, "battle_struct_size": battle["StructEnd"], "party_capacity": cap,
                     "name_length": constants["NAME_LENGTH"], "mon_name_length": constants["MON_NAME_LENGTH"],
                     "player_name_length": constants["PLAYER_NAME_LENGTH"], "num_boxes": constants["NUM_BOXES"],
-                    "rom_size": out["size"], "pockets": pockets},
+                    "rom_size": out["size"], "pockets": pockets, **rom_derived},
         "overlay": overlay,
     }
     return {"schema": "gen2-profile-v1", "generator": "tools/gen_polished_profile.py", "source": source,

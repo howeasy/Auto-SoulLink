@@ -25,14 +25,49 @@
         "ABILITY_MASK": 96,
         "ACCURACY": 5,
         "ATTACK": 0,
+        "BASE_ATK": 1,
+        "BASE_CATCH_RATE": 8,
+        "BASE_DEF": 2,
+        "BASE_EGG_GROUPS": 17,
+        "BASE_EXP": 9,
+        "BASE_GENDER": 12,
+        "BASE_GROWTH_RATE": 16,
+        "BASE_HP": 0,
+        "BASE_ITEM_1": 10,
+        "BASE_ITEM_2": 11,
+        "BASE_SAT": 4,
+        "BASE_SDF": 5,
+        "BASE_SPE": 3,
         "BASE_STAT_LEVEL": 7,
+        "BASE_TMHM": 20,
+        "BASE_TYPE_1": 6,
+        "BASE_TYPE_2": 7,
         "BATTLERESULT_BITMASK": 192,
+        "BATTLETYPE_CANLOSE": 1,
+        "BATTLETYPE_CONTEST": 6,
+        "BATTLETYPE_FISH": 3,
+        "BATTLETYPE_FORCEITEM": 12,
+        "BATTLETYPE_GHOST": 8,
+        "BATTLETYPE_GROTTO": 9,
+        "BATTLETYPE_INVERSE": 10,
+        "BATTLETYPE_LEGENDARY": 14,
+        "BATTLETYPE_NEVER_SHINY": 13,
+        "BATTLETYPE_NORMAL": 0,
+        "BATTLETYPE_ROAMING": 5,
+        "BATTLETYPE_SAFARI": 7,
+        "BATTLETYPE_TRAP": 11,
+        "BATTLETYPE_TREE": 4,
+        "BATTLETYPE_TUTORIAL": 2,
         "DEFENSE": 1,
         "EVASION": 6,
         "EXTSPECIES_MASK": 32,
+        "FISHGROUP_DATA_LENGTH": 8,
+        "FISHGROUP_SHORE": 0,
         "FORM_MASK": 31,
         "GENDER_MASK": 128,
+        "GRASS_WILDDATA_LENGTH": 68,
         "IS_EGG_MASK": 64,
+        "LEVEL_FROM_BADGES": 178,
         "MAX_BALLS": 25,
         "MAX_BERRIES": 31,
         "MAX_ITEMS": 75,
@@ -45,10 +80,17 @@
         "NAME_LENGTH": 11,
         "NATURE_MASK": 31,
         "NUM_BOXES": 20,
+        "NUM_FISHGROUPS": 15,
+        "NUM_GRASSMON": 7,
         "NUM_JOHTO_BADGES": 8,
         "NUM_KANTO_BADGES": 8,
         "NUM_LEVEL_STATS": 8,
         "NUM_MOVES": 4,
+        "NUM_POKEMON": 289,
+        "NUM_ROAMMON_MAPS": 16,
+        "NUM_SPECIES": 291,
+        "NUM_TREEMON_SETS": 10,
+        "NUM_WATERMON": 3,
         "PARTY_LENGTH": 6,
         "PLAYER_NAME_LENGTH": 8,
         "SHINY_MASK": 128,
@@ -56,13 +98,29 @@
         "SP_ATTACK": 3,
         "SP_DEFENSE": 4,
         "TRAINER_BATTLE": 2,
+        "TREEMON_SET_ROCK": 9,
+        "WATER_WILDDATA_LENGTH": 12,
         "WILD_BATTLE": 1
       },
       "derived": {
+        "area_battle_types": [
+          0,
+          3,
+          4
+        ],
+        "base_stats_stride": 34,
+        "base_tmhm_offset": 20,
         "battle_struct_size": 35,
         "mon_name_length": 11,
         "name_length": 11,
         "num_boxes": 20,
+        "num_fishgroups": 15,
+        "num_grassmon": 7,
+        "num_pokemon": 289,
+        "num_roammon_maps": 16,
+        "num_time_fishgroups": 0,
+        "num_treemon_sets": 10,
+        "num_watermon": 3,
         "party_capacity": 6,
         "party_struct_size": 48,
         "player_name_length": 8,
@@ -88,7 +146,11 @@
             "data": "wMedicine"
           }
         },
-        "rom_size": 2097152
+        "roamer_count": 2,
+        "rom_size": 2097152,
+        "species_count": 291,
+        "treemon_enabled_limit": 10,
+        "treemon_set_rock": 9
       },
       "header_title": "PKPCRYSTAL",
       "hram": {
@@ -221,6 +283,43 @@
         "hVBlankOccurred": 65423,
         "hWX": 65467,
         "hWY": 65468
+      },
+      "layout": {
+        "base_fields": {
+          "attack": 1,
+          "base_exp": 9,
+          "catch_rate": 8,
+          "defense": 2,
+          "egg_groups": 17,
+          "gender": 12,
+          "growth": 16,
+          "hp": 0,
+          "item1": 10,
+          "item2": 11,
+          "sat": 4,
+          "sdf": 5,
+          "speed": 3,
+          "tmhm": 20,
+          "type1": 6,
+          "type2": 7
+        },
+        "base_stats_stride": 34,
+        "fish_group_base": 0,
+        "fish_group_header": 8,
+        "level_from_badges": 178,
+        "prob_width": 1,
+        "roamer_inc_a": true,
+        "species_bytes": 2,
+        "species_count": 291,
+        "tree_first_set": 0,
+        "wild_grass_row": 68,
+        "wild_regions": [
+          "Johto",
+          "Kanto",
+          "Orange",
+          "Swarm"
+        ],
+        "wild_water_row": 12
       },
       "overlay": {
         "abi": 3,
@@ -796,6 +895,39 @@
         "wPlayerSpeLevel": 50475,
         "wPlayerStatLevels": 50473,
         "wRivalName": 54406,
+        "wRoamMon1": 57276,
+        "wRoamMon1DVs": 57281,
+        "wRoamMon1End": 57287,
+        "wRoamMon1Form": 57285,
+        "wRoamMon1HP": 57280,
+        "wRoamMon1Level": 57277,
+        "wRoamMon1MapGroup": 57278,
+        "wRoamMon1MapNumber": 57279,
+        "wRoamMon1Personality": 57284,
+        "wRoamMon1Species": 57276,
+        "wRoamMon1Status": 57286,
+        "wRoamMon2": 57287,
+        "wRoamMon2DVs": 57292,
+        "wRoamMon2End": 57298,
+        "wRoamMon2Form": 57296,
+        "wRoamMon2HP": 57291,
+        "wRoamMon2Level": 57288,
+        "wRoamMon2MapGroup": 57289,
+        "wRoamMon2MapNumber": 57290,
+        "wRoamMon2Personality": 57295,
+        "wRoamMon2Species": 57287,
+        "wRoamMon2Status": 57297,
+        "wRoamMon3": 57298,
+        "wRoamMon3DVs": 57303,
+        "wRoamMon3End": 57309,
+        "wRoamMon3Form": 57307,
+        "wRoamMon3HP": 57302,
+        "wRoamMon3Level": 57299,
+        "wRoamMon3MapGroup": 57300,
+        "wRoamMon3MapNumber": 57301,
+        "wRoamMon3Personality": 57306,
+        "wRoamMon3Species": 57298,
+        "wRoamMon3Status": 57308,
         "wSavedAtLeastOnce": 54439,
         "wScriptRunning": 54327,
         "wSlinkMailbox": 50699,
@@ -1363,6 +1495,39 @@
         "wPlayerSpeLevel": 0,
         "wPlayerStatLevels": 0,
         "wRivalName": 1,
+        "wRoamMon1": 1,
+        "wRoamMon1DVs": 1,
+        "wRoamMon1End": 1,
+        "wRoamMon1Form": 1,
+        "wRoamMon1HP": 1,
+        "wRoamMon1Level": 1,
+        "wRoamMon1MapGroup": 1,
+        "wRoamMon1MapNumber": 1,
+        "wRoamMon1Personality": 1,
+        "wRoamMon1Species": 1,
+        "wRoamMon1Status": 1,
+        "wRoamMon2": 1,
+        "wRoamMon2DVs": 1,
+        "wRoamMon2End": 1,
+        "wRoamMon2Form": 1,
+        "wRoamMon2HP": 1,
+        "wRoamMon2Level": 1,
+        "wRoamMon2MapGroup": 1,
+        "wRoamMon2MapNumber": 1,
+        "wRoamMon2Personality": 1,
+        "wRoamMon2Species": 1,
+        "wRoamMon2Status": 1,
+        "wRoamMon3": 1,
+        "wRoamMon3DVs": 1,
+        "wRoamMon3End": 1,
+        "wRoamMon3Form": 1,
+        "wRoamMon3HP": 1,
+        "wRoamMon3Level": 1,
+        "wRoamMon3MapGroup": 1,
+        "wRoamMon3MapNumber": 1,
+        "wRoamMon3Personality": 1,
+        "wRoamMon3Species": 1,
+        "wRoamMon3Status": 1,
         "wSavedAtLeastOnce": 1,
         "wScriptRunning": 1,
         "wSlinkMailbox": 0,
@@ -1371,6 +1536,108 @@
         "wYCoord": 1
       },
       "repo": "https://github.com/Rangi42/polishedcrystal",
+      "rom": {
+        "BaseData": {
+          "addr": 19224,
+          "bank": 17,
+          "flat": 281368
+        },
+        "CheckEncounterRoamMon": {
+          "addr": 17322,
+          "bank": 12,
+          "flat": 197546
+        },
+        "ContestMons": {
+          "addr": 22708,
+          "bank": 37,
+          "flat": 612532
+        },
+        "ContestMonsEnd": {
+          "addr": 22768,
+          "bank": 37,
+          "flat": 612592
+        },
+        "FishGroups": {
+          "addr": 25107,
+          "bank": 36,
+          "flat": 598547
+        },
+        "GrassMonProbTable": {
+          "addr": 16949,
+          "bank": 12,
+          "flat": 197173
+        },
+        "InitRoamMons": {
+          "addr": 17277,
+          "bank": 12,
+          "flat": 197501
+        },
+        "JohtoGrassWildMons": {
+          "addr": 18152,
+          "bank": 12,
+          "flat": 198376
+        },
+        "JohtoWaterWildMons": {
+          "addr": 23661,
+          "bank": 12,
+          "flat": 203885
+        },
+        "KantoGrassWildMons": {
+          "addr": 24346,
+          "bank": 12,
+          "flat": 204570
+        },
+        "KantoWaterWildMons": {
+          "addr": 29175,
+          "bank": 12,
+          "flat": 209399
+        },
+        "OrangeGrassWildMons": {
+          "addr": 29692,
+          "bank": 12,
+          "flat": 209916
+        },
+        "OrangeWaterWildMons": {
+          "addr": 30441,
+          "bank": 12,
+          "flat": 210665
+        },
+        "RoamMaps": {
+          "addr": 17597,
+          "bank": 12,
+          "flat": 197821
+        },
+        "RockMonMaps": {
+          "addr": 17669,
+          "bank": 46,
+          "flat": 754949
+        },
+        "SwarmGrassWildMons": {
+          "addr": 30526,
+          "bank": 12,
+          "flat": 210750
+        },
+        "SwarmWaterWildMons": {
+          "addr": 30663,
+          "bank": 12,
+          "flat": 210887
+        },
+        "TreeMonMaps": {
+          "addr": 17539,
+          "bank": 46,
+          "flat": 754819
+        },
+        "TreeMons": {
+          "addr": 18177,
+          "bank": 46,
+          "flat": 755457
+        },
+        "WaterMonProbTable": {
+          "addr": 16956,
+          "bank": 12,
+          "flat": 197180
+        }
+      },
       "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
       "structs": {
         "battle": {

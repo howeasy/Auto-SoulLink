@@ -73,6 +73,39 @@ def test_struct_offsets_agree_with_the_codec():
     assert (battle["Form"], battle["PP"], battle["HP"], battle["Type1"], battle["StructEnd"]) == (10, 11, 19, 33, 35)
 
 
+def test_profile_rom_tables_are_the_sym_and_the_upr_ini():
+    sym = _sym()
+    ini = dict(re.findall(r"^(\w+)=(0x[0-9A-Fa-f]+)", (REPO / "data/polished/upr_polished_entries.ini")
+                          .read_text(encoding="utf-8"), re.M))
+    for name, e in P["rom"].items():
+        assert sym[name] == (e["bank"], e["addr"]) and e["flat"] == e["bank"] * 0x4000 + e["addr"] - 0x4000, name
+    rom = {name: e["flat"] for name, e in P["rom"].items()}
+    assert rom["BaseData"] == int(ini["PokemonStatsOffset"], 16) == 0x44B18
+    assert (rom["JohtoGrassWildMons"], rom["JohtoWaterWildMons"], rom["FishGroups"], rom["TreeMons"],
+            rom["RoamMaps"], rom["ContestMons"]) == (0x306E8, 0x31C6D, 0x92213, 0xB8701, 0x304BD, 0x958B4)
+    assert "TimeFishGroups" not in rom
+
+
+def test_profile_pins_the_rom_table_layout_and_counts():
+    """docs/polished/ROMTABLES.md facts, every one re-derived by the generator from source/sym/ini."""
+    layout, derived, consts = P["layout"], P["derived"], P["constants"]
+    assert (layout["species_bytes"], layout["prob_width"], layout["wild_grass_row"], layout["wild_water_row"],
+            layout["fish_group_header"], layout["fish_group_base"], layout["tree_first_set"],
+            layout["level_from_badges"], layout["roamer_inc_a"]) == (2, 1, 68, 12, 8, 0, 0, 178, True)
+    assert layout["wild_regions"] == ["Johto", "Kanto", "Orange", "Swarm"]
+    assert (derived["species_count"], derived["num_pokemon"], derived["base_stats_stride"],
+            derived["base_tmhm_offset"]) == (291, 289, 34, 20)
+    assert (layout["species_count"], layout["base_stats_stride"]) == (291, 34)
+    assert (derived["num_treemon_sets"], derived["treemon_set_rock"], derived["treemon_enabled_limit"],
+            derived["num_fishgroups"], derived["num_time_fishgroups"], derived["num_roammon_maps"],
+            derived["roamer_count"]) == (10, 9, 10, 15, 0, 16, 2)
+    assert layout["base_fields"]["hp"] == 0 and layout["base_fields"]["tmhm"] == 20
+    assert "species" not in layout["base_fields"] and "hatch" not in layout["base_fields"]
+    assert [consts[f"BATTLETYPE_{n}"] for n in ("NORMAL", "FISH", "TREE", "ROAMING", "CONTEST", "GHOST", "GROTTO")] \
+        == [0, 3, 4, 5, 6, 8, 9]
+    assert derived["area_battle_types"] == [0, 3, 4]
+
+
 # ── reads over a synthetic WRAM image laid out per the profile ──────────────
 
 class Wram:
