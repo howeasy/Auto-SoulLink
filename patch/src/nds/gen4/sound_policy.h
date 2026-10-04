@@ -107,6 +107,7 @@ static inline void slink_gen4_sound_layout(SlinkGen4StateSound *s)
         s->in_flight = 0u;
         s->ready = 0u;
         s->blocked = 0u;
+        s->caps = 0u; /* a reset card advertises nothing until it proves ready again */
     }
 }
 
@@ -118,6 +119,10 @@ static inline void slink_gen4_sound_latch_ready(SlinkGen4StateSound *s)
 {
     slink_gen4_sound_layout(s);
     s->ready = 1u;
+    /* D-C3-1: the contribution follows readiness. The latch is the ONLY place readiness
+     * becomes true, so the word moves here and nowhere else, and Slink_NDS_PublishCaps()
+     * composes it into the mailbox after the fan-out (beacon.h). */
+    s->caps = (uint32_t)SLINK_GEN4_SOUND_CAPABILITIES;
 }
 
 static inline void slink_gen4_sound_release(SlinkGen4StateSound *s)
@@ -196,6 +201,14 @@ static inline int slink_gen4_sound_step(volatile SlinkMailboxV2 *m, SlinkGen4Sta
     }
 
     slink_gen4_sound_layout(s);
+
+    /* D-C3-1: this card's contribution to the published capability word, REBUILT from
+     * this card's own state on every visit -- assigned, never accumulated, so the
+     * beacon's post-fan-out stamp cannot keep a bit this card has stopped declaring.
+     * Not ready means nothing is advertised: before InitSoundData there is no sound
+     * system to claim (C3_SOUND_SPEC.md:266-268). The bit is C3's own either way, and
+     * only this card's Service writes this word. */
+    s->caps = (s->ready != 0u) ? (uint32_t)SLINK_GEN4_SOUND_CAPABILITIES : 0u;
     seq = m->seq;
 
     /* 1. the sound-ready latch, before the empty/invalid path (sfx.asm:34-36) */

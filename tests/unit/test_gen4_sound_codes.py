@@ -11,7 +11,12 @@ What is provable here and what is not:
            their named reasons and nothing is played; the epoch gate; the sound-ready
            latch; the 240-visit hold saturates and consumes exactly once; one request in
            flight; foreign opcodes are never acked; the arena accessor refuses a
-           non-census base; the capability/reason numbers are in their ruled ranges.
+           non-census base; the capability/reason numbers are in their ruled ranges; and
+           the PUBLISHED capability word (beacon.h, Slink_NDS_PublishCaps) is composed
+           from the cards after the fan-out -- a card's bit survives the visit, a bit a
+           card drops is gone in that same visit, a host write into the word cannot
+           survive, bits 7..15 are never published, and a card that is not in the build
+           contributes nothing even if its contribution word is set.
   NOT PROVED  that an SE is audible, and which of the four SE handles a given id lands on.
            Both are falsifier F1, a PHYSICAL claim (C3_SOUND_SPEC.md:487, §6 Q3). This
            module never claims them.
@@ -159,6 +164,20 @@ void reset_world(void)
     slink_gen4_sound_latch_ready(&sound);
 }
 int step(void) { return slink_gen4_sound_step(&mailbox, &sound, &engine, &reasons, EPOCH); }
+
+/* ---------------------------------------------------------------- the beacon's block
+ * The composition the beacon performs after the fan-out (beacon.h,
+ * Slink_NDS_PublishCaps), over the state block whose .sound member IS this card's
+ * sub-struct. `state.sound = sound` stands for the in-place relationship: in the ROM the
+ * card's Service writes state.sound and the beacon composes from it; here the card's
+ * sub-struct is a separate object, so one copy brings the two together. */
+static SlinkGen4State state;
+
+static void visit(void)
+{
+    state.sound = sound;
+    Slink_NDS_PublishCaps(&state, &mailbox);
+}
 #define CHECK(c, n) do { if (!(c)) { printf("FAIL line %d: %s\n", __LINE__, #c); return (n); } } while (0)
 
 int scen_codes(void)
@@ -401,9 +420,94 @@ int scen_numbers(void)
     CHECK(SLINK_GEN4_SOUND_MAX_HOLD_VISITS == 240u, 12);
     CHECK(SLINK_GEN4_SOUND_CODE_MAX == 4u && SLINK_GEN4_SOUND_OPCODE == SLINK_OP_PLAY_SE, 13);
     /* the state block: fixed size per card, versioned, zero at allocation (layout 0) */
-    CHECK(sizeof(SlinkGen4StateSound) == 12u, 14);
+    CHECK(sizeof(SlinkGen4StateSound) == 16u, 14);
     CHECK(SLINK_GEN4_STATE_SOUND_LAYOUT == 1u && SLINK_GEN4_STATE_PANEL_LAYOUT == 1u
           && SLINK_GEN4_STATE_TRADE_LAYOUT == 1u, 15);
+    return 0;
+}
+
+int scen_caps(void)
+{
+    memset(&state, 0, sizeof state);
+    memset(&mailbox, 0, sizeof mailbox);
+    memset(&sound, 0, sizeof sound);
+
+    /* 1. C3 has run and is NOT ready (no InitSoundData yet), so it contributes nothing and
+     *    the published word is the beacon's own set, which is zero at C2. */
+    CHECK(step() == SLINK_SOUND_IDLE, 1);
+    visit();
+    CHECK(state.sound.caps == 0u, 2);
+    CHECK(mailbox.capabilities == SLINK_GEN4_CAPABILITIES, 3);
+
+    /* 2. the latch: C3's contribution appears and the host sees it in the same visit. The
+     *    bit is C3's own (D-C3-1) and no other card is in the word yet. */
+    slink_gen4_sound_latch_ready(&sound);
+    CHECK(step() == SLINK_SOUND_IDLE, 4);
+    visit();
+    CHECK(state.sound.caps == SLINK_GEN4_SOUND_CAPABILITIES, 5);
+    CHECK(mailbox.capabilities == (SLINK_CAP_NATIVE_SOUND | SLINK_GEN4_CAP_SE_NOTIFY), 6);
+    CHECK((mailbox.capabilities & SLINK_CAP_DURABLE_TRADE) == 0u, 7);
+
+    /* 3. C5 declares its contribution (trade.h step 5) and the composed word keeps it --
+     *    the defect this composition exists to fix: the beacon stamped over it before. */
+    state.trade.caps = SLINK_CAP_DURABLE_TRADE;
+    visit();
+    CHECK(mailbox.capabilities
+          == (SLINK_CAP_NATIVE_SOUND | SLINK_GEN4_CAP_SE_NOTIFY | SLINK_CAP_DURABLE_TRADE), 8);
+
+    /* 4. C4 likewise -- and a card that stops declaring loses its bit in the SAME visit */
+    state.panel.caps = SLINK_CAP_INFO_PANEL;
+    visit();
+    CHECK((mailbox.capabilities & SLINK_CAP_INFO_PANEL) != 0u, 9);
+    state.panel.caps = 0u;
+    visit();
+    CHECK((mailbox.capabilities & SLINK_CAP_INFO_PANEL) == 0u, 10);
+
+    /* 5. a host write into the mailbox cannot survive: the word is rebuilt from state, so
+     *    nothing it wrote (nor the previous visit's word) is ever carried forward. */
+    mailbox.capabilities = 0xFFFFFFFFu;
+    visit();
+    CHECK(mailbox.capabilities
+          == (SLINK_CAP_NATIVE_SOUND | SLINK_GEN4_CAP_SE_NOTIFY | SLINK_CAP_DURABLE_TRADE), 11);
+
+    /* 6. bits 7..15 are reserved for future shared caps and are dropped on the way out,
+     *    from any card: the card's own word is left alone, the published word is not. */
+    sound.caps = SLINK_GEN4_SOUND_CAPABILITIES | 0x0000FF80u;
+    state.trade.caps = 0x00008100u;
+    visit();
+    CHECK((sound.caps & 0x0000FF80u) != 0u, 12);
+    CHECK((mailbox.capabilities & 0x0000FF80u) == 0u, 13);
+    CHECK(mailbox.capabilities == (SLINK_CAP_NATIVE_SOUND | SLINK_GEN4_CAP_SE_NOTIFY), 14);
+
+    /* 7. a title-private bit stays title-private: it never lands in the shared 0..15 */
+    sound.caps = SLINK_CAP_NATIVE_SOUND;
+    state.trade.caps = 0x00010000u;
+    visit();
+    CHECK((mailbox.capabilities & SLINK_GEN4_CAP_MASK_TITLE) == 0x00010000u, 15);
+    CHECK((mailbox.capabilities & 0xFFFFu) == SLINK_CAP_NATIVE_SOUND, 16);
+
+    /* 8. fail closed: no block, no stamp (beacon.c has already returned on either) */
+    mailbox.capabilities = SLINK_CAP_NATIVE_SOUND;
+    Slink_NDS_PublishCaps(NULL, &mailbox);
+    CHECK(mailbox.capabilities == SLINK_CAP_NATIVE_SOUND, 17);
+    Slink_NDS_PublishCaps(&state, NULL);
+    CHECK(mailbox.capabilities == SLINK_CAP_NATIVE_SOUND, 18);
+    return 0;
+}
+
+int scen_nocards(void)
+{
+    /* This binary is built WITHOUT SLINK_GEN4_SOUND/PANEL/TRADE. A contribution word no
+     * card in this build can own -- stale bytes, a speculative module -- must never reach
+     * the published word: "no card may set a bit ahead of its own" is enforced by the
+     * composition, not by reviewer discipline (C2_BEACON_SPEC.md:432-435). */
+    memset(&state, 0, sizeof state);
+    memset(&mailbox, 0, sizeof mailbox);
+    state.sound.caps = SLINK_GEN4_SOUND_CAPABILITIES;
+    state.panel.caps = SLINK_CAP_INFO_PANEL;
+    state.trade.caps = SLINK_CAP_DURABLE_TRADE;
+    Slink_NDS_PublishCaps(&state, &mailbox);
+    CHECK(mailbox.capabilities == SLINK_GEN4_CAPABILITIES, 1);
     return 0;
 }
 
@@ -427,6 +531,10 @@ int main(void)
     return scen_arena();
 #elif SCENARIO == 9
     return scen_numbers();
+#elif SCENARIO == 10
+    return scen_caps();
+#elif SCENARIO == 11
+    return scen_nocards();
 #else
 #error "no scenario selected"
 #endif
@@ -443,15 +551,27 @@ SCENARIOS = {
     7: "foreign opcodes are never acked",
     8: "the arena accessor refuses a non-census base",
     9: "capability, reason, table and layout numbers",
+    10: "the composed capability word: survives, drops, survives a host write",
+    11: "no card arm without its card in this build",
 }
 
 
-def _drive(tmp_path, scenario):
+def _defines(scenario):
+    """The build the scenario needs. Scenario 10 is compiled WITH all three cards, so
+    every arm of the composition is real; scenario 11 is compiled WITHOUT them, which is
+    the whole point of it. The red controls take the same defines as the green test, or
+    a control could trip for a missing -D instead of for its mutation."""
     census, delta = _census_constants()
-    return _build(tmp_path / f"s{scenario}", "sound", DRIVER,
-                  defines=[f"-DSCENARIO={scenario}",
-                           f"-DSLINK_TEST_CENSUS={census}u",
-                           f"-DSLINK_TEST_DELTA={delta}u"])
+    defines = [f"-DSCENARIO={scenario}",
+               f"-DSLINK_TEST_CENSUS={census}u",
+               f"-DSLINK_TEST_DELTA={delta}u"]
+    if scenario == 10:
+        defines += ["-DSLINK_GEN4_SOUND", "-DSLINK_GEN4_PANEL", "-DSLINK_GEN4_TRADE"]
+    return defines
+
+
+def _drive(tmp_path, scenario):
+    return _build(tmp_path / f"s{scenario}", "sound", DRIVER, defines=_defines(scenario))
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS), ids=[f"{n}-{SCENARIOS[n]}" for n in sorted(SCENARIOS)])
@@ -521,6 +641,19 @@ _CONTROLS = [
      "return SLINK_SOUND_IDLE;", 7),
     ("the arena accessor stops failing closed",
      "beacon.h", "if (arena_lo != census_arena_lo) {", "if (arena_lo != census_arena_lo && 0) {", 8),
+    # D-C3-1 / C2: the published word is composed from the cards, assigned (never
+    # accumulated), masked, and only from cards that are in THIS build.
+    ("accumulates the previous word",
+     "beacon.h", "    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;",
+     "    m->capabilities |= caps & SLINK_GEN4_CAP_MASK_LEGAL;", 10),
+    ("stamps the beacon's constant instead of the cards'",
+     "beacon.h", "    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;",
+     "    m->capabilities = SLINK_GEN4_CAPABILITIES; (void)caps;", 10),
+    ("publishes the reserved bits 7..15",
+     "beacon.h", "caps & SLINK_GEN4_CAP_MASK_LEGAL;", "caps;", 10),
+    ("lets a card advertise ahead of itself",
+     "beacon.h", "#if defined(SLINK_GEN4_SOUND)\n    caps |= st->sound.caps;\n#endif",
+     "    caps |= st->sound.caps;", 11),
 ]
 
 
@@ -530,10 +663,7 @@ def test_red_controls(tmp_path, label, filename, anchor, replacement, scenario):
     census, delta = _census_constants()
     gen4 = _mutant_gen4(tmp_path, label.replace(" ", "_"), filename, anchor, replacement)
     exe, done = _compile(tmp_path / f"m{scenario}", "mutant", DRIVER,
-                         defines=[f"-DSCENARIO={scenario}",
-                                  f"-DSLINK_TEST_CENSUS={census}u",
-                                  f"-DSLINK_TEST_DELTA={delta}u"],
-                         gen4=gen4)
+                         defines=_defines(scenario), gen4=gen4)
     assert done.returncode == 0, f"control {label!r} does not even compile: {done.stderr}"
     run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
     assert run.returncode != 0, f"red control {label!r} did not trip"

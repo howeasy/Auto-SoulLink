@@ -31,6 +31,15 @@
  * no game header at all.
  */
 
+/* ------------------------------------------------------------------ the capability contribution
+ * C5's whole advertised set: the shared SLINK_CAP_DURABLE_TRADE (abi.h:88-96), whose bit
+ * abi.h:155 documents as "only implemented/qualified features". It is C5's, declared
+ * here rather than in the beacon, and the beacon is what composes the PUBLISHED word:
+ * SLINK_GEN4_CAPABILITIES (zero at C2) OR-ed with every compiled-in card's contribution
+ * word, once the fan-out has run (patch/src/nds/gen4/beacon.h, Slink_NDS_PublishCaps).
+ * A host must not gate liveness on the bit (README.md:156-158). */
+#define SLINK_GEN4_TRADE_CAPABILITIES SLINK_CAP_DURABLE_TRADE
+
 /* ------------------------------------------------------------------ wiring recipe (trade.c, not this card)
  *
  *  1. Own the state. A SlinkGen4TradePolicy is allocated inside the service SysTask's heap
@@ -61,14 +70,18 @@
  *     without the marker it refuses, and the marker is the only evidence that a mutation
  *     is about to happen.
  *
- *  5. Capability. C5 advertises the shared SLINK_CAP_DURABLE_TRADE via
- *     slink_trade_advertise(m) (trade_producer.h:28-33), but the single-writer owner of
- *     `capabilities` is the beacon, which ASSIGNS m->capabilities = SLINK_GEN4_CAPABILITIES
- *     on every visit BEFORE dispatch (patch/src/nds/gen4/beacon.c:244-245, :262) and
- *     SLINK_GEN4_CAPABILITIES is 0u (beacon.h:63). The policy therefore does NOT write
- *     the mailbox header: the C2 owner must add SLINK_CAP_DURABLE_TRADE there, or a
- *     per-visit advertise from C5 would be erased on the next visit. No host may gate
- *     liveness on the bit (README.md:156-158).
+ *  5. Capability. Every service visit, C5's Service declares its contribution to the
+ *     published word:
+ *
+ *         st->trade.caps = SLINK_GEN4_TRADE_CAPABILITIES;
+ *
+ *     The mailbox header stays the beacon's: it is stamped once, after every producer has
+ *     run, out of the state block (patch/src/nds/gen4/beacon.h, Slink_NDS_PublishCaps),
+ *     so a bit C5 sets there would be overwritten later in the same visit. For the same
+ *     reason slink_trade_advertise(m) (trade_producer.h:28-33) is NOT the mechanism on
+ *     this title: its `m->capabilities |= SLINK_CAP_DURABLE_TRADE` is true for one
+ *     statement, and the beacon's whole-word stamp is what a host reads afterwards. No
+ *     host may gate liveness on the bit (README.md:156-158).
  */
 
 /* ------------------------------------------------------------------ what this policy deliberately does NOT do

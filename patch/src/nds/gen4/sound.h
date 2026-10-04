@@ -96,8 +96,17 @@
  * (abi.h:88-96) and bits 16..31 are title-private (ABI owner, 2026-10-02), so NOTIFY is
  * gated on the title-private bit 16, declared HERE as C3_SOUND_SPEC.md:436-440 rules, with
  * no abi.h edit. C3 sets the shared SLINK_CAP_NATIVE_SOUND (bit 2) too
- * (C3_SOUND_SPEC.md:450-453). The advertised word is applied by the build, not here:
- * beacon.h's SLINK_GEN4_CAPABILITIES is still 0 and a card may not set a bit ahead of itself.
+ * (C3_SOUND_SPEC.md:450-453).
+ *
+ * This constant is C3's CONTRIBUTION, not the published word. The beacon composes that
+ * one per visit out of SLINK_GEN4_CAPABILITIES (zero at C2) plus the contribution word
+ * of every COMPILED-IN card, and it composes AFTER the fan-out (beacon.h,
+ * Slink_NDS_PublishCaps). C3 therefore writes the contribution -- from its own readiness,
+ * in slink_gen4_sound_step() and slink_gen4_sound_latch_ready() (sound_policy.h) -- and
+ * never writes m->capabilities: the beacon is the single writer and stamps last, so a
+ * bit set there would be erased later in the same visit. A host still proves liveness
+ * from signature + abi_version alone and must not gate on this word
+ * (C2_BEACON_SPEC.md:436-442).
  */
 #define SLINK_GEN4_CAP_SE_NOTIFY (1u << 16)
 #define SLINK_GEN4_SOUND_CAPABILITIES (SLINK_CAP_NATIVE_SOUND | SLINK_GEN4_CAP_SE_NOTIFY)

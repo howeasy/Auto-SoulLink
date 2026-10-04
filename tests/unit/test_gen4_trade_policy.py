@@ -17,6 +17,9 @@ Covered falsifiers (spec section given per test):
                    reads the staging buffer stays RED
   §3.3            one in-flight trade; WITHDRAW/STATUS semantics
   §3.5 / §7 Q2    the save-timeout watchdog: PENDING past the bound is FAIL/UNCERTAIN
+  §6 / C2         the published capability word: C5's SLINK_CAP_DURABLE_TRADE survives the
+                 beacon's post-fan-out stamp, a host write into the word does not, and a
+                 cleared contribution drops the bit in the same visit
 
 Every green test is re-run against a seeded defect (MUTANTS below) and must go red, so no
 test here measures nothing.
@@ -104,6 +107,7 @@ def _run(exe, *args):
 
 HARNESS_C = r'''/* Card C5 host-C harness: the REAL trade.h / trade_policy.h over a fake Gen 4 engine. */
 #include "trade.h"
+#include "beacon.h" /* SlinkGen4State + the composition the ROM beacon calls (beacon.h) */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -122,6 +126,7 @@ HARNESS_C = r'''/* Card C5 host-C harness: the REAL trade.h / trade_policy.h ove
 /* ---- the policy under test and the ABI objects it is pointed at ---- */
 static SlinkGen4TradePolicy pol;
 static volatile SlinkMailboxV2 m;
+static SlinkGen4State capst;   /* the beacon's block; .trade is C5's own sub-struct */
 static volatile SlinkTradeWitnessV2 w;
 static volatile SlinkRecordStageV1 stage;
 static SlinkGen4TradeSeam seam;
@@ -715,6 +720,41 @@ static int sc_init(void)
     return 0;
 }
 
+/* The capability contract (trade.h step 5, C2_BEACON_SPEC.md:429-442). The mailbox word
+ * is the beacon's: it composes that word from the cards AFTER the fan-out
+ * (beacon.h, Slink_NDS_PublishCaps), so a bit C5 sets is a contribution, not a mailbox
+ * write, and a host must read liveness from signature + abi_version, never from here. */
+int sc_caps(void)
+{
+    memset(&capst, 0, sizeof capst);
+    memset((void *)&m, 0, sizeof m);
+
+    /* the shared producer's own advertise, exactly as a module would call it */
+    slink_trade_advertise(&m);
+    CHECK((m.capabilities & SLINK_CAP_DURABLE_TRADE) != 0u);
+
+    /* the beacon's stamp, after the fan-out: C5's declared contribution survives it, and
+     * nothing the mailbox happened to hold does (a whole word is rebuilt, never accumulated) */
+    capst.trade.caps = SLINK_GEN4_TRADE_CAPABILITIES;
+    m.capabilities = 0xFFFFFFFFu;
+    Slink_NDS_PublishCaps(&capst, &m);
+    CHECK(m.capabilities == SLINK_CAP_DURABLE_TRADE);
+    CHECK((m.capabilities & SLINK_CAP_EXPLODE) == 0u);
+    CHECK((m.capabilities & 0x0000FF80u) == 0u); /* bits 7..15 are reserved, never published */
+
+    /* a card that stops declaring drops the bit in the SAME visit */
+    capst.trade.caps = 0u;
+    m.capabilities = SLINK_CAP_DURABLE_TRADE;
+    Slink_NDS_PublishCaps(&capst, &m);
+    CHECK(m.capabilities == 0u);
+
+    /* fail closed with no block: nothing is stamped at all */
+    m.capabilities = SLINK_CAP_DURABLE_TRADE;
+    Slink_NDS_PublishCaps(NULL, &m);
+    CHECK(m.capabilities == SLINK_CAP_DURABLE_TRADE);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int sc = argc > 1 ? atoi(argv[1]) : 0;
@@ -733,6 +773,7 @@ int main(int argc, char **argv)
     case 11: return sc_chosen_disagrees();
     case 12: return sc_vanilla();
     case 13: return sc_init();
+    case 14: return sc_caps();
     default: return 99;
     }
 }
@@ -788,6 +829,20 @@ def policy_exe(tmp_path_factory):
 @pytest.mark.parametrize("name,sc,var", SCENARIOS, ids=[s[0] for s in SCENARIOS])
 def test_gen4_trade_policy_scenarios(policy_exe, name, sc, var):
     _run(policy_exe, sc, var)
+
+
+@pytest.fixture(scope="module")
+def caps_exe(tmp_path_factory):
+    """Scenario 14 is built WITH SLINK_GEN4_TRADE: the composition reads a card's
+    contribution only for a card that is in THIS build (beacon.h), so without the define
+    the scenario would measure a different program."""
+    tmp = tmp_path_factory.mktemp("gen4-trade-caps")
+    return _build(tmp, "gen4_trade_caps", HARNESS_C, includes=(COMMON, GEN4),
+                  defines=("-DSLINK_GEN4_TRADE",))
+
+
+def test_gen4_trade_capability_survives_the_beacon_stamp(caps_exe):
+    _run(caps_exe, 14, 0)
 
 
 # --------------------------------------------------------------------------- mutants
@@ -852,6 +907,36 @@ def test_policy_falsifiers_fail_on_known_bad_mutants(tmp_path, mutation):
         path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
     exe = _build(tmp_path, mutation, HARNESS_C, includes=(root / "common", root / "gen4"))
     done = subprocess.run([str(exe), *map(str, scenario)], capture_output=True, text=True, timeout=30)
+    assert done.returncode != 0 and "FAIL line" in done.stdout, (
+        f"mutant {mutation} was NOT detected: rc={done.returncode}\n{done.stdout}\n{done.stderr}")
+
+
+# The capability mutants, against the SAME scenario. Both are the shapes the erase defect
+# took: accumulate the published word (a stale bit outlives the card that set it), or
+# stamp the beacon's constant and drop every card's bit. Neither needs a game header.
+CAPS_MUTANTS = {
+    "capability-accumulated-not-rebuilt": [
+        ("beacon.h", "    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;",
+         "    m->capabilities |= caps & SLINK_GEN4_CAP_MASK_LEGAL;")],
+    "capability-back-to-the-beacon-constant": [
+        ("beacon.h", "    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;",
+         "    m->capabilities = SLINK_GEN4_CAPABILITIES; (void)caps;")],
+}
+
+
+@pytest.mark.parametrize("mutation", sorted(CAPS_MUTANTS))
+def test_capability_falsifiers_fail_on_known_bad_mutants(tmp_path, mutation):
+    root = tmp_path / mutation
+    shutil.copytree(COMMON, root / "common")
+    shutil.copytree(GEN4, root / "gen4")
+    for header, needle, replacement in CAPS_MUTANTS[mutation]:
+        path = root / "gen4" / header
+        text = path.read_text(encoding="utf-8")
+        assert needle in text, f"{mutation}: needle not found in {header}"
+        path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
+    exe = _build(tmp_path, mutation, HARNESS_C, includes=(root / "common", root / "gen4"),
+                 defines=("-DSLINK_GEN4_TRADE",))
+    done = subprocess.run([str(exe), "14", "0"], capture_output=True, text=True, timeout=30)
     assert done.returncode != 0 and "FAIL line" in done.stdout, (
         f"mutant {mutation} was NOT detected: rc={done.returncode}\n{done.stdout}\n{done.stderr}")
 

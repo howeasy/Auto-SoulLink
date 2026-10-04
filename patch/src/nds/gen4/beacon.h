@@ -116,8 +116,18 @@ typedef char slink_gen4_title_size_check[
  * bit ahead of its own. The shared enum has no beacon/liveness member, so the host
  * proves C2 from signature + abi_version alone and must NOT gate liveness on a
  * capability bit (C2_BEACON_SPEC.md:436-442).
+ *
+ * The PUBLISHED word is not this constant. It is composed per visit by
+ * Slink_NDS_PublishCaps() below, out of the beacon's own set plus one contribution
+ * word per COMPILED-IN card, and it is INFORMATIONAL -- nothing about liveness, the
+ * reset latch or the header repair may read it.
  */
 #define SLINK_GEN4_CAP_MASK_TITLE 0xFFFF0000u
+/* Every bit a published word may carry: the shared vocabulary (0..6) plus the
+ * title-private range. Bits 7..15 are reserved and are dropped on the way out, so a
+ * card that sets one cannot leak it into the word a host reads (beacon.c asserts the
+ * same mask over the static word). */
+#define SLINK_GEN4_CAP_MASK_LEGAL (0x7Fu | SLINK_GEN4_CAP_MASK_TITLE)
 #define SLINK_GEN4_CAPABILITIES 0u
 
 /* ---------------------------------------------------------------- session state
@@ -167,6 +177,11 @@ typedef struct {
     uint8_t in_flight;     /* one sound request held across visits                       */
     uint8_t ready;         /* InitSoundData has run: the sound system exists             */
     uint8_t blocked;       /* a request was refused pre-InitSoundData                   */
+    uint32_t caps;         /* this card's contribution to the published word: 0, or
+                            * SLINK_GEN4_SOUND_CAPABILITIES once and only while this
+                            * card is ready. Rebuilt by C3 on every visit (sound_policy.h);
+                            * OR-ed by Slink_NDS_PublishCaps() below, never assigned to
+                            * the mailbox by a card. */
 } SlinkGen4StateSound;
 
 /* C4. The shared panel producer, by value: the snapshot it draws from and its active
@@ -174,6 +189,8 @@ typedef struct {
 typedef struct {
     uint32_t layout; /* SLINK_GEN4_STATE_PANEL_LAYOUT, stamped by C4 */
     SlinkPanelProducer producer;
+    uint32_t caps; /* C4's contribution to the published word; 0 until C4's Service
+                    * declares one (beacon.h, "capabilities" above) */
 } SlinkGen4StatePanel;
 
 /* C5. The shared trade producer, by value: phase, sequences, both identities and the two
@@ -181,6 +198,8 @@ typedef struct {
 typedef struct {
     uint32_t layout; /* SLINK_GEN4_STATE_TRADE_LAYOUT, stamped by C5 */
     SlinkTradeProducer producer;
+    uint32_t caps; /* C5's contribution: SLINK_GEN4_TRADE_CAPABILITIES while C5's module
+                    * is in this build (trade.h step 5), rebuilt by the card every visit */
 } SlinkGen4StateTrade;
 
 typedef struct {
@@ -201,16 +220,57 @@ typedef struct {
 } SlinkGen4State;
 
 /* C89-safe compile-time checks (the ROM compiler is not required to be C11).
-   - the sound block is 12 bytes, so a stray field cannot be added without this firing;
+   - the sound block is 16 bytes -- the five ROM-private fields plus this card's
+     contribution word -- so a stray field cannot be added without this firing;
    - every sub-struct starts word-aligned: the producers contain word loads and _Alignas
      members, and a byte-aligned base would make that a build error. */
-typedef char slink_gen4_state_sound_size_check[(sizeof(SlinkGen4StateSound) == 12u) ? 1 : -1];
+typedef char slink_gen4_state_sound_size_check[(sizeof(SlinkGen4StateSound) == 16u) ? 1 : -1];
 typedef char slink_gen4_state_substructs_aligned_check[
     ((offsetof(SlinkGen4State, sound) % 4u) == 0u && (offsetof(SlinkGen4State, panel) % 4u) == 0u
      && (offsetof(SlinkGen4State, trade) % 4u) == 0u) ? 1 : -1];
 typedef char slink_gen4_state_block_aligned_check[((sizeof(SlinkGen4State) % 4u) == 0u) ? 1 : -1];
 
 #define SLINK_GEN4_STATE_MAGIC 0x4C4B5347u /* "GSKL" little-endian */
+
+/* ---------------------------------------------------------------- the capability word
+ * ONE writer, ONE composition, ONE call site: the beacon's service body, immediately
+ * after Slink_NDS_Dispatch(). A card owns the MEANING of a bit and publishes it by
+ * writing its own contribution word; it never touches m->capabilities, because the
+ * next stamp would overwrite it anyway (beacon.c stamps after the fan-out).
+ *
+ * Whole-word assignment, never accumulate. That is the fix for the erase defect: a
+ * whole-word rebuild from state cannot keep a bit a card has stopped declaring
+ * (drop it this visit), and it cannot inherit a bit from the previous visit or from
+ * a host write into the mailbox (the word is a function of the state block alone).
+ * OR-ing the mailbox's own word back in would do both wrong things, which is what the
+ * tests pin.
+ *
+ * The mask is fail-closed, not cosmetic: bits 7..15 are reserved for future shared
+ * caps (abi.h:88-96 stops at bit 6), so a card that sets one loses it rather than
+ * publishing a bit the ABI owner has not defined.
+ *
+ * Header-only and host-compilable on purpose, the same way Slink_NDS_SpanBase() is:
+ * beacon.c needs the NitroSDK and cannot be driven by a host compiler, so the RULE
+ * lives here and the ROM file carries the call.
+ */
+static inline void Slink_NDS_PublishCaps(const SlinkGen4State *st, volatile SlinkMailboxV2 *m)
+{
+    uint32_t caps = SLINK_GEN4_CAPABILITIES;
+
+    if (st == NULL || m == NULL) {
+        return; /* fail closed: no block, no stamp -- the caller has already returned */
+    }
+#if defined(SLINK_GEN4_SOUND)
+    caps |= st->sound.caps;
+#endif
+#if defined(SLINK_GEN4_PANEL)
+    caps |= st->panel.caps;
+#endif
+#if defined(SLINK_GEN4_TRADE)
+    caps |= st->trade.caps;
+#endif
+    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;
+}
 
 /* ---------------------------------------------------------------- entry point
  * Called once per boot from NitroMain, after InitSystemForTheGame() (which creates

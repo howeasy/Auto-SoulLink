@@ -16,6 +16,11 @@ detector measures nothing.
   title window 0xE00..0xE40   D-C2-1 forbids an unversioned title block and anything
                               past 0xE40
   capabilities 0, bits 16..31 a bit set ahead of its card advertises what is not built
+  capability composed after         assigning the beacon's constant erases every card's
+  the fan-out                       bit; composing before the cards run makes every bit one
+                                    visit stale, so a cleared bit outlives the visit that
+                                    cleared it; accumulating into the mailbox keeps a bit,
+                                    or a host's write, forever
   vblankCounter only          gSystem.frameCounter is zeroed every loop (main.c:124)
   no DTCM / OS_ARENA_ITCM     DTCM is the launcher stack; census W2 FAILs an ITCM alloc
   no 7-8 hex span literal     census W2 FAILs a literal inside the span, and this source
@@ -235,6 +240,51 @@ def det_bad_capabilities(src: dict[str, str]) -> list[str]:
     return out
 
 
+def det_capability_composition(src: dict[str, str]) -> list[str]:
+    """The published word is COMPOSED from the cards, AFTER the fan-out, by a single
+    whole-word assignment.
+
+    Three defects share one shape -- the erase: assigning the beacon's constant (which
+    drops every card's bit), composing BEFORE the fan-out (every bit one visit stale, so
+    a cleared bit outlives the visit that cleared it), and accumulating into the mailbox
+    (a bit, or a host's write, survives forever). All three are invisible to a C2 build
+    that has no card in it yet, so they are pinned here as well as by the host harnesses.
+    """
+    code, header = _strip(src["beacon.c"]), src["beacon.h"]
+    out = []
+    service = _function_body(code, "Slink_NDS_Service")
+    if not service:
+        return ["no Slink_NDS_Service body found"]
+    dispatch_at = service.find("Slink_NDS_Dispatch(st, m)")
+    caps_at = service.find("Slink_NDS_PublishCaps(st, m)")
+    if dispatch_at < 0:
+        out.append("the service does not run the producer fan-out")
+    if caps_at < 0:
+        out.append("the service does not stamp the word through Slink_NDS_PublishCaps")
+    elif dispatch_at >= 0 and caps_at < dispatch_at:
+        out.append("the capability word is stamped BEFORE the fan-out: every bit would be "
+                   "one visit stale and a card's cleared bit would survive the visit")
+    direct = re.findall(r"m->capabilities\s*(?:=|\|=|&=|\^=)", code)
+    if direct:
+        out.append(f"beacon.c writes m->capabilities directly ({len(direct)}x): the "
+                   f"composition helper is the single writer, a card is not")
+    helper = _function_body(_strip(header), "Slink_NDS_PublishCaps")
+    if not helper:
+        out.append("beacon.h has no Slink_NDS_PublishCaps body")
+    else:
+        if "m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;" not in helper:
+            out.append("the composition does not assign the masked sum of the cards' words "
+                       "(an accumulate here is exactly the stale-bit defect)")
+    for card in ("sound", "panel", "trade"):
+        arm = (r"#if defined\(SLINK_GEN4_" + card.upper() + r"\)\s*\n"
+               r"\s*caps \|= st->" + card + r"\.caps;\s*\n#endif")
+        if not re.search(arm, header):
+            out.append(f"the {card} contribution is not guarded by its own build flag")
+        if "caps" not in struct_fields(header, "SlinkGen4State" + card.capitalize()):
+            out.append(f"SlinkGen4State{card.capitalize()} has no per-card contribution word")
+    return out
+
+
 def det_frame_counter(src: dict[str, str]) -> list[str]:
     """Code only: the rule is also named in prose, and prose must not trip it."""
     return [f"{name}: gSystem.frameCounter" for name, t in src.items() if "frameCounter" in _strip(t)]
@@ -319,6 +369,7 @@ DETECTORS = {
     "opcode pre-route": det_opcode_route,
     "in-span literal": det_span_literals,
     "capability set ahead of its card": det_bad_capabilities,
+    "capability word composed after the fan-out": det_capability_composition,
     "frameCounter as the clock": det_frame_counter,
     "DTCM or ITCM arena": det_arena_misuse,
     "title window overruns its ruling": det_title_window,
@@ -533,6 +584,15 @@ _MUTATIONS = [
     ("sound_policy.h", "static inline void slink_gen4_sound_release(",
      "static const uint32_t slink_sound_span = 0x01FFEC00u;\n\n"
      "static inline void slink_gen4_sound_release(", "in-span literal"),
+    # The erase defect, in the two shapes that compile in a C2 build with no card in it.
+    ("beacon.c", "    Slink_NDS_PublishCaps(st, m);",
+     "    m->capabilities = SLINK_GEN4_CAPABILITIES;", "capability word composed after the fan-out"),
+    ("beacon.h", "    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;",
+     "    m->capabilities |= caps & SLINK_GEN4_CAP_MASK_LEGAL;", "capability word composed after the fan-out"),
+    # Stamping before AND after the fan-out: the ordering this card rejected. The first
+    # occurrence moves ahead of the dispatch, which is the whole defect.
+    ("beacon.c", "    Slink_NDS_Dispatch(st, m);",
+     "    Slink_NDS_PublishCaps(st, m);\n    Slink_NDS_Dispatch(st, m);", "capability word composed after the fan-out"),
 ]
 
 
