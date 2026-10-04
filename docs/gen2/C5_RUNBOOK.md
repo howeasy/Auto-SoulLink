@@ -100,20 +100,32 @@ fails on `rand_overlay ~= overlay`. Production `lua/gen2/**` is untouched.
 
 ## Cells
 
-READY: `cc/link` (G-a), `gs/link` and `cg/link` (G-b), `cc/` and `gs/gen2_reconnect` (G-d), `cc/` and
-`gs/gen2_gift` (G-e/G-f: Bill's givepoke, a static-site gift read from the ROM), and `ct/gen2_npc_trade` (G-h: pair
-`ct` is provisioned with `trades=given`, so Kyle still asks for the fixture's Bellsprout).
+READY (10/11 PASS at e5b0c5c6):
+- `cc/link` (G-a), plus `gs/link` and `cg/link` (G-b);
+- `cc/` and `gs/gen2_reconnect` (G-d);
+- `cc/` and `gs/gen2_gift` (G-e/G-f): Bill's givepoke, read from each side's ROM;
+- `ct/gen2_npc_trade` (G-h): pair `ct` uses `trades=given`, so Kyle still asks for the fixture's Bellsprout;
+- `cc/gen2_c5_wrong_rom` (G-c) and `cc/gen2_c5_no_contract` (G-i): refused at hello by the SERVER.
 
-BLOCKED (`python tools/c5_runner.py list` prints the gaps):
-- G-c: a randomized wrong cart. Lua admits it; the SERVER refuses it at hello with a hud_show reason. This needs a new
-  duo scenario shaped like `scenario_gen2_reconnect.lua`'s wrong_save leg: hello, then the refusal HUD, then a verdict.
-  It also needs e2e_duo registration, an orchestration that does not wait for "both admitted Gen 2 hellos", and an
-  oracle on the server snapshot. Registration and orchestration are `tools/e2e_duo.py` work.
-- G-i: no `rom_contract.json`, so the server refuses (`server/server.py:862-867`). It is the same scenario as G-c, with
-  a shim mode that withholds the contract.
-- G-g: a roamer. It needs an O-33 SYNTH setup: a `tools/gen2_synth_fixtures.py` recipe that has the roamer active
-  and adjacent, plus its committed disclosure. It also needs a scenario and an oracle that compare the met species
-  with the ROM's `InitRoamMons` immediate (`scan_randomized()["roamers"]`).
+G-c and G-i are explicit-only e2e_duo scenarios (`GEN2_C5_REFUSED`). Their Lua half is
+`lua/tests/duo/gen2_c5_refused.lua`; their oracle is `gen2_duo_oracles.c5_refused_oracle`. The orchestration waits
+for every admitted side's hello and for every refused side's `admission == "rejected"` before it writes the go-file.
+- G-c: B boots cc's B cart, but the served contract names ct's B, another real Manager cart.
+- G-i: the run has no `rom_contract.json`.
+- The oracle matches the server's text exactly. Observed:
+  - G-c B: `this is not the ROM built for player b (sha1 c462e7602032, expected 32a08d4c5bb0)`;
+  - G-i A and B: `randomized cartridges for this game must be made by the Manager (this run has no randomized-ROM
+    contract)`.
+- A refused side receives no command (`SERVER_VERDICT rx=0`), holds no identity and forms no link. The journal holds
+  `REJECTED — <reason>`. G-i leaves no links.json at all.
+
+BLOCKED: G-g, the roamer. The overlay client never registers `roamer_party_finalized` or `roamer_box_finalized`:
+they are not among the 27 sites proven by `tests/fixtures/gen2/receipts/overlay/<title>.engine_sites.json`. So
+`lua/gen2/signals.lua:953-965` cannot classify a roamer catch on any overlay cart, randomized or not. The fix comes
+first, as a U1G `roamer` leg that proves those sites. Only after that can an O-33 roamer setup link:
+- `wRoamMon<i>` on Route 29, written from the executed ROM's `InitRoamMons` immediates;
+- a Repel to block ordinary wilds;
+- Master Balls.
 
 ## What the verifier does not consume yet
 

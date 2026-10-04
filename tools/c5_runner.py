@@ -186,17 +186,34 @@ def shim(pair: str, duo_argv: list[str]) -> None:
         plan["env"].update(SLINK_GEN2_EXEC_SHA1=sha, SLINK_GEN2_RANDOMIZED="1", SLINK_GEN2_SAVERAM_NAME=name)
         return plan
 
+    scenario = duo_argv[duo_argv.index("--scenario") + 1]
+    # C-5 refused-at-hello controls. wrong_rom: the server's contract names ANOTHER Manager cart for B (pair ct's B,
+    # a real UPR output with its own roms/b.gbc), while B boots its own pair's cart. no_contract: no contract at all.
+    expect = {"gen2_c5_wrong_rom": {"a": "admitted", "b": "refused"},
+              "gen2_c5_no_contract": {"a": "refused", "b": "refused"}}.get(scenario)
+
     def swap(self):
-        Path(self.data_dir, "roms").mkdir(exist_ok=True)
-        shutil.copyfile(source / "rom_contract.json", Path(self.data_dir, "rom_contract.json"))
+        if scenario != "gen2_c5_no_contract":
+            Path(self.data_dir, "roms").mkdir(exist_ok=True)
+            served = json.loads(json.dumps(contract))
+            for inst in ("a", "b"):
+                rom = source / "roms" / f"{inst}.gbc"
+                if scenario == "gen2_c5_wrong_rom" and inst == "b":
+                    rom = ROMS / "ct" / "roms" / "b.gbc"
+                    served["players"]["b"] = json.loads((ROMS / "ct" / "rom_contract.json").read_text())["players"]["b"]
+                    if served["players"]["b"]["rom_sha1"] == contract["players"]["b"]["rom_sha1"]:
+                        raise RuntimeError("the wrong-ROM control's contract cart equals the booted cart")
+                shutil.copyfile(rom, Path(self.data_dir, "roms", f"{inst}.gbc"))
+            Path(self.data_dir, "rom_contract.json").write_text(json.dumps(served, indent=2) + "\n", encoding="utf-8")
         for inst, plan in self._gen2_plans.items():
             row = self._gen2_inputs[inst]
             if row.get("expect_admission") == "refused":
                 continue
-            shutil.copyfile(source / "roms" / f"{inst}.gbc", Path(self.data_dir, "roms", f"{inst}.gbc"))
             randomize(plan, inst, row["title"])
+            if expect:
+                plan["env"]["SLINK_C5_EXPECT"] = expect[inst]
             print(f"[c5] {inst}: executes randomized {row['title']} {plan['launch_sha1'][:12]} "
-                  f"(seed {contract['players'][inst]['seed']})")
+                  f"(seed {contract['players'][inst]['seed']}){' expect ' + expect[inst] if expect else ''}")
         self._c5_swapped = True
 
     reconnect = duo.DuoRun._stage_gen2_reconnect
@@ -274,16 +291,16 @@ CELLS = [
     ("gs", "gen2_gift", "G-e G-f", None),
     # G-h: ct is provisioned with trades=given, so Kyle still asks for Bellsprout; the given species comes from the ROM
     ("ct", "gen2_npc_trade", "G-h", None),
-    ("cc", "c5_wrong_rom", "G-c",
-     "no driver: a randomized cart whose sha1 is not the contract's is admitted by Lua (rand_overlay) and refused by the "
-     "SERVER at hello; gen2_admit_wrong_rom's refused half only covers a Lua refusal (duo_gen2_main.lua:195). Needs an "
-     "e2e_duo scenario + oracle asserting the server verdict 'not the ROM built for player b'"),
-    ("cc", "c5_no_contract", "G-i",
-     "no driver: the same server-side refusal as G-c (a rand_overlay hello in a run with no rom_contract.json, "
-     "server.py:862-866); needs the refusal scenario + oracle, then a shim mode that withholds the contract"),
+    # G-c: B boots cc's B cart while the served contract names ct's B (another real Manager cart): server refuses B
+    ("cc", "gen2_c5_wrong_rom", "G-c", None),
+    # G-i: no rom_contract.json in the run: the server refuses both randomized hellos (server.py:862-867)
+    ("cc", "gen2_c5_no_contract", "G-i", None),
     ("cc", "c5_roamer", "G-g",
-     "no driver: no Gen 2 duo meets a roamer (InitRoamMons needs the Burned Tower event); needs an O-33 SYNTH roamer "
-     "setup + scenario + oracle"),
+     "the overlay client never registers roamer_party_finalized / roamer_box_finalized: they are absent from the "
+     "PHYSICAL engine_sites receipt (tests/fixtures/gen2/receipts/overlay/<title>.engine_sites.json proves 27 sites, "
+     "no roamer_*), so lua/gen2/signals.lua:953-965 can never classify a roamer catch on ANY overlay cart (randomized "
+     "or not). Needs a U1G 'roamer' leg (tests/live/test_gen2_u1g.py KINDS, lua/tests/gen2_u1g_inputs.lua) to prove "
+     "them first; only then an O-33 roamer setup (wRoamMon<i> on Route 29 + repel + Master Balls) can link"),
 ]
 RNG_STALL = None   # filled from gen2_final_sweep (the same retry-once classes)
 
@@ -305,7 +322,10 @@ def _git(cwd, *args):
 
 # The C-5 harness files that may be carried UNCOMMITTED from this checkout into the lane (--carry): outside the Gen 2
 # CODE_DIGEST (lua/tests, tools), so a carried run still stamps a clean digest. New files are listed too.
-CARRY = ("lua/tests/test_gen2_scripted_gate.lua", "lua/tests/duo/duo_gen2_main.lua", "tools/gen2_duo_oracles.py")
+CARRY = ("lua/tests/test_gen2_scripted_gate.lua", "lua/tests/duo/duo_gen2_main.lua", "tools/gen2_duo_oracles.py",
+         "tools/e2e_duo.py", "tools/gen2_synth_fixtures.py", "lua/tests/duo/gen2_c5_refused.lua",
+         "lua/tests/duo/scenario_gen2_c5_wrong_rom.lua", "lua/tests/duo/scenario_gen2_c5_no_contract.lua",
+         "lua/tests/duo/scenario_gen2_c5_roamer.lua")
 
 
 def ensure_lane(sha: str, carry: bool) -> Path:

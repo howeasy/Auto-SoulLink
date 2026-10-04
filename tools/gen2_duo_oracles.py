@@ -250,6 +250,70 @@ def _randomized_npc_trade(inst, title, wanted, ot_id):
     return hits[0][2], ot_id
 
 
+# The server's own refusal texts (server/server.py _decide_admission), matched EXACTLY: a different wording is a finding
+# to record, never a reason to loosen this oracle.
+C5_NO_CONTRACT_REASON = ("randomized cartridges for this game must be made by the Manager "
+                         "(this run has no randomized-ROM contract)")
+
+
+def _c5_wrong_rom_reason(player, got, want):
+    return f"this is not the ROM built for player {player} (sha1 {got.lower()[:12]}, expected {want.lower()[:12]})"
+
+
+def c5_refused_oracle(results, *, data_dir, status, events, expect, on_verified=None, on_reason=None):
+    """C-5 G-c / G-i: each refused side ran its randomized cart (rand_overlay at its own contract sha1), sent its hello,
+    and the SERVER refused it with the exact reason; it received no command, holds no identity and forms no link. An
+    admitted side (G-c's A) was admitted. expect: {side: "admitted" | "rejected"}."""
+    check_save_witness(results)
+    contract_path = Path(data_dir) / "rom_contract.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path.is_file() else None
+    players = (status or {}).get("players") or {}
+    links_path = Path(data_dir) / "links.json"   # absent when no side was ever admitted (G-i): nothing persisted
+    document = json.loads(links_path.read_text(encoding="utf-8")) if links_path.is_file() else {}
+    if not links_path.is_file() and "admitted" in expect.values():
+        raise RuntimeError("an admitted side left no links.json")
+    observed = {}
+    for side, state in expect.items():
+        text = (results or {}).get(side) or ""
+        client = _last_tagged(text, "CLIENT") or {}
+        verdict = _last_tagged(text, "SERVER_VERDICT") or {}
+        if client.get("artifact_kind") != "rand_overlay":
+            raise RuntimeError(f"{side}: not a randomized cart (CLIENT {client.get('artifact_kind')!r})")
+        if verdict.get("expect") != ("refused" if state == "rejected" else "admitted") or verdict.get("hellos", 0) < 1:
+            raise RuntimeError(f"{side}: SERVER_VERDICT {verdict} does not match the expected {state}")
+        row = players.get(side) or {}
+        reason = row.get("admission_reason", "")
+        observed[side] = {"admission": row.get("admission"), "reason": reason}
+        if on_reason is not None:
+            on_reason(f"C5_SERVER_VERDICT {json.dumps({'side': side, **observed[side]}, sort_keys=True)}")
+        if row.get("admission") != state:
+            raise RuntimeError(f"{side}: server admission {row.get('admission')!r} ({reason!r}), expected {state}")
+        if state == "admitted":
+            if verdict.get("rx", 0) < 1:
+                raise RuntimeError(f"{side}: the admitted side received no command")
+            continue
+        if contract is None:
+            want = C5_NO_CONTRACT_REASON
+        else:
+            want = _c5_wrong_rom_reason(side, client["rom_sha1"], contract["players"][side]["rom_sha1"])
+            if client["rom_sha1"] == contract["players"][side]["rom_sha1"]:
+                raise RuntimeError(f"{side}: the refused cart IS its contract cartridge; the control is invalid")
+        if reason != want:
+            raise RuntimeError(f"{side}: server refusal reason {reason!r} != expected {want!r}")
+        if verdict.get("rx") != 0:
+            raise RuntimeError(f"{side}: the refused side received {verdict.get('rx')} command(s)")
+        if str(side) in ((document.get("player_identity") or {})):
+            raise RuntimeError(f"{side}: the refused side's identity was locked")
+        if not any(e.get("player") == side and e.get("text") == f"REJECTED — {want}" for e in events or []):
+            raise RuntimeError(f"{side}: no 'REJECTED — {want}' event in the journal")
+    if document.get("links"):
+        raise RuntimeError(f"a refused run formed links: {document['links']}")
+    if on_verified is not None:
+        on_verified({"a": observed["a"]["admission"], "b": observed["b"]["admission"], "area": "none",
+                     "titles": "/".join(str((_last_tagged(results[s], "CLIENT") or {}).get("title")) for s in ("a", "b")),
+                     "status": "refused"})
+
+
 def _client_artifact(inst, client, duo):
     kind = client.get("artifact_kind", "clean")
     if kind == "rand_overlay":
