@@ -4,7 +4,7 @@
   "source": {
     "artifact": "polishedcrystal",
     "build": "polishedcrystal-3.2.3.gbc (standard: no FAITHFUL/MONOCHROME/DEBUG)",
-    "build_provenance_sha256": "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    "build_provenance_sha256": "d590e33adf0d696f279bd1acda6981cc50374ff2d8eae4deb9dee7097ab757f4",
     "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42",
     "evidence_level": "SOURCE",
     "generator": "tools/gen_polished_profile.py",

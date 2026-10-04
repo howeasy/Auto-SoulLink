@@ -11,7 +11,7 @@ return {
     ["sym_sha256"] = "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
     ["map_sha256"] = "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
     ["lock_sha256"] = "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
-    ["build_provenance_sha256"] = "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    ["build_provenance_sha256"] = "d590e33adf0d696f279bd1acda6981cc50374ff2d8eae4deb9dee7097ab757f4",
     ["build"] = "polishedcrystal-3.2.3.gbc (standard: no FAITHFUL/MONOCHROME/DEBUG)",
     ["generator"] = "tools/gen_polished_pack.py",
   },
