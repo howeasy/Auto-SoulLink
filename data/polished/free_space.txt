@@ -1,0 +1,39 @@
+Polished Crystal free space -- GENERATED, do not edit.
+Command: python tools/build_polished_syms.py
+ROM: 128 banks (2097152 bytes), header size code 0x06; 2 ROMX bank(s) never allocated by the linker (fully free): [126, 127]
+
+ROM0: 351 bytes free across 1 bank(s)
+  bank   0:    351 free ($015f) of 16384
+
+ROMX: 33444 bytes free across 127 bank(s) (incl. unallocated)
+  top banks by free bytes (max 20, nonzero only):
+  bank 126:  16384 free ($4000)
+  bank 127:  16384 free ($4000)
+  bank 125:    660 free ($0294)
+  bank  80:      4 free ($0004)
+  bank  87:      4 free ($0004)
+  bank  81:      2 free ($0002)
+  bank  97:      2 free ($0002)
+  bank  83:      1 free ($0001)
+  bank  84:      1 free ($0001)
+  bank  85:      1 free ($0001)
+  bank 100:      1 free ($0001)
+  banks with any free space: 11
+
+WRAM0: 265 bytes free across 1 bank(s)
+  bank   0:    265 free ($0109) of 4096
+
+WRAMX: 3888 bytes free across 7 bank(s)
+  bank   1:     13 free ($000d) of 4096
+  bank   2:   1813 free ($0715) of 4096
+  bank   5:   2062 free ($080e) of 4096
+
+SRAM: 1832 bytes free across 4 bank(s)
+  bank   0:    442 free ($01ba) of 8192
+  bank   1:   1372 free ($055c) of 8192
+  bank   2:      9 free ($0009) of 8192
+  bank   3:      9 free ($0009) of 8192
+
+HRAM: 0 bytes free across 1 bank(s)
+
+(per-bank lists show only banks with free bytes; VRAM/OAM omitted)

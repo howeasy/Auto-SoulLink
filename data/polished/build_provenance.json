@@ -1,0 +1,42 @@
+{
+  "schema": "polished-build-provenance-v1",
+  "generated": "2026-10-04T12:26:43Z",
+  "source": {
+    "url": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42"
+  },
+  "toolchain": {
+    "rgbds": {
+      "version": "v1.0.3",
+      "binaries": {
+        "rgbasm": "d82cd2d23194c8c351b28eaf7a603761a08ddff8a8f6aaf2cc3c49d4bb077697",
+        "rgblink": "ecbcb4bc2e1e3d7dcb8a7be6955e2ec6e62a331949a9e6856af8f78483326365",
+        "rgbfix": "54b7a90b799641cfd95de1f9bb8f0d46cef80e950b06ffdcbd096f7e51ae1bbb",
+        "rgbgfx": "abedc5660b477b881496390502bffd25e40d1b0155ab8de43f623726a036f149"
+      }
+    },
+    "w64devkit": {
+      "version": "2.10.0",
+      "binaries": {
+        "make": "114f047af6b479b17adc5044a40ee0e03c1e39accfd9c3a4d8230c5bfc73f4a9",
+        "gcc": "9a52de3e3af8f4896e963c4b68ed159f049954775decb20e421cd75d51aab6ed"
+      }
+    }
+  },
+  "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
+  "roms": {
+    "polishedcrystal": {
+      "sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+      "md5": "53d90e468c9eae4d602feacc6295a021",
+      "header_crc": "A36C",
+      "crc32": "F98367E4",
+      "title": "PKPCRYSTAL"
+    }
+  },
+  "symbols": {
+    "polishedcrystal.sym": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
+    "polishedcrystal.map": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0"
+  },
+  "sym_vs_release_sym": "equal (LF-normalised)"
+}

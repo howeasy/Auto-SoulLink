@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "rgbds_version": "v1.0.3",
+  "rgbds_note": "upstream .rgbds-version says 1.0.0, but v1.0.3 reproduces the release ROM byte-for-byte (verified 2026-10-04), so no 1.0.0 pin was added",
+  "w64devkit_version": "2.10.0",
+  "source": {
+    "url": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42"
+  },
+  "outputs": {
+    "polishedcrystal": {
+      "filename": "polishedcrystal-3.2.3.gbc",
+      "sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+      "title": "PKPCRYSTAL"
+    }
+  },
+  "make_targets": ["polishedcrystal-3.2.3.gbc"],
+  "make_args": ["CFLAGS=-O2"],
+  "make_args_note": "w64devkit gcc has no LTO; tools/Makefile hard-codes -flto. CFLAGS=-O2 (command-line, propagates to the tools sub-make) only affects the host helper tools, never the ROM",
+  "release_assets": {
+    "polishedcrystal-3.2.3.gbc": {"sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed"},
+    "polishedcrystal-3.2.3.sym": {"sha1": "e85a84d628e7fc1f3240b16dda1cc2dba453c469", "compare": "LF-normalised equality with the built .sym"}
+  }
+}
