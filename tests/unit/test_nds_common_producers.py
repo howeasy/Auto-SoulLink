@@ -538,15 +538,23 @@ static SlinkRecordStageV1 stage; static SlinkTradeEngine e; static SlinkDecoder 
 static uint8_t rec[SLINK_MAX_RECORD], last_rec[SLINK_MAX_RECORD];
 static uint16_t last_len;
 static int pre_result, scene_result, begin_result, script[16], script_n;
-static int polls, begins, starts, old_present, safe_flag, verify_ok, decodes, misaligned, recv_ok, bad_begin_state, pre_polls;
+static int polls, begins, starts, old_present, safe_flag, verify_ok, decodes, misaligned, recv_ok, bad_begin_state, pre_polls, pre_start_clks, safe_calls, capture_safe;
 static uint32_t recv_pid, recv_ot, frame, frame_step;
+/* Sampled inside a service call: the witness as it stands at a chosen point, which is the only
+ * way to see a verdict that the same call overwrites. capture_safe fires exactly once. */
+static SlinkTradeWitnessV2 seen_at_safe;
+static uint32_t clk(void *p);
 static int mutate_arg, start_ret;
 static const uint8_t *arg_ptr;
 static uint8_t entry_rec[2][SLINK_MAX_RECORD];
 
-static int safe(void *p) { (void)p; return safe_flag; }
+static int safe(void *p) {
+  (void)p; safe_calls++;
+  if (capture_safe) { capture_safe=0; memcpy(&seen_at_safe,&w,sizeof seen_at_safe); }
+  return safe_flag;
+}
 static int locate(void *p,uint32_t pid,uint32_t ot) { (void)p; return old_present && pid==OLD_PID && ot==OLD_OT ? 0 : -1; }
-static int pre_start(void *p) { (void)p; return 1; }
+static int pre_start(void *p) { (void)p; for (int i=0;i<pre_start_clks;i++) (void)clk(p); return 1; }
 static int pre_poll(void *p) { (void)p; pre_polls++; return pre_result; }
 static int scene_start(void *p,unsigned slot,const uint8_t *r,uint16_t n) {
   (void)p;(void)slot;starts++;
@@ -595,6 +603,7 @@ static void reset(void) {
   memset(last_rec,0,sizeof last_rec);last_len=0;
   pre_result=0;scene_result=0;begin_result=1;script[0]=SP_OK;script_n=1;
   polls=begins=starts=decodes=misaligned=bad_begin_state=pre_polls=0;frame=0;frame_step=1;
+  pre_start_clks=0;safe_calls=0;capture_safe=0;memset(&seen_at_safe,0,sizeof seen_at_safe);
   mutate_arg=0;start_ret=1;arg_ptr=0;memset(entry_rec,0,sizeof entry_rec);B=&BIND;
   old_present=1;safe_flag=1;verify_ok=1;recv_ok=1;recv_pid=NEW_PID;recv_ot=NEW_OT;
   dec.context=0;dec.read_u32=dec_read;dec.verify=dec_verify;
@@ -1034,6 +1043,143 @@ static int sc_uncertain(void) {
   return 0;
 }
 
+/* Both frame bounds are unsigned deltas against a wrapping 32-bit frame counter. Here the
+ * stamp lands just below the wrap and the elapsed time is measured ACROSS it, so a
+ * difference that is widened (or taken signed) before it is compared reads a huge elapsed
+ * time and expires the visit on the first poll. Elapsed is (now - stamp) mod 2^32:
+ * 0xFFFFFFF0 -> 0x00000020 is 0x30 = 48 frames, not a 4-billion-frame gap. */
+static int sc_wrap_pre(void) {
+  reset();
+  e.pre_save_timeout_frames=50u;frame_step=0;frame=0xFFFFFFF0u;   /* the stamp lands here */
+  pre_result=0;                          /* neither saved (1) nor refused (<0), ever */
+  send_prepare(7,1);svc();
+  CHECK(s.phase==TP_PRE_SAVE && s.pre_save_start_frame==0xFFFFFFF0u && pre_polls==0);
+  CHECK(w.visit_flags==SLINK_VISIT_ACCEPTED && !w.milestones && w.final_result==SLINK_TRADE_PENDING);
+  frame=0xFFFFFFF8u;svc();               /* elapsed 8 */
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==1 && m.status==SLINK_ST_BUSY);
+  frame=0x00000020u;svc();               /* elapsed 0x30 = 48, measured across the wrap */
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==2 && !w.milestones && !m.ack_seq && !m.reason);
+  frame=0x00000022u;svc();               /* elapsed 50 == bound: still tolerated */
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==3 && m.status==SLINK_ST_BUSY);
+  frame=0x00000023u;svc();               /* elapsed 51: the bound expires across the wrap */
+  CHECK(s.phase==TP_DONE && m.producer_phase==SLINK_PHASE_DONE && pre_polls==4);
+  CHECK(w.final_result==SLINK_TRADE_UNCHANGED && w.milestones==(1u<<SLINK_FINAL_RESULT));
+  CHECK(!(w.milestones&(1u<<SLINK_PRE_SAVE_OK)) && w.save_status==0 && w.visit_flags==SLINK_VISIT_ACCEPTED);
+  CHECK(w.milestone_seq[SLINK_FINAL_RESULT]==1 && w.milestone_frame[SLINK_FINAL_RESULT]==0x00000023u);
+  CHECK(m.status==SLINK_ST_FAIL && m.ack_seq==1 && !m.reason && !m.opcode);
+  CHECK(starts==0 && begins==0 && polls==0 && !slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  /* the same arithmetic away from the wrap: a fresh visit stamps its own frame and expires 51 later */
+  frame=0x00000032u;send_prepare(7,10);word(m.args+12,77);m.args[16]=3;svc();
+  CHECK(s.phase==TP_PRE_SAVE && s.pre_save_start_frame==0x00000032u && !w.milestones);
+  frame=0x00000064u;svc();               /* 50 == bound */
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==5);
+  frame=0x00000065u;svc();               /* 51 */
+  CHECK(s.phase==TP_DONE && w.final_result==SLINK_TRADE_UNCHANGED && m.ack_seq==10 && pre_polls==6);
+  return 0;
+}
+
+static int sc_wrap_post(void) {
+  reset(); if (prep()) return 1;
+  scene(2);CHECK(starts==1);
+  CHECK(slink_trade_commit_entered(&s,&w,0,&e));
+  script_n=4;for (int i=0;i<4;i++) script[i]=SP_PEND;   /* this save never completes */
+  e.save_timeout_frames=50u;frame_step=0;frame=0xFFFFFFF0u;   /* the stamp lands here */
+  scene_result=1;svc();
+  CHECK(begins==1 && polls==1 && !bad_begin_state && s.save_start_frame==0xFFFFFFF0u);
+  if (still_saving()) return 1;
+  frame=0xFFFFFFF8u;svc();               /* elapsed 8 */
+  CHECK(polls==2);if (still_saving()) return 1;
+  frame=0x00000020u;svc();               /* elapsed 0x30 = 48, measured across the wrap */
+  CHECK(polls==3);if (still_saving()) return 1;
+  frame=0x00000022u;svc();               /* elapsed 50 == bound: PENDING is still believed */
+  CHECK(polls==4 && s.phase==TP_SCENE && m.status==SLINK_ST_BUSY);if (still_saving()) return 1;
+  frame=0x00000023u;svc();               /* elapsed 51: PENDING past the bound is FAIL */
+  CHECK(polls==5 && w.final_result==SLINK_TRADE_UNCERTAIN && w.save_status==SLINK_SAVE_FAILED);
+  CHECK(w.milestones==(7u|(1u<<SLINK_FINAL_RESULT)) && !(w.milestones&(1u<<SLINK_POST_SAVE_OK)));
+  CHECK(s.phase==TP_UNCERTAIN && m.producer_phase==SLINK_PHASE_UNCERTAIN && begins==1);
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_UNCERTAIN && m.ack_seq==2 && !m.opcode);
+  CHECK(!slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  return 0;
+}
+
+/* The pre-save bound must start when the producer ASKS, not when the engine answers:
+ * start_pre_save drives a real save prompt and may consume frames, and every one of them is
+ * time the host is already waiting. With a stepping clock the stamp is the FIRST clock read
+ * of the PREPARE branch (frame 1), so start_pre_save's three reads carry the clock to 4 and
+ * the first poll's bound check reads 5: elapsed 4, exactly the frames the engine spent.
+ * A stamp taken after start_pre_save reads 4 instead, forgives all three, and the visit
+ * survives three polls longer than the bound allows. */
+static int sc_presave_stamp(int var) {
+  reset();                                  /* frame_step = 1: the clock advances inside a call */
+  e.pre_save_timeout_frames=var==0 ? 4u : 3u;
+  pre_start_clks=3;                         /* the engine spends three frames answering the ask */
+  pre_result=0;
+  send_prepare(7,1);svc();
+  CHECK(s.phase==TP_PRE_SAVE && s.prepare_seq==1 && pre_polls==0 && !w.milestones);
+  CHECK(s.pre_save_start_frame==1u && frame==4u);   /* stamped before start_pre_save's three reads */
+  svc();                                    /* first poll: elapsed 5 - 1 = 4 */
+  CHECK(pre_polls==1);
+  if (var==0) {                             /* elapsed == bound: inside it */
+    CHECK(s.phase==TP_PRE_SAVE && m.producer_phase==SLINK_PHASE_PRE_SAVE && m.status==SLINK_ST_BUSY);
+    CHECK(!w.milestones && w.final_result==SLINK_TRADE_PENDING);
+    svc();                                  /* second poll: elapsed 6 - 1 = 5 > 4 */
+  }
+  CHECK(s.phase==TP_DONE && m.producer_phase==SLINK_PHASE_DONE && pre_polls==(var==0 ? 2 : 1));
+  CHECK(w.final_result==SLINK_TRADE_UNCHANGED && w.milestones==(1u<<SLINK_FINAL_RESULT));
+  CHECK(!(w.milestones&(1u<<SLINK_PRE_SAVE_OK)) && w.save_status==0 && w.visit_flags==SLINK_VISIT_ACCEPTED);
+  /* the tripping read is bound+1 past the stamp; tp_mark's own read is the next one */
+  CHECK(w.milestone_seq[SLINK_FINAL_RESULT]==1 && w.milestone_frame[SLINK_FINAL_RESULT]==e.pre_save_timeout_frames+3u);
+  CHECK(m.status==SLINK_ST_FAIL && m.ack_seq==1 && !m.reason && !m.opcode);
+  CHECK(starts==0 && begins==0 && polls==0 && !slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  return 0;
+}
+
+/* A fresh PREPARE that arrives on the exact frame the pre-save bound expires is dispatched
+ * AFTER the watchdog: the poll block sits above the mailbox-ownership gate, so the timed-out
+ * visit is finished UNCHANGED first and the new command is handled in the very same service
+ * call. That ordering is intended, not incidental -- gating first would leave the expired
+ * visit parked in TP_PRE_SAVE with no owner and nothing to time it out. The old finish is
+ * silent in the mailbox: tp_ack compares only the sequence and m->seq is already the new
+ * PREPARE's, so sequence 1 is never published and the new visit opens unacknowledged. */
+static int sc_expire_replace(void) {
+  reset();
+  e.pre_save_timeout_frames=50u;frame_step=0;frame=0;
+  pre_result=0;
+  send_prepare(7,1);svc();
+  CHECK(s.phase==TP_PRE_SAVE && s.prepare_seq==1 && s.pre_save_start_frame==0u && pre_polls==0);
+  /* one frame earlier the same fresh command is refused: the old visit still owns the mailbox */
+  frame=50u;send_prepare(9,11);word(m.args+12,77);m.args[16]=3;svc();
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==1 && w.session_epoch==7u && w.visit_id==8u);
+  CHECK(m.status==SLINK_ST_FAIL && m.reason==SLINK_REASON_IDENTITY && m.ack_seq==11 && !m.opcode);
+  /* the expiring frame: safe_field is evaluated after the watchdog's tp_finish and before the
+   * reopen, which is the only point at which the old verdict is still visible */
+  int sc0=safe_calls;
+  frame=51u;send_prepare(9,12);word(m.args+12,77);m.args[16]=3;capture_safe=1;svc();
+  CHECK(safe_calls==sc0+1);
+  CHECK(seen_at_safe.final_result==SLINK_TRADE_UNCHANGED && seen_at_safe.milestones==(1u<<SLINK_FINAL_RESULT));
+  CHECK(seen_at_safe.milestone_seq[SLINK_FINAL_RESULT]==1 && seen_at_safe.milestone_frame[SLINK_FINAL_RESULT]==51u);
+  CHECK(seen_at_safe.session_epoch==7u && seen_at_safe.visit_id==8u && seen_at_safe.visit_flags==SLINK_VISIT_ACCEPTED);
+  CHECK(seen_at_safe.save_status==0 && !seen_at_safe.received_pid && !seen_at_safe.received_otid);
+  /* the old visit is finished, the new one owns the witness, the mailbox was not acked for 1 */
+  CHECK(s.phase==TP_PRE_SAVE && m.producer_phase==SLINK_PHASE_PRE_SAVE && s.prepare_seq==12);
+  CHECK(s.pre_save_start_frame==51u && pre_polls==2 && m.status==SLINK_ST_BUSY);
+  CHECK(w.session_epoch==9u && w.visit_id==77u && w.token[0]==3 && !w.token[1]);
+  CHECK(w.visit_flags==SLINK_VISIT_ACCEPTED && w.save_status==0 && !w.milestones);
+  CHECK(w.final_result==SLINK_TRADE_PENDING);
+  CHECK(m.opcode==SLINK_OP_TRADE_PREPARE && m.ack_seq==11 && m.reason==SLINK_REASON_IDENTITY);
+  CHECK(starts==0 && begins==0 && polls==0);
+  /* the new visit carries its own bound: at elapsed 1 it is still inside it */
+  frame=52u;svc();
+  CHECK(s.phase==TP_PRE_SAVE && pre_polls==3 && !w.milestones && w.final_result==SLINK_TRADE_PENDING);
+  /* and its own sequence: this PREPARE is the one that gets acknowledged */
+  pre_result=1;frame=53u;svc();
+  CHECK(s.phase==TP_READY && m.producer_phase==SLINK_PHASE_READY && pre_polls==4);
+  CHECK(m.status==SLINK_ST_OK && m.ack_seq==12 && m.reason==0 && !m.opcode);
+  CHECK(w.milestones==(1u<<SLINK_PRE_SAVE_OK) && w.visit_flags==(SLINK_VISIT_ACCEPTED|SLINK_PRE_SAVE_CONSENT));
+  CHECK(w.save_status==SLINK_SAVE_OK && w.final_result==SLINK_TRADE_PENDING && w.session_epoch==9u);
+  return 0;
+}
+
 int main(int argc,char **argv) {
   int sc=argc>1?atoi(argv[1]):1,var=argc>2?atoi(argv[2]):0;
   switch (sc) {
@@ -1050,6 +1196,10 @@ int main(int argc,char **argv) {
     case 11: return sc_foreign(var);
     case 12: return sc_presave(var);
     case 13: return sc_uncertain();
+    case 14: return sc_wrap_pre();
+    case 15: return sc_wrap_post();
+    case 16: return sc_presave_stamp(var);
+    case 17: return sc_expire_replace();
   }
   return 99;
 }
@@ -1073,6 +1223,10 @@ SCENARIOS = (
         ["wait-times-out", "fallback-bound-large", "consented-times-out", "completion-after-bound-wins",
           "garbage-poll-times-out", "fallback-bound-expires"])]
     + [("uncertain-terminal", 13, 0)]
+    + [("wrap-presave", 14, 0), ("wrap-postsave", 15, 0)]
+    + [(f"presave-stamp-{n}", 16, v) for v, n in enumerate(
+        ["elapsed-equals-bound", "elapsed-exceeds-bound"])]
+    + [("presave-expiry-replaced", 17, 0)]
 )
 
 
@@ -1127,6 +1281,15 @@ MUTANTS = {
     # parks the producer in TP_PRE_SAVE forever while the host's own budget expires.
     "no-pre-save-watchdog": ((12, 0), [(TP, "> (e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)", "> 0xFFFFFFFFu")]),
     "no-pre-save-fallback-bound": ((12, 5), [(TP, "(e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)", "e->pre_save_timeout_frames")]),
+    # the pre-save bound starts when the producer ASKS. start_pre_save drives a real save prompt,
+    # so the frames it spends answering are time the host is already waiting; a stamp taken
+    # after the call forgives every one of them. Scenario 16 burns three frames in start_pre_save
+    # under a stepping clock, so the stamp's own value and the first poll's elapsed time both move.
+    "presave-stamped-after-start": ((16, 1), [(TP,
+        "        s->pre_save_start_frame = e->frame(e->context);  /* the bound starts when we ask */\n"
+        "        if (!e->start_pre_save(e->context)) tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);",
+        "        if (!e->start_pre_save(e->context)) tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);\n"
+        "        s->pre_save_start_frame = e->frame(e->context);  /* the bound starts when we ask */")]),
     # UNCERTAIN is terminal for the arena lifetime: no opcode may clear it, and the refusal
     # has to name the phase. The self-clearing mutant still answers 11, so it must go red on
     # the phase assertion, not the reason one.
