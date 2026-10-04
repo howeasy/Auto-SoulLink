@@ -139,3 +139,18 @@ def test_committed_index_matches_a_fresh_build() -> None:
     if not (SRC_OK and ROM_OK):
         pytest.skip("Polished sources or release ROM absent")
     assert gen.OUT.read_text(encoding="utf-8") == gen.dump(gen.build_index())
+
+
+@needs_index
+def test_nineteen_variants_evolve_and_plain_targets_resolve(index: dict) -> None:
+    """19 of the 46 variant forms evolve; targets with an explicit PLAIN_FORM (Galarian Meowth -> Perrserker,
+    Galarian Farfetch'd -> Sirfetch'd, Galarian Corsola -> Cursola) resolve to the plain species id. The generator
+    proves every edge against the ROM's EvosAttacks block.
+
+    RED CONTROL: make effective_id drop PLAIN_FORM targets again (16 evolving variants).
+    """
+    evolving = {r["record_index"]: [e["effective_species_id"] for e in r["evolves_to"]]
+                for r in index["variant_forms"] if r["evolves_to"]}
+    assert len(evolving) == 19
+    assert evolving[313] == [279] and evolving[318] == [281] and evolving[325] == [280]
+    assert sorted(evolving[316]) == [317, 324]  # Galarian Slowpoke -> Galarian Slowbro / Galarian Slowking

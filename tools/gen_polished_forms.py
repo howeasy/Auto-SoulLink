@@ -46,6 +46,87 @@ EXT_CONST_RE = re.compile(r"^\s*ext_const\s+([A-Z_0-9]+)")
 NUM_SPECIES_RE = re.compile(r"^DEF NUM_SPECIES EQU const_value")
 
 
+EVOS_START_RE = re.compile(r"^\s*evos_attacks ([A-Z][A-Za-z_0-9]*)\s*$")
+EVO_DATA_RE = re.compile(r"^\s*evo_data ([A-Z_0-9]+)(?:, ([A-Z_0-9]+))?(?:, ([A-Z_0-9]+)(?:, ([A-Z_0-9]+))?)?\s*(?:;.*)?$")
+
+
+def label_key(label: str) -> str:
+    """`RattataAlolan` and the base_stats stem `rattata_alolan` name the same record."""
+    return re.sub(r"[^a-z0-9]", "", label.lower())
+
+
+def read_evolutions(src: pathlib.Path, forms: dict) -> dict[str, list[tuple[str, str]]]:
+    """EvosAttacks label -> [(target species CONSTANT, target form CONSTANT or "")].
+
+    `data/pokemon/evos_attacks.asm` defines every record with `evos_attacks <Label>`
+    followed by its `evo_data` lines, e.g. `evo_data EVOLVE_LEVEL, 20, RATICATE, ALOLAN_FORM`
+    (evos_attacks.asm:377-378). The next `evos_attacks` line closes the record.
+    """
+    out: dict[str, list[tuple[str, str]]] = {}
+    current: str | None = None
+    for line in (src / "data" / "pokemon" / "evos_attacks.asm").read_text(encoding="utf-8").splitlines():
+        m = EVOS_START_RE.match(line)
+        if m:
+            current = label_key(m.group(1))
+            out.setdefault(current, [])
+            continue
+        if current is None:
+            continue
+        d = EVO_DATA_RE.match(line)
+        if not d:
+            continue
+        tokens = [t.strip() for t in line.split(";")[0].split(",")]
+        # `evo_data METHOD [, PARAM,] TARGET[, FORM]`. The trailing token is a FORM only when
+        # it is a known form constant: EVOLVE_HOLDING carries an extra PARAM instead
+        # (evo_data.asm `evo_data EVOLVE_HOLDING, RAZOR_CLAW, TR_MORNDAY, SNEASLER`), so the
+        # token count alone cannot decide it.
+        last = tokens[-1]
+        as_form = last if (last in forms or f"{last}_FORM" in forms) else ""
+        if as_form and len(tokens) >= 4:
+            target, target_form = tokens[-2], as_form
+        else:
+            target, target_form = last, ""
+        out[current].append((target, target_form))
+    return out
+
+
+def _check_evolutions_in_rom(rom: bytes, sym: dict, index: int, edges: list, species: dict, forms: dict) -> None:
+    """Prove the source's evolution targets against the ROM: the record's EvosAttacks block (up to its $FF
+    terminator) must contain each target's `dp` pair (LOW(species), HIGH(species) << 5 | form)."""
+    bank, addr = sym["EvosAttacksPointers"]
+    table = bank * 0x4000 + addr - 0x4000
+    ptr = rom[table + (index - 1) * 2] | rom[table + (index - 1) * 2 + 1] << 8
+    off = bank * 0x4000 + ptr - 0x4000
+    block = bytes(rom[off:off + 40])
+    block = block[:block.index(0xFF)] if 0xFF in block else block
+    for tc, fc in edges:
+        sid = species[tc]
+        if fc and fc not in ("PLAIN", "PLAIN_FORM", "NO_FORM"):
+            wanted = [forms[fc if fc in forms else f"{fc}_FORM"]]
+        else:  # a plain target is stored with form 0 or PLAIN_FORM (1): `evo_data` appends PLAIN_FORM by default
+            wanted = [0, forms.get("PLAIN_FORM", 1)]
+        pairs = [bytes([sid & 0xFF, ((sid >> 8) << 5) | form]) for form in wanted]
+        if not any(pair in block for pair in pairs):
+            raise SystemExit(f"record {index}: ROM evolution block {block.hex()} lacks target {tc}/{fc} ({[x.hex() for x in pairs]})")
+
+
+def effective_id(species_const: str, form_const: str, species: dict, forms: dict,
+                 by_pair: dict) -> int | None:
+    """A variant target resolves to its record index (292..337); a plain one to its species id."""
+    sid = species.get(species_const)
+    if sid is None:
+        return None
+    form = 0
+    if form_const and form_const not in ("PLAIN", "PLAIN_FORM", "NO_FORM"):  # PLAIN_FORM names the plain species
+        name = form_const if form_const in forms else f"{form_const}_FORM"
+        if name not in forms:
+            return None
+        form = forms[name]
+    if form:
+        return by_pair.get((sid, form))
+    return sid
+
+
 def sha256_of(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -157,6 +238,7 @@ def read_ability_species(path: pathlib.Path) -> str:
 def build_index(src: pathlib.Path = DEFAULT_SRC, roms: pathlib.Path = DEFAULT_ROMS) -> dict:
     species = read_species(src)
     forms = read_forms(src)
+    evolutions = read_evolutions(src, forms)
     stems = read_records(src)
     num_species = len(species)
 
@@ -169,6 +251,17 @@ def build_index(src: pathlib.Path = DEFAULT_SRC, roms: pathlib.Path = DEFAULT_RO
             sym[m.group(3)] = (int(m.group(1), 16), int(m.group(2), 16))
     bank, addr = sym["BaseData"]
     base = addr if bank == 0 else bank * 0x4000 + addr - 0x4000
+
+    by_pair = {}
+    for _i, _entry in enumerate(stems, start=1):
+        _stem = _entry[0] if isinstance(_entry, tuple) else _entry
+        _n, _sid, _sfx = split_stem(_stem, species)
+        if not _sfx or _sfx == "PLAIN":
+            continue
+        _fc = next((c for c in (f"{_stem.upper()}_FORM", _stem.upper(),
+                                f"{_sfx}_FORM", _sfx) if c in forms), "")
+        if _fc:
+            by_pair[(_sid, forms[_fc])] = _i
 
     variant_records = []
     last_species = max(species.values())  # records 1..last_species are species slots; the tail is the variant forms
@@ -201,7 +294,21 @@ def build_index(src: pathlib.Path = DEFAULT_SRC, roms: pathlib.Path = DEFAULT_RO
             "form_id": forms[form_const], "form_constant": form_const, "kind": "variant",
             "base_stats_file": f"data/pokemon/base_stats/{stem}.asm",
             "rom_offset": off, "types": [t1, t2],
+            "evolves_to": [
+                {"species_id": t, "effective_species_id": t}
+                for t in (
+                    effective_id(tc, fc, species, forms, by_pair)
+                    for tc, fc in evolutions.get(
+                        label_key("".join(w.capitalize() for w in stem.split("_"))), [])
+                )
+                if t is not None
+            ],
         })
+        want_edges = len(evolutions.get(label_key("".join(w.capitalize() for w in stem.split("_"))), []))
+        if len(variant_records[-1]["evolves_to"]) != want_edges:
+            raise SystemExit(f"record {index} ({stem}): an evolution target did not resolve to an effective id")
+        _check_evolutions_in_rom(rom, sym, index, evolutions.get(
+            label_key("".join(w.capitalize() for w in stem.split("_"))), []), species, forms)
 
     if len(variant_records) != 46:
         raise SystemExit(f"expected 46 variant records, derived {len(variant_records)}")

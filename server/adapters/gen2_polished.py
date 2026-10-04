@@ -222,7 +222,9 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                              if s["species"] == row["species_id"]), None)
                 merged = dict(base or {})
                 merged.update({"species": row["species_id"], "form": row["form_id"],
-                               "record_index": row["record_index"]})
+                               "record_index": row["record_index"],
+                               "form_const": row["form_constant"],
+                               "evolves_to": row.get("evolves_to", [])})
                 self._variant_by_record[row["record_index"]] = merged
         self._types = {}
         for row in [*self._species.values(), *self._variants.values()]:
@@ -233,6 +235,7 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                 self._record_type(number, _type_display(name))
         evolution = load("evolutions", "polished-evolutions-v1")
         self._families = {int(k): v for k, v in evolution["family"].items()}
+        self._variant_families_cache = None
         _require(self._families.keys() == self._species.keys()
                  and all(self._families[v] == v for v in self._families.values()), "invalid evolution families")
         items = load("items", "polished-items-v1")
@@ -444,11 +447,50 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return tuple(self._row(species_id, form)["type_ids"]) if species_id in self._species else None
 
     def evo_family(self, species_id):
-        # UNVERIFIED: evolutions.json carries no rows for variant forms (self._families is keyed exactly by
-        # self._species, verified in __init__), so a variant record is a family of its own rather than a guess.
-        if type(species_id) is int and species_id in self._variant_by_record:
+        """Owner ruling 2026-10-04: a regional form is a DIFFERENT mon from its standard
+        counterpart, but an evolution is the SAME mon as its pre-evolution. So the family is the
+        lowest effective id in the connected component of the evolution graph over BOTH the
+        variant edges (forms_index.json evolves_to) and the plain edges (evolutions.json).
+
+        A variant with no evolution edge (31 of 46) is a singleton - never merged into its
+        standard counterpart, because nothing in the graph says it should be.
+        """
+        if type(species_id) is not int:
             return species_id
-        return self._families.get(species_id, species_id) if type(species_id) is int else species_id
+        if self._variant_families_cache is None:
+            self._variant_families_cache = self._variant_families()
+        return self._variant_families_cache.get(species_id, species_id)
+
+    def _variant_families(self) -> dict:
+        """Union-find over the combined graph; plain species keep the pack's own families."""
+        parent = {}
+
+        def find(x):
+            parent.setdefault(x, x)
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[max(ra, rb)] = min(ra, rb)
+
+        for species, family in self._families.items():
+            union(species, family)
+        for record, row in self._variant_by_record.items():
+            find(record)
+            for target in row.get("evolves_to", []):
+                tid = target["effective_species_id"]
+                if tid is not None:
+                    union(record, tid)
+        # lowest id in each component wins, so the answer is deterministic
+        lowest = {}
+        for node in list(parent):
+            root = find(node)
+            lowest[root] = min(lowest.get(root, node), node)
+        return {node: lowest[find(node)] for node in parent}
 
     def to_national_dex(self, species_id):
         row = self._species.get(species_id) if type(species_id) is int else None
@@ -603,6 +645,9 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
     def supports_explode_mode(self):
         return False             # no Polished client handler exists yet: a queued force_explode would never fire
+
+    def supports_box_mon(self):
+        return False             # compose_polished composes no box executor: a queued box_mon only comes back failed
 
     def reports_box_census(self):
         return True              # P3: the Polished client reads the newbox/PokeDB layout (NEWBOX.md §6.1); no client yet

@@ -197,3 +197,57 @@ def test_variant_display_name(adapter: Gen2PolishedAdapter) -> None:
 def test_unknown_id_name_falls_back(adapter: Gen2PolishedAdapter) -> None:
     """RED CONTROL: return None instead of the `#id` fallback."""
     assert adapter.species_name(9999) == "#9999"
+
+
+# ------------------------------------------------------------------ evolution families
+
+
+def test_alolan_rattata_and_alolan_raticate_share_a_family(adapter: Gen2PolishedAdapter) -> None:
+    """An evolution is the SAME mon as its pre-evolution, so the variant chain shares a family.
+
+    RED CONTROL: return the record index unchanged from `evo_family` (the pre-card singleton).
+    """
+    assert adapter.evo_family(295) == adapter.evo_family(296)
+
+
+def test_rattata_and_alolan_rattata_do_not_share_a_family(adapter: Gen2PolishedAdapter) -> None:
+    """Owner ruling: a regional form is a DIFFERENT mon from its standard counterpart.
+
+    RED CONTROL: seed the union-find with (species_id, record) for every variant.
+    """
+    assert adapter.evo_family(295) != adapter.evo_family(19)
+
+
+def test_hisuian_sneasel_joins_the_plain_sneasler_family(adapter: Gen2PolishedAdapter) -> None:
+    """Hisuian Sneasel -> Sneasler is an edge into a PLAIN species, so they unify.
+
+    RED CONTROL: ignore evolves_to targets that are not variant records.
+    """
+    assert adapter.evo_family(332) == adapter.evo_family(286)
+
+
+def test_paldean_wooper_joins_clodsires_family(adapter: Gen2PolishedAdapter) -> None:
+    """Paldean Wooper -> Clodsire; the graph says so, so they unify (derived, not assumed).
+
+    RED CONTROL: hardcode `return species_id` for any variant record.
+    """
+    assert adapter.evo_family(333) == adapter.evo_family(290)
+
+
+def test_every_variant_family_is_deterministic(adapter: Gen2PolishedAdapter) -> None:
+    """46 variants, each answering the same id twice, and never a string.
+
+    RED CONTROL: make `_variant_families` return a fresh random ordering per call.
+    """
+    for record in adapter._variant_by_record:
+        assert isinstance(adapter.evo_family(record), int)
+        assert adapter.evo_family(record) == adapter.evo_family(record)
+
+
+def test_plain_families_are_unchanged(adapter: Gen2PolishedAdapter) -> None:
+    """Adding variant edges must not move any 1..291 family: evolutions.json is still the source.
+
+    RED CONTROL: seed the union-find with a non-minimum representative.
+    """
+    for species, family in adapter._families.items():
+        assert adapter.evo_family(species) == family

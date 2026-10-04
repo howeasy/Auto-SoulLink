@@ -37,7 +37,8 @@
       "types": [
         10,
         2
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 293,
@@ -51,7 +52,8 @@
       "types": [
         13,
         8
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 294,
@@ -65,7 +67,8 @@
       "types": [
         0,
         15
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 295,
@@ -79,6 +82,12 @@
       "types": [
         16,
         0
+      ],
+      "evolves_to": [
+        {
+          "species_id": 296,
+          "effective_species_id": 296
+        }
       ]
     },
     {
@@ -93,7 +102,8 @@
       "types": [
         16,
         0
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 297,
@@ -107,7 +117,8 @@
       "types": [
         12,
         13
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 298,
@@ -121,6 +132,12 @@
       "types": [
         14,
         8
+      ],
+      "evolves_to": [
+        {
+          "species_id": 299,
+          "effective_species_id": 299
+        }
       ]
     },
     {
@@ -135,7 +152,8 @@
       "types": [
         14,
         8
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 300,
@@ -149,6 +167,12 @@
       "types": [
         14,
         14
+      ],
+      "evolves_to": [
+        {
+          "species_id": 301,
+          "effective_species_id": 301
+        }
       ]
     },
     {
@@ -163,7 +187,8 @@
       "types": [
         14,
         17
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 302,
@@ -177,6 +202,12 @@
       "types": [
         4,
         8
+      ],
+      "evolves_to": [
+        {
+          "species_id": 303,
+          "effective_species_id": 303
+        }
       ]
     },
     {
@@ -191,7 +222,8 @@
       "types": [
         4,
         8
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 304,
@@ -205,6 +237,12 @@
       "types": [
         16,
         16
+      ],
+      "evolves_to": [
+        {
+          "species_id": 305,
+          "effective_species_id": 305
+        }
       ]
     },
     {
@@ -219,7 +257,8 @@
       "types": [
         16,
         16
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 306,
@@ -233,6 +272,12 @@
       "types": [
         5,
         12
+      ],
+      "evolves_to": [
+        {
+          "species_id": 307,
+          "effective_species_id": 307
+        }
       ]
     },
     {
@@ -247,6 +292,12 @@
       "types": [
         5,
         12
+      ],
+      "evolves_to": [
+        {
+          "species_id": 308,
+          "effective_species_id": 308
+        }
       ]
     },
     {
@@ -261,7 +312,8 @@
       "types": [
         5,
         12
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 309,
@@ -275,6 +327,12 @@
       "types": [
         3,
         16
+      ],
+      "evolves_to": [
+        {
+          "species_id": 310,
+          "effective_species_id": 310
+        }
       ]
     },
     {
@@ -289,7 +347,8 @@
       "types": [
         3,
         16
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 311,
@@ -303,7 +362,8 @@
       "types": [
         11,
         15
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 312,
@@ -317,7 +377,8 @@
       "types": [
         9,
         7
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 313,
@@ -331,6 +392,12 @@
       "types": [
         8,
         8
+      ],
+      "evolves_to": [
+        {
+          "species_id": 279,
+          "effective_species_id": 279
+        }
       ]
     },
     {
@@ -345,6 +412,12 @@
       "types": [
         13,
         13
+      ],
+      "evolves_to": [
+        {
+          "species_id": 315,
+          "effective_species_id": 315
+        }
       ]
     },
     {
@@ -359,7 +432,8 @@
       "types": [
         13,
         17
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 316,
@@ -373,6 +447,16 @@
       "types": [
         13,
         13
+      ],
+      "evolves_to": [
+        {
+          "species_id": 324,
+          "effective_species_id": 324
+        },
+        {
+          "species_id": 317,
+          "effective_species_id": 317
+        }
       ]
     },
     {
@@ -387,7 +471,8 @@
       "types": [
         3,
         13
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 318,
@@ -401,6 +486,12 @@
       "types": [
         1,
         1
+      ],
+      "evolves_to": [
+        {
+          "species_id": 281,
+          "effective_species_id": 281
+        }
       ]
     },
     {
@@ -415,7 +506,8 @@
       "types": [
         3,
         17
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 320,
@@ -429,6 +521,12 @@
       "types": [
         14,
         13
+      ],
+      "evolves_to": [
+        {
+          "species_id": 282,
+          "effective_species_id": 282
+        }
       ]
     },
     {
@@ -443,7 +541,8 @@
       "types": [
         13,
         2
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 322,
@@ -457,7 +556,8 @@
       "types": [
         1,
         2
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 323,
@@ -471,7 +571,8 @@
       "types": [
         16,
         2
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 324,
@@ -485,7 +586,8 @@
       "types": [
         3,
         13
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 325,
@@ -499,6 +601,12 @@
       "types": [
         7,
         5
+      ],
+      "evolves_to": [
+        {
+          "species_id": 280,
+          "effective_species_id": 280
+        }
       ]
     },
     {
@@ -513,6 +621,12 @@
       "types": [
         9,
         5
+      ],
+      "evolves_to": [
+        {
+          "species_id": 327,
+          "effective_species_id": 327
+        }
       ]
     },
     {
@@ -527,7 +641,8 @@
       "types": [
         9,
         5
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 328,
@@ -541,6 +656,12 @@
       "types": [
         12,
         11
+      ],
+      "evolves_to": [
+        {
+          "species_id": 329,
+          "effective_species_id": 329
+        }
       ]
     },
     {
@@ -555,7 +676,8 @@
       "types": [
         12,
         11
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 330,
@@ -569,7 +691,8 @@
       "types": [
         9,
         7
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 331,
@@ -583,6 +706,12 @@
       "types": [
         16,
         3
+      ],
+      "evolves_to": [
+        {
+          "species_id": 287,
+          "effective_species_id": 287
+        }
       ]
     },
     {
@@ -597,6 +726,12 @@
       "types": [
         3,
         1
+      ],
+      "evolves_to": [
+        {
+          "species_id": 286,
+          "effective_species_id": 286
+        }
       ]
     },
     {
@@ -611,6 +746,12 @@
       "types": [
         3,
         4
+      ],
+      "evolves_to": [
+        {
+          "species_id": 290,
+          "effective_species_id": 290
+        }
       ]
     },
     {
@@ -625,7 +766,8 @@
       "types": [
         1,
         1
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 335,
@@ -639,7 +781,8 @@
       "types": [
         1,
         9
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 336,
@@ -653,7 +796,8 @@
       "types": [
         1,
         10
-      ]
+      ],
+      "evolves_to": []
     },
     {
       "record_index": 337,
@@ -667,7 +811,8 @@
       "types": [
         4,
         0
-      ]
+      ],
+      "evolves_to": []
     }
   ]
 }
