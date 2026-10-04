@@ -16,6 +16,10 @@ Entry.PACKS = {
     crystal={pack="gen2_crystal", artifact="pokecrystal", revision="1.0", rom_type="Crystal"},
     gold={pack="gen2_gold", artifact="pokegold", revision="US", rom_type="Gold"},
     silver={pack="gen2_silver", artifact="pokesilver", revision="US", rom_type="Silver"},
+    -- DEV-GRADE (P3a): admitted by Entry.admit_polished only, never by Entry.admit's catalog/G4/receipt gate;
+    -- the client composition is a later card (lua/gen2/polished.lua holds the reads).
+    polished={pack="polished_crystal", artifact="polishedcrystal", revision="3.2.3", rom_type="polished_crystal",
+              dev=true},
 }
 -- Every CURRENT generated pack artifact is literal for bundle-closure tooling.
 -- Legacy Crystal item_names/species_types/gender_ratios JSON is not an input.
@@ -70,6 +74,11 @@ Entry.PACK_FILES = {
         statics="data/games/gen2_silver/static_encounters.json",
         trainers="data/games/gen2_silver/trainers.json",
         checkpoint="data/games/gen2_silver/write_checkpoint.json",
+    },
+    -- dev pack: only what run.lua and Entry.admit_polished read (lua/gen2/polished.lua P.PROFILE/P.CHARMAP)
+    polished_crystal={
+        profile="data/games/polished_crystal/profile.json",
+        charmap="data/games/polished_crystal/charmap.lua",
     },
 }
 -- The O-22 proofs a production pack ships as release data: byte copies of the committed
@@ -188,6 +197,7 @@ end
 
 local function load_pack(root, json, title)
     local def = assert(Entry.PACKS[title], "unsupported selected Gen 2 title")
+    assert(not def.dev, "a dev title has no Gen 2 production pack")
     local files, data = Entry.PACK_FILES[def.pack], {}
     for _, key in ipairs(order) do
         local path = root .. "/" .. files[key]
@@ -566,7 +576,7 @@ function Entry.build_candidate(deps)
 end
 
 -- Header family (ROM $0134..$0143). It only picks which pack build_candidate hash-checks.
-local HEADERS = {PM_CRYSTAL="crystal", POKEMON_GLD="gold", POKEMON_SLV="silver"}
+local HEADERS = {PM_CRYSTAL="crystal", POKEMON_GLD="gold", POKEMON_SLV="silver", PKPCRYSTAL="polished"}
 function Entry.detect_title(read_rom_u8)
     local chars = {}
     for i = 0, 15 do
@@ -584,12 +594,28 @@ end
 -- Production: the admitted title's graph (see compose). deps = admit()'s root, rom_size and
 -- read_rom_u8, plus live io (not model_only), net, hud, player and log.
 function Entry.build(deps)
+    if deps.title == "polished" then
+        local decision, reason = Entry.admit_polished(deps)
+        if not decision then return nil, reason end
+        -- ponytail: P3a stops at admission; the Polished client graph (reads -> client) is the next card
+        return nil, "Polished Crystal overlay admitted (dev, " .. decision.rom_sha1:sub(1, 8)
+                    .. ") but its client composition is not wired yet"
+    end
     local decision, reason = Entry.admit(deps)
     if not decision then return nil, reason end
     if deps.title ~= nil and deps.title ~= decision.title then
         return nil, "admitted title " .. decision.title .. " differs from the requested " .. tostring(deps.title)
     end
     return compose(deps, decision.title, true, decision)
+end
+
+-- DEV-GRADE Polished admission, separate from Entry.admit: the exact overlay sha1 of
+-- data/polished/overlay_provenance.json only; the clean release is refused with the companion message.
+-- deps = {root, rom_size, read_rom_u8}. The decision, or nil, why.
+function Entry.admit_polished(deps)
+    local ok, P = pcall(dofile, tostring(deps.root) .. "/lua/gen2/polished.lua")
+    if not ok then return nil, tostring(P) end
+    return P.admit(deps)
 end
 
 -- tools/gen_gen2_admission.py --promote-overlays (D6): does a PROSPECTIVE overlay row (binding_sha256 set) pass its own
