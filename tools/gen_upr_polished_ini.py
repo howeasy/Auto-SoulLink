@@ -57,8 +57,9 @@ ROM_SIZE = 2 * 1024 * 1024          # polishedcrystal-3.2.3.gbc, GBConstants.max
 # Header constants, read off the released .gbc and restated here so the section is
 # self-describing. Game is the 4-byte header code at 0x13F (GBConstants.romCodeOffset).
 GAME_CODE = "PKPC"
-VERSION = 0
-CRC_IN_HEADER = 0x6CA3
+VERSION = 50                         # header 0x14C (mask ROM version) = $32; found by P6a, the Version=0 here was wrong
+CRC_IN_HEADER = 0xA36C               # header 0x14E-0x14F read big-endian ($A3 $6C), as UPR reads it
+VARIANT_FORM_COUNT = 46              # variant forms with their own BaseData row (P6a: 337 records = 291 + 46)
 CRC32 = 0xF98367E4
 NON_JAPANESE = 1
 TITLE = "PKPCRYSTAL"
@@ -106,7 +107,7 @@ WILD_TABLE_LABELS = (
 )
 
 # Labels every section must carry. A missing one is a hard error, never a silent skip.
-REQUIRED_LABELS = tuple(sorted(set(SYMBOL_KEYS.values()) | set(WILD_TABLE_LABELS)))
+REQUIRED_LABELS = tuple(sorted(set(SYMBOL_KEYS.values()) | set(WILD_TABLE_LABELS) | {"VariantSpeciesAndFormTable"}))
 
 def _load_helpers():
     """Reuse `flat`/`read_sym` from the Gen 1 generator when it is importable."""
@@ -223,6 +224,8 @@ def render_ini(sym: dict[str, int], sites: list[dict], sym_path: pathlib.Path = 
     lines += [f"Game={GAME_CODE}", f"Title={TITLE}", f"Version={VERSION}",
               f"NonJapanese={NON_JAPANESE}", f"CRCInHeader=0x{CRC_IN_HEADER:X}",
               f"CRC32=0x{CRC32:X}"]
+    lines += [f"VariantFormTableOffset={check_offset(sym['VariantSpeciesAndFormTable'])}  // VariantSpeciesAndFormTable",
+              f"VariantFormCount={VARIANT_FORM_COUNT}"]
     lines += ["Polished=1", "LosslessMode=1", f"RomSize={ROM_SIZE}",
               f"SpeciesCount={SPECIES_COUNT}", f"NumPokemon={NUM_POKEMON}",
               f"BaseStatsEntrySize={BASE_STATS_ENTRY_SIZE}", f"MoveLength={MOVE_LENGTH}",

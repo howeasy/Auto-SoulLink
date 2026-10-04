@@ -53,9 +53,10 @@ def test_section_header_is_the_pinned_release():
 
 def test_admission_tuple_is_emitted(text: str):
     assert _kv(text, "Game") == "PKPC"
-    assert _kv(text, "Version") == "0"
+    assert _kv(text, "Version") == "50"               # header 0x14C = $32
     assert _kv(text, "Polished") == "1"
-    assert _kv(text, "CRCInHeader") == "0x6CA3"
+    assert _kv(text, "CRCInHeader") == "0xA36C"       # 0x14E-0x14F big-endian, as UPR reads it
+    assert _kv(text, "VariantFormCount") == "46"
     assert _kv(text, "CRC32") == "0xF98367E4"
 
 
