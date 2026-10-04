@@ -2,7 +2,7 @@
 
 The engine and memory I/O are boundary simulations. The producer, record
 bindings, ABI layout and C durability predicate are the committed implementation.
-Gen 3 compatibility references lua/gen3/native.lua:613-654, not a rewritten oracle.
+Gen 3 compatibility references lua/gen3/native.lua:628-669, not a rewritten oracle.
 """
 from __future__ import annotations
 
@@ -473,7 +473,7 @@ def test_revert_control_removing_final_bit_clause_accepts_corrupt_producer_dump(
 def legacy_accepts(raw, layout, final_seq):
     """Execute the actual Gen 3 reader body, without modifying or importing its module.
 
-    SOURCE: lua/gen3/native.lua:613-654; integer :28-30 and word :468-472.
+    SOURCE: lua/gen3/native.lua:628-669; integer :28-30 and word :483-487.
     Only its I/O/mailbox/context boundary dependencies are injected here.
     """
     native = (ROOT / "lua/gen3/native.lua").read_text(encoding="utf-8")

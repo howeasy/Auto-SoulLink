@@ -5,8 +5,9 @@ machines (`patch/src/trade_targets/`), with **record bindings** so the same
 lifecycle serves Gen 3 PK3, Gen 4 PK4 and Gen 5 PK5. Header-only, plain C11,
 host-falsifiable (`tests/unit/test_nds_common_producers.py`). Nothing here is an
 admission or qualification claim; no title, address or pin lives in this
-directory. The Gen 3 sources and `patch/tools/build.py` are untouched
-(byte-identical, guarded by a test), so the Gen 3 payload sha cannot change.
+directory. The Gen 3 trade sources (`patch/src/trade_targets`) and `patch/tools/build.py` are
+untouched (byte-identical, guarded by a test); nothing else under the Gen 3 payload build is
+touched by this change set either, but only those paths are guarded.
 
 Do not include these headers together with `trade_targets/abi.h` (an `#error`
 enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/gen5/`.
@@ -58,7 +59,7 @@ enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/ge
 
 The struct layouts, constants and milestone order are the Gen 3 v2 contract, but
 the **witness semantics diverge**, so the NDS ABI is **version 3** and a Gen 3
-reader must not be pointed at an NDS arena (`lua/gen3/native.lua:631` rejects a
+reader must not be pointed at an NDS arena (`lua/gen3/native.lua:646` rejects a
 witness with PRE_SAVE_OK set unless `save_status` is 1 or 255; NDS publishes 2
 while an asynchronous save is in flight). The NDS reader is `lua/nds/native_witness.lua` (ABI 2 keeps the Gen 3 rule, ABI 3 accepts SAVE_PENDING); see `docs/shared-nds-witness.md`.
 
@@ -116,7 +117,7 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
    `save_timeout_frames` (REQUIRED nonzero, else PREPARE is refused with
    BAD_ARGS) is FAIL, so UNCERTAIN stays reachable after COMMIT_ENTERED. The
    bound is a shared invariant, the number is the adapter's: the host's own
-   TRADE_SCENE budget is 6000 frames (`lua/gen3/native.lua:177-181`), so an
+   TRADE_SCENE budget is 6000 frames (`lua/gen3/native.lua:189-194`), so an
    adapter bound that is longer would let the host poison the module before the
    native side reaches UNCERTAIN. A synchronous engine still finishes in one
    service call (begin, then one immediate poll).

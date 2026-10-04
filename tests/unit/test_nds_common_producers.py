@@ -441,7 +441,7 @@ def test_abi_deliberately_diverged_subset(tmp_path):
         "SLINK_SAVE_FAILED": "255", "SLINK_SAVEPOLL_PENDING": "0", "SLINK_SAVEPOLL_OK": "1",
         "SLINK_SAVEPOLL_FAIL": "-1",
     }
-    # the Gen 3 reader accepts save_status only as 1 or 255 with PRE_SAVE_OK set (lua/gen3/native.lua:631),
+    # the Gen 3 reader accepts save_status only as 1 or 255 with PRE_SAVE_OK set (lua/gen3/native.lua:646),
     # so the NDS PENDING value must stay outside that set and the version must differ
     assert out["SLINK_SAVE_PENDING"] not in ("1", "255")
 
@@ -1371,6 +1371,10 @@ def test_gen3_sources_and_build_are_untouched():
     assert _git("diff", "--stat", "HEAD", "--", *paths).stdout.strip() == ""
     assert _git("diff", "--stat", "--cached", "--", *paths).stdout.strip() == ""
     assert _git("status", "--porcelain", "--", *paths).stdout.strip() == ""
-    base = "735dea38"
-    if _git("cat-file", "-e", f"{base}^{{commit}}").returncode == 0:
-        assert _git("diff", "--stat", base, "--", *paths).stdout.strip() == ""
+    # Time-independent invariant (a diff against a fixed base commit stops being meaningful once the
+    # branch is merged and Gen 3 legitimately changes): the Gen 3 payload build must never consume the
+    # shared NDS headers, so no Gen 3 build file may reference patch/src/nds.
+    for rel in ("patch/tools/build.py", *sorted(str(q.relative_to(ROOT)).replace("\\", "/")
+                                                for q in (ROOT / "patch/src/trade_targets").rglob("*") if q.is_file())):
+        text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        assert "nds/common" not in text and "patch/src/nds" not in text, rel
