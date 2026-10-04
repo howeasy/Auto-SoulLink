@@ -409,8 +409,9 @@ def test_gen2_widest_allowed_file_round_trips_and_is_admitted():
     spec = _gen2_widest()
     parsed = load(build_spec(spec, family=FAMILY_GEN2))
     assert parsed["rom_name"] == "Pokemon Crystal (U)"
-    assert set(parsed["misc_tweak_names"]) == {"FASTEST_TEXT", "LOWER_CASE_POKEMON_NAMES",
-                                                "RANDOMIZE_CATCHING_TUTORIAL", "BAN_LUCKY_EGG", "BW_EXP_PATCH"}
+    # lowercase_names stays off for Gen 2 (server/upr_settings.py ~576: with random statics the fork crashes)
+    assert set(parsed["misc_tweak_names"]) == {"FASTEST_TEXT", "RANDOMIZE_CATCHING_TUTORIAL", "BAN_LUCKY_EGG",
+                                                "BW_EXP_PATCH"}
     assert forbidden_enabled(parsed, FAMILY_GEN2) == []
     assert unexpected_settings(parsed, FAMILY_GEN2) == []
     assert spec_from_parsed(parsed, FAMILY_GEN2) == spec
