@@ -370,3 +370,70 @@ def test_option_form_is_json_safe_and_ordered_like_the_table():
     by_key = {r["key"]: r for r in rows}
     assert by_key["trainers_levels"]["min"] == -50 and by_key["trainers_levels"]["unit"] == "%"
     assert [c["value"] for c in by_key["wild"]["choices"]] == ["unchanged", "random", "area", "global"]
+
+
+# ── the Polished Crystal family (docs/polished/UPR_HANDLER.md; fork patch 0017 = wild only) ─────────
+def test_polished_family_is_the_handlers_wild_allowlist():
+    from server.upr_settings import (
+        FAMILIES,
+        FAMILY_POLISHED,
+        POLISHED_OPTION_KEYS,
+        ROM_NAME,
+        options_for,
+    )
+    assert FAMILY_POLISHED == "gen2_polished" and FAMILY_POLISHED in FAMILIES
+    assert tuple(options_for(FAMILY_POLISHED)) == POLISHED_OPTION_KEYS
+    assert all(o["group"] == "Wild encounters" for o in options_for(FAMILY_POLISHED).values())
+    assert not any("misc" in o for o in options_for(FAMILY_POLISHED).values())
+    assert ROM_NAME[FAMILY_POLISHED] == "Polished Crystal (U) 3.2.3"
+
+
+def test_polished_widest_allowed_file_round_trips_and_is_admitted():
+    from server.upr_settings import (
+        FAMILY_POLISHED,
+        build_spec,
+        default_spec,
+        spec_from_parsed,
+        summarize,
+        unexpected_settings,
+    )
+    spec = dict(default_spec(FAMILY_POLISHED), wild="area", wild_restriction="type_themed",
+                wild_block_legendaries=False, wild_min_catch_rate=5, wild_levels=-20)
+    parsed = load(build_spec(spec, family=FAMILY_POLISHED))
+    assert parsed["misc_tweaks"] == 0 and parsed["rom_name"] == "Polished Crystal (U) 3.2.3"
+    assert forbidden_enabled(parsed, FAMILY_POLISHED) == []
+    assert unexpected_settings(parsed, FAMILY_POLISHED) == []
+    assert spec_from_parsed(parsed, FAMILY_POLISHED) == spec
+    assert categories_enabled(parsed, FAMILY_POLISHED) == {"wild"}
+    assert "starters" not in summarize(spec_from_parsed(parsed, FAMILY_POLISHED))    # absent, not "random"
+
+
+@pytest.mark.parametrize("flags, expected", [
+    ({"baseStats_UNCHANGED": False, "baseStats_RANDOM": True}, "base_stats"),
+    ({"types_UNCHANGED": False}, "types"), ({"evolutions_UNCHANGED": False}, "evolutions"),
+    ({"movesets_UNCHANGED": False}, "movesets"),
+    ({"starters_UNCHANGED": False, "starters_COMPLETELY_RANDOM": True}, "starters"),
+    ({"trainers_UNCHANGED": False, "trainers_RANDOM": True}, "trainers"),
+    ({"static_UNCHANGED": False, "static_COMPLETELY_RANDOM": True}, "statics"),
+    ({"tms_UNCHANGED": False, "tms_RANDOM": True}, "tms")])
+def test_polished_refuses_rule_tables_and_every_category_without_a_writer(flags, expected):
+    from server.upr_settings import FAMILY_POLISHED, unexpected_settings
+    parsed = load(build(flags, rom_name="Polished Crystal (U) 3.2.3"))
+    assert any(why.startswith(expected) for why in forbidden_enabled(parsed, FAMILY_POLISHED))
+    assert unexpected_settings(parsed, FAMILY_POLISHED)
+
+
+@pytest.mark.parametrize("tweak", ["FASTEST_TEXT", "BW_EXP_PATCH", "UPDATE_TYPE_EFFECTIVENESS", "LOWER_CASE_POKEMON_NAMES"])
+def test_polished_refuses_every_misc_tweak(tweak):
+    from server.upr_settings import FAMILY_POLISHED, unexpected_settings
+    parsed = load(build({}, MISC_TWEAKS[tweak], rom_name="Polished Crystal (U) 3.2.3"))
+    assert any(tweak in why for why in forbidden_enabled(parsed, FAMILY_POLISHED))
+    assert unexpected_settings(parsed, FAMILY_POLISHED)
+
+
+def test_polished_refuses_a_non_wild_option_by_name():
+    from server.upr_settings import FAMILY_POLISHED, build_spec
+    with pytest.raises(UprSettingsError, match="starters"):
+        build_spec({"starters": "random"}, family=FAMILY_POLISHED)
+    with pytest.raises(UprSettingsError, match="fastest_text"):
+        build_spec({"fastest_text": True}, family=FAMILY_POLISHED)

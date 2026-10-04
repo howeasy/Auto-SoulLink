@@ -525,3 +525,80 @@ def test_injection_refusal_is_reported_before_final_outputs(tmp_path, monkeypatc
     assert not (tmp_path / "roms" / "a.gb").exists()
     assert not (tmp_path / "roms" / "b.gb").exists()
     assert not (tmp_path / "rom_contract.json").exists()
+
+
+# ── Polished Crystal randomize (docs/polished/UPR_HANDLER.md) ──────────────────────────────────
+def _polished():
+    import os
+    path = Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work")) / "cache/polished/release/polishedcrystal-3.2.3.gbc"
+    if not path.is_file():
+        pytest.skip(f"pinned Polished Crystal release absent: {path}")
+    return {"a": str(path), "b": str(path)}
+
+
+def _polished_ready(monkeypatch):
+    """What the Polished client card flips: the enable flag, the picker's verdict and companion admission."""
+    from server import cartridges
+    describe = upr_pipeline.describe_rom
+    monkeypatch.setattr(upr_pipeline, "POLISHED_RANDOMIZER_ENABLED", True)
+    monkeypatch.setattr(upr_pipeline, "describe_rom", lambda path, jar_fork: {**describe(path, jar_fork), "clean": True})
+    monkeypatch.setattr(cartridges, "companion_admitted", lambda info: True)
+
+
+def test_polished_randomize_stays_refused_while_the_flag_is_off(tmp_path, monkeypatch):
+    from server import cartridges
+    sources = _polished()
+    _polished_ready(monkeypatch)
+    monkeypatch.setattr(upr_pipeline, "POLISHED_RANDOMIZER_ENABLED", False)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a held Polished randomize"))
+    with pytest.raises(cartridges.CartridgeError, match="Polished Crystal randomizer support is coming"):
+        cartridges.provision(str(tmp_path), sources, companion=True, randomize={"settings_path": "s.rnqs"}, jar="fork.jar")
+    assert not (tmp_path / "roms").exists()
+
+
+def test_polished_randomizes_the_companion_overlay(tmp_path, monkeypatch):
+    """UPS first (md5 verified against the patch registry), then the overlay is what the randomizer reads;
+    the handed-out cartridge is the randomizer output, pinned by rom_contract.json with its seed."""
+    from server import cartridges
+    sources = _polished()
+    _polished_ready(monkeypatch)
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda _jar: True)
+    monkeypatch.setattr(upr_pipeline, "fingerprint_any", lambda _rom: pytest.fail("Gen 1 fingerprint on Polished"))
+    overlay_sha1 = json.loads((REPO / "data/polished/overlay_provenance.json").read_text())["output"]["sha1"]
+    seen = {}
+
+    def prepare(jar, settings_path, inputs, out_dir):
+        players = {}
+        for seed, (pid, path) in enumerate(sorted(inputs.items()), 7):
+            data = bytearray(Path(path).read_bytes())
+            seen[pid] = hashlib.sha1(data).hexdigest()
+            data[0x306EE] ^= seed                         # a JohtoGrass slot: stands in for the UPR tables
+            output = Path(out_dir) / f"{pid}_randomized.gbc"
+            output.write_bytes(data)
+            players[pid] = {"output": str(output), "seed": seed, "source_sha1": seen[pid], "content_hash": "h"}
+        return {"upr_version": "4.6.1-slink3", "settings_sha256": "abc", "categories": ["wild"],
+                "spec": {}, "summary": "wild encounters random", "players": players}
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", prepare)
+    result = cartridges.provision(str(tmp_path), sources, companion=True,
+                                  randomize={"settings_path": "s.rnqs"}, jar="fork.jar")
+    assert result["family"] == upr_pipeline.FAMILY_POLISHED
+    assert seen == {"a": overlay_sha1, "b": overlay_sha1}, "randomized the release instead of the overlay"
+    contract = json.loads((tmp_path / "rom_contract.json").read_text())
+    for seed, pid in enumerate("ab", 7):
+        player = result["players"][pid]
+        final = Path(player["output"]).read_bytes()
+        assert final == (tmp_path / "roms" / f"{pid}_randomized.gbc").read_bytes()
+        assert player["kind"] == "rand_companion" and player["fingerprint"] == ""
+        assert contract["players"][pid] == {"fingerprint": "", "rom_sha1": hashlib.sha1(final).hexdigest(),
+                                            "seed": str(seed)}
+
+
+def test_polished_randomize_needs_the_fork_jar(tmp_path, monkeypatch):
+    from server import cartridges
+    sources = _polished()
+    _polished_ready(monkeypatch)
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda _jar: False)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a stock jar"))
+    with pytest.raises(cartridges.CartridgeError, match="UPR fork jar"):
+        cartridges.provision(str(tmp_path), sources, companion=True, randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
+    assert not (tmp_path / "roms").exists()

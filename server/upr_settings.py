@@ -497,7 +497,11 @@ FAMILY_PURE = "gen1_purergb"
 # write nowhere near an engine site (the pipeline re-proves that on every output).
 FAMILY_FRLG = "gen3_frlg"
 FAMILY_EMERALD = "gen3_emerald"
-FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG, FAMILY_EMERALD)
+# Polished Crystal 3.2.3 (docs/polished/UPR_HANDLER.md): randomizes the companion OVERLAY on the
+# fork's PolishedCrystalRomHandler, which writes wild encounters only so far (patch/upr/0017). The
+# family is an ALLOWLIST (POLISHED_OPTION_KEYS); each new handler writer extends that one tuple.
+FAMILY_POLISHED = "gen2_polished"
+FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG, FAMILY_EMERALD, FAMILY_POLISHED)
 GEN3_FAMILIES = (FAMILY_FRLG, FAMILY_EMERALD)
 GEN1_FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
 # Gen 1 code tweaks with no FR/LG implementation (Gen3RomHandler.miscTweaksAvailable), so
@@ -559,12 +563,19 @@ GEN3_OPTIONS: dict[str, dict] = {
     "balance_static_levels": _bool("Tweaks", "Balance static levels", misc="BALANCE_STATIC_LEVELS"),
 }
 ALL_OPTIONS: dict[str, dict] = {**OPTIONS, **GEN3_OPTIONS}
+# What the Polished handler can write (patch/upr/0017: grass/surf, swarms, fishing, headbutt/rock
+# smash, the bug contest; the catch-rate byte is written in place by its base-data saver). No misc
+# tweak: the handler implements none, and tweakForRom would drop one silently. The 0018 card
+# (trainers / starters / statics / trades) extends THIS tuple and nothing else.
+POLISHED_OPTION_KEYS = ("wild", "wild_restriction", "wild_block_legendaries", "wild_min_catch_rate", "wild_levels")
 
 
 def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
     """The option table one family's files are built from and admitted against."""
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
+    if family == FAMILY_POLISHED:
+        return {k: ALL_OPTIONS[k] for k in POLISHED_OPTION_KEYS}
     if family in GEN3_FAMILIES:
         unavailable = (*GEN1_ONLY_OPTIONS, "balance_static_levels") if family == FAMILY_EMERALD else GEN1_ONLY_OPTIONS
         return {k: o for k, o in ALL_OPTIONS.items() if k not in unavailable}
@@ -577,7 +588,8 @@ def families_of_option(key: str) -> list[str]:
 
 # The ROM name a family's file carries (informational: UPR matches the ROM itself).
 ROM_NAME = {FAMILY_VANILLA: "Pokemon Red (U) [!]", FAMILY_PURE: "Pokemon Red (U) [!]",
-            FAMILY_FRLG: "Fire Red (U)", FAMILY_EMERALD: "Emerald (U)"}
+            FAMILY_FRLG: "Fire Red (U)", FAMILY_EMERALD: "Emerald (U)",
+            FAMILY_POLISHED: "Polished Crystal (U) 3.2.3"}
 # The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
 # DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
 # place (never through its string path), so nothing else in the cartridge moves.
@@ -707,7 +719,9 @@ def summarize(spec: dict) -> str:
     """One line for the run record: what differs from a run that randomizes nothing."""
     parts = []
     for key, opt in ALL_OPTIONS.items():
-        val = spec.get(key, opt["default"])
+        if key not in spec:             # a family without the option (Polished has no starters)
+            continue
+        val = spec[key]
         if opt["kind"] == "choice":
             if val != next(iter(opt["choices"])):        # the first choice is the quiet one
                 parts.append(f"{opt['label'].lower()} {opt['choices'][val][0].lower()}")
@@ -799,7 +813,7 @@ def load(path_or_bytes) -> dict:
 def categories_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> set[str]:
     """Which of the six categories this settings file actually randomizes (any mode)."""
     spec = spec_from_parsed(parsed, family)
-    return {cat for cat in _CATEGORY_MODES if spec[cat] != "unchanged"}
+    return {cat for cat in _CATEGORY_MODES if spec.get(cat, "unchanged") != "unchanged"}
 
 
 # wild=global (one species map for the whole game) honours only the similar-strength
@@ -845,7 +859,13 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")
-    if family in GEN3_FAMILIES:
+    if family == FAMILY_POLISHED:
+        # the handler throws on every other writer; a category outside the allowlist is refused by
+        # name here too, not only by the envelope (this also runs on the log's effective settings)
+        every = spec_from_parsed(parsed, FAMILY_VANILLA)
+        bad += [f"{cat} (no Polished Crystal writer yet)" for cat in _CATEGORY_MODES
+                if cat not in POLISHED_OPTION_KEYS and every[cat] != "unchanged"]
+    if family in GEN3_FAMILIES or family == FAMILY_POLISHED:
         # ruling 31: abilities and the type chart join Gen 1's set by name (Gen 1 has no
         # abilities: there tweakForRom clears the flag). A Gen 1-only tweak would be dropped
         # silently by tweakForRom, so it is refused rather than believed.
@@ -857,7 +877,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         allowed = {o["misc"] for o in options_for(family).values() if "misc" in o}
         other = [n for n in names if n not in allowed and n != "UPDATE_TYPE_EFFECTIVENESS"]
         if other or parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values()):
-            label = "Emerald" if family == FAMILY_EMERALD else "FR/LG"
+            label = {FAMILY_EMERALD: "Emerald", FAMILY_POLISHED: "Polished Crystal"}.get(family, "FR/LG")
             bad.append("tweaks (" + ", ".join(other or ["unknown"]) + f") not available on {label}")
     if not f.get("types_UNCHANGED"):
         bad.append("types")

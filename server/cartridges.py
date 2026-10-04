@@ -56,9 +56,9 @@ def _vanilla_target(data: bytes) -> dict:
 
 
 def _companion(data: bytes, family: str, info: dict) -> bytes:
+    if info.get("kind") == "overlay":      # a pinned companion overlay picked as itself (pureRGB, Polished)
+        return data
     if family == FAMILY_PURE:
-        if info["kind"] == "overlay":
-            return data
         # Reuse the playthrough tool's admission lookup and its clean + UPS proof,
         # but apply to the user's picked bytes without requiring a separate ROM cache.
         want, entry = _overlay_admission_row(identify(data)["variant"])
@@ -84,8 +84,8 @@ def provision(run_dir: str, sources: dict[str, str], *, companion: bool,
     so a pure cartridge named .gb would run on the DMG core in mono. Red/Blue dumps are .gb
     (the DMG core, where the client is proven), Yellow and pureRGB are .gbc.
 
-    Vanilla randomizes clean bytes before structural injection; pureRGB randomizes
-    the admitted overlay after UPS application. Only randomized runs get a contract,
+    Vanilla randomizes clean bytes before structural injection; pureRGB and Polished Crystal
+    randomize the admitted overlay after UPS application. Only randomized runs get a contract,
     and that contract fingerprints and hashes the final handed-out cartridges.
     ``randomize`` is None or {"settings_path": <Manager-written .rnqs path>}.
     """
@@ -134,7 +134,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         raise CartridgeError(
             "Gen 2 has no randomizer support; turn Randomize off to prepare companion "
             "cartridges only")
-    if randomize is not None and family == upr_pipeline.FAMILY_POLISHED:
+    if randomize is not None and family == upr_pipeline.FAMILY_POLISHED and not upr_pipeline.POLISHED_RANDOMIZER_ENABLED:
         raise CartridgeError(upr_pipeline.POLISHED_RANDOMIZER_REFUSAL)
     if randomize is not None:
         if not isinstance(randomize, dict) or not randomize.get("settings_path"):
@@ -149,7 +149,12 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         if family in GEN3_FAMILIES and not upr_pipeline.jar_is_fork(jar):
             raise CartridgeError(upr_pipeline.EMERALD_RANDOMIZER_REFUSAL if family == FAMILY_EMERALD
                                  else upr_pipeline.FRLG_RANDOMIZER_REFUSAL)
-    if family == FAMILY_PURE or randomize is None:
+        if family == upr_pipeline.FAMILY_POLISHED and not upr_pipeline.jar_is_fork(jar):
+            raise CartridgeError(upr_pipeline.POLISHED_JAR_REFUSAL)
+    # overlay first, then randomize the overlay (pureRGB; Polished: the UPR handler writes in place and
+    # the write-domain audit re-proves it never touches the overlay's spans, bank $7E or the header)
+    overlay_first = family in (FAMILY_PURE, upr_pipeline.FAMILY_POLISHED)
+    if overlay_first or randomize is None:
         data = {pid: _companion(rom, family, infos[pid]) if want[pid] else rom
                 for pid, rom in data.items()}
 
@@ -161,7 +166,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     if randomize is not None:
         ext = ".gba" if family in GEN3_FAMILIES else ".gbc"
         destinations.extend(roms / f"{pid}_randomized{ext}" for pid in sources)
-        if family == FAMILY_PURE:
+        if overlay_first:
             destinations.extend(roms / f"{pid}_companion.gbc" for pid in sources if want[pid])
     for output in destinations:
         for source in sources.values():
@@ -172,7 +177,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     randomized = None
     if randomize is not None:
         inputs = dict(sources)
-        if family == FAMILY_PURE:
+        if overlay_first:
             for pid, rom in data.items():
                 if want[pid]:
                     staged = roms / f"{pid}_companion.gbc"

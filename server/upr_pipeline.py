@@ -47,13 +47,14 @@ import re
 import shutil
 import subprocess
 
-from server import upr_gen3_write_domain
+from server import upr_gen3_write_domain, upr_polished_write_domain
 from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
     GEN1_ROM_SIZE,
     RomScanError,
     evolution_graph,
     identify,
+    profile_hash,
     scan,
     scan_base_stats,
 )
@@ -61,9 +62,15 @@ from server.adapters.gen3_rom_tables import (
     gen3_content_fingerprint,
     normalised_species_rules,
 )
+from server.adapters.polished_rom_scan import (
+    Rom as PolishedRom,
+    RomScanError as PolishedRomScanError,
+    identify as polished_identify,
+)
 from server.upr_settings import (
     FAMILY_EMERALD,
     FAMILY_FRLG,
+    FAMILY_POLISHED,
     FAMILY_PURE,
     FAMILY_VANILLA,
     GEN3_FAMILIES,
@@ -251,12 +258,18 @@ def jar_entry_crcs(jar: str) -> dict[str, int | None]:
 FAMILY_GEN2 = "gen2_gsc"
 _GEN2_TITLES = ("crystal", "gold", "silver")
 
-# Polished Crystal v3.2.3: its own Gen 2 family (server/adapters/gen2_polished.py), recognised by the exact
-# release sha1 data/polished_sources.lock.json pins. P5: the companion overlay's sha1 joins it once the
-# overlay card lands. No randomizer yet: server/cartridges.py and the Manager refuse it by this reason.
-FAMILY_POLISHED = "gen2_polished"
+# Polished Crystal v3.2.3: its own Gen 2 family (upr_settings.FAMILY_POLISHED, server/adapters/gen2_polished.py),
+# recognised by the exact sha1s polished_rom_scan pins: the release (data/polished_sources.lock.json) and the SLink
+# companion overlay (data/polished/overlay_provenance.json). It randomizes the OVERLAY (cartridges.py applies the
+# UPS first) on a fork jar whose polished_offsets.ini has an entry for the source's header checksum. The pipeline
+# below is complete; POLISHED_RANDOMIZER_ENABLED keeps every Manager path refusing it until the Polished client
+# exists (flip it with that card; manager.py's NON_RANDOMIZABLE_GAMES row goes with it).
 POLISHED_VARIANT = "Polished Crystal"
+POLISHED_RANDOMIZER_ENABLED = False
 POLISHED_RANDOMIZER_REFUSAL = "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off"
+POLISHED_JAR_REFUSAL = (
+    "Polished Crystal randomization needs SLink's UPR fork jar with a Polished Crystal entry for this "
+    "cartridge's header checksum (tools/build_upr_fork.py, patch/upr)")
 
 # The Emerald Expansion (pokeemerald-expansion, gen3_exp pack) is a 32 MiB BUILD, not a dump: it
 # is recognised by the exact sha1 its pack pins, never by header, so the 16 MiB Gen 3 gates
@@ -267,10 +280,17 @@ EXPANSION_REFUSAL = ("The Emerald Expansion has no randomizer and no companion p
                      "reference ROM); turn Randomize and Companion off")
 
 
-@functools.cache
-def _polished_sha1() -> str:
-    with open(os.path.join(_REPO, "data", "polished_sources.lock.json"), encoding="utf-8") as fh:
-        return json.load(fh)["outputs"]["polishedcrystal"]["sha1"].lower()
+def jar_supports_polished(jar: str, rom: bytes) -> bool:
+    """The fork's PolishedCrystalRomHandler matches ONLY an exact header checksum (no wildcard), so a
+    jar without an entry for this build would fail inside Java ("unsupported ROM"); say so first."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            text = zf.read("com/dabomstew/pkrandom/config/polished_offsets.ini").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return False
+    want = rom[0x14E] << 8 | rom[0x14F]                 # read big-endian, as the handler does
+    return want in {int(m, 0) for m in re.findall(r"^CRCInHeader=(0x[0-9A-Fa-f]+|\d+)", text, flags=re.MULTILINE)}
 
 
 @functools.cache
@@ -342,7 +362,7 @@ def family_of(sources: dict[str, str]) -> str:
         if hashlib.sha1(rom).hexdigest() in gen2:
             families[pid] = FAMILY_GEN2
             continue
-        if hashlib.sha1(rom).hexdigest() == _polished_sha1():
+        if polished_identify(rom):                       # release or companion overlay
             families[pid] = FAMILY_POLISHED
             continue
         ident = identify(rom)
@@ -506,6 +526,46 @@ def _check_content_gen3(source_rom: str, output_rom: str) -> dict:
     return tables
 
 
+def _polished_rules(tables: dict) -> tuple[list, list, list]:
+    """(base data without the catch rate, evolutions, learnsets) per record 1..337. The catch rate is
+    the one base-data byte an allowed option (minimum catch rate) rewrites; no Soul Link rule reads it."""
+    stats = [{k: v for k, v in rec.items() if k != "catch_rate"} for rec in tables["base_stats"]]
+    return stats, [e["evolutions"] for e in tables["evos_attacks"]], [e["learnset"] for e in tables["evos_attacks"]]
+
+
+def _check_content_polished(source_rom: str, output_rom: str) -> dict:
+    """The Polished _check_content: a pinned source (release or companion overlay), the same cartridge
+    (size and header unchanged), and base data, types, the evolution graph and the level-up learnsets
+    equal to the source's, compared as decoded records (server/adapters/polished_rom_scan.py). Returns
+    the output's table scan for the content hash."""
+    with open(source_rom, "rb") as f:
+        src = f.read()
+    with open(output_rom, "rb") as f:
+        out = f.read()
+    if polished_identify(src) is None:
+        raise UprPipelineError("source ROM is not the pinned Polished Crystal 3.2.3 release or its companion "
+                               "overlay; randomize from a pinned cartridge so the result is reproducible")
+    if len(out) != len(src) or out[0x134:0x150] != src[0x134:0x150]:
+        raise UprPipelineError("output is not Polished Crystal any more (size or header changed)")
+    try:
+        scan = PolishedRom(out, pinned=False).scan_all()
+        (s_stats, s_evos, s_moves), (o_stats, o_evos, o_moves) = (
+            _polished_rules(PolishedRom(src).rule_tables()), _polished_rules(scan))
+    except PolishedRomScanError as exc:
+        raise UprPipelineError(f"the randomized ROM could not be decoded: {exc}") from exc
+    if o_stats != s_stats:
+        raise UprPipelineError(
+            "base stats or types differ from the source — a setting that changes data the Soul Link "
+            "rules read was enabled")
+    if o_evos != s_evos:
+        raise UprPipelineError(
+            "evolution targets differ from the source — evolution randomization was enabled, and the "
+            "species clause reads a vanilla family table")
+    if o_moves != s_moves:
+        raise UprPipelineError("level-up movesets differ from the source — moveset randomization was enabled")
+    return scan
+
+
 def _sha1(path: str) -> str:
     h = hashlib.sha1()
     with open(path, "rb") as f:
@@ -591,10 +651,10 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
                         variant=GEN3_TITLE_WORDS[g3["title"]])
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
             return info
-        if info["sha1"] == _polished_sha1():
+        if pol := polished_identify(rom):
             # Recognised, but not offered: there is no Polished client to run it yet (lua/gen2/entry.lua stops at
             # admission), so every provisioning path refuses it. Flip clean back on with the client card.
-            info.update(family=FAMILY_POLISHED, kind="clean", clean=False, variant=POLISHED_VARIANT,
+            info.update(family=FAMILY_POLISHED, kind=pol["kind"], clean=False, variant=POLISHED_VARIANT,
                         title=f"{POLISHED_VARIANT} 3.2.3 (the SLink client for it is not ready yet)")
             return info
         gen2_title = _gen2_clean_sha1s().get(info["sha1"])
@@ -693,7 +753,10 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
         # Not a style preference: UPR APPENDS its handler's extension to anything else, so
         # the artifact would not be where the caller thinks it is.
         raise UprPipelineError(f"output must end in {ext}, got {output_rom!r}")
-    src_ident = {"kind": "clean"} if g3 else identify(src_bytes)
+    pol = None if g3 else polished_identify(src_bytes)   # never the Gen 1 identify() on Polished
+    src_ident = {"kind": "clean"} if g3 else pol or identify(src_bytes)
+    if pol and not (jar_is_fork(jar) and jar_supports_polished(jar, src_bytes)):
+        raise UprPipelineError(POLISHED_JAR_REFUSAL)
     if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
         raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
     if g3 and not jar_is_fork(jar):
@@ -894,9 +957,17 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if bad := forbidden_enabled(effective, family):
             raise UprPipelineError(
                 f"player {player}: after tweakForRom the run would randomize {', '.join(bad)}")
-        fam = (family,) if family in GEN3_FAMILIES else ()    # Gen 1 keeps its call shape
+        fam = (family,) if family in (*GEN3_FAMILIES, FAMILY_POLISHED) else ()    # Gen 1 keeps its call shape
         info["categories"] = sorted(categories_enabled(effective, *fam))
         info["spec"] = spec_from_parsed(effective, *fam)
+        if family == FAMILY_POLISHED:
+            scan = _check_content_polished(sources[player], info["output"])
+            info["write_domain"] = upr_polished_write_domain.check_output(sources[player], info["output"])
+            # no client-reproducible fingerprint yet (the Polished client card); the content hash covers
+            # the decoded tables, as Gen 1's does
+            info["content_hash"], info["fingerprint"] = profile_hash(scan), ""
+            results[player] = info
+            continue
         if family in GEN3_FAMILIES:
             tables = _check_content_gen3(sources[player], info["output"])
             info["sites_intact"] = True        # _check_content_gen3 refuses otherwise
@@ -919,8 +990,8 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             f"the two ROMs ended up with different settings applied: "
             f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}")
 
-    from server.adapters.gen1_rom_scan import fingerprint_rom, profile_hash
-    for player in ("a", "b") if family not in GEN3_FAMILIES else ():
+    from server.adapters.gen1_rom_scan import fingerprint_rom
+    for player in ("a", "b") if family not in (*GEN3_FAMILIES, FAMILY_POLISHED) else ():
         results[player]["content_hash"] = profile_hash(results[player]["content_profile"])
         # The fingerprint is the CLIENT-reproducible one: it covers only the tables a
         # running client can read out of its own cartridge, which is what makes it usable
