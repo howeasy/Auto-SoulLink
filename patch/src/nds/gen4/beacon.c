@@ -55,9 +55,12 @@ extern void SDK_SECTION_ARENA_ITCM_START(void);
 typedef char slink_gen4_span_fits_itcm[
     (SLINK_GEN4_ARENA_DELTA + SLINK_ARENA_SIZE <= 0x8000u) ? 1 : -1];
 /* No card may set a bit outside the shared vocabulary (0..6) and the title-private
- * range (16..31); bits 7..15 are reserved for future shared caps (C2_BEACON_SPEC.md:6-12). */
+ * range (16..31); bits 7..15 are reserved for future shared caps (C2_BEACON_SPEC.md:6-12).
+ * The same mask is applied to the PUBLISHED word on every visit, so a card's
+ * contribution cannot smuggle a reserved bit past this check (beacon.h,
+ * Slink_NDS_PublishCaps). */
 typedef char slink_gen4_caps_in_range[
-    ((SLINK_GEN4_CAPABILITIES & ~(0x7Fu | SLINK_GEN4_CAP_MASK_TITLE)) == 0u) ? 1 : -1];
+    ((SLINK_GEN4_CAPABILITIES & ~SLINK_GEN4_CAP_MASK_LEGAL) == 0u) ? 1 : -1];
 
 /* Lower runs first: SysTaskQueue_InsertTaskCore walks from the head and inserts ahead
  * of the first strictly-higher priority (pret src/sys_task.c:124-133). Game tasks
@@ -84,6 +87,17 @@ static u32 Slink_NDS_ArenaLo(void)
 static u32 Slink_NDS_Base(void)
 {
     return Slink_NDS_ArenaLo() + SLINK_GEN4_ARENA_DELTA;
+}
+
+/* The ONE exported accessor, for beacon.c and for C3/C4/C5 alike (beacon.h). The rule
+ * itself lives in beacon.h so it is host-testable with a fake arena value; this is only
+ * the binding of it to the linker symbol. The helpers below keep deriving the base the
+ * cheap way because they are reachable only from a service visit, and registration
+ * already failed closed on exactly this check. */
+uint32_t Slink_NDS_ArenaBase(void)
+{
+    return Slink_NDS_SpanBase(Slink_NDS_ArenaLo(), SLINK_GEN4_ARENA_START,
+                              SLINK_GEN4_ARENA_DELTA);
 }
 
 static volatile SlinkMailboxV2 *Slink_NDS_Mailbox(void)
@@ -239,10 +253,15 @@ static void Slink_NDS_Service(SysTask *task, void *data)
     }
 
     /* Header repair (C2_BEACON_SPEC.md:242-244): re-stamp the ROM-owned header only.
-     * It never clears host requests, panel state, holds or lease bytes. */
+     * It never clears host requests, panel state, holds or lease bytes.
+     *
+     * capabilities is deliberately NOT stamped here. It is the OR of what the beacon owns
+     * and what each COMPILED-IN card advertises, a card decides that inside its own
+     * Service, and this stamp runs BEFORE the fan-out -- so stamping it here would
+     * publish the previous visit's answer and erase the visit's own (beacon.h,
+     * "the capability word"; Slink_NDS_PublishCaps below). */
     m->signature = SLINK_SIGNATURE;
     m->abi_version = (uint16_t)SLINK_ABI_VERSION;
-    m->capabilities = SLINK_GEN4_CAPABILITIES;
     m->reserved = st->generation; /* the session epoch, zero bytes added to the ABI */
 #if !defined(SLINK_GEN4_TRADE)
     /* At C2 there is no transaction, so IDLE is the truth and is re-stamped every
@@ -258,6 +277,23 @@ static void Slink_NDS_Service(SysTask *task, void *data)
     /* Every producer, every visit, no opcode pre-route (C2_BEACON_SPEC.md:6-12;
      * C3_SOUND_SPEC.md:150-162; C5_TRADE_SPEC.md:22-30). */
     Slink_NDS_Dispatch(st, m);
+
+    /* The capability word, composed AFTER the fan-out, and that order is the rule.
+     *
+     * A card's contribution is decided inside its own Service (C3's sound-ready latch,
+     * C5's per-visit advertise), so it can only be composed once every producer has
+     * run: composing before the fan-out would publish the PREVIOUS visit's decision --
+     * every bit one visit stale, and a bit a card had just cleared would still be set.
+     * Composed after, the published word is a function of the state as it stands at the
+     * END of the visit, which is the only definition an asynchronous host can compare
+     * against (C2_BEACON_SPEC.md:436-442: never gate liveness on this word).
+     *
+     * No second stamp before the fan-out is needed: the previous visit left a complete,
+     * legal word here and a whole-word assignment cannot tear, so there is no instant at
+     * which a host can read an unstamped or half-written word. The assignment is what
+     * makes the word immune to a host write: the next visit overwrites it from state
+     * alone, and a card that stops advertising loses the bit in that same visit. */
+    Slink_NDS_PublishCaps(st, m);
 
 }
 
@@ -316,7 +352,7 @@ void Slink_NDS_Register(void)
     u32 prev_cookie;
     u32 identity;
 
-    if (Slink_NDS_ArenaLo() != SLINK_GEN4_ARENA_START) {
+    if (Slink_NDS_ArenaBase() == 0u) {
         /* Fail closed and say nothing: the arena moved, so the accepted span is not
          * where the host reads it. Leaving the arena untouched keeps every pinned
          * address intact and the host reads no beacon, which is the correct reading
@@ -354,6 +390,15 @@ void Slink_NDS_Register(void)
         registrations = 1u;
         prev_cookie = 0u;
     }
+
+    /* OS_AllocFromArenaLo hands back arena memory, not cleared memory. Every field above
+     * is written by the latch below, but the three per-card sub-structs are not: a card
+     * that is compiled out must leave nothing behind, and a card that runs must see
+     * layout == 0 -- "never stamped" -- so it initialises its own sub-struct on first use
+     * (beacon.h, the per-card state section). */
+    Slink_NDS_Zero((volatile u8 *)&st->sound, (u32)sizeof st->sound);
+    Slink_NDS_Zero((volatile u8 *)&st->panel, (u32)sizeof st->panel);
+    Slink_NDS_Zero((volatile u8 *)&st->trade, (u32)sizeof st->trade);
 
     st->magic = 0;
     st->prev_cookie = prev_cookie;

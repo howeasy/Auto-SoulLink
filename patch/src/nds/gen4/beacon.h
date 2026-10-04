@@ -18,6 +18,43 @@
 #define SLINK_GEN4_BEACON_H
 
 #include "abi.h"
+/* The per-card state sub-structs below hold the SHARED producers by value, which is what
+ * sizes them: the state block is where a producer lives, so a second copy would be a
+ * second, stale transaction. Both are header-only and host-compilable, and both are
+ * already the ROM's own translation units (C4 wraps slink_panel_service, C5 wraps
+ * slink_trade_service), so this adds no new dependency to the build. */
+#include "panel_producer.h"
+#include "trade_producer.h"
+
+/* ---------------------------------------------------------------- the span accessor (ONE)
+ * Every ABI region is "arena base + an abi.h offset" (C2_BEACON_SPEC.md:89-100), so C3,
+ * C4 and C5 all need the base -- and all of them need the census check that comes with it.
+ * It is exported once here instead of re-derived three times: no card may re-implement
+ * Slink_NDS_SpanBase(), and no card may name a span address at all.
+ *
+ * Slink_NDS_SpanBase() is the RULE and is host-testable with a fake arena value.
+ * Slink_NDS_ArenaBase() is beacon.c's binding of it to the linker symbol the census
+ * anchors on. It returns 0 to mean REFUSE, which is the only fail signal a caller needs:
+ * nothing is stamped, nothing is written, and the host reads no beacon -- the correct
+ * reading of "not live".
+ *
+ * The absolute span base is absent from the source on purpose: the C1 census's W2 row
+ * FAILs a build whose source carries a 7-8 hex-digit literal inside the span
+ * (tools/gen4_mailbox_census.py:83,188-197,217), and these headers are compiled into the
+ * tree that census scans. The census value and the arena->span delta live in beacon.c for
+ * the same reason; the numbers themselves are in README.md, which the census does not scan
+ * (SCAN_EXT, gen4_mailbox_census.py:85).
+ */
+static inline uint32_t Slink_NDS_SpanBase(uint32_t arena_lo, uint32_t census_arena_lo,
+                                          uint32_t delta)
+{
+    if (arena_lo != census_arena_lo) {
+        return 0u; /* the arena moved: there is no span, so there is no base to hand out */
+    }
+    return arena_lo + delta;
+}
+
+uint32_t Slink_NDS_ArenaBase(void);
 
 /* ---------------------------------------------------------------- title-private block
  * D-C2-1 (ABI owner, Gen 5, 2026-10-02; C2_BEACON_SPEC.md:6-12) RULES: Gen 4 may use
@@ -79,8 +116,18 @@ typedef char slink_gen4_title_size_check[
  * bit ahead of its own. The shared enum has no beacon/liveness member, so the host
  * proves C2 from signature + abi_version alone and must NOT gate liveness on a
  * capability bit (C2_BEACON_SPEC.md:436-442).
+ *
+ * The PUBLISHED word is not this constant. It is composed per visit by
+ * Slink_NDS_PublishCaps() below, out of the beacon's own set plus one contribution
+ * word per COMPILED-IN card, and it is INFORMATIONAL -- nothing about liveness, the
+ * reset latch or the header repair may read it.
  */
 #define SLINK_GEN4_CAP_MASK_TITLE 0xFFFF0000u
+/* Every bit a published word may carry: the shared vocabulary (0..6) plus the
+ * title-private range. Bits 7..15 are reserved and are dropped on the way out, so a
+ * card that sets one cannot leak it into the word a host reads (beacon.c asserts the
+ * same mask over the static word). */
+#define SLINK_GEN4_CAP_MASK_LEGAL (0x7Fu | SLINK_GEN4_CAP_MASK_TITLE)
 #define SLINK_GEN4_CAPABILITIES 0u
 
 /* ---------------------------------------------------------------- session state
@@ -95,6 +142,66 @@ typedef char slink_gen4_title_size_check[
  * .bss symbol would move 0x021E5900 and with it every overlay address and every pinned
  * hook site (C2_BEACON_SPEC.md:303-308; FEATURE_BAR.md:140-145).
  */
+/* ---------------------------------------------------------------- per-card state
+ * FIXED, versioned, and OWNED BY EXACTLY ONE CARD each. Three cards appending loose
+ * fields to one struct is a serialization hazard: the allocation size changes silently
+ * with every card, no offset is pinned, and two cards can end up writing the same word.
+ * So each card gets a named sub-struct with its own layout word:
+ *
+ *   sound  C3  patch/src/nds/gen4/sound.h + sound_policy.h
+ *   panel  C4  patch/src/nds/gen4/panel.h
+ *   trade  C5  patch/src/nds/gen4/trade.h + trade_policy.h
+ *
+ * The layout word is stamped by the OWNING card on first use and never by C2: a zeroed
+ * sub-struct means "this card has never run", and a mismatch means "these bytes are not
+ * the layout this card knows". Both are fail-closed resets, never a reinterpretation.
+ * C2's only obligation is to hand over ZEROED bytes, which it does at allocation --
+ * OS_AllocFromArenaLo returns arena memory, not cleared memory, so Slink_NDS_Register()
+ * zeroes the whole block before the first latch.
+ *
+ * No card may declare a second producer storage: panel and trade embed the SHARED
+ * producers by value (panel_producer.h, trade_producer.h), which is what sizes them.
+ */
+#define SLINK_GEN4_STATE_SOUND_LAYOUT 1u
+#define SLINK_GEN4_STATE_PANEL_LAYOUT 1u
+#define SLINK_GEN4_STATE_TRADE_LAYOUT 1u
+
+/* C3. Sized from C3_SOUND_SPEC.md:527-532's ROM-private table: the pending code, the
+ * hold-at visit counter, the hold-blocked latch and the sound-ready bit. The latch and the
+ * ready bit are separate because the latch is discarded-and-remembered while readiness is
+ * what the policy gates on (sound_policy.h). */
+typedef struct {
+    uint32_t layout;       /* SLINK_GEN4_STATE_SOUND_LAYOUT, stamped by C3              */
+    uint32_t hold_visits;  /* saturating service-visit hold counter (sfx.asm:77-83)     */
+    uint8_t pending_code;  /* the semantic code held for playback                        */
+    uint8_t in_flight;     /* one sound request held across visits                       */
+    uint8_t ready;         /* InitSoundData has run: the sound system exists             */
+    uint8_t blocked;       /* a request was refused pre-InitSoundData                   */
+    uint32_t caps;         /* this card's contribution to the published word: 0, or
+                            * SLINK_GEN4_SOUND_CAPABILITIES once and only while this
+                            * card is ready. Rebuilt by C3 on every visit (sound_policy.h);
+                            * OR-ed by Slink_NDS_PublishCaps() below, never assigned to
+                            * the mailbox by a card. */
+} SlinkGen4StateSound;
+
+/* C4. The shared panel producer, by value: the snapshot it draws from and its active
+ * flag (panel_producer.h). */
+typedef struct {
+    uint32_t layout; /* SLINK_GEN4_STATE_PANEL_LAYOUT, stamped by C4 */
+    SlinkPanelProducer producer;
+    uint32_t caps; /* C4's contribution to the published word; 0 until C4's Service
+                    * declares one (beacon.h, "capabilities" above) */
+} SlinkGen4StatePanel;
+
+/* C5. The shared trade producer, by value: phase, sequences, both identities and the two
+ * native-binding buffers (trade_producer.h:50-60). */
+typedef struct {
+    uint32_t layout; /* SLINK_GEN4_STATE_TRADE_LAYOUT, stamped by C5 */
+    SlinkTradeProducer producer;
+    uint32_t caps; /* C5's contribution: SLINK_GEN4_TRADE_CAPABILITIES while C5's module
+                    * is in this build (trade.h step 5), rebuilt by the card every visit */
+} SlinkGen4StateTrade;
+
 typedef struct {
     uint32_t magic;         /* SLINK_GEN4_STATE_MAGIC: this block is ours and live */
     uint32_t generation;    /* session epoch: registration + every identity change */
@@ -104,11 +211,66 @@ typedef struct {
     uint32_t delta;         /* accumulated engine-clock delta                    */
     uint32_t registrations; /* Slink_NDS_Register() calls, seeded across boots    */
     uint32_t prev_cookie;   /* previous session's published cookie (mix input)   */
-    /* C3/C4/C5 append their private state HERE (decision block:5: hold/state lives
-     * in this block, never in the title window, never in the ABI). */
+    /* Per-card state, one fixed versioned sub-struct each, written only by its owner.
+     * The decision block (C2_BEACON_SPEC.md:5) puts all of it in this block -- never in
+ * the title window, never in the ABI, never in DTCM. */
+    SlinkGen4StateSound sound;
+    SlinkGen4StatePanel panel;
+    SlinkGen4StateTrade trade;
 } SlinkGen4State;
 
+/* C89-safe compile-time checks (the ROM compiler is not required to be C11).
+   - the sound block is 16 bytes -- the five ROM-private fields plus this card's
+     contribution word -- so a stray field cannot be added without this firing;
+   - every sub-struct starts word-aligned: the producers contain word loads and _Alignas
+     members, and a byte-aligned base would make that a build error. */
+typedef char slink_gen4_state_sound_size_check[(sizeof(SlinkGen4StateSound) == 16u) ? 1 : -1];
+typedef char slink_gen4_state_substructs_aligned_check[
+    ((offsetof(SlinkGen4State, sound) % 4u) == 0u && (offsetof(SlinkGen4State, panel) % 4u) == 0u
+     && (offsetof(SlinkGen4State, trade) % 4u) == 0u) ? 1 : -1];
+typedef char slink_gen4_state_block_aligned_check[((sizeof(SlinkGen4State) % 4u) == 0u) ? 1 : -1];
+
 #define SLINK_GEN4_STATE_MAGIC 0x4C4B5347u /* "GSKL" little-endian */
+
+/* ---------------------------------------------------------------- the capability word
+ * ONE writer, ONE composition, ONE call site: the beacon's service body, immediately
+ * after Slink_NDS_Dispatch(). A card owns the MEANING of a bit and publishes it by
+ * writing its own contribution word; it never touches m->capabilities, because the
+ * next stamp would overwrite it anyway (beacon.c stamps after the fan-out).
+ *
+ * Whole-word assignment, never accumulate. That is the fix for the erase defect: a
+ * whole-word rebuild from state cannot keep a bit a card has stopped declaring
+ * (drop it this visit), and it cannot inherit a bit from the previous visit or from
+ * a host write into the mailbox (the word is a function of the state block alone).
+ * OR-ing the mailbox's own word back in would do both wrong things, which is what the
+ * tests pin.
+ *
+ * The mask is fail-closed, not cosmetic: bits 7..15 are reserved for future shared
+ * caps (abi.h:88-96 stops at bit 6), so a card that sets one loses it rather than
+ * publishing a bit the ABI owner has not defined.
+ *
+ * Header-only and host-compilable on purpose, the same way Slink_NDS_SpanBase() is:
+ * beacon.c needs the NitroSDK and cannot be driven by a host compiler, so the RULE
+ * lives here and the ROM file carries the call.
+ */
+static inline void Slink_NDS_PublishCaps(const SlinkGen4State *st, volatile SlinkMailboxV2 *m)
+{
+    uint32_t caps = SLINK_GEN4_CAPABILITIES;
+
+    if (st == NULL || m == NULL) {
+        return; /* fail closed: no block, no stamp -- the caller has already returned */
+    }
+#if defined(SLINK_GEN4_SOUND)
+    caps |= st->sound.caps;
+#endif
+#if defined(SLINK_GEN4_PANEL)
+    caps |= st->panel.caps;
+#endif
+#if defined(SLINK_GEN4_TRADE)
+    caps |= st->trade.caps;
+#endif
+    m->capabilities = caps & SLINK_GEN4_CAP_MASK_LEGAL;
+}
 
 /* ---------------------------------------------------------------- entry point
  * Called once per boot from NitroMain, after InitSystemForTheGame() (which creates

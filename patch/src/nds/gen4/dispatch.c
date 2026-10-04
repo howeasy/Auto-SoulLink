@@ -25,6 +25,10 @@
 #include "beacon.h"
 #include "dispatch.h"
 
+#if defined(SLINK_GEN4_SOUND)
+#include "sound.h" /* C3's service declaration: the ONE producer symbol named outside this file */
+#endif
+
 void Slink_NDS_Dispatch(SlinkGen4State *st, volatile SlinkMailboxV2 *m)
 {
 #if defined(SLINK_GEN4_SOUND)
