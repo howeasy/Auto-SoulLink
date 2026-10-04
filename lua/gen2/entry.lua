@@ -600,8 +600,8 @@ end
 --   reads   lua/gen2/polished.lua P.new; wire = P.wire (DDDDDD:OOOO:SSS:TT keys, 70-byte party blobs)
 --   panel   lua/gen2/panel.lua over profile.overlay (the same SLNK mailbox, ABI 3): only for companion_abi, the
 --           server's companion evidence; the overlay advertises caps 0, so it never paints or plays a sound
---   signals a binder that registers NOTHING: engine_signals.json is SOURCE_CANDIDATE / physical_firing OPEN with no
---           receipt, so no engine-site hook is ever placed (no capture/PC/evolution events: milestone B, C-SITES)
+--   signals C-SITES: signals.lua S.new_polished registers ONE hook, capture_party (03:652B, the wild party catch), at
+--           DEV_OVERLAY evidence (no receipt: physical_firing OPEN); no other engine site, so no PC/evolution events
 --   safety  refuses every write kind, so writes/boxes/phone/trade/checkpoint/battle holds are all absent (nil)
 --   pc_boxes the READ-ONLY newbox census (P.census over lua/gen2/polished_boxes.lua, C-BOX): a scan counts only with
 --           a real save (sSaveVersion + sChecksum anchors) and all 20 boxes decoded, else pc_boxes stays [] with no
@@ -670,7 +670,18 @@ local function compose_polished(deps, decision)
             error(why, 0)
         end
         local panel = assert(Panel.new(profile, charmap, io_, panel_writes, hud.sanitize or function(s) return s end))
-        local function signals()
+        -- C-SITES (milestone B): ONE engine site, capture_party (signals.lua S.new_polished), under this DEV-GRADE
+        -- admission only. A refused binder (anchor bytes differ, malformed pack) degrades to the inert binder: the
+        -- client keeps its hello and party ticks, registers nothing, and says why once in the log.
+        local Signals, Registry, GB = load("lua/gen2/signals.lua"), load("lua/hook_registry.lua"),
+                                      load("lua/gb_hook_binding.lua")
+        local pack = load_json(json, root .. "/data/games/polished_crystal/engine_signals.json")
+        local function signals(authority)
+            local binder, why = Signals.new_polished({title="polished", qualification=decision.qualification,
+                profile=profile, pack=pack, io=io_, reads=reads, key_fn=P.mon_key, areas=area_map,
+                authority=authority, Registry=Registry, GB=GB, owner="SLink-gen2-polished", max_pending=64})
+            if binder then return binder end
+            if deps.log then deps.log("[SLink-gen2] Polished engine sites refused: " .. tostring(why)) end
             return {drain=function() return {} end, status=function() return {} end,
                     boundary=function() end, abandon=function() end, close=function() return true end}
         end

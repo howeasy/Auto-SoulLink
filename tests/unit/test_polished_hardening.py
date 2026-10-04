@@ -76,7 +76,7 @@ def test_a_queued_panel_request_is_refused_not_written_and_not_dropped(roms):  #
     _run(io, client, 1)
     assert len(refusals.log) >= 2 and "refused" in refusals.log[2]["why"]
     assert any("Polished panel write refused" in line for line in log.lines.values()), list(log.lines.values())
-    assert len(log.writes) == 0 and len(log.hooks) == 0
+    assert len(log.writes) == 0 and set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'}
 
 
 # ── H2 (F-4): hello_unheld still needs out-of-battle and a stable party ─────

@@ -304,3 +304,13 @@ The PC above is off by two bytes: `rst FarCall` (`D7`) is at **03:652B** (flat 0
 +0x18B), not 03:652D; the `08 45` match I scanned for is the *address operand* (0x652C). Bytes:
 `652A=E7 (rst CopyBytes), 652B=D7, 652C=08, 652D=45, 652E=13, 652F=FA`. A hook at 0x652D would sit
 mid-instruction and never fire. The SITE-REPIN worker caught it; `engine_signals.json` pins 0x652B.
+
+
+---
+
+## Coordinator note after C-SITES (2026-10-04)
+
+`wBattleType` is `01:d236` in the pinned `.sym` and the profile, not `01:d216` as section 3 says. The
+binder reads wPartyCount (last slot) plus the party record, not `wCurPartyMon`/`wCurPartySpecies` as
+ENGINE_SITES.md section 4 says. The site is registered in `Signals.new_polished` (DEV_OVERLAY_SHA1, never
+PHYSICAL); tests: `tests/unit/test_polished_sites.py`.

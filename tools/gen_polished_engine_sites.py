@@ -51,6 +51,25 @@ DEFAULT_HEX_LEN = 6
 HEX_LEN_OVERRIDE = {"battle_faint": 2, "rival_swap_commit": 2, "rival_swap_gate": 3,
                     "rival_swap_last_consumption": 1}
 
+# CPU-instruction proof for the sites a client binds (lua/gen2/signals.lua S.new_polished demands `instructions`
+# and `point_symbols` of its site, as build() does of a vanilla one). Each instruction is RE-ENCODED from the .sym and
+# must equal the site's ROM bytes exactly, so the text is a decoding of the anchor, never a label. point_symbols are the
+# WRAM scalars the binder reads at the site, from the same .sym.
+def _le(addr: int) -> bytes:
+    return addr.to_bytes(2, "little")
+
+
+PROOFS = {
+    "capture_party": {
+        "instructions": (
+            ("rst FarCall ; SetCaughtData",  # rst $10 + inline dw addr, db bank (macros/rst.asm)
+             lambda s: b"\xD7" + _le(s["SetCaughtData"][1]) + bytes([s["SetCaughtData"][0]])),
+            ("ld a, [wCurItem]", lambda s: b"\xFA" + _le(s["wCurItem"][1])),
+        ),
+        "point_symbols": ("wPartyCount", "wBattleType", "wBattleScriptFlags", "wMapGroup", "wMapNumber"),
+    },
+}
+
 SYMPATH = DATA / "polishedcrystal.sym"
 SYM_RE = re.compile(r"^([0-9a-f]{2}):([0-9a-f]{4}) (\S+)$")
 
@@ -365,6 +384,15 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
     })
     if site["find_hex"]:
         out["find_hex"] = site["find_hex"]
+    proof = PROOFS.get(site["id"])
+    if proof:
+        encoded = b"".join(encode(sym) for _, encode in proof["instructions"])
+        if encoded != rom[off:off + n]:
+            raise SystemExit(f"{site['id']}: instructions encode {encoded.hex().upper()}, "
+                             f"ROM has {rom[off:off + n].hex().upper()}")
+        out["instructions"] = [text for text, _ in proof["instructions"]]
+        out["point_symbols"] = {name: {"bank": sym[name][0], "addr": sym[name][1]}
+                                for name in proof["point_symbols"]}
     if site["anchor"]:
         out["sym_anchor"] = site["anchor"]
     if site["notes"]:

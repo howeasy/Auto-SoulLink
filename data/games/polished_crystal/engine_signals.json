@@ -291,7 +291,33 @@
           "rom_offset": 58667,
           "expected_hex": "D7084513FA09D1",
           "hex_len": 7,
-          "find_hex": "D7084513FA09D1"
+          "find_hex": "D7084513FA09D1",
+          "instructions": [
+            "rst FarCall ; SetCaughtData",
+            "ld a, [wCurItem]"
+          ],
+          "point_symbols": {
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 56526
+            },
+            "wBattleType": {
+              "bank": 1,
+              "addr": 53814
+            },
+            "wBattleScriptFlags": {
+              "bank": 1,
+              "addr": 54374
+            },
+            "wMapGroup": {
+              "bank": 1,
+              "addr": 56492
+            },
+            "wMapNumber": {
+              "bank": 1,
+              "addr": 56493
+            }
+          }
         },
         "capture_box": {
           "id": "capture_box",

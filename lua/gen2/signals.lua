@@ -1234,4 +1234,155 @@ function S.new_model(options)
     if not ok then return nil,tostring(result) end
     return result,why,failed
 end
+
+-- C-SITES (docs/polished/CLIENT.md, milestone B): the DEV-GRADE Polished binder, reached only from lua/gen2/entry.lua
+-- compose_polished (the admitted overlay sha1, qualification DEV_OVERLAY_SHA1). S.new keeps refusing Polished (no
+-- PHYSICAL receipt path) and S.new_model keeps refusing its pack schema; nothing above is shared or changed. This
+-- registers exactly ONE site, capture_party = PokeBallEffect+0x18B `rst FarCall SetCaughtData`, the first instruction
+-- after the party-record/OT/nickname rst CopyBytes (item_effects.asm: `inc [hl]` on wPartyCount precedes them, so the
+-- catch is the LAST party slot). A full party jumps to .SendToPC and a contest catch branches off before the copy, so
+-- neither reaches it. No finalized site is registered, so there is no nickname latch: the wild party catch is
+-- published AT the site, under the same battle-type/scripted/area rules final_event applies to a vanilla wild catch.
+-- Events carry evidence DEV_OVERLAY / physical_status OPEN. What a PHYSICAL receipt proves (qualified_sites: a live
+-- hit at the PC and the capture RAM-effect frame alignment, never from synthetic data) stays UNPROVEN: status().unproven.
+-- Options: title="polished", qualification="DEV_OVERLAY_SHA1", profile (the Polished title table), pack (the generated
+-- polished-engine-signals-v1 wrapper), io (live), reads (polished.lua), key_fn (P.mon_key), areas (area_map),
+-- authority {capture, valid}, Registry, GB, owner, max_pending.
+S.POLISHED_SITE, S.POLISHED_PHASE = "capture_party", "post_insert_post_nickname_copy"
+S.POLISHED_UNPROVEN = {"a live exec hit at the capture_party PC on a running cartridge",
+    "the capture RAM-effect frame alignment (signals.lua qualified_sites live_capture: no non-synthetic run)"}
+function S.new_polished(options)
+    local ok,result,why,failed = pcall(function()
+        local o = options
+        assert(type(o) == "table" and o.title == "polished" and o.qualification == "DEV_OVERLAY_SHA1",
+               "the Polished DEV_OVERLAY_SHA1 admission is required")
+        local io, authority, reads, profile, pack = assert(o.io), assert(o.authority), assert(o.reads), o.profile, o.pack
+        assert(io.model_only ~= true and callable(io.bank_valid), "live IO required")
+        assert(callable(authority.capture) and callable(authority.valid), "held operation authority required")
+        assert(callable(o.key_fn) and callable(reads.read_party), "Polished key builder and party reader required")
+        assert(type(profile) == "table" and profile.title == "polished" and type(profile.ram) == "table"
+               and type(profile.ram_bank) == "table" and type(profile.derived) == "table", "generated Polished profile required")
+        assert(type(pack) == "table" and pack.schema == "polished-engine-signals-v1" and pack.runtime_admission == "NOT_GRANTED"
+               and pack.f3_complete == false and type(pack.source) == "table" and pack.source.rom_sha1 == profile.rom_sha1,
+               "generated Polished engine-site pack required")
+        local data = type(pack.titles) == "table" and pack.titles.polished_crystal
+        local site = type(data) == "table" and type(data.sites) == "table" and data.sites[S.POLISHED_SITE]
+        assert(type(site) == "table" and site.status == "RESOLVED" and site.kind == "CPU_INSTRUCTION"
+               and site.maturity == "SOURCE_CANDIDATE" and site.runtime_enabled == false and site.physical_firing == "OPEN"
+               and site.phase == S.POLISHED_PHASE, "capture_party: the re-pinned CPU source candidate required")
+        assert(type(site.expected_hex) == "string" and integer(site.bank,0,255) and integer(site.addr,0,65535),
+               "capture_party: anchor required")
+        assert(type(site.instructions) == "table" and #site.instructions > 0,"CPU instruction proof required")
+        for _,instruction in ipairs(site.instructions) do
+            assert(type(instruction) == "string" and CPU[instruction:match("^(%w+)")],
+                   "unsupported CPU instruction or script bytecode")
+        end
+        assert(type(site.point_symbols) == "table","source point-symbol facts required")
+        for _,symbol in ipairs({"wBattleType","wBattleScriptFlags","wMapGroup","wMapNumber"}) do
+            local point = site.point_symbols[symbol]
+            assert(type(point) == "table" and integer(point.bank,0,255) and integer(point.addr,0,65535),
+                   "invalid source point " .. symbol)
+            if profile.ram[symbol] ~= nil then
+                assert(profile.ram[symbol] == point.addr and profile.ram_bank[symbol] == point.bank,
+                       "profile/point address mismatch")
+            end
+        end
+        local area_types = {}
+        for _,t in ipairs(assert(profile.derived.area_battle_types, "profile area_battle_types required")) do
+            area_types[t] = true
+        end
+        local function key(mon)
+            local k, kwhy = o.key_fn(mon)
+            need(type(k) == "string", "complete decoded Gen 2 identity required: " .. tostring(kwhy))
+            return k
+        end
+        local function byte(symbol)
+            local point = site.point_symbols[symbol]
+            need(io.bank_valid(point.bank,point.addr,1) == true,"OPEN: unmapped guard memory")
+            local value = io.read_u8(point.addr,"System Bus")
+            assert(integer(value,0,255),"guard byte unavailable")
+            return value
+        end
+        local binding = assert(o.GB).new(io,{bus_domain="System Bus",rom_domain="ROM",bank_domain="System Bus",
+            bank_address=assert(profile.ram.hROMBank),pc_register="PC",sp_register="SP"})
+        local refusals, drops, refused = {}, {}, 0
+        local function process(prepared)
+            local context = binding:context(prepared.anchor)
+            if not context then return nil end -- another bank mapped at this PC: nothing stamped
+            local held = authority.capture()
+            assert(type(held) == "table" and type(held.operation) == "string" and held.operation ~= "",
+                   "operation identity malformed")
+            need(authority.valid(held) == true,"OPEN: held observation unavailable")
+            local party, pwhy = reads.read_party()
+            need(party,"OPEN: receiver snapshot unavailable: " .. tostring(pwhy))
+            need(integer(party.count,1,6),"occupied receiver required")
+            local slot = party.count-1 -- selector "last"
+            local mon = copy(party.mons[slot+1])
+            need(mon and mon.is_egg == false,"final acquisition cannot be an unhatched egg")
+            mon.key = key(mon)
+            for i,other in ipairs(party.mons) do
+                if i ~= slot+1 then need(key(other) ~= mon.key,"ambiguous receiver identity") end
+            end
+            need(math.floor(byte("wBattleScriptFlags")/128)%2 == 0,"OPEN: scripted/static acquisition caller policy unavailable")
+            need(area_types[byte("wBattleType")] == true,"OPEN: specialized/static acquisition policy unavailable")
+            local row = o.areas and o.areas[tostring(byte("wMapGroup")*256+byte("wMapNumber"))]
+            need(type(row) == "table" and type(row.area_id) == "string" and row.area_id ~= "" and type(row.source) == "table"
+                 and row.source.artifact == pack.source.artifact and row.source.commit == pack.source.commit,
+                 "OPEN: source-qualified ordinary area unavailable")
+            need(authority.valid(held) == true,"held identity changed while sampling")
+            local event = {kind="capture",site_id=S.POLISHED_SITE,acquisition="wild",area_id=row.area_id,destination="party",
+                slot=slot,mon=mon,classifications={},identity_scope="observed_destination_only",
+                global_identity_qualification="OPEN",evidence_level="DEV_OVERLAY",physical_status="OPEN",runtime_authorized=false}
+            return {kind="polished_dev_batch",events={event},context=context,generation=held.generation,operation=held.operation,
+                    evidence_level="DEV_OVERLAY",physical_status="OPEN",runtime_authorized=false}
+        end
+        local service, message, fault = assert(o.Registry).new({owner=o.owner,max_pending=o.max_pending,
+            sites={{id=S.POLISHED_SITE}},
+            validate=function(descriptor)
+                return {id=descriptor.id,anchor=binding:validate({id=descriptor.id,bank=site.bank,address=site.addr,
+                    capture_offset=0,rom_offset=site.rom_offset,expected_hex=site.expected_hex})}
+            end,
+            register=function(prepared,callback,name) return binding:register(prepared.anchor,callback,name) end,
+            unregister=function(handle) return binding:unregister(handle) end,
+            valid_handle=function(handle) return binding:valid_handle(handle) end,
+            capture=function(prepared)
+                local done,value = pcall(process,prepared)
+                if done then return value end
+                if type(value) == "table" and type(value.refusal) == "string" then
+                    refusals[S.POLISHED_SITE], refused = value.refusal, refused+1
+                    return nil
+                end
+                error(value,0)
+            end,
+        })
+        if not service then return nil,message,fault end
+        local self = {}
+        function self:drain() return service:drain() end
+        -- no latches: a natural boundary retires nothing, queued captures are delivered by the next drain
+        function self:boundary(reason)
+            assert(BOUNDARIES[reason],"explicit failure/cancel/reset/reload/source_change boundary required")
+        end
+        -- an abandoned timeline (savestate load/rewind) delivers nothing it observed (as build's abandon)
+        function self:abandon(reason)
+            local count = #service:drain()
+            if count > 0 then
+                local drop = drops.abandoned_timeline or {count=0}
+                drop.count,drop.reason = drop.count+count,"abandoned timeline: " .. tostring(reason)
+                drops.abandoned_timeline = drop
+            end
+        end
+        function self:status()
+            local status = service:status()
+            status.runtime_authorized,status.physical_status,status.evidence_level = false,"OPEN","DEV_OVERLAY"
+            status.registered_sites,status.refusals,status.drops = {S.POLISHED_SITE},copy(refusals),copy(drops)
+            status.refused_acquisitions,status.pending_acquisitions = refused,0
+            status.unproven = copy(S.POLISHED_UNPROVEN)
+            return status
+        end
+        function self:close() return service:close() end
+        return self
+    end)
+    if not ok then return nil,tostring(result) end
+    return result,why,failed
+end
 return S

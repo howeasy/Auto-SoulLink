@@ -1025,3 +1025,13 @@ existed).
    the three commits above: the composed `P.writes` panel writer (`lua/gen2/panel.lua:66`, whose
    `pointer_stable` and `lifetime.valid` are unconditionally `true`) and `hello_unheld`
    (`lua/gen2/client.lua:1364`) skipping the `battle.mode` gate at `:1366`.
+
+
+### 5.4 C-SITES update (coordinator, after commit of Signals.new_polished)
+
+C-SITES is now **DONE-unproven-live**: the composed client registers one hook, `capture_party` at 03:652B,
+and a replayed wild party catch emits `capture` that the real server takes into `pending_captures`
+(`tests/unit/test_polished_sites.py`, 10 tests with red controls). Unproven without a cartridge: that the
+exec hook fires at 0xE52B as an instruction start with hROMBank 3, and the frame alignment of the party
+write (the capture RAM-effect stays OPEN by design). Box catches, roamers, scripted/grotto and contest catches
+emit nothing (fail closed). The milestone-A "no hook anywhere" assertions now allow exactly this one hook.

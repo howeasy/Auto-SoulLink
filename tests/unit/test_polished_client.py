@@ -205,11 +205,11 @@ def test_no_hook_and_no_write_on_the_whole_path(composed):
     _hello(composed)
     lua, _, parts, io, log = composed
     _run(io, parts.client, 60)  # a tick, a validate, a box rescan
-    assert len(log.hooks) == 0 and len(log.writes) == 0
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'} and len(log.writes) == 0
     ticks = [json.loads(line) for line in log.sent.values() if json.loads(line)["event"] == "tick"]
     assert ticks and ticks[-1]["party"] == _hello(composed)["party"]
     parts.client.stop(parts.client)
-    assert len(log.hooks) == 0
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'}
 
 
 def test_the_production_signals_gate_refuses_polished():
@@ -243,7 +243,7 @@ def test_the_clean_release_and_a_random_rom_get_no_client(roms):
         deps, io, log = _rig(lua, rom, _memory(_mons()))
         parts, why = _pair(_entry(lua).build(deps))
         assert parts is None and expect in why
-        assert len(log.hooks) == 0 and len(log.writes) == 0
+        assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'} and len(log.writes) == 0
 
 
 # ── C-SIGNALS: the binder's title facts come from the profile ────────────────
