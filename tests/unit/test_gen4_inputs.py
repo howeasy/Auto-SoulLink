@@ -24,6 +24,7 @@ from tests.unit.gen4_world import SD, World  # the model RAM + the PRODUCTION cl
 ROOT = Path(__file__).resolve().parents[2]
 INPUTS = (ROOT / "lua/gen4/inputs.lua").read_text(encoding="utf-8")
 HGSS = ROOT / "data/games/gen4_hgss"
+HGE = ROOT / "data/games/gen4_hge"
 HGSS_MAP = json.loads((HGSS / "area_map.json").read_text(encoding="utf-8"))
 HGSS_LOCS = json.loads((HGSS / "locations.json").read_text(encoding="utf-8"))
 
@@ -71,7 +72,15 @@ def bag_memory(slots: list[tuple[int, int]]) -> dict[int, int]:
 def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locations: bool = True,
                charmap: dict | None = None, titles: dict | None = None, bag_mem: dict | None = None,
                array_refuses: bool = False, save_array: bool = True, gift_areas: dict | None = None,
-               profile: str = "data/games/gen4_x/profile.json") -> dict:
+               profile: str = "data/games/gen4_x/profile.json", real_pack: Path | None = None) -> dict:
+    """Load inputs.lua in lupa over a scratch pack; returns the flat namespace it produced.
+
+    `titles` writes profile.json's title table (the bag fact's home). `bag_mem` is the fake save
+    array: save_array(array_id) hands back a reader over it, `array_refuses` models an unreadable
+    save (R.save_data's refusal), which must never read as an empty bag, and `save_array=False`
+    withholds the handle entirely, which is what an unwired composition root looks like.
+    `real_pack` copies that pack's committed area_map.json/locations.json instead of synthesising them,
+    so a test can run the producers over a pack as it ships."""
     """Load inputs.lua in lupa over a scratch pack; returns the flat namespace it produced.
 
     `titles` writes profile.json's title table (the bag fact's home). `bag_mem` is the fake save
@@ -83,16 +92,22 @@ def lua_inputs(tmp: Path, src: str | None = None, *, areas: bool = False, locati
     (tmp / "lua").mkdir(exist_ok=True)
     (tmp / "lua/json_codec.lua").write_bytes((ROOT / "lua/json_codec.lua").read_bytes())
     (pack / "profile.json").write_text(json.dumps({"titles": titles} if titles else {}), encoding="utf-8")
-    if areas:
-        # a deep copy; the gift_areas key is REMOVED unless a test asks for one, so "the pack ships no
-        # gift list" stays that case whatever the committed area_map.json happens to carry
-        doc = json.loads(json.dumps(HGSS_MAP))
-        doc.pop("gift_areas", None)
-        if gift_areas is not None:
-            doc["gift_areas"] = gift_areas
-        (pack / "area_map.json").write_text(json.dumps(doc), encoding="utf-8")
-    if locations:
-        (pack / "locations.json").write_text(json.dumps(HGSS_LOCS), encoding="utf-8")
+    if real_pack is not None:
+        for name in ("area_map.json", "locations.json"):
+            src_file = real_pack / name
+            assert src_file.is_file(), f"{src_file} is missing: run the generator that writes it"
+            (pack / name).write_bytes(src_file.read_bytes())
+    else:
+        if areas:
+            # a deep copy; the gift_areas key is REMOVED unless a test asks for one, so "the pack ships no
+            # gift list" stays that case whatever the committed area_map.json happens to carry
+            doc = json.loads(json.dumps(HGSS_MAP))
+            doc.pop("gift_areas", None)
+            if gift_areas is not None:
+                doc["gift_areas"] = gift_areas
+            (pack / "area_map.json").write_text(json.dumps(doc), encoding="utf-8")
+        if locations:
+            (pack / "locations.json").write_text(json.dumps(HGSS_LOCS), encoding="utf-8")
     if charmap is not None:
         (pack / "charmap.json").write_text(json.dumps(charmap), encoding="utf-8")
 
@@ -157,6 +172,26 @@ def test_area_of_names_a_mapped_map_from_the_real_pack_files(tmp_path):
     # "National Park" -- the pack's two tables answer two different questions.
     assert w["area"](487) == ["bug_catching_contest", "National Park"]
     assert w["area"](488) == ["national_park", "National Park"]
+
+
+
+@pytest.mark.parametrize("pack", [HGSS, HGE], ids=["gen4_hgss", "gen4_hge"])
+def test_the_shipped_pack_files_drive_area_of_and_gift_area(tmp_path, pack):
+    """The pack's OWN committed area_map.json / locations.json, copied in as shipped (not a synthesised
+    stand-in), so a producer that only ever worked on the hgss fixture cannot pass here. Both packs ship
+    the files; gen4_hge's generator proves its copy is the HGSS map on the two pinned ROMs."""
+    w = lua_inputs(tmp_path / "pack", real_pack=pack)
+    assert w["raw"] is not None, f"{pack.name} refused its own area map: {w['why']}"
+    assert_area_contract(w)                                   # a null/absent fact stays nil
+    assert w["area"](487) == ["bug_catching_contest", "National Park"]
+    assert w["gift"] is not None, f"{pack.name} refused its own gift list: {w['gift_why']}"
+    doc = json.loads((pack / "area_map.json").read_text(encoding="utf-8"))
+    ids = doc["gift_areas"]["ids"]
+    assert ids and [a for a in ids if w["gift"](a) is not True] == [], ids
+    assert w["gift"]("route_1") is False and w["gift"]("") is False
+    # area_of and gift_area are both wired for this pack, so neither may show up as a gap
+    assert {"area_of", "gift_area"}.isdisjoint({g["name"] for g in w["gaps"].values()}), \
+        sorted(g["name"] for g in w["gaps"].values())
 
 
 def test_an_unmapped_map_is_an_empty_area_not_a_guess_and_keeps_its_label(tmp_path):

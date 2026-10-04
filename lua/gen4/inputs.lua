@@ -24,7 +24,8 @@
 --             (tools/gen_gen4_area_map.py, pret/pokeheartgold@ad7a3afa; null = not a Soul Link
 --             place, the file's `unmapped_maps` explains each), and
 --             data/games/<pack>/locations.json `.locations[map_id].name` -> loc_name.
---             SHIPPED for gen4_hgss. gen4_hge ships no area map, so its producer refuses.
+--             SHIPPED for gen4_hgss and gen4_hge (hge's is the HGSS map, proven byte-identical on the two
+--             pinned ROMs: area_map.json source.hge_proof). A pack that ships neither still refuses.
 --   gift_area   data/games/<pack>/area_map.json `.gift_areas.ids` -> the areas a scripted
 --             starter/gift/egg/loan reaches and no wild-encounter map backs (tools/
 --             gen_gen4_area_map.py over acquisition.json; the rule is that file's rules.gift_areas).

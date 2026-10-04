@@ -11,6 +11,7 @@
       "files/fielddata/eventdata/zone_event/016_R11.json": "ef3e76be00ffeb8e37b1b24ec1b16e450f628f558fa7d38db642d3bc8344a4f4",
       "files/fielddata/eventdata/zone_event/017_R12.json": "8de2e712d23df4804fd33c2a3d048b4b6fe1763c0ca86030f1fdb48f14b61600",
       "files/fielddata/eventdata/zone_event/026_R25.json": "8c092eee127821e8b0d03ba55a1335e3e51e5a87427cf51a108816cff5e1265d",
+      "files/fielddata/eventdata/zone_event/035_R34.json": "2f7361064c6e493f92162e923f60bdf99a442961625da594a931453b0010b4fe",
       "files/fielddata/eventdata/zone_event/037_R36.json": "7d8d4b0d3ed3009449275a2cc7927c05d31adfc4ab9f884af946742d72ca9981",
       "files/fielddata/eventdata/zone_event/048_T03.json": "23ba844db9eabb4a0fb31898acc8b92d1e957fee8b23b79c425a06224a0323a6",
       "files/fielddata/eventdata/zone_event/051_T06.json": "1bf38cb7d183f9476f9446f66bb1e74ac1f4b9e45a2ed25dab7dc3670006642c",
@@ -78,6 +79,7 @@
       "files/fielddata/script/scr_seq/scr_seq_0216_R25.s": "eea6e8b819f051086d925aa439ba7af5a0042189c35b5e9f4292c067b7893bd1",
       "files/fielddata/script/scr_seq/scr_seq_0241_R35R0101.s": "5f4aa7a959367d52c3a3b5b54988c851536f90c99372ec24f5ca861a2f5a9cfb",
       "files/fielddata/script/scr_seq/scr_seq_0243_R36.s": "50fc6a49e1e7b7d8cf412751e88e091bb9000a357ed9b20fed8c1466cdaeeb31",
+      "files/fielddata/script/scr_seq/scr_seq_0265.s": "761f9dcf491578a9005b7656eef11a20dc940cc4753f87072412b17ebd11c36a",
       "files/fielddata/script/scr_seq/scr_seq_0266_D01R0101_hdr.s": "b254a9fcda5896ac7f7f7e5d3ac429649f5eea988a12609cdcc7e72feb157c72",
       "files/fielddata/script/scr_seq/scr_seq_0272_D03R0103_hdr.s": "f25348f3124189b83ff5c33680c28d0519d6b4a61125604ff35c4a29d22a7784",
       "files/fielddata/script/scr_seq/scr_seq_0275_D11R0105_hdr.s": "b587e36fa2f4a973d762e689a9cae9e80d6fc3c3c4c8b4a4e1c809ffdb58381a",
@@ -100,6 +102,7 @@
       "files/fielddata/script/scr_seq/scr_seq_0442_R11_hdr.s": "e9310aac4d57122b16399f80a6fbaa8f9944f990e0d15dfd215aae4cabbb4dc6",
       "files/fielddata/script/scr_seq/scr_seq_0444_R12_hdr.s": "20f35ffc84a87e46adb4ddf64ade960c767ad4b8b9f82db100a0bcd24f75b744",
       "files/fielddata/script/scr_seq/scr_seq_0461_R25_hdr.s": "4bd671105f40dd0564c7fae7f6907bcee5ae349462fc7908349381155203e1b3",
+      "files/fielddata/script/scr_seq/scr_seq_0482_R34_hdr.s": "73b874d7355e995c71a8af4bc3f16d0db91b333ef91ae34ac24ba1b5b0a4318c",
       "files/fielddata/script/scr_seq/scr_seq_0486_R35R0101_hdr.s": "0e979575224585dcc8cc68f37d495bb38d315f83da60504958bde346c7280860",
       "files/fielddata/script/scr_seq/scr_seq_0488_R36_hdr.s": "a4ba6c6d7a9fbd17bab501011d1319feafa48c72eb0eae05ac59b9a83ac03fef",
       "files/fielddata/script/scr_seq/scr_seq_0513_T01R0301_hdr.s": "d54f1d0e59921e67d873d4300880622d594091749e579579e22a3ca2bbc2d6c9",
@@ -159,6 +162,7 @@
       "include/constants/npc_trade.h": "061d09a3293045cb81188808cf4215fd60971d01bb21c6e0f8ff023c72627d9e",
       "include/constants/safari.h": "475bd34656e7c550ef57e3ce2feb5f0c658ad5e73ef2f06f75c55d6d07fd6de8",
       "include/constants/species.h": "a72ce01027d83aabd9ff61dc8f3afbbf43eee30b25c39b6e23ed42c5ac587732",
+      "include/constants/std_script.h": "e64378af66fa6e2a20d7f326d9a1837459cbc3d5c5c36346c89f870635aa3efb",
       "src/battle/battle_command.c": "c1409260680ffaf11cb8b8d9849be10f207119a68da51fe1caccf94a014bcd09",
       "src/battle/battle_setup.c": "388a1928e92863069dd966ead56b69da15277f25c7b2d4bd69fae0cba16d0bd8",
       "src/choose_starter.c": "d6d9bcdaca6555d965a2fa89a43aab7c8859e5dc9d197ead30e71680b714b3fd",
@@ -166,6 +170,7 @@
       "src/field/encounter_check.c": "4e1f481e5abad931febcfadd2dc6b92723fd2c515a6ec1fbd82bd89e037cfbf6",
       "src/field/scrcmd_pokemon_misc.c": "ad2cd2c3f16b9beefe33ab210e890b647a225b5a563012fcf5775598c9ee90e0",
       "src/field_roamer.c": "a413683ab55d410ddcf57e13d0931a1db5f700829e92d4e557c1d080f017b19d",
+      "src/fieldmap.c": "0434d42345fdd218d39fa1b25f67463d45f0fcff189d67a5943eeb1d3392315c",
       "src/get_egg.c": "dbf573749aba2d8b096d71f9801d790fd0f7abbb96f7069b046c9a15e93e63be",
       "src/npc_trade.c": "2ff070ec4455b575ec1d2050e673d0ad7e7ba85a4b1ba423c0a392e057e82b3a",
       "src/overlay_bug_contest.c": "24c5e475a495f35cf2400dc2427aa1f11b1a5550d032e634998e3f4b0577cc03",
@@ -181,14 +186,15 @@
       "script_dir": "files/fielddata/script/scr_seq",
       "script_files_scanned": 965,
       "script_scan_digest": "701db7ac8ef2781d1be95e1a2d68fd05393b5dd7fe147c3232871029bd12c973",
-      "command_regex": "^\\s*(GiveMon|GiveEgg|GiveTogepiEgg|GiveSpikyEarPichu|GiveLoanMon|CreateRoamer|WildBattle|LoadNPCTrade|ChooseStarter)\\b(.*)$"
+      "command_regex": "^\\s*(GiveMon|GiveEgg|GiveDaycareEgg|GiveTogepiEgg|GiveSpikyEarPichu|GiveLoanMon|CreateRoamer|WildBattle|LoadNPCTrade|ChooseStarter)\\b(.*)$"
     }
   },
   "inventory": {
-    "script_site_count": 61,
+    "script_site_count": 62,
     "script_command_counts": {
       "GiveMon": 13,
       "GiveEgg": 3,
+      "GiveDaycareEgg": 1,
       "GiveTogepiEgg": 1,
       "GiveSpikyEarPichu": 1,
       "GiveLoanMon": 2,
@@ -197,7 +203,7 @@
       "LoadNPCTrade": 11,
       "ChooseStarter": 1
     },
-    "script_file_count_with_sites": 47,
+    "script_file_count_with_sites": 48,
     "c_producer_count": 25,
     "c_call_site_count": 29,
     "npc_record_count": 13,
@@ -210,12 +216,12 @@
     "npc_distinct_exchange_ids": [0, 1, 2, 3, 5, 8, 9, 10, 11, 12],
     "status_counts": {
       "candidates": 6,
-      "resolved": 51,
+      "resolved": 52,
       "unresolved": 1,
       "version_branch": 3
     },
     "reachability_status_counts": {
-      "resolved": 61
+      "resolved": 62
     },
     "callstd_call_count": 2,
     "callstd_conflict_count": 0,
@@ -223,6 +229,7 @@
     "reachability_by_command": {
       "GiveMon": {"resolved": 13},
       "GiveEgg": {"resolved": 3},
+      "GiveDaycareEgg": {"resolved": 1},
       "GiveTogepiEgg": {"resolved": 1},
       "GiveSpikyEarPichu": {"resolved": 1},
       "GiveLoanMon": {"resolved": 2},
@@ -232,7 +239,7 @@
       "ChooseStarter": {"resolved": 1}
     },
     "commands_without_a_c_producer": [],
-    "scope": "bounded candidate inventory: script sites for the 9 commands plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)"
+    "scope": "bounded candidate inventory: script sites for the 10 commands (a command inside a COMMON (std) script file is placed on the map of the object that runs its member) plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)"
   },
   "zone_policy": {
     "wild": {
@@ -292,11 +299,6 @@
   },
   "reachability_scope": "in-map script path + the event/header trigger that starts the entry, from pinned SOURCE; the gate flags/vars are NAMED and cited, not traced to the scripts that set them. NOT derived: how the player reaches the map (warp chains, HM/badge route gates). CallStd callees ARE resolved (sScriptBankMapping) and their flag/var write-set checked against the caller's gates (conflicts fail generation); hge paths through the differing common-script member 3 are flagged inherits_unproven, not proved",
   "out_of_scope_commands": {
-    "GiveDaycareEgg": {
-      "count": 1,
-      "sites": ["scr_seq_0265.s:101"],
-      "why": "daycare egg grant: the hatch is the O-15 gift catch (see C producer GiveEggToPlayer)"
-    },
     "RetrieveDaycareMon": {
       "count": 1,
       "sites": ["scr_seq_0265.s:444"],
@@ -900,6 +902,24 @@
       "shiny": false,
       "status": "resolved",
       "reachability": {"map": {"id": 40, "const": "MAP_ROUTE_36", "token": "R36"}, "sources": {"script": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s", "events": {"file": "files/fielddata/eventdata/zone_event/037_R36.json", "narc": "a/0/3/2", "member": 37}, "header": {"file": "files/fielddata/script/scr_seq/scr_seq_0488_R36_hdr.s", "narc": "a/0/1/2", "member": 488}}, "entries": [{"entry": "scr_seq_R36_000", "script_gates": [{"kind": "flag", "token": "FLAG_HIDE_GOLDENROD_FLOWERSHOP_GIRL", "scope": "script", "class": "story", "state": "unset", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:47"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "0", "via": {"cmd": "GetMenuChoice", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:183"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:185"}], "path_dependent_gates": [{"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "!=", "value": "2", "via": {"cmd": "GetPlayerFacing", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:195"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:196"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "2", "via": {"cmd": "GetPlayerFacing", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:195"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:196"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "!=", "value": "1", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:202"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "1", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:202"}], "triggers": [{"kind": "npc", "cite": "files/fielddata/eventdata/zone_event/037_R36.json:120", "gates": [{"kind": "flag", "token": "FLAG_HIDE_ROUTE_36_SUDOWOODO", "scope": "npc_visibility", "class": "story", "state": "unset", "cite": "files/fielddata/eventdata/zone_event/037_R36.json:119"}]}]}], "gates": [{"kind": "flag", "token": "FLAG_HIDE_ROUTE_36_SUDOWOODO", "scope": "npc_visibility", "class": "story", "state": "unset", "cite": "files/fielddata/eventdata/zone_event/037_R36.json:119"}, {"kind": "flag", "token": "FLAG_HIDE_GOLDENROD_FLOWERSHOP_GIRL", "scope": "script", "class": "story", "state": "unset", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:47"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "0", "via": {"cmd": "GetMenuChoice", "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:183"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0243_R36.s:185"}], "callstd": {"calls": [], "conflicts": []}, "status": "resolved", "unresolved": []}
+    },
+    {
+      "id": "scr_seq_0265:101",
+      "file": "scr_seq_0265.s",
+      "line": 101,
+      "command": "GiveDaycareEgg",
+      "raw_args": "",
+      "kind": "egg",
+      "zone": "gift",
+      "map_id": 38,
+      "map_const": "MAP_ROUTE_34",
+      "map_token": "R34",
+      "area": "route_34",
+      "via": {"kind": "std_script", "std": "std_daycare_man", "scriptId": 9500, "member": 0, "entry": "scr_seq_0265_000", "cite": "src/fieldmap.c:50", "called_by": {"map_id": 38, "cite": "files/fielddata/eventdata/zone_event/035_R34.json:230", "map_cite": "src/data/map_headers.h:1168"}, "members_without_this_command": [{"std": "std_daycare_lady", "scriptId": 9501, "member": 1, "entry": "scr_seq_0265_001", "bank_cite": "src/fieldmap.c:50", "called_by": [{"map_id": 331, "cite": "files/fielddata/eventdata/zone_event/302_R34R0101.json:10", "map_cite": "src/data/map_headers.h:9958"}], "why": "member 1 (scr_seq_0265_001) of the same std script file does not contain the command"}]},
+      "species": {"resolution": "c_source", "evidence": "src/get_egg.c:628 GiveEggToPlayer Daycare_GetEggSpecies(dayCare, gender_idx)", "detail": "the command takes no argument: the species is the egg the Day Care is holding (its own state, plus the incense), not anything the script names"},
+      "level": {"resolution": "c_source", "value": 1, "evidence": "src/get_egg.c GiveEggToPlayer -> SetEggStats(level 1)"},
+      "status": "resolved",
+      "reachability": {"map": {"id": 38, "const": "MAP_ROUTE_34", "token": "R34"}, "sources": {"script": "files/fielddata/script/scr_seq/scr_seq_0265.s", "events": {"file": "files/fielddata/eventdata/zone_event/035_R34.json", "narc": "a/0/3/2", "member": 35}, "header": {"file": "files/fielddata/script/scr_seq/scr_seq_0482_R34_hdr.s", "narc": "a/0/1/2", "member": 482}}, "entries": [{"entry": "scr_seq_0265_000", "script_gates": [{"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "1", "via": {"cmd": "GetDaycareState", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:17"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:18"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "0", "via": {"cmd": "GetMenuChoice", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:60"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:61"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "!=", "value": "6", "via": {"cmd": "GetPartyCount", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:87"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:88"}], "path_dependent_gates": [{"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "!=", "value": "0", "via": {"cmd": "GetMenuChoice", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:60"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:61"}], "triggers": [{"kind": "npc:std_script", "token": "std_daycare_man", "cite": "files/fielddata/eventdata/zone_event/035_R34.json:230", "gates": []}]}], "gates": [{"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "1", "via": {"cmd": "GetDaycareState", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:17"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:18"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "==", "value": "0", "via": {"cmd": "GetMenuChoice", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:60"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:61"}, {"kind": "var", "token": "VAR_SPECIAL_RESULT", "scope": "script", "class": "runtime", "op": "!=", "value": "6", "via": {"cmd": "GetPartyCount", "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:87"}, "cite": "files/fielddata/script/scr_seq/scr_seq_0265.s:88"}], "callstd": {"calls": [], "conflicts": []}, "status": "resolved", "unresolved": []}
     },
     {
       "id": "scr_seq_0740_T01R0301:629",
@@ -1530,7 +1550,8 @@
       "lines": [640],
       "cls": "acquisition",
       "kind": "egg",
-      "note": "daycare egg (O-15: the hatch is the gift catch); reached from a daycare script, not one of the 9 commands"
+      "scripts": ["GiveDaycareEgg"],
+      "note": "daycare egg (O-15: the hatch is the gift catch); the GiveDaycareEgg command sits in the COMMON (std) script scr_seq_0265.s, member 000, run by the Day-Care Man object on Route 34"
     },
     {
       "file": "src/get_egg.c",

@@ -5,12 +5,15 @@ import pytest
 
 from tools import gen4_evidence as e
 
-ABSENT_BY_PROOF = (("gen4_hge", "area_map.json"), ("gen4_hge", "locations.json"))
+# No pack input is absent by proof any more: gen4_hge ships area_map.json/locations.json too
+# (tools/gen_gen4_area_map.py proves the fork's map headers and area names byte-identical to HGSS's on
+# the two pinned ROMs, and lua/gen4/inputs.lua therefore builds area_of/gift_area for that pack). Both
+# packs bind the same file set, and the ABSENT marker is now only ever a work-tree state -- the
+# tolerance in gen4_evidence.OPTIONAL_PACK_INPUTS stays, so an uncommitted delete/add is still refused.
 PACK_FILES = tuple(
     f"data/games/{pack}/{name}"
     for pack in ("gen4_hgss", "gen4_hge")
     for name in ("profile.json", *e.PACK_INPUTS)
-    if (pack, name) not in ABSENT_BY_PROOF
 )
 
 
@@ -93,29 +96,35 @@ def test_uncommitted_charmap_edit_is_refused(repo):
         e.snapshot("probe", "heartgold", repo=repo)
 
 
-def test_hge_area_map_is_recorded_absent_under_its_path_and_shipping_it_stales(repo):
-    """The absent file keeps its path in the map, so an hge receipt says WHY the producer is unwired
-    and adding the file later must move the digest."""
+def test_the_hge_area_files_are_bound_like_hgss_and_an_edit_stales_and_reverts(repo):
+    """Shipping the file must move the digest: that is the whole reason ABSENT was recorded under its own
+    path, and it is what makes "add it later" a stale receipt rather than a silent change."""
     old = hge_receipt(repo)
     files = old["module_sha256"]
     for name in ("area_map.json", "locations.json"):
-        assert files[f"data/games/gen4_hge/{name}"] == e.ABSENT, name
+        assert files[f"data/games/gen4_hge/{name}"] not in (None, e.ABSENT), name
     assert files["data/games/gen4_hge/charmap.json"] != e.ABSENT
-    write_pack_file(repo, "data/games/gen4_hge/area_map.json", b'{"maps":{}}')
+    before = old["surface_sha256"]
+    write_pack_file(repo, "data/games/gen4_hge/area_map.json", b'{"maps":{"0":"route_1"}}\n')
     commit(repo)
     new = hge_receipt(repo)
-    assert new["surface_sha256"] != old["surface_sha256"]
-    assert new["module_sha256"]["data/games/gen4_hge/area_map.json"] != e.ABSENT
+    assert new["surface_sha256"] != before
     with pytest.raises(e.StaleEvidenceError, match="area_map.json"):
         e.verify(old, "probe", "heartgold_hge", "b" * 40, repo=repo)
     e.verify(new, "probe", "heartgold_hge", "b" * 40, repo=repo)
+    write_pack_file(repo, "data/games/gen4_hge/area_map.json")
+    commit(repo)
+    e.verify(old, "probe", "heartgold_hge", "b" * 40, repo=repo)
 
 
-def test_hgss_area_files_are_hashed_not_marked_absent(repo):
-    """The absent marker is a PACK fact, not a filename rule: hgss ships both and is never exempt."""
-    files = e.snapshot("probe", "heartgold", repo=repo)["module_sha256"]
+@pytest.mark.parametrize("pack", ["gen4_hgss", "gen4_hge"])
+def test_every_pack_area_file_is_hashed_never_marked_absent(repo, pack):
+    """The absent marker is a PACK fact, not a filename rule: both packs ship both files and neither is
+    ever exempt, so an hge receipt says nothing about which files the producers could open."""
+    title = "heartgold" if pack == "gen4_hgss" else "heartgold_hge"
+    files = e.snapshot("probe", title, repo=repo)["module_sha256"]
     for name in ("area_map.json", "locations.json"):
-        assert files[f"data/games/gen4_hgss/{name}"] not in (None, e.ABSENT), name
+        assert files[f"data/games/{pack}/{name}"] not in (None, e.ABSENT), name
 
 
 def test_absent_is_recorded_not_a_bypass_and_a_missing_charmap_is_refused(repo):
@@ -147,13 +156,19 @@ def test_deleting_a_shipped_area_file_in_the_work_tree_is_refused_not_absent(rep
     e.verify(old, "probe", "heartgold", "a" * 40, repo=repo)
 
 
-def test_creating_an_absent_pack_file_uncommitted_is_refused(repo):
-    old = hge_receipt(repo)
+def test_a_pack_file_absent_at_head_and_created_uncommitted_is_refused(repo):
+    """The mirror of the delete control: even an OPTIONAL path the commit does not carry cannot be added
+    in the work tree, or a receipt could qualify against bytes no commit has."""
+    path = repo / "data/games/gen4_hge/area_map.json"
+    path.unlink()
+    commit(repo)
+    absent = hge_receipt(repo)
+    assert absent["module_sha256"]["data/games/gen4_hge/area_map.json"] == e.ABSENT
     write_pack_file(repo, "data/games/gen4_hge/area_map.json", b'{"maps":{}}')
     with pytest.raises(e.StaleEvidenceError, match="area_map.json"):
         e.snapshot("probe", "heartgold_hge", repo=repo)
-    (repo / "data/games/gen4_hge/area_map.json").unlink()
-    e.verify(old, "probe", "heartgold_hge", "b" * 40, repo=repo)
+    path.unlink()
+    e.verify(absent, "probe", "heartgold_hge", "b" * 40, repo=repo)
 
 
 def commit(repo):

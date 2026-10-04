@@ -362,12 +362,45 @@ def test_committed_hge_profile_bag_is_present_or_named_open():
     assert profile["bag"]["balls_pocket_off"] % profile["bag"]["ball_slot_size"] == 0
 
 
-def test_hge_area_map_is_absent_because_the_fork_cannot_supply_one():
-    """The reason is a SOURCE fact recorded next to the generator, not a silent omission."""
-    assert "MAPSEC_" in amap.HGE_NOT_EMITTED
-    assert "MAP_*" in amap.HGE_NOT_EMITTED
-    if (HGE / "area_map.json").exists():
-        pytest.fail("gen4_hge area_map.json exists; re-derive the areas from the fork or amend HGE_NOT_EMITTED")
+def test_hge_area_map_is_the_hgss_map_and_says_what_proves_it():
+    """hge no longer has no area map. It has the HGSS one, and the file must be able to say WHY that is
+    valid for the fork -- the two spans measured on the two pinned ROMs, with the pins named."""
+    for name in ("area_map.json", "locations.json"):
+        path = HGE / name
+        assert path.is_file(), f"gen4_hge {name} is not generated; run tools/gen_gen4_area_map.py"
+        hge_doc = json.loads(path.read_text(encoding="utf-8"))
+        hgss_doc = json.loads((HGSS / name).read_text(encoding="utf-8"))
+        # every field but `source`/`_note` is the HGSS file, verbatim: no second derivation to drift
+        # (gift_areas is derived from each pack's OWN acquisition inventory: ids/sites/on_wild_area must match,
+        # the inventory pointer and the out-of-scope record list legitimately differ)
+        skip = ("source", "_note", "gift_areas")
+        assert {k: v for k, v in hge_doc.items() if k not in skip} \
+            == {k: v for k, v in hgss_doc.items() if k not in skip}, name
+        if name == "area_map.json":
+            for key in ("ids", "sites", "on_wild_area"):
+                assert hge_doc["gift_areas"][key] == hgss_doc["gift_areas"][key], key
+        # the hge note keeps the hgss one whole and names the proof beside it
+        assert hge_doc["_note"].startswith(amap.NOTE) and hgss_doc["_note"].startswith(amap.NOTE), name
+        assert hge_doc["_note"].endswith(hgss_doc["_note"][len(amap.NOTE):]), "the same tail, proof sentence in front"
+        assert "hge_proof" in hge_doc["_note"] and "hge_proof" not in hgss_doc["_note"], name
+        # ... and the source still names pret as the derivation, never the fork as an oracle
+        assert (hge_doc["source"]["repo"], hge_doc["source"]["commit"]) \
+            == ("pret/pokeheartgold", gen4_pins.SOURCE_COMMITS["pokeheartgold_citation"]), name
+        assert "hge_proof" in hge_doc["source"] and "hge_proof" not in hgss_doc["source"], name
+
+    proof = json.loads((HGE / "area_map.json").read_text(encoding="utf-8"))["source"]["hge_proof"]
+    heads, names = proof["map_headers"]["sha256"], proof["area_names"]["sha256"]
+    assert proof["identical"] is True and "byte-identical" in proof["claim"]
+    assert set(heads) == set(names) == {"heartgold", "heartgold_hge"}
+    assert len(set(heads.values())) == 1 and len(set(names.values())) == 1, "the two ROMs must agree"
+    assert all(len(d) == 64 for d in (*heads.values(), *names.values())), "full sha256, never a prefix"
+    assert (proof["map_headers"]["symbol"], proof["map_headers"]["address"], proof["map_headers"]["size"],
+            proof["map_headers"]["count"]) == (amap.MAP_HEADERS_SYMBOL, f"{amap.MAP_HEADERS_ADDR:#010x}",
+                                              amap.MAP_HEADERS_SIZE, amap.MAP_HEADER_COUNT)
+    assert proof["map_headers"]["cite"] == amap.MAP_HEADERS_CITE
+    assert (proof["area_names"]["narc"], proof["area_names"]["member"]) == (amap.AREA_NAMES_NARC, amap.AREA_NAMES_MSG)
+    for key in ("heartgold", "heartgold_hge"):
+        assert proof["roms"][key]["sha1"] == gen4_pins.ROM_SPECS[key][0], key
 
 
 # ── the hge PC-function count ────────────────────────────────────────────────────────────────

@@ -37,9 +37,9 @@ PYTHON = {
 # profile.json already binds (inputs.lua:21-29 -- area_map.json/locations.json for area_of,
 # charmap.json for the u16 glyphs, profile.json for the bag array). A file the pack does not ship is
 # recorded ABSENT WITH ITS PATH, never dropped, so shipping it later changes the digest. Only the two
-# area files are optional: gen4_hge emits no area map BY PROOF (tools/gen_gen4_area_map.py:53-67), and
-# inputs.lua refuses that producer for the pack rather than borrowing gen4_hgss's. A missing
-# charmap.json is a broken pack, not a pack gap, and stays a refusal.
+# area files are optional (a pack that ships no area map makes inputs.lua refuse that producer; today
+# gen4_hgss and gen4_hge both ship one). A missing charmap.json is a broken pack, not a pack gap, and
+# stays a refusal.
 PACK_INPUTS = ("charmap.json", "area_map.json", "locations.json")
 OPTIONAL_PACK_INPUTS = frozenset({"area_map.json", "locations.json"})
 ABSENT = "absent"

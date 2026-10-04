@@ -246,8 +246,8 @@ def test_trainers_counts_and_roles():
 def test_acquisition_inventory_counts_are_pinned():
     doc = load("acquisition.json")
     inv = doc["inventory"]
-    assert inv["script_site_count"] == len(doc["script_sites"]) == 61
-    assert inv["script_command_counts"] == {"GiveMon": 13, "GiveEgg": 3, "GiveTogepiEgg": 1, "GiveSpikyEarPichu": 1, "GiveLoanMon": 2, "CreateRoamer": 8, "WildBattle": 21, "LoadNPCTrade": 11, "ChooseStarter": 1}
+    assert inv["script_site_count"] == len(doc["script_sites"]) == 62
+    assert inv["script_command_counts"] == {"GiveMon": 13, "GiveEgg": 3, "GiveDaycareEgg": 1, "GiveTogepiEgg": 1, "GiveSpikyEarPichu": 1, "GiveLoanMon": 2, "CreateRoamer": 8, "WildBattle": 21, "LoadNPCTrade": 11, "ChooseStarter": 1}
     assert inv["npc_record_count"] == len(doc["npc_trade_records"]) == 13
     assert inv["npc_classification"] == {"authored_exchange": 10, "authored_loan_grant": 2, "dormant_narc_record_in_pinned_authored_scan": 1}
     assert inv["npc_load_site_count"] == 11 and inv["npc_distinct_exchange_ids"] == [0, 1, 2, 3, 5, 8, 9, 10, 11, 12]
@@ -303,10 +303,14 @@ def test_site_areas_exist_and_zones_follow_d10():
 
 
 def test_sites_match_the_independent_research_inventory():
-    """The generator re-derives the 61 hits; docs/gen4/research/data was produced separately."""
+    """The generator re-derives the hits; docs/gen4/research/data was produced separately, so every research
+    hit must still be one of ours -- and the difference is pinned, so a hit the generator invents (or drops)
+    cannot ride on the subset comparison."""
     ours = {(s["file"], s["line"], s["command"], s["map_id"]) for s in load("acquisition.json")["script_sites"]}
     research = json.loads((ROOT / "docs/gen4/research/data/acquisition_manifest.json").read_text(encoding="utf-8"))
-    assert ours == {(h["file"], h["line"], h["command"], h["map_num"]) for h in research["hits"]}
+    theirs = {(h["file"], h["line"], h["command"], h["map_num"]) for h in research["hits"]}
+    assert theirs <= ours, f"the generator lost a researched hit: {sorted(theirs - ours)}"
+    assert ours - theirs == {("scr_seq_0265.s", 101, "GiveDaycareEgg", 38)}, f"unexpected new hits: {sorted(ours - theirs)}"
     raw = json.loads((ROOT / "docs/gen4/research/data/npc_trades.json").read_text(encoding="utf-8"))
     recs = load("acquisition.json")["npc_trade_records"]
     for r, old in zip(recs, raw, strict=True):
@@ -345,7 +349,8 @@ REQUIRED_KINDS = {"gift", "loan", "npc_exchange", "static", "egg", "starter"}
 def walk_gates(obj):
     """Independent of the generator: every dict carrying both `token` and `cite` anywhere in a record."""
     if isinstance(obj, dict):
-        if "token" in obj and "cite" in obj:
+        # (an `npc:std_script` TRIGGER carries the std script's name as its `token`; it is not a gate)
+        if "token" in obj and "cite" in obj and obj.get("kind") != "npc:std_script":
             yield obj
         for v in obj.values():
             yield from walk_gates(v)
@@ -358,7 +363,7 @@ def test_every_required_site_has_a_reachability_record():
     """Revert: drop the `site["reachability"] = ...` line in build_doc (or any record in the committed JSON)."""
     doc = load("acquisition.json")
     sites = doc["script_sites"]
-    assert len(sites) == 61 and {s["kind"] for s in sites if s["kind"] in REQUIRED_KINDS} == REQUIRED_KINDS
+    assert len(sites) == 62 and {s["kind"] for s in sites if s["kind"] in REQUIRED_KINDS} == REQUIRED_KINDS
     for s in sites:
         rec = s.get("reachability")
         assert rec, f"{s['id']}: no reachability record"
@@ -373,15 +378,15 @@ def test_every_required_site_has_a_reachability_record():
         assert by_id[sid]["reachability"]["entries"], sid
     inv = doc["inventory"]
     assert inv["reachability_status_counts"] == dict(sorted(Counter(s["reachability"]["status"] for s in sites).items()))
-    assert sum(sum(v.values()) for v in inv["reachability_by_command"].values()) == 61
+    assert sum(sum(v.values()) for v in inv["reachability_by_command"].values()) == 62
     assert "NOT derived" in doc["reachability_scope"]
 
 
 def test_reachability_statuses_are_pinned_per_command():
-    """All 61 sites derive fully at the pin (the 9 dead label blocks, referenced by no jump, are recorded as `dead_blocks_ignored`, not gaps). A new unmodelled
+    """All 62 sites derive fully at the pin (the 9 dead label blocks, referenced by no jump, are recorded as `dead_blocks_ignored`, not gaps). A new unmodelled
     condition or an entry without a trigger turns a site `partial` and fails here until it is looked at."""
     inv = load("acquisition.json")["inventory"]
-    assert inv["reachability_status_counts"] == {"resolved": 61}
+    assert inv["reachability_status_counts"] == {"resolved": 62}
     assert {c: sum(v.values()) for c, v in inv["reachability_by_command"].items()} == inv["script_command_counts"]
 
 
@@ -397,7 +402,10 @@ def test_reachability_gate_cites_exist_in_the_pinned_clone_and_hold_the_token(cl
         for e in s["reachability"]["entries"]:
             for t in e["triggers"]:
                 rel, _, line = t["cite"].rpartition(":")
-                assert "_EV_scr_seq_" in (clone / rel).read_text(encoding="utf-8", errors="replace").splitlines()[int(line) - 1], f"{s['id']}: trigger {t['cite']}"
+                # a per-map trigger cites the `_EV_scr_seq_` expression that starts the entry; a COMMON (std)
+                # script trigger cites the scriptId NAME the map object calls
+                want = t.get("token", "_EV_scr_seq_")
+                assert want in (clone / rel).read_text(encoding="utf-8", errors="replace").splitlines()[int(line) - 1], f"{s['id']}: trigger {t['cite']}"
     assert n > 300
 
 
@@ -632,7 +640,7 @@ def test_hge_committed_provenance_and_member_proof():
     assert doc["source"]["inputs"] and all(len(h) == 64 for h in doc["source"]["inputs"].values())
     assert {"hooks", "include/config.h", "include/debug.h"} <= set(doc["source"]["inputs"])
     script, trade = doc["script_narc"], doc["trade_narc"]
-    assert script["site_member_count"] == len(script["site_members"]) == 47 and script["member_count"] == 965
+    assert script["site_member_count"] == len(script["site_members"]) == 48 and script["member_count"] == 965
     assert all(m["vanilla_sha256"] == m["hge_sha256"] and len(m["hge_sha256"]) == 64 for m in script["site_members"].values())
     assert script["members_differing_in_hge"] == [3] and script["differing_members_holding_sites"] == []
     assert trade["all_equal"] and trade["member_count"] == 13
@@ -644,7 +652,7 @@ def test_hge_script_sections_are_the_vanilla_ones():
     for key in ("script_sites", "npc_trade_records", "runtime_branches", "zone_policy", "special_modes"):
         assert hge[key] == van[key], key
     inv = hge["inventory"]
-    assert inv["script_site_count"] == 61 and inv["npc_record_count"] == 13 and inv["commands_without_a_c_producer"] == []
+    assert inv["script_site_count"] == 62 and inv["npc_record_count"] == 13 and inv["commands_without_a_c_producer"] == []
     assert not any(u["id"] == "hg_engine" for u in hge["unresolved"]) and any(u["id"] == "hge_runtime_receipt" for u in hge["unresolved"])
 
 
@@ -905,16 +913,17 @@ def test_titled_keeps_a_letter_after_an_apostrophe_lowercase():
 
 def test_site_count_is_a_real_pin(clone, monkeypatch):
     """Revert: restore the tautology `len(sites) == sum(Counter(...))` -> a changed count is not caught."""
-    assert acq.SITE_COUNT == 61
-    monkeypatch.setattr(acq, "SITE_COUNT", 60)
-    with pytest.raises(AssertionError, match="script site count 61 != pinned 60"):
+    assert acq.SITE_COUNT == 62
+    monkeypatch.setattr(acq, "SITE_COUNT", 61)
+    with pytest.raises(AssertionError, match="script site count 62 != pinned 61"):
         acq.build_doc(clone)
 
 
 def test_out_of_scope_commands_are_counted_and_pinned(clone, monkeypatch, tmp_path):
     """Revert: delete the count assert in scan_out_of_scope() (or the 1:1 assert) -> no raise."""
     doc = load("acquisition.json")["out_of_scope_commands"]
-    assert {c: v["count"] for c, v in doc.items()} == {"GiveDaycareEgg": 1, "RetrieveDaycareMon": 1, "MysteryGift": 14, "NPCTradeExec": 11, "GetFossilPokemon": 2}
+    assert {c: v["count"] for c, v in doc.items()} == {"RetrieveDaycareMon": 1, "MysteryGift": 14, "NPCTradeExec": 11, "GetFossilPokemon": 2}
+    assert "GiveDaycareEgg" not in doc and "GiveDaycareEgg" not in acq.OUT_OF_SCOPE, "the egg is a placed site, not an unplaceable command"
     assert all(len(v["sites"]) == v["count"] and all(":" in x for x in v["sites"]) for v in doc.values())
     files = sorted((clone / "files/fielddata/script/scr_seq").glob("*.s"))
     assert acq.scan_out_of_scope(files) == doc
@@ -929,6 +938,98 @@ def test_out_of_scope_commands_are_counted_and_pinned(clone, monkeypatch, tmp_pa
         acq.scan_out_of_scope([f])
     committed_loads = sum(1 for s in load("acquisition.json")["script_sites"] if s["command"] == "LoadNPCTrade")
     assert committed_loads == doc["NPCTradeExec"]["count"]
+
+
+# ── COMMON (std) script sites: the Day-Care egg has no map of its own, only objects that run it ─────────
+
+
+def _std_daycare(clone):
+    """The Day-Care std script, the GiveDaycareEgg hit, and the owner/skip split the generator computes."""
+    ctx, std = acq.Ctx(clone), acq.StdScripts(clone)
+    sc = std.script(265)
+    hit = next(i for i, ln in enumerate(sc.lines) if ln.strip() == "GiveDaycareEgg")
+    return ctx, std, sc, hit, acq.std_callers(clone, ctx, std, sc, 265, hit)
+
+
+def test_the_daycare_egg_site_is_bound_to_the_day_care_man_map_through_the_std_tables():
+    """The command has no map token in its file name. The binding is: sScriptBankMapping puts `_std_daycare`
+    (9500) in scr_seq member 265; `std_daycare_man` is that same id, so it is ScrDef index 0; the object that
+    calls that member stands on map 38 (Route 34). Every hop is cited in the site record."""
+    site = next(s for s in load("acquisition.json")["script_sites"] if s["command"] == "GiveDaycareEgg")
+    via = site["via"]
+    assert (site["id"], site["file"], site["line"]) == ("scr_seq_0265:101", "scr_seq_0265.s", 101)
+    assert (site["map_id"], site["map_const"], site["map_token"], site["area"]) == (38, "MAP_ROUTE_34", "R34", "route_34")
+    assert site["kind"] == "egg" and site["zone"] == "gift" and site["status"] == "resolved"
+    assert (via["kind"], via["std"], via["scriptId"], via["member"], via["entry"]) == ("std_script", "std_daycare_man", 9500, 0, "scr_seq_0265_000")
+    assert via["cite"].startswith("src/fieldmap.c:") and via["called_by"]["map_id"] == 38
+    assert via["called_by"]["cite"] == "files/fielddata/eventdata/zone_event/035_R34.json:230"
+    assert site["reachability"]["entries"][0]["triggers"][0]["token"] == "std_daycare_man"
+
+
+def test_the_day_care_lady_is_not_an_egg_source_and_its_exclusion_is_recorded(clone):
+    """`std_daycare_lady` (9501) is ScrDef index 1 -- the withdrawal member, which has no GiveDaycareEgg -- and it
+    is run from the Route 34 DAYCARE interior (map 331). So the Lady's map must produce no egg site, and the
+    reason must be on the site rather than absent."""
+    _, std, sc, hit, (owners, skipped) = _std_daycare(clone)
+    assert acq.std_member_of(sc, hit) == 0 and std.entries(sc)[0] == "scr_seq_0265_000"
+    assert [o["std"] for o in owners] == ["std_daycare_man"] and [o["std"] for o in skipped] == ["std_daycare_lady"]
+    assert skipped[0]["member"] == 1 and "does not contain the command" in skipped[0]["why"]
+    assert {c["map_id"] for o in owners for c in o["called_by"]} == {38}
+    assert {c["map_id"] for o in skipped for c in o["called_by"]} == {331}
+    sites = [s for s in load("acquisition.json")["script_sites"] if s["command"] == "GiveDaycareEgg"]
+    assert [s["map_id"] for s in sites] == [38], "the Lady's interior must not become an egg source"
+    recorded = next(s for s in sites if s["map_id"] == 38)["via"]["members_without_this_command"]
+    assert [r["std"] for r in recorded] == ["std_daycare_lady"] and recorded[0]["member"] == 1
+
+
+def test_a_std_script_table_with_the_ladys_member_id_swapped_binds_the_lady_map_too(clone, monkeypatch):
+    """One-byte revert control (`std_script.h`: `std_daycare_lady 9501` -> `9500`). If the binding ignored the
+    ScrDef index and just took "an object that calls this file", swapping the ids would change nothing; here it
+    must add the Lady's interior as a second egg site, so the discrimination above is real."""
+    _, std, sc, hit, (owners, _skipped) = _std_daycare(clone)
+    assert [o["std"] for o in owners] == ["std_daycare_man"]
+    monkeypatch.setitem(std.consts, "std_daycare_lady", 9500)
+    owners2, skipped2 = acq.std_callers(clone, acq.Ctx(clone), std, sc, 265, hit)
+    assert sorted(o["std"] for o in owners2) == ["std_daycare_lady", "std_daycare_man"] and skipped2 == []
+    assert {c["map_id"] for o in owners2 for c in o["called_by"]} == {38, 331}
+
+
+def test_the_zone_event_prefix_is_a_narc_member_not_a_map_id(clone):
+    """The trap, pinned on the generator's own table. 035_R34.json is map 38 and 302_R34R0101.json is map 331;
+    only `.eventsBank` (src/data/map_headers.h) says so, and the file name's token agrees with it."""
+    maps = base.Maps(clone)
+    assert maps.by_events_bank[35][0] == 38 and maps.by_events_bank[302][0] == 331
+    assert maps.rows[38]["const"] == "MAP_ROUTE_34" and maps.rows[331]["const"] == "MAP_ROUTE_34_DAYCARE"
+    assert maps.rows[38]["events_bank"] == 35 and maps.rows[331]["events_bank"] == 302
+    assert (maps.by_token["R34"], maps.by_token["R34R0101"]) == (38, 331)
+    assert (38 != 35) and (331 != 302), "the prefixes are member numbers; reading one as a map id lands elsewhere"
+    # both maps share a mapsec, so the egg's area is route_34 either way -- but the SITE is the Day-Care Man's
+    assert maps.rows[38]["mapsec"] == maps.rows[331]["mapsec"] == "MAPSEC_ROUTE_34"
+    assert maps.rows[38]["enc_bank"] == "R34" and maps.rows[331]["enc_bank"] is None
+
+
+def test_every_std_script_bind_is_checked_against_the_header_that_claims_the_event_member(clone):
+    """The generator asserts both directions for every zone_event file it binds (token vs `.eventsBank`); a map
+    header that claims a member another header's token owns must fail generation, not silently pick a side."""
+    ctx = acq.Ctx(clone)
+    for rel, _line in acq.std_event_index(str(clone)).get("std_daycare_man", []):
+        assert acq.event_bank_map(ctx, rel) == 38
+    assert acq.event_bank_map(ctx, "files/fielddata/eventdata/zone_event/302_R34R0101.json") == 331
+    with pytest.raises(AssertionError, match="its token names map"):
+        broken = base.Maps(clone)
+        broken.by_token.pop("R34R0101")
+        monkey = acq.Ctx(clone)
+        monkey.maps = broken
+        acq.event_bank_map(monkey, "files/fielddata/eventdata/zone_event/302_R34R0101.json")
+
+
+def test_the_hge_inventory_carries_the_same_bound_egg_site():
+    """gen4_hge's script sections are the vanilla ones (proved by NARC member hashes), so the egg site must be
+    in its inventory too -- and the hge pack's own gift split must place it identically."""
+    van = {s["id"]: s for s in load("acquisition.json")["script_sites"]}
+    hge = {s["id"]: s for s in load_hge()["script_sites"]}
+    assert "scr_seq_0265:101" in hge and hge["scr_seq_0265:101"]["via"] == van["scr_seq_0265:101"]["via"]
+    assert hge["scr_seq_0265:101"]["map_id"] == 38
 
 
 def test_every_map_enc_bank_exists_in_the_bank_table(clone, monkeypatch):
@@ -1007,11 +1108,12 @@ def test_real_synthetic_hook_on_a_used_handler_fails_generation(hge_inputs):
     van = acq.make_vanilla(hge_inputs["pret"], hge_inputs["xmap"], hge_inputs["van_rom"], hge_inputs["src"])
     files = sorted({s["file"] for s in load("acquisition.json")["script_sites"]})
     accounted = {"ScrCmd_CreateRoamer": "x", "ScrCmd_GiveEgg": "x", "ScrCmd_GiveTogepiEgg": "x"}
-    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted)
+    sites = load("acquisition.json")["script_sites"]
+    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted, acq.std_member_scope(hge_inputs["pret"], sites))
     assert problems == []
     fn = van.find("ScrCmd_GiveMon")[0]
     van.hooks.append({"region": van.region[fn[3]], "name": "synthetic_hook", "addr": fn[0]})
-    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted)
+    _doc, problems = acq.script_dispatch(hge_inputs["pret"], files, van, accounted, acq.std_member_scope(hge_inputs["pret"], sites))
     assert len(problems) == 1 and "ScrCmd_GiveMon" in problems[0] and "synthetic_hook" in problems[0]
 
 
@@ -1341,12 +1443,12 @@ def test_successor_graph_is_built_once_per_script():
 
 
 def test_reachability_pin_is_earned_after_the_callstd_check():
-    """The 61/61 pin: derived from the per-site records AFTER the CallStd check, not typed in."""
+    """The 62/62 pin: derived from the per-site records AFTER the CallStd check, not typed in."""
     doc = load("acquisition.json")
     sites = doc["script_sites"]
     assert doc["inventory"]["callstd_conflict_count"] == 0
     resolved = [s for s in sites if s["reachability"]["status"] == "resolved" and s["reachability"]["callstd"]["conflicts"] == [] and s["reachability"]["unresolved"] == []]
-    assert len(resolved) == len(sites) == 61 and doc["inventory"]["reachability_status_counts"] == {"resolved": len(resolved)}
+    assert len(resolved) == len(sites) == 62 and doc["inventory"]["reachability_status_counts"] == {"resolved": len(resolved)}
 
 
 def test_hge_callstd_paths_prove_or_flag_member_3():
