@@ -527,7 +527,8 @@ class Gen2GSCAdapter(GameAdapter):
         if not isinstance(area_id, str) or _AREA.fullmatch(area_id) is None:
             return ""
         if self._legend(area_id):
-            return self.species_name(int(area_id.removeprefix("legend_")))
+            slot = int(area_id.removeprefix("legend_"))
+            return self.species_name(getattr(self, "_legend_names", {}).get(slot, slot))
         return {"gift_daycare": "Egg Hatch", "national_park_contest": "Bug-Catching Contest"}.get(
             area_id, self._area_names.get(area_id, humanize_area_id(area_id)))
 
@@ -662,6 +663,10 @@ class Gen2GSCAdapter(GameAdapter):
             self._tables = {}
             return
         _require(tables.get("title") == self.title, "ROM tables belong to another title")
+        # a legend area id stays the vanilla slot's id (R4); its NAME is the species this cartridge put in that slot
+        vanilla = [row["species"] for row in self._encounters["roamers"]["initial"]]
+        adopted = [row["species"] for row in tables["roamers"]["initial"]]
+        self._legend_names = dict(zip(vanilla, adopted, strict=False))
         self._encounters = {**self._encounters, **{name: tables[name] for name in ("wild", "tree", "fishing", "roamers")},
                             "contest": {**self._encounters["contest"], **tables["contest"]}}
         self._tables = self._presentation_tables()

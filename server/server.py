@@ -697,7 +697,13 @@ class SLinkServer:
         # sends this when it can see its ROM, so a failure is evidence something is unusual
         # about that ROM, and retail species printed beside a randomized cartridge is the
         # exact misinformation this whole path exists to remove.
-        adopt(tables)
+        try:
+            adopt(tables)
+        except Exception as exc:                      # noqa: BLE001 - e.g. tables of another title: show nothing
+            log.warning("[%s] rom tables could not be adopted — encounter data will be shown as "
+                        "unavailable for this player: %s", player_id, exc)
+            tables, failed = {}, True
+            adopt(tables)
         self._player_adapters[player_id] = adapter
         if failed:
             log.info("[%s] encounter data marked unavailable", player_id)

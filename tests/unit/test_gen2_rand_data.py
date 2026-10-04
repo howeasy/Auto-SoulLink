@@ -127,6 +127,18 @@ def test_a_randomized_adapter_answers_only_from_its_own_cartridge(roms):  # noqa
     assert unreadable.encounter_table("route_29") is None
 
 
+def test_a_randomized_roamers_area_is_named_for_the_species_its_cartridge_holds(roms):  # noqa: F811
+    """Review cx-db933785 F1: the legend area id stays the vanilla slot's id; its display name is the ROM's species."""
+    adapter = Gen2GSCAdapter("crystal", artifact_kind="rand_overlay")
+    adapter.use_rom_encounters(scan_randomized(_upr_crystal(roms), "crystal"))
+    assert adapter.area_display_name("legend_243") == "Cyndaquil"      # Raikou's slot, UPR log: Raikou => Cyndaquil
+    assert adapter.area_display_name("legend_244") == "Lugia"          # Entei's slot
+    assert Gen2GSCAdapter("crystal").area_display_name("legend_243") == "Raikou"   # clean/overlay unchanged
+    unreadable = Gen2GSCAdapter("crystal", artifact_kind="rand_overlay")
+    unreadable.use_rom_encounters({})
+    assert unreadable.area_display_name("legend_243") == "Raikou"      # no tables: nothing to remap
+
+
 @pytest.mark.parametrize("fault", ["client_json", "sha1", "rom_type"])
 def test_ingest_takes_only_the_servers_contract_checked_bytes(fault):
     rom = b"\x00" * 0x200
