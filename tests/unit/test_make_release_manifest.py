@@ -146,12 +146,12 @@ _GEN4_ENTRYPOINTS = ["lua/gen4/run.lua"]
 #   * the pack files inputs.lua opens: it derives the pack directory from the profile path
 #     (inputs.lua pack_dir :64-71) and appends a BARE filename -- "area_map.json" (:80),
 #     "locations.json" (:85), "charmap.json" (:146) -- so none is quotable either. The same three
-#     are the pack runtime inputs tools/gen4_evidence.py:43 declares (PACK_INPUTS). gen4_hge has
-#     charmap only: its area map is absent BY PROOF (tools/gen_gen4_area_map.py HGE_NOT_EMITTED).
+#     are the pack runtime inputs tools/gen4_evidence.py:43 declares (PACK_INPUTS). gen4_hge ships
+#     the same three: its area map is the HGSS map, proven byte-identical (area_map.json source.hge_proof).
 _GEN4_CONCAT_ONLY = {"lua/nds/residency_contract.lua"}
 _GEN4_RUNTIME_PACK_FILES = {
     "gen4_hgss": ("area_map.json", "locations.json", "charmap.json"),
-    "gen4_hge": ("charmap.json",),
+    "gen4_hge": ("area_map.json", "locations.json", "charmap.json"),
 }
 
 

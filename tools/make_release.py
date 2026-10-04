@@ -178,6 +178,7 @@ _LUA_GEN4 = [
     "pk4.lua",
     "safety.lua",
     "poll_events.lua",
+    "companion.lua",  # C2 companion binder; not loaded by run.lua yet, ships with the directory
 ]
 
 # lua/nds/ — the shared NDS modules the Gen 4 graph loads. entry.lua Entry.build binds the
@@ -187,6 +188,7 @@ _LUA_GEN4 = [
 # and nothing in the Gen 4 graph loads it.
 _LUA_NDS = [
     "hook_binding.lua",
+    "mailbox.lua",  # the shared envelope reader lua/gen4/companion.lua is handed (injected, never required)
     "phase_signals.lua",
     "pkm45_crypto.lua",
     "residency_contract.lua",
@@ -432,11 +434,10 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         # Same profile + charmap (Entry.PACKS.gen4_hge.profile, entry.lua:27).
         "profile.json",
         "charmap.json",
-        # NO area_map.json / locations.json, and that is a SOURCE fact, not an omission: the
-        # hg-engine fork keeps the vanilla MAP_* ids but declares no MAPSEC_*, has no
-        # map_headers.h and no msg tree, so an area (a map section) and its display name are not
-        # derivable from its own source (tools/gen_gen4_area_map.py HGE_NOT_EMITTED). inputs.lua
-        # refuses the area_of producer for this pack rather than borrowing gen4_hgss's.
+        # hge's area map is the HGSS map, proven byte-identical on the two pinned ROMs
+        # (area_map.json source.hge_proof, tools/gen_gen4_area_map.py); inputs.lua opens both.
+        "area_map.json",
+        "locations.json",
     ],
     "gen4_pt": [
         # Bind-only (Entry.BIND_ONLY, D3): never admitted, never routed. It ships anyway for the
