@@ -1331,6 +1331,35 @@ def build_map_names():
         "constants": {"NUM_MAP_GROUPS": groups, "NUM_MAPS": len(maps)}})
 
 
+def build_area_map(names):
+    """Flat Gen 2 area-map contract (lua/gen2/client.lua area_of): key str(group*256+number) -- the exact
+    expression the client computes from wMapGroup/wMapNumber (lua/gen2/polished.lua read_map).  area_id is the
+    landmark constant lowercased with the Bug-Catching Contest map split out, i.e. the rule
+    server/adapters/gen2_polished.py and tools/gen_gen2_area_map.py use, so client and server agree."""
+    out = {}
+    for m in sorted(names["maps"].values(), key=lambda r: r["encoded_id"]):
+        area_id = m["landmark_const"].lower()
+        if m["constant"] == "NATIONAL_PARK_BUG_CONTEST":
+            area_id = "national_park_contest"
+        file, _, line = m["source"].rpartition(" ")[2].rpartition(":")
+        out[str(m["encoded_id"])] = {
+            "area_id": area_id, "name": m["landmark_name"], "map_group": m["group"], "map_number": m["number"],
+            "map_const": m["constant"], "map_name": m["source_label"], "environment": m["environment"],
+            "landmark_const": m["landmark_const"],
+            "source": {"commit": LOCK["source"]["commit"], "artifact": "polishedcrystal", "file": file,
+                       "line": int(line)}}
+    return out
+
+
+def check_area_map(areas):
+    require(len(areas) == 605 and len({(a["map_group"], a["map_number"]) for a in areas.values()}) == len(areas),
+            "area map rows must be one per map")
+    for k, a in areas.items():
+        require(int(k) == a["map_group"] * 256 + a["map_number"] and 1 <= a["map_group"] <= 37
+                and 1 <= a["map_number"] <= 255, f"area map key {k} out of range")
+        require(re.fullmatch(r"[a-z0-9_]+", a["area_id"]), f"area map {k}: bad area_id")
+
+
 # ----------------------------------------------------------------------------- statics / gifts / trades
 def map_script_files():
     return sorted(p.name for p in (SRC / "maps").glob("*.asm"))
@@ -1744,7 +1773,7 @@ def json_bytes(doc: dict) -> bytes:
     return (json.dumps(doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
-KINDS = ("charmap", "species", "moves", "items", "evolutions", "trainers", "encounters", "statics", "gifts", "maps")
+KINDS = ("charmap", "species", "moves", "items", "evolutions", "trainers", "encounters", "statics", "gifts", "maps", "areas")
 
 
 def build_all(only):
@@ -1795,6 +1824,11 @@ def build_all(only):
         check_map_names(d)
         checks["maps"] = "MapGroupPointers ROM-verified"
         docs["map_names.json"] = json_bytes(d)
+    if need("areas"):
+        a = build_area_map(d if need("maps") else build_map_names())
+        check_area_map(a)
+        checks["areas"] = f"{len(a)} maps -> {len({r['area_id'] for r in a.values()})} areas"
+        docs["area_map.json"] = json_bytes(a)
     return docs, checks
 
 
