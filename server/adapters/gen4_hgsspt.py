@@ -1,12 +1,13 @@
 """
 server/adapters/gen4_hgsspt.py — Game adapter for Gen 4 (HeartGold/SoulSilver/hg-engine).
 
-One class serves three cartridges that do not share a memory layout, so anything describing a
-CARTRIDGE (box geometry, the pairing foundation) is keyed on the foundation rather than on the
-game_id they all share. Platinum is NOT served: it has no routing row in
-server/adapters/__init__.py and its hello is refused by name. The legacy Sinnoh tables below
-(`_PT_TRAINERS`, `_PT_ENCOUNTERS`, `_RP_*`, the platinum area map) are still loaded because
-the data directory has not been repointed yet; that removal is a separate repointing card.
+One class serves two cartridges that do not share a memory layout (HeartGold/SoulSilver and the
+hg-engine fork), so anything describing a CARTRIDGE (box geometry, the pairing foundation) is
+keyed on the foundation rather than on the game_id they all share. Platinum is NOT served: it has
+no routing row in server/adapters/__init__.py and its hello is refused by name, so this adapter
+reads ONE data directory — the generated HeartGold/SoulSilver pack, data/games/gen4_hgss/. The
+legacy Sinnoh tables (area_map_platinum.json, trainers_pt.json, encounters_pt.json and the
+rp_*.json override chain) are gone.
 
 Gen 4 uses National Pokédex IDs natively (1-493). Mon keys use the same
 PID:OTID format as Gen 3. No CFRU/RR support.
@@ -45,10 +46,10 @@ _GAMES_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "data", "games",
 )
-# The legacy Gen 4 tables (area_map_hgss.json / area_map_platinum.json / trainers_*.json).
-_data_dir = os.path.join(_GAMES_DIR, "gen4_hgsspt")
-# The GENERATED HeartGold/SoulSilver pack (tools/gen_gen4_area_map.py + tools/gen_gen4_acquisition.py).
-# Same wire area ids the client reads, with the gift-area split derived from acquisition.json.
+# The GENERATED HeartGold/SoulSilver pack: tools/gen_gen4_area_map.py (area map + gift split),
+# tools/gen_gen4_trainers.py and tools/gen_gen4_encounters.py, all from the pinned
+# pret/pokeheartgold clone. Same wire area ids the client reads. This is the adapter's ONLY data
+# directory — the legacy data/games/gen4_hgsspt/ tables are deleted.
 _HGSS_PACK_DIR = os.path.join(_GAMES_DIR, "gen4_hgss")
 
 # Gift/static encounter area_ids — Pokémon obtained without requiring Pokéballs.
@@ -104,8 +105,8 @@ def _load_hgss_gift_areas() -> frozenset[str]:
 _HGSS_GIFT_AREAS = _load_hgss_gift_areas()
 
 # Pal Park is the one hand-typed gift id, and it is NOT a Platinum one. `pal_park` is a real
-# HGSS/SS area — data/games/gen4_hgss/area_map.json:61 (MAPSEC_PAL_PARK, Kanto region) and the
-# legacy area_map_hgss.json:2002 — and a mon migrated in arrives there with no Pokéballs and no
+# HGSS/SS area — data/games/gen4_hgss/area_map.json owns it (MAPSEC_PAL_PARK, Kanto region) — and
+# a mon migrated in arrives there with no Pokéballs and no
 # wild encounter to fail, so it stays exempt.
 #
 # Every OTHER id the old `_PLATINUM_GIFT_AREAS` carried is GONE. Platinum is no longer routed
@@ -138,10 +139,6 @@ _GIFT_AREAS = _HGSS_GIFT_AREAS | _HGSS_EXTRA_GIFT_AREAS | frozenset({"gift"})
 _EGG_PICKUP_AREAS = frozenset({
     # HGSS
     "violet_city",     # Togepi from Mr. Pokémon; Mareep/Wooper/Slugma in the Poké Center
-    # Platinum
-    "eterna_city",     # Togepi egg via Underground Man / Cynthia
-    "iron_island",     # Riolu egg from Riley
-    "route_212",       # Cynthia's alternate Togepi egg cutscene
 })
 
 
@@ -149,14 +146,11 @@ _EGG_PICKUP_AREAS = frozenset({
 # Treated separately from egg pickups: daycare eggs hatch into a random species
 # determined by the parents' species/breeding rules, so the linked players may get
 # different species. Clause logic uses this to decide whether to skip the egg.
-# HGSS: Day-Care Couple on Route 34 (Goldenrod). Pt: Solaceon Town Day-Care.
+# HGSS: the Day-Care Couple on Route 34 (Goldenrod) and the egg handoff in Goldenrod City.
 _DAYCARE_AREAS = frozenset({
     # HGSS
     "route_34",          # Pokémon Day Care (Goldenrod outskirts)
     "goldenrod_city",    # parents handed off egg in town
-    # Platinum
-    "solaceon_town",     # Solaceon Day Care
-    "route_209",         # adjacent route to Solaceon
 })
 
 # Gift areas with a forced, identical species (no player choice).
@@ -171,64 +165,203 @@ _FIXED_SPECIES_GIFTS = frozenset({
     "mt_mortar",       # Tyrogue from Kiyo
     "ilex_forest",     # Spiky-eared Pichu (event)
     "goldenrod_city",  # Eevee from Bill (HGSS)
-    "hearthome_city",  # Eevee from Bebe (Platinum)
-    "iron_island",     # Riolu egg from Riley
-    "veilstone_city",  # Porygon (condominiums)
 })
 
-# Area display names: loaded from both HGSS and Platinum area maps.
-_AREA_DISPLAY_NAMES: dict[str, str] = {}
-for _map_file in ("area_map_hgss.json", "area_map_platinum.json"):
-    _area_map_path = os.path.join(_data_dir, _map_file)
-    if os.path.exists(_area_map_path):
-        with open(_area_map_path) as _f:
-            _raw_areas = json.load(_f)
-            for _area_id, _entry in _raw_areas.items():
-                if isinstance(_entry, dict) and "display" in _entry:
-                    _AREA_DISPLAY_NAMES[_area_id] = _entry["display"]
+# ── Generated-pack loaders ──────────────────────────────────────────────────────────────────
+#
+# Every table this adapter serves comes out of _HGSS_PACK_DIR at import, from the files the three
+# tools/gen_gen4_*.py generators write from the pinned pret/pokeheartgold clone. A pack that cannot
+# be read leaves its table EMPTY with an error naming the path — never a hand-typed substitute.
+# An empty table shows an honest blank board; a stale hand-typed one would keep asserting facts
+# the pack no longer carries, which is the failure the Platinum deletion exists to stop.
 
-
-def _load_trainer_table(filename: str) -> dict:
-    """Load a trainer table JSON, returning an empty dict on miss."""
-    path = os.path.join(_data_dir, filename)
-    if not os.path.exists(path):
-        return {"trainers": {}, "classes": {}}
+def _read_pack(path: str) -> dict | None:
+    """Parse one generated pack JSON, or None — with an error naming the path — on any miss."""
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        log.warning("Failed to load %s: %s", filename, e)
-        return {"trainers": {}, "classes": {}}
+            doc = json.load(f)
+    except (OSError, ValueError) as e:
+        log.error("Gen 4: cannot read the generated pack at %s (%s)", path, e)
+        return None
+    if not isinstance(doc, dict):
+        log.error("Gen 4: %s is a %s, not a JSON object — refused", path, type(doc).__name__)
+        return None
+    return doc
 
 
-_HGSS_TRAINERS = _load_trainer_table("trainers_hgss.json")
-_PT_TRAINERS   = _load_trainer_table("trainers_pt.json")
+def _load_hgss_area_display_names() -> dict[str, str]:
+    """area_id -> display name, from the pack's `areas` block.
 
-
-def _load_encounters(filename: str) -> dict:
-    """Load encounter table JSON. Returns area_id -> method -> entries."""
-    path = os.path.join(_data_dir, filename)
-    if not os.path.exists(path):
+    The pack nests its rows under `areas` (the legacy file had them at the top level) and every
+    row carries the pret map-section name the generator read out of msg 0279, e.g.
+    `areas.route_1.display == "Route 1"`. A row with no usable `display` contributes nothing and
+    that area falls through to humanize_area_id, exactly as an unmapped id always did.
+    """
+    path = os.path.join(_HGSS_PACK_DIR, "area_map.json")
+    doc = _read_pack(path)
+    areas = (doc or {}).get("areas")
+    if not isinstance(areas, dict):
+        log.error("Gen 4: %s has no `areas` block (%r) — every area falls back to its id",
+                  path, areas)
         return {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        log.warning("Failed to load %s: %s", filename, e)
+    return {aid: row["display"] for aid, row in areas.items()
+            if isinstance(row, dict) and isinstance(row.get("display"), str) and row["display"]}
+
+
+_AREA_DISPLAY_NAMES: dict[str, str] = _load_hgss_area_display_names()
+
+
+def _load_hgss_trainers() -> dict[str, dict]:
+    """trainer_id -> {"name", "class"}, flattened from the pack's `trainers` block.
+
+    The pack is version-independent (`version_split: false`: HG and SS share one trainers NARC)
+    and already writes the class NAME on each trainer row, so the legacy two-level
+    {trainers, classes} join happens once here and `trainer_info` reads one flat row. `class`
+    comes off the row, falling back to `classes[class_id].name`. TRAINER_NONE is the pack's "no
+    trainer here" marker and is dropped, which is how trainer_info(0) keeps answering ("", "").
+    """
+    path = os.path.join(_HGSS_PACK_DIR, "trainers.json")
+    doc = _read_pack(path)
+    trainers = (doc or {}).get("trainers")
+    if not isinstance(trainers, dict):
+        log.error("Gen 4: %s has no `trainers` block (%r) — no trainer resolves by name",
+                  path, trainers)
         return {}
+    classes = doc.get("classes") if isinstance(doc.get("classes"), dict) else {}
+    out: dict[str, dict] = {}
+    for tid, row in trainers.items():
+        if not isinstance(row, dict) or row.get("const") == "TRAINER_NONE":
+            continue
+        cls_row = classes.get(str(row.get("class_id")))
+        out[str(tid)] = {
+            "name": (row.get("name") or "").strip(),
+            "class": row.get("class") or (cls_row or {}).get("name", ""),
+        }
+    return out
 
 
-_HGSS_ENCOUNTERS = _load_encounters("encounters_hgss.json")
-_PT_ENCOUNTERS   = _load_encounters("encounters_pt.json")
+_HGSS_TRAINERS: dict[str, dict] = _load_hgss_trainers()
 
 
-# Renegade Platinum overrides — empty dicts by default. To populate, drop a
-# rp_<thing>.json file matching the parent's schema and the adapter will pick it
-# up via the override chain when rom_type == "renegade_platinum".
-_RP_TRAINERS   = _load_trainer_table("rp_trainers.json")
-_RP_ENCOUNTERS = _load_encounters("rp_encounters.json")
+# Encounter projection. The pack is keyed by ENCDATA token: `banks.<token>.areas` names the areas
+# a token backs and `versions.<title>.banks.<token>` holds that title's tables. The adapter's
+# contract is area-first, so the whole inversion happens once here.
+_ENCOUNTER_METHOD_LABELS = {
+    "surf": "Surfing", "old_rod": "Old Rod", "good_rod": "Good Rod", "super_rod": "Super Rod",
+    "rock_smash": "Rock Smash", "headbutt": "Headbutt",
+}
+# A `land` table is split by hour as morn/day/nite; the legacy tables showed Day/Night.
+_ENCOUNTER_TIME_LABELS = {"morn": "Morn", "day": "Day", "nite": "Night"}
+# Bank keys that are not a table a walker can roll for:
+#   `rates` — each bank's per-method WEIGHT (which of the banks backing one area the game picks),
+#             not a slot percentage. Folding it into a printed rate would invent a number.
+#   `radio` — the Tune Radio table (hoenn/sinnoh), only present while a radio station plays.
+#   `swarm` — the single-species swarm table the game flags rather than rolls.
+# The legacy encounters_hgss.json had no row for any of the three, so dropping them preserves the
+# old board exactly. A card that wants them should first decide what a radio or a swarm means for
+# a Soul Link slot.
+_ENCOUNTER_NON_TABLE_KEYS = frozenset({"rates", "radio", "swarm"})
 
-# Gen 4 item names (HGSS/Platinum item IDs — differ from Gen 3)
+
+def _merge_slots(bucket: dict[int, dict], slots) -> None:
+    """Fold `slots` into `bucket`, keyed by species: rates summed, level range widened.
+
+    The pack keeps one entry per SLOT (12 land slots, each with its own rate and level band), while
+    the legacy tables kept one row per species. Aggregating per species is the same projection
+    gen1_rby and gen1_rom_scan.build_encounter_tables make, and the board only ever prints the
+    distinct species names anyway (server/templates/_board.html:237).
+    """
+    if not isinstance(slots, list):
+        return
+    for slot in slots:
+        if not isinstance(slot, dict) or not isinstance(slot.get("species_id"), int):
+            continue
+        sid = slot["species_id"]
+        row = bucket.get(sid)
+        if row is None:
+            bucket[sid] = {
+                "name": slot.get("name", ""), "species_id": sid,
+                "rate": slot.get("rate", 0),
+                "min_level": slot.get("min_level", 0), "max_level": slot.get("max_level", 0),
+            }
+            continue
+        row["rate"] += slot.get("rate", 0)
+        row["min_level"] = min(row["min_level"], slot.get("min_level", row["min_level"]))
+        row["max_level"] = max(row["max_level"], slot.get("max_level", row["max_level"]))
+
+
+def _load_hgss_encounters() -> dict[str, dict[str, list[dict]]]:
+    """title -> area_id -> method label -> entries, projected from the pack's encounter banks.
+
+    Several tokens back one area (a route's own bank plus the banks for its headbutt trees), so
+    the slots of every token naming an area are folded into that area's per-method buckets.
+
+    `safari` is deliberately NOT projected: its tables sit under `safari.areas` with one `level`
+    per slot and conditional `bonus` rows — neither the shape nor the certainty of a wild roll —
+    and the legacy table carried no safari area either, so `encounter_table("safari_plains")`
+    answers None today and still does. A safari card should decide what a bonus-only species means
+    for a Soul Link slot first.
+    """
+    path = os.path.join(_HGSS_PACK_DIR, "encounters.json")
+    doc = _read_pack(path)
+    banks = (doc or {}).get("banks")
+    versions = (doc or {}).get("versions")
+    if not isinstance(banks, dict) or not isinstance(versions, dict):
+        log.error("Gen 4: %s has no `banks`/`versions` blocks — no wild table resolves", path)
+        return {}
+    unmapped: set[str] = set()
+    out: dict[str, dict[str, list[dict]]] = {}
+    for title, version in versions.items():
+        vbanks = version.get("banks") if isinstance(version, dict) else None
+        if not isinstance(vbanks, dict):
+            log.error("Gen 4: %s versions.%s has no `banks` block — that title has no wild table",
+                      path, title)
+            continue
+        areas_out = out.setdefault(title, {})
+        for token, tables in vbanks.items():
+            bank = banks.get(token)
+            areas = bank.get("areas") if isinstance(bank, dict) else None
+            if not isinstance(areas, list) or not isinstance(tables, dict):
+                continue
+            buckets: dict[str, dict[int, dict]] = {}
+            for key, value in tables.items():
+                if key in _ENCOUNTER_NON_TABLE_KEYS:
+                    continue
+                if key == "land":
+                    if isinstance(value, dict):
+                        for hour, slots in value.items():
+                            label = _ENCOUNTER_TIME_LABELS.get(hour)
+                            if label is None:
+                                unmapped.add(f"land.{hour}")
+                                continue
+                            _merge_slots(buckets.setdefault(label, {}), slots)
+                    else:
+                        _merge_slots(buckets.setdefault("Grass", {}), value)
+                    continue
+                label = _ENCOUNTER_METHOD_LABELS.get(key)
+                if label is None:
+                    unmapped.add(key)
+                    continue
+                _merge_slots(buckets.setdefault(label, {}), value)
+            for area_id in areas:
+                if not isinstance(area_id, str):
+                    continue
+                area_out = areas_out.setdefault(area_id, {})
+                for label, bucket in buckets.items():
+                    # Most likely first, then by name, so the board's order is stable.
+                    area_out.setdefault(label, []).extend(
+                        sorted(bucket.values(), key=lambda r: (-r["rate"], r["name"])))
+    if unmapped:
+        log.error("Gen 4: %s has bank keys with no method label in %s: %s — those tables are NOT "
+                  "projected (a pin bump added a method; map it before trusting the board)",
+                  path, sorted(_ENCOUNTER_METHOD_LABELS), sorted(unmapped))
+    return out
+
+
+_HGSS_ENCOUNTERS: dict[str, dict[str, list[dict]]] = _load_hgss_encounters()
+
+
+# Gen 4 item names (HGSS item IDs — differ from Gen 3)
 
 
 # Gen 4 alternate-form sprite mapping.
@@ -319,18 +452,12 @@ class Gen4Adapter(GameAdapter):
         # the registry does not route (Platinum) — which is what makes the box properties
         # refuse below instead of answering for HeartGold.
         self._foundation = foundation_for_rom_type(self._rom_type)
-        self._is_rp = (self._rom_type == "renegade_platinum")
-        # Sinnoh trainers live in Platinum (and RP); Johto/Kanto in HGSS.
-        # RP override chain: prefer rp_*.json when populated, else fall back to vanilla Pt.
-        if self._is_rp:
-            self._trainers   = _RP_TRAINERS   if _RP_TRAINERS.get("trainers") else _PT_TRAINERS
-            self._encounters = _RP_ENCOUNTERS if _RP_ENCOUNTERS               else _PT_ENCOUNTERS
-        elif self._rom_type == "platinum":
-            self._trainers   = _PT_TRAINERS
-            self._encounters = _PT_ENCOUNTERS
-        else:
-            self._trainers   = _HGSS_TRAINERS
-            self._encounters = _HGSS_ENCOUNTERS
+        # Trainers are version-independent (the pack says so: `version_split: false`), so every
+        # routed title reads the same table. Only the WILD tables split, by title, and hg-engine
+        # has no title of its own in the pack: it is a HeartGold fork, so it reads HeartGold's.
+        self._trainers = _HGSS_TRAINERS
+        self._encounters = _HGSS_ENCOUNTERS.get(
+            "soulsilver" if self._rom_type == "soulsilver" else "heartgold", {})
 
     @property
     def game_id(self) -> str:
@@ -354,9 +481,10 @@ class Gen4Adapter(GameAdapter):
         return bare in _FIXED_SPECIES_GIFTS
 
     def is_egg_pickup_area(self, area_id: str) -> bool:
-        # NPC-given eggs (HGSS violet_city Togepi/Mareep/Wooper/Slugma, Platinum iron_island
-        # Riolu, etc.). Daycare eggs use is_daycare_area instead — they aren't pickups, they're
-        # player-bred. Strip the "egg_" prefix the client emits to consult the underlying area.
+        # NPC-given eggs — in HGSS that is violet_city alone (Togepi from Mr. Pokémon; Mareep,
+        # Wooper and Slugma in the Poké Center). Daycare eggs use is_daycare_area instead — they
+        # aren't pickups, they're player-bred. Strip the "egg_" prefix the client emits to consult
+        # the underlying area.
         bare = area_id[4:] if area_id.startswith("egg_") else area_id
         # Daycare always wins over egg-pickup classification (player-bred ≠ NPC gift).
         if bare in _DAYCARE_AREAS:
@@ -366,7 +494,7 @@ class Gen4Adapter(GameAdapter):
         return bare in _EGG_PICKUP_AREAS
 
     def is_daycare_area(self, area_id: str) -> bool:
-        # Pokémon Day Care locations: Route 34 (HGSS), Solaceon Town (Platinum).
+        # Pokémon Day Care locations: Route 34 (Goldenrod) and Goldenrod City.
         bare = area_id[4:] if area_id.startswith("egg_") else area_id
         return bare in _DAYCARE_AREAS
 
@@ -460,18 +588,21 @@ class Gen4Adapter(GameAdapter):
         return ""
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        # Sparse table: returns ("", "") for any ID not yet seeded. Run
-        # tools/gen_gen4_trainers.py --pret-hgss <path> --pret-pt <path>
-        # against cloned pret decomps to populate.
-        if not self._trainers or not trainer_id:
+        """(name, class) for a trainer_id, or ("", "") when the pack has no such row.
+
+        `_HGSS_TRAINERS` is the pack's own `trainers` block (data/games/gen4_hgss/trainers.json,
+        keyed by the wire trainer_id) flattened once at import. The class is the PACK's word for
+        it — "Leader" for the Johto gym leaders, where the deleted hand-curated table said
+        "Gym Leader" — and it is a presentation label only: nothing keys on it (server.py:2512
+        stores it as `opponent_class`). Regenerate with tools/gen_gen4_trainers.py against a
+        cloned pret/pokeheartgold; there is no hand-editable table any more.
+        """
+        if not trainer_id:
             return ("", "")
-        entry = self._trainers.get("trainers", {}).get(str(trainer_id))
+        entry = self._trainers.get(str(trainer_id))
         if not entry:
             return ("", "")
-        name = entry.get("name", "").strip()
-        cls_id = entry.get("class", 0)
-        cls = self._trainers.get("classes", {}).get(str(cls_id), "")
-        return (name, cls)
+        return (entry.get("name", ""), entry.get("class", ""))
 
     def item_name(self, item_id: int) -> str:
         return _GEN4_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
@@ -505,13 +636,14 @@ class Gen4Adapter(GameAdapter):
     def encounter_table(self, area_id: str) -> dict | None:
         """Return wild encounter data for an area, or None if no data.
 
-        Returns a dict mapping method label (Day/Night/Grass/Surfing/Old Rod/
-        Good Rod/Super Rod/Rock Smash/Headbutt/Honey Tree) → list of entries
+        Returns a dict mapping method label (Morn/Day/Night/Grass/Surfing/Old Rod/
+        Good Rod/Super Rod/Rock Smash/Headbutt) → list of entries
         {name, species_id, rate, min_level, max_level}.
 
-        Sparse: returns None for unmapped areas (e.g. towns, dungeons we
-        haven't seeded). Run tools/gen_gen4_encounters.py --pret-* to populate
-        the full ~150 encounter zones.
+        `self._encounters` is `_load_hgss_encounters()`'s projection of the pack's encounter
+        banks for this cartridge's title (see there for what is deliberately not projected).
+        Areas the pack backs no bank for — towns, Safari sub-areas, and every Sinnoh id now that
+        Platinum is gone — answer None.
         """
         return self._encounters.get(area_id) or None
 
@@ -568,17 +700,6 @@ class Gen4Adapter(GameAdapter):
         return _MONS_PER_BOX if self._codec_profile is not None else 0
 
     def gym_badge_slugs(self, rom_type: str) -> list[tuple[int, str]]:
-        if (rom_type or "").lower() == "platinum":
-            return [
-                (25, "Coal Badge"),
-                (26, "Forest Badge"),
-                (27, "Cobble Badge"),
-                (28, "Fen Badge"),
-                (29, "Relic Badge"),
-                (30, "Mine Badge"),
-                (31, "Icicle Badge"),
-                (32, "Beacon Badge"),
-            ]
         # HeartGold / SoulSilver → Johto + Kanto (16 badges)
         return [
             ( 9, "Zephyr Badge"),

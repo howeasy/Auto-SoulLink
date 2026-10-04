@@ -1,7 +1,20 @@
-"""Tests for the Gen 4 HGSS/Pt adapter."""
+"""Tests for the Gen 4 HGSS adapter — every table it serves now comes from data/games/gen4_hgss.
+
+Platinum is gone: it is not routed (server/adapters/__init__.py), the hello guard refuses it by
+name, and data/games/gen4_hgsspt/ is deleted. What is left of the old per-title split is one
+pack, and the tests below pin the adapter against THAT file rather than against a hand-curated
+table it can drift from.
+"""
+
+import ast
+import inspect
+import json
+import logging
+import os
 
 import pytest
 
+from server.adapters import gen4_hgsspt as gen4
 from server.adapters.gen4_hgsspt import Gen4Adapter
 
 
@@ -189,9 +202,9 @@ def test_area_display_name_fallback_keeps_the_raw_id(adapter):
 
 
 def test_area_display_name_known(adapter):
-    # Should resolve from area_map_hgss.json
+    # Resolves from the pack's areas.<id>.display — data/games/gen4_hgss/area_map.json.
     name = adapter.area_display_name("route_1")
-    assert name  # non-empty
+    assert name == "Route 1"
 
 
 def test_evo_family_single_stage(adapter):
@@ -366,7 +379,7 @@ class TestEggPickupArea:
 
     def test_egg_prefix_recognized(self, adapter):
         assert adapter.is_egg_pickup_area("egg_violet_city") is True
-        assert adapter.is_egg_pickup_area("egg_iron_island") is True
+        assert adapter.is_egg_pickup_area("egg_ilex_forest") is True
 
     def test_violet_city_recognized(self, adapter):
         # The pack's acquisition inventory puts every `kind: "egg"` site in violet_city: Mr.
@@ -399,13 +412,10 @@ class TestDaycareArea:
     def test_hgss_daycare_route_34(self, adapter):
         assert adapter.is_daycare_area("route_34") is True
 
-    def test_platinum_daycare_solaceon(self, adapter):
-        assert adapter.is_daycare_area("solaceon_town") is True
-        assert adapter.is_daycare_area("route_209") is True
 
     def test_non_daycare_route_returns_false(self, adapter):
         assert adapter.is_daycare_area("route_30") is False
-        assert adapter.is_daycare_area("eterna_city") is False
+        assert adapter.is_daycare_area("cianwood_city") is False
 
     def test_daycare_egg_prefix_recognized(self, adapter):
         # "egg_route_34" → strip prefix → route_34 → daycare.
@@ -427,21 +437,6 @@ class TestRomTypeVariants:
         a = Gen4Adapter()  # default rom_type=heartgold
         assert a._rom_type == "heartgold"
 
-    def test_platinum_selects_pt_trainers(self):
-        from server.adapters.gen4_hgsspt import _PT_TRAINERS
-        a = Gen4Adapter(rom_type="platinum")
-        assert a._trainers is _PT_TRAINERS
-
-    def test_renegade_platinum_shares_pt_trainers_when_no_rp_data(self):
-        # When rp_trainers.json is empty/missing, RP falls back to vanilla Pt.
-        from server.adapters.gen4_hgsspt import _PT_TRAINERS, _RP_TRAINERS
-        a = Gen4Adapter(rom_type="renegade_platinum")
-        if _RP_TRAINERS.get("trainers"):
-            # If user has populated rp_trainers.json, RP gets its own table.
-            assert a._trainers is _RP_TRAINERS
-        else:
-            # Default state: empty RP table → fall back to Pt.
-            assert a._trainers is _PT_TRAINERS
 
     def test_hgss_uses_hgss_trainers(self):
         from server.adapters.gen4_hgsspt import _HGSS_TRAINERS
@@ -453,18 +448,11 @@ class TestRomTypeVariants:
         hgss = Gen4Adapter(rom_type="heartgold")
         name, cls = hgss.trainer_info(20)  # Falkner
         assert name == "Falkner"
-        assert cls == "Gym Leader"
+        assert cls == "Leader"      # the pack's word for TRAINERCLASS_LEADER_FALKNER
         name, cls = hgss.trainer_info(244)  # Lance
         assert name == "Lance"
         assert cls == "Champion"
 
-    def test_trainer_info_pt_sinnoh_leaders(self):
-        pt = Gen4Adapter(rom_type="platinum")
-        name, cls = pt.trainer_info(261)  # Roark
-        assert name == "Roark"
-        name, cls = pt.trainer_info(273)  # Cynthia
-        assert name == "Cynthia"
-        assert cls == "Champion"
 
     def test_trainer_info_empty_for_unknown_id(self, adapter):
         assert adapter.trainer_info(99999) == ("", "")
@@ -474,22 +462,31 @@ class TestRomTypeVariants:
 class TestEncounterTable:
     """Wild encounter tables (Phase 10 — closing a Gen3 parity gap)."""
 
-    def test_hgss_route_29(self):
+    def test_hgss_route_29_day_is_the_pack_land_table(self):
+        """Route 29 has a Day grass table, and it IS the pack's — slot rates summed per species.
+
+        The old hand-curated table printed Pidgey at 40%; the pack's twelve R29 day slots carry
+        20/10/10/10/4/1 for it. What matters is that the number comes from the file, so this
+        compares against the file rather than re-pinning a rate that a pin bump can move.
+        """
         hgss = Gen4Adapter(rom_type="heartgold")
         enc = hgss.encounter_table("route_29")
         assert enc is not None
         assert "Day" in enc
-        # Day grass has Pidgey at 40% rate.
-        day_pidgey = next((e for e in enc["Day"] if e["name"] == "Pidgey"), None)
-        assert day_pidgey is not None
-        assert day_pidgey["rate"] == 40
+        expected = _aggregate(_pack_land_slots("route_29"))
+        assert expected, "the pack must back route_29 with a day land table"
+        assert enc["Day"] == sorted(expected, key=lambda r: (-r["rate"], r["name"]))
+        pidgey = next(r for r in enc["Day"] if r["name"] == "Pidgey")
+        assert pidgey["species_id"] == 16
+        assert pidgey["rate"] == sum(s["rate"] for s in _pack_land_slots("route_29")
+                                     if s["species_id"] == 16)
 
-    def test_pt_route_201(self):
-        pt = Gen4Adapter(rom_type="platinum")
-        enc = pt.encounter_table("route_201")
-        assert enc is not None
-        bidoof = next((e for e in enc["Day"] if e["name"] == "Bidoof"), None)
-        assert bidoof is not None
+    def test_hgss_land_is_split_by_hour_and_rods_are_labelled(self):
+        enc = Gen4Adapter(rom_type="heartgold").encounter_table("route_29")
+        assert {"Morn", "Day", "Night"} <= set(enc)
+        rods = Gen4Adapter(rom_type="heartgold").encounter_table("new_bark_town")
+        assert "Old Rod" in rods and "Surfing" in rods
+
 
     def test_unknown_area_returns_none(self, adapter):
         assert adapter.encounter_table("nonexistent_area") is None
@@ -500,12 +497,113 @@ class TestEncounterTable:
         assert hgss.encounter_table("route_29") is not None
         assert hgss.encounter_table("route_201") is None
 
-    def test_pt_uses_pt_encounters(self):
-        pt = Gen4Adapter(rom_type="platinum")
-        assert pt.encounter_table("route_201") is not None
-        assert pt.encounter_table("route_29") is None  # not in Sinnoh
 
-    def test_rp_inherits_pt_encounters_by_default(self):
-        # Without rp_encounters.json populated, RP falls back to vanilla Pt data.
-        rp = Gen4Adapter(rom_type="renegade_platinum")
-        assert rp.encounter_table("route_201") is not None
+    def test_soulsilver_reads_the_soulsilver_banks(self):
+        """Only the wild tables split by title (the pack's trainers do not)."""
+        from server.adapters.gen4_hgsspt import _HGSS_ENCOUNTERS
+        assert Gen4Adapter(rom_type="soulsilver")._encounters is _HGSS_ENCOUNTERS["soulsilver"]
+        assert Gen4Adapter(rom_type="heartgold")._encounters is _HGSS_ENCOUNTERS["heartgold"]
+        assert Gen4Adapter(rom_type="heartgold_hge")._encounters is _HGSS_ENCOUNTERS["heartgold"]
+
+
+# ── the tables are the generated pack, and a missing pack is loud ─────────────────────────────
+
+def _pack(name: str) -> dict:
+    with open(os.path.join(gen4._HGSS_PACK_DIR, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _pack_land_slots(area_id: str, title: str = "heartgold", hour: str = "day") -> list[dict]:
+    """Every land slot the pack puts in `area_id`, read straight out of encounters.json."""
+    doc = _pack("encounters.json")
+    out: list[dict] = []
+    for token, bank in doc["banks"].items():
+        if area_id not in (bank.get("areas") or ()):
+            continue
+        land = doc["versions"][title]["banks"][token].get("land")
+        if isinstance(land, dict):
+            out.extend(land.get(hour, ()))
+    return out
+
+
+def _aggregate(slots: list[dict]) -> list[dict]:
+    """The per-species fold the adapter applies, written out again here on purpose."""
+    rows: dict[int, dict] = {}
+    for s in slots:
+        row = rows.setdefault(s["species_id"], {
+            "name": s["name"], "species_id": s["species_id"], "rate": 0,
+            "min_level": s["min_level"], "max_level": s["max_level"]})
+        row["rate"] += s["rate"]
+        row["min_level"] = min(row["min_level"], s["min_level"])
+        row["max_level"] = max(row["max_level"], s["max_level"])
+    return list(rows.values())
+
+
+def test_display_names_are_the_packs_own():
+    areas = _pack("area_map.json")["areas"]
+    assert gen4._AREA_DISPLAY_NAMES
+    assert {
+        aid: row["display"] for aid, row in areas.items() if row.get("display")} == gen4._AREA_DISPLAY_NAMES
+    assert Gen4Adapter().area_display_name("route_29") == areas["route_29"]["display"]
+
+
+def test_trainers_are_the_packs_own():
+    rows = _pack("trainers.json")["trainers"]
+    assert gen4._HGSS_TRAINERS
+    assert "Falkner" == Gen4Adapter().trainer_info(20)[0] == rows["20"]["name"]
+    assert "Leader" == Gen4Adapter().trainer_info(20)[1] == rows["20"]["class"]
+    assert "Lance" == Gen4Adapter().trainer_info(244)[0] == rows["244"]["name"]
+    assert "Champion" == Gen4Adapter().trainer_info(244)[1] == rows["244"]["class"]
+    # TRAINER_NONE (id 0) is the pack's "no trainer" marker and must not answer by name.
+    assert Gen4Adapter().trainer_info(0) == ("", "")
+
+
+def test_encounters_cover_every_area_the_pack_backs_a_bank_for():
+    doc = _pack("encounters.json")
+    backed = {a for bank in doc["banks"].values() for a in bank.get("areas", ())}
+    tables = gen4._HGSS_ENCOUNTERS
+    assert backed
+    for title in ("heartgold", "soulsilver"):
+        assert backed <= set(tables[title]), sorted(backed - set(tables[title]))
+    # Every entry the adapter serves is one the pack wrote: name/species/level range and a rate.
+    for area, methods in tables["heartgold"].items():
+        assert methods, area
+        for label, rows in methods.items():
+            assert rows, (area, label)
+            for r in rows:
+                assert set(r) == {"name", "species_id", "rate", "min_level", "max_level"}
+                assert r["species_id"] > 0 and r["min_level"] <= r["max_level"]
+
+
+def test_a_missing_pack_empties_every_table_and_names_the_path(monkeypatch, tmp_path, caplog):
+    """The red control: an unreadable pack must not leave a stale table standing in silence."""
+    empty = tmp_path / "no_such_pack"
+    empty.mkdir()
+    monkeypatch.setattr(gen4, "_HGSS_PACK_DIR", str(empty))
+    with caplog.at_level(logging.ERROR):
+        assert gen4._load_hgss_area_display_names() == {}
+        assert gen4._load_hgss_trainers() == {}
+        assert gen4._load_hgss_encounters() == {}
+    for name in ("area_map.json", "trainers.json", "encounters.json"):
+        assert any(str(empty) in r.getMessage() for r in caplog.records
+                   if name in r.getMessage()), caplog.records
+    # And the adapter built on them answers empty rather than raising.
+    monkeypatch.setattr(gen4, "_AREA_DISPLAY_NAMES", {})
+    monkeypatch.setattr(gen4, "_HGSS_TRAINERS", {})
+    monkeypatch.setattr(gen4, "_HGSS_ENCOUNTERS", {})
+    a = Gen4Adapter()
+    assert a.area_display_name("route_29") == "Route 29"   # humanize fallback
+    assert a.trainer_info(20) == ("", "")
+    assert a.encounter_table("route_29") is None
+
+
+def test_the_module_names_no_legacy_data_path():
+    """Only the game_id may still spell `gen4_hgsspt`; no data path may."""
+    tree = ast.parse(inspect.getsource(gen4))
+    legacy = sorted({n.value for n in ast.walk(tree)
+                     if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                     and len(n.value) <= 40   # prose out: a docstring MENTIONING a file is not a path
+                     and ("gen4_hgsspt" in n.value or n.value.endswith(".json"))
+                     and not n.value.startswith(("tools/", "data/games/gen4_hgss/"))
+                     and n.value not in {"area_map.json", "encounters.json", "trainers.json"}})  # the pack's own file names
+    assert legacy == ["gen4_hgsspt"]
