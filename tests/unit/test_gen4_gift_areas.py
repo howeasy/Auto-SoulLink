@@ -15,6 +15,7 @@ Two independent checks live here on purpose:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ import gen4_pins  # noqa: E402
 import gen_gen4_area_map as base  # noqa: E402
 
 DATA = ROOT / "data" / "games" / "gen4_hgss"
+HGE_DATA = ROOT / "data" / "games" / "gen4_hge"
 PIN = gen4_pins.SOURCE_COMMITS["pokeheartgold_citation"]
 
 # The pinned pret's answer, written down so a silent re-derivation cannot slip through unnoticed, and
@@ -46,8 +48,8 @@ EXPECTED_ON_WILD = {
 }
 
 
-def load(name: str) -> dict:
-    return json.loads((DATA / name).read_text(encoding="utf-8"))
+def load(name: str, data: Path = DATA) -> dict:
+    return json.loads((data / name).read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -64,16 +66,18 @@ def clone() -> Path:
 
 
 # -- the committed block, re-derived from locations.json's own enc_bank column -------------------
-def test_the_shipped_gift_ids_and_the_on_wild_ones_are_the_derived_pair():
-    block = load("area_map.json")["gift_areas"]
+@pytest.mark.parametrize("data", [DATA, HGE_DATA], ids=["hgss", "hge"])
+def test_the_shipped_gift_ids_and_the_on_wild_ones_are_the_derived_pair(data):
+    block = load("area_map.json", data)["gift_areas"]
     assert set(block["ids"]) == EXPECTED_IDS
     assert block["on_wild_area"] == EXPECTED_ON_WILD
 
 
-def test_every_shipped_gift_id_has_no_wild_encounter_map_anywhere_in_its_area():
+@pytest.mark.parametrize("data", [DATA, HGE_DATA], ids=["hgss", "hge"])
+def test_every_shipped_gift_id_has_no_wild_encounter_map_anywhere_in_its_area(data):
     """enc_bank is read from locations.json, a DIFFERENT parse from the map_headers.h rows the list
     was derived from -- so a genuine wild map inside a listed area would show up here."""
-    area_map, locs = load("area_map.json"), load("locations.json")
+    area_map, locs = load("area_map.json", data), load("locations.json", data)
     for aid in area_map["gift_areas"]["ids"]:
         area = area_map["areas"][aid]
         wild = [m for m in area["maps"] + area["unused_maps"] if locs["locations"][str(m)]["enc_bank"]]
@@ -100,14 +104,33 @@ def test_the_daycare_egg_is_named_as_a_gift_catch_the_pack_cannot_place_on_a_map
     assert all(k.isdigit() for k in block["sites"]), "every recorded gift site is placed on a map"
 
 
-def test_the_pack_states_which_kinds_the_list_was_built_from():
+@pytest.mark.parametrize("data", [DATA, HGE_DATA], ids=["hgss", "hge"])
+def test_the_pack_states_which_kinds_the_list_was_built_from(data):
     """zone_policy is the pack's own table, so the emitted kinds must be exactly its gift-zone kinds
     minus `static` -- a static is a WildBattle and must never be exempted from no_catch."""
-    kinds = load("area_map.json")["gift_areas"]["acquisition"]["kinds"]
+    kinds = load("area_map.json", data)["gift_areas"]["acquisition"]["kinds"]
     assert set(kinds) == {"egg", "gift", "loan", "special_gift", "starter"}
     assert "static" not in kinds
-    policy = load("acquisition.json")["zone_policy"]
+    policy = load("acquisition.json", data)["zone_policy"]
     assert {k for k, v in policy.items() if v["zone"] == "gift"} - {"static"} == set(kinds)
+
+
+def test_the_hge_pack_derives_the_same_gift_areas_from_its_own_inventory():
+    """Same areas, same split -- but derived from gen4_hge/acquisition.json, not borrowed. If hge reused
+    gen4_hgss's file the `acquisition` block would name a pack the client never loaded, which is exactly
+    the sort of wrong claim this file exists to refuse."""
+    hgss = load("area_map.json")["gift_areas"]
+    hge = load("area_map.json", HGE_DATA)["gift_areas"]
+    for key in ("ids", "sites", "on_wild_area"):
+        assert hge[key] == hgss[key], key
+    # hge's own inventory carries no out_of_scope_commands record, so its no_map_commands says only what
+    # that file says (nothing); it must never claim more than HGSS's list
+    assert set(hge["no_map_commands"]) <= set(hgss["no_map_commands"])
+    assert hge["acquisition"]["kinds"] == hgss["acquisition"]["kinds"]
+    assert hge["acquisition"]["file"].endswith("gen4_hge/acquisition.json"), hge["acquisition"]["file"]
+    assert hgss["acquisition"]["file"].endswith("gen4_hgss/acquisition.json")
+    assert hge["acquisition"]["sha256"] != hgss["acquisition"]["sha256"], "two inventories, two digests"
+    assert hge["acquisition"]["sha256"] == hashlib.sha256((HGE_DATA / "acquisition.json").read_bytes()).hexdigest()
 
 
 # -- the fail-closed guard ----------------------------------------------------------------------
@@ -126,20 +149,22 @@ def test_the_guard_refuses_a_gift_area_that_covers_a_wild_encounter_map():
     base.check_gift_ids(model, {"pallet_town"})            # the wild-less half is fine
 
 
-def test_the_shipped_area_map_drives_the_shipped_producer():
+@pytest.mark.parametrize("data", [DATA, HGE_DATA], ids=["hgss", "hge"])
+def test_the_shipped_area_map_drives_the_shipped_producer(data):
     """End to end over the REAL files, no scratch pack: lua/gen4/inputs.lua's gift_area reads the very
     area_map.json this test just derived, so the list the generator writes is the list the client
-    gets. A generator output the producer cannot read would be a silent run-wide dead-zone regression."""
+    gets. A generator output the producer cannot read would be a silent run-wide dead-zone regression.
+    Both packs now, since gen4_hge ships the file instead of refusing the producer."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
-    g.ROOT_DIR, g.PROFILE = ROOT.as_posix(), "data/games/gen4_hgss/profile.json"
+    g.ROOT_DIR, g.PROFILE = ROOT.as_posix(), f"data/games/{data.name}/profile.json"
     lua.execute("""
         JSON = assert(dofile(ROOT_DIR .. "/lua/json_codec.lua"))
         INPUTS = assert(dofile(ROOT_DIR .. "/lua/gen4/inputs.lua"))
         gift, WHY = INPUTS.gift_area({ root = ROOT_DIR, json = JSON, pack_profile = PROFILE })
     """)
-    assert g.gift is not None, f"the shipped pack refused its own gift list: {g.WHY}"
-    ids = load("area_map.json")["gift_areas"]["ids"]
+    assert g.gift is not None, f"{data.name} refused its own gift list: {g.WHY}"
+    ids = load("area_map.json", data)["gift_areas"]["ids"]
     assert [a for a in ids if g.gift(a) is not True] == [], ids
     assert g.gift("route_1") is False and g.gift("") is False
 

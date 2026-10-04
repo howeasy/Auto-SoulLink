@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import gen4_fixtures, gen_gen4_pack as g
+from tools import gen4_fixtures, gen4_pins, gen_gen4_area_map as amap, gen_gen4_pack as g
 
 PACKS = {m: g.OUT[m] for m in ("hgss", "hge", "pt")}
 
@@ -1425,9 +1425,14 @@ def test_d7_is_absent_for_platinum_with_an_explicit_open():
 def _flip(images: g.Images, image: str, addr: int) -> g.Images:
     """A copy of `images` with one byte of `image` inverted at `addr`."""
     ovs = {i: (ram, bytearray(data), bss) for i, (ram, data, bss) in images.overlays.items()}
-    ram, data, _ = ovs[int(image[2:])]
-    data[addr - ram] ^= 0xFF
-    return g.Images(images.arm9_base, images.arm9, ovs)
+    arm9 = images.arm9
+    if image == "arm9":
+        arm9 = bytearray(arm9)
+        arm9[addr - images.arm9_base] ^= 0xFF
+    else:
+        ram, data, _ = ovs[int(image[2:])]
+        data[addr - ram] ^= 0xFF
+    return g.Images(images.arm9_base, bytes(arm9), ovs)
 
 
 def _d7_inputs():
@@ -1653,6 +1658,62 @@ def test_the_running_field_map_writer_is_byte_identical_in_hge():
     # revert: a changed byte in the writer fails the generator
     with pytest.raises(g.Fail, match="ov01_021F54AC"):
         g.hge_field_checks(xm, hg, _flip(hge, s.image, s.address + 2))
+
+
+# ---- card gen4-hge-area-map: the map table and the area names are the SAME bytes in both ROMs -----
+def _hge_area_inputs():
+    """HG's DECOMPRESSED static image and hge's RAW arm9 -- the two sources the generator reads."""
+    inputs = _need("heartgold", "heartgold_hge")
+    return (g.load_images(inputs.paths["heartgold"]),
+            g.load_images(inputs.paths["heartgold_hge"], raw_arm9=True), inputs)
+
+
+def test_the_map_header_table_and_area_names_are_byte_identical_in_hge():
+    hg, hge, inputs = _hge_area_inputs()
+    assert (amap.MAP_HEADERS_SYMBOL, amap.MAP_HEADERS_IMAGE) == ("sMapHeaders", "arm9")
+    assert (amap.MAP_HEADERS_ADDR, amap.MAP_HEADERS_SIZE, amap.MAP_HEADER_SIZE, amap.MAP_HEADER_COUNT) \
+        == (0x020F6BE0, 0x32A0, 24, 540)
+    assert amap.MAP_HEADER_COUNT * amap.MAP_HEADER_SIZE == amap.MAP_HEADERS_SIZE
+    assert "map_header.c:15" in amap.MAP_HEADERS_CITE and "heartgoldus.xMAP:49069-49070" in amap.MAP_HEADERS_CITE
+
+    # the whole proof, end to end, on the pinned ROMs: both spans, and the digests it records
+    proof = amap.hge_proof(inputs)
+    assert proof["identical"] is True and "byte-identical" in proof["claim"]
+    heads, names = proof["map_headers"]["sha256"], proof["area_names"]["sha256"]
+    assert set(heads) == set(names) == {"heartgold", "heartgold_hge"}
+    assert len(set(heads.values())) == 1 and len(set(names.values())) == 1
+    assert all(len(d) == 64 for d in (*heads.values(), *names.values())), "full sha256, never a prefix"
+    assert (proof["map_headers"]["address"], proof["map_headers"]["size"], proof["map_headers"]["count"]) \
+        == (f"{amap.MAP_HEADERS_ADDR:#010x}", amap.MAP_HEADERS_SIZE, amap.MAP_HEADER_COUNT)
+    assert proof["map_headers"]["cite"] == amap.MAP_HEADERS_CITE
+    assert (proof["area_names"]["narc"], proof["area_names"]["member"]) == ("a/0/2/7", 279), proof["area_names"]
+    # the ROM identities are the pins themselves, taken from gen4_pins -- not retyped here
+    assert proof["roms"]["heartgold"]["sha1"] == gen4_pins.ROM_SPECS["heartgold"][0]
+    assert proof["roms"]["heartgold_hge"]["sha1"] == gen4_pins.ROM_SPECS["heartgold_hge"][0]
+
+    # the spans really are the same bytes, read out of the two images
+    spans = amap.map_header_spans({"heartgold": hg, "heartgold_hge": hge})
+    amap.require_identical(spans, amap.MAP_HEADERS_SYMBOL)
+    assert spans["heartgold"] == hg.read("arm9", amap.MAP_HEADERS_ADDR, amap.MAP_HEADERS_SIZE)
+    # revert: one flipped byte anywhere in the hge table is red (the arm9 image, not an overlay)
+    with pytest.raises(amap.HgeMapDrift, match=amap.MAP_HEADERS_SYMBOL):
+        amap.require_identical(amap.map_header_spans({"heartgold": hg, "heartgold_hge": _flip(hge, "arm9", amap.MAP_HEADERS_ADDR + 7)}),
+                               amap.MAP_HEADERS_SYMBOL)
+
+
+def test_the_area_name_bank_is_byte_identical_in_hge_and_a_flipped_byte_is_red():
+    inputs = _need("heartgold", "heartgold_hge")
+    names = {key: amap.area_name_member(inputs.paths[key], amap.AREA_NAMES_MSG)
+             for key in ("heartgold", "heartgold_hge")}
+    what = f"{amap.AREA_NAMES_NARC} member {amap.AREA_NAMES_MSG}"
+    amap.require_identical(names, what)
+    blob = names["heartgold_hge"]
+    broken = dict(names, heartgold_hge=blob[:4] + bytes([blob[4] ^ 0x01]) + blob[5:])
+    with pytest.raises(amap.HgeMapDrift, match="member 279"):
+        amap.require_identical(broken, what)
+    # and a bank the fork shortened is a named FAIL, not a silent short read
+    with pytest.raises(amap.HgeMapDrift, match="holds"):
+        amap.area_name_member(inputs.paths["heartgold"], 10 ** 6)
 
 
 # ---- place-pack fixes (OMP cx-3bab37d5 on 3f5f447d): F1 vecY, F3 derived key set, F4 bics/str pin, F5 :374, F6 summable offset ----
