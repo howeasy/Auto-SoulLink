@@ -113,8 +113,8 @@ def test_pinned_constants_match_their_documented_values():
     assert pc.MAILBOX == 0xC60B
     assert pc.SERVICE_BANK == 0x7E
     # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
-    assert pc.DELAY_NATIVE == bytes.fromhex("f044e0d7afe08f")
-    assert pc.HEADER_CHECKSUMS == range(0x14D, 0x150)
+    assert bytes.fromhex("f044e0d7afe08f") == pc.DELAY_NATIVE
+    assert range(0x14D, 0x150) == pc.HEADER_CHECKSUMS
     assert pc.ABI_VERSION == 3
 
 
@@ -327,7 +327,7 @@ def test_panel_true_permits_only_bank_4_movement(tmp_path):
     ANCHOR FOR: `location[0] == 4` at build_gen2_companion.py:669 -> `True`.
     """
     start_names = ("SlinkStartMenuEntry", "SlinkMenuString", "SlinkMenuDesc")
-    panel = {name: (0x04, 0x4010) for name in start_names}
+    panel = dict.fromkeys(start_names, (4, 16400))
     clean = _write_sym(tmp_path / "clean.sym", {"InBank4": (0x04, 0x4000), "InBank10": (0x10, 0x5000)})
     ok = _write_sym(tmp_path / "ok.sym", {**panel, "InBank4": (0x04, 0x4010), "InBank10": (0x10, 0x5000)})
     pc.verify_symbol_scope(clean, ok, panel=True)             # bank 4 may move
